@@ -444,7 +444,7 @@ fn scheduling_content_error_message(error: &str) -> String {
             .to_owned();
     }
     if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
-        return "Watermerk bestaat niet.".to_owned();
+        return "Zenderlogo bestaat niet.".to_owned();
     }
     if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
         return "Grafisch element bestaat niet.".to_owned();
@@ -593,14 +593,14 @@ fn scheduling_content_error_message(error: &str) -> String {
 fn watermark_error_message(error: &str) -> String {
     let trimmed = error.trim();
     if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
-        return "Watermerk niet gevonden.".to_owned();
+        return "Zenderlogo niet gevonden.".to_owned();
     }
 
     match trimmed {
         "Name is required" => "Naam is verplicht".to_owned(),
         "Name must be 50 characters or fewer" => "Naam mag maximaal 50 tekens bevatten".to_owned(),
         "Watermark image is required" | "Watermark image is required!" => {
-            "Afbeelding voor watermerk is verplicht".to_owned()
+            "Afbeelding voor zenderlogo is verplicht".to_owned()
         }
         "Width must be between 0 and 100%" => "Breedte moet tussen 0 en 100% liggen".to_owned(),
         "Horizontal margin must be between 0 and 50%" => {
@@ -616,10 +616,10 @@ fn watermark_error_message(error: &str) -> String {
             "Ondoorzichtigheid moet tussen 1 en 100 liggen".to_owned()
         }
         "Watermark name must be unique" | "ChannelWatermark name must be unique" => {
-            "Naam van watermerk moet uniek zijn".to_owned()
+            "Naam van zenderlogo moet uniek zijn".to_owned()
         }
         "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
-            "Watermerk niet gevonden.".to_owned()
+            "Zenderlogo niet gevonden.".to_owned()
         }
         _ => error.to_owned(),
     }
@@ -1183,8 +1183,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchForDecoTemplates => "Decoratiesjablonen zoeken",
         TextKey::TrimToFit => "Passend inkorten",
         TextKey::UseGraphicsElementsDuringFiller => "Grafische elementen gebruiken tijdens filler",
-        TextKey::UseWatermarkDuringFiller => "Watermerk gebruiken tijdens filler",
-        TextKey::WatermarkMode => "Watermerkmodus",
+        TextKey::UseWatermarkDuringFiller => "Zenderlogo gebruiken tijdens filler",
+        TextKey::WatermarkMode => "Zenderlogomodus",
         TextKey::DecoTemplates => "Decoratiesjablonen",
         TextKey::DefaultFfmpegProfile => "Standaard FFmpeg-profiel",
         TextKey::DefaultFfmpegProfileHelp => "Het FFmpeg-profiel dat wordt gebruikt bij het maken van nieuwe kanalen",
@@ -1243,7 +1243,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::FillerPresets => "Opvulvoorinstellingen",
         TextKey::Flags => "Vlaggen",
         TextKey::GlobalFallbackFiller => "Globale fallback-opvulling",
-        TextKey::GlobalWatermark => "Globaal watermerk",
+        TextKey::GlobalWatermark => "Globaal zenderlogo",
         TextKey::GoHome => "Naar startpagina",
         TextKey::HdHomeRun => "HDHomeRun",
         TextKey::HealthChecks => "Gezondheidscontroles",
@@ -1721,7 +1721,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Peak => "piek",
         TextKey::StreamsInUse => "Streams in gebruik",
         TextKey::SuggestedTranscodeLimit => "Voorgestelde waarde",
-        TextKey::Watermarks => "Watermerken",
+        TextKey::Watermarks => "Zenderlogo's",
         TextKey::Width => "Breedte",
         TextKey::WorkAheadSegmenterLimit => "Vooruitwerkende HLS-transcodes",
         TextKey::WorkAheadSegmenterLimitHelp => "Hoeveel HLS-transcodeslots vooruit mogen werken op maximale snelheid om buffer op te bouwen. Vooruitwerken wijkt altijd voor bekeken streams.",
@@ -1742,7 +1742,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CopyProfile => "Profiel kopiëren",
         TextKey::CopyTemplate => "Sjabloon kopiëren",
         TextKey::Crop => "Bijsnijden",
-        TextKey::AllowWatermarks => "Watermerken toestaan",
+        TextKey::AllowWatermarks => "Zenderlogo's toestaan",
         TextKey::DeinterlaceVideo => "Video de-interlacen",
         TextKey::Edit => "Bewerken",
         TextKey::EditBlock => "Blok bewerken",
@@ -1930,7 +1930,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteChannel => "Kanaal verwijderen",
         TextKey::DownloadMediaSample => "Mediavoorbeeld downloaden",
         TextKey::DownloadResults => "Resultaten downloaden",
-        TextKey::DisableWatermarks => "Watermerken uitschakelen",
+        TextKey::DisableWatermarks => "Zenderlogo's uitschakelen",
         TextKey::EditChannel => "Kanaal bewerken",
         TextKey::EditChannelNumbers => "Kanaalnummers bewerken",
         TextKey::EditNumbers => "Nummers bewerken",
@@ -2049,6 +2049,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Styles => "Stijlen",
         TextKey::Subtitle => "Ondertitel",
         TextKey::SubtitleMode => "Ondertitelmodus",
+        TextKey::SubtitleModeHelp => {
+            "Geforceerd toont alleen geforceerde tekstsporen (forced narrative). Kies Elke om \
+             ondertitels in je voorkeurstaal altijd te tonen."
+        }
         TextKey::Timestamp => "Tijdstip",
         TextKey::Timeline => "Tijdlijn",
         TextKey::Target => "Doel",
@@ -2098,8 +2102,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UploadLogo => "Logo uploaden",
         TextKey::UploadLogoHelp => "Kies een lokale afbeelding om het opgeslagen kanaallogo bij opslaan te vervangen",
         TextKey::Warning => "Waarschuwing",
-        TextKey::Watermark => "Watermerk",
-        TextKey::WatermarkIds => "Watermerk-ID's",
+        TextKey::Watermark => "Zenderlogo",
+        TextKey::WatermarkIds => "Zenderlogo-ID's",
         TextKey::Window => "Venster",
         TextKey::WithProgress => "Met voortgang",
         TextKey::Writers => "Schrijvers",
@@ -2111,17 +2115,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MediaItemType => "Media-itemtype",
         TextKey::MediaItemTitle => "Media-itemtitel",
         TextKey::ActualSize => "Werkelijke grootte",
-        TextKey::AddWatermark => "Watermerk toevoegen",
+        TextKey::AddWatermark => "Zenderlogo toevoegen",
         TextKey::BottomLeft => "Linksonder",
         TextKey::BottomMiddle => "Middenonder",
         TextKey::BottomRight => "Rechtsonder",
-        TextKey::CopyWatermark => "Watermerk kopiëren",
+        TextKey::CopyWatermark => "Zenderlogo kopiëren",
         TextKey::CopyOf => "Kopie van",
         TextKey::CurrentImage => "Huidige afbeelding",
         TextKey::Custom => "Aangepast",
-        TextKey::DeleteWatermark => "Watermerk verwijderen",
+        TextKey::DeleteWatermark => "Zenderlogo verwijderen",
         TextKey::DurationSeconds => "Duur (seconden)",
-        TextKey::EditWatermark => "Watermerk bewerken",
+        TextKey::EditWatermark => "Zenderlogo bewerken",
         TextKey::Frequency => "Frequentie",
         TextKey::GeneratingPreview => "Voorbeeld genereren...",
         TextKey::HorizontalMarginPercent => "Horizontale marge (%)",
@@ -2146,7 +2150,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Placement => "Plaatsing",
         TextKey::PlacementPreview => "Plaatsingsvoorbeeld",
         TextKey::RightMiddle => "Midden rechts",
-        TextKey::SaveWatermark => "Watermerk opslaan",
+        TextKey::SaveWatermark => "Zenderlogo opslaan",
         TextKey::Scaled => "Geschaald",
         TextKey::Size => "Grootte",
         TextKey::TopLeft => "Linksboven",
@@ -2155,10 +2159,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UploadFailed => "Uploaden mislukt.",
         TextKey::UploadImage => "Afbeelding uploaden",
         TextKey::VerticalMarginPercent => "Verticale marge (%)",
-        TextKey::WatermarkCopied => "Watermerk gekopieerd.",
-        TextKey::WatermarkNotFound => "Watermerk niet gevonden.",
-        TextKey::WatermarkPlacementPreview => "voorbeeld van watermerkplaatsing",
-        TextKey::WatermarkPreview => "watermerkvoorbeeld",
+        TextKey::WatermarkCopied => "Zenderlogo gekopieerd.",
+        TextKey::WatermarkNotFound => "Zenderlogo niet gevonden.",
+        TextKey::WatermarkPlacementPreview => "voorbeeld van zenderlogoplaatsing",
+        TextKey::WatermarkPreview => "zenderlogovoorbeeld",
         TextKey::WidthPercent => "Breedte (%)",
         TextKey::ZIndex => "Z-index",
         TextKey::XmltvBlockBehavior => "XMLTV-blokgedrag",
@@ -2203,5 +2207,225 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::WarningToast => "Waarschuwing",
         TextKey::YamlScript => "YAML-script",
         TextKey::Yes => "Ja",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admin::i18n::{
+        episode_display_subtitle_text, ffmpeg_loudness_mode_text, ffmpeg_profile_audio_format_text,
+        ffmpeg_profile_error_text, ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text,
+        filler_error_text, hardware_acceleration_option_text, library_kind_text, log_level_text,
+        media_action_error_text, media_browser_error_text, media_kind_text,
+        media_source_error_text, playout_schedule_kind_text, schedule_error_text,
+        scheduling_content_error_text, settings_error_text, trakt_error_text, upload_error_text,
+        watermark_error_text, UiLanguage,
+    };
+
+    #[test]
+    fn season_display_names() {
+        assert_eq!(STRINGS.season_display_name(2), "Seizoen 2");
+    }
+
+    #[test]
+    fn episode_display_subtitles() {
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Dutch, Some("Serie"), Some(1), Some(3))
+                .as_deref(),
+            Some("Serie - seizoen 1, aflevering 3")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Dutch, Some("Serie"), None, None).as_deref(),
+            Some("Serie")
+        );
+    }
+
+    #[test]
+    fn fallback_item_labels() {
+        assert_eq!(STRINGS.schedule_item_fallback_label(7), "Schema-item #7");
+    }
+
+    #[test]
+    fn log_level_labels() {
+        assert_eq!(log_level_text(UiLanguage::Dutch, "Fatal"), "Fataal");
+        assert_eq!(log_level_text(UiLanguage::Dutch, "TRACE"), "TRACE");
+    }
+
+    #[test]
+    fn channel_labels() {
+        assert_eq!(STRINGS.channel_language_label("nld"), "Nederlands");
+        assert_eq!(STRINGS.channel_streaming_mode_label(99), "Onbekend (99)");
+        assert_eq!(STRINGS.channel_language_label("tlh"), "tlh");
+    }
+
+    #[test]
+    fn media_and_library_kind_labels() {
+        assert_eq!(media_kind_text(UiLanguage::Dutch, 1), "Films");
+        assert_eq!(media_kind_text(UiLanguage::Dutch, 99), "Onbekend");
+        assert_eq!(library_kind_text(UiLanguage::Dutch, "Local"), "Lokaal");
+    }
+
+    #[test]
+    fn playout_schedule_kind_labels() {
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Dutch, 1), "Klassiek");
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::Dutch, 20),
+            "JSON (dizqueTV)"
+        );
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Dutch, 99), "");
+    }
+
+    #[test]
+    fn hardware_acceleration_labels() {
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Dutch, "NVENC", false),
+            "NVENC (niet beschikbaar op dit systeem)"
+        );
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Dutch, "VAAPI", true),
+            "VAAPI"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_option_labels() {
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::Dutch, 99),
+            "Onbekend (99)"
+        );
+        assert_eq!(ffmpeg_loudness_mode_text(UiLanguage::Dutch, 0), "Uit");
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::Dutch, 42, 0),
+            "Onbekend (42)"
+        );
+        assert_eq!(
+            ffmpeg_profile_audio_format_text(UiLanguage::Dutch, 99),
+            "Kopiëren"
+        );
+    }
+
+    #[test]
+    fn deco_template_action_labels() {
+        assert_eq!(
+            STRINGS.text(TextKey::AddDecoToTemplate),
+            "Decoratie aan sjabloon toevoegen"
+        );
+    }
+
+    #[test]
+    fn server_errors_follow_language_without_changing_unknown_values() {
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Dutch, "Source profile not found."),
+            "Bronprofiel niet gevonden."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            schedule_error_text(
+                UiLanguage::Dutch,
+                "Fixed schedule items require a start time."
+            ),
+            "Vaste schema-items vereisen een starttijd."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Dutch,
+                "[Collection] is required for collection type 'Collection'"
+            ),
+            "Collectie is verplicht voor collectietype Collectie."
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Dutch, "Template 12 does not exist."),
+            "Sjabloon bestaat niet."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Dutch,
+                "Break content playlist item does not exist."
+            ),
+            "Afspeellijst voor onderbrekingsinhoud bestaat niet."
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Dutch, "Watermark 12 does not exist."),
+            "Zenderlogo niet gevonden."
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            settings_error_text(UiLanguage::Dutch, "ffmpeg path does not exist"),
+            "ffmpeg-pad bestaat niet"
+        );
+        assert_eq!(
+            settings_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Dutch, "Unable to locate media item"),
+            "Kan media-item niet vinden."
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Dutch, "FillerPreset 42 does not exist."),
+            "Fillerpreset bestaat niet."
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            media_browser_error_text(
+                UiLanguage::Dutch,
+                "[MultiCollection] is required for collection type 'MultiCollection'"
+            ),
+            "Multi-collectie is verplicht."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Dutch, "[ProgramScheduleId] does not exist."),
+            "Schema bestaat niet."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            media_source_error_text(UiLanguage::Dutch, "'Address' must be a valid URL"),
+            "Adres moet een geldige URL zijn."
+        );
+        assert_eq!(
+            media_source_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            trakt_error_text(UiLanguage::Dutch, "trakt list with id 42 not found"),
+            "Trakt-lijst bestaat niet."
+        );
+        assert_eq!(
+            trakt_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Dutch, "Read field: connection reset"),
+            "Veld lezen mislukt: connection reset"
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Dutch, "custom upload failure"),
+            "custom upload failure"
+        );
     }
 }

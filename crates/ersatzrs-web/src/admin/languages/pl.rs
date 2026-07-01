@@ -2057,6 +2057,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Styles => "Style",
         TextKey::Subtitle => "Napisy",
         TextKey::SubtitleMode => "Tryb napisów",
+        TextKey::SubtitleModeHelp => {
+            "Wymuszone pokazuje tylko wymuszone ścieżki narracyjne (forced narrative). Wybierz \
+             Dowolne, aby zawsze wyświetlać napisy w preferowanym języku."
+        }
         TextKey::Timestamp => "Czas",
         TextKey::Timeline => "Oś czasu",
         TextKey::Target => "Cel",
@@ -2211,5 +2215,154 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::WarningToast => "Ostrzeżenie",
         TextKey::YamlScript => "Skrypt YAML",
         TextKey::Yes => "Tak",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admin::i18n::{
+        episode_display_subtitle_text, ffmpeg_profile_error_text, ffmpeg_profile_video_format_text,
+        ffmpeg_tonemap_algorithm_text, filler_error_text, hardware_acceleration_option_text,
+        library_kind_text, log_level_text, media_action_error_text, media_browser_error_text,
+        media_kind_text, media_source_error_text, playout_schedule_kind_text, schedule_error_text,
+        scheduling_content_error_text, settings_error_text, trakt_error_text, upload_error_text,
+        watermark_error_text, UiLanguage,
+    };
+
+    #[test]
+    fn season_display_names() {
+        assert_eq!(STRINGS.season_display_name(0), "Odcinki specjalne");
+    }
+
+    #[test]
+    fn episode_display_subtitles() {
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Polish, Some("Show"), Some(2), Some(5))
+                .as_deref(),
+            Some("Show - sezon 2, odcinek 5")
+        );
+    }
+
+    #[test]
+    fn fallback_item_labels() {
+        assert_eq!(
+            STRINGS.schedule_item_fallback_label(7),
+            "Element harmonogramu #7"
+        );
+    }
+
+    #[test]
+    fn log_level_labels() {
+        assert_eq!(log_level_text(UiLanguage::Polish, "Warning"), "Ostrzeżenie");
+    }
+
+    #[test]
+    fn channel_labels() {
+        assert_eq!(STRINGS.channel_streaming_mode_label(1), "MPEG-TS (starszy)");
+    }
+
+    #[test]
+    fn media_and_library_kind_labels() {
+        assert_eq!(media_kind_text(UiLanguage::Polish, 7), "Zdalne strumienie");
+        assert_eq!(library_kind_text(UiLanguage::Polish, "Plex"), "Plex");
+    }
+
+    #[test]
+    fn playout_schedule_kind_labels() {
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Polish, 2), "Blokowy");
+    }
+
+    #[test]
+    fn hardware_acceleration_labels() {
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Polish, "NVENC", false),
+            "NVENC (niedostępne w tym systemie)"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_option_labels() {
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::Polish, 0),
+            "Liniowy"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::Polish, 99, 0),
+            "Kopiuj"
+        );
+    }
+
+    #[test]
+    fn deco_template_action_labels() {
+        assert_eq!(
+            STRINGS.text(TextKey::SaveDecoTemplate),
+            "Zapisz szablon dekoracji"
+        );
+    }
+
+    #[test]
+    fn server_errors_follow_language() {
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Polish, "Thread count must be 0 or greater."),
+            "Liczba wątków musi wynosić 0 lub więcej."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::Polish, "Collection is required."),
+            "Kolekcja jest wymagana."
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Polish, "Template group name must be unique"),
+            "Nazwa grupy szablonów musi być unikalna"
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Polish,
+                "Deco may only contain one [Block Start] break content"
+            ),
+            "Dekoracja może zawierać tylko jedną treść przerwy na początku bloku."
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Polish, "Watermark name must be unique"),
+            "Nazwa znaku wodnego musi być unikalna"
+        );
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::Polish,
+                "Library refresh interval must be 0 (do not refresh) or greater than zero"
+            ),
+            "Interwał odświeżania biblioteki musi wynosić 0 (bez odświeżania) albo więcej niż zero."
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Polish, "Collection name is required"),
+            "Nazwa kolekcji jest wymagana."
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Polish, "Duration must not be empty"),
+            "Czas trwania nie może być pusty."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Polish, "Smart collection query is required"),
+            "Zapytanie kolekcji inteligentnej jest wymagane."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Polish, "[MediaItem] does not exist."),
+            "Element multimedialny nie istnieje."
+        );
+        assert_eq!(
+            media_source_error_text(UiLanguage::Polish, "API key is required."),
+            "Klucz API jest wymagany."
+        );
+        assert_eq!(
+            trakt_error_text(
+                UiLanguage::Polish,
+                "conflict: Trakt ClientId is not configured; set TRAKT__CLIENTID"
+            ),
+            "Identyfikator klienta Trakt nie jest skonfigurowany; ustaw TRAKT__CLIENTID."
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Polish, "No file field"),
+            "Nie znaleziono pola pliku."
+        );
     }
 }

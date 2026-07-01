@@ -2075,6 +2075,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Styles => "Estilos",
         TextKey::Subtitle => "Legenda",
         TextKey::SubtitleMode => "Modo de legenda",
+        TextKey::SubtitleModeHelp => {
+            "Forçada mostra apenas faixas de narrativa forçada (forced narrative). Escolha \
+             Qualquer para sempre exibir legendas no seu idioma preferido."
+        }
         TextKey::Timestamp => "Data/hora",
         TextKey::Timeline => "Linha do tempo",
         TextKey::Target => "Destino",
@@ -2229,5 +2233,180 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::WarningToast => "Toast de aviso",
         TextKey::YamlScript => "Script YAML",
         TextKey::Yes => "Sim",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admin::i18n::{
+        episode_display_subtitle_text, ffmpeg_loudness_mode_text, ffmpeg_profile_error_text,
+        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
+        hardware_acceleration_option_text, log_level_text, media_action_error_text,
+        media_browser_error_text, media_kind_text, media_source_error_text,
+        playout_schedule_kind_text, schedule_error_text, scheduling_content_error_text,
+        settings_error_text, trakt_error_text, upload_error_text, watermark_error_text, UiLanguage,
+    };
+
+    #[test]
+    fn season_display_names() {
+        assert_eq!(STRINGS.season_display_name(2), "Temporada 2");
+    }
+
+    #[test]
+    fn episode_display_subtitles() {
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::PortugueseBrazil, None, Some(1), Some(3))
+                .as_deref(),
+            Some("Temporada 1, episódio 3")
+        );
+    }
+
+    #[test]
+    fn fallback_item_labels() {
+        assert_eq!(STRINGS.media_item_fallback_label(42), "Item de mídia #42");
+    }
+
+    #[test]
+    fn log_level_labels() {
+        assert_eq!(
+            log_level_text(UiLanguage::PortugueseBrazil, "Debug"),
+            "Depuração"
+        );
+    }
+
+    #[test]
+    fn channel_labels() {
+        assert_eq!(STRINGS.channel_language_label("deu"), "Alemão");
+    }
+
+    #[test]
+    fn media_kind_labels() {
+        assert_eq!(
+            media_kind_text(UiLanguage::PortugueseBrazil, 4),
+            "Outros vídeos"
+        );
+    }
+
+    #[test]
+    fn playout_schedule_kind_labels() {
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::PortugueseBrazil, 4),
+            "Por script"
+        );
+    }
+
+    #[test]
+    fn hardware_acceleration_labels() {
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::PortugueseBrazil, "NVENC", false),
+            "NVENC (não disponível neste sistema)"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_option_labels() {
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::PortugueseBrazil, 2),
+            "Gama"
+        );
+        assert_eq!(
+            ffmpeg_loudness_mode_text(UiLanguage::PortugueseBrazil, 1),
+            "loudnorm"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::PortugueseBrazil, 0, 0),
+            "Nenhum"
+        );
+    }
+
+    #[test]
+    fn deco_template_action_labels() {
+        assert_eq!(
+            STRINGS.text(TextKey::SaveDecoTemplate),
+            "Salvar modelo de decoração"
+        );
+    }
+
+    #[test]
+    fn server_errors_follow_language() {
+        assert_eq!(
+            ffmpeg_profile_error_text(
+                UiLanguage::PortugueseBrazil,
+                "An FFmpeg profile named \"main\" already exists."
+            ),
+            "Já existe um perfil FFmpeg chamado \"main\"."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::PortugueseBrazil, "Search Query is required."),
+            "A consulta de pesquisa é obrigatória."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Template items cannot cross midnight."
+            ),
+            "Os itens do modelo não podem atravessar a meia-noite."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Deco from 01:00:00 to 01:30:00 intersects deco from 01:15:00 to 01:45:00"
+            ),
+            "A decoração se sobrepõe a outra decoração."
+        );
+        assert_eq!(
+            watermark_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Width must be between 0 and 100%"
+            ),
+            "A largura deve estar entre 0 e 100%"
+        );
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::PortugueseBrazil,
+                "XMLTV days to build (5) cannot be greater than Playout days to build (2)"
+            ),
+            "Dias de XMLTV para construir (5) não podem ser maiores que dias de playout para construir (2)"
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::PortugueseBrazil, "Playlist does not exist."),
+            "A playlist não existe."
+        );
+        assert_eq!(
+            filler_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Use Chapters As Media Items must not be enabled for fallback filler"
+            ),
+            "Usar capítulos como itens de mídia não pode estar ativado para preenchimento de fallback."
+        );
+        assert_eq!(
+            media_browser_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Playlist name \"example\" is invalid"
+            ),
+            "O nome da playlist é inválido."
+        );
+        assert_eq!(
+            media_source_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Could not reach Jellyfin: connection refused"
+            ),
+            "Não foi possível acessar o Jellyfin: connection refused"
+        );
+        assert_eq!(
+            trakt_error_text(
+                UiLanguage::PortugueseBrazil,
+                "failed to decode trakt http: status 404 Not Found"
+            ),
+            "Não foi possível acessar o Trakt: status 404 Not Found"
+        );
+        assert_eq!(
+            upload_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Write failed: permission denied"
+            ),
+            "Falha ao gravar: permission denied"
+        );
     }
 }

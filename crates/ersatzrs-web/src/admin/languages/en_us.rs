@@ -1389,6 +1389,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Styles => "Styles",
         TextKey::Subtitle => "Subtitle",
         TextKey::SubtitleMode => "Subtitle Mode",
+        TextKey::SubtitleModeHelp => {
+            "Forced shows only forced-narrative tracks. To always show subtitles in your \
+             preferred language, choose Any."
+        }
         TextKey::Timestamp => "Timestamp",
         TextKey::Timeline => "Timeline",
         TextKey::Target => "Target",
@@ -2186,5 +2190,154 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
             "No FFmpeg resolutions are available; database bootstrap is incomplete".to_owned()
         }
         _ => error.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admin::i18n::{
+        episode_display_subtitle_text, ffmpeg_profile_error_text, ffmpeg_profile_video_format_text,
+        ffmpeg_tonemap_algorithm_text, filler_error_text, hardware_acceleration_option_text,
+        log_level_text, media_action_error_text, media_browser_error_text, media_kind_text,
+        media_source_error_text, playout_schedule_kind_text, schedule_error_text,
+        scheduling_content_error_text, settings_error_text, trakt_error_text, upload_error_text,
+        watermark_error_text, UiLanguage,
+    };
+
+    #[test]
+    fn season_display_names() {
+        assert_eq!(STRINGS.season_display_name(0), "Specials");
+        assert_eq!(STRINGS.season_display_name(2), "Season 2");
+    }
+
+    #[test]
+    fn episode_display_subtitles() {
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::English, Some("Show"), Some(2), Some(5))
+                .as_deref(),
+            Some("Show - S2 E5")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::English, None, None, None),
+            None
+        );
+    }
+
+    #[test]
+    fn fallback_item_labels() {
+        assert_eq!(STRINGS.media_item_fallback_label(42), "Media Item #42");
+    }
+
+    #[test]
+    fn log_level_labels() {
+        assert_eq!(
+            log_level_text(UiLanguage::English, "Information"),
+            "Information"
+        );
+    }
+
+    #[test]
+    fn channel_labels() {
+        assert_eq!(STRINGS.channel_streaming_mode_label(1), "MPEG-TS (Legacy)");
+    }
+
+    #[test]
+    fn media_kind_labels() {
+        assert_eq!(media_kind_text(UiLanguage::English, 3), "Music Videos");
+    }
+
+    #[test]
+    fn playout_schedule_kind_labels() {
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::English, 3),
+            "Sequential"
+        );
+    }
+
+    #[test]
+    fn hardware_acceleration_labels() {
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::English, "NVENC", false),
+            "NVENC (not available on this system)"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_option_labels() {
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::English, 1),
+            "Clip"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::English, 1, 2),
+            "H264 / NVENC"
+        );
+    }
+
+    #[test]
+    fn deco_template_action_labels() {
+        assert_eq!(
+            STRINGS.text(TextKey::AddDecoToTemplate),
+            "Add Deco To Template"
+        );
+    }
+
+    #[test]
+    fn server_errors_pass_through_unchanged() {
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::English, "Profile name is required."),
+            "Profile name is required."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::English, "Schedule name is required!"),
+            "Schedule name is required!"
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::English, "Block name is required"),
+            "Block name is required"
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::English,
+                "A deco named \"example\" already exists in that deco group"
+            ),
+            "A deco with that name already exists in that deco group."
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::English, "Watermark image is required"),
+            "Watermark image is required"
+        );
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::English,
+                "HLS Segmenter idle timeout must be greater than or equal to 30"
+            ),
+            "HLS Segmenter idle timeout must be greater than or equal to 30"
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::English, "Collection name must be unique"),
+            "Collection name must be unique"
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::English, "Filler preset name must be unique"),
+            "Filler preset name must be unique"
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::English, "MultiCollection 7 does not exist."),
+            "Multi-collection does not exist."
+        );
+        assert_eq!(
+            media_source_error_text(UiLanguage::English, "Address is required."),
+            "Address is required."
+        );
+        assert_eq!(
+            trakt_error_text(UiLanguage::English, "Invalid Trakt list url"),
+            "Invalid Trakt list URL."
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::English, "Upload exceeds maximum allowed size"),
+            "Upload exceeds maximum allowed size."
+        );
     }
 }
