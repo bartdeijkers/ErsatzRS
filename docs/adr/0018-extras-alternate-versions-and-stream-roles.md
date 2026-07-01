@@ -11,11 +11,11 @@ by ADR NNNN | Deprecated. It must NOT be read as "the code exists".
 
 ## Implementation
 
-Partial — the local/provider scanner/search/UI/playback/scheduling scope
+Implemented — the local/provider scanner/search/UI/playback/scheduling scope
 tracked by `docs/progress/parity/content-variants.toml` is implemented through
-Phase 5 plus provider-side Plex/Jellyfin/Emby content-variant import, but
-2026-07-01 movie-detail parity debt remains open for commentary-track and
-alternate-edition selection cards. A
+Phase 5 plus provider-side Plex/Jellyfin/Emby content-variant import, and the
+2026-07-01 movie-detail follow-up now surfaces alternate-edition cards plus
+commentary audio/subtitle playback options on `/media/movies/:id`. A
 2026-06-27 live admin dogfood pass also proved the documented
 `content_kind:alternate_version AND sub_kind:unplugged` selector against
 admin-triggered Music Videos scans after the scanner learned to retry SQLite

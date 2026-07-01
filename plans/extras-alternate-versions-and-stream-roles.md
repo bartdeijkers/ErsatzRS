@@ -3,7 +3,9 @@
 > **Status: Ported for the local and provider scanner/search/UI/playback/scheduling scope.** Implements
 > [ADR 0018](../docs/adr/0018-extras-alternate-versions-and-stream-roles.md).
 > Deliberate, parity-safe enhancement with no ErsatzTV equivalent. Live state
-> lives in `docs/progress/parity/content-variants.toml`.
+> lives in `docs/progress/parity/content-variants.toml`. The 2026-07-01
+> movie-detail follow-up restored `/media/movies/:id` extras rows, alternate
+> movie edition cards, and commentary audio/subtitle playback options.
 
 ## Goal
 

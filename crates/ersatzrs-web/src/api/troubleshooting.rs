@@ -18,9 +18,10 @@ use ersatzrs_infra::{
         load_playback_profile, load_source_audio_streams, load_source_video_stream,
         load_subtitles_for_media_item, render_playback_graphics_overlays,
         resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
-        select_custom_playback_streams, select_playback_graphics, select_playback_subtitle,
-        select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
-        CustomStreamSelection, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+        select_custom_playback_streams, select_playback_audio_stream_index,
+        select_playback_graphics, select_playback_subtitle, select_playback_watermarks,
+        subtitle_input_for_stream, watermark_overlay_for_stream, CustomStreamSelection,
+        PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     },
     subtitles::rebase_burned_text_subtitle_input,
 };
@@ -51,6 +52,8 @@ pub struct PlaybackPreviewQuery {
     graphics_element: Vec<i64>,
     #[serde(default, rename = "streamSelector")]
     stream_selector: Option<String>,
+    #[serde(default, rename = "preferredAudioTitle")]
+    preferred_audio_title: Option<String>,
     #[serde(default, rename = "subtitleId")]
     subtitle_id: Option<i64>,
     #[serde(default, rename = "seekSeconds")]
@@ -169,6 +172,13 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
             content_start_time: Utc::now(),
         })
         .await;
+    let selected_audio_stream_index = selected_audio_stream_index.or_else(|| {
+        select_playback_audio_stream_index(
+            &source_audio_streams,
+            selector_channel.preferred_audio_language_code.as_deref(),
+            selector_channel.preferred_audio_title.as_deref(),
+        )
+    });
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
     let graphics_overlays = preview_graphics_overlays(PreviewGraphicsRequest {
@@ -882,6 +892,12 @@ fn preview_selector_channel(
         subtitle_mode: ChannelSubtitleMode::Any,
         stream_selector: query
             .stream_selector
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+        preferred_audio_title: query
+            .preferred_audio_title
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())

@@ -1,7 +1,7 @@
 feature    = 'Content variants, alternate versions, and stream roles'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, ADR 0018'
 rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::playback`, `crates/ersatzrs-web::transport::iptv`, `crates/ersatzrs-infra::hls_worker`, `crates/ersatzrs-infra::health`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0018']
 
 summary    = '''
@@ -48,11 +48,11 @@ returns the expected 38 rows in the admin UI, and an admin-UI-created MTV
 Unplugged channel now runs from that smart collection with an MTV Bumpers item
 after every three unplugged videos.
 
-Reopened 2026-07-01: `/media/movies/{movie_id}` does not surface playable cards
-for commentary-track viewing or alternate movie editions such as theatrical,
-remastered, director's cut, black-and-white, and related versions, so the ADR
-0018 movie-detail UI remains incomplete until those options are visible and
-actionable from the movie detail page.
+Closed 2026-07-01: `/media/movies/:id` now surfaces alternate movie editions
+as actionable version cards and commentary audio/subtitle options as playable
+troubleshooting-preview cards. The commentary links preserve
+`preferredAudioTitle` and commentary `subtitleId` selections so playback uses
+the intended stream role instead of only showing a cosmetic label.
 '''
 
 [[debt]]
@@ -76,8 +76,8 @@ id          = 'movie-detail-commentary-edition-cards'
 adr         = '0018'
 description = "The movie detail page does not provide playable cards/options for watching the movie with a specific commentary track or choosing alternate movie editions such as theatrical, remastered, director's cut, black-and-white, and related version subtypes."
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Reclose only with browser/runtime proof on `/media/movies/:id` that commentary-track viewing and alternate edition cards are visible, select the intended stream or alternate version, and remain compatible with the ADR 0018 content-variant search/playback contract.'
-resolved    = false
+evidence    = 'Resolved 2026-07-01: movie detail loads linked alternate movie editions, commentary audio tracks, and commentary subtitle tracks; the UI renders version cards and commentary cards, and the troubleshooting preview link carries `preferredAudioTitle` plus `subtitleId` when commentary subtitles are present. Covered by `cargo test -p ersatzrs-web --features ssr movie_detail_loads_extras_versions_and_commentary_tracks`, `cargo xtask hydration-lint -p ersatzrs-web`, and focused Chromium `tests/e2e/content-variants.spec.ts` proof that the troubleshooting form preserves the intended commentary audio and subtitle selection.'
+resolved    = true
 
 [[debt]]
 id          = 'local-scanner-import-classify-extras'

@@ -40,6 +40,9 @@ release section when tagging a release.
 - Release Docker image builds now compile the native `ersatzrs-web` crate as an
   `rlib` only, avoiding the unused native web `cdylib` link that caused ARMv7
   QEMU aborts during multi-arch GHCR publication.
+- Movie detail pages now render linked extras as TV-style action rows, allow
+  those extras to be added to collections and playlists, and expose alternate
+  movie editions plus commentary audio/subtitle playback options.
 
 ## [1.0.15-beta.4] - 2026-07-01
 

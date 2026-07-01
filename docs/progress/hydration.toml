@@ -60,8 +60,8 @@ notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, car
 
 [[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'
-status = 'TODO'
-notes  = 'Reopened 2026-07-01: maintainer reported movie extras render as poster cards, movie extra Add To Collection/Playlist actions are missing, and commentary/alternate-edition cards are absent on `/media/movies/{movie_id}`. Pending browser proof for the corrected movie detail actions and variant cards.'
+status = '✅'
+notes  = 'Closed 2026-07-01: focused Chromium `tests/e2e/content-variants.spec.ts` proof renders `/media/movies/:id` with episode-style extras rows, visible Add To Collection/Add To Playlist extra actions, alternate-edition cards, commentary audio cards, commentary subtitle cards, and a troubleshooting form that preserves `preferredAudioTitle` plus selected commentary `subtitleId`; `cargo xtask hydration-lint -p ersatzrs-web` reports no new findings.'
 
 [[page]]
 name   = 'ArtistPage` (`/media/music/artists/:id`)'

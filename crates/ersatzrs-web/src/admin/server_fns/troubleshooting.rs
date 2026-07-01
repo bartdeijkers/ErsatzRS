@@ -70,6 +70,8 @@ pub struct PlaybackTroubleshootingContext {
     pub mode: PlaybackTroubleshootingMode,
     pub media_item_id: i64,
     pub channel_id: i64,
+    pub preferred_audio_title: String,
+    pub selected_subtitle_id: i64,
     pub title: String,
     pub kind: String,
     pub duration_seconds: i64,
@@ -254,11 +256,20 @@ pub async fn list_block_playout_history(
 pub async fn load_playback_troubleshooting_context(
     media_item_id: i64,
     channel_id: i64,
+    preferred_audio_title: String,
+    selected_subtitle_id: i64,
 ) -> Result<PlaybackTroubleshootingContext, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_playback_troubleshooting_context_with_pool(&state.pool, media_item_id, channel_id).await
+    load_playback_troubleshooting_context_with_pool(
+        &state.pool,
+        media_item_id,
+        channel_id,
+        preferred_audio_title,
+        selected_subtitle_id,
+    )
+    .await
 }
 
 #[server]
@@ -1720,6 +1731,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     media_item_id: i64,
     channel_id: i64,
+    preferred_audio_title: String,
+    selected_subtitle_id: i64,
 ) -> Result<PlaybackTroubleshootingContext, ServerFnError> {
     let ffmpeg_profiles = load_playback_options(
         pool,
@@ -1760,6 +1773,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             mode: PlaybackTroubleshootingMode::MediaItem,
             media_item_id,
             channel_id: 0,
+            preferred_audio_title: preferred_audio_title.trim().to_owned(),
+            selected_subtitle_id: selected_subtitle_id.max(0),
             title: row.title,
             kind: split_pascal_case(&row.kind),
             duration_seconds: parse_duration_seconds(&row.duration),
@@ -1781,6 +1796,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             mode: PlaybackTroubleshootingMode::Channel,
             media_item_id: 0,
             channel_id,
+            preferred_audio_title: String::new(),
+            selected_subtitle_id: 0,
             title: channel.name,
             kind: "Channel".to_owned(),
             duration_seconds: 0,
@@ -1796,6 +1813,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
 
     Ok(PlaybackTroubleshootingContext {
         mode: PlaybackTroubleshootingMode::Missing,
+        preferred_audio_title: String::new(),
+        selected_subtitle_id: 0,
         ffmpeg_profiles,
         stream_selectors: load_stream_selectors().await,
         watermarks,

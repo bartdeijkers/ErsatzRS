@@ -9,8 +9,15 @@ type Seed = {
   libraryPathId: number;
   movieId: number;
   movieMetadataId: number;
+  movieVersionId: number;
+  movieVersionMetadataId: number;
+  movieMediaVersionId: number;
+  movieCommentarySubtitleId: number;
   movieExtraId: number;
   movieExtraMetadataId: number;
+  collectionId: number;
+  playlistGroupId: number;
+  playlistId: number;
   showId: number;
   seasonId: number;
   showExtraId: number;
@@ -50,8 +57,15 @@ function seedForProject(testInfo: TestInfo): Seed {
     libraryPathId: base + 3,
     movieId: base + 10,
     movieMetadataId: base + 11,
-    movieExtraId: base + 12,
-    movieExtraMetadataId: base + 13,
+    movieVersionId: base + 12,
+    movieVersionMetadataId: base + 13,
+    movieMediaVersionId: base + 14,
+    movieCommentarySubtitleId: base + 15,
+    movieExtraId: base + 16,
+    movieExtraMetadataId: base + 17,
+    collectionId: base + 36,
+    playlistGroupId: base + 37,
+    playlistId: base + 38,
     showId: base + 20,
     seasonId: base + 21,
     showExtraId: base + 26,
@@ -74,6 +88,7 @@ function seedContentVariants(testInfo: TestInfo): Seed {
   const now = '2026-06-24T00:00:00Z';
   const itemIds = [
     seed.movieId,
+    seed.movieVersionId,
     seed.movieExtraId,
     seed.showId,
     seed.seasonId,
@@ -90,14 +105,22 @@ DELETE FROM "MusicVideoMetadata" WHERE "Id" IN (${seed.musicVideoMetadataId}, ${
 DELETE FROM "MusicVideo" WHERE "Id" IN (${seed.musicVideoId}, ${seed.musicVideoVersionId});
 DELETE FROM "ArtistMetadata" WHERE "Id" = ${seed.artistMetadataId};
 DELETE FROM "Artist" WHERE "Id" = ${seed.artistId};
+DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ${seed.playlistId} OR "MediaItemId" IN (${itemIds});
+DELETE FROM "Playlist" WHERE "Id" = ${seed.playlistId};
+DELETE FROM "PlaylistGroup" WHERE "Id" = ${seed.playlistGroupId};
+DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId} OR "MediaItemId" IN (${itemIds});
+DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
+DELETE FROM "Subtitle" WHERE "Id" = ${seed.movieCommentarySubtitleId};
+DELETE FROM "MediaStream" WHERE "MediaVersionId" = ${seed.movieMediaVersionId};
+DELETE FROM "MediaVersion" WHERE "Id" = ${seed.movieMediaVersionId};
 DELETE FROM "OtherVideoMetadata" WHERE "Id" IN (${seed.movieExtraMetadataId}, ${seed.showExtraMetadataId}, ${seed.seasonExtraMetadataId});
 DELETE FROM "OtherVideo" WHERE "Id" IN (${seed.movieExtraId}, ${seed.showExtraId}, ${seed.seasonExtraId});
 DELETE FROM "SeasonMetadata" WHERE "Id" = ${seed.seasonMetadataId};
 DELETE FROM "ShowMetadata" WHERE "Id" = ${seed.showMetadataId};
 DELETE FROM "Season" WHERE "Id" = ${seed.seasonId};
 DELETE FROM "Show" WHERE "Id" = ${seed.showId};
-DELETE FROM "MovieMetadata" WHERE "Id" = ${seed.movieMetadataId};
-DELETE FROM "Movie" WHERE "Id" = ${seed.movieId};
+DELETE FROM "MovieMetadata" WHERE "Id" IN (${seed.movieMetadataId}, ${seed.movieVersionMetadataId});
+DELETE FROM "Movie" WHERE "Id" IN (${seed.movieId}, ${seed.movieVersionId});
 DELETE FROM "MediaItem" WHERE "Id" IN (${itemIds});
 DELETE FROM "LibraryPath" WHERE "Id" = ${seed.libraryPathId};
 DELETE FROM "LocalLibrary" WHERE "Id" = ${seed.libraryId};
@@ -117,6 +140,7 @@ INSERT INTO "MediaItem" (
   "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
 ) VALUES
   (${seed.movieId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
+  (${seed.movieVersionId}, ${seed.libraryPathId}, 0, 2, 'directors_cut', ${seed.movieId}),
   (${seed.movieExtraId}, ${seed.libraryPathId}, 0, 1, 'featurette', ${seed.movieId}),
   (${seed.showId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.seasonId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
@@ -126,13 +150,50 @@ INSERT INTO "MediaItem" (
   (${seed.musicVideoId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.musicVideoVersionId}, ${seed.libraryPathId}, 0, 2, 'unplugged', ${seed.musicVideoId});
 
-INSERT INTO "Movie" ("Id") VALUES (${seed.movieId});
+INSERT INTO "Movie" ("Id") VALUES (${seed.movieId}), (${seed.movieVersionId});
 INSERT INTO "MovieMetadata" (
   "Id", "MovieId", "MetadataKind", "Title", "SortTitle", "Year", "Plot", "DateAdded", "DateUpdated"
-) VALUES (
+) VALUES
+(
   ${seed.movieMetadataId}, ${seed.movieId}, 0, 'E2E Variant Movie', 'e2e variant movie',
   2026, 'Movie with special features.', '${now}', '${now}'
+),
+(
+  ${seed.movieVersionMetadataId}, ${seed.movieVersionId}, 0, 'E2E Variant Movie Director''s Cut',
+  'e2e variant movie directors cut', 2026, 'Alternate edition.', '${now}', '${now}'
 );
+
+INSERT INTO "MediaVersion" (
+  "Id", "DateAdded", "DateUpdated", "Duration", "MovieId",
+  "Height", "Width", "VideoScanKind", "SampleAspectRatio", "DisplayAspectRatio", "RFrameRate"
+) VALUES (
+  ${seed.movieMediaVersionId}, '${now}', '${now}', '02:00:00', ${seed.movieId},
+  1080, 1920, 1, '1:1', '16:9', '24000/1001'
+);
+INSERT INTO "MediaStream" (
+  "Index", "Codec", "Profile", "MediaStreamKind", "Language",
+  "Channels", "Title", "Default", "Forced", "MediaVersionId"
+) VALUES
+  (0, 'h264', 'High', 1, NULL, 0, NULL, 1, 0, ${seed.movieMediaVersionId}),
+  (1, 'aac', NULL, 2, 'eng', 2, 'Main Audio', 1, 0, ${seed.movieMediaVersionId}),
+  (2, 'aac', NULL, 2, 'eng', 2, 'Director Commentary', 0, 0, ${seed.movieMediaVersionId}),
+  (3, 'srt', NULL, 3, 'eng', 0, 'Director Commentary Subtitles', 0, 0, ${seed.movieMediaVersionId});
+INSERT INTO "Subtitle" (
+  "Id", "MovieMetadataId", "StreamIndex", "SubtitleKind", "Title",
+  "Codec", "Language", "Default", "Forced", "Path", "IsExtracted",
+  "DateAdded", "DateUpdated"
+) VALUES (
+  ${seed.movieCommentarySubtitleId}, ${seed.movieMetadataId}, 3, 0,
+  'Director Commentary Subtitles', 'srt', 'eng', 0, 0,
+  '/cache/e2e-movie-commentary.srt', 1, '${now}', '${now}'
+);
+
+INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+  VALUES (${seed.collectionId}, 'E2E Variant Collection', 0);
+INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+  VALUES (${seed.playlistGroupId}, 'E2E Variant Playlists', 0);
+INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
+  VALUES (${seed.playlistId}, 'E2E Variant Playlist', ${seed.playlistGroupId}, 0);
 
 INSERT INTO "OtherVideo" ("Id") VALUES (${seed.movieExtraId}), (${seed.showExtraId}), (${seed.seasonExtraId});
 INSERT INTO "OtherVideoMetadata" (
@@ -215,8 +276,46 @@ test.describe('content variants UI surfacing', () => {
 
     await page.goto(`/media/movies/${seed.movieId}`);
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
-    await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
-    await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
+    const movieSpecialRow = page.locator('[data-media-special-row]', {
+      hasText: 'E2E Variant Featurette',
+    });
+    await expect(movieSpecialRow).toBeVisible();
+    await expect(movieSpecialRow.getByText('Extra: Featurette')).toBeVisible();
+    await expect(movieSpecialRow.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
+    await expect(movieSpecialRow.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
+    const movieVersionCard = page.locator('[data-movie-version-card]', {
+      hasText: "E2E Variant Movie Director's Cut",
+    });
+    await expect(movieVersionCard).toBeVisible();
+    await expect(movieVersionCard.getByText("Version: Director's Cut")).toBeVisible();
+    await expect(movieVersionCard.getByRole('link', { name: 'Details' })).toHaveAttribute(
+      'href',
+      `/media/movies/${seed.movieVersionId}`,
+    );
+    await expect(page.getByRole('heading', { name: 'Commentary Tracks' })).toBeVisible();
+    const commentaryCard = page.locator('[data-commentary-track-card]', {
+      hasText: 'Director Commentary',
+    });
+    await expect(commentaryCard).toBeVisible();
+    await expect(commentaryCard.getByText('Subtitle: Director Commentary Subtitles')).toBeVisible();
+    await expect(commentaryCard.getByRole('link', { name: 'Play' })).toHaveAttribute(
+      'href',
+      new RegExp(`/system/troubleshooting/playback\\?mediaItem=${seed.movieId}&preferredAudioTitle=Director%20Commentary&subtitleId=${seed.movieCommentarySubtitleId}`),
+    );
+    const commentarySubtitleCard = page.locator('[data-commentary-subtitle-card]', {
+      hasText: 'Director Commentary Subtitles',
+    });
+    await expect(commentarySubtitleCard).toBeVisible();
+    await expect(commentarySubtitleCard.getByRole('link', { name: 'Play' })).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.movieId}&subtitleId=${seed.movieCommentarySubtitleId}`,
+    );
+    await commentaryCard.getByRole('link', { name: 'Play' }).click();
+    await expect(page.locator('input[name="preferredAudioTitle"]')).toHaveValue('Director Commentary');
+    await expect(page.locator('select[name="subtitleId"]')).toHaveValue(
+      String(seed.movieCommentarySubtitleId),
+    );
 
     await page.goto(`/media/tv/shows/${seed.showId}`);
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();

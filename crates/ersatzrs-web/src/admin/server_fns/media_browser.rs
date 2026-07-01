@@ -87,6 +87,25 @@ impl ContentVariantInfo {
     }
 }
 
+/// Audio stream option surfaced on movie detail pages for commentary preview.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommentaryTrackRow {
+    pub media_version_id: i64,
+    pub stream_index: i64,
+    pub title: String,
+    pub language: Option<String>,
+}
+
+/// Subtitle option intended for commentary playback.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommentarySubtitleRow {
+    pub id: i64,
+    pub stream_index: i64,
+    pub title: String,
+    pub language: Option<String>,
+    pub codec: Option<String>,
+}
+
 /// Page-map for the alphabetic jump-bar. Mirrors `ErsatzTV`'s
 /// `SearchPageMap.PageMap`: for each bucket ('#' or 'a'..='z'), the 1-based
 /// page number that contains the first item starting with that letter.
@@ -136,6 +155,9 @@ pub struct MovieDetailRow {
     pub writers: Vec<String>,
     pub actors: Vec<ActorCardRow>,
     pub extras: Vec<MediaCardRow>,
+    pub alternate_versions: Vec<MediaCardRow>,
+    pub commentary_tracks: Vec<CommentaryTrackRow>,
+    pub commentary_subtitles: Vec<CommentarySubtitleRow>,
 }
 
 /// Detailed projection for the other-video details page. ErsatzTV only ships
@@ -679,6 +701,139 @@ async fn load_extra_cards(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
+async fn load_movie_alternate_version_cards(
+    pool: &ersatzrs_infra::db::DbPool,
+    parent_movie_id: i64,
+) -> Result<Vec<MediaCardRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT m."Id" AS "Id",
+                  COALESCE(mm."Title", '') AS "Title",
+                  COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
+                  mm."Year" AS "Year",
+                  a."Path" AS "Artwork",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind",
+                  pmm."Title" AS "ParentTitle"
+           FROM "Movie" m
+           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           JOIN "MediaItem" mi ON mi."Id" = m."Id"
+           LEFT JOIN "MovieMetadata" pmm ON pmm."MovieId" = mi."ParentMediaItemId"
+           LEFT JOIN "Artwork" a
+               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
+           WHERE mi."ParentMediaItemId" = ?
+             AND COALESCE(mi."ContentKind", 0) = 2
+           ORDER BY COALESCE(mi."SubKind", ''), mm."SortTitle", mm."Title""#,
+    )
+    .bind(parent_movie_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<i64>, _>("Year")
+                .unwrap_or(None)
+                .map(|year| year.to_string()),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Artwork")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
+            variant: content_variant_from_row(r),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_movie_commentary_tracks(
+    pool: &ersatzrs_infra::db::DbPool,
+    movie_id: i64,
+) -> Result<Vec<CommentaryTrackRow>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT mv."Id" AS "MediaVersionId",
+                  ms."Index" AS "StreamIndex",
+                  COALESCE(NULLIF(ms."Title", ''), 'Commentary') AS "Title",
+                  ms."Language" AS "Language"
+           FROM "MediaVersion" mv
+           JOIN "MediaStream" ms ON ms."MediaVersionId" = mv."Id"
+           WHERE mv."MovieId" = ?
+             AND ms."MediaStreamKind" = 2
+             AND LOWER(COALESCE(ms."Title", '')) LIKE '%commentary%'
+           ORDER BY mv."Id", ms."Index""#,
+    )
+    .bind(movie_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| CommentaryTrackRow {
+            media_version_id: r.try_get("MediaVersionId").unwrap_or(0),
+            stream_index: r.try_get("StreamIndex").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_movie_commentary_subtitles(
+    pool: &ersatzrs_infra::db::DbPool,
+    movie_id: i64,
+) -> Result<Vec<CommentarySubtitleRow>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT DISTINCT sub."Id" AS "Id",
+                  sub."StreamIndex" AS "StreamIndex",
+                  COALESCE(NULLIF(sub."Title", ''), NULLIF(ms."Title", ''), 'Commentary') AS "Title",
+                  sub."Language" AS "Language",
+                  sub."Codec" AS "Codec"
+           FROM "Subtitle" sub
+           JOIN "MovieMetadata" mm ON mm."Id" = sub."MovieMetadataId"
+           LEFT JOIN "MediaVersion" mv ON mv."MovieId" = mm."MovieId"
+           LEFT JOIN "MediaStream" ms
+              ON ms."MediaVersionId" = mv."Id"
+             AND ms."Index" = sub."StreamIndex"
+             AND ms."MediaStreamKind" = 3
+           WHERE mm."MovieId" = ?
+             AND NOT (
+                 sub."SubtitleKind" = 0
+                 AND sub."IsExtracted" = 0
+                 AND COALESCE(sub."Codec", '') NOT IN ('dvd_subtitle', 'hdmv_pgs_subtitle', 'xsub')
+             )
+             AND (
+                 LOWER(COALESCE(sub."Title", '')) LIKE '%commentary%'
+                 OR LOWER(COALESCE(ms."Title", '')) LIKE '%commentary%'
+             )
+           ORDER BY sub."StreamIndex", sub."Id""#,
+    )
+    .bind(movie_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| CommentarySubtitleRow {
+            id: r.try_get("Id").unwrap_or(0),
+            stream_index: r.try_get("StreamIndex").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+            codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Movies
 // ---------------------------------------------------------------------------
@@ -770,11 +925,20 @@ pub async fn list_movies(
 #[server]
 #[allow(clippy::too_many_lines)]
 pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
+    get_movie_details_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+pub async fn get_movie_details_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+) -> Result<Option<MovieDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
 
     let Some(row) = sqlx::query(
         r#"SELECT m."Id" AS "Id",
@@ -794,7 +958,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
            LIMIT 1"#,
     )
     .bind(id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?
     else {
         return Ok(None);
@@ -808,7 +972,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
            WHERE "MovieMetadataId" = ? AND "ArtworkKind" = 0 LIMIT 1"#,
     )
     .bind(metadata_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?
     .and_then(|v: Option<String>| v);
     let fanart_path: Option<String> = sqlx::query_scalar(
@@ -816,7 +980,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
            WHERE "MovieMetadataId" = ? AND "ArtworkKind" = 3 LIMIT 1"#,
     )
     .bind(metadata_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?
     .and_then(|v: Option<String>| v);
 
@@ -829,14 +993,14 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
            ORDER BY mv."Id" LIMIT 1"#,
     )
     .bind(id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?
     .and_then(|v: Option<String>| v);
     let library_path_id: Option<i64> = row.try_get("LibraryPathId").unwrap_or(None);
     let local_path = match (file_path.as_deref(), library_path_id) {
         (Some(path), Some(library_path_id)) => {
             let replacements =
-                load_path_replacements_for_library_path(&state.pool, library_path_id).await?;
+                load_path_replacements_for_library_path(pool, library_path_id).await?;
             Some(resolve_local_path(path, &replacements))
         }
         (Some(path), None) => Some(path.to_owned()),
@@ -854,13 +1018,12 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
         })
         .unwrap_or_default();
 
-    let genres = load_strings(&state.pool, r#""Genre""#, "MovieMetadataId", metadata_id).await?;
-    let tags = load_strings(&state.pool, r#""Tag""#, "MovieMetadataId", metadata_id).await?;
-    let studios = load_strings(&state.pool, r#""Studio""#, "MovieMetadataId", metadata_id).await?;
-    let directors =
-        load_strings(&state.pool, r#""Director""#, "MovieMetadataId", metadata_id).await?;
-    let writers = load_strings(&state.pool, r#""Writer""#, "MovieMetadataId", metadata_id).await?;
-    let languages = load_movie_languages(&state.pool, id).await?;
+    let genres = load_strings(pool, r#""Genre""#, "MovieMetadataId", metadata_id).await?;
+    let tags = load_strings(pool, r#""Tag""#, "MovieMetadataId", metadata_id).await?;
+    let studios = load_strings(pool, r#""Studio""#, "MovieMetadataId", metadata_id).await?;
+    let directors = load_strings(pool, r#""Director""#, "MovieMetadataId", metadata_id).await?;
+    let writers = load_strings(pool, r#""Writer""#, "MovieMetadataId", metadata_id).await?;
+    let languages = load_movie_languages(pool, id).await?;
 
     // Actors ordered by `Order` then `Id` (see `Movies/Mapper.cs`).
     let actor_rows = sqlx::query(
@@ -874,7 +1037,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
            ORDER BY a."Order", a."Id""#,
     )
     .bind(metadata_id)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
     let actors = actor_rows
         .iter()
@@ -888,7 +1051,10 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
         })
         .collect();
-    let extras = load_extra_cards(&state.pool, id).await?;
+    let extras = load_extra_cards(pool, id).await?;
+    let alternate_versions = load_movie_alternate_version_cards(pool, id).await?;
+    let commentary_tracks = load_movie_commentary_tracks(pool, id).await?;
+    let commentary_subtitles = load_movie_commentary_subtitles(pool, id).await?;
 
     Ok(Some(MovieDetailRow {
         id: row.try_get("Id").unwrap_or(0),
@@ -913,6 +1079,9 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
         writers,
         actors,
         extras,
+        alternate_versions,
+        commentary_tracks,
+        commentary_subtitles,
     }))
 }
 
@@ -8251,6 +8420,107 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn movie_detail_loads_extras_versions_and_commentary_tracks() {
+        let (_database_dir, pool) = collection_test_pool("movie-detail-variants.db").await;
+        seed_movie_detail_variant_fixture(&pool).await;
+
+        let movie = get_movie_details_with_pool(&pool, 10)
+            .await
+            .expect("load movie details")
+            .expect("movie exists");
+
+        assert_eq!(movie.title, "Example Movie");
+        assert_eq!(movie.extras.len(), 1);
+        assert_eq!(movie.extras[0].id, 30);
+        assert_eq!(movie.extras[0].title, "Behind the Scenes");
+        assert_eq!(
+            movie.extras[0].variant.content_kind,
+            ersatzrs_domain::ContentKind::Extra
+        );
+        assert_eq!(
+            movie.extras[0].variant.sub_kind.as_deref(),
+            Some("featurette")
+        );
+
+        assert_eq!(movie.alternate_versions.len(), 1);
+        assert_eq!(movie.alternate_versions[0].id, 11);
+        assert_eq!(
+            movie.alternate_versions[0].title,
+            "Example Movie Director's Cut"
+        );
+        assert_eq!(
+            movie.alternate_versions[0].variant.content_kind,
+            ersatzrs_domain::ContentKind::AlternateVersion
+        );
+        assert_eq!(
+            movie.alternate_versions[0].variant.sub_kind.as_deref(),
+            Some("directors_cut")
+        );
+        assert_eq!(
+            movie.alternate_versions[0].variant.parent_title.as_deref(),
+            Some("Example Movie")
+        );
+
+        assert_eq!(movie.commentary_tracks.len(), 1);
+        assert_eq!(movie.commentary_tracks[0].media_version_id, 1000);
+        assert_eq!(movie.commentary_tracks[0].stream_index, 2);
+        assert_eq!(movie.commentary_tracks[0].title, "Director Commentary");
+        assert_eq!(movie.commentary_tracks[0].language.as_deref(), Some("eng"));
+
+        assert_eq!(movie.commentary_subtitles.len(), 1);
+        assert_eq!(movie.commentary_subtitles[0].id, 1200);
+        assert_eq!(movie.commentary_subtitles[0].stream_index, 3);
+        assert_eq!(
+            movie.commentary_subtitles[0].title,
+            "Director Commentary Subtitles"
+        );
+        assert_eq!(
+            movie.commentary_subtitles[0].language.as_deref(),
+            Some("eng")
+        );
+    }
+
+    #[tokio::test]
+    async fn movie_extra_collection_and_playlist_actions_use_other_video_type() {
+        let (_database_dir, pool) = collection_test_pool("movie-extra-actions.db").await;
+        seed_movie_detail_variant_fixture(&pool).await;
+        let state = collection_test_state(pool.clone());
+        let owner = leptos::prelude::Owner::new();
+        owner.with(|| leptos::prelude::provide_context(state));
+        owner.set();
+
+        let collection_added = add_media_items_to_collection(900, vec![30])
+            .await
+            .expect("add extra to collection");
+        let playlist_added =
+            add_media_items_to_playlist(MediaBrowserKind::OtherVideo, 902, vec![30])
+                .await
+                .expect("add extra to playlist");
+
+        let collection_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "CollectionItem"
+               WHERE "CollectionId" = 900 AND "MediaItemId" = 30"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load collection item count");
+        let collection_type: i64 = sqlx::query_scalar(
+            r#"SELECT "CollectionType" FROM "PlaylistItem"
+               WHERE "PlaylistId" = 902 AND "MediaItemId" = 30"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load playlist item collection type");
+
+        assert_eq!(collection_added, 1);
+        assert_eq!(playlist_added, 1);
+        assert_eq!(collection_count, 1);
+        assert_eq!(collection_type, 40);
+
+        owner.cleanup();
+    }
+
+    #[tokio::test]
     async fn load_artist_languages_resolves_music_video_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
@@ -8667,6 +8937,149 @@ mod tests {
         .execute(pool)
         .await
         .expect("seed tags");
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn seed_movie_detail_variant_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        let now = "2026-07-01T00:00:00Z";
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed local media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Movies', 1, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed local library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/movies', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" (
+                   "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
+               ) VALUES
+                   (10, 1, 0, 0, NULL, NULL),
+                   (11, 1, 0, 2, 'directors_cut', 10),
+                   (30, 1, 0, 1, 'featurette', 10)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media items");
+        sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (10), (11)"#)
+            .execute(pool)
+            .await
+            .expect("seed movies");
+        sqlx::query(r#"INSERT INTO "OtherVideo" ("Id") VALUES (30)"#)
+            .execute(pool)
+            .await
+            .expect("seed other video");
+        sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                   "Id", "MovieId", "MetadataKind", "Title", "SortTitle", "Year",
+                   "Plot", "DateAdded", "DateUpdated"
+               ) VALUES
+                   (100, 10, 0, 'Example Movie', 'example movie', 2026,
+                    'Primary movie.', ?, ?),
+                   (101, 11, 0, 'Example Movie Director''s Cut',
+                    'example movie directors cut', 2026, 'Alternate edition.', ?, ?)"#,
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("seed movie metadata");
+        sqlx::query(
+            r#"INSERT INTO "OtherVideoMetadata" (
+                   "Id", "OtherVideoId", "MetadataKind", "Title", "OriginalTitle",
+                   "SortTitle", "Year", "DateAdded", "DateUpdated"
+               ) VALUES (
+                   300, 30, 0, 'Behind the Scenes', 'Featurette',
+                   'behind the scenes', 2026, ?, ?
+               )"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("seed other-video metadata");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "MovieId",
+                   "Height", "Width", "VideoScanKind", "SampleAspectRatio",
+                   "DisplayAspectRatio", "RFrameRate"
+               ) VALUES (
+                   1000, ?, ?, '02:00:00', 10, 1080, 1920, 1, '1:1', '16:9', '24000/1001'
+               )"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "Profile", "MediaStreamKind", "Language",
+                   "Channels", "Title", "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (1100, 0, 'h264', 'High', 1, NULL, 0, NULL, 1, 0, 1000),
+                   (1101, 1, 'aac', NULL, 2, 'eng', 2, 'Main Audio', 1, 0, 1000),
+                   (1102, 2, 'aac', NULL, 2, 'eng', 2, 'Director Commentary', 0, 0, 1000),
+                   (1103, 3, 'srt', NULL, 3, 'eng', 0, 'Director Commentary Subtitles', 0, 0, 1000)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media streams");
+        sqlx::query(
+            r#"INSERT INTO "Subtitle" (
+                   "Id", "MovieMetadataId", "StreamIndex", "SubtitleKind", "Title",
+                   "Codec", "Language", "Default", "Forced", "Path", "IsExtracted",
+                   "DateAdded", "DateUpdated"
+               ) VALUES (
+                   1200, 100, 3, 0, 'Director Commentary Subtitles', 'srt', 'eng',
+                   0, 0, '/cache/movie-commentary.srt', 1, ?, ?
+               )"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("seed commentary subtitle");
+        sqlx::query(
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+               VALUES (900, 'Favorites', 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed collection");
+        sqlx::query(
+            r#"INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+               VALUES (901, 'Movies', 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed playlist group");
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
+               VALUES (902, 'Featurettes', 901, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed playlist");
     }
 
     #[allow(clippy::too_many_lines)]

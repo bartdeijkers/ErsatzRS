@@ -322,7 +322,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/tv/seasons/:id` | TODO   | Detail page renders fanart/poster header plus vertical episode cards; needs manual Add-To, Show Media Info, and Troubleshoot Playback hydration smoke. |
 | `/media/movies`          | ✅     | Seeded URL-driven query plus item overflow menu, Add To Collection dialog, Show Media Info, and Troubleshoot Playback covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/media/trash`           | ✅     | Seeded Delete Selected dialog cancel, Empty Trash confirmation, and delete persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
-| `/media/movies/:id`      | TODO   | Reopened 2026-07-01: movie extras need episode-card row treatment, Add To Collection/Playlist actions, and commentary/alternate-edition cards with browser proof. |
+| `/media/movies/:id`      | ✅     | Movie extras row treatment, Add To Collection/Playlist extra actions, alternate-edition cards, commentary audio/subtitle cards, and troubleshooting form selection preservation covered by `tests/e2e/content-variants.spec.ts`. |
 | `/media/remote/streams`  | ✅     | Dedicated `RemoteStreamList.razor` parity route; card geometry, Add To Collection persistence, no-JS SSR HTML, and mobile menu covered by `tests/e2e/remote-streams.spec.ts`. |
 | `/media/music/artists/:id` | TODO | Reopened 2026-07-01: artist Add To Collection and preview images reported broken; needs browser proof for the hydrated action and rendered artist/music-video preview images. |
 | `/system/troubleshooting/playback` | TODO | Media-item entry route accepts `?mediaItem=ID` and loads backend media-info context. |

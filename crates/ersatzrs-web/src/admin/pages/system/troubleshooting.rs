@@ -511,12 +511,33 @@ pub fn PlaybackTroubleshootingPage() -> impl IntoView {
             .and_then(|value| value.parse::<i64>().ok())
             .unwrap_or_default()
     });
+    let preferred_audio_title =
+        query.with_untracked(|params| params.get("preferredAudioTitle").unwrap_or_default());
+    let selected_subtitle_id = query.with_untracked(|params| {
+        params
+            .get("subtitleId")
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
 
     let context: Resource<Result<PlaybackTroubleshootingContext, ServerFnError>> =
         Resource::new_blocking(
-            move || (media_item_id, channel_id),
-            |(media_item, channel)| async move {
-                load_playback_troubleshooting_context(media_item, channel).await
+            move || {
+                (
+                    media_item_id,
+                    channel_id,
+                    preferred_audio_title.clone(),
+                    selected_subtitle_id,
+                )
+            },
+            |(media_item, channel, preferred_audio, subtitle_id)| async move {
+                load_playback_troubleshooting_context(
+                    media_item,
+                    channel,
+                    preferred_audio,
+                    subtitle_id,
+                )
+                .await
             },
         );
 
@@ -594,12 +615,15 @@ fn render_playback_troubleshooting(context: PlaybackTroubleshootingContext) -> A
 fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: String) -> AnyView {
     let is_media_item = context.mode == PlaybackTroubleshootingMode::MediaItem;
     let stream_selectors_disabled = context.stream_selectors.is_empty();
+    let preferred_audio_title = context.preferred_audio_title.clone();
+    let selected_subtitle_id = context.selected_subtitle_id;
 
     view! {
         <form method="get" action="/api/troubleshoot/playback.m3u8" class=style::playbackForm>
             <input type="hidden" name="mediaItem" value=context.media_item_id.to_string()/>
             <input type="hidden" name="channel" value=context.channel_id.to_string()/>
             <input type="hidden" name="streamingMode" value="1"/>
+            <input type="hidden" name="preferredAudioTitle" value=preferred_audio_title/>
 
             {playback_select_field(
                 tr(TextKey::FfmpegProfile),
@@ -623,13 +647,20 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                     <label class=style::playbackField>
                         <span>{tr(TextKey::Subtitle)}</span>
                         <select class=style::select name="subtitleId">
-                            <option value="">{tr(TextKey::DefaultOption)}</option>
+                            <option value="" selected=selected_subtitle_id == 0>{tr(TextKey::DefaultOption)}</option>
                             {context.subtitles.into_iter().map(|subtitle| {
                                 let label = format!(
                                     "{}: {} - {} ({})",
                                     subtitle.id, subtitle.language, subtitle.title, subtitle.codec
                                 );
-                                view! { <option value=subtitle.id.to_string()>{label}</option> }
+                                view! {
+                                    <option
+                                        value=subtitle.id.to_string()
+                                        selected=subtitle.id == selected_subtitle_id
+                                    >
+                                        {label}
+                                    </option>
+                                }
                             }).collect_view()}
                         </select>
                     </label>

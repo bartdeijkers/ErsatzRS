@@ -15,26 +15,32 @@ state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
 Current selection: maintainer-reported regressions reopened six parity
 features on 2026-07-01, and ADR 0019 added one Not started scheduling
-extension. The movie-detail gap spans `media-browsers` and `content-variants`:
-`/media/movies/{movie_id}` renders movie extras like poster cards, does not let
-movie extras be added to collections/playlists, and lacks playable
-commentary-track / alternate-edition cards for theatrical, remastered,
-director's cut, black-and-white, and related versions. `media-browsers` also
-tracks missing multi-select / three-dots action menus on movie, TV show,
-season, artist, song, and image routes, top-positioned songs/images toolbars
-that should match the right-side browser layout, and the artist-detail Add To
-Collection / preview-image regression. `ersatzrs-healthcheck` tracks Zero
-Duration warnings for static images, which should be ignored unless the image
-is an animated/timed format that needs duration metadata. Additional tracked
-follow-ups cover `/channels/add` defaulting to `ErsatzTV` instead of
-`ErsatzRS`, ADR 0017 default FFmpeg profile video bitrate halving with buffer
-sizes untouched, and inconsistent Video/Audio section spacing on
-`/ffmpeg/{ffmpeg_profile_id}`. The new `similar-video-cooldown` scheduling
-feature remains below these immediate regressions in the prompt order.
+extension. Closed 2026-07-01: the movie-detail gap spanning `media-browsers`
+and `content-variants` now renders `/media/movies/{movie_id}` extras as
+episode-style rows, restores movie-extra collection/playlist actions, and
+surfaces playable alternate-edition plus commentary audio/subtitle options.
+`media-browsers` still tracks missing multi-select / three-dots action menus on
+movie, TV show, season, artist, song, and image routes, top-positioned
+songs/images toolbars that should match the right-side browser layout, and the
+artist-detail Add To Collection / preview-image regression.
+`ersatzrs-healthcheck` tracks Zero Duration warnings for static images, which
+should be ignored unless the image is an animated/timed format that needs
+duration metadata. Additional tracked follow-ups cover `/channels/add`
+defaulting to `ErsatzTV` instead of `ErsatzRS`, ADR 0017 default FFmpeg profile
+video bitrate halving with buffer sizes untouched, and inconsistent Video/Audio
+section spacing on `/ffmpeg/{ffmpeg_profile_id}`. The new
+`similar-video-cooldown` scheduling feature remains below these immediate
+regressions in the prompt order.
 
 ---
 
 ## 1. Fix reopened movie-detail extras and content-variant cards (slugs `media-browsers`, `content-variants`)
+
+Status: closed 2026-07-01 by `fix(web): restore movie detail extras and variant cards`.
+Evidence: focused Rust tests for movie detail projection/action persistence,
+`cargo xtask hydration-lint -p ersatzrs-web`, and focused Chromium
+`tests/e2e/content-variants.spec.ts` proof, including commentary subtitle
+selection preservation in the playback troubleshooting form.
 
 Use the repo workflow from AGENTS.md. This is a parity regression fix for
 `/media/movies/{movie_id}`, tracked by these debts:

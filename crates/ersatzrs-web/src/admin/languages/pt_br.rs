@@ -1095,6 +1095,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ComputingPreview => "Calculando prévia...",
         TextKey::Confirm => "Confirmar",
         TextKey::ConfirmDelete => "Confirmar exclusão",
+        TextKey::CommentaryTracks => "Faixas de comentário",
         TextKey::Content => "Conteúdo",
         TextKey::ContentVariantAcoustic => "Acústico",
         TextKey::ContentVariantAlternateVersion => "Versão",

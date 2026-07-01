@@ -6,14 +6,26 @@
 //! Collection / Add-to-Playlist / Show-Media-Info modals are shared across
 //! movies/shows/artists/other-videos via
 //! [`crate::admin::pages::media::multi_select_browser`].
+#![allow(clippy::too_many_lines)]
+
+use std::collections::HashSet;
+
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{content_variant_badge_label, tr, TextKey};
-use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
-use crate::admin::server_fns::media_browser::{get_movie_details, MovieDetailRow};
-use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
+use crate::admin::pages::media::multi_select_browser::{
+    AddToCollectionModal, AddToPlaylistModal, BrowserKindConfig, MediaInfoModal,
+    MultiSelectBrowserPage,
+};
+use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
+use crate::admin::server_fns::media_browser::{
+    get_media_item_info_json, CommentarySubtitleRow, CommentaryTrackRow, MediaBrowserKind,
+    MediaCardRow, MovieDetailRow,
+};
+use crate::admin::ui::primitives::card::{first_letter_placeholder, MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 #[allow(dead_code)]
 mod detail_style {
@@ -38,28 +50,41 @@ pub fn MoviePage() -> impl IntoView {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or_default()
     });
+    let movie = load_movie_detail_initial(id);
 
-    let data: Resource<Option<MovieDetailRow>> = Resource::new_blocking(
-        move || id,
-        |id| async move { get_movie_details(id).await.ok().flatten() },
-    );
+    match movie {
+        Some(movie) => view! { <MovieDetailIsland movie/> }.into_any(),
+        None => view! {
+            <div class=detail_style::not_found>
+                <h1>{tr(TextKey::MovieNotFound)}</h1>
+                <a href="/media/movies">{tr(TextKey::BackToMovies)}</a>
+            </div>
+        }
+        .into_any(),
+    }
+}
 
-    view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    match data.get() {
-                        Some(Some(movie)) => view! { <MovieDetailView movie/> }.into_any(),
-                        Some(None) => view! {
-                            <div class=detail_style::not_found>
-                                <h1>{tr(TextKey::MovieNotFound)}</h1>
-                                <a href="/media/movies">{tr(TextKey::BackToMovies)}</a>
-                            </div>
-                        }
-                        .into_any(),
-                        None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
-                    }
-                }}
-            </Suspense>
+#[island]
+fn MovieDetailIsland(movie: MovieDetailRow) -> impl IntoView {
+    view! { <MovieDetailView movie/> }
+}
+
+fn load_movie_detail_initial(id: i64) -> Option<MovieDetailRow> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                crate::admin::server_fns::media_browser::get_movie_details(id)
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
     }
 }
 
@@ -86,9 +111,56 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         writers,
         actors,
         extras,
+        alternate_versions,
+        commentary_tracks,
+        commentary_subtitles,
     } = movie;
 
+    let movie_collection_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
+    let movie_playlist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
+    let extra_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
+
+    let movie_collection_open = RwSignal::new(false);
+    let movie_playlist_open = RwSignal::new(false);
+    let extra_collection_open = RwSignal::new(false);
+    let extra_playlist_open = RwSignal::new(false);
+
+    let media_info_open = RwSignal::new(false);
+    let media_info_title = RwSignal::new(String::new());
+    let media_info_body = RwSignal::new(String::new());
+    let toast = use_toast();
+    let media_info_action = Action::new(move |target: &(i64, String)| {
+        let (media_item_id, title) = target.clone();
+        async move {
+            get_media_item_info_json(media_item_id)
+                .await
+                .map(|json| (title, json))
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = media_info_action.value().get() {
+            match result {
+                Ok((title, json)) => {
+                    media_info_title.set(title);
+                    media_info_body.set(json);
+                }
+                Err(error) => {
+                    media_info_body.set(format!("{}: {error}", tr(TextKey::UnableToLoadMediaInfo)));
+                    toast.push(tr(TextKey::UnableToLoadMediaInfo), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+    let show_media_info = Callback::new(move |(media_item_id, title): (i64, String)| {
+        media_info_title.set(title.clone());
+        media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
+        media_info_open.set(true);
+        media_info_action.dispatch((media_item_id, title));
+    });
+    let show_movie_info = show_media_info.clone();
+
     let title_for_poster = title.clone();
+    let title_for_info = title.clone();
     let poster_state = media_state(media_item_state);
     let fanart_src = fanart_url.unwrap_or_default();
     let fanart_style = if fanart_src.trim().is_empty() {
@@ -152,6 +224,17 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
     } else {
         ""
     };
+    let versions_style = if alternate_versions.is_empty() {
+        "display:none"
+    } else {
+        ""
+    };
+    let commentary_style = if commentary_tracks.is_empty() && commentary_subtitles.is_empty() {
+        "display:none"
+    } else {
+        ""
+    };
+    let troubleshoot_href = playback_troubleshooting_href(id, None, None);
 
     view! {
         <div class=detail_style::page>
@@ -187,7 +270,41 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                         </div>
                     </div>
                 </div>
-                <MovieActions id/>
+                <div class=detail_style::actions>
+                    <button
+                        type="button"
+                        class=detail_style::btn_add
+                        on:click=move |_| {
+                            movie_collection_selected.set(HashSet::from([id]));
+                            movie_collection_open.set(true);
+                        }
+                    >
+                        {tr(TextKey::AddToCollection)}
+                    </button>
+                    <button
+                        type="button"
+                        class=detail_style::btn_add
+                        on:click=move |_| {
+                            movie_playlist_selected.set(HashSet::from([id]));
+                            movie_playlist_open.set(true);
+                        }
+                    >
+                        {tr(TextKey::AddToPlaylist)}
+                    </button>
+                    <button
+                        type="button"
+                        class=detail_style::btn_secondary
+                        on:click=move |_| show_movie_info.run((id, title_for_info.clone()))
+                    >
+                        {tr(TextKey::ShowMediaInfo)}
+                    </button>
+                    <a class=detail_style::btn_secondary href=troubleshoot_href>
+                        {tr(TextKey::TroubleshootPlayback)}
+                    </a>
+                    <a class=detail_style::btn_back href="/media/movies">
+                        {tr(TextKey::Back)}
+                    </a>
+                </div>
                 <div class=detail_style::warning style=warning_style>
                     <span style=icon_style(IconName::Warning, "1.2rem") aria-hidden="true"></span>
                     <span>{format!("{warning_label}: ")}</span>
@@ -207,25 +324,48 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     <h2 class=detail_style::section_title>
                         {tr(TextKey::ContentVariantSpecialFeatures)}
                     </h2>
-                    <div class=detail_style::actor_grid>
+                    <div class=detail_style::special_stack>
                         {extras.into_iter().map(|extra| {
-                            let extra_id = extra.id;
-                            let title = extra.title.clone();
-                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
+                            let show_extra_info = show_media_info.clone();
                             view! {
-                                <MediaCard
-                                    title=title
-                                    subtitle=extra.subtitle
-                                    artwork_url=extra.artwork_path
-                                    href=Some(format!("/media/other/videos/{extra_id}"))
-                                    placeholder=placeholder
-                                    state=MediaItemState::Normal
-                                    badge=content_variant_badge_label(
-                                        extra.variant.content_kind,
-                                        extra.variant.sub_kind.as_deref(),
-                                    )
+                                <TvSpecialFeatureRow
+                                    extra=extra
+                                    on_add_collection=Callback::new(move |extra_id: i64| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_collection_open.set(true);
+                                    })
+                                    on_add_playlist=Callback::new(move |extra_id: i64| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_playlist_open.set(true);
+                                    })
+                                    on_show_info=show_extra_info
                                 />
                             }
+                        }).collect_view()}
+                    </div>
+                </section>
+
+                <section class=detail_style::actors_section style=versions_style>
+                    <h2 class=detail_style::section_title>{tr(TextKey::ContentVariantVersions)}</h2>
+                    <div class=detail_style::variant_grid>
+                        {alternate_versions.into_iter().map(|version| {
+                            view! { <MovieVersionCard version=version/> }
+                        }).collect_view()}
+                    </div>
+                </section>
+
+                <section class=detail_style::actors_section style=commentary_style>
+                    <h2 class=detail_style::section_title>{tr(TextKey::CommentaryTracks)}</h2>
+                    <div class=detail_style::commentary_grid>
+                        {commentary_tracks.into_iter().map(|track| {
+                            let subtitle = best_commentary_subtitle_for_track(
+                                &track,
+                                &commentary_subtitles,
+                            );
+                            view! { <CommentaryTrackCard movie_id=id track=track subtitle=subtitle/> }
+                        }).collect_view()}
+                        {commentary_subtitles.iter().cloned().map(|subtitle| {
+                            view! { <CommentarySubtitleCard movie_id=id subtitle=subtitle/> }
                         }).collect_view()}
                     </div>
                 </section>
@@ -250,404 +390,191 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                 </section>
             </div>
 
+            <AddToCollectionModal
+                open=movie_collection_open
+                selected=movie_collection_selected
+                redirect_after_add=true
+            />
+            <AddToPlaylistModal
+                open=movie_playlist_open
+                selected=movie_playlist_selected
+                kind=MediaBrowserKind::Movie
+            />
+            <AddToCollectionModal open=extra_collection_open selected=extra_selected/>
+            <AddToPlaylistModal
+                open=extra_playlist_open
+                selected=extra_selected
+                kind=MediaBrowserKind::OtherVideo
+            />
+            <MediaInfoModal open=media_info_open title=media_info_title body=media_info_body/>
         </div>
     }
 }
 
 #[component]
-fn MovieActions(id: i64) -> impl IntoView {
-    let add_button_id = format!("movie-add-button-{id}");
-    let menu_id = format!("movie-add-menu-{id}");
-    let collection_open_id = format!("movie-collection-open-{id}");
-    let collection_modal_id = format!("movie-collection-modal-{id}");
-    let collection_select_id = format!("movie-collection-select-{id}");
-    let collection_name_id = format!("movie-collection-name-{id}");
-    let collection_message_id = format!("movie-collection-message-{id}");
-    let collection_cancel_id = format!("movie-collection-cancel-{id}");
-    let collection_submit_id = format!("movie-collection-submit-{id}");
-    let playlist_open_id = format!("movie-playlist-open-{id}");
-    let playlist_modal_id = format!("movie-playlist-modal-{id}");
-    let playlist_group_id = format!("movie-playlist-group-{id}");
-    let playlist_select_id = format!("movie-playlist-select-{id}");
-    let playlist_message_id = format!("movie-playlist-message-{id}");
-    let playlist_cancel_id = format!("movie-playlist-cancel-{id}");
-    let playlist_submit_id = format!("movie-playlist-submit-{id}");
-    let media_info_open_id = format!("movie-media-info-open-{id}");
-    let media_info_modal_id = format!("movie-media-info-modal-{id}");
-    let media_info_title_id = format!("movie-media-info-title-{id}");
-    let media_info_body_id = format!("movie-media-info-body-{id}");
-    let media_info_close_id = format!("movie-media-info-close-{id}");
-    let troubleshoot_href = format!("/system/troubleshooting/playback?mediaItem={id}");
-    let title_for_info = format!("{} {id}", tr(TextKey::Movie));
-    let script_ids = MovieActionScriptIds {
-        media_item_id: id,
-        title: &title_for_info,
-        add_button: &add_button_id,
-        menu: &menu_id,
-        collection_open: &collection_open_id,
-        collection_modal: &collection_modal_id,
-        collection_select: &collection_select_id,
-        collection_name: &collection_name_id,
-        collection_message: &collection_message_id,
-        collection_cancel: &collection_cancel_id,
-        collection_submit: &collection_submit_id,
-        playlist_open: &playlist_open_id,
-        playlist_modal: &playlist_modal_id,
-        playlist_group: &playlist_group_id,
-        playlist_select: &playlist_select_id,
-        playlist_message: &playlist_message_id,
-        playlist_cancel: &playlist_cancel_id,
-        playlist_submit: &playlist_submit_id,
-        media_info_open: &media_info_open_id,
-        media_info_modal: &media_info_modal_id,
-        media_info_title: &media_info_title_id,
-        media_info_body: &media_info_body_id,
-        media_info_close: &media_info_close_id,
+fn MovieVersionCard(version: MediaCardRow) -> impl IntoView {
+    let version_id = version.id;
+    let title = version.title;
+    let subtitle = version.subtitle.filter(|value| !value.trim().is_empty());
+    let placeholder = first_letter_placeholder(&version.sort_title);
+    let badge = content_variant_badge_label(
+        version.variant.content_kind,
+        version.variant.sub_kind.as_deref(),
+    );
+    let details_href = format!("/media/movies/{version_id}");
+    let troubleshoot_href = playback_troubleshooting_href(version_id, None, None);
+    let thumb_alt = title.clone();
+    let title_for_label = title.clone();
+    let thumb = match version.artwork_path {
+        Some(src) => view! {
+            <img class=detail_style::variant_thumb src=src alt=thumb_alt loading="lazy"/>
+        }
+        .into_any(),
+        None => view! {
+            <div class=detail_style::variant_placeholder>{placeholder}</div>
+        }
+        .into_any(),
     };
-    let script = movie_actions_script(&script_ids);
 
     view! {
-        <div class=detail_style::actions>
-            <div class=detail_style::add_menu>
-                <button
-                    id=add_button_id
-                    type="button"
-                    class=detail_style::btn_add
-                    aria-label=tr(TextKey::AddToEllipsis)
-                >
-                    <span>{tr(TextKey::AddToEllipsis)}</span>
-                </button>
-                <div
-                    class=detail_style::add_menu_popover
-                    role="menu"
-                    id=menu_id
-                    style="display:none"
-                >
-                    <button
-                        id=collection_open_id
-                        type="button"
-                        class=detail_style::add_menu_entry
-                        role="menuitem"
-                    >
-                        <span>{tr(TextKey::AddToCollection)}</span>
-                    </button>
-                    <button
-                        id=playlist_open_id
-                        type="button"
-                        class=detail_style::add_menu_entry
-                        role="menuitem"
-                    >
-                        <span>{tr(TextKey::AddToPlaylist)}</span>
-                    </button>
+        <article
+            class=detail_style::variant_card
+            aria-label=title_for_label
+            data-movie-version-card="true"
+        >
+            <div class=detail_style::variant_thumb_wrap>{thumb}</div>
+            <div class=detail_style::variant_body>
+                <div class=detail_style::variant_heading>
+                    <h3 class=detail_style::variant_title>{title}</h3>
+                    {badge.map(|label| view! {
+                        <span class=detail_style::variant_badge>{label}</span>
+                    })}
+                </div>
+                {subtitle.map(|value| view! {
+                    <p class=detail_style::variant_meta>{value}</p>
+                })}
+                <div class=detail_style::variant_actions>
+                    <a class=detail_style::btn_secondary href=details_href>
+                        {tr(TextKey::Details)}
+                    </a>
+                    <a class=detail_style::btn_secondary href=troubleshoot_href>
+                        {tr(TextKey::TroubleshootPlayback)}
+                    </a>
                 </div>
             </div>
-            <button
-                id=media_info_open_id
-                type="button"
-                class=detail_style::btn_secondary
-            >
-                <span>{tr(TextKey::ShowMediaInfo)}</span>
-            </button>
-            <a
-                class=detail_style::btn_secondary
-                href=troubleshoot_href
-            >
-                <span>{tr(TextKey::TroubleshootPlayback)}</span>
-            </a>
-            <a class=detail_style::btn_back href="/media/movies">
-                <span>{tr(TextKey::Back)}</span>
-            </a>
-
-            <div class=detail_style::modal_backdrop id=collection_modal_id.clone() style="display:none">
-                <div class=detail_style::modal_panel>
-                    <h2>{tr(TextKey::AddToCollection)}</h2>
-                    <p class=detail_style::modal_help>{tr(TextKey::SelectCollectionToAddThisMovie)}</p>
-                    <label for=collection_select_id.clone()>{tr(TextKey::Collection)}</label>
-                    <select id=collection_select_id.clone()></select>
-                    <label for=collection_name_id.clone()>{tr(TextKey::NewCollectionName)}</label>
-                    <input id=collection_name_id.clone() type="text"/>
-                    <p class=detail_style::modal_message id=collection_message_id.clone()></p>
-                    <div class=detail_style::modal_actions>
-                        <button
-                            id=collection_cancel_id
-                            type="button"
-                            class=detail_style::btn_back
-                        >
-                            {tr(TextKey::Cancel)}
-                        </button>
-                        <button
-                            id=collection_submit_id
-                            type="button"
-                            class=detail_style::btn_add
-                        >
-                            {tr(TextKey::AddToCollection)}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class=detail_style::modal_backdrop id=playlist_modal_id.clone() style="display:none">
-                <div class=detail_style::modal_panel>
-                    <h2>{tr(TextKey::AddToPlaylist)}</h2>
-                    <p class=detail_style::modal_help>{tr(TextKey::SelectPlaylistToAddThisMovie)}</p>
-                    <label for=playlist_group_id.clone()>{tr(TextKey::PlaylistGroup)}</label>
-                    <select id=playlist_group_id.clone()></select>
-                    <label for=playlist_select_id.clone()>{tr(TextKey::Playlist)}</label>
-                    <select id=playlist_select_id.clone()></select>
-                    <p class=detail_style::modal_message id=playlist_message_id.clone()></p>
-                    <div class=detail_style::modal_actions>
-                        <button
-                            id=playlist_cancel_id
-                            type="button"
-                            class=detail_style::btn_back
-                        >
-                            {tr(TextKey::Cancel)}
-                        </button>
-                        <button
-                            id=playlist_submit_id
-                            type="button"
-                            class=detail_style::btn_add
-                        >
-                            {tr(TextKey::AddToPlaylist)}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class=detail_style::modal_backdrop id=media_info_modal_id.clone() style="display:none">
-                <div class=detail_style::modal_panel>
-                    <h2 id=media_info_title_id.clone()>{tr(TextKey::MediaInfo)}</h2>
-                    <pre class=detail_style::media_info_pre><code id=media_info_body_id.clone()></code></pre>
-                    <div class=detail_style::modal_actions>
-                        <button
-                            id=media_info_close_id
-                            type="button"
-                            class=detail_style::btn_back
-                        >
-                            {tr(TextKey::Close)}
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <script inner_html=script></script>
-        </div>
+        </article>
     }
 }
 
-struct MovieActionScriptIds<'a> {
+#[component]
+fn CommentaryTrackCard(
+    movie_id: i64,
+    track: CommentaryTrackRow,
+    subtitle: Option<CommentarySubtitleRow>,
+) -> impl IntoView {
+    let title = track.title;
+    let language = track.language.filter(|value| !value.trim().is_empty());
+    let subtitle_id = subtitle.as_ref().map(|subtitle| subtitle.id);
+    let subtitle_label = subtitle
+        .as_ref()
+        .map(commentary_subtitle_label)
+        .filter(|value| !value.trim().is_empty());
+    let preview_href = playback_troubleshooting_href(movie_id, Some(&title), subtitle_id);
+    let card_label = title.clone();
+
+    view! {
+        <article
+            class=detail_style::commentary_card
+            aria-label=card_label
+            data-commentary-track-card="true"
+        >
+            <div>
+                <h3 class=detail_style::variant_title>{title.clone()}</h3>
+                {language.map(|value| view! {
+                    <p class=detail_style::variant_meta>{value}</p>
+                })}
+                {subtitle_label.map(|value| view! {
+                    <p class=detail_style::variant_meta>
+                        {format!("{}: {value}", tr(TextKey::Subtitle))}
+                    </p>
+                })}
+            </div>
+            <a class=detail_style::btn_secondary href=preview_href>
+                {tr(TextKey::Play)}
+            </a>
+        </article>
+    }
+}
+
+#[component]
+fn CommentarySubtitleCard(movie_id: i64, subtitle: CommentarySubtitleRow) -> impl IntoView {
+    let title = commentary_subtitle_label(&subtitle);
+    let href = playback_troubleshooting_href(movie_id, None, Some(subtitle.id));
+    let card_label = title.clone();
+
+    view! {
+        <article
+            class=detail_style::commentary_card
+            aria-label=card_label
+            data-commentary-subtitle-card="true"
+        >
+            <div>
+                <h3 class=detail_style::variant_title>{title}</h3>
+                <p class=detail_style::variant_meta>{tr(TextKey::Subtitle)}</p>
+            </div>
+            <a class=detail_style::btn_secondary href=href>
+                {tr(TextKey::Play)}
+            </a>
+        </article>
+    }
+}
+
+fn playback_troubleshooting_href(
     media_item_id: i64,
-    title: &'a str,
-    add_button: &'a str,
-    menu: &'a str,
-    collection_open: &'a str,
-    collection_modal: &'a str,
-    collection_select: &'a str,
-    collection_name: &'a str,
-    collection_message: &'a str,
-    collection_cancel: &'a str,
-    collection_submit: &'a str,
-    playlist_open: &'a str,
-    playlist_modal: &'a str,
-    playlist_group: &'a str,
-    playlist_select: &'a str,
-    playlist_message: &'a str,
-    playlist_cancel: &'a str,
-    playlist_submit: &'a str,
-    media_info_open: &'a str,
-    media_info_modal: &'a str,
-    media_info_title: &'a str,
-    media_info_body: &'a str,
-    media_info_close: &'a str,
+    preferred_audio_title: Option<&str>,
+    subtitle_id: Option<i64>,
+) -> String {
+    let mut href = format!("/system/troubleshooting/playback?mediaItem={media_item_id}");
+    if let Some(title) = preferred_audio_title
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+    {
+        href.push_str("&preferredAudioTitle=");
+        href.push_str(&urlencoding::encode(title));
+    }
+    if let Some(subtitle_id) = subtitle_id.filter(|id| *id > 0) {
+        href.push_str("&subtitleId=");
+        href.push_str(&subtitle_id.to_string());
+    }
+    href
 }
 
-#[allow(clippy::too_many_lines)]
-fn movie_actions_script(ids: &MovieActionScriptIds<'_>) -> String {
-    format!(
-        r#"
-(() => {{
-  const mediaItemId = {media_item_id};
-  const title = {title};
-  const labels = {{
-    requestFailed: {request_failed},
-    loadingCollections: {loading_collections},
-    newCollection: {new_collection},
-    addingItem: {adding_item},
-    loadingPlaylistGroups: {loading_playlist_groups},
-    loadingPlaylists: {loading_playlists},
-    noPlaylistsInGroup: {no_playlists_in_group},
-    pleaseChoosePlaylist: {please_choose_playlist},
-    addedItemToPlaylist: {added_item_to_playlist},
-    loadingMediaInfo: {loading_media_info},
-    unableToLoadMediaInfo: {unable_to_load_media_info},
-  }};
-  const byId = (id) => document.getElementById(id);
-  const show = (id) => {{ const el = byId(id); if (el) el.style.display = ""; }};
-  const hide = (id) => {{ const el = byId(id); if (el) el.style.display = "none"; }};
-  const text = (id, value) => {{ const el = byId(id); if (el) el.textContent = value; }};
-  const json = async (url, options) => {{
-    const response = await fetch(url, options);
-    if (!response.ok) {{
-      let message = labels.requestFailed;
-      try {{
-        const body = await response.json();
-        message = body.error || message;
-      }} catch (_) {{}}
-      throw new Error(message);
-    }}
-    return response.json();
-  }};
-  const fillSelect = (id, rows, first) => {{
-    const select = byId(id);
-    if (!select) return;
-    select.innerHTML = "";
-    const all = first ? [first, ...rows] : rows;
-    for (const row of all) {{
-      const option = document.createElement("option");
-      option.value = String(row.id);
-      option.textContent = row.name;
-      select.appendChild(option);
-    }}
-  }};
-
-  byId({add_button})?.addEventListener("click", () => {{
-    const menu = byId({menu});
-    if (menu) menu.style.display = menu.style.display === "none" ? "" : "none";
-  }});
-  byId({collection_open})?.addEventListener("click", async () => {{
-    hide({menu});
-    show({collection_modal});
-    const name = byId({collection_name});
-    if (name) name.value = "";
-    text({collection_message}, labels.loadingCollections);
-    try {{
-      const collections = await json("/api/media/actions/collections");
-      fillSelect({collection_select}, collections, {{ id: -1, name: labels.newCollection }});
-      text({collection_message}, "");
-    }} catch (error) {{
-      text({collection_message}, error.message);
-    }}
-  }});
-  byId({collection_cancel})?.addEventListener("click", () => hide({collection_modal}));
-  byId({collection_submit})?.addEventListener("click", async () => {{
-    const select = byId({collection_select});
-    const name = byId({collection_name});
-    const selected = Number(select?.value || -1);
-    text({collection_message}, labels.addingItem);
-    try {{
-      const result = await json("/api/media/actions/collections/add", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{
-          media_item_id: mediaItemId,
-          collection_id: selected > 0 ? selected : null,
-          new_name: selected > 0 ? null : (name?.value || "")
-        }})
-      }});
-      window.location.href = `/media/collections/${{result.id}}`;
-    }} catch (error) {{
-      text({collection_message}, error.message);
-    }}
-  }});
-
-  byId({playlist_open})?.addEventListener("click", async () => {{
-    hide({menu});
-    show({playlist_modal});
-    text({playlist_message}, labels.loadingPlaylistGroups);
-    try {{
-      const groups = await json("/api/media/actions/playlist-groups");
-      fillSelect({playlist_group}, groups);
-      text({playlist_message}, "");
-      byId({playlist_group})?.dispatchEvent(new Event("change"));
-    }} catch (error) {{
-      text({playlist_message}, error.message);
-    }}
-  }});
-  byId({playlist_group})?.addEventListener("change", async () => {{
-    const groupId = Number(byId({playlist_group})?.value || 0);
-    text({playlist_message}, labels.loadingPlaylists);
-    try {{
-      const playlists = groupId > 0 ? await json(`/api/media/actions/playlists?group_id=${{groupId}}`) : [];
-      fillSelect({playlist_select}, playlists);
-      text({playlist_message}, playlists.length ? "" : labels.noPlaylistsInGroup);
-    }} catch (error) {{
-      text({playlist_message}, error.message);
-    }}
-  }});
-  byId({playlist_cancel})?.addEventListener("click", () => hide({playlist_modal}));
-  byId({playlist_submit})?.addEventListener("click", async () => {{
-    const playlistId = Number(byId({playlist_select})?.value || 0);
-    if (!playlistId) {{
-      text({playlist_message}, labels.pleaseChoosePlaylist);
-      return;
-    }}
-    text({playlist_message}, labels.addingItem);
-    try {{
-      await json("/api/media/actions/playlists/add", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ media_item_id: mediaItemId, playlist_id: playlistId }})
-      }});
-      text({playlist_message}, labels.addedItemToPlaylist);
-      setTimeout(() => hide({playlist_modal}), 600);
-    }} catch (error) {{
-      text({playlist_message}, error.message);
-    }}
-  }});
-
-  byId({media_info_open})?.addEventListener("click", async () => {{
-    show({media_info_modal});
-    text({media_info_title}, title);
-    text({media_info_body}, labels.loadingMediaInfo);
-    try {{
-      const response = await fetch(`/api/media/actions/media-info/${{mediaItemId}}`);
-      if (!response.ok) throw new Error(labels.unableToLoadMediaInfo);
-      text({media_info_body}, await response.text());
-    }} catch (error) {{
-      text({media_info_body}, error.message);
-    }}
-  }});
-  byId({media_info_close})?.addEventListener("click", () => hide({media_info_modal}));
-}})();
-"#,
-        media_item_id = ids.media_item_id,
-        title = js_string(ids.title),
-        add_button = js_string(ids.add_button),
-        menu = js_string(ids.menu),
-        collection_open = js_string(ids.collection_open),
-        collection_modal = js_string(ids.collection_modal),
-        collection_select = js_string(ids.collection_select),
-        collection_name = js_string(ids.collection_name),
-        collection_message = js_string(ids.collection_message),
-        collection_cancel = js_string(ids.collection_cancel),
-        collection_submit = js_string(ids.collection_submit),
-        playlist_open = js_string(ids.playlist_open),
-        playlist_modal = js_string(ids.playlist_modal),
-        playlist_group = js_string(ids.playlist_group),
-        playlist_select = js_string(ids.playlist_select),
-        playlist_message = js_string(ids.playlist_message),
-        playlist_cancel = js_string(ids.playlist_cancel),
-        playlist_submit = js_string(ids.playlist_submit),
-        media_info_open = js_string(ids.media_info_open),
-        media_info_modal = js_string(ids.media_info_modal),
-        media_info_title = js_string(ids.media_info_title),
-        media_info_body = js_string(ids.media_info_body),
-        media_info_close = js_string(ids.media_info_close),
-        request_failed = js_string(tr(TextKey::RequestFailed)),
-        loading_collections = js_string(tr(TextKey::LoadingCollections)),
-        new_collection = js_string(tr(TextKey::NewCollection)),
-        adding_item = js_string(tr(TextKey::AddingItem)),
-        loading_playlist_groups = js_string(tr(TextKey::LoadingPlaylistGroups)),
-        loading_playlists = js_string(tr(TextKey::LoadingPlaylists)),
-        no_playlists_in_group = js_string(tr(TextKey::NoPlaylistsInGroup)),
-        please_choose_playlist = js_string(tr(TextKey::PleaseChoosePlaylist)),
-        added_item_to_playlist = js_string(tr(TextKey::AddedItemToPlaylist)),
-        loading_media_info = js_string(tr(TextKey::LoadingMediaInfo)),
-        unable_to_load_media_info = js_string(tr(TextKey::UnableToLoadMediaInfo)),
-    )
+fn best_commentary_subtitle_for_track(
+    track: &CommentaryTrackRow,
+    subtitles: &[CommentarySubtitleRow],
+) -> Option<CommentarySubtitleRow> {
+    subtitles
+        .iter()
+        .find(|subtitle| subtitle.title.eq_ignore_ascii_case(&track.title))
+        .or_else(|| {
+            track.language.as_deref().and_then(|language| {
+                subtitles.iter().find(|subtitle| {
+                    subtitle
+                        .language
+                        .as_deref()
+                        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(language))
+                })
+            })
+        })
+        .or_else(|| subtitles.first())
+        .cloned()
 }
 
-fn js_string(value: &str) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+fn commentary_subtitle_label(subtitle: &CommentarySubtitleRow) -> String {
+    if subtitle.title.trim().is_empty() {
+        return tr(TextKey::Subtitle).to_owned();
+    }
+    subtitle.title.clone()
 }
 
 fn linked_fact_row(
