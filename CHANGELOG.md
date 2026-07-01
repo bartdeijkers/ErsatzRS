@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.4] - 2026-07-01
+
+### Fixed
+
+- Release Docker image builds now compile only the runtime binaries instead of
+  the extra web library target, avoiding ARMv7 QEMU memory exhaustion while
+  publishing the multi-arch GHCR image.
+
 ## [1.0.15-beta.3] - 2026-07-01
 
 ### Fixed

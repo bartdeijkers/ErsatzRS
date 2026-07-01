@@ -67,7 +67,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     set -eux; \
     SQLX_OFFLINE=true ERSATZRS_SKIP_STYLANCE=1 \
         CARGO_TARGET_DIR=/workspace/target-cache \
-        cargo build --release -p ersatzrs-web -p ersatzrs-healthcheck; \
+        cargo build --release --bin ersatzrs-web --bin ersatzrs-healthcheck; \
     rm -rf \
         /workspace/target-cache/release/.fingerprint/ersatzrs-* \
         /workspace/target-cache/release/build/ersatzrs-* \
@@ -86,7 +86,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     set -eux; \
     SQLX_OFFLINE=true ERSATZRS_SKIP_STYLANCE=1 \
         CARGO_TARGET_DIR=/workspace/target-cache \
-        cargo build --release -p ersatzrs-web -p ersatzrs-healthcheck; \
+        cargo build --release --bin ersatzrs-web --bin ersatzrs-healthcheck; \
     mkdir -p /workspace/target/release; \
     cp /workspace/target-cache/release/ersatzrs-web /workspace/target/release/ersatzrs-web; \
     cp /workspace/target-cache/release/ersatzrs-healthcheck /workspace/target/release/ersatzrs-healthcheck
