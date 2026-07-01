@@ -111,10 +111,20 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `docker-prebuilt-binary-images.md` - release Docker plan to assemble GHCR
+  images from already-built Linux release binaries instead of compiling Rust
+  inside the Docker build.
+- `docker-persistent-build-cache.md` - release Docker plan to add persistent
+  BuildKit cache export/import for repeated beta and release attempts.
+- `docker-sequential-platform-publishing.md` - release Docker plan to build and
+  push one platform image at a time, then combine the final multi-arch manifest.
 - `module-split-survey.md` — standing refactoring backlog: large files to split,
   with ready-to-run prompts. The infra health pilot is implemented; lift the
   remaining media-browser, YAML scheduling, scripted scheduling, and provider
   dedup items one at a time and keep each refactor behavior-preserving.
+- `web-server-wasm-crate-split.md` - structural refactor plan to separate the
+  native SSR server binary from the WASM hydration library so native release
+  builds never compile the web `cdylib`.
 
 ## Deferred Contract Work
 
