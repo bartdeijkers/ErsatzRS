@@ -189,11 +189,11 @@ INSERT INTO "Subtitle" (
 );
 
 INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
-  VALUES (${seed.collectionId}, 'E2E Variant Collection', 0);
+  VALUES (${seed.collectionId}, 'E2E Variant Collection ${seed.collectionId}', 0);
 INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
-  VALUES (${seed.playlistGroupId}, 'E2E Variant Playlists', 0);
+  VALUES (${seed.playlistGroupId}, 'E2E Variant Playlists ${seed.playlistGroupId}', 0);
 INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
-  VALUES (${seed.playlistId}, 'E2E Variant Playlist', ${seed.playlistGroupId}, 0);
+  VALUES (${seed.playlistId}, 'E2E Variant Playlist ${seed.playlistId}', ${seed.playlistGroupId}, 0);
 
 INSERT INTO "OtherVideo" ("Id") VALUES (${seed.movieExtraId}), (${seed.showExtraId}), (${seed.seasonExtraId});
 INSERT INTO "OtherVideoMetadata" (
