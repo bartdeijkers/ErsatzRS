@@ -19,6 +19,10 @@ ENV CARGO_BUILD_JOBS=1 \
 
 WORKDIR /workspace
 
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+
 # Prime a dependency layer from manifests and lockfiles before copying source.
 COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 COPY .cargo .cargo
@@ -59,7 +63,7 @@ RUN set -eux; \
     printf 'fn main() {}\n' > crates/ersatzrs-web/src/main.rs
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/workspace/target-cache \
+    --mount=type=cache,id=ersatzrs-release-target-${TARGETOS}-${TARGETARCH}-${TARGETVARIANT},target=/workspace/target-cache \
     set -eux; \
     SQLX_OFFLINE=true ERSATZRS_SKIP_STYLANCE=1 \
         CARGO_TARGET_DIR=/workspace/target-cache \
@@ -78,7 +82,7 @@ RUN test -f release-web-assets/public/bundle.css; \
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/workspace/target-cache \
+    --mount=type=cache,id=ersatzrs-release-target-${TARGETOS}-${TARGETARCH}-${TARGETVARIANT},target=/workspace/target-cache \
     set -eux; \
     SQLX_OFFLINE=true ERSATZRS_SKIP_STYLANCE=1 \
         CARGO_TARGET_DIR=/workspace/target-cache \

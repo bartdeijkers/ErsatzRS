@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.3] - 2026-07-01
+
+### Fixed
+
+- Release Docker image builds now isolate Cargo target caches per target
+  platform, avoiding concurrent multi-arch BuildKit cleanup races that could
+  remove active Cargo fingerprints during GHCR publication.
+
 ## [1.0.15-beta.2] - 2026-06-30
 
 ### Fixed
