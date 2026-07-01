@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Release Docker image builds now compile the native `ersatzrs-web` crate as an
+  `rlib` only, avoiding the unused native web `cdylib` link that caused ARMv7
+  QEMU aborts during multi-arch GHCR publication.
+
 ## [1.0.15-beta.4] - 2026-07-01
 
 ### Fixed

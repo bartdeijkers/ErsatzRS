@@ -38,6 +38,13 @@ COPY crates/ersatzrs-scanner/Cargo.toml crates/ersatzrs-scanner/Cargo.toml
 COPY crates/ersatzrs-scheduler/Cargo.toml crates/ersatzrs-scheduler/Cargo.toml
 COPY crates/ersatzrs-web/Cargo.toml crates/ersatzrs-web/Cargo.toml
 COPY xtask/Cargo.toml xtask/Cargo.toml
+
+# The release image consumes the workflow's prebuilt WASM bundle and ships only
+# native executables. Avoid building the unused native web cdylib under QEMU.
+RUN set -eux; \
+    sed -i 's/crate-type = \["cdylib", "rlib"\]/crate-type = ["rlib"]/' crates/ersatzrs-web/Cargo.toml; \
+    grep -F 'crate-type = ["rlib"]' crates/ersatzrs-web/Cargo.toml
+
 RUN set -eux; \
     for crate in \
         crates/ersatzrs-app \
@@ -77,7 +84,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         /workspace/target-cache/release/ersatzrs-healthcheck
 
 COPY . .
-RUN test -f release-web-assets/public/bundle.css; \
+RUN set -eux; \
+    sed -i 's/crate-type = \["cdylib", "rlib"\]/crate-type = ["rlib"]/' crates/ersatzrs-web/Cargo.toml; \
+    grep -F 'crate-type = ["rlib"]' crates/ersatzrs-web/Cargo.toml; \
+    test -f release-web-assets/public/bundle.css; \
     test -d release-web-assets/site/pkg
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
