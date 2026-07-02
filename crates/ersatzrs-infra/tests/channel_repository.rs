@@ -212,6 +212,30 @@ async fn channel_editor_lists_bundled_music_video_credit_templates() {
 }
 
 #[tokio::test]
+async fn channel_editor_new_channel_defaults_to_ersatzrs_group() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let state = repos.channel.get_editor_state(None).await.unwrap().unwrap();
+    assert_eq!(state.form.group, "ErsatzRS");
+    assert_eq!(state.form.name, "New Channel");
+
+    let mut form = state.form.clone();
+    form.number = "77".to_owned();
+    let result = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+
+    let saved = repos
+        .channel
+        .get_editor_state(Some(result.id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.form.group, "ErsatzRS");
+}
+
+#[tokio::test]
 async fn channel_editor_save_validates_parity_rules() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

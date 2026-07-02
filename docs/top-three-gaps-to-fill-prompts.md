@@ -13,87 +13,21 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: regenerated 2026-07-02 from `cargo xtask progress gaps`,
-open `[[debt]]` items, `cargo xtask progress adr list`, active plans, and
-`docs/progress/phase.toml`. The completed movie-detail, media-browser action,
-and static-image health-check prompts were removed. The top three are the
-remaining in-progress Phase 7 items: `/channels/add` default group,
-`/ffmpeg/{id}` profile-editor section spacing, and ADR 0017 default FFmpeg
-profile video bitrate retune. Newly registered media curation follow-ups cover
-same-collection duplicate movie rows with distinct ADR 0048 playback overrides
-and stay-in-context Add To Collection/Add To Playlist behavior, plus
-artist-detail music-video checkbox multi-select for bulk collection/playlist
-adds. ADR 0020 playout rebuild, ADR 0019 similar-video cooldown, proposed
-localization ADRs, active Docker release plans, and module split work remain
-candidates, but rank behind the selected phase-focus regressions in this pass.
+Current selection: updated 2026-07-02 after the `/channels/add` default group
+regression closed (`channels-add-default-group-ersatzrs` resolved; channels
+admin UI returned to `Ported`). The remaining in-progress Phase 7 items —
+`/ffmpeg/{id}` profile-editor section spacing and the ADR 0017 default FFmpeg
+profile video bitrate retune — move up, and the freed slot is refilled by the
+top-ranked registered media curation follow-up: ADR 0048 same-collection
+duplicate movie rows with distinct playback overrides. Stay-in-context Add To
+Collection/Add To Playlist behavior, artist-detail music-video checkbox
+multi-select, ADR 0020 playout rebuild, ADR 0019 similar-video cooldown,
+proposed localization ADRs, active Docker release plans, and module split work
+remain candidates, but rank behind the selected items in this pass.
 
 ---
 
-## 1. Fix the next ErsatzTV parity gap in ErsatzRS: `/channels/add` default group (slug `channels-admin-ui`)
-
-Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Tracked debt: `channels-add-default-group-ersatzrs` in
-[`docs/progress/parity/channels-admin-ui.toml`](progress/parity/channels-admin-ui.toml).
-Current debt text: creating a channel at `/channels/add` shows `ErsatzTV` as
-the default channel group instead of `ErsatzRS`; closeout requires browser
-proof that `/channels/add` pre-fills `Group` with `ErsatzRS`, saving a new
-channel persists that value, and existing channel edit behavior is unchanged.
-
-Before editing:
-1. Read `docs/progress/parity/channels-admin-ui.toml`,
-   `docs/automation/parity-baseline.md`, `TEST.md`, `PORTING.md`, and `STYLE.md`.
-2. Ensure `$ERSATZTV_SRC` is at the pinned parity baseline, then inspect
-   `ErsatzTV/Pages/Channel*.razor`,
-   `ErsatzTV/ViewModels/ChannelEditViewModel.cs`,
-   `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, and
-   `ErsatzTV/Locals/Pages/Channels*.resx`.
-3. Inspect the current ErsatzRS channel editor/default path in
-   `crates/ersatzrs-core/src/repositories/channel.rs`,
-   `crates/ersatzrs-infra/src/repositories/channel.rs`,
-   `crates/ersatzrs-web/src/admin/pages/channels/`,
-   `crates/ersatzrs-web/src/admin/server_fns/channels.rs`, and
-   `crates/ersatzrs-web/src/api/channels.rs`.
-4. Build a Source Map covering default construction, editor form binding,
-   validation, multipart/no-JS save fallback, repository persistence, and
-   side effects.
-5. Build a Visual Source Map for `/channels/add` and `/channels/{id}`,
-   including the Group field, surrounding form geometry, save actions,
-   validation surfaces, and mobile layout.
-
-Implement the coherent end-to-end slice that genuinely closes the gap:
-- Reproduce the current `/channels/add` default value before editing.
-- Make fresh Add Channel forms default `Group` to `ErsatzRS`.
-- Preserve existing-channel edit behavior and user-saved group values.
-- Preserve SSR, hydrated, and multipart/no-JS save paths.
-- Add focused regression coverage for default form projection and save
-  persistence.
-- Update `docs/progress/parity/channels-admin-ui.toml`,
-  `docs/progress/phase.toml`, `CHANGELOG.md` if the user-visible behavior needs
-  a release note, this prompt file, and the session log when the debt closes.
-
-Visual verification for UI routes:
-- Start the app with `./run.sh serve` after rebuilding Leptos assets.
-- Browser-proof `/channels/add` in desktop and mobile viewports.
-- Save a new channel and verify the persisted Group remains `ErsatzRS`.
-- Open an existing channel and verify its saved group is not overwritten.
-- Inspect the console/page errors and confirm the form hydrates.
-
-Verification:
-- Focused Rust tests for channel default projection/save behavior.
-- `cargo xtask hydration-lint -p ersatzrs-web`.
-- `npx playwright test tests/e2e/channels-edit-numbers.spec.ts` plus the
-  focused channel-add spec or test case added for this regression.
-- `cargo xtask progress check`.
-
-When done, report the Source Map, Visual Source Map, ErsatzTV baseline files
-consulted, behavior implemented, any remaining `ParityDebt`, verification run,
-and changed files.
-
----
-
-## 2. Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg profile editor spacing (slug `ffmpeg-profile-editor`)
+## 1. Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg profile editor spacing (slug `ffmpeg-profile-editor`)
 
 Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV visual/editor parity without stopgaps.
@@ -162,7 +96,7 @@ and changed files.
 
 ---
 
-## 3. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
+## 2. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
 
 Use the repo workflow from AGENTS.md and the governing ADRs. This is an
 ADR-backed runtime/default-profile hardening slice; do not force an ErsatzTV
@@ -217,5 +151,74 @@ Verification:
 
 When done, report the Source Map, ADR 0017 fields changed, verification run,
 changed files, and any remaining FFmpeg/profile parity debt.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+
+Use the repo workflow from AGENTS.md and the governing ADR. This is a
+spec-backed ErsatzRS-owned extension — ErsatzTV has no equivalent, so do not
+force the parity-slice workflow; follow
+[ADR 0048](adr/0048-collection-item-playback-overrides.md) instead. The goal is
+the complete follow-up slice ADR 0048's Implementation section names, without
+stopgaps.
+
+Tracked debt: `collection-item-duplicate-playback-overrides` in
+[`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`](progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml).
+Current debt text: the same movie should be addable to the same collection
+multiple times when each row has a different playback override, so movies with
+multiple commentary or alternate audio tracks can have every track represented
+in one collection. Current SQLite and MySQL schemas keep `CollectionItem`
+keyed by `(CollectionId, MediaItemId)` (`PK_CollectionItem`), so the model
+cannot represent two rows for the same movie even when `PreferredAudioTitle`,
+preferred audio/subtitle language, or `SubtitleMode` differ.
+
+Before editing:
+1. Read `docs/adr/0048-collection-item-playback-overrides.md`,
+   `docs/adr/0018-extras-alternate-versions-and-stream-roles.md`,
+   `STYLE.md` (SQL migration rules), and
+   `docs/how-to/testing.md`.
+2. Inspect the current collection item identity and override columns in
+   `migrations/0001_initial.sql`,
+   `migrations/202607011455_collection_item_playback_overrides.sql`, and the
+   matching `migrations/mysql/` files.
+3. Inspect the add/inspect/schedule paths:
+   `crates/ersatzrs-infra/src/repositories/collection.rs`,
+   `crates/ersatzrs-infra/src/repositories/scheduling.rs`,
+   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`, and
+   `crates/ersatzrs-web/src/admin/pages/media/collection_detail.rs`.
+4. Build a Source Map covering collection item identity, add-to-collection
+   flow, collection detail rendering of saved overrides, scheduling expansion
+   into playout items, and SQLite/MySQL migration parity.
+5. Reproduce the current limitation before editing: adding the same movie
+   twice with different overrides must currently collapse to one row.
+
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Change collection item identity so the same movie can appear more than once
+  in one collection when playback overrides differ, in both SQLite and MySQL
+  migrations, following STYLE.md's EF-style constraint naming.
+- Keep default rows (no override) behaving exactly like the ErsatzTV row shape
+  and keep import/parity tooling treating override fields as ErsatzRS-only.
+- Preserve ADR 0048 scheduling propagation so each duplicate row schedules
+  separately with its own override.
+- Make collection detail UI distinguish duplicate rows by their saved override.
+- Add focused regression coverage for duplicate-row persistence, collection
+  detail projection, and scheduling expansion.
+- Update the owning parity TOML, ADR 0048's Implementation text,
+  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
+  session log when the debt closes.
+
+Verification:
+- Focused `cargo test -p ersatzrs-infra` collection/scheduling tests covering
+  duplicate rows with distinct overrides.
+- `cargo test -p ersatzrs-web --all-targets <collection_route_filter>` for the
+  admin flows touched.
+- `cargo xtask hydration-lint -p ersatzrs-web` if collection detail islands
+  change.
+- `npx playwright test tests/e2e/collections.spec.ts` when the UI flow changes.
+- `cargo xtask progress check`.
+
+When done, report the Source Map, behavior implemented, migration changes,
+any remaining debt, verification run, and changed files.
 
 ---

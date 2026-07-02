@@ -1,7 +1,7 @@
 feature    = 'Channels admin UI'
 etv_source = '`ErsatzTV/Pages/Channel*.razor`, `ErsatzTV/ViewModels/ChannelEditViewModel.cs`, `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, `ErsatzTV/Locals/Pages/Channels*.resx`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/channels/`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-core/src/repositories/channel.rs`, `crates/ersatzrs-infra/src/repositories/channel.rs`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 
 summary    = '''
@@ -17,7 +17,9 @@ fallback.
 
 Reopened 2026-07-01: creating a new channel through `/channels/add` shows the
 default group as `ErsatzTV` again; fresh ErsatzRS channels should default to
-the `ErsatzRS` group.
+the `ErsatzRS` group. Closed 2026-07-02: `ChannelEditorForm::new_defaults`
+(core) and the web-side `ChannelForm::new_defaults` now default `Group` to
+`ErsatzRS`; existing channels keep their saved group values.
 '''
 
 [[debt]]
@@ -31,5 +33,5 @@ resolved    = true
 id          = 'channels-add-default-group-ersatzrs'
 description = 'Creating a channel at `/channels/add` shows `ErsatzTV` as the default channel group instead of `ErsatzRS`.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Current default construction still points at `crates/ersatzrs-core/src/repositories/channel.rs`. Reclose only with browser proof that `/channels/add` pre-fills `Group` with `ErsatzRS`, save persistence keeps that value for a new channel, and existing channel edit behavior is unchanged.'
-resolved    = false
+evidence    = 'Resolved 2026-07-02: `ChannelEditorForm::new_defaults` in `crates/ersatzrs-core/src/repositories/channel.rs` and `ChannelForm::new_defaults` in `crates/ersatzrs-web/src/admin/server_fns/channels.rs` default `Group` to `ErsatzRS`. Focused regression `channel_editor_new_channel_defaults_to_ersatzrs_group` proves `get_editor_state(None)` defaults and save persistence. Browser proof in `tests/e2e/channels-add-default-group.spec.ts`: `/channels/add` pre-fills `Group` with `ErsatzRS` in desktop and mobile viewports (Chromium and Firefox), saving a new channel persists `ErsatzRS`, and editing an existing channel keeps its saved group.'
+resolved    = true

@@ -50,7 +50,7 @@ impl ChannelEditorForm {
         Self {
             number,
             name: "New Channel".to_owned(),
-            group: "ErsatzTV".to_owned(),
+            group: "ErsatzRS".to_owned(),
             ffmpeg_profile_id,
             streaming_mode: 5,
             is_enabled: true,

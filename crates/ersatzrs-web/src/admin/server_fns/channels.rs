@@ -106,7 +106,7 @@ impl ChannelForm {
             show_in_epg: true,
             streaming_mode: 5,
             name: "New Channel".to_string(),
-            group: "ErsatzTV".to_string(),
+            group: "ErsatzRS".to_string(),
             ..Default::default()
         }
     }
