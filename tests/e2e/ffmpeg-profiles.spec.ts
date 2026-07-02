@@ -4,6 +4,64 @@ function uniqueName(prefix: string): string {
   return `${prefix} ${Date.now()} ${Math.floor(Math.random() * 10_000)}`;
 }
 
+type SectionGaps = Record<string, number[]>;
+
+/**
+ * Measures the vertical gap between consecutive field blocks (label+control
+ * wrappers) inside each titled editor section. Gaps that cross the bordered
+ * Hardware Acceleration sub-panel include its padding/border and are larger
+ * by design; every plain field-to-field gap must match General's rhythm.
+ */
+async function measureSectionGaps(page: Page): Promise<SectionGaps> {
+  return page.evaluate(() => {
+    const form = document.querySelector('form[data-ffmpeg-profile-editor-hydrated="true"]');
+    if (!form) {
+      return {};
+    }
+    const sections = [...form.querySelectorAll('div[class*="section"]')].filter(
+      (d) => /(^|\s)section/.test(d.className) && d.querySelector('h2'),
+    );
+    const report: Record<string, number[]> = {};
+    for (const section of sections) {
+      const title = section.querySelector('h2')?.textContent?.trim() ?? '?';
+      const fields = [...section.querySelectorAll(':scope div, :scope label')].filter(
+        (el) =>
+          el.querySelector('input,select') &&
+          !el.querySelector('h2,h3') &&
+          ![...el.querySelectorAll('div')].some((d) => d.querySelector('input,select')),
+      );
+      const boxes = fields
+        .map((f) => f.getBoundingClientRect())
+        .filter((b) => b.height > 0);
+      const gaps: number[] = [];
+      for (let i = 1; i < boxes.length; i++) {
+        const gap = Math.round(boxes[i].top - boxes[i - 1].bottom);
+        if (gap >= 0) {
+          gaps.push(gap);
+        }
+      }
+      report[title] = gaps;
+    }
+    return report;
+  });
+}
+
+function dominantGap(gaps: number[]): number {
+  const counts = new Map<number, number>();
+  for (const gap of gaps) {
+    counts.set(gap, (counts.get(gap) ?? 0) + 1);
+  }
+  let best = -1;
+  let bestCount = 0;
+  for (const [gap, count] of counts) {
+    if (count > bestCount) {
+      best = gap;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 async function gotoAddProfile(page: Page): Promise<void> {
   await page.goto('/ffmpeg/add');
   await expect(page.getByRole('heading', { name: /add ffmpeg profile/i })).toBeVisible();
@@ -56,6 +114,45 @@ test.describe('ffmpeg profile editor parity', () => {
     await videoFormatSelect.selectOption('3');
     await videoFormatSelect.dispatchEvent('change');
     await expect(page.getByText('NVENC supports formats (h264, hevc, av1).')).toBeVisible();
+  });
+
+  test('General, Video, and Audio sections keep a consistent vertical rhythm', async ({
+    page,
+  }) => {
+    const name = uniqueName('Spacing Profile');
+    const editHref = await createNvencH264Profile(page, name);
+
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(editHref);
+      await page.waitForLoadState('networkidle');
+      await expect(
+        page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]'),
+      ).toBeVisible();
+
+      const gaps = await measureSectionGaps(page);
+      expect(Object.keys(gaps).length, 'expected titled editor sections').toBeGreaterThanOrEqual(3);
+
+      const generalRhythm = dominantGap(gaps.General ?? []);
+      expect(generalRhythm, 'General section has a measurable rhythm').toBeGreaterThan(0);
+
+      for (const [title, sectionGaps] of Object.entries(gaps)) {
+        expect(sectionGaps.length, `${title} has measurable field gaps`).toBeGreaterThan(0);
+        for (const gap of sectionGaps) {
+          // No collapsed rows anywhere; sub-panel crossings may exceed the rhythm.
+          expect(gap, `${title} field gap at ${viewport.width}px`).toBeGreaterThanOrEqual(
+            generalRhythm,
+          );
+        }
+        expect(
+          dominantGap(sectionGaps),
+          `${title} dominant rhythm at ${viewport.width}px`,
+        ).toBe(generalRhythm);
+      }
+    }
   });
 
   test('no-JS edit form keeps the h264 profile select in the HTML fallback', async ({

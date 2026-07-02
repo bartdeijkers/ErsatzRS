@@ -14,89 +14,21 @@ selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
 Current selection: updated 2026-07-02 after the `/channels/add` default group
-regression closed (`channels-add-default-group-ersatzrs` resolved; channels
-admin UI returned to `Ported`). The remaining in-progress Phase 7 items —
-`/ffmpeg/{id}` profile-editor section spacing and the ADR 0017 default FFmpeg
-profile video bitrate retune — move up, and the freed slot is refilled by the
-top-ranked registered media curation follow-up: ADR 0048 same-collection
-duplicate movie rows with distinct playback overrides. Stay-in-context Add To
-Collection/Add To Playlist behavior, artist-detail music-video checkbox
+and FFmpeg profile editor section spacing regressions closed
+(`channels-add-default-group-ersatzrs` and
+`profile-editor-video-audio-section-spacing` resolved; both features returned
+to `Ported`). The remaining in-progress Phase 7 item — the ADR 0017 default
+FFmpeg profile video bitrate retune — moves to the top, followed by the two
+top-ranked registered media curation follow-ups: ADR 0048 same-collection
+duplicate movie rows with distinct playback overrides, and stay-in-context Add
+To Collection/Add To Playlist behavior. Artist-detail music-video checkbox
 multi-select, ADR 0020 playout rebuild, ADR 0019 similar-video cooldown,
 proposed localization ADRs, active Docker release plans, and module split work
 remain candidates, but rank behind the selected items in this pass.
 
 ---
 
-## 1. Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg profile editor spacing (slug `ffmpeg-profile-editor`)
-
-Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV visual/editor parity without stopgaps.
-
-Tracked debt: `profile-editor-video-audio-section-spacing` in
-[`docs/progress/parity/ffmpeg-profile-editor.toml`](progress/parity/ffmpeg-profile-editor.toml).
-Current debt text: on `/ffmpeg/{ffmpeg_profile_id}`, the Video and Audio
-sections use different vertical spacing between elements than the General
-section; closeout requires desktop and mobile browser proof that General,
-Video, and Audio render with consistent vertical rhythm without regressing
-hydrated save/edit behavior.
-
-Before editing:
-1. Read `docs/progress/parity/ffmpeg-profile-editor.toml`,
-   `docs/progress/hydration.toml`, `docs/automation/parity-baseline.md`,
-   `TEST.md`, `PORTING.md`, and `STYLE.md`.
-2. Ensure `$ERSATZTV_SRC` is at the pinned parity baseline, then inspect
-   `ErsatzTV/Pages/FFmpegProfile*.razor` for the actual section structure,
-   form containers, dividers, labels, and spacing.
-3. Inspect the current ErsatzRS implementation in
-   `crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.rs`,
-   `crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.module.css`,
-   `crates/ersatzrs-web/src/admin/server_fns/ffmpeg_profiles.rs`,
-   `crates/ersatzrs-web/src/api/ffmpeg_profiles.rs`, and
-   `tests/e2e/ffmpeg-profiles.spec.ts`.
-4. Build a Source Map covering SSR data load, island state, no-JS fallback,
-   save/copy actions, section rendering, CSS modules, and route aliases.
-5. Build a Visual Source Map for `/ffmpeg/profiles/{id}` and `/ffmpeg/{id}`,
-   including General, Video, Audio, Hardware Acceleration, dividers, labels,
-   inputs, row gaps, and mobile stacking.
-
-Implement the coherent end-to-end slice that genuinely closes the gap:
-- Reproduce the spacing mismatch in a running browser before editing.
-- Align Video and Audio section vertical rhythm with General without changing
-  the field contract or hiding controls.
-- Keep the hydrated editor, no-JS edit fallback, Copy Profile, validation, and
-  save behavior intact.
-- Prefer existing CSS-module patterns and shared form primitives over ad hoc
-  route-only layout hacks.
-- Add focused regression coverage that checks the section geometry or stable
-  class structure in desktop and mobile layouts.
-- Update `docs/progress/parity/ffmpeg-profile-editor.toml`,
-  `docs/progress/hydration.toml` if proof state changes,
-  `docs/progress/phase.toml`, `TEST.md` if the Playwright playbook changes,
-  this prompt file, and the session log when the debt closes.
-
-Visual verification for UI routes:
-- Start the app with `./run.sh serve` after rebuilding Leptos assets.
-- Browser-proof `/ffmpeg/profiles/{id}` and the `/ffmpeg/{id}` alias in desktop
-  and mobile viewports.
-- Capture or inspect same-viewport geometry for General, Video, and Audio:
-  row gaps, label/input alignment, divider placement, clipped text, and page
-  overflow.
-- Save an edit after the layout change and confirm no console/page errors.
-
-Verification:
-- Focused Rust tests only if projection, server functions, or save behavior
-  changes.
-- `cargo xtask hydration-lint -p ersatzrs-web`.
-- `npx playwright test tests/e2e/ffmpeg-profiles.spec.ts`.
-- `cargo xtask progress check`.
-
-When done, report the Source Map, Visual Source Map, ErsatzTV baseline files
-consulted, behavior implemented, any remaining `ParityDebt`, verification run,
-and changed files.
-
----
-
-## 2. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
+## 1. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
 
 Use the repo workflow from AGENTS.md and the governing ADRs. This is an
 ADR-backed runtime/default-profile hardening slice; do not force an ErsatzTV
@@ -154,7 +86,7 @@ changed files, and any remaining FFmpeg/profile parity debt.
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 2. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Use the repo workflow from AGENTS.md and the governing ADR. This is a
 spec-backed ErsatzRS-owned extension — ErsatzTV has no equivalent, so do not
@@ -220,5 +152,62 @@ Verification:
 
 When done, report the Source Map, behavior implemented, migration changes,
 any remaining debt, verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: stay-in-context Add To Collection / Add To Playlist (slug `media-browsers`)
+
+Use the repo workflow from AGENTS.md. This is a maintainer-requested ErsatzRS
+UX chore recorded as structured debt — ErsatzTV's flows navigate away, so do
+not treat the current navigation as a parity requirement; the debt entry is
+the contract. The goal is the complete stay-in-context behavior without
+stopgaps.
+
+Tracked debt: `add-to-collection-playlist-stay-in-context` in
+[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
+Current debt text: after adding one or more media items to a collection or
+playlist from a media page, the admin UI should keep the user in the current
+browsing/detail context by default instead of always navigating to the target
+collection or playlist page. Most add-to-collection/add-to-playlist sessions
+are iterative curation sessions where the user wants to continue adding items.
+
+Before editing:
+1. Read `docs/progress/parity/media-browsers.toml`, `TEST.md`, and `STYLE.md`.
+2. Inspect the current add flows in
+   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`,
+   `crates/ersatzrs-web/src/admin/pages/media/browser.rs`, the media detail
+   pages under `crates/ersatzrs-web/src/admin/pages/media/`, and the existing
+   browser proof in `tests/e2e/media-browser-actions.spec.ts` and
+   `tests/e2e/hydration-pending-routes.spec.ts`.
+3. Build a Source Map covering the Add To Collection / Add To Playlist dialog
+   flow, single-item and bulk selection paths, post-add navigation, success
+   feedback (toast) primitives, and localization of any new labels.
+4. Reproduce the current always-navigate behavior in a running browser before
+   editing.
+
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Keep the user on the current media browse/detail page by default after a
+  successful add, for single-item and bulk flows, collections and playlists.
+- Show a clear success state that still offers an explicit View
+  Collection/View Playlist navigation path.
+- Localize any new user-visible labels for every supported culture under
+  `crates/ersatzrs-web/src/admin/languages/`.
+- Preserve SSR/no-JS fallbacks and hydration stability per `TEST.md`.
+- Add focused browser coverage proving bulk and single-item flows for
+  collections and playlists keep context and can still navigate explicitly.
+- Update `docs/progress/parity/media-browsers.toml`,
+  `docs/progress/hydration.toml` if proof state changes,
+  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
+  session log when the debt closes.
+
+Verification:
+- Focused Rust tests for any server-fn/projection changes.
+- `cargo xtask hydration-lint -p ersatzrs-web`.
+- `npx playwright test tests/e2e/media-browser-actions.spec.ts` plus the
+  focused stay-in-context cases added for this chore.
+- `cargo xtask progress check`.
+
+When done, report the Source Map, behavior implemented, any remaining debt,
+verification run, and changed files.
 
 ---

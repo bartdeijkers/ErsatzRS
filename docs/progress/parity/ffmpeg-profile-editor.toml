@@ -1,7 +1,7 @@
 feature    = 'FFmpeg Profile editor'
 etv_source = '`ErsatzTV/Pages/FFmpegProfile*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/`, `crates/ersatzrs-web/src/admin/languages/`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 
 summary    = '''
@@ -9,13 +9,16 @@ Ported: list at `/ffmpeg/profiles` (alias `/ffmpeg`), editor `#[island]` at `/ff
 
 Reopened 2026-07-01: the profile edit page has inconsistent vertical spacing
 between form elements in the Video and Audio sections compared with the General
-section, so the visual editor parity remains open until `/ffmpeg/{id}` and
-`/ffmpeg/profiles/{id}` render those sections with matching vertical rhythm.
+section. Closed 2026-07-02: the Video/Audio (and VAAPI sub-panel)
+visibility-toggle wrappers now carry a shared `section-fields` CSS-module class
+with the same flex-column 1rem gap as `.section`, so all three sections render
+one uniform vertical rhythm on `/ffmpeg/{id}` and `/ffmpeg/profiles/{id}` in
+desktop and mobile layouts.
 '''
 
 [[debt]]
 id          = 'profile-editor-video-audio-section-spacing'
 description = 'On `/ffmpeg/{ffmpeg_profile_id}`, the Video and Audio sections use different vertical spacing between elements than the General section.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Reclose only with browser proof that the existing profile editor route renders the General, Video, and Audio sections with consistent vertical spacing in desktop and mobile layouts, without regressing hydrated save/edit behavior.'
-resolved    = false
+evidence    = 'Resolved 2026-07-02: the visibility-toggle wrappers in the Video and Audio sections (and the VAAPI sub-panel wrapper) use the new `section-fields` class in `editor.module.css`, matching the General section rhythm. Live-browser measurement on `/ffmpeg/1` went from Video gaps `[16,57,17,0,0,0]` / Audio gaps `[16,0,0,0]` to a uniform 16px field rhythm in all sections, desktop (1440px) and mobile (390px). Regression test `General, Video, and Audio sections keep a consistent vertical rhythm` in `tests/e2e/ffmpeg-profiles.spec.ts` measures adjacent field gaps per section in both viewports and passed in Chromium and Firefox; hydrated save and no-JS fallback tests still pass.'
+resolved    = true

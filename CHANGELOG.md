@@ -43,6 +43,9 @@ release section when tagging a release.
 - Creating a channel at `/channels/add` now pre-fills the Group field with
   `ErsatzRS` again instead of `ErsatzTV`; existing channels keep their saved
   group values.
+- The FFmpeg profile editor's Video and Audio sections now use the same
+  vertical spacing between fields as the General section, in desktop and
+  mobile layouts.
 - Release Docker image builds now compile the native `ersatzrs-web` crate as an
   `rlib` only, avoiding the unused native web `cdylib` link that caused ARMv7
   QEMU aborts during multi-arch GHCR publication.

@@ -652,7 +652,10 @@ fn FfmpegProfileEditorForm(
 
                 // Video normalization fields — always rendered; hidden when normalize_video is off.
                 // Stable DOM shape avoids hydration mismatches.
-                <div style:display=move || if show_hw_section.get() { "" } else { "none" }>
+                <div
+                    class=style::section_fields
+                    style:display=move || if show_hw_section.get() { "" } else { "none" }
+                >
                     <SelectField<i32>
                         label=tr(TextKey::VideoFormat)
                         value=video_format
@@ -679,7 +682,10 @@ fn FfmpegProfileEditorForm(
                             />
                         </div>
                         // VAAPI fields — always rendered; hidden for non-VAAPI accelerators.
-                        <div style:display=move || if show_vaapi_fields.get() { "" } else { "none" }>
+                        <div
+                            class=style::section_fields
+                            style:display=move || if show_vaapi_fields.get() { "" } else { "none" }
+                        >
                             <TextField label=tr(TextKey::VaapiDevicePath) value=vaapi_device/>
                             <TextField label=tr(TextKey::VaapiDisplay) value=vaapi_display/>
                             <SelectField<i32>
@@ -773,7 +779,10 @@ fn FfmpegProfileEditorForm(
                 <CheckBox label=tr(TextKey::NormalizeAudio) value=normalize_audio/>
 
                 // Audio normalization fields — always rendered; hidden when normalize_audio is off.
-                <div style:display=move || if normalize_audio.get() { "" } else { "none" }>
+                <div
+                    class=style::section_fields
+                    style:display=move || if normalize_audio.get() { "" } else { "none" }
+                >
                     <SelectField<i32>
                         label=tr(TextKey::AudioFormat)
                         value=audio_format

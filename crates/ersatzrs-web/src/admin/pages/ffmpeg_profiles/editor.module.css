@@ -83,6 +83,14 @@
     margin: 0 0 0.5rem;
 }
 
+/* Visibility-toggle wrappers inside a section keep the same vertical rhythm
+   as the section itself, so Video/Audio rows match General. */
+.section-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: 1fr;
