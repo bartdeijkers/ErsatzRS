@@ -29,6 +29,7 @@ release section when tagging a release.
 
 - Updated the locked Leptos package family to `leptos` 0.8.20.
 - Updated the locked `leptos_router` dependency to 0.8.14.
+- Updated the locked `jsonschema` dependency to 0.46.8.
 - The channel editor's Subtitle Mode dropdown now shows helper text (all
   locales) clarifying that "Forced" only selects forced-narrative tracks and
   that "Any" is the mode to always show subtitles in the preferred language,
