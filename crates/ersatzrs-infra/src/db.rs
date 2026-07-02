@@ -109,7 +109,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         video_format: 1,
         video_profile: "high",
         bit_depth: 0,
-        video_bitrate: 8000,
+        video_bitrate: 4000,
         video_buffer_size: 8000,
     },
     DefaultFfmpegProfileSeed {
@@ -119,7 +119,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         video_format: 1,
         video_profile: "high",
         bit_depth: 0,
-        video_bitrate: 16000,
+        video_bitrate: 8000,
         video_buffer_size: 16000,
     },
     DefaultFfmpegProfileSeed {
@@ -129,7 +129,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         video_format: 2,
         video_profile: "main10",
         bit_depth: 1,
-        video_bitrate: 20000,
+        video_bitrate: 10000,
         video_buffer_size: 20000,
     },
     DefaultFfmpegProfileSeed {
@@ -139,7 +139,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         video_format: 2,
         video_profile: "main",
         bit_depth: 0,
-        video_bitrate: 45000,
+        video_bitrate: 22500,
         video_buffer_size: 45000,
     },
     DefaultFfmpegProfileSeed {
@@ -149,7 +149,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         video_format: 2,
         video_profile: "main10",
         bit_depth: 1,
-        video_bitrate: 60000,
+        video_bitrate: 30000,
         video_buffer_size: 60000,
     },
 ];
@@ -954,6 +954,7 @@ mod tests {
         video_profile: &'a str,
         bit_depth: i32,
         bitrate: i32,
+        buffer_size: i32,
     }
 
     #[test]
@@ -1144,7 +1145,8 @@ mod tests {
                 video_format: 1,
                 video_profile: "high",
                 bit_depth: 0,
-                bitrate: 8000,
+                bitrate: 4000,
+                buffer_size: 8000,
             },
         );
         assert_profile_row(
@@ -1156,7 +1158,8 @@ mod tests {
                 video_format: 1,
                 video_profile: "high",
                 bit_depth: 0,
-                bitrate: 16000,
+                bitrate: 8000,
+                buffer_size: 16000,
             },
         );
         assert_profile_row(
@@ -1168,7 +1171,8 @@ mod tests {
                 video_format: 2,
                 video_profile: "main10",
                 bit_depth: 1,
-                bitrate: 20000,
+                bitrate: 10000,
+                buffer_size: 20000,
             },
         );
         assert_profile_row(
@@ -1180,7 +1184,8 @@ mod tests {
                 video_format: 2,
                 video_profile: "main",
                 bit_depth: 0,
-                bitrate: 45000,
+                bitrate: 22500,
+                buffer_size: 45000,
             },
         );
         assert_profile_row(
@@ -1192,7 +1197,8 @@ mod tests {
                 video_format: 2,
                 video_profile: "main10",
                 bit_depth: 1,
-                bitrate: 60000,
+                bitrate: 30000,
+                buffer_size: 60000,
             },
         );
 
@@ -1235,7 +1241,7 @@ mod tests {
         assert_eq!(
             row.try_get::<i32, _>("VideoBufferSize")
                 .expect("video buffer"),
-            expected.bitrate
+            expected.buffer_size
         );
     }
 

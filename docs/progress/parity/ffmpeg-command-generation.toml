@@ -1,7 +1,7 @@
 feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0003', '0014', '0017']
 
 summary    = '''
@@ -51,8 +51,10 @@ max-delay gating.
 
 Reopened 2026-07-01: the ADR 0017 seeded default profile video bitrate targets
 need to be halved while the existing video buffer-size values remain unchanged.
-For example, the 1080p default video bitrate should move from 16000 kbit/s to
-8000 kbit/s while its video buffer size stays 16000 kbit.
+Closed 2026-07-02 (ADR 0017 v3): the fresh-database seed now writes video
+bitrates 4000, 8000, 10000, 22500, and 30000 kbit/s while keeping video buffer
+sizes at 8000, 16000, 20000, 45000, and 60000 kbit; existing databases are not
+rewritten (seed remains fresh-only and idempotent).
 
 The 2026-06-19 HDR proof slice added a live HDR -> SDR calibration gate that
 generates HDR10 PQ and HLG masters, boots ErsatzRS on a throwaway database,
@@ -84,8 +86,8 @@ id          = 'default-profile-video-bitrate-halving'
 adr         = '0017'
 description = 'The ADR 0017 fresh-database default FFmpeg profiles still use the earlier video bitrate targets; their video bitrates should be halved, e.g. 16000 kbit/s to 8000 kbit/s for the 1080p default, while video buffer-size values remain untouched.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Current seeded values in `crates/ersatzrs-infra/src/db.rs` include 8000, 16000, 20000, 45000, and 60000 kbit/s video bitrates with matching buffer sizes. Reclose only after fresh DB seeding and tests prove video bitrates are 4000, 8000, 10000, 22500, and 30000 kbit/s respectively while video buffer sizes stay 8000, 16000, 20000, 45000, and 60000 kbit.'
-resolved    = false
+evidence    = 'Resolved 2026-07-02: `ADR0017_DEFAULT_PROFILES` in `crates/ersatzrs-infra/src/db.rs` seeds video bitrates 4000, 8000, 10000, 22500, and 30000 kbit/s with video buffer sizes kept at 8000, 16000, 20000, 45000, and 60000 kbit. `media_server_initializer_seeds_upstream_defaults` now asserts `VideoBitrate` and `VideoBufferSize` independently per profile (the old expectation assumed they were equal) and was proven to fail against the pre-retune seed before the change; `media_server_initializer_is_idempotent` and `default_ffmpeg_profile_hardware_update_targets_seeded_profiles` still pass, so re-runs do not reseed and existing tables are not rewritten.'
+resolved    = true
 
 [[debt]]
 id          = 'ac3-segmenter-max-delay'

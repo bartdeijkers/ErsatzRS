@@ -123,21 +123,23 @@ health warning for static images is closed as well; ordinary still-image media
 versions no longer warn while animated-capable image paths and duration-bearing
 media remain warning candidates. ADR 0019 is now proposed for an opt-in
 similar-video cooldown scheduling extension; it is tracked separately and is
-not implemented. The ADR 0017 default FFmpeg profile video bitrate retune is
-still open. The reopened `/channels/add` default group regression closed on
-2026-07-02 (fresh Add Channel forms default `Group` to `ErsatzRS` with focused
-repository and browser-proof coverage, while existing channels keep their
-saved groups), and the FFmpeg profile editor Video/Audio section spacing
-regression closed the same day (shared `section-fields` rhythm class with
-measured browser proof in desktop and mobile viewports). On 2026-07-02, additional media curation tasks were
+not implemented. The three 2026-07-01 reopened items all closed on 2026-07-02:
+the `/channels/add` default group regression (fresh Add Channel forms default
+`Group` to `ErsatzRS` with focused repository and browser-proof coverage,
+while existing channels keep their saved groups), the FFmpeg profile editor
+Video/Audio section spacing regression (shared `section-fields` rhythm class
+with measured browser proof in desktop and mobile viewports), and the ADR 0017
+v3 default-profile bitrate retune (seeded video bitrates 4000/8000/10000/
+22500/30000 kbit/s with video buffer sizes unchanged; fresh-only, idempotent
+seed proven by focused tests). On 2026-07-02, additional media curation tasks were
 registered: ADR 0048 collection items must allow the same movie to appear more
 than once in one collection when each row has a different commentary or
 alternate-audio override, and Add To Collection/Add To Playlist should keep the
 admin in the current media browsing/detail context by default after adding
 items; `/media/music/artists/:id` also needs checkbox multi-select actions for
 bulk adding multiple artist music videos to collections or playlists. Remaining
-Phase 7 closeout work is broad verification, release-readiness proof, ADR
-0017's default-profile bitrate retune, and those media curation follow-ups.
+Phase 7 closeout work is broad verification, release-readiness proof, and
+those media curation follow-ups.
 '''
 
 # Phase 0 checklist (all complete).

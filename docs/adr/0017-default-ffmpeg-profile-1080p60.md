@@ -6,12 +6,13 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Partial — fresh database bootstrap seeds the five default profiles, web startup
-applies seed-time hardware-acceleration detection from the captured FFmpeg
-runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
-multichannel AC-3. The 2026-07-01 bitrate revision is not implemented yet:
-seeded profile video bitrates must be halved while existing video buffer-size
-values remain unchanged.
+Implemented — fresh database bootstrap seeds the five default profiles, web
+startup applies seed-time hardware-acceleration detection from the captured
+FFmpeg runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
+multichannel AC-3. The 2026-07-01 (v3) bitrate revision landed on 2026-07-02:
+seeded profile video bitrates are 4000, 8000, 10000, 22500, and 30000 kbit/s
+while video buffer sizes keep the v2 values (8000, 16000, 20000, 45000, and
+60000 kbit).
 
 ## Context
 
@@ -148,11 +149,12 @@ starting points an admin can edit or delete per channel.
 - **Correctness:** `-maxrate` remains effective while video buffer sizes keep
   the known v2 values; `-max_delay` removes a real multichannel-AC-3 seam
   artifact.
-- **Partial implementation:** `ensure_default_ffmpeg_profile` seeds the five
-  profiles and points `ffmpeg.default_profile_id` at #2; web startup applies the
+- **Implementation:** `ensure_default_ffmpeg_profile` seeds the five profiles
+  and points `ffmpeg.default_profile_id` at #2; web startup applies the
   detected encoder choice to that fresh seed only; HLS output emits
   `-max_delay 500000` for multichannel AC-3. The seeded video bitrate values
-  still need the 2026-07-01 halving retune while preserving video buffer sizes.
+  carry the 2026-07-01 halving retune while video buffer sizes keep the v2
+  values.
 
 ## Alternatives Considered
 
@@ -173,7 +175,7 @@ starting points an admin can edit or delete per channel.
 
 ## Revision history
 
-- **2026-07-01 (v3 — pending implementation).** Halve every seeded default
+- **2026-07-01 (v3 — implemented 2026-07-02).** Halve every seeded default
   profile video bitrate from the v2 targets while leaving `VideoBufferSize`
   untouched: 8000→4000, 16000→8000, 20000→10000, 45000→22500, and 60000→30000.
   The 1080p default therefore becomes 8000 kbit/s video with the existing

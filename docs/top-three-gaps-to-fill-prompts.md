@@ -13,80 +13,22 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: updated 2026-07-02 after the `/channels/add` default group
-and FFmpeg profile editor section spacing regressions closed
-(`channels-add-default-group-ersatzrs` and
-`profile-editor-video-audio-section-spacing` resolved; both features returned
-to `Ported`). The remaining in-progress Phase 7 item — the ADR 0017 default
-FFmpeg profile video bitrate retune — moves to the top, followed by the two
-top-ranked registered media curation follow-ups: ADR 0048 same-collection
-duplicate movie rows with distinct playback overrides, and stay-in-context Add
-To Collection/Add To Playlist behavior. Artist-detail music-video checkbox
-multi-select, ADR 0020 playout rebuild, ADR 0019 similar-video cooldown,
-proposed localization ADRs, active Docker release plans, and module split work
-remain candidates, but rank behind the selected items in this pass.
+Current selection: updated 2026-07-02 after all three 2026-07-01 reopened
+items closed (`channels-add-default-group-ersatzrs`,
+`profile-editor-video-audio-section-spacing`, and
+`default-profile-video-bitrate-halving` resolved; channels admin UI, the
+FFmpeg profile editor, and FFmpeg command generation returned to `Ported`).
+The three registered media curation follow-ups now fill the queue: ADR 0048
+same-collection duplicate movie rows with distinct playback overrides,
+stay-in-context Add To Collection/Add To Playlist behavior, and artist-detail
+music-video checkbox multi-select. ADR 0020 playout rebuild, ADR 0019
+similar-video cooldown, proposed localization ADRs, active Docker release
+plans, and module split work remain candidates, but rank behind the selected
+items in this pass.
 
 ---
 
-## 1. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
-
-Use the repo workflow from AGENTS.md and the governing ADRs. This is an
-ADR-backed runtime/default-profile hardening slice; do not force an ErsatzTV
-parity workflow where ADR 0017 intentionally deviates from ErsatzTV defaults.
-The goal is the complete ADR 0017 v3 behavior without stopgaps.
-
-Tracked debt: `default-profile-video-bitrate-halving` in
-[`docs/progress/parity/ffmpeg-command-generation.toml`](progress/parity/ffmpeg-command-generation.toml),
-backed by [ADR 0017](adr/0017-default-ffmpeg-profile-1080p60.md). Current debt
-text: fresh-database default profile video bitrates should change from 8000,
-16000, 20000, 45000, and 60000 kbit/s to 4000, 8000, 10000, 22500, and 30000
-kbit/s while video buffer sizes remain 8000, 16000, 20000, 45000, and 60000
-kbit.
-
-Before editing:
-1. Read `docs/progress/parity/ffmpeg-command-generation.toml`,
-   `docs/adr/0017-default-ffmpeg-profile-1080p60.md`,
-   `docs/adr/0014-runtime-learned-hardware-capability-fallback.md`,
-   `docs/how-to/testing.md`, and `STYLE.md`.
-2. Inspect the current default-profile seed and hardware update paths in
-   `crates/ersatzrs-infra/src/db.rs`,
-   `crates/ersatzrs-web/src/host/bootstrap.rs`,
-   `crates/ersatzrs-domain/src/ffmpeg.rs`, and the existing focused seed tests.
-3. Build a Source Map covering fresh database bootstrap, default profile ID
-   selection, seeded-profile idempotence, seed-time hardware acceleration
-   update, existing database non-rewrite behavior, and command-generation use of
-   profile bitrate/buffer fields.
-4. Reproduce or prove the current seed values before editing with a focused
-   test, temp-database query, or direct failing assertion.
-
-Implement the coherent end-to-end slice that genuinely closes the gap:
-- Retune only the seeded `VideoBitrate` values to 4000, 8000, 10000, 22500, and
-  30000 kbit/s.
-- Keep `VideoBufferSize` exactly at 8000, 16000, 20000, 45000, and 60000 kbit.
-- Do not rewrite existing saved profile tables.
-- Preserve the five-profile seed, default profile pointer, AC-3 6ch audio
-  defaults, hardware-acceleration seed update, and ADR 0014 fallback behavior.
-- Add focused regression coverage for fresh database seeding and idempotence.
-- When proof passes, mark the structured debt resolved, return
-  `ffmpeg-command-generation` to `Ported` if no open debt remains, update ADR
-  0017's Implementation text if it is now complete, refresh
-  `docs/progress/phase.toml`, `CHANGELOG.md` if needed, this prompt file, and
-  the session log.
-
-Verification:
-- `cargo test -p ersatzrs-infra media_server_initializer_seeds_upstream_defaults`.
-- `cargo test -p ersatzrs-infra media_server_initializer_is_idempotent`.
-- `cargo test -p ersatzrs-infra default_ffmpeg_profile_hardware_update_targets_seeded_profiles`.
-- Run any additional focused `ersatzrs-ffmpeg` command-generation tests if the
-  command layer or profile mapping changes.
-- `cargo xtask progress check`.
-
-When done, report the Source Map, ADR 0017 fields changed, verification run,
-changed files, and any remaining FFmpeg/profile parity debt.
-
----
-
-## 2. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 1. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Use the repo workflow from AGENTS.md and the governing ADR. This is a
 spec-backed ErsatzRS-owned extension — ErsatzTV has no equivalent, so do not
@@ -155,7 +97,7 @@ any remaining debt, verification run, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: stay-in-context Add To Collection / Add To Playlist (slug `media-browsers`)
+## 2. Build the next ErsatzRS spec chore: stay-in-context Add To Collection / Add To Playlist (slug `media-browsers`)
 
 Use the repo workflow from AGENTS.md. This is a maintainer-requested ErsatzRS
 UX chore recorded as structured debt — ErsatzTV's flows navigate away, so do
@@ -205,6 +147,63 @@ Verification:
 - `cargo xtask hydration-lint -p ersatzrs-web`.
 - `npx playwright test tests/e2e/media-browser-actions.spec.ts` plus the
   focused stay-in-context cases added for this chore.
+- `cargo xtask progress check`.
+
+When done, report the Source Map, behavior implemented, any remaining debt,
+verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: artist-detail music-video multi-select actions (slug `media-browsers`)
+
+Use the repo workflow from AGENTS.md. This is a maintainer-requested ErsatzRS
+UX chore recorded as structured debt; ErsatzTV's artist page has no bulk
+music-video selection, so the debt entry is the contract. The goal is the
+complete multi-select behavior without stopgaps.
+
+Tracked debt: `artist-detail-music-video-multi-select-actions` in
+[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
+Current debt text: on `/media/music/artists/{artist_id}`, the artist detail
+page should allow selecting multiple music-video rows with checkboxes and
+adding the selected videos to collections or playlists in bulk. The current
+artist detail page restored artist-level Add To Collection and music-video
+preview artwork, but the listed music videos still lack a multi-select
+checkbox/action toolbar for bulk Add To Collection and Add To Playlist.
+
+Before editing:
+1. Read `docs/progress/parity/media-browsers.toml`, `TEST.md`, and `STYLE.md`.
+2. Inspect the current artist detail implementation in
+   `crates/ersatzrs-web/src/admin/pages/media/artists.rs` (and its detail
+   module/CSS), the shared selection toolbar used by the media browser lists in
+   `crates/ersatzrs-web/src/admin/pages/media/browser.rs`,
+   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`, and the
+   existing browser proof in `tests/e2e/media-browser-actions.spec.ts`.
+3. Build a Source Map covering artist detail row rendering, the shared
+   checkbox/selection toolbar primitives, bulk Add To Collection / Add To
+   Playlist dialog flows, persistence, and localization of any new labels.
+4. Reproduce the missing behavior in a running browser before editing: artist
+   music-video rows expose no checkboxes or bulk actions today.
+
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Add checkbox multi-select to the artist detail music-video rows, reusing the
+  shared media-browser selection toolbar/action primitives over ad hoc UI.
+- Bulk Add To Collection and Add To Playlist dialogs persist all selected
+  music-video items; individual row actions keep working.
+- Localize any new user-visible labels for every supported culture under
+  `crates/ersatzrs-web/src/admin/languages/`.
+- Keep the route hydrated and console-clean per `TEST.md` island rules.
+- Add focused browser coverage proving the bulk flow persists membership for
+  multiple selected music videos.
+- Update `docs/progress/parity/media-browsers.toml`,
+  `docs/progress/hydration.toml` if proof state changes,
+  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
+  session log when the debt closes.
+
+Verification:
+- Focused Rust tests for any server-fn/projection changes.
+- `cargo xtask hydration-lint -p ersatzrs-web`.
+- `npx playwright test tests/e2e/media-browser-actions.spec.ts` plus the
+  focused multi-select cases added for this chore.
 - `cargo xtask progress check`.
 
 When done, report the Source Map, behavior implemented, any remaining debt,

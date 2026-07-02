@@ -37,6 +37,10 @@ release section when tagging a release.
   0017 default FFmpeg profile bitrate, and FFmpeg profile editor spacing debts.
 - Dutch admin UI now translates "watermark" as "zenderlogo" (station logo)
   instead of the literal "watermerk", matching common Dutch broadcast usage.
+- Fresh-database default FFmpeg profiles now seed halved video bitrates
+  (4000, 8000, 10000, 22500, and 30000 kbit/s for the 720p through 4K HDR
+  profiles) while keeping the previous video buffer sizes, per ADR 0017 v3.
+  Existing databases keep their saved profiles unchanged.
 
 ### Fixed
 
