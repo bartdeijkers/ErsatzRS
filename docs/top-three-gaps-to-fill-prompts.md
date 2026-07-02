@@ -1,6 +1,6 @@
 <!--
 generated: 2026-07-02
-last_processed_commit: 4ce96714dae25c3731f05dad52c070ca3524be3a
+last_processed_commit: 149b4cb9d3963c62391898f1079dad34e66a6cf6
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,18 +13,22 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: updated 2026-07-02 after all three 2026-07-01 reopened
-items closed (`channels-add-default-group-ersatzrs`,
+Current selection: renewed 2026-07-02 after all three 2026-07-01 reopened
+items closed and landed green on CI (`channels-add-default-group-ersatzrs`,
 `profile-editor-video-audio-section-spacing`, and
 `default-profile-video-bitrate-halving` resolved; channels admin UI, the
-FFmpeg profile editor, and FFmpeg command generation returned to `Ported`).
+FFmpeg profile editor, and FFmpeg command generation returned to `Ported`;
+`quick-xml` was bumped to 0.41 for RUSTSEC-2026-0194/0195 in the same push).
 The three registered media curation follow-ups now fill the queue: ADR 0048
 same-collection duplicate movie rows with distinct playback overrides,
 stay-in-context Add To Collection/Add To Playlist behavior, and artist-detail
-music-video checkbox multi-select. ADR 0020 playout rebuild, ADR 0019
-similar-video cooldown, proposed localization ADRs, active Docker release
-plans, and module split work remain candidates, but rank behind the selected
-items in this pass.
+music-video checkbox multi-select. ADR 0020 playout rebuild debts
+(`channel-edit-triggers-no-playout-rebuild`,
+`classic-refresh-appends-instead-of-rebuilding`,
+`reset-playout-must-rewrite-near-term-items`), ADR 0019 similar-video
+cooldown, proposed localization ADRs, active Docker release plans, and module
+split work remain candidates, but rank behind the selected items in this
+pass.
 
 ---
 
