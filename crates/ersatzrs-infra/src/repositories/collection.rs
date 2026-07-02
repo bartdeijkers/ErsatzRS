@@ -18,16 +18,17 @@ impl CollectionRepository for SqliteCollectionRepository {
             .await
             .map_err(|error| not_found("collection", id, error))?;
         let mut collection = map_collection(&row)?;
-        // ErsatzTV CollectionItem has no Id or sort_order - use MediaItemId as the item id
+        // ADR 0048 allows duplicate rows per media item (distinct playback
+        // overrides); the domain Collection tracks distinct media item ids.
         collection.item_ids = load_ids(
             &self.0,
-            r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
+            r#"SELECT DISTINCT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
             id,
         )
         .await?;
         collection.media_item_ids = load_ids(
             &self.0,
-            r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
+            r#"SELECT DISTINCT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
             id,
         )
         .await?;
@@ -109,9 +110,13 @@ impl CollectionRepository for SqliteCollectionRepository {
             .bind(collection.id)
             .execute(&mut *tx)
             .await?;
-        for media_item_id in &collection.media_item_ids {
+        // CollectionItem is keyed by a surrogate Id (ADR 0048), so dedupe the
+        // media item ids here to keep upsert idempotent for default rows.
+        let media_item_ids: std::collections::BTreeSet<_> =
+            collection.media_item_ids.iter().copied().collect();
+        for media_item_id in media_item_ids {
             sqlx::query(
-                r#"REPLACE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
+                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
             )
             .bind(collection.id)
             .bind(media_item_id)

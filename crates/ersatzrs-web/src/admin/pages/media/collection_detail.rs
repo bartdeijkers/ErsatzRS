@@ -118,7 +118,9 @@ fn CollectionDetailView(
     // ── Custom-order toggle ────────────────────────────────────────────
     let use_custom_order = RwSignal::new(detail.use_custom_playback_order);
 
-    // ── Selection state (HashSet<media_item_id>) ───────────────────────
+    // ── Selection state (HashSet<collection_item_id>) — ADR 0048 rows are
+    //    identified by the surrogate CollectionItem.Id so duplicate
+    //    same-movie rows select/remove independently. ────────────────────
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let selected_count = Signal::derive(move || selected.with(HashSet::len));
 
@@ -236,9 +238,9 @@ fn CollectionDetailView(
     // ordering across ALL items; ErsatzTV's `UpdateCollectionCustomOrder`
     // only writes the indices that changed, but writing all of them is
     // idempotent and keeps the index sequence dense.
-    let on_move = Callback::new(move |(item_id, direction): (i64, i32)| {
+    let on_move = Callback::new(move |(row_id, direction): (i64, i32)| {
         items_signal.update(|items| {
-            let Some(pos) = items.iter().position(|i| i.media_item_id == item_id) else {
+            let Some(pos) = items.iter().position(|i| i.collection_item_id == row_id) else {
                 return;
             };
             let new_pos = if direction < 0 {
@@ -254,7 +256,7 @@ fn CollectionDetailView(
             items
                 .iter()
                 .filter(|i| i.kind == "movie")
-                .map(|i| i.media_item_id)
+                .map(|i| i.collection_item_id)
                 .collect()
         });
         reorder_action.dispatch(order);
@@ -262,10 +264,10 @@ fn CollectionDetailView(
 
     let on_reorder = Callback::new(move |order: Vec<i64>| {
         items_signal.update(|items| {
-            for (idx, item_id) in order.iter().enumerate() {
+            for (idx, row_id) in order.iter().enumerate() {
                 if let Some(item) = items
                     .iter_mut()
-                    .find(|item| item.kind == "movie" && item.media_item_id == *item_id)
+                    .find(|item| item.kind == "movie" && item.collection_item_id == *row_id)
                 {
                     item.custom_index = i64::try_from(idx).unwrap_or(i64::MAX);
                 }
@@ -497,7 +499,7 @@ fn CardGrid(
                 }
 
                 let len = section.len();
-                let section_order: Vec<i64> = section.iter().map(|item| item.media_item_id).collect();
+                let section_order: Vec<i64> = section.iter().map(|item| item.collection_item_id).collect();
                 let kind_is_movie = *kind == "movie";
                 let show_move_for_section = supports_custom_order && use_custom && kind_is_movie;
                 Some(view! {
@@ -542,7 +544,9 @@ fn SelectableCollectionCard(
     dragged_item: RwSignal<Option<i64>>,
     section_order: Vec<i64>,
 ) -> impl IntoView {
-    let item_id = card.media_item_id;
+    // Row identity: the surrogate CollectionItem.Id. Duplicate same-movie
+    // rows (ADR 0048) must select, remove, drag, and reorder independently.
+    let item_id = card.collection_item_id;
     let title = card.title.clone();
     let title_for_alt = card.title.clone();
     let subtitle = card.subtitle.clone();

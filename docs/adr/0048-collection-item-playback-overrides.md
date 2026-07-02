@@ -6,11 +6,16 @@ Accepted
 
 ## Implementation
 
-Partial. Item-level audio/subtitle overrides are implemented for collection and
-playlist rows, but collection rows are still unique by `(CollectionId,
-MediaItemId)`. A follow-up is needed so the same movie can appear more than
-once in the same collection when each row carries a different playback override,
-such as multiple commentary tracks.
+Implemented. Item-level audio/subtitle overrides are implemented for collection
+and playlist rows. `CollectionItem` is keyed by a surrogate `Id` (mirroring
+`PlaylistItem`), so the same movie can appear more than once in the same
+collection when each row carries a different playback override, such as
+multiple commentary tracks. Add flows skip a row whose override tuple is
+identical to an existing row for the same media item, default (no-override)
+adds stay idempotent, the collection detail page selects/removes/reorders by
+row identity and shows each row's override summary, and scheduling expansion
+keys deduplication on (media item, override tuple) so duplicate rows schedule
+separately.
 
 ## Context
 

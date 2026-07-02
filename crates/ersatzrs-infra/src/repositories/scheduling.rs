@@ -599,7 +599,10 @@ impl SqliteSchedulingContentRepository {
                         guids: guids.clone(),
                     }))
                     .await?;
-                let mut seen = items.iter().map(|item| item.id).collect::<BTreeSet<_>>();
+                let mut seen = items
+                    .iter()
+                    .map(scheduling_item_key)
+                    .collect::<BTreeSet<_>>();
                 for query in searches {
                     let search_items = self.search_items(query).await?;
                     append_unique(&mut items, &mut seen, search_items);
@@ -686,7 +689,7 @@ impl SqliteSchedulingContentRepository {
             r#"SELECT *
              FROM "CollectionItem"
              WHERE "CollectionId" = ?
-             ORDER BY COALESCE("CustomIndex", "MediaItemId"), "MediaItemId""#,
+             ORDER BY COALESCE("CustomIndex", "MediaItemId"), "MediaItemId", "Id""#,
         )
         .bind(collection_id)
         .fetch_all(&self.0)
@@ -3134,13 +3137,40 @@ async fn exists_by_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> 
         .map_err(Into::into)
 }
 
+/// Dedupe key for expanded scheduling items. ADR 0048 allows the same media
+/// item to appear more than once in a collection when the rows carry different
+/// playback overrides, so the override tuple is part of the identity — two
+/// rows for one movie with distinct commentary tracks must both schedule.
+type SchedulingItemKey = (
+    EntityId,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<u8>,
+);
+
+fn scheduling_item_key(item: &SchedulingMediaItem) -> SchedulingItemKey {
+    (
+        item.id,
+        item.preferred_audio_language_code.clone(),
+        item.preferred_audio_title.clone(),
+        item.preferred_subtitle_language_code.clone(),
+        item.subtitle_mode.map(|mode| match mode {
+            ChannelSubtitleMode::None => 0,
+            ChannelSubtitleMode::Forced => 1,
+            ChannelSubtitleMode::Default => 2,
+            ChannelSubtitleMode::Any => 3,
+        }),
+    )
+}
+
 fn append_unique(
     target: &mut Vec<SchedulingMediaItem>,
-    seen: &mut BTreeSet<EntityId>,
+    seen: &mut BTreeSet<SchedulingItemKey>,
     items: Vec<SchedulingMediaItem>,
 ) {
     for item in items {
-        if seen.insert(item.id) {
+        if seen.insert(scheduling_item_key(&item)) {
             target.push(item);
         }
     }

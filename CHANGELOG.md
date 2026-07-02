@@ -18,6 +18,14 @@ release section when tagging a release.
 - Collection and playlist items can now persist item-level audio/subtitle
   playback overrides, so admins can add a movie with a commentary or alternate
   audio track and see the saved override on collection/playlist inspection.
+- The same movie can now be added to one collection several times when each
+  row carries a different playback override, so every commentary or alternate
+  audio track of a movie can be represented in a single collection. Duplicate
+  rows show their own override summary on the collection detail page, can be
+  removed or reordered independently, and schedule separately with their own
+  audio/subtitle preferences. (`CollectionItem` now uses a surrogate primary
+  key in SQLite and MySQL; adding an item that exactly matches an existing
+  row, including default adds without an override, remains a no-op.)
 - ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
   shuffling, covering artist/show/franchise-like grouping and custom filters.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or

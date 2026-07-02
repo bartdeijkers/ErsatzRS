@@ -315,6 +315,46 @@ async fn scheduling_repository_applies_collection_and_playlist_playback_override
 }
 
 #[tokio::test]
+async fn scheduling_repository_expands_duplicate_collection_rows_with_distinct_overrides() {
+    let pool = common::test_db().await;
+    seed_scheduling_fixture(&pool).await;
+
+    // ADR 0048: the same movie appears twice in one collection, once as a
+    // default row and once with a commentary-track override. Both rows must
+    // schedule as separate items carrying their own playback preferences.
+    pool.execute(
+        r#"INSERT INTO "CollectionItem" (
+              "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
+              "PreferredAudioTitle", "SubtitleMode"
+           ) VALUES (1, 20, 'eng', 'Director Commentary', 3)"#,
+    )
+    .await
+    .unwrap();
+
+    let repos = make_repositories(pool.clone());
+    let items = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Collection("prime".to_owned()))
+        .await
+        .unwrap();
+
+    let features: Vec<_> = items.iter().filter(|item| item.id == 20).collect();
+    assert_eq!(features.len(), 2, "both duplicate rows must expand");
+    assert!(features
+        .iter()
+        .any(|item| item.preferred_audio_title.is_none()));
+    let commentary = features
+        .iter()
+        .find(|item| item.preferred_audio_title.as_deref() == Some("Director Commentary"))
+        .expect("override row expands with its own audio title");
+    assert_eq!(
+        commentary.preferred_audio_language_code.as_deref(),
+        Some("eng")
+    );
+    assert_eq!(commentary.subtitle_mode, Some(ChannelSubtitleMode::Any));
+}
+
+#[tokio::test]
 async fn scheduling_repository_resolves_playlist_children_by_group_before_name() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -1448,7 +1488,8 @@ async fn seed_collection_fixture(pool: &SqlitePool) {
     )
     .await
     .unwrap();
-    // CollectionItem has composite PK (CollectionId, MediaItemId) — no id or sort_order
+    // CollectionItem is keyed by a surrogate Id (ADR 0048) so the same media
+    // item may appear more than once with distinct playback overrides
     pool.execute(
         r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
          VALUES (1, 10), (1, 20)"#,

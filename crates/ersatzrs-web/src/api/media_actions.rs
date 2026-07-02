@@ -96,10 +96,22 @@ pub async fn add_to_collection(
         _ => create_collection(&state, input.new_name.unwrap_or_default(), language).await?,
     };
 
+    // Default add: idempotent per (collection, media item, no-override) row;
+    // ADR 0048 duplicate rows are created only via the override add flow.
     let result = sqlx::query(
-        r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId")
-           VALUES (?, ?)"#,
+        r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
+           SELECT ?, ?
+           WHERE NOT EXISTS (
+               SELECT 1 FROM "CollectionItem"
+               WHERE "CollectionId" = ? AND "MediaItemId" = ?
+                 AND "PreferredAudioLanguageCode" IS NULL
+                 AND "PreferredAudioTitle" IS NULL
+                 AND "PreferredSubtitleLanguageCode" IS NULL
+                 AND "SubtitleMode" IS NULL
+           )"#,
     )
+    .bind(collection_id)
+    .bind(input.media_item_id)
     .bind(collection_id)
     .bind(input.media_item_id)
     .execute(&state.pool)

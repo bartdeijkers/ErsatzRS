@@ -137,9 +137,16 @@ than once in one collection when each row has a different commentary or
 alternate-audio override, and Add To Collection/Add To Playlist should keep the
 admin in the current media browsing/detail context by default after adding
 items; `/media/music/artists/:id` also needs checkbox multi-select actions for
-bulk adding multiple artist music videos to collections or playlists. Remaining
-Phase 7 closeout work is broad verification, release-readiness proof, and
-those media curation follow-ups.
+bulk adding multiple artist music videos to collections or playlists. On
+2026-07-03 the ADR 0048 duplicate-row task closed: `CollectionItem` moved to a
+surrogate `Id` key in SQLite and MySQL, add flows insert duplicate same-movie
+rows when the playback-override tuple differs (identical tuples stay
+idempotent), the collection detail page selects/removes/reorders by row
+identity, and scheduling expansion dedupes on (media item, override tuple) so
+each duplicate row schedules with its own override. Remaining Phase 7 closeout
+work is broad verification, release-readiness proof, and the remaining media
+curation follow-ups (stay-in-context add flows, artist music-video
+multi-select).
 '''
 
 # Phase 0 checklist (all complete).

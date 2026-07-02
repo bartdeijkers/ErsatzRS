@@ -1,7 +1,7 @@
 feature    = 'Multi-collections / Rerun collections / Playlists / Filler presets'
 etv_source = '`ErsatzTV/Pages/MultiCollections*.razor`, `ErsatzTV/Pages/RerunCollections.razor`, `ErsatzTV/Pages/RerunCollectionEditor.razor`, `ErsatzTV/Pages/Playlists.razor`, `ErsatzTV/Pages/PlaylistEditor.razor`, `ErsatzTV/Pages/FillerPresets.razor`, `ErsatzTV/Pages/FillerPresetEditor.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`, `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`, `crates/ersatzrs-web/src/admin/server_fns/filler.rs`, `crates/ersatzrs-web/src/api/{collections,playlists,rerun_collections,filler}.rs`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/media-collection-route-family.spec.ts`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0011', '0048']
 summary    = '''
 Ported: `/media/multi-collections` ports the ErsatzTV multi-collection list plus add/edit/delete editor surface, including search, persisted page size (`pages.multi_collections.page_size`), manual/smart collection selectors with duplicate disabling, `ScheduleAsGroup` and `PlaybackOrder` persistence, name validation, transactional member replacement, `BuildPlayout(Refresh)` enqueue for playouts whose anchors reference an edited multi-collection, persisted-language list/editor labels/actions/options/validation/toasts/pager text via per-culture translation modules, and HTML POST fallback save/delete routes that share the hydrated validation/persistence path. `/media/rerun-collections` ports the ErsatzTV list/add/edit/delete surface with persisted target/playback-order fields, HTML POST fallback save/delete paths, page-size config persistence, update-triggered playout refresh, and persisted-language list/editor labels, actions, options, toasts, and pager text via per-culture translation modules. `/media/filler/presets` ports the ErsatzTV list/editor surface with persisted page size, kind/mode/duration/count/pad/watermark/collection-target/chapter/expression fields, HTML POST fallback save/delete paths, and persisted-language list/editor labels, actions, options, pager text, toasts, and expression help text via per-culture translation modules. `/media/playlists` ports the playlist group/tree and playlist editor route with add/delete group and playlist actions, item add/copy/move/delete, name save, item target/playback/count/play-all/EPG fields, validation, transactional item replacement, smart-collection-aware preview reference data dispatched through the canonical `PlayoutBuilder` Classic scheduler path, HTML POST fallback create/save/delete routes covered by browser smoke and focused tests, and persisted-language list/editor labels/actions/options/toasts/preview text via per-culture translation modules. Generated/system playlists intentionally diverge from ErsatzTV's disabled-editor presentation: ADR 0011 keeps scheduling semantics but renders generated rows as read-only projections with clearer Count and Play All labels. `tests/e2e/media-collection-route-family.spec.ts` proves the high-risk route-family surfaces in Chromium with deterministic SQLite seed data, the new multi-collection no-JS fallback, visible geometry checks, hydrated/fallback form controls, localized English labels, and no console/runtime errors.
@@ -13,10 +13,20 @@ show compact override summaries, playlist HTML save fallback preserves them,
 and scheduling expansion applies them before generated playout items are
 persisted.
 
-Reopened 2026-07-02: the current `CollectionItem` model still permits only one
-row per `(CollectionId, MediaItemId)`, so an admin cannot add the same movie
-several times to one collection with different commentary or alternate-audio
-track overrides.
+Closed 2026-07-03: migration `202607030900_collection_item_duplicate_rows`
+rebuilds `CollectionItem` around a surrogate `Id` primary key (mirroring
+`PlaylistItem`) in both the SQLite and MySQL schemas, so the same movie can
+appear several times in one collection when each row carries a different
+playback override. Add flows skip rows whose override tuple is identical
+(NULL-safe) to an existing row for the same media item, so default adds stay
+idempotent; the collection detail page selects, removes, and reorders by row
+identity with per-row override summaries; and scheduling expansion dedupes on
+(media item, override tuple) so duplicate rows schedule separately with their
+own overrides. Proven by
+`scheduling_repository_expands_duplicate_collection_rows_with_distinct_overrides`
+(ersatzrs-infra) and
+`duplicate_collection_rows_with_distinct_overrides_persist_and_remove_independently`
+(ersatzrs-web).
 '''
 
 [[debt]]
@@ -25,4 +35,4 @@ adr         = '0048'
 description = 'The same movie should be addable to the same collection multiple times when each row has a different playback override, so movies with multiple commentary or alternate audio tracks can have every track represented in one collection.'
 discovered  = '2026-07-02'
 evidence    = 'Maintainer request on 2026-07-02. Current SQLite and MySQL schemas keep `CollectionItem` keyed by `(CollectionId, MediaItemId)` (`PK_CollectionItem`), and the ADR 0048 migration only adds nullable override columns, so the model cannot represent two rows for the same movie in one collection even when `PreferredAudioTitle`, preferred audio/subtitle language, or `SubtitleMode` differ. Reclose only after the collection item identity, add-to-collection flow, collection detail UI, scheduling expansion, SQLite/MySQL migrations, and focused tests prove duplicate same-movie rows with distinct overrides persist and schedule separately.'
-resolved    = false
+resolved    = true

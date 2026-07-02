@@ -5381,9 +5381,23 @@ pub async fn add_item_to_collection(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
+    // Default add: idempotent per (collection, media item, no-override) row.
+    // ADR 0048 duplicate rows are only created through the playback-override
+    // add flow, so this guards on an existing default row.
     sqlx::query(
-        r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
+        r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
+           SELECT ?, ?
+           WHERE NOT EXISTS (
+               SELECT 1 FROM "CollectionItem"
+               WHERE "CollectionId" = ? AND "MediaItemId" = ?
+                 AND "PreferredAudioLanguageCode" IS NULL
+                 AND "PreferredAudioTitle" IS NULL
+                 AND "PreferredSubtitleLanguageCode" IS NULL
+                 AND "SubtitleMode" IS NULL
+           )"#,
     )
+    .bind(collection_id)
+    .bind(media_item_id)
     .bind(collection_id)
     .bind(media_item_id)
     .execute(&state.pool)
@@ -6656,7 +6670,7 @@ async fn media_ids_for_collection(
         return Ok(Vec::new());
     };
     Ok(sqlx::query_scalar(
-        r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
+        r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId", "Id""#,
     )
     .bind(collection_id)
     .fetch_all(pool)
@@ -7038,9 +7052,10 @@ pub async fn media_page_map(
 
 /// Add any media items to a collection. Ports the
 /// `AddItemsToCollectionHandler` branches: `CollectionItem` only references a
-/// `MediaItemId`, so this works uniformly for every kind. Duplicates are
-/// skipped via `INSERT OR IGNORE` (PK is composite). Returns the number of
-/// rows actually inserted.
+/// `MediaItemId`, so this works uniformly for every kind. A row with the same
+/// media item and an identical playback-override tuple is skipped, so default
+/// adds stay idempotent like ErsatzTV. Returns the number of rows actually
+/// inserted.
 #[server]
 pub async fn add_media_items_to_collection(
     collection_id: i64,
@@ -7051,7 +7066,10 @@ pub async fn add_media_items_to_collection(
 
 /// Add media items to a collection and optionally persist item-level playback
 /// overrides. ErsatzTV `CollectionItem` has no such fields; this is the ADR
-/// 0048 ErsatzRS extension.
+/// 0048 ErsatzRS extension. The same media item may appear in one collection
+/// several times as long as each row carries a different override tuple (for
+/// example one row per commentary track); a row identical to an existing one
+/// (media item plus override tuple) is skipped.
 #[server]
 pub async fn add_media_items_to_collection_with_playback(
     collection_id: i64,
@@ -7087,57 +7105,57 @@ pub async fn add_media_items_to_collection_with_playback(
             )));
         }
 
-        let result = if playback_has_value(&playback) {
-            let sql = match state.database_backend {
-                ersatzrs_infra::db::DatabaseBackend::Sqlite => {
-                    r#"INSERT INTO "CollectionItem" (
-                           "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
-                           "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode"
-                       ) VALUES (?, ?, ?, ?, ?, ?)
-                       ON CONFLICT("CollectionId", "MediaItemId") DO UPDATE SET
-                           "PreferredAudioLanguageCode" = excluded."PreferredAudioLanguageCode",
-                           "PreferredAudioTitle" = excluded."PreferredAudioTitle",
-                           "PreferredSubtitleLanguageCode" = excluded."PreferredSubtitleLanguageCode",
-                           "SubtitleMode" = excluded."SubtitleMode""#
-                }
-                #[cfg(feature = "mysql")]
-                ersatzrs_infra::db::DatabaseBackend::MySql => {
-                    r"INSERT INTO `CollectionItem` (
-                           `CollectionId`, `MediaItemId`, `PreferredAudioLanguageCode`,
-                           `PreferredAudioTitle`, `PreferredSubtitleLanguageCode`, `SubtitleMode`
-                       ) VALUES (?, ?, ?, ?, ?, ?)
-                       ON DUPLICATE KEY UPDATE
-                           `PreferredAudioLanguageCode` = VALUES(`PreferredAudioLanguageCode`),
-                           `PreferredAudioTitle` = VALUES(`PreferredAudioTitle`),
-                           `PreferredSubtitleLanguageCode` = VALUES(`PreferredSubtitleLanguageCode`),
-                           `SubtitleMode` = VALUES(`SubtitleMode`)"
-                }
-            };
-            sqlx::query(sql)
-                .bind(collection_id)
-                .bind(id)
-                .bind(&playback.preferred_audio_language_code)
-                .bind(&playback.preferred_audio_title)
-                .bind(&playback.preferred_subtitle_language_code)
-                .bind(playback.subtitle_mode)
-                .execute(&state.pool)
-                .await?
-        } else {
-            let sql = match state.database_backend {
-                ersatzrs_infra::db::DatabaseBackend::Sqlite => {
-                    r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#
-                }
-                #[cfg(feature = "mysql")]
-                ersatzrs_infra::db::DatabaseBackend::MySql => {
-                    r"INSERT IGNORE INTO `CollectionItem` (`CollectionId`, `MediaItemId`) VALUES (?, ?)"
-                }
-            };
-            sqlx::query(sql)
-                .bind(collection_id)
-                .bind(id)
-                .execute(&state.pool)
-                .await?
+        // One guarded insert covers both the default and the override case:
+        // the new row is only inserted when no row with the same media item
+        // and an identical (NULL-safe) override tuple already exists.
+        let sql = match state.database_backend {
+            ersatzrs_infra::db::DatabaseBackend::Sqlite => {
+                r#"INSERT INTO "CollectionItem" (
+                       "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
+                       "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode"
+                   )
+                   SELECT ?, ?, ?, ?, ?, ?
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM "CollectionItem"
+                       WHERE "CollectionId" = ? AND "MediaItemId" = ?
+                         AND "PreferredAudioLanguageCode" IS ?
+                         AND "PreferredAudioTitle" IS ?
+                         AND "PreferredSubtitleLanguageCode" IS ?
+                         AND "SubtitleMode" IS ?
+                   )"#
+            }
+            #[cfg(feature = "mysql")]
+            ersatzrs_infra::db::DatabaseBackend::MySql => {
+                r"INSERT INTO `CollectionItem` (
+                       `CollectionId`, `MediaItemId`, `PreferredAudioLanguageCode`,
+                       `PreferredAudioTitle`, `PreferredSubtitleLanguageCode`, `SubtitleMode`
+                   )
+                   SELECT ?, ?, ?, ?, ?, ? FROM DUAL
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM `CollectionItem`
+                       WHERE `CollectionId` = ? AND `MediaItemId` = ?
+                         AND `PreferredAudioLanguageCode` <=> ?
+                         AND `PreferredAudioTitle` <=> ?
+                         AND `PreferredSubtitleLanguageCode` <=> ?
+                         AND `SubtitleMode` <=> ?
+                   )"
+            }
         };
+        let result = sqlx::query(sql)
+            .bind(collection_id)
+            .bind(id)
+            .bind(&playback.preferred_audio_language_code)
+            .bind(&playback.preferred_audio_title)
+            .bind(&playback.preferred_subtitle_language_code)
+            .bind(playback.subtitle_mode)
+            .bind(collection_id)
+            .bind(id)
+            .bind(&playback.preferred_audio_language_code)
+            .bind(&playback.preferred_audio_title)
+            .bind(&playback.preferred_subtitle_language_code)
+            .bind(playback.subtitle_mode)
+            .execute(&state.pool)
+            .await?;
         added += result.rows_affected();
     }
     if added > 0 {
@@ -7242,13 +7260,6 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-}
-
-fn playback_has_value(playback: &PlaybackOverrideForm) -> bool {
-    playback.preferred_audio_language_code.is_some()
-        || playback.preferred_audio_title.is_some()
-        || playback.preferred_subtitle_language_code.is_some()
-        || playback.subtitle_mode.is_some()
 }
 
 /// One row to be inserted into `PlaylistItem` by
@@ -7984,6 +7995,11 @@ mod season_detail_tests {
 /// "remote_stream"`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CollectionItemCard {
+    /// Surrogate `CollectionItem.Id` — the row identity. ADR 0048 allows the
+    /// same media item to appear several times with different playback
+    /// overrides, so selection/removal/reordering key on this, not on
+    /// `media_item_id`.
+    pub collection_item_id: i64,
     pub media_item_id: i64,
     pub kind: String,
     pub title: String,
@@ -8046,7 +8062,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
     // `MediaCard` defaults).
     let rows = sqlx::query(
         r#"
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8066,7 +8083,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8086,7 +8104,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8108,7 +8127,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8132,7 +8152,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8152,7 +8173,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8172,7 +8194,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8192,7 +8215,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8212,7 +8236,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8232,7 +8257,8 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         UNION ALL
 
-        SELECT ci."MediaItemId" AS "Id",
+        SELECT ci."Id" AS "CollectionItemId",
+               ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
                ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                ci."PreferredAudioTitle" AS "PreferredAudioTitle",
@@ -8250,7 +8276,7 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
           JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
          WHERE ci."CollectionId" = ?
 
-        ORDER BY "Kind", "SortTitle", "Title"
+        ORDER BY "Kind", "SortTitle", "Title", "CollectionItemId"
         "#,
     )
     .bind(id)
@@ -8291,6 +8317,7 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
             };
 
             CollectionItemCard {
+                collection_item_id: r.try_get("CollectionItemId").unwrap_or(0),
                 media_item_id: item_id,
                 kind,
                 title: r.try_get("Title").unwrap_or_default(),
@@ -8337,27 +8364,30 @@ pub async fn set_collection_use_custom_order(id: i64, on: bool) -> Result<(), Se
     Ok(())
 }
 
-/// Removes one or many media items from a collection. Mirrors
-/// `RemoveItemsFromCollectionHandler`.
+/// Removes one or many rows from a collection. Mirrors
+/// `RemoveItemsFromCollectionHandler`, but keys on the surrogate
+/// `CollectionItem.Id` so an ADR 0048 duplicate row (same media item,
+/// different playback override) can be removed without touching its
+/// siblings.
 #[server]
 pub async fn remove_items_from_collection(
     collection_id: i64,
-    media_item_ids: Vec<i64>,
+    collection_item_ids: Vec<i64>,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    if media_item_ids.is_empty() {
+    if collection_item_ids.is_empty() {
         return Ok(());
     }
     let mut tx = state.pool.begin().await?;
     let mut removed = 0_u64;
-    for mid in &media_item_ids {
+    for row_id in &collection_item_ids {
         let result = sqlx::query(
             r#"DELETE FROM "CollectionItem"
-               WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
+               WHERE "CollectionId" = ? AND "Id" = ?"#,
         )
         .bind(collection_id)
-        .bind(mid)
+        .bind(row_id)
         .execute(&mut *tx)
         .await?;
         removed += result.rows_affected();
@@ -8370,30 +8400,31 @@ pub async fn remove_items_from_collection(
 }
 
 /// Persists the manual playback order. Mirrors
-/// `UpdateCollectionCustomOrderHandler` — writes `CustomIndex` per
-/// `(CollectionId, MediaItemId)` based on position in `ordered_item_ids`
-/// (0-based, matching the C# handler's input).
+/// `UpdateCollectionCustomOrderHandler` — writes `CustomIndex` based on
+/// position in `ordered_collection_item_ids` (0-based, matching the C#
+/// handler's input), keyed on the surrogate `CollectionItem.Id` so ADR 0048
+/// duplicate rows order independently.
 #[server]
 pub async fn update_collection_custom_order(
     collection_id: i64,
-    ordered_item_ids: Vec<i64>,
+    ordered_collection_item_ids: Vec<i64>,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    if ordered_item_ids.is_empty() {
+    if ordered_collection_item_ids.is_empty() {
         return Ok(());
     }
     let mut tx = state.pool.begin().await?;
     let mut updated = 0_u64;
-    for (idx, mid) in ordered_item_ids.iter().enumerate() {
+    for (idx, row_id) in ordered_collection_item_ids.iter().enumerate() {
         let result = sqlx::query(
             r#"UPDATE "CollectionItem"
                   SET "CustomIndex" = ?
-                WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
+                WHERE "CollectionId" = ? AND "Id" = ?"#,
         )
         .bind(i64::try_from(idx).unwrap_or(0))
         .bind(collection_id)
-        .bind(mid)
+        .bind(row_id)
         .execute(&mut *tx)
         .await?;
         updated += result.rows_affected();
@@ -8414,7 +8445,7 @@ pub async fn list_collection_members(
 
     let state = expect_context::<AppState>();
     let rows = sqlx::query(
-        r#"SELECT ci."MediaItemId" AS "MediaItemId", "Title", "Kind" FROM "CollectionItem" ci
+        r#"SELECT DISTINCT ci."MediaItemId" AS "MediaItemId", "Title", "Kind" FROM "CollectionItem" ci
            JOIN (
                SELECT m."Id" AS "Id", COALESCE(mm."Title", '') AS "Title", 'movie' AS "Kind"
                FROM "Movie" m JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
@@ -8820,6 +8851,108 @@ mod tests {
             Some("eng")
         );
         assert_eq!(collection_card.subtitle_mode, Some(3));
+
+        owner.cleanup();
+    }
+
+    #[tokio::test]
+    async fn duplicate_collection_rows_with_distinct_overrides_persist_and_remove_independently() {
+        let (_database_dir, pool) = collection_test_pool("collection-duplicate-rows.db").await;
+        seed_movie_detail_variant_fixture(&pool).await;
+        let state = collection_test_state(pool.clone());
+        let owner = leptos::prelude::Owner::new();
+        owner.with(|| leptos::prelude::provide_context(state));
+        owner.set();
+
+        // Default add is idempotent.
+        let default_added = add_media_items_to_collection(900, vec![10])
+            .await
+            .expect("add default row");
+        let default_repeat = add_media_items_to_collection(900, vec![10])
+            .await
+            .expect("repeat default add");
+
+        // Same movie again with two distinct commentary overrides — both must
+        // persist as separate rows; an identical override tuple is skipped.
+        let commentary_a = PlaybackOverrideForm {
+            preferred_audio_title: Some("Director Commentary".to_string()),
+            ..PlaybackOverrideForm::default()
+        };
+        let commentary_b = PlaybackOverrideForm {
+            preferred_audio_title: Some("Isolated Score".to_string()),
+            ..PlaybackOverrideForm::default()
+        };
+        let a_added =
+            add_media_items_to_collection_with_playback(900, vec![10], Some(commentary_a.clone()))
+                .await
+                .expect("add commentary A row");
+        let a_repeat =
+            add_media_items_to_collection_with_playback(900, vec![10], Some(commentary_a))
+                .await
+                .expect("repeat commentary A add");
+        let b_added =
+            add_media_items_to_collection_with_playback(900, vec![10], Some(commentary_b))
+                .await
+                .expect("add commentary B row");
+
+        assert_eq!(default_added, 1);
+        assert_eq!(default_repeat, 0);
+        assert_eq!(a_added, 1);
+        assert_eq!(a_repeat, 0);
+        assert_eq!(b_added, 1);
+
+        // Collection detail projects one card per row with distinct row ids
+        // and each card's own override summary fields.
+        let detail = get_collection_detail(900)
+            .await
+            .expect("load collection detail")
+            .expect("collection exists");
+        let movie_cards: Vec<_> = detail
+            .items
+            .iter()
+            .filter(|card| card.media_item_id == 10)
+            .collect();
+        assert_eq!(movie_cards.len(), 3, "one card per duplicate row");
+        let mut row_ids: Vec<i64> = movie_cards
+            .iter()
+            .map(|card| card.collection_item_id)
+            .collect();
+        row_ids.sort_unstable();
+        row_ids.dedup();
+        assert_eq!(row_ids.len(), 3, "row ids must be distinct");
+        assert!(movie_cards
+            .iter()
+            .any(|card| card.preferred_audio_title.is_none()));
+        assert!(movie_cards
+            .iter()
+            .any(|card| card.preferred_audio_title.as_deref() == Some("Director Commentary")));
+
+        // Removing one duplicate row leaves its siblings untouched.
+        let commentary_a_row: i64 = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "CollectionItem"
+               WHERE "CollectionId" = 900 AND "MediaItemId" = 10
+                 AND "PreferredAudioTitle" = 'Director Commentary'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load commentary A row id");
+        remove_items_from_collection(900, vec![commentary_a_row])
+            .await
+            .expect("remove commentary A row");
+
+        let remaining: Vec<Option<String>> = sqlx::query_scalar(
+            r#"SELECT "PreferredAudioTitle" FROM "CollectionItem"
+               WHERE "CollectionId" = 900 AND "MediaItemId" = 10
+               ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load remaining rows");
+        assert_eq!(
+            remaining,
+            vec![None, Some("Isolated Score".to_string())],
+            "only the removed duplicate row disappears"
+        );
 
         owner.cleanup();
     }
