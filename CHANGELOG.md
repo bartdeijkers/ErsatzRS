@@ -65,6 +65,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Collection detail pages now hydrate cleanly after adding items from media
+  pages and following the explicit "View Collection" toast action.
 - Creating a channel at `/channels/add` now pre-fills the Group field with
   `ErsatzRS` again instead of `ErsatzTV`; existing channels keep their saved
   group values.

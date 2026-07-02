@@ -7,10 +7,11 @@
 //! `crates/ersatzrs-web/src/admin/pages/media/movies.rs`):
 //!
 //! * The page wrapper is a plain `#[component]` (`CollectionDetailPage`).
-//! * The interactive surface lives in [`CollectionDetailIsland`], which
-//!   takes only a scalar `id: i64` prop, owns a `Resource::new_blocking`
-//!   for the detail payload, and renders `<Suspense>` internally. This
-//!   honours the `TEST.md` rule "no prop-bearing islands across Suspense".
+//! * The page wrapper resolves the initial detail payload before rendering
+//!   [`CollectionDetailIsland`]. The island receives that stable payload as a
+//!   prop outside any `<Suspense>` boundary and uses a local resource only for
+//!   post-mutation refreshes, so hydration never swaps a loading/not-found
+//!   branch under the island.
 //! * All sub-components (`Header`, `SelectionBar`, `CardGrid`,
 //!   `SelectableCollectionCard`) are plain `#[component]`s reading
 //!   `RwSignal`s created inside the island, so nothing nested is itself
@@ -66,7 +67,33 @@ pub fn CollectionDetailPage() -> impl IntoView {
         .into_any();
     }
 
-    view! { <CollectionDetailIsland id/> }.into_any()
+    let detail = load_collection_detail_initial(id);
+
+    match detail {
+        Some(detail) => view! { <CollectionDetailIsland initial_detail=detail/> }.into_any(),
+        None => view! {
+            <div class=style::not_found>
+                <h1>{tr(TextKey::CollectionNotFound)}</h1>
+                <a href="/media/collections">{tr(TextKey::BackToCollections)}</a>
+            </div>
+        }
+        .into_any(),
+    }
+}
+
+fn load_collection_detail_initial(id: i64) -> Option<CollectionDetail> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { get_collection_detail(id).await.ok().flatten() })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -76,32 +103,32 @@ pub fn CollectionDetailPage() -> impl IntoView {
 // ---------------------------------------------------------------------------
 
 #[island]
-fn CollectionDetailIsland(id: i64) -> impl IntoView {
+fn CollectionDetailIsland(initial_detail: CollectionDetail) -> impl IntoView {
+    let id = initial_detail.id;
     // Refresh tick — bumped after every successful mutation so the resource
     // re-runs and the grid reflects the new state.
     let refresh: RwSignal<u32> = RwSignal::new(0);
-    let data: Resource<Option<CollectionDetail>> = Resource::new_blocking(
-        move || (id, refresh.get()),
-        |(id, _)| async move { get_collection_detail(id).await.ok().flatten() },
-    );
+    let current_detail = RwSignal::new(initial_detail);
+    let data: LocalResource<Option<CollectionDetail>> = LocalResource::new(move || {
+        let _ = refresh.get();
+        async move { get_collection_detail(id).await.ok().flatten() }
+    });
+
+    Effect::new(move |_| {
+        if let Some(Some(detail)) = data.get() {
+            current_detail.set(detail);
+        }
+    });
 
     view! {
         <div class=style::page>
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || match data.get() {
-                    Some(Some(detail)) => {
-                        view! { <CollectionDetailView id detail refresh=refresh/> }.into_any()
-                    }
-                    Some(None) => view! {
-                        <div class=style::not_found>
-                            <h1>{tr(TextKey::CollectionNotFound)}</h1>
-                            <a href="/media/collections">{tr(TextKey::BackToCollections)}</a>
-                        </div>
-                    }
-                    .into_any(),
-                    None => view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
-                }}
-            </Suspense>
+            {move || view! {
+                <CollectionDetailView
+                    id=id
+                    detail=current_detail.get()
+                    refresh=refresh
+                />
+            }}
         </div>
     }
 }

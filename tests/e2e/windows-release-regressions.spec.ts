@@ -181,7 +181,7 @@ test.describe('Windows release interaction regressions', () => {
     const libraryRow = page.getByRole('row').filter({ hasText: 'E2E Windows TV' });
     await expect(libraryRow).toBeVisible();
     await libraryRow.getByRole('button', { name: 'Scan Library' }).click();
-    await expect(page.getByText('Scan queued')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText(/Scan queued/);
     await expect(page.locator('body')).not.toContainText('Scan failed');
 
     await page.goto('/system/logs');
