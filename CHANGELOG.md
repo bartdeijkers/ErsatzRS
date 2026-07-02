@@ -64,6 +64,13 @@ release section when tagging a release.
   continuing to warn for zero-duration video/audio media and animated-capable
   image paths that still need duration metadata.
 
+### Security
+
+- Updated `quick-xml` to 0.41 to resolve RUSTSEC-2026-0194 (quadratic
+  duplicate-attribute checking) and RUSTSEC-2026-0195 (unbounded
+  namespace-declaration allocation), both denial-of-service vectors in XML
+  parsing.
+
 ## [1.0.15-beta.4] - 2026-07-01
 
 ### Fixed
