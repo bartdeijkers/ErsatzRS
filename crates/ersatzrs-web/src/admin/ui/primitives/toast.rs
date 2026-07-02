@@ -11,11 +11,20 @@ pub enum ToastSeverity {
     Error,
 }
 
+/// Optional navigation offer rendered inside a toast, e.g. "View Collection"
+/// after a stay-in-context add flow.
+#[derive(Clone)]
+pub struct ToastAction {
+    pub label: String,
+    pub href: String,
+}
+
 #[derive(Clone)]
 pub struct Toast {
     pub id: u64,
     pub message: String,
     pub severity: ToastSeverity,
+    pub action: Option<ToastAction>,
 }
 
 /// Process-level toast store. Provide once in the app root and use `push_toast` in islands.
@@ -34,6 +43,25 @@ impl ToastStore {
     }
 
     pub fn push(&self, message: impl Into<String>, severity: ToastSeverity) {
+        self.push_toast(message, severity, None);
+    }
+
+    /// Push a toast carrying an explicit navigation action link.
+    pub fn push_with_action(
+        &self,
+        message: impl Into<String>,
+        severity: ToastSeverity,
+        action: ToastAction,
+    ) {
+        self.push_toast(message, severity, Some(action));
+    }
+
+    fn push_toast(
+        &self,
+        message: impl Into<String>,
+        severity: ToastSeverity,
+        action: Option<ToastAction>,
+    ) {
         let id = self.next_id.get_untracked();
         self.next_id.update(|n| *n += 1);
         self.inner.update(|v| {
@@ -41,6 +69,7 @@ impl ToastStore {
                 id,
                 message: message.into(),
                 severity,
+                action,
             });
         });
     }
@@ -62,8 +91,33 @@ pub fn provide_toast_store() -> ToastStore {
 }
 
 /// Access the `ToastStore` from any component.
+///
+/// Hydrated islands do not share a context tree, so a toast pushed from a
+/// page island would otherwise land in a store the shell's `ToastContainer`
+/// island never reads. On the client every caller therefore shares one
+/// process-wide store, regardless of island hydration order; on the server
+/// the store stays request-scoped via context.
 pub fn use_toast() -> ToastStore {
-    use_context::<ToastStore>().unwrap_or_else(provide_toast_store)
+    #[cfg(target_arch = "wasm32")]
+    {
+        thread_local! {
+            static GLOBAL_TOAST_STORE: std::cell::Cell<Option<ToastStore>> =
+                const { std::cell::Cell::new(None) };
+        }
+        GLOBAL_TOAST_STORE.with(|cell| {
+            if let Some(store) = cell.get() {
+                store
+            } else {
+                let store = ToastStore::new();
+                cell.set(Some(store));
+                store
+            }
+        })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use_context::<ToastStore>().unwrap_or_else(provide_toast_store)
+    }
 }
 
 fn severity_class(s: ToastSeverity) -> &'static str {
@@ -104,7 +158,14 @@ pub fn ToastContainer() -> impl IntoView {
                             <span class=style::toast_icon>
                                 {severity_icon(toast.severity)}
                             </span>
-                            <span class=style::toast_text>{toast.message.clone()}</span>
+                            <span class=style::toast_text>
+                                {toast.message.clone()}
+                                {toast.action.clone().map(|action| view! {
+                                    <a class=style::toast_action href=action.href>
+                                        {action.label}
+                                    </a>
+                                })}
+                            </span>
                             <button
                                 class=style::toast_close
                                 on:click=move |_| store.remove(id)

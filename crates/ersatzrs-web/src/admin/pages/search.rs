@@ -45,7 +45,7 @@ use crate::admin::server_fns::search::{
 use crate::admin::ui::dialogs::save_as_smart_collection::SaveAsSmartCollectionDialog;
 use crate::admin::ui::primitives::card::MediaCard;
 use crate::admin::ui::primitives::dialog::Modal;
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::toast::{use_toast, ToastAction, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/search.module.css");
 mod shell {
@@ -911,15 +911,24 @@ fn AddToCollectionModal(
                 chosen
             };
             let added = add_media_items_to_collection(target, flat.clone()).await?;
-            Ok::<(usize, u64), ServerFnError>((flat.len(), added))
+            Ok::<(usize, u64, i64), ServerFnError>((flat.len(), added, target))
         }
     });
 
     Effect::new(move |_| {
         if let Some(res) = submit_action.value().get() {
             match res {
-                Ok((requested, _)) => {
-                    toast.push(added_items_to_collection(requested), ToastSeverity::Success);
+                Ok((requested, _, target_id)) => {
+                    // Stay on the search results; the toast offers the
+                    // explicit navigation path instead.
+                    toast.push_with_action(
+                        added_items_to_collection(requested),
+                        ToastSeverity::Success,
+                        ToastAction {
+                            label: tr(TextKey::ViewCollection).to_string(),
+                            href: format!("/media/collections/{target_id}"),
+                        },
+                    );
                     selected.update(HashSet::clear);
                     open.set(false);
                     collection_id.set(NEW_COLLECTION_ID);
@@ -1031,15 +1040,24 @@ fn AddToPlaylistModal(
             }
             let count = ids.flatten().len();
             let added = add_media_items_to_playlist_mixed(pid, ids).await?;
-            Ok::<(usize, u64), ServerFnError>((count, added))
+            Ok::<(usize, u64, i64), ServerFnError>((count, added, pid))
         }
     });
 
     Effect::new(move |_| {
         if let Some(res) = submit_action.value().get() {
             match res {
-                Ok((requested, _)) => {
-                    toast.push(added_items_to_playlist(requested), ToastSeverity::Success);
+                Ok((requested, _, target_id)) => {
+                    // Stay on the search results; the toast offers the
+                    // explicit navigation path instead.
+                    toast.push_with_action(
+                        added_items_to_playlist(requested),
+                        ToastSeverity::Success,
+                        ToastAction {
+                            label: tr(TextKey::ViewPlaylist).to_string(),
+                            href: format!("/media/playlists/{target_id}"),
+                        },
+                    );
                     selected.update(HashSet::clear);
                     open.set(false);
                 }

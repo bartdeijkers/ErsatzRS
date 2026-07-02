@@ -1814,6 +1814,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::VideoFormat => "Format wideo",
         TextKey::VideoPreset => "Preset wideo",
         TextKey::VideoProfile => "Profil wideo",
+        TextKey::ViewCollection => "Zobacz kolekcję",
+        TextKey::ViewPlaylist => "Zobacz playlistę",
         TextKey::AddAll => "Dodaj wszystko",
         TextKey::AddedItemToPlaylist => "Dodano element do playlisty.",
         TextKey::AddedArtistToSchedule => "Dodano artystę do harmonogramu",

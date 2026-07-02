@@ -283,11 +283,7 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
             <a class=detail_style::btn_back href="/media/other/videos">
                 <span>{tr(TextKey::Back)}</span>
             </a>
-            <AddToCollectionModal
-                open=collection_open
-                selected=selected
-                redirect_after_add=true
-            />
+            <AddToCollectionModal open=collection_open selected=selected/>
             <MediaInfoModal
                 open=media_info_open
                 title=media_info_title

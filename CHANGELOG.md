@@ -35,6 +35,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Add To Collection and Add To Playlist now keep you on the current media
+  browse, detail, or search page after a successful add instead of navigating
+  to the target collection or playlist. The success notification includes an
+  explicit, localized "View Collection" / "View Playlist" link for when you do
+  want to jump there.
 - Updated the locked Leptos package family to `leptos` 0.8.20.
 - Updated the locked `leptos_router` dependency to 0.8.14.
 - Updated the locked `jsonschema` dependency to 0.46.9.

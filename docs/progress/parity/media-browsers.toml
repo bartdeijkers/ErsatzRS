@@ -22,6 +22,18 @@ even when the likely workflow is to keep browsing and add more items.
 `/media/music/artists/:id` also needs multi-select checkboxes/action toolbar
 for the artist's music-video rows so admins can add several music videos to a
 collection or playlist in one action.
+
+Closed 2026-07-03 for the stay-in-context add flows: every Add To Collection /
+Add To Playlist dialog (shared browser/detail modals and the search page's own
+dialogs) now keeps the user on the current page after a successful add. The
+success toast carries an explicit localized "View Collection" / "View
+Playlist" action link (new `ToastAction` on the shared toast primitive) so the
+previous navigation is still one click away. The `redirect_after_add` behavior
+was removed from the collection modal; `AddToScheduleModal` redirects are
+schedule-flow behavior and unchanged. Proven by the stay-in-context assertions
+in `tests/e2e/media-browser-actions.spec.ts` covering single-item (item menu),
+bulk (selection toolbar), and artist-detail flows for collections and
+playlists, including explicit toast-link navigation.
 '''
 
 [[debt]]
@@ -64,7 +76,7 @@ id          = 'add-to-collection-playlist-stay-in-context'
 description = 'After adding one or more media items to a collection or playlist from a media page, the admin UI should keep the user in the current browsing/detail context by default instead of always navigating to the target collection or playlist page.'
 discovered  = '2026-07-02'
 evidence    = 'Maintainer request on 2026-07-02. Most add-to-collection/add-to-playlist sessions are iterative curation sessions where the user wants to continue adding items to collections or playlists. Reclose only after the media browse/detail Add To Collection and Add To Playlist flows show a clear success state, preserve the current page/selection context by default, still offer an explicit View Collection/View Playlist navigation path, and focused browser coverage proves bulk and single-item flows for collections and playlists.'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'artist-detail-music-video-multi-select-actions'

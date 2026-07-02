@@ -46,7 +46,7 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
 };
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::toast::{use_toast, ToastAction, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
 mod card_style {
@@ -54,16 +54,6 @@ mod card_style {
     stylance::import_crate_style!(s, "src/admin/ui/primitives/card.module.css");
     pub use s::*;
 }
-
-#[cfg(target_arch = "wasm32")]
-fn set_browser_location(path: &str) {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().set_href(path);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn set_browser_location(_path: &str) {}
 
 pub const PAGE_SIZE: u32 = 50;
 
@@ -825,7 +815,6 @@ pub(crate) fn AddToCollectionModal(
     open: RwSignal<bool>,
     selected: RwSignal<HashSet<i64>>,
     #[prop(optional)] playback: Option<RwSignal<Option<PlaybackOverrideForm>>>,
-    #[prop(optional)] redirect_after_add: bool,
 ) -> impl IntoView {
     let refresh: RwSignal<u32> = RwSignal::new(0);
     let options: RwSignal<Vec<CollectionOption>> = RwSignal::new(Vec::new());
@@ -881,12 +870,18 @@ pub(crate) fn AddToCollectionModal(
         if let Some(res) = submit_action.value().get() {
             match res {
                 Ok((requested, _added, target_id)) => {
-                    toast.push(added_items_to_collection(requested), ToastSeverity::Success);
+                    // Stay in the current browsing/detail context; the toast
+                    // offers the explicit navigation path instead.
+                    toast.push_with_action(
+                        added_items_to_collection(requested),
+                        ToastSeverity::Success,
+                        ToastAction {
+                            label: tr(TextKey::ViewCollection).to_string(),
+                            href: format!("/media/collections/{target_id}"),
+                        },
+                    );
                     selected.update(HashSet::clear);
                     open.set(false);
-                    if redirect_after_add {
-                        set_browser_location(&format!("/media/collections/{target_id}"));
-                    }
                     refresh.update(|n| *n += 1);
                     collection_id.set(NEW_COLLECTION_ID);
                     new_name.set(String::new());
@@ -1034,15 +1029,24 @@ pub(crate) fn AddToPlaylistModal(
             }
             let added =
                 add_media_items_to_playlist_with_playback(kind, pid, ids.clone(), playback).await?;
-            Ok::<(usize, u64), ServerFnError>((ids.len(), added))
+            Ok::<(usize, u64, i64), ServerFnError>((ids.len(), added, pid))
         }
     });
 
     Effect::new(move |_| {
         if let Some(res) = submit_action.value().get() {
             match res {
-                Ok((requested, _added)) => {
-                    toast.push(added_items_to_playlist(requested), ToastSeverity::Success);
+                Ok((requested, _added, target_id)) => {
+                    // Stay in the current browsing/detail context; the toast
+                    // offers the explicit navigation path instead.
+                    toast.push_with_action(
+                        added_items_to_playlist(requested),
+                        ToastSeverity::Success,
+                        ToastAction {
+                            label: tr(TextKey::ViewPlaylist).to_string(),
+                            href: format!("/media/playlists/{target_id}"),
+                        },
+                    );
                     selected.update(HashSet::clear);
                     open.set(false);
                 }

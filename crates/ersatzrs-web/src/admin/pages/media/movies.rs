@@ -423,7 +423,6 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                 open=movie_collection_open
                 selected=movie_collection_selected
                 playback=movie_collection_playback
-                redirect_after_add=true
             />
             <AddToPlaylistModal
                 open=movie_playlist_open

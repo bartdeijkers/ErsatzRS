@@ -308,6 +308,20 @@ async function chooseExistingPlaylist(page: Page, seed: Seed): Promise<void> {
   await dialog.getByRole('button', { name: /^add to playlist$/i }).click();
 }
 
+async function expectStayInContextSuccess(
+  page: Page,
+  urlPattern: RegExp,
+  linkName: RegExp,
+  href: string,
+): Promise<void> {
+  // Stay-in-context add flows keep the current page and surface the explicit
+  // navigation path as a toast action link instead of redirecting.
+  await expect(page).toHaveURL(urlPattern);
+  const link = page.getByRole('link', { name: linkName }).last();
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', href);
+}
+
 async function expectSelectAllRightAligned(page: Page): Promise<void> {
   const metrics = await page.locator('main').evaluate((main) => {
     const buttons = Array.from(main.querySelectorAll('button'));
@@ -356,6 +370,12 @@ test.describe('media browser action parity', () => {
     );
     await page.getByRole('menuitem', { name: /^add to collection$/i }).click();
     await chooseExistingCollection(page, seed);
+    await expectStayInContextSuccess(
+      page,
+      /\/media\/music\/songs\?query=/,
+      /^view collection$/i,
+      `/media/collections/${seed.collectionId}`,
+    );
     await expect.poll(() => sqlite(`
 SELECT COUNT(*) FROM "CollectionItem"
 WHERE "CollectionId" = ${seed.collectionId} AND "MediaItemId" = ${seed.songId};
@@ -366,11 +386,29 @@ WHERE "CollectionId" = ${seed.collectionId} AND "MediaItemId" = ${seed.songId};
     await expect(page.locator('main [class*="selection-count"]')).toHaveText(/1 item selected/i);
     await page.getByRole('button', { name: /add to playlist/i }).click();
     await chooseExistingPlaylist(page, seed);
+    await expectStayInContextSuccess(
+      page,
+      /\/media\/music\/songs\?query=/,
+      /^view playlist$/i,
+      `/media/playlists/${seed.playlistId}`,
+    );
     await expect.poll(() => sqlite(`
 SELECT "CollectionType" FROM "PlaylistItem"
 WHERE "PlaylistId" = ${seed.playlistId} AND "MediaItemId" = ${seed.songId}
 ORDER BY "Id" DESC LIMIT 1;
 `)).toBe('50');
+
+    // Bulk Add To Collection from the selection toolbar also keeps context.
+    await page.locator('main input[type="checkbox"]').first().check({ force: true });
+    await expect(page.locator('main [class*="selection-count"]')).toHaveText(/1 item selected/i);
+    await page.getByRole('button', { name: /add to collection/i }).click();
+    await chooseExistingCollection(page, seed);
+    await expectStayInContextSuccess(
+      page,
+      /\/media\/music\/songs\?query=/,
+      /^view collection$/i,
+      `/media/collections/${seed.collectionId}`,
+    );
 
     await gotoHydrated(page, `/media/browser/images?query=${encodeURIComponent(seed.imageTitle)}`);
     await expect(page.getByRole('heading', { name: 'Images' })).toBeVisible();
@@ -411,11 +449,20 @@ ORDER BY "Id" DESC LIMIT 1;
 
     await page.getByRole('button', { name: /^add to collection$/i }).first().click();
     await chooseExistingCollection(page, seed);
-    await expect(page).toHaveURL(new RegExp(`/media/collections/${seed.collectionId}$`));
+    await expectStayInContextSuccess(
+      page,
+      new RegExp(`/media/music/artists/${seed.artistId}$`),
+      /^view collection$/i,
+      `/media/collections/${seed.collectionId}`,
+    );
     await expect.poll(() => sqlite(`
 SELECT COUNT(*) FROM "CollectionItem"
 WHERE "CollectionId" = ${seed.collectionId} AND "MediaItemId" = ${seed.artistId};
 `)).toBe('1');
+
+    // The explicit navigation path still works from the toast link.
+    await page.getByRole('link', { name: /^view collection$/i }).last().click();
+    await expect(page).toHaveURL(new RegExp(`/media/collections/${seed.collectionId}$`));
 
     expect(runtimeErrors).toEqual([]);
   });

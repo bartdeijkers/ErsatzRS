@@ -229,11 +229,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                 </section>
             </div>
 
-            <AddToCollectionModal
-                open=collection_open
-                selected=artist_selected
-                redirect_after_add=true
-            />
+            <AddToCollectionModal open=collection_open selected=artist_selected/>
             <AddToCollectionModal open=music_video_collection_open selected=music_video_selected/>
             <AddToScheduleModal
                 open=schedule_open

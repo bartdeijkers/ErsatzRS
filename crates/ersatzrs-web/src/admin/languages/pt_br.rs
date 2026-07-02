@@ -1830,6 +1830,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::VideoFormat => "Formato de vídeo",
         TextKey::VideoPreset => "Predefinição de vídeo",
         TextKey::VideoProfile => "Perfil de vídeo",
+        TextKey::ViewCollection => "Ver coleção",
+        TextKey::ViewPlaylist => "Ver playlist",
         TextKey::AddAll => "Adicionar tudo",
         TextKey::AddedItemToPlaylist => "Item adicionado à playlist.",
         TextKey::AddedArtistToSchedule => "Artista adicionado ao horário",

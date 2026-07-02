@@ -9,7 +9,7 @@ use crate::admin::ui::primitives::{
     form::{CheckBox, NumberField, SelectField, TextArea, TextField},
     icon::{icon_style, IconName},
     table::{Column, PageParams, PagedTable},
-    toast::{use_toast, ToastContainer, ToastSeverity},
+    toast::{use_toast, ToastSeverity},
 };
 
 /// Component gallery for Phase 6.0 verification. Accessible at `/dev/components`.
@@ -254,7 +254,5 @@ pub fn ComponentsPage() -> impl IntoView {
                 </div>
             </section>
         </div>
-
-        <ToastContainer/>
     }
 }

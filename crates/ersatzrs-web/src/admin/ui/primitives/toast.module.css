@@ -63,3 +63,12 @@
     flex-shrink: 0;
 }
 .toast-close:hover { opacity: 1; }
+
+.toast-action {
+    display: block;
+    margin-top: 0.25rem;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: underline;
+}
+.toast-action:hover { opacity: 0.8; }
