@@ -1,7 +1,7 @@
 feature    = 'Media browsers (movies, shows, images, music, other videos, songs)'
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0048']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
@@ -34,6 +34,16 @@ schedule-flow behavior and unchanged. Proven by the stay-in-context assertions
 in `tests/e2e/media-browser-actions.spec.ts` covering single-item (item menu),
 bulk (selection toolbar), and artist-detail flows for collections and
 playlists, including explicit toast-link navigation.
+
+Closed 2026-07-03 for artist-detail music-video multi-select:
+`/media/music/artists/:id` music-video rows (including alternate-version
+rows) carry selection checkboxes feeding the shared media-browser
+`SelectionToolbar` (extracted from the multi-select browser shell) with bulk
+Add To Collection and Add To Playlist dialogs stamping the MusicVideo
+collection type; per-row Add To Collection keeps working and replaces the
+selection with that single row, matching browser-list item-menu behavior.
+Proven by the multi-select assertions in
+`tests/e2e/media-browser-actions.spec.ts`.
 '''
 
 [[debt]]
@@ -83,4 +93,4 @@ id          = 'artist-detail-music-video-multi-select-actions'
 description = 'On `/media/music/artists/{artist_id}`, the artist detail page should allow selecting multiple music-video rows with checkboxes and adding the selected videos to collections or playlists in bulk.'
 discovered  = '2026-07-02'
 evidence    = 'Maintainer request on 2026-07-02. The current artist detail page restored artist-level Add To Collection and music-video preview artwork, but the listed music videos still lack a multi-select checkbox/action toolbar for bulk Add To Collection and Add To Playlist. Reclose only after `/media/music/artists/{artist_id}` supports checkbox selection for artist music videos, bulk collection/playlist dialogs persist the selected music-video items, individual row actions still work, the route remains hydrated and console-clean, and focused browser coverage proves the bulk flow.'
-resolved    = false
+resolved    = true

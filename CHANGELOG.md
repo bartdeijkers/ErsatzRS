@@ -26,6 +26,10 @@ release section when tagging a release.
   audio/subtitle preferences. (`CollectionItem` now uses a surrogate primary
   key in SQLite and MySQL; adding an item that exactly matches an existing
   row, including default adds without an override, remains a no-op.)
+- Artist detail pages now support music-video multi-select: each listed music
+  video (including alternate versions) has a checkbox, and the shared
+  selection toolbar bulk-adds the selected videos to a collection or playlist.
+  Per-video Add To Collection keeps working.
 - ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
   shuffling, covering artist/show/franchise-like grouping and custom filters.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or

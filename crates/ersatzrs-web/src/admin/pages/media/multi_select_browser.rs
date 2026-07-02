@@ -403,7 +403,6 @@ fn GridWithSelection(
 ) -> impl IntoView {
     let kind = config.kind;
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
-    let selected_count = Signal::derive(move || selected.with(HashSet::len));
 
     let page_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let page_ids_for_select_all = page_ids.clone();
@@ -506,34 +505,11 @@ fn GridWithSelection(
             </div>
         </div>
 
-        <div
-            class=style::selection_header
-            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
-        >
-            <span class=style::selection_count>
-                {move || {
-                    selected_items_count(selected_count.get())
-                }}
-            </span>
-            <button
-                class=style::selection_btn
-                on:click=move |_| collection_open.set(true)
-            >
-                {format!("+ {}", tr(TextKey::AddToCollection))}
-            </button>
-            <button
-                class=style::selection_btn
-                on:click=move |_| playlist_open.set(true)
-            >
-                {format!("+ {}", tr(TextKey::AddToPlaylist))}
-            </button>
-            <button
-                class=style::selection_btn_secondary
-                on:click=move |_| selected.update(HashSet::clear)
-            >
-                {format!("✓ {}", tr(TextKey::ClearSelection))}
-            </button>
-        </div>
+        <SelectionToolbar
+            selected=selected
+            collection_open=collection_open
+            playlist_open=playlist_open
+        />
 
         {
             let rows_empty = rows.is_empty();
@@ -800,6 +776,51 @@ fn ItemMenu(
                     <span>{tr(TextKey::TroubleshootPlayback)}</span>
                 </a>
             </div>
+        </div>
+    }
+}
+
+/// Sticky bulk-selection toolbar shared by the media-browser lists and detail
+/// pages with selectable rows (e.g. artist music videos): selected count plus
+/// bulk Add To Collection / Add To Playlist / Clear Selection actions.
+/// Rendered in the DOM at all times and toggled via `style:display` to keep
+/// the SSR and hydrated DOM shapes identical.
+#[component]
+pub(crate) fn SelectionToolbar(
+    selected: RwSignal<HashSet<i64>>,
+    collection_open: RwSignal<bool>,
+    playlist_open: RwSignal<bool>,
+) -> impl IntoView {
+    let selected_count = Signal::derive(move || selected.with(HashSet::len));
+
+    view! {
+        <div
+            class=style::selection_header
+            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+        >
+            <span class=style::selection_count>
+                {move || {
+                    selected_items_count(selected_count.get())
+                }}
+            </span>
+            <button
+                class=style::selection_btn
+                on:click=move |_| collection_open.set(true)
+            >
+                {format!("+ {}", tr(TextKey::AddToCollection))}
+            </button>
+            <button
+                class=style::selection_btn
+                on:click=move |_| playlist_open.set(true)
+            >
+                {format!("+ {}", tr(TextKey::AddToPlaylist))}
+            </button>
+            <button
+                class=style::selection_btn_secondary
+                on:click=move |_| selected.update(HashSet::clear)
+            >
+                {format!("✓ {}", tr(TextKey::ClearSelection))}
+            </button>
         </div>
     }
 }

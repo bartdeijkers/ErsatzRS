@@ -19,12 +19,15 @@ type Seed = {
   artistMetadataId: number;
   musicVideoId: number;
   musicVideoMetadataId: number;
+  secondMusicVideoId: number;
+  secondMusicVideoMetadataId: number;
   songId: number;
   songMetadataId: number;
   imageId: number;
   imageMetadataId: number;
   artistTitle: string;
   musicVideoTitle: string;
+  secondMusicVideoTitle: string;
   songTitle: string;
   imageTitle: string;
 };
@@ -84,12 +87,15 @@ function seedForProject(testInfo: TestInfo): Seed {
     artistMetadataId: base + 11,
     musicVideoId: base + 12,
     musicVideoMetadataId: base + 13,
+    secondMusicVideoId: base + 18,
+    secondMusicVideoMetadataId: base + 19,
     songId: base + 14,
     songMetadataId: base + 15,
     imageId: base + 16,
     imageMetadataId: base + 17,
     artistTitle: `E2E Browser Artist ${suffix}`,
     musicVideoTitle: `E2E Browser Music Video ${suffix}`,
+    secondMusicVideoTitle: `E2E Browser Music Video Deux ${suffix}`,
     songTitle: `E2E Browser Song ${suffix}`,
     imageTitle: `E2E Browser Image ${suffix}`,
   };
@@ -98,7 +104,7 @@ function seedForProject(testInfo: TestInfo): Seed {
 function seedMediaBrowserActions(testInfo: TestInfo): Seed {
   const seed = seedForProject(testInfo);
   const now = '2026-07-01T00:00:00Z';
-  const itemIds = [seed.artistId, seed.musicVideoId, seed.songId, seed.imageId].join(', ');
+  const itemIds = [seed.artistId, seed.musicVideoId, seed.secondMusicVideoId, seed.songId, seed.imageId].join(', ');
   const artwork = {
     artistThumb: `e2e-artist-thumb-${seed.artistId}.png`,
     artistFanart: `e2e-artist-fanart-${seed.artistId}.png`,
@@ -120,8 +126,8 @@ DELETE FROM "Artwork" WHERE "ArtistMetadataId" = ${seed.artistMetadataId}
    OR "MusicVideoMetadataId" = ${seed.musicVideoMetadataId}
    OR "SongMetadataId" = ${seed.songMetadataId}
    OR "ImageMetadataId" = ${seed.imageMetadataId};
-DELETE FROM "MusicVideoMetadata" WHERE "Id" = ${seed.musicVideoMetadataId};
-DELETE FROM "MusicVideo" WHERE "Id" = ${seed.musicVideoId};
+DELETE FROM "MusicVideoMetadata" WHERE "Id" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId});
+DELETE FROM "MusicVideo" WHERE "Id" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId});
 DELETE FROM "SongMetadata" WHERE "Id" = ${seed.songMetadataId};
 DELETE FROM "Song" WHERE "Id" = ${seed.songId};
 DELETE FROM "ImageMetadata" WHERE "Id" = ${seed.imageMetadataId};
@@ -154,6 +160,7 @@ INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State", "ContentKind", "SubKind
   VALUES
   (${seed.artistId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.musicVideoId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
+  (${seed.secondMusicVideoId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.songId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.imageId}, ${seed.libraryPathId}, 0, 0, NULL, NULL);
 
@@ -165,12 +172,17 @@ INSERT INTO "ArtistMetadata" (
   '${sqlEscape(seed.artistTitle.toLowerCase())}', 'Artist detail action proof.', '${now}', '${now}'
 );
 
-INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (${seed.musicVideoId}, ${seed.artistId});
+INSERT INTO "MusicVideo" ("Id", "ArtistId")
+  VALUES (${seed.musicVideoId}, ${seed.artistId}), (${seed.secondMusicVideoId}, ${seed.artistId});
 INSERT INTO "MusicVideoMetadata" (
   "Id", "MusicVideoId", "MetadataKind", "Title", "SortTitle", "Album", "Plot", "DateAdded", "DateUpdated"
 ) VALUES (
   ${seed.musicVideoMetadataId}, ${seed.musicVideoId}, 0, '${sqlEscape(seed.musicVideoTitle)}',
   '${sqlEscape(seed.musicVideoTitle.toLowerCase())}', 'Browser Proof', 'Music-video artwork proof.',
+  '${now}', '${now}'
+), (
+  ${seed.secondMusicVideoMetadataId}, ${seed.secondMusicVideoId}, 0, '${sqlEscape(seed.secondMusicVideoTitle)}',
+  '${sqlEscape(seed.secondMusicVideoTitle.toLowerCase())}', 'Browser Proof', 'Second music-video row.',
   '${now}', '${now}'
 );
 
@@ -459,6 +471,54 @@ ORDER BY "Id" DESC LIMIT 1;
 SELECT COUNT(*) FROM "CollectionItem"
 WHERE "CollectionId" = ${seed.collectionId} AND "MediaItemId" = ${seed.artistId};
 `)).toBe('1');
+
+    // Music-video multi-select: check both rows and bulk Add To Collection
+    // from the shared selection toolbar.
+    await expect(page.getByRole('heading', { name: seed.secondMusicVideoTitle })).toBeVisible();
+    await page.locator(`#music-video-${seed.musicVideoId} input[type="checkbox"]`).check();
+    await page.locator(`#music-video-${seed.secondMusicVideoId} input[type="checkbox"]`).check();
+    await expect(page.getByText(/2 items selected/i)).toBeVisible();
+    await page.getByRole('button', { name: '+ Add To Collection' }).click();
+    await chooseExistingCollection(page, seed);
+    await expectStayInContextSuccess(
+      page,
+      new RegExp(`/media/music/artists/${seed.artistId}$`),
+      /^view collection$/i,
+      `/media/collections/${seed.collectionId}`,
+    );
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "CollectionItem"
+WHERE "CollectionId" = ${seed.collectionId}
+  AND "MediaItemId" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId});
+`)).toBe('2');
+
+    // Bulk Add To Playlist persists both selected music videos with the
+    // MusicVideo playlist collection type.
+    await page.locator(`#music-video-${seed.musicVideoId} input[type="checkbox"]`).check();
+    await page.locator(`#music-video-${seed.secondMusicVideoId} input[type="checkbox"]`).check();
+    await expect(page.getByText(/2 items selected/i)).toBeVisible();
+    await page.getByRole('button', { name: '+ Add To Playlist' }).click();
+    await chooseExistingPlaylist(page, seed);
+    await expectStayInContextSuccess(
+      page,
+      new RegExp(`/media/music/artists/${seed.artistId}$`),
+      /^view playlist$/i,
+      `/media/playlists/${seed.playlistId}`,
+    );
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId} AND "CollectionType" = 30
+  AND "MediaItemId" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId});
+`)).toBe('2');
+
+    // Per-row single Add To Collection keeps working alongside multi-select.
+    await page
+      .locator(`#music-video-${seed.musicVideoId}`)
+      .getByRole('button', { name: /^add to collection$/i })
+      .click();
+    const dialog = dialogWithHeading(page, /^add to collection$/i);
+    await expect(dialog.getByText(/add the 1 selected/i)).toBeVisible();
+    await dialog.getByRole('button', { name: /^cancel$/i }).click();
 
     // The explicit navigation path still works from the toast link.
     await page.getByRole('link', { name: /^view collection$/i }).last().click();

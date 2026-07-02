@@ -147,9 +147,12 @@ each duplicate row schedules with its own override. The stay-in-context add
 task also closed on 2026-07-03: Add To Collection/Add To Playlist dialogs keep
 the admin on the current media browse/detail/search page after a successful
 add, with a localized "View Collection"/"View Playlist" toast action link as
-the explicit navigation path. Remaining Phase 7 closeout work is broad
-verification, release-readiness proof, and the remaining media curation
-follow-up (artist music-video multi-select).
+the explicit navigation path. The artist-detail music-video multi-select task
+closed the same day: `/media/music/artists/:id` rows carry checkboxes feeding
+the shared media-browser selection toolbar with bulk Add To Collection / Add
+To Playlist dialogs, closing all three registered 2026-07-02 media curation
+follow-ups. Remaining Phase 7 closeout work is broad verification and
+release-readiness proof.
 '''
 
 # Phase 0 checklist (all complete).

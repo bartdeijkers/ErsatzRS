@@ -19,11 +19,15 @@ use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
-use crate::admin::pages::media::multi_select_browser::AddToCollectionModal;
+use crate::admin::pages::media::multi_select_browser::{
+    AddToCollectionModal, AddToPlaylistModal, SelectionToolbar,
+};
 use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
 #[cfg(feature = "ssr")]
 use crate::admin::server_fns::media_browser::get_artist_details;
-use crate::admin::server_fns::media_browser::{ArtistDetailRow, ArtistMusicVideoRow};
+use crate::admin::server_fns::media_browser::{
+    ArtistDetailRow, ArtistMusicVideoRow, MediaBrowserKind,
+};
 
 #[allow(dead_code)]
 mod detail_style {
@@ -97,9 +101,13 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
     } = artist;
 
     let artist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
+    // Music-video rows share one selection set: row checkboxes toggle
+    // membership for the bulk toolbar, while a per-row action replaces the
+    // selection with that single row (matching the browser list behavior).
     let music_video_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let collection_open = RwSignal::new(false);
     let music_video_collection_open = RwSignal::new(false);
+    let music_video_playlist_open = RwSignal::new(false);
     let schedule_open = RwSignal::new(false);
     let title_for_thumb = title.clone();
     let bio_text = biography
@@ -193,6 +201,12 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                     {linked_fact_row(TextKey::Moods, "mood", &moods)}
                 </dl>
 
+                <SelectionToolbar
+                    selected=music_video_selected
+                    collection_open=music_video_collection_open
+                    playlist_open=music_video_playlist_open
+                />
+
                 <section class=style::music_video_section style=music_video_style>
                     <div class=style::music_video_stack>
                         {music_videos.into_iter().map(|video| {
@@ -200,6 +214,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                             view! {
                                 <MusicVideoRow
                                     video=video
+                                    selected=music_video_selected
                                     on_add_collection=Callback::new(move |(): ()| {
                                         music_video_selected.set(HashSet::from([video_id]));
                                         music_video_collection_open.set(true);
@@ -218,6 +233,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                             view! {
                                 <MusicVideoRow
                                     video=video
+                                    selected=music_video_selected
                                     on_add_collection=Callback::new(move |(): ()| {
                                         music_video_selected.set(HashSet::from([video_id]));
                                         music_video_collection_open.set(true);
@@ -231,6 +247,11 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
 
             <AddToCollectionModal open=collection_open selected=artist_selected/>
             <AddToCollectionModal open=music_video_collection_open selected=music_video_selected/>
+            <AddToPlaylistModal
+                open=music_video_playlist_open
+                selected=music_video_selected
+                kind=MediaBrowserKind::MusicVideo
+            />
             <AddToScheduleModal
                 open=schedule_open
                 media_item_id=id
@@ -243,7 +264,20 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
 }
 
 #[component]
-fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) -> impl IntoView {
+fn MusicVideoRow(
+    video: ArtistMusicVideoRow,
+    selected: RwSignal<HashSet<i64>>,
+    on_add_collection: Callback<()>,
+) -> impl IntoView {
+    let video_id = video.id;
+    let is_selected = Signal::derive(move || selected.with(|s| s.contains(&video_id)));
+    let toggle_selected = move || {
+        selected.update(|s| {
+            if !s.remove(&video_id) {
+                s.insert(video_id);
+            }
+        });
+    };
     let title = video.title.clone();
     let thumb_alt = format!("{} {}", title, tr(TextKey::Thumbnail));
     let album = video.album.unwrap_or_default();
@@ -293,6 +327,13 @@ fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) ->
     view! {
         <article class=style::music_video_card id=format!("music-video-{}", video.id)>
             <div class=style::music_video_main>
+                <label class=style::music_video_select aria-label=tr(TextKey::Select)>
+                    <input
+                        type="checkbox"
+                        prop:checked=move || is_selected.get()
+                        on:change=move |_| toggle_selected()
+                    />
+                </label>
                 <div class=style::music_video_thumb_wrap>
                     <img class=style::music_video_thumb src=thumb_src alt=thumb_alt style=thumb_style/>
                     <div class=style::music_video_placeholder style=thumb_placeholder_style/>

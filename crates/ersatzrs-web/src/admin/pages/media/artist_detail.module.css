@@ -72,9 +72,22 @@
 
 .music-video-main {
     display: grid;
-    grid-template-columns: minmax(13.75rem, 16.5rem) 1fr;
+    grid-template-columns: auto minmax(13.75rem, 16.5rem) 1fr;
     gap: 1rem;
     align-items: stretch;
+}
+
+.music-video-select {
+    display: flex;
+    align-items: flex-start;
+    padding: 0.75rem 0 0 0.75rem;
+}
+
+.music-video-select input {
+    width: 1.125rem;
+    height: 1.125rem;
+    accent-color: var(--color-primary);
+    cursor: pointer;
 }
 
 .music-video-thumb-wrap {
@@ -175,7 +188,11 @@
     }
 
     .music-video-main {
-        grid-template-columns: 1fr;
+        grid-template-columns: auto 1fr;
+    }
+
+    .music-video-select {
+        grid-row: span 2;
     }
 
     .music-video-body {
