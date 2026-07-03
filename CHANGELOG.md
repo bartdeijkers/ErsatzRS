@@ -72,6 +72,9 @@ release section when tagging a release.
 - Saving a channel now enqueues a playout `Refresh` for each channel playout
   when playback-impacting fields change, including subtitle/audio preferences,
   watermark, streaming mode, FFmpeg profile, and playout offset.
+- Reset Playout and Reset All Playouts now rewrite near-term classic playout
+  rows instead of only appending future items, so reset-applied playback
+  settings are visible on the next scheduled item.
 - Collection detail pages now hydrate cleanly after adding items from media
   pages and following the explicit "View Collection" toast action.
 - Creating a channel at `/channels/add` now pre-fills the Group field with

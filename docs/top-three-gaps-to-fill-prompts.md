@@ -33,13 +33,14 @@ ADRs, active Docker release plans, and module-split work. The three prompts are
 ordered foundational-first: the engine Refresh/Reset semantics unblock the
 channel-save enqueue and the Reset Playout rewrite.
 
-Sequential closeout status (2026-07-03): gaps 1 and 2 have been implemented
-and source-reviewed in the active sequence. Gap 1 added scheduler-core
-Refresh/Reset semantics; gap 2 added channel-save Refresh enqueueing plus
-deferred save-path and worker regressions. Verification commands are
-intentionally deferred until gap 3 has been committed, per the combined goal.
-Continue with gap 3 next; do not restart gaps 1 or 2 unless the deferred
-verification later contradicts the review.
+Sequential closeout status (2026-07-03): gaps 1, 2, and 3 have been
+implemented and source-reviewed in the active sequence. Gap 1 added
+scheduler-core Refresh/Reset semantics; gap 2 added channel-save Refresh
+enqueueing plus deferred save-path and worker regressions; gap 3 pinned the
+ErsatzTV Reset Playout mode mapping and added deferred near-term rewrite
+coverage. Verification commands are intentionally deferred until gap 3 has
+been committed, per the combined goal. After the gap 3 commit, run the focused
+and broad gates and use one final bugfix/CI commit if needed.
 
 ---
 
@@ -165,7 +166,7 @@ When done, report the Source Map, behavior implemented, any remaining
 
 ---
 
-## 3. Fix the next ErsatzRS parity-infrastructure gap: Reset Playout must rewrite near-term items (slug `playout-rebuild-on-impacting-changes`)
+## 3. Reviewed in sequence: Reset Playout must rewrite near-term items (slug `playout-rebuild-on-impacting-changes`)
 
 Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
 ErsatzTV parity gap governed by

@@ -485,15 +485,9 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
 #[server]
 pub async fn reset_playout(id: i64, schedule_kind: i32) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
 
     let state = expect_context::<AppState>();
-    let mode = if schedule_kind == KIND_CLASSIC {
-        PlayoutBuildMode::Refresh
-    } else {
-        PlayoutBuildMode::Reset
-    };
-    enqueue_build(&state, id, mode);
+    enqueue_build(&state, id, reset_playout_mode(schedule_kind));
     Ok(())
 }
 
@@ -503,7 +497,6 @@ pub async fn reset_playout(id: i64, schedule_kind: i32) -> Result<(), ServerFnEr
 #[server]
 pub async fn reset_all_playouts() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
     use sqlx::Row;
 
     let state = expect_context::<AppState>();
@@ -514,11 +507,8 @@ pub async fn reset_all_playouts() -> Result<(), ServerFnError> {
     for r in &rows {
         let id: i64 = r.try_get("Id").unwrap_or(0);
         let kind: i32 = r.try_get("ScheduleKind").unwrap_or(0);
-        let mode = match kind {
-            KIND_CLASSIC => PlayoutBuildMode::Refresh,
-            KIND_BLOCK | KIND_SEQUENTIAL | KIND_SCRIPTED => PlayoutBuildMode::Reset,
-            // ExternalJson / None cannot be reset.
-            _ => continue,
+        let Some(mode) = reset_all_playout_mode(kind) else {
+            continue;
         };
         enqueue_build(&state, id, mode);
     }
@@ -990,6 +980,29 @@ pub async fn validate_yaml_playout(content: String) -> Result<(), ServerFnError>
 // ---------------------------------------------------------------------------
 // SSR-only helpers
 // ---------------------------------------------------------------------------
+
+#[cfg(feature = "ssr")]
+fn reset_playout_mode(schedule_kind: i32) -> ersatzrs_core::scheduling::PlayoutBuildMode {
+    if schedule_kind == KIND_CLASSIC {
+        ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
+    } else {
+        ersatzrs_core::scheduling::PlayoutBuildMode::Reset
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn reset_all_playout_mode(
+    schedule_kind: i32,
+) -> Option<ersatzrs_core::scheduling::PlayoutBuildMode> {
+    match schedule_kind {
+        KIND_CLASSIC => Some(ersatzrs_core::scheduling::PlayoutBuildMode::Refresh),
+        KIND_BLOCK | KIND_SEQUENTIAL | KIND_SCRIPTED => {
+            Some(ersatzrs_core::scheduling::PlayoutBuildMode::Reset)
+        }
+        // ExternalJson / None cannot be reset.
+        _ => None,
+    }
+}
 
 #[cfg(feature = "ssr")]
 fn enqueue_build(
@@ -2730,6 +2743,44 @@ mod tests {
         assert_eq!(collection_type_name(8), "RerunRerun");
         assert_eq!(filler_kind_name(2), "MidRoll");
         assert_eq!(filler_mode_name(3), "Pad");
+    }
+
+    #[test]
+    fn reset_playout_mode_matches_ersatztv_classic_refresh_mapping() {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+        assert_eq!(reset_playout_mode(KIND_CLASSIC), PlayoutBuildMode::Refresh);
+        assert_eq!(reset_playout_mode(KIND_BLOCK), PlayoutBuildMode::Reset);
+        assert_eq!(reset_playout_mode(KIND_SEQUENTIAL), PlayoutBuildMode::Reset);
+        assert_eq!(reset_playout_mode(KIND_SCRIPTED), PlayoutBuildMode::Reset);
+        assert_eq!(
+            reset_playout_mode(KIND_EXTERNAL_JSON),
+            PlayoutBuildMode::Reset
+        );
+    }
+
+    #[test]
+    fn reset_all_playout_mode_skips_unsupported_kinds() {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+        assert_eq!(
+            reset_all_playout_mode(KIND_CLASSIC),
+            Some(PlayoutBuildMode::Refresh)
+        );
+        assert_eq!(
+            reset_all_playout_mode(KIND_BLOCK),
+            Some(PlayoutBuildMode::Reset)
+        );
+        assert_eq!(
+            reset_all_playout_mode(KIND_SEQUENTIAL),
+            Some(PlayoutBuildMode::Reset)
+        );
+        assert_eq!(
+            reset_all_playout_mode(KIND_SCRIPTED),
+            Some(PlayoutBuildMode::Reset)
+        );
+        assert_eq!(reset_all_playout_mode(KIND_EXTERNAL_JSON), None);
+        assert_eq!(reset_all_playout_mode(0), None);
     }
 
     #[tokio::test]

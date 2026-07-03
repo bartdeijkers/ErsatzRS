@@ -398,6 +398,68 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     );
 }
 
+#[tokio::test]
+async fn requested_classic_refresh_rewrites_near_term_playout_items() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        start,
+        None,
+    )
+    .await
+    .unwrap();
+
+    sqlx::query(r#"UPDATE "ProgramScheduleItem" SET "SubtitleMode" = 3 WHERE "Id" = 401"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Refresh,
+        },
+        start + Duration::minutes(1),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let near_cutoff = (start + Duration::hours(1))
+        .naive_utc()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let stale_near_term_items: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "PlayoutItem"
+           WHERE "PlayoutId" = 88
+             AND "Start" < ?
+             AND "SubtitleMode" = 1"#,
+    )
+    .bind(near_cutoff)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stale_near_term_items, 0);
+    assert_eq!(
+        first_playout_item_subtitle_mode(&pool, 88).await,
+        Some(3),
+        "classic Refresh must rewrite the near-term window Reset Playout targets"
+    );
+}
+
 async fn seed_refresh_rebuild_fixture(pool: &SqlitePool, repos: &Repositories) {
     common::seed_media_path(pool, 1, 1, 1).await;
     common::seed_media_item(pool, 100, 1).await;

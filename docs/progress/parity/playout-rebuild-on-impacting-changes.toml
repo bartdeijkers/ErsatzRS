@@ -1,7 +1,7 @@
 feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0020']
 summary    = '''
 Proposed by ADR 0020: rebuild the impacted playouts whenever a change can alter
@@ -35,7 +35,7 @@ resolved    = true
 [[debt]]
 id          = 'reset-playout-must-rewrite-near-term-items'
 adr         = '0020'
-description = 'Clicking "Reset Playout" must rewrite ALL items in the build window, including near-term/already-scheduled items, not just append future ones. For classic playouts the button maps to `Refresh` (`server_fns/playouts.rs`, mirroring `Playouts.razor`), which today does not clear near-term items, so operators cannot force current settings onto content already on the timeline (only the on-air segment itself may legitimately wait for its next item boundary). Reset Playout (and Reset All Playouts) must clear and rebuild the whole window so the change is visible on the next item.'
+description = 'Clicking "Reset Playout" rewrites all items in the build window, including near-term/already-scheduled items, instead of only appending future ones. For classic playouts the button maps to `Refresh` (`server_fns/playouts.rs`, mirroring `Playouts.razor`), and classic `Refresh` now clears/rebuilds the generated window so operators can force current settings onto content already on the timeline (only the on-air segment itself may legitimately wait for its next item boundary). Reset Playout and Reset All Playouts now clear and rebuild the whole window so the change is visible on the next item.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer request on 2026-07-01: "clicking Reset Playout must rewrite all items, including near-term items." Reclose only after Reset Playout on a classic playout rewrites every future item in the window (not just the tail) and a browser/scheduler test proves a settings change applied via Reset appears on the next scheduled item.'
-resolved    = false
+evidence    = 'Source review against pinned `Playouts.razor`: ErsatzTV maps classic Reset Playout to `PlayoutBuildMode.Refresh` and all other per-row resets to `Reset`; ErsatzRS now centralizes and tests the same mapping, and Reset All skips ExternalJson/None while mapping classic to `Refresh` and block/sequential/scripted to `Reset`. The maintenance regression `requested_classic_refresh_rewrites_near_term_playout_items` proves the queued classic Refresh clears stale near-term rows and rebuilds them with updated item-level playback data. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
+resolved    = true

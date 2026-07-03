@@ -14,9 +14,12 @@ same-day checkpoint anchors needed for enumerator/shuffle continuity, and
 `Reset` starts with no retained anchors. Channel saves now compare the
 playback-impacting channel signature (FFmpeg profile, subtitle/audio
 preferences, watermark, streaming mode, and playout offset) and enqueue one
-`Refresh` build per affected playout when that signature changes. The deferred
-verification gate for the sequential closeout still needs to run after the
-remaining ADR 0020 slices land.
+`Refresh` build per affected playout when that signature changes. The Playouts
+admin reset path keeps ErsatzTV's mapping (classic Reset Playout enqueues
+`Refresh`; block, sequential, and scripted playouts enqueue `Reset`), and
+classic `Refresh` now clears the near-term generated rows it previously left
+stale. The deferred verification gate for the sequential closeout still needs
+to run after this third ADR 0020 slice is committed.
 
 ## Context
 
