@@ -65,6 +65,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Classic, YAML, and scripted playout `Refresh` builds now clear and rebuild the
+  scheduled window instead of appending past stale items; classic refresh also
+  preserves same-day checkpoint anchors so enumerator/shuffle continuity
+  survives while per-item settings are re-stamped.
 - Collection detail pages now hydrate cleanly after adding items from media
   pages and following the explicit "View Collection" toast action.
 - Creating a channel at `/channels/add` now pre-fills the Group field with

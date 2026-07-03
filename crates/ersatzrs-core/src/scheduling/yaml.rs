@@ -364,7 +364,10 @@ impl YamlPlayoutEngine {
 
         let mut result = SchedulingResult {
             remove_before: Some(request.start),
-            clear_items: request.mode == PlayoutBuildMode::Reset,
+            clear_items: matches!(
+                request.mode,
+                PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
+            ),
             ..SchedulingResult::default()
         };
         if request.mode == PlayoutBuildMode::Reset {
@@ -387,7 +390,7 @@ impl YamlPlayoutEngine {
             request.start,
             content_sources(&definition),
         );
-        if request.mode != PlayoutBuildMode::Reset {
+        if request.mode == PlayoutBuildMode::Continue {
             if let Some(anchor) = &request.playout.anchor {
                 context.restore(anchor)?;
             }

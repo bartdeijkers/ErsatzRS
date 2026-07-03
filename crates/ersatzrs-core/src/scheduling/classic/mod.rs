@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
-    playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlaylistEnumerator,
+    playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
     PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingError, SchedulingMediaItem,
     SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
@@ -57,10 +57,7 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         }
 
         items.sort_by_key(|item| (item.sort_order, item.id));
-        let state = request.playout.anchor.as_ref().map_or_else(
-            || start_state(&request, &items),
-            |anchor| anchor_state(anchor, &request),
-        );
+        let state = state_for_mode(&request, &items);
 
         let mut context = ClassicContext::new(request, items, state);
         context.apply_existing_collection_anchors();
@@ -104,6 +101,7 @@ struct ClassicContext {
     media: BTreeMap<String, MediaEnumerator>,
     playlists: BTreeMap<String, PlaylistEnumerator>,
     media_states: BTreeMap<String, CollectionEnumeratorState>,
+    collection_anchors: Vec<PlayoutProgramScheduleAnchor>,
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
     result: SchedulingResult,
@@ -194,6 +192,7 @@ impl ClassicContext {
             }
         }
 
+        let collection_anchors = retained_collection_anchors(&request);
         let mut context = Self {
             request,
             schedule_items,
@@ -202,6 +201,7 @@ impl ClassicContext {
             media,
             playlists,
             media_states,
+            collection_anchors,
             filler_media,
             fill_group_states,
             result: SchedulingResult {
@@ -235,11 +235,18 @@ impl ClassicContext {
             .unwrap_or_default()
             + 1;
 
-        for anchor in &self
-            .request
-            .reference_data
-            .existing_program_schedule_anchors
-        {
+        let mut selected_anchors = BTreeMap::<String, PlayoutProgramScheduleAnchor>::new();
+        for anchor in &self.collection_anchors {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            if selected_anchors
+                .get(&key)
+                .is_none_or(|existing| should_prefer_enumerator_anchor(anchor, existing))
+            {
+                selected_anchors.insert(key, anchor.clone());
+            }
+        }
+
+        for anchor in selected_anchors.values() {
             let key = history_key_for_collection_key(&SchedulingCollectionKey {
                 collection_type: anchor.collection_type,
                 collection_id: anchor.collection_id,
@@ -1154,6 +1161,10 @@ impl ClassicContext {
     }
 
     fn into_result(mut self) -> SchedulingResult {
+        self.result.clear_items = matches!(
+            self.request.mode,
+            PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
+        );
         let current_item = self.schedule_items[self.current_schedule_index()].clone();
         let mut next_start = self.start_time_after(&current_item, false);
         if let Some(last_finish) = self.result.added_items.iter().map(|item| item.finish).max() {
@@ -1192,11 +1203,9 @@ impl ClassicContext {
                 continue;
             };
             let existing = self
-                .request
-                .reference_data
-                .existing_program_schedule_anchors
+                .collection_anchors
                 .iter()
-                .find(|anchor| anchor_matches_key(anchor, &key));
+                .find(|anchor| anchor.anchor_date.is_none() && anchor_matches_key(anchor, &key));
             let id = existing.map_or_else(
                 || {
                     let id = next_id;
@@ -1227,6 +1236,12 @@ impl ClassicContext {
                 },
             });
         }
+        result.extend(
+            self.collection_anchors
+                .iter()
+                .filter(|anchor| anchor.anchor_date.is_some())
+                .cloned(),
+        );
         result
     }
 
@@ -1460,6 +1475,29 @@ fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> Cl
     }
 }
 
+fn state_for_mode(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
+    match request.mode {
+        PlayoutBuildMode::Continue => request.playout.anchor.as_ref().map_or_else(
+            || start_state(request, items),
+            |anchor| anchor_state(anchor, request),
+        ),
+        PlayoutBuildMode::Refresh => refresh_state(request, items),
+        PlayoutBuildMode::Reset => start_state(request, items),
+    }
+}
+
+fn refresh_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
+    let mut state = start_state(request, items);
+    if let Some(anchor_date) = retained_refresh_anchors(request)
+        .iter()
+        .filter_map(|anchor| anchor.anchor_date)
+        .min()
+    {
+        state.current_time = anchor_date.max(request.start);
+    }
+    state
+}
+
 fn anchor_state(anchor: &PlayoutAnchor, request: &SchedulingRequest) -> ClassicState {
     ClassicState {
         current_time: anchor.next_start.max(request.start),
@@ -1469,6 +1507,65 @@ fn anchor_state(anchor: &PlayoutAnchor, request: &SchedulingRequest) -> ClassicS
         in_flood: anchor.in_flood,
         in_duration_filler: anchor.in_duration_filler,
         next_guide_group: anchor.next_guide_group.max(1),
+    }
+}
+
+fn retained_collection_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramScheduleAnchor> {
+    match request.mode {
+        PlayoutBuildMode::Continue => retained_continue_anchors(request),
+        PlayoutBuildMode::Refresh => retained_refresh_anchors(request),
+        PlayoutBuildMode::Reset => Vec::new(),
+    }
+}
+
+fn retained_continue_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramScheduleAnchor> {
+    let start_day = midnight(request.start);
+    request
+        .reference_data
+        .existing_program_schedule_anchors
+        .iter()
+        .filter(|anchor| {
+            anchor
+                .anchor_date
+                .is_none_or(|anchor_date| anchor_date >= start_day)
+        })
+        .cloned()
+        .collect()
+}
+
+fn retained_refresh_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramScheduleAnchor> {
+    let start_day = midnight(request.start);
+    let next_day = start_day + Duration::days(1);
+    let mut by_key = BTreeMap::<String, PlayoutProgramScheduleAnchor>::new();
+
+    for anchor in &request.reference_data.existing_program_schedule_anchors {
+        let Some(anchor_date) = anchor.anchor_date else {
+            continue;
+        };
+        if anchor_date < start_day || anchor_date >= next_day {
+            continue;
+        }
+
+        let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+        match by_key.get(&key).and_then(|existing| existing.anchor_date) {
+            Some(existing_date) if existing_date <= anchor_date => {}
+            _ => {
+                by_key.insert(key, anchor.clone());
+            }
+        }
+    }
+
+    by_key.into_values().collect()
+}
+
+fn should_prefer_enumerator_anchor(
+    candidate: &PlayoutProgramScheduleAnchor,
+    existing: &PlayoutProgramScheduleAnchor,
+) -> bool {
+    match (candidate.anchor_date, existing.anchor_date) {
+        (None, Some(_)) => true,
+        (Some(_), None) | (None, None) => false,
+        (Some(candidate_date), Some(existing_date)) => candidate_date > existing_date,
     }
 }
 
@@ -1556,6 +1653,20 @@ fn collection_key(item: &ProgramScheduleItem) -> SchedulingCollectionKey {
         playlist_id: item.playlist_id,
         search_query: item.search_query.clone(),
         fake_collection_key: None,
+    }
+}
+
+fn collection_key_for_anchor(anchor: &PlayoutProgramScheduleAnchor) -> SchedulingCollectionKey {
+    SchedulingCollectionKey {
+        collection_type: anchor.collection_type,
+        collection_id: anchor.collection_id,
+        multi_collection_id: anchor.multi_collection_id,
+        smart_collection_id: anchor.smart_collection_id,
+        rerun_collection_id: anchor.rerun_collection_id,
+        media_item_id: anchor.media_item_id,
+        playlist_id: anchor.playlist_id,
+        search_query: anchor.search_query.clone(),
+        fake_collection_key: anchor.fake_collection_key.clone(),
     }
 }
 
@@ -1762,7 +1873,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
-    use ersatzrs_domain::{CollectionType, Playout, PlayoutMode, PlayoutScheduleKind};
+    use ersatzrs_domain::{
+        ChannelSubtitleMode, CollectionType, Playout, PlayoutMode, PlayoutScheduleKind,
+    };
     use insta::assert_json_snapshot;
 
     use super::*;
@@ -2147,6 +2260,110 @@ mod tests {
                 .map(|anchor| anchor.enumerator_state.seed),
             Some(next_i32_seed(42))
         );
+    }
+
+    #[test]
+    fn classic_refresh_clears_and_rebuilds_from_checkpoint_anchor() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            subtitle_mode: Some(ChannelSubtitleMode::Any),
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let media_items = vec![
+            SchedulingMediaItem::new(101, Duration::minutes(10)),
+            SchedulingMediaItem::new(102, Duration::minutes(10)),
+            SchedulingMediaItem::new(103, Duration::minutes(10)),
+            SchedulingMediaItem::new(104, Duration::minutes(10)),
+        ];
+        let mut expected = MediaEnumerator::new(key.clone(), media_items.clone())
+            .with_playback_order(PlaybackOrder::Shuffle);
+        prepare_enumerator_items(&mut expected, PlaybackOrder::Shuffle, 42);
+        expected.set_index(1);
+        let expected_media_ids = (0..3)
+            .filter_map(|_| {
+                let id = expected.current().map(|item| item.id);
+                expected.advance();
+                id
+            })
+            .collect::<Vec<_>>();
+
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            existing_program_schedule_anchors: vec![
+                PlayoutProgramScheduleAnchor {
+                    id: 900,
+                    playout_id: 50,
+                    collection_type: CollectionType::Collection,
+                    collection_id: Some(1),
+                    anchor_date: None,
+                    enumerator_state: CollectionEnumeratorState { seed: 99, index: 0 },
+                    ..PlayoutProgramScheduleAnchor::default()
+                },
+                PlayoutProgramScheduleAnchor {
+                    id: 901,
+                    playout_id: 50,
+                    collection_type: CollectionType::Collection,
+                    collection_id: Some(1),
+                    anchor_date: Some(start),
+                    enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                    ..PlayoutProgramScheduleAnchor::default()
+                },
+                PlayoutProgramScheduleAnchor {
+                    id: 902,
+                    playout_id: 50,
+                    collection_type: CollectionType::Collection,
+                    collection_id: Some(1),
+                    anchor_date: Some(start + Duration::days(1)),
+                    enumerator_state: CollectionEnumeratorState { seed: 7, index: 2 },
+                    ..PlayoutProgramScheduleAnchor::default()
+                },
+            ],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(key, media_items);
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    anchor: Some(PlayoutAnchor {
+                        next_start: start + Duration::days(1),
+                        ..PlayoutAnchor::default()
+                    }),
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("classic refresh should rebuild from checkpoint");
+
+        assert!(result.clear_items);
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>(),
+            expected_media_ids
+        );
+        assert!(result
+            .added_items
+            .iter()
+            .all(|item| item.subtitle_mode == Some(ChannelSubtitleMode::Any)));
+        assert!(result
+            .program_schedule_anchors
+            .iter()
+            .any(|anchor| anchor.id == 901 && anchor.anchor_date == Some(start)));
+        assert!(!result
+            .program_schedule_anchors
+            .iter()
+            .any(|anchor| anchor.id == 900 || anchor.id == 902));
     }
 
     #[test]

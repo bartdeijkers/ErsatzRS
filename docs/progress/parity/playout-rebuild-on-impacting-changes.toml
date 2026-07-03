@@ -1,7 +1,7 @@
 feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
-status     = 'Not started'
+status     = 'In progress'
 adr        = ['0020']
 summary    = '''
 Proposed by ADR 0020: rebuild the impacted playouts whenever a change can alter
@@ -27,10 +27,10 @@ resolved    = false
 [[debt]]
 id          = 'classic-refresh-appends-instead-of-rebuilding'
 adr         = '0020'
-description = 'The classic scheduling engine ignores `request.mode` and branches only on `request.playout.anchor` presence, trimming items older than `now - 4h` and appending from the anchor next_start; `clear_items` is set only for Reset in yaml/scripted and never in classic. Classic `Refresh` therefore behaves like ErsatzTV `Continue` (append-only) instead of ErsatzTV `RefreshPlayout` (ClearItems=true + null main anchor + retained checkpoint anchors), so a schedule/library/channel change does not re-stamp existing classic items. Port ErsatzTV Refresh/Reset semantics to every engine, preserving enumerator/shuffle continuity across the rebuild.'
+description = 'The scheduler core now consumes `request.mode` for classic playouts and treats `Refresh` as a clear-and-rebuild request for classic, YAML, and scripted engines. Classic `Refresh` ignores the stale main anchor, retains same-day checkpoint anchors by content key, and uses those anchors to preserve enumerator/shuffle continuity while re-stamping generated items.'
 discovered  = '2026-07-01'
-evidence    = 'Comparison: `PlayoutBuilder.cs` RefreshPlayout sets ClearItems=true and nulls the anchor; `scheduling/classic/mod.rs` has no `request.mode` use and `clear_items` is only `mode == Reset` in yaml.rs/scripted.rs. Reclose only after classic consumes `request.mode`, Refresh clears and rebuilds the window while preserving checkpoint anchors, and scheduler tests assert identical media order from the checkpoint with re-stamped per-item settings.'
-resolved    = false
+evidence    = 'Source review against pinned `PlayoutBuilder.cs`: `RefreshPlayout` sets `ClearItems=true`, nulls the main anchor, and retains checkpoint anchors; `ResetPlayout` clears anchors. ErsatzRS mirrors this in `classic/mod.rs` with mode-aware state selection, retained checkpoint-anchor persistence, and a regression asserting checkpoint media order plus re-stamped subtitle mode. `yaml.rs` and `scripted.rs` now also set `clear_items` for `Refresh`. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
+resolved    = true
 
 [[debt]]
 id          = 'reset-playout-must-rewrite-near-term-items'

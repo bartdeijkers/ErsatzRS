@@ -61,7 +61,10 @@ impl ScriptedSchedulingEngine {
             .max()
             .unwrap_or(state.current_time);
         Ok(SchedulingResult {
-            clear_items: state.mode == PlayoutBuildMode::Reset,
+            clear_items: matches!(
+                state.mode,
+                PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
+            ),
             remove_before: Some(request.start),
             anchor: Some(PlayoutAnchor {
                 next_start: anchor_time,
