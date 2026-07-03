@@ -118,6 +118,7 @@ impl ClassicContext {
         let mut media = BTreeMap::new();
         let mut playlists = BTreeMap::new();
         let mut media_states = BTreeMap::new();
+        let collection_anchors = retained_collection_anchors(&request);
         for item in &schedule_items {
             let key = item_key(item);
             let seed = request.playout.seed;
@@ -133,24 +134,31 @@ impl ClassicContext {
                     .media_items_for_source(&super::SchedulingContentSource::direct(&key)),
             )
             .with_playback_order(item.playback_order);
-            prepare_enumerator_items(
-                &mut enumerator,
-                item.playback_order,
-                u64::try_from(request.playout.seed).unwrap_or_default(),
-            );
-            if request.reference_data.classic_random_start_point && !enumerator.is_empty() {
-                let index =
-                    usize::try_from(request.playout.seed).unwrap_or_default() % enumerator.len();
-                enumerator.set_index(index);
-                media_states.insert(
-                    key.clone(),
-                    CollectionEnumeratorState {
-                        seed,
-                        index: i32::try_from(index).unwrap_or_default(),
-                    },
-                );
-            } else {
+            let has_retained_anchor = collection_anchors.iter().any(|anchor| {
+                history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
+            });
+            if has_retained_anchor {
                 media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+            } else {
+                prepare_enumerator_items(
+                    &mut enumerator,
+                    item.playback_order,
+                    u64::try_from(request.playout.seed).unwrap_or_default(),
+                );
+                if request.reference_data.classic_random_start_point && !enumerator.is_empty() {
+                    let index = usize::try_from(request.playout.seed).unwrap_or_default()
+                        % enumerator.len();
+                    enumerator.set_index(index);
+                    media_states.insert(
+                        key.clone(),
+                        CollectionEnumeratorState {
+                            seed,
+                            index: i32::try_from(index).unwrap_or_default(),
+                        },
+                    );
+                } else {
+                    media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+                }
             }
             media.insert(key, enumerator);
         }
@@ -192,7 +200,6 @@ impl ClassicContext {
             }
         }
 
-        let collection_anchors = retained_collection_anchors(&request);
         let mut context = Self {
             request,
             schedule_items,
@@ -1564,7 +1571,7 @@ fn should_prefer_enumerator_anchor(
 ) -> bool {
     match (candidate.anchor_date, existing.anchor_date) {
         (None, Some(_)) => true,
-        (Some(_), None) | (None, None) => false,
+        (Some(_) | None, None) => false,
         (Some(candidate_date), Some(existing_date)) => candidate_date > existing_date,
     }
 }
@@ -1662,7 +1669,6 @@ fn collection_key_for_anchor(anchor: &PlayoutProgramScheduleAnchor) -> Schedulin
         collection_id: anchor.collection_id,
         multi_collection_id: anchor.multi_collection_id,
         smart_collection_id: anchor.smart_collection_id,
-        rerun_collection_id: anchor.rerun_collection_id,
         media_item_id: anchor.media_item_id,
         playlist_id: anchor.playlist_id,
         search_query: anchor.search_query.clone(),

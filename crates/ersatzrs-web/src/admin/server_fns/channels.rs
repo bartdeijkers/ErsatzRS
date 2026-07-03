@@ -491,8 +491,23 @@ struct ChannelSaveSideEffectState {
 }
 
 #[cfg(feature = "ssr")]
+type ChannelEpgSignature<'a> = (&'a str, i32, bool, Option<i64>, Option<&'a str>);
+
+#[cfg(feature = "ssr")]
+type ChannelPlaybackRebuildSignature<'a> = (
+    i64,
+    i32,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<&'a str>,
+    i32,
+    Option<i64>,
+    Option<&'a str>,
+);
+
+#[cfg(feature = "ssr")]
 impl ChannelSaveSideEffectState {
-    fn epg_signature(&self) -> (&str, i32, bool, Option<i64>, Option<&str>) {
+    fn epg_signature(&self) -> ChannelEpgSignature<'_> {
         (
             &self.number,
             self.playout_source,
@@ -502,18 +517,7 @@ impl ChannelSaveSideEffectState {
         )
     }
 
-    fn playback_rebuild_signature(
-        &self,
-    ) -> (
-        i64,
-        i32,
-        Option<&str>,
-        Option<&str>,
-        Option<&str>,
-        i32,
-        Option<i64>,
-        Option<&str>,
-    ) {
+    fn playback_rebuild_signature(&self) -> ChannelPlaybackRebuildSignature<'_> {
         (
             self.ffmpeg_profile_id,
             self.subtitle_mode,
@@ -839,8 +843,8 @@ mod tests {
         channel_state_with_pool_and_playout_rx(pool)
     }
 
-    #[test]
-    fn channel_save_side_effects_enqueue_refresh_for_playback_change() {
+    #[tokio::test]
+    async fn channel_save_side_effects_enqueue_refresh_for_playback_change() {
         let (state, mut playout_build_rx) = channel_state_with_playout_rx();
         let before = ChannelSaveSideEffectState {
             number: "1".to_owned(),
@@ -872,8 +876,8 @@ mod tests {
         assert!(playout_build_rx.try_recv().is_err());
     }
 
-    #[test]
-    fn channel_save_side_effects_skip_refresh_for_epg_only_change() {
+    #[tokio::test]
+    async fn channel_save_side_effects_skip_refresh_for_epg_only_change() {
         let (state, mut playout_build_rx) = channel_state_with_playout_rx();
         let before = ChannelSaveSideEffectState {
             number: "1".to_owned(),

@@ -2,24 +2,26 @@
 
 ## Status
 
-Proposed
+Accepted 2026-07-03
 
 ## Implementation
 
-Partially implemented. The scheduler core now treats `Refresh` as a window
-rewrite request for classic, YAML, and scripted playouts. Classic builds consume
+Implemented. The scheduler core treats `Refresh` as a window rewrite request for
+classic, YAML, and scripted playouts. Classic builds consume
 `PlayoutBuildMode`: `Continue` keeps the normal main anchor path, `Refresh`
 clears generated items while ignoring the stale main anchor and retaining the
 same-day checkpoint anchors needed for enumerator/shuffle continuity, and
-`Reset` starts with no retained anchors. Channel saves now compare the
+`Reset` starts with no retained anchors. Channel saves compare the
 playback-impacting channel signature (FFmpeg profile, subtitle/audio
 preferences, watermark, streaming mode, and playout offset) and enqueue one
-`Refresh` build per affected playout when that signature changes. The Playouts
-admin reset path keeps ErsatzTV's mapping (classic Reset Playout enqueues
-`Refresh`; block, sequential, and scripted playouts enqueue `Reset`), and
-classic `Refresh` now clears the near-term generated rows it previously left
-stale. The deferred verification gate for the sequential closeout still needs
-to run after this third ADR 0020 slice is committed.
+coalesced `Refresh` build per affected playout when that signature changes. The
+Playouts admin reset path keeps ErsatzTV's mapping (classic Reset Playout
+enqueues `Refresh`; block, sequential, and scripted playouts enqueue `Reset`),
+and classic `Refresh` clears the near-term generated rows it previously left
+stale. Focused scheduler, channel-save, reset, and maintenance tests cover the
+three closeout slices; the post-sequence gates passed on 2026-07-03, including
+workspace clippy, the MySQL clippy pass, workspace all-features tests,
+`cargo xtask parity-check web`, and `cargo xtask smoke`.
 
 ## Context
 

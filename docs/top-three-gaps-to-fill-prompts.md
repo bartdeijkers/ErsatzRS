@@ -1,6 +1,6 @@
 <!--
 generated: 2026-07-03
-last_processed_commit: f02ea8454534b68295ce25df3b047cf5559d036a
+last_processed_commit: f7afb3ccabf74461934b5b82dc599e56fe5ef61d
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,224 +13,209 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: renewed 2026-07-03. The 149b4cb..f02ea84 change window was
-dependency bumps only (leptos 0.8.20, leptos_router 0.8.14, jsonschema
-0.46.8/0.46.9, open 5.3.6) plus one docs-housekeeping commit, so no parity
-status moved. Applying the selection rules, the three `Not started`
-`playout-rebuild-on-impacting-changes` debts (ADR 0020) now lead the queue:
-each is confirmed user-visible runtime debt (a subtitle-mode change that never
-burns because scheduled items keep the old settings and no rebuild is
-requested; classic `Refresh` appending instead of clearing and rebuilding;
-Reset Playout leaving near-term items stale), and the
-confirmed-user-visible-runtime-debt rule outranks everything except phase
-focus — above the ADR 0048 duplicate-collection-row and the two media-browser
-UX chores that filled the previous queue. Those three UX debts
-(`collection-item-duplicate-playback-overrides`,
-`add-to-collection-playlist-stay-in-context`,
-`artist-detail-music-video-multi-select-actions`) stay open and are the next
-candidates, followed by ADR 0019 similar-video cooldown, proposed localization
-ADRs, active Docker release plans, and module-split work. The three prompts are
-ordered foundational-first: the engine Refresh/Reset semantics unblock the
-channel-save enqueue and the Reset Playout rewrite.
-
-Sequential closeout status (2026-07-03): gaps 1, 2, and 3 have been
-implemented and source-reviewed in the active sequence. Gap 1 added
-scheduler-core Refresh/Reset semantics; gap 2 added channel-save Refresh
-enqueueing plus deferred save-path and worker regressions; gap 3 pinned the
-ErsatzTV Reset Playout mode mapping and added deferred near-term rewrite
-coverage. Verification commands are intentionally deferred until gap 3 has
-been committed, per the combined goal. After the gap 3 commit, run the focused
-and broad gates and use one final bugfix/CI commit if needed.
+Current selection: renewed 2026-07-03 after the ADR 0020 playout-rebuild
+sequence closed. The completed `playout-rebuild-on-impacting-changes` prompts
+were removed because the parity slug is `Ported`, its three targeted debts are
+resolved, and ADR 0020 is now implemented after the post-sequence gates. The
+candidate sweep found one remaining whole-feature parity/spec gap,
+`similar-video-cooldown`, plus proposed localization ADRs, active release Docker
+plans, the module-split backlog, and deferred contract work. Applying the
+selection rules, ADR 0019 leads because it is the only remaining non-ported
+feature and is maintainer-requested scheduling behavior. The next two slots go
+to the first proposed, maintainer-requested admin localization ADRs by stable
+ADR-number order: French (France), then German (Germany). The release Docker
+plans and module-split work remain actionable follow-ups after these higher
+ranked spec chores unless phase focus changes.
 
 ---
 
-## 1. Reviewed in sequence: ADR 0020 classic Refresh/Reset rebuild semantics (slug `playout-rebuild-on-impacting-changes`)
+## 1. Build the next ErsatzRS spec chore: ADR 0019 similar video cooldown scheduling (slug `similar-video-cooldown`)
 
-Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
-ErsatzTV parity gap governed by
-[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
-source at the pinned baseline commit
-`0d301df5e8512fdfccf3a611188d27ab1690ee31`
-([parity-baseline.md](automation/parity-baseline.md)). The goal is fully
-functional ErsatzTV `RefreshPlayout`/`ResetPlayout` parity without stopgaps;
-record any shortfall as visible `ParityDebt`, never hide it in prose.
+Use the repo workflow from AGENTS.md. This is an ErsatzRS scheduling extension
+governed by [ADR 0019](adr/0019-similar-video-cooldown.md), not an ErsatzTV
+behavior clone; compare ErsatzTV only to preserve disabled-by-default imported
+schedule behavior. The goal is a complete, opt-in, deterministic cooldown-aware
+shuffle policy without stopgaps. Existing schedules must behave exactly as they
+do today when the policy is disabled, and any shortfall must stay visible as ADR
+or `ParityDebt`.
 
-Tracked debt: `classic-refresh-appends-instead-of-rebuilding` in
-[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
-Current debt text: the classic scheduling engine ignores `request.mode` and
-branches only on `request.playout.anchor` presence, trimming items older than
-`now - 4h` and appending from the anchor `next_start`; `clear_items` is set
-only for Reset in yaml/scripted and never in classic. Classic `Refresh`
-therefore behaves like ErsatzTV `Continue` (append-only) instead of ErsatzTV
-`RefreshPlayout` (ClearItems=true + null main anchor + retained checkpoint
-anchors), so a schedule/library/channel change does not re-stamp existing
-classic items. This is the foundational fix that unblocks prompts 2 and 3.
-
-Before editing:
-1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md`, `STYLE.md`,
-   and `docs/how-to/testing.md`.
-2. Read ErsatzTV source at the pin:
-   `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` — study
-   `RefreshPlayout` (sets `ClearItems=true`, nulls the main anchor, retains
-   checkpoint anchors) and `ResetPlayout` (also `ClearItems=true`), and how
-   `PlayoutBuildMode.Refresh`/`Reset` dispatch differs from `Continue`.
-3. Inspect the current ErsatzRS engines:
-   `crates/ersatzrs-core/src/scheduling/classic/mod.rs` (no `request.mode`
-   use; anchor-presence branching), `crates/ersatzrs-core/src/scheduling/yaml.rs`
-   and `scripted.rs` (`clear_items` only when `mode == Reset`).
-4. Build a Source Map covering build-mode dispatch, `clear_items` handling,
-   anchor/checkpoint retention, and enumerator/shuffle continuity across a
-   rebuild.
-
-Implement the coherent end-to-end slice that genuinely closes the gap:
-- Make classic consume `request.mode`; `Refresh` clears and rebuilds the
-  window while preserving checkpoint anchors and nulling the main anchor, per
-  `RefreshPlayout`.
-- Align yaml/scripted so `Refresh` and `Reset` semantics match ErsatzTV across
-  every engine behind the shared trait.
-- Preserve enumerator/shuffle continuity so a rebuild re-stamps per-item
-  settings without reordering media from the checkpoint.
-- Add scheduler tests asserting identical media order from the checkpoint with
-  re-stamped per-item settings after a `Refresh`.
-- Update `docs/progress/parity/playout-rebuild-on-impacting-changes.toml`
-  (resolve this debt only when it fully closes; advance `status` toward
-  `In progress`), ADR 0020 implementation text, `CHANGELOG.md`, this prompt
-  file, and the session log.
-
-Verification:
-- Focused `cargo test -p ersatzrs-core` scheduling tests covering Refresh
-  clear-and-rebuild with checkpoint retention.
-- Snapshot coverage (`insta`) for any changed generated scheduling output.
-- `cargo xtask progress check`.
-
-When done, report the Source Map, behavior implemented, any remaining
-`ParityDebt`, verification run, and changed files.
-
----
-
-## 2. Reviewed in sequence: channel save must enqueue playout Refresh (slug `playout-rebuild-on-impacting-changes`)
-
-Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
-ErsatzTV parity gap governed by
-[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
-source at the pinned baseline commit
-`0d301df5e8512fdfccf3a611188d27ab1690ee31`. The goal is fully functional
-ErsatzTV channel-edit rebuild parity without stopgaps; record any shortfall as
-visible `ParityDebt`. This slice depends on prompt 1's engine Refresh
-semantics actually re-stamping items.
-
-Tracked debt: `channel-edit-triggers-no-playout-rebuild` in
-[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
-Current debt text: saving a channel enqueues no playout build
-(`server_fns/channels.rs`), so changes to subtitle mode, preferred
-subtitle/audio language and title, watermark, streaming mode, FFmpeg profile,
-or playout offset never reach already-scheduled items. Channel edits that
-affect playback selection or stream shape must enqueue a Refresh for every
-playout on that channel. Confirmed runtime evidence: channel Subtitle Mode
-changed Forced -> Any but a Dutch sidecar still did not burn because scheduled
-items kept the old mode and no rebuild was requested on channel save.
+Tracked debt: `similar-video-cooldown-scheduling` in
+[`docs/progress/parity/similar-video-cooldown.toml`](progress/parity/similar-video-cooldown.toml).
+Current debt text: scheduling has no shared opt-in cooldown-aware shuffle policy
+that can keep groupable media, such as the same artist, TV show, movie
+franchise, parent variant, collection, tag, or operator-defined filter, apart
+for a configured number of videos or playout duration. Reclose only after ADR
+0019 is implemented with deterministic cooldown-aware selection, persisted
+Continue-build state, disabled-by-default ErsatzTV parity behavior, focused
+scheduler tests, and admin or schedule-definition controls for item-count and
+duration cooldown thresholds.
 
 Before editing:
-1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md` and `STYLE.md`.
-2. Read ErsatzTV source at the pin:
-   `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`
-   — study which channel changes enqueue a playout rebuild and how the Refresh
-   is requested per affected playout.
-3. Inspect the current ErsatzRS save path:
-   `crates/ersatzrs-web/src/admin/server_fns/channels.rs` (no rebuild enqueue)
-   and `crates/ersatzrs-infra/src/maintenance.rs` (the build queue it should
-   feed).
-4. Build a Source Map covering channel-save, the playout build queue, Refresh
-   coalescing for multiple playouts, and which fields are playback-impacting.
+1. Read ADR 0019, `STYLE.md`, `TEST.md`, and `docs/how-to/testing.md`.
+2. Inspect the current scheduling model and engines:
+   `crates/ersatzrs-core/src/scheduling/classic/`,
+   `crates/ersatzrs-core/src/scheduling/block.rs`,
+   `crates/ersatzrs-core/src/scheduling/yaml.rs`,
+   `crates/ersatzrs-core/src/scheduling/scripted.rs`, playout anchor/context
+   persistence, scheduling reference-data loading, and admin schedule editors.
+3. Build a Source Map covering policy serialization, similarity-tag hydration,
+   deterministic candidate selection, anchor/context persistence across
+   `Continue`, and every UI or schedule-definition entry point.
+4. Build a Visual Source Map for the admin schedule editor routes that will
+   expose the cooldown policy.
 
 Implement the coherent end-to-end slice that genuinely closes the gap:
-- On channel save, enqueue a coalesced `Refresh` build for every playout bound
-  to that channel when a playback-impacting field changed (subtitle mode,
-  preferred subtitle/audio language and title, watermark, streaming mode,
-  FFmpeg profile, playout offset).
-- Coalesce so one save does not stack redundant builds.
-- Add a test proving an upcoming playout item reflects a changed channel
-  setting after save (paired with prompt 1's engine rebuild).
-- Update the owning parity TOML (resolve
-  `channel-edit-triggers-no-playout-rebuild` only when it fully closes), ADR
-  0020 implementation text, `CHANGELOG.md`, this prompt file, and the session
-  log.
-
-Verification:
-- Focused `cargo test -p ersatzrs-web` channel-save tests plus
-  `cargo test -p ersatzrs-infra` queue/maintenance tests.
-- `cargo xtask progress check`.
-
-When done, report the Source Map, behavior implemented, any remaining
-`ParityDebt`, verification run, and changed files.
-
----
-
-## 3. Reviewed in sequence: Reset Playout must rewrite near-term items (slug `playout-rebuild-on-impacting-changes`)
-
-Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
-ErsatzTV parity gap governed by
-[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
-source at the pinned baseline commit
-`0d301df5e8512fdfccf3a611188d27ab1690ee31`. The goal is fully functional
-ErsatzTV Reset Playout parity without stopgaps; record any shortfall as visible
-`ParityDebt`. This slice depends on prompt 1's engine Refresh/Reset semantics.
-
-Tracked debt: `reset-playout-must-rewrite-near-term-items` in
-[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
-Current debt text: clicking "Reset Playout" must rewrite ALL items in the build
-window, including near-term/already-scheduled items, not just append future
-ones. For classic playouts the button maps to `Refresh`
-(`server_fns/playouts.rs`, mirroring `Playouts.razor`), which today does not
-clear near-term items, so operators cannot force current settings onto content
-already on the timeline (only the on-air segment itself may legitimately wait
-for its next item boundary). Reset Playout and Reset All Playouts must clear
-and rebuild the whole window so the change is visible on the next item.
-Maintainer request (2026-07-01): "clicking Reset Playout must rewrite all
-items, including near-term items."
-
-Before editing:
-1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md`, `TEST.md`,
-   and `STYLE.md`.
-2. Read ErsatzTV source at the pin:
-   `$ERSATZTV_SRC/ErsatzTV/Pages/Playouts.razor` — study how `ResetPlayout`
-   and `Reset All Playouts` invoke the build, and
-   `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` `ResetPlayout`
-   (`ClearItems=true`).
-3. Inspect the current ErsatzRS path:
-   `crates/ersatzrs-web/src/admin/server_fns/playouts.rs` (the Reset button
-   mapping) and the classic engine's window handling after prompt 1.
-4. Build a Source Map and Visual Source Map (the Playouts admin page) covering
-   the Reset control, the build request it issues, and near-term item
-   retention.
-
-Implement the coherent end-to-end slice that genuinely closes the gap:
-- Make Reset Playout (and Reset All Playouts) clear and rebuild the whole
-  window, rewriting every future item — not just appending the tail — while
-  leaving only the currently on-air segment to finish at its next item
-  boundary.
-- Keep the admin control hydrated and console-clean per `TEST.md` island
-  rules.
-- Add a browser/scheduler test proving a settings change applied via Reset
-  appears on the next scheduled item across the near-term window.
-- Update the owning parity TOML (resolve
-  `reset-playout-must-rewrite-near-term-items` only when it fully closes; flip
-  the feature to `Ported` only once all three ADR 0020 debts are resolved),
-  `docs/progress/hydration.toml` if proof state changes, ADR 0020
-  implementation text, `CHANGELOG.md`, this prompt file, and the session log.
+- Add versioned `SchedulingCooldownPolicy`, rule, and state models that are
+  disabled by default and leave imported ErsatzTV schedules byte/behavior
+  compatible when absent.
+- Hydrate similarity tags before the scheduling hot loop for artist, album
+  artist, show, season, ADR 0018 parent/variant lineage, collection/tag/genre or
+  other already-loaded facets, and operator-defined search/filter rules.
+- Add a shared deterministic soft-cooldown selector for shuffled/randomized
+  scheduling units. It must avoid active groups when alternatives exist,
+  degrade deterministically when every candidate is blocked, and keep multi-item
+  units indivisible.
+- Persist cooldown state in each engine's existing anchor/context path so
+  `Continue` builds do not forget active cooldowns.
+- Expose the policy in DB-backed admin schedule editors and in YAML/scripted
+  schedule definitions using the same semantics; localize every new admin string.
+- Add focused tests proving disabled policy parity, count-based and
+  duration-based cooldowns, impossible-constraint relaxation, persisted
+  `Continue` state, and at least one UI or schedule-definition save/load path.
+- Update the parity TOML, ADR 0019 implementation text, `CHANGELOG.md`, this
+  prompt file, and the session log. Do not mark the feature `Ported` until the
+  selector, persistence, controls, and tests all land.
 
 Visual verification:
-- Serve via `./run.sh serve` after rebuilding Leptos assets and confirm the
-  Reset Playout control behaves as above; capture same-viewport evidence.
+- Serve via `./run.sh serve` after rebuilding Leptos assets.
+- Capture the changed schedule-editor route(s) in desktop and mobile viewports.
+- Verify the cooldown controls are hydrated, labels are localized, save/load
+  round trips work, and the browser console is clean.
 
 Verification:
-- Focused `cargo test -p ersatzrs-web` / `cargo test -p ersatzrs-core`
-  scheduling tests for the Reset window rewrite.
-- `cargo xtask hydration-lint -p ersatzrs-web` if the Playouts island changes.
-- `npx playwright test` for the Playouts reset flow.
-- `cargo xtask progress check`.
+- Focused scheduler tests for the new cooldown policy in `ersatzrs-core`.
+- Focused persistence tests in `ersatzrs-infra` for anchor/context state.
+- Focused web tests for admin schedule editor save/load behavior.
+- `cargo xtask parity-check web`
+- `cargo xtask progress check`
 
-When done, report the Source Map, Visual Source Map, behavior implemented, any
-remaining `ParityDebt`, verification run, and changed files.
+When done, report the Source Map, Visual Source Map, behavior implemented,
+remaining ADR/`ParityDebt`, verification run, and changed files.
 
 ---
+
+## 2. Build the next ErsatzRS spec chore: ADR 0021 French (France) admin UI localization (new slug `admin-ui-fr-fr-localization`)
+
+Use the repo workflow from AGENTS.md. This is a spec-backed localization chore
+governed by [ADR 0021](adr/0021-admin-ui-fr-fr-localization.md) and ADR 0012's
+translation boundary, not a parity-slice port. The goal is first-class French
+(France) admin UI support without stopgaps: every `TextKey`, dynamic helper,
+settings option, persisted-language path, and browser proof must work before
+the ADR is marked implemented.
+
+Before editing:
+1. Read ADR 0021, ADR 0012, `TEST.md`, and `docs/how-to/testing.md`.
+2. Inspect `crates/ersatzrs-web/src/admin/i18n.rs`,
+   `crates/ersatzrs-web/src/admin/languages/`,
+   `crates/ersatzrs-web/build.rs`, `/settings/ui`, and
+   `tests/e2e/settings-i18n.spec.ts`.
+3. Build a Source Map covering the generated language registry, normalized
+   culture aliases, `pages.language` persistence, server-side initial language
+   loading, dynamic helper methods, and test coverage.
+4. Build a Visual Source Map for `/settings/ui` and at least two translated
+   admin route families already covered by the settings i18n proof.
+
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Add French (France) as `fr-fr` with aliases `fr`, `fr-FR`, and `fr_FR`, and
+  render the language option as `français (France)`.
+- Add a dedicated admin language module following the existing per-culture
+  contract and metadata shape.
+- Translate every admin `TextKey` plus dynamic helper output covered by the
+  `LanguageStrings` trait. Preserve technical identifiers, provider names,
+  codec names, routes, configuration keys, logs, and user-authored media data
+  verbatim per ADR 0012.
+- Update i18n coverage tests and the settings i18n Playwright proof so French
+  selection, `html lang`, route markers, and absence of English fallback text
+  are verified.
+- Register the new progress slug `admin-ui-fr-fr-localization` in the
+  appropriate progress source when implementation starts, then mark it and ADR
+  0021 implemented only after full coverage and browser proof.
+- Update `CHANGELOG.md`, this prompt file, and the session log.
+
+Visual verification:
+- Serve via `./run.sh serve` after rebuilding Leptos assets.
+- Capture `/settings/ui` and the route samples used by
+  `tests/e2e/settings-i18n.spec.ts` in French.
+- Verify labels fit at desktop and mobile widths, no English fallback markers
+  remain where French translations are expected, and the browser console is
+  clean.
+
+Verification:
+- `cargo test -p ersatzrs-web all_languages_translate_each_key`
+- `cargo test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
+- `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
+- `cargo xtask hydration-lint -p ersatzrs-web`
+- `cargo xtask parity-check web`
+- `cargo xtask progress check`
+
+When done, report the Source Map, Visual Source Map, translations added,
+remaining ADR/progress debt, verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: ADR 0022 German (Germany) admin UI localization (new slug `admin-ui-de-de-localization`)
+
+Use the repo workflow from AGENTS.md. This is a spec-backed localization chore
+governed by [ADR 0022](adr/0022-admin-ui-de-de-localization.md) and ADR 0012's
+translation boundary, not a parity-slice port. The goal is first-class German
+(Germany) admin UI support without stopgaps: every `TextKey`, dynamic helper,
+settings option, persisted-language path, and browser proof must work before
+the ADR is marked implemented.
+
+Before editing:
+1. Read ADR 0022, ADR 0012, `TEST.md`, and `docs/how-to/testing.md`.
+2. Inspect `crates/ersatzrs-web/src/admin/i18n.rs`,
+   `crates/ersatzrs-web/src/admin/languages/`,
+   `crates/ersatzrs-web/build.rs`, `/settings/ui`, and
+   `tests/e2e/settings-i18n.spec.ts`.
+3. Build a Source Map covering the generated language registry, normalized
+   culture aliases, `pages.language` persistence, server-side initial language
+   loading, dynamic helper methods, and test coverage.
+4. Build a Visual Source Map for `/settings/ui` and at least two translated
+   admin route families already covered by the settings i18n proof.
+
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Add German (Germany) as `de-de` with aliases `de`, `de-DE`, and `de_DE`, and
+  render the language option as `Deutsch (Deutschland)`.
+- Add a dedicated admin language module following the existing per-culture
+  contract and metadata shape.
+- Translate every admin `TextKey` plus dynamic helper output covered by the
+  `LanguageStrings` trait. Preserve technical identifiers, provider names,
+  codec names, routes, configuration keys, logs, and user-authored media data
+  verbatim per ADR 0012.
+- Update i18n coverage tests and the settings i18n Playwright proof so German
+  selection, `html lang`, route markers, and absence of English fallback text
+  are verified.
+- Register the new progress slug `admin-ui-de-de-localization` in the
+  appropriate progress source when implementation starts, then mark it and ADR
+  0022 implemented only after full coverage and browser proof.
+- Update `CHANGELOG.md`, this prompt file, and the session log.
+
+Visual verification:
+- Serve via `./run.sh serve` after rebuilding Leptos assets.
+- Capture `/settings/ui` and the route samples used by
+  `tests/e2e/settings-i18n.spec.ts` in German.
+- Verify labels fit at desktop and mobile widths, no English fallback markers
+  remain where German translations are expected, and the browser console is
+  clean.
+
+Verification:
+- `cargo test -p ersatzrs-web all_languages_translate_each_key`
+- `cargo test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
+- `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
+- `cargo xtask hydration-lint -p ersatzrs-web`
+- `cargo xtask parity-check web`
+- `cargo xtask progress check`
+
+When done, report the Source Map, Visual Source Map, translations added,
+remaining ADR/progress debt, verification run, and changed files.
