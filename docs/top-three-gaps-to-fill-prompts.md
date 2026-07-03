@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-02
-last_processed_commit: 149b4cb9d3963c62391898f1079dad34e66a6cf6
+generated: 2026-07-03
+last_processed_commit: f02ea8454534b68295ce25df3b047cf5559d036a
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,204 +13,215 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: renewed 2026-07-02 after all three 2026-07-01 reopened
-items closed and landed green on CI (`channels-add-default-group-ersatzrs`,
-`profile-editor-video-audio-section-spacing`, and
-`default-profile-video-bitrate-halving` resolved; channels admin UI, the
-FFmpeg profile editor, and FFmpeg command generation returned to `Ported`;
-`quick-xml` was bumped to 0.41 for RUSTSEC-2026-0194/0195 in the same push).
-The three registered media curation follow-ups now fill the queue: ADR 0048
-same-collection duplicate movie rows with distinct playback overrides,
-stay-in-context Add To Collection/Add To Playlist behavior, and artist-detail
-music-video checkbox multi-select. ADR 0020 playout rebuild debts
-(`channel-edit-triggers-no-playout-rebuild`,
-`classic-refresh-appends-instead-of-rebuilding`,
-`reset-playout-must-rewrite-near-term-items`), ADR 0019 similar-video
-cooldown, proposed localization ADRs, active Docker release plans, and module
-split work remain candidates, but rank behind the selected items in this
-pass.
+Current selection: renewed 2026-07-03. The 149b4cb..f02ea84 change window was
+dependency bumps only (leptos 0.8.20, leptos_router 0.8.14, jsonschema
+0.46.8/0.46.9, open 5.3.6) plus one docs-housekeeping commit, so no parity
+status moved. Applying the selection rules, the three `Not started`
+`playout-rebuild-on-impacting-changes` debts (ADR 0020) now lead the queue:
+each is confirmed user-visible runtime debt (a subtitle-mode change that never
+burns because scheduled items keep the old settings and no rebuild is
+requested; classic `Refresh` appending instead of clearing and rebuilding;
+Reset Playout leaving near-term items stale), and the
+confirmed-user-visible-runtime-debt rule outranks everything except phase
+focus — above the ADR 0048 duplicate-collection-row and the two media-browser
+UX chores that filled the previous queue. Those three UX debts
+(`collection-item-duplicate-playback-overrides`,
+`add-to-collection-playlist-stay-in-context`,
+`artist-detail-music-video-multi-select-actions`) stay open and are the next
+candidates, followed by ADR 0019 similar-video cooldown, proposed localization
+ADRs, active Docker release plans, and module-split work. The three prompts are
+ordered foundational-first: the engine Refresh/Reset semantics unblock the
+channel-save enqueue and the Reset Playout rewrite.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: ADR 0048 duplicate collection rows with distinct playback overrides (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 1. Fix the next ErsatzRS parity-infrastructure gap: ADR 0020 classic Refresh/Reset rebuild semantics (slug `playout-rebuild-on-impacting-changes`)
 
-Use the repo workflow from AGENTS.md and the governing ADR. This is a
-spec-backed ErsatzRS-owned extension — ErsatzTV has no equivalent, so do not
-force the parity-slice workflow; follow
-[ADR 0048](adr/0048-collection-item-playback-overrides.md) instead. The goal is
-the complete follow-up slice ADR 0048's Implementation section names, without
-stopgaps.
+Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
+ErsatzTV parity gap governed by
+[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
+source at the pinned baseline commit
+`0d301df5e8512fdfccf3a611188d27ab1690ee31`
+([parity-baseline.md](automation/parity-baseline.md)). The goal is fully
+functional ErsatzTV `RefreshPlayout`/`ResetPlayout` parity without stopgaps;
+record any shortfall as visible `ParityDebt`, never hide it in prose.
 
-Tracked debt: `collection-item-duplicate-playback-overrides` in
-[`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`](progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml).
-Current debt text: the same movie should be addable to the same collection
-multiple times when each row has a different playback override, so movies with
-multiple commentary or alternate audio tracks can have every track represented
-in one collection. Current SQLite and MySQL schemas keep `CollectionItem`
-keyed by `(CollectionId, MediaItemId)` (`PK_CollectionItem`), so the model
-cannot represent two rows for the same movie even when `PreferredAudioTitle`,
-preferred audio/subtitle language, or `SubtitleMode` differ.
+Tracked debt: `classic-refresh-appends-instead-of-rebuilding` in
+[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
+Current debt text: the classic scheduling engine ignores `request.mode` and
+branches only on `request.playout.anchor` presence, trimming items older than
+`now - 4h` and appending from the anchor `next_start`; `clear_items` is set
+only for Reset in yaml/scripted and never in classic. Classic `Refresh`
+therefore behaves like ErsatzTV `Continue` (append-only) instead of ErsatzTV
+`RefreshPlayout` (ClearItems=true + null main anchor + retained checkpoint
+anchors), so a schedule/library/channel change does not re-stamp existing
+classic items. This is the foundational fix that unblocks prompts 2 and 3.
 
 Before editing:
-1. Read `docs/adr/0048-collection-item-playback-overrides.md`,
-   `docs/adr/0018-extras-alternate-versions-and-stream-roles.md`,
-   `STYLE.md` (SQL migration rules), and
-   `docs/how-to/testing.md`.
-2. Inspect the current collection item identity and override columns in
-   `migrations/0001_initial.sql`,
-   `migrations/202607011455_collection_item_playback_overrides.sql`, and the
-   matching `migrations/mysql/` files.
-3. Inspect the add/inspect/schedule paths:
-   `crates/ersatzrs-infra/src/repositories/collection.rs`,
-   `crates/ersatzrs-infra/src/repositories/scheduling.rs`,
-   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`, and
-   `crates/ersatzrs-web/src/admin/pages/media/collection_detail.rs`.
-4. Build a Source Map covering collection item identity, add-to-collection
-   flow, collection detail rendering of saved overrides, scheduling expansion
-   into playout items, and SQLite/MySQL migration parity.
-5. Reproduce the current limitation before editing: adding the same movie
-   twice with different overrides must currently collapse to one row.
+1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md`, `STYLE.md`,
+   and `docs/how-to/testing.md`.
+2. Read ErsatzTV source at the pin:
+   `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` — study
+   `RefreshPlayout` (sets `ClearItems=true`, nulls the main anchor, retains
+   checkpoint anchors) and `ResetPlayout` (also `ClearItems=true`), and how
+   `PlayoutBuildMode.Refresh`/`Reset` dispatch differs from `Continue`.
+3. Inspect the current ErsatzRS engines:
+   `crates/ersatzrs-core/src/scheduling/classic/mod.rs` (no `request.mode`
+   use; anchor-presence branching), `crates/ersatzrs-core/src/scheduling/yaml.rs`
+   and `scripted.rs` (`clear_items` only when `mode == Reset`).
+4. Build a Source Map covering build-mode dispatch, `clear_items` handling,
+   anchor/checkpoint retention, and enumerator/shuffle continuity across a
+   rebuild.
 
 Implement the coherent end-to-end slice that genuinely closes the gap:
-- Change collection item identity so the same movie can appear more than once
-  in one collection when playback overrides differ, in both SQLite and MySQL
-  migrations, following STYLE.md's EF-style constraint naming.
-- Keep default rows (no override) behaving exactly like the ErsatzTV row shape
-  and keep import/parity tooling treating override fields as ErsatzRS-only.
-- Preserve ADR 0048 scheduling propagation so each duplicate row schedules
-  separately with its own override.
-- Make collection detail UI distinguish duplicate rows by their saved override.
-- Add focused regression coverage for duplicate-row persistence, collection
-  detail projection, and scheduling expansion.
-- Update the owning parity TOML, ADR 0048's Implementation text,
-  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
-  session log when the debt closes.
+- Make classic consume `request.mode`; `Refresh` clears and rebuilds the
+  window while preserving checkpoint anchors and nulling the main anchor, per
+  `RefreshPlayout`.
+- Align yaml/scripted so `Refresh` and `Reset` semantics match ErsatzTV across
+  every engine behind the shared trait.
+- Preserve enumerator/shuffle continuity so a rebuild re-stamps per-item
+  settings without reordering media from the checkpoint.
+- Add scheduler tests asserting identical media order from the checkpoint with
+  re-stamped per-item settings after a `Refresh`.
+- Update `docs/progress/parity/playout-rebuild-on-impacting-changes.toml`
+  (resolve this debt only when it fully closes; advance `status` toward
+  `In progress`), ADR 0020 implementation text, `CHANGELOG.md`, this prompt
+  file, and the session log.
 
 Verification:
-- Focused `cargo test -p ersatzrs-infra` collection/scheduling tests covering
-  duplicate rows with distinct overrides.
-- `cargo test -p ersatzrs-web --all-targets <collection_route_filter>` for the
-  admin flows touched.
-- `cargo xtask hydration-lint -p ersatzrs-web` if collection detail islands
-  change.
-- `npx playwright test tests/e2e/collections.spec.ts` when the UI flow changes.
+- Focused `cargo test -p ersatzrs-core` scheduling tests covering Refresh
+  clear-and-rebuild with checkpoint retention.
+- Snapshot coverage (`insta`) for any changed generated scheduling output.
 - `cargo xtask progress check`.
 
-When done, report the Source Map, behavior implemented, migration changes,
-any remaining debt, verification run, and changed files.
+When done, report the Source Map, behavior implemented, any remaining
+`ParityDebt`, verification run, and changed files.
 
 ---
 
-## 2. Build the next ErsatzRS spec chore: stay-in-context Add To Collection / Add To Playlist (slug `media-browsers`)
+## 2. Fix the next ErsatzRS parity-infrastructure gap: channel save must enqueue playout Refresh (slug `playout-rebuild-on-impacting-changes`)
 
-Use the repo workflow from AGENTS.md. This is a maintainer-requested ErsatzRS
-UX chore recorded as structured debt — ErsatzTV's flows navigate away, so do
-not treat the current navigation as a parity requirement; the debt entry is
-the contract. The goal is the complete stay-in-context behavior without
-stopgaps.
+Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
+ErsatzTV parity gap governed by
+[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
+source at the pinned baseline commit
+`0d301df5e8512fdfccf3a611188d27ab1690ee31`. The goal is fully functional
+ErsatzTV channel-edit rebuild parity without stopgaps; record any shortfall as
+visible `ParityDebt`. This slice depends on prompt 1's engine Refresh
+semantics actually re-stamping items.
 
-Tracked debt: `add-to-collection-playlist-stay-in-context` in
-[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
-Current debt text: after adding one or more media items to a collection or
-playlist from a media page, the admin UI should keep the user in the current
-browsing/detail context by default instead of always navigating to the target
-collection or playlist page. Most add-to-collection/add-to-playlist sessions
-are iterative curation sessions where the user wants to continue adding items.
+Tracked debt: `channel-edit-triggers-no-playout-rebuild` in
+[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
+Current debt text: saving a channel enqueues no playout build
+(`server_fns/channels.rs`), so changes to subtitle mode, preferred
+subtitle/audio language and title, watermark, streaming mode, FFmpeg profile,
+or playout offset never reach already-scheduled items. Channel edits that
+affect playback selection or stream shape must enqueue a Refresh for every
+playout on that channel. Confirmed runtime evidence: channel Subtitle Mode
+changed Forced -> Any but a Dutch sidecar still did not burn because scheduled
+items kept the old mode and no rebuild was requested on channel save.
 
 Before editing:
-1. Read `docs/progress/parity/media-browsers.toml`, `TEST.md`, and `STYLE.md`.
-2. Inspect the current add flows in
-   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`,
-   `crates/ersatzrs-web/src/admin/pages/media/browser.rs`, the media detail
-   pages under `crates/ersatzrs-web/src/admin/pages/media/`, and the existing
-   browser proof in `tests/e2e/media-browser-actions.spec.ts` and
-   `tests/e2e/hydration-pending-routes.spec.ts`.
-3. Build a Source Map covering the Add To Collection / Add To Playlist dialog
-   flow, single-item and bulk selection paths, post-add navigation, success
-   feedback (toast) primitives, and localization of any new labels.
-4. Reproduce the current always-navigate behavior in a running browser before
-   editing.
+1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md` and `STYLE.md`.
+2. Read ErsatzTV source at the pin:
+   `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`
+   — study which channel changes enqueue a playout rebuild and how the Refresh
+   is requested per affected playout.
+3. Inspect the current ErsatzRS save path:
+   `crates/ersatzrs-web/src/admin/server_fns/channels.rs` (no rebuild enqueue)
+   and `crates/ersatzrs-infra/src/maintenance.rs` (the build queue it should
+   feed).
+4. Build a Source Map covering channel-save, the playout build queue, Refresh
+   coalescing for multiple playouts, and which fields are playback-impacting.
 
 Implement the coherent end-to-end slice that genuinely closes the gap:
-- Keep the user on the current media browse/detail page by default after a
-  successful add, for single-item and bulk flows, collections and playlists.
-- Show a clear success state that still offers an explicit View
-  Collection/View Playlist navigation path.
-- Localize any new user-visible labels for every supported culture under
-  `crates/ersatzrs-web/src/admin/languages/`.
-- Preserve SSR/no-JS fallbacks and hydration stability per `TEST.md`.
-- Add focused browser coverage proving bulk and single-item flows for
-  collections and playlists keep context and can still navigate explicitly.
-- Update `docs/progress/parity/media-browsers.toml`,
-  `docs/progress/hydration.toml` if proof state changes,
-  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
-  session log when the debt closes.
+- On channel save, enqueue a coalesced `Refresh` build for every playout bound
+  to that channel when a playback-impacting field changed (subtitle mode,
+  preferred subtitle/audio language and title, watermark, streaming mode,
+  FFmpeg profile, playout offset).
+- Coalesce so one save does not stack redundant builds.
+- Add a test proving an upcoming playout item reflects a changed channel
+  setting after save (paired with prompt 1's engine rebuild).
+- Update the owning parity TOML (resolve
+  `channel-edit-triggers-no-playout-rebuild` only when it fully closes), ADR
+  0020 implementation text, `CHANGELOG.md`, this prompt file, and the session
+  log.
 
 Verification:
-- Focused Rust tests for any server-fn/projection changes.
-- `cargo xtask hydration-lint -p ersatzrs-web`.
-- `npx playwright test tests/e2e/media-browser-actions.spec.ts` plus the
-  focused stay-in-context cases added for this chore.
+- Focused `cargo test -p ersatzrs-web` channel-save tests plus
+  `cargo test -p ersatzrs-infra` queue/maintenance tests.
 - `cargo xtask progress check`.
 
-When done, report the Source Map, behavior implemented, any remaining debt,
-verification run, and changed files.
+When done, report the Source Map, behavior implemented, any remaining
+`ParityDebt`, verification run, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: artist-detail music-video multi-select actions (slug `media-browsers`)
+## 3. Fix the next ErsatzRS parity-infrastructure gap: Reset Playout must rewrite near-term items (slug `playout-rebuild-on-impacting-changes`)
 
-Use the repo workflow from AGENTS.md. This is a maintainer-requested ErsatzRS
-UX chore recorded as structured debt; ErsatzTV's artist page has no bulk
-music-video selection, so the debt entry is the contract. The goal is the
-complete multi-select behavior without stopgaps.
+Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
+ErsatzTV parity gap governed by
+[ADR 0020](adr/0020-playout-rebuild-on-impacting-changes.md); read ErsatzTV
+source at the pinned baseline commit
+`0d301df5e8512fdfccf3a611188d27ab1690ee31`. The goal is fully functional
+ErsatzTV Reset Playout parity without stopgaps; record any shortfall as visible
+`ParityDebt`. This slice depends on prompt 1's engine Refresh/Reset semantics.
 
-Tracked debt: `artist-detail-music-video-multi-select-actions` in
-[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
-Current debt text: on `/media/music/artists/{artist_id}`, the artist detail
-page should allow selecting multiple music-video rows with checkboxes and
-adding the selected videos to collections or playlists in bulk. The current
-artist detail page restored artist-level Add To Collection and music-video
-preview artwork, but the listed music videos still lack a multi-select
-checkbox/action toolbar for bulk Add To Collection and Add To Playlist.
+Tracked debt: `reset-playout-must-rewrite-near-term-items` in
+[`docs/progress/parity/playout-rebuild-on-impacting-changes.toml`](progress/parity/playout-rebuild-on-impacting-changes.toml).
+Current debt text: clicking "Reset Playout" must rewrite ALL items in the build
+window, including near-term/already-scheduled items, not just append future
+ones. For classic playouts the button maps to `Refresh`
+(`server_fns/playouts.rs`, mirroring `Playouts.razor`), which today does not
+clear near-term items, so operators cannot force current settings onto content
+already on the timeline (only the on-air segment itself may legitimately wait
+for its next item boundary). Reset Playout and Reset All Playouts must clear
+and rebuild the whole window so the change is visible on the next item.
+Maintainer request (2026-07-01): "clicking Reset Playout must rewrite all
+items, including near-term items."
 
 Before editing:
-1. Read `docs/progress/parity/media-browsers.toml`, `TEST.md`, and `STYLE.md`.
-2. Inspect the current artist detail implementation in
-   `crates/ersatzrs-web/src/admin/pages/media/artists.rs` (and its detail
-   module/CSS), the shared selection toolbar used by the media browser lists in
-   `crates/ersatzrs-web/src/admin/pages/media/browser.rs`,
-   `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`, and the
-   existing browser proof in `tests/e2e/media-browser-actions.spec.ts`.
-3. Build a Source Map covering artist detail row rendering, the shared
-   checkbox/selection toolbar primitives, bulk Add To Collection / Add To
-   Playlist dialog flows, persistence, and localization of any new labels.
-4. Reproduce the missing behavior in a running browser before editing: artist
-   music-video rows expose no checkboxes or bulk actions today.
+1. Read `docs/adr/0020-playout-rebuild-on-impacting-changes.md`, `TEST.md`,
+   and `STYLE.md`.
+2. Read ErsatzTV source at the pin:
+   `$ERSATZTV_SRC/ErsatzTV/Pages/Playouts.razor` — study how `ResetPlayout`
+   and `Reset All Playouts` invoke the build, and
+   `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` `ResetPlayout`
+   (`ClearItems=true`).
+3. Inspect the current ErsatzRS path:
+   `crates/ersatzrs-web/src/admin/server_fns/playouts.rs` (the Reset button
+   mapping) and the classic engine's window handling after prompt 1.
+4. Build a Source Map and Visual Source Map (the Playouts admin page) covering
+   the Reset control, the build request it issues, and near-term item
+   retention.
 
 Implement the coherent end-to-end slice that genuinely closes the gap:
-- Add checkbox multi-select to the artist detail music-video rows, reusing the
-  shared media-browser selection toolbar/action primitives over ad hoc UI.
-- Bulk Add To Collection and Add To Playlist dialogs persist all selected
-  music-video items; individual row actions keep working.
-- Localize any new user-visible labels for every supported culture under
-  `crates/ersatzrs-web/src/admin/languages/`.
-- Keep the route hydrated and console-clean per `TEST.md` island rules.
-- Add focused browser coverage proving the bulk flow persists membership for
-  multiple selected music videos.
-- Update `docs/progress/parity/media-browsers.toml`,
-  `docs/progress/hydration.toml` if proof state changes,
-  `docs/progress/phase.toml`, `CHANGELOG.md`, this prompt file, and the
-  session log when the debt closes.
+- Make Reset Playout (and Reset All Playouts) clear and rebuild the whole
+  window, rewriting every future item — not just appending the tail — while
+  leaving only the currently on-air segment to finish at its next item
+  boundary.
+- Keep the admin control hydrated and console-clean per `TEST.md` island
+  rules.
+- Add a browser/scheduler test proving a settings change applied via Reset
+  appears on the next scheduled item across the near-term window.
+- Update the owning parity TOML (resolve
+  `reset-playout-must-rewrite-near-term-items` only when it fully closes; flip
+  the feature to `Ported` only once all three ADR 0020 debts are resolved),
+  `docs/progress/hydration.toml` if proof state changes, ADR 0020
+  implementation text, `CHANGELOG.md`, this prompt file, and the session log.
+
+Visual verification:
+- Serve via `./run.sh serve` after rebuilding Leptos assets and confirm the
+  Reset Playout control behaves as above; capture same-viewport evidence.
 
 Verification:
-- Focused Rust tests for any server-fn/projection changes.
-- `cargo xtask hydration-lint -p ersatzrs-web`.
-- `npx playwright test tests/e2e/media-browser-actions.spec.ts` plus the
-  focused multi-select cases added for this chore.
+- Focused `cargo test -p ersatzrs-web` / `cargo test -p ersatzrs-core`
+  scheduling tests for the Reset window rewrite.
+- `cargo xtask hydration-lint -p ersatzrs-web` if the Playouts island changes.
+- `npx playwright test` for the Playouts reset flow.
 - `cargo xtask progress check`.
 
-When done, report the Source Map, behavior implemented, any remaining debt,
-verification run, and changed files.
+When done, report the Source Map, Visual Source Map, behavior implemented, any
+remaining `ParityDebt`, verification run, and changed files.
 
 ---
