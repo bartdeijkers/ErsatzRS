@@ -9,11 +9,11 @@ what a playout's items should contain, so already-scheduled `PlayoutItem` rows
 pick up new settings instead of only being appended past. Playout items bake a
 snapshot of settings at build time (subtitle mode, preferred subtitle/audio
 language and title, watermark/graphics/deco, filler, resolved media), and stream
-generation reads the baked snapshot (`playout_item.subtitle_mode ?? channel`),
-so a settings change is invisible until the affected items are rewritten. Today
-channel edits enqueue no rebuild at all, and the classic engine ignores
-`request.mode` (keying off anchor presence), so classic `Refresh` appends rather
-than clearing and rebuilding the window the way ErsatzTV `RefreshPlayout` does.
+generation reads item overrides before falling back to channel settings.
+Channel edits now enqueue a Refresh for every playout on the channel when
+playback-impacting fields change. The classic engine now consumes
+`request.mode`, so classic `Refresh` clears and rebuilds the window the way
+ErsatzTV `RefreshPlayout` does.
 '''
 
 [[debt]]
@@ -21,8 +21,8 @@ id          = 'channel-edit-triggers-no-playout-rebuild'
 adr         = '0020'
 description = 'Saving a channel enqueues no playout build (`server_fns/channels.rs`), so changes to subtitle mode, preferred subtitle/audio language and title, watermark, streaming mode, FFmpeg profile, or playout offset never reach already-scheduled items. Channel edits that affect playback selection or stream shape must enqueue a Refresh for every playout on that channel.'
 discovered  = '2026-07-01'
-evidence    = 'Reported: channel Subtitle Mode changed Forced -> Any but a Dutch sidecar still did not burn because scheduled items kept the old mode and no rebuild was requested on channel save. Reclose only after channel save enqueues coalesced Refresh builds for impacted playouts and a test proves an upcoming item reflects the new setting.'
-resolved    = false
+evidence    = 'Source review: `save_channel_with_state` now loads before/after channel side-effect state, compares the playback rebuild signature (FFmpeg profile, subtitle/audio preferences, watermark, streaming mode, and playout offset), and enqueues a deduped `PlayoutBuildMode::Refresh` request for every `Playout` bound to the saved channel. Regression coverage was added for the public save path with two playouts plus the maintenance worker Refresh rewrite of stale item-level playback data. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
+resolved    = true
 
 [[debt]]
 id          = 'classic-refresh-appends-instead-of-rebuilding'

@@ -473,15 +473,21 @@ pub async fn save_channel_numbers_with_pool(
 }
 
 #[cfg(feature = "ssr")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct ChannelSaveSideEffectState {
     number: String,
+    ffmpeg_profile_id: i64,
     playout_source: i32,
     mirror_source_channel_id: Option<i64>,
     playout_offset: Option<String>,
+    preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
+    preferred_subtitle_language_code: Option<String>,
     subtitle_mode: i32,
+    streaming_mode: i32,
+    watermark_id: Option<i64>,
     show_in_epg: bool,
-    playout_id: Option<i64>,
+    playout_ids: Vec<i64>,
 }
 
 #[cfg(feature = "ssr")]
@@ -495,6 +501,30 @@ impl ChannelSaveSideEffectState {
             self.playout_offset.as_deref(),
         )
     }
+
+    fn playback_rebuild_signature(
+        &self,
+    ) -> (
+        i64,
+        i32,
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        i32,
+        Option<i64>,
+        Option<&str>,
+    ) {
+        (
+            self.ffmpeg_profile_id,
+            self.subtitle_mode,
+            self.preferred_audio_language_code.as_deref(),
+            self.preferred_audio_title.as_deref(),
+            self.preferred_subtitle_language_code.as_deref(),
+            self.streaming_mode,
+            self.watermark_id,
+            self.playout_offset.as_deref(),
+        )
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -505,9 +535,11 @@ async fn load_channel_save_side_effect_state(
     use sqlx::Row;
 
     let row = sqlx::query(
-        r#"SELECT c."Number", c."PlayoutSource", c."MirrorSourceChannelId",
-                  c."PlayoutOffset", c."SubtitleMode", c."ShowInEpg",
-                  (SELECT p."Id" FROM "Playout" p WHERE p."ChannelId" = c."Id" ORDER BY p."Id" LIMIT 1) AS "PlayoutId"
+        r#"SELECT c."Number", c."FFmpegProfileId", c."PlayoutSource",
+                  c."MirrorSourceChannelId", c."PlayoutOffset",
+                  c."PreferredAudioLanguageCode", c."PreferredAudioTitle",
+                  c."PreferredSubtitleLanguageCode", c."SubtitleMode",
+                  c."StreamingMode", c."WatermarkId", c."ShowInEpg"
            FROM "Channel" c
            WHERE c."Id" = ?"#,
     )
@@ -515,14 +547,33 @@ async fn load_channel_save_side_effect_state(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| ChannelSaveSideEffectState {
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let playout_ids =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" WHERE "ChannelId" = ? ORDER BY "Id""#)
+            .bind(channel_id)
+            .fetch_all(pool)
+            .await?;
+
+    Ok(Some(ChannelSaveSideEffectState {
         number: row.try_get("Number").unwrap_or_default(),
+        ffmpeg_profile_id: row.try_get("FFmpegProfileId").unwrap_or_default(),
         playout_source: row.try_get("PlayoutSource").unwrap_or_default(),
         mirror_source_channel_id: row.try_get("MirrorSourceChannelId").unwrap_or_default(),
         playout_offset: row.try_get("PlayoutOffset").unwrap_or_default(),
+        preferred_audio_language_code: row
+            .try_get("PreferredAudioLanguageCode")
+            .unwrap_or_default(),
+        preferred_audio_title: row.try_get("PreferredAudioTitle").unwrap_or_default(),
+        preferred_subtitle_language_code: row
+            .try_get("PreferredSubtitleLanguageCode")
+            .unwrap_or_default(),
         subtitle_mode: row.try_get("SubtitleMode").unwrap_or_default(),
+        streaming_mode: row.try_get("StreamingMode").unwrap_or_default(),
+        watermark_id: row.try_get("WatermarkId").unwrap_or_default(),
         show_in_epg: row.try_get("ShowInEpg").unwrap_or(false),
-        playout_id: row.try_get("PlayoutId").unwrap_or_default(),
+        playout_ids,
     }))
 }
 
@@ -539,26 +590,60 @@ fn dispatch_channel_save_side_effects(
         );
     }
 
+    if before.is_some_and(|before| {
+        before.playback_rebuild_signature() != after.playback_rebuild_signature()
+    }) {
+        enqueue_channel_playout_refreshes(state, &after.playout_ids);
+    }
+
     if after.subtitle_mode == 0 {
         return;
     }
 
-    let Some(playout_id) = after.playout_id else {
-        return;
-    };
+    for playout_id in unique_playout_ids(&after.playout_ids) {
+        let pool = state.pool.clone();
+        tokio::spawn(async move {
+            if let Err(error) =
+                ersatzrs_infra::subtitles::extract_embedded_playout_subtitles(&pool, playout_id)
+                    .await
+            {
+                tracing::warn!(
+                    playout_id,
+                    %error,
+                    "embedded subtitle extraction failed after channel save"
+                );
+            }
+        });
+    }
+}
 
-    let pool = state.pool.clone();
-    tokio::spawn(async move {
-        if let Err(error) =
-            ersatzrs_infra::subtitles::extract_embedded_playout_subtitles(&pool, playout_id).await
-        {
+#[cfg(feature = "ssr")]
+fn enqueue_channel_playout_refreshes(state: &crate::host::state::AppState, playout_ids: &[i64]) {
+    for playout_id in unique_playout_ids(playout_ids) {
+        let request = ersatzrs_core::scheduling::PlayoutBuildRequest {
+            playout_id,
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
+        };
+        if let Err(error) = state.playout_build_tx.try_send(request) {
             tracing::warn!(
                 playout_id,
                 %error,
-                "embedded subtitle extraction failed after channel save"
+                "dropping channel-save playout refresh; periodic scheduler will retry later"
             );
         }
-    });
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn unique_playout_ids(playout_ids: &[i64]) -> Vec<i64> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut unique = Vec::new();
+    for &playout_id in playout_ids {
+        if seen.insert(playout_id) {
+            unique.push(playout_id);
+        }
+    }
+    unique
 }
 
 /// Returns the channel numbers that currently have a live transcode session.
@@ -684,5 +769,199 @@ fn channel_logo_url(name: &str, path: Option<&str>) -> String {
             "/iptv/logos/gen?text={}",
             urlencoding::encode(name).into_owned()
         )
+    }
+}
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+mod tests {
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    fn channel_state_with_playout_rx() -> (
+        crate::host::state::AppState,
+        mpsc::Receiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    ) {
+        let pool =
+            ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
+        channel_state_with_pool_and_playout_rx(pool)
+    }
+
+    fn channel_state_with_pool_and_playout_rx(
+        pool: ersatzrs_infra::db::DbPool,
+    ) -> (
+        crate::host::state::AppState,
+        mpsc::Receiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    ) {
+        let (playout_build_tx, playout_build_rx) = mpsc::channel(4);
+        let state = crate::host::state::AppState::new(
+            pool,
+            ersatzrs_infra::db::DatabaseBackend::Sqlite,
+            crate::host::state::SystemStartup {
+                database_ready: true,
+                schema_status: ersatzrs_infra::db::DatabaseSchemaStatus::default(),
+            },
+            ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+            uuid::Uuid::nil(),
+            1,
+            crate::host::state::IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+        (state, playout_build_rx)
+    }
+
+    async fn migrated_channel_state_with_playout_rx() -> (
+        crate::host::state::AppState,
+        mpsc::Receiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    ) {
+        use sqlx::Executor;
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create sqlite pool");
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("enable foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool.execute(
+            r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height")
+               VALUES (1, '1920x1080', 1920, 1080)"#,
+        )
+        .await
+        .expect("seed resolution");
+
+        channel_state_with_pool_and_playout_rx(pool)
+    }
+
+    #[test]
+    fn channel_save_side_effects_enqueue_refresh_for_playback_change() {
+        let (state, mut playout_build_rx) = channel_state_with_playout_rx();
+        let before = ChannelSaveSideEffectState {
+            number: "1".to_owned(),
+            ffmpeg_profile_id: 1,
+            streaming_mode: 5,
+            playout_ids: vec![10, 11],
+            ..ChannelSaveSideEffectState::default()
+        };
+        let after = ChannelSaveSideEffectState {
+            watermark_id: Some(25),
+            playout_ids: vec![10, 10, 11],
+            ..before.clone()
+        };
+
+        dispatch_channel_save_side_effects(&state, Some(&before), &after);
+
+        let first = playout_build_rx.try_recv().expect("first refresh request");
+        let second = playout_build_rx.try_recv().expect("second refresh request");
+        assert_eq!(first.playout_id, 10);
+        assert_eq!(second.playout_id, 11);
+        assert_eq!(
+            first.mode,
+            ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
+        );
+        assert_eq!(
+            second.mode,
+            ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
+        );
+        assert!(playout_build_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn channel_save_side_effects_skip_refresh_for_epg_only_change() {
+        let (state, mut playout_build_rx) = channel_state_with_playout_rx();
+        let before = ChannelSaveSideEffectState {
+            number: "1".to_owned(),
+            ffmpeg_profile_id: 1,
+            streaming_mode: 5,
+            show_in_epg: true,
+            playout_ids: vec![10],
+            ..ChannelSaveSideEffectState::default()
+        };
+        let after = ChannelSaveSideEffectState {
+            show_in_epg: false,
+            ..before.clone()
+        };
+
+        dispatch_channel_save_side_effects(&state, Some(&before), &after);
+
+        assert!(playout_build_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn save_channel_enqueues_refresh_for_each_channel_playout() {
+        use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
+        use sqlx::Executor;
+
+        let (state, mut playout_build_rx) = migrated_channel_state_with_playout_rx().await;
+        let repos = ersatzrs_infra::repositories::make_repositories(state.pool.clone());
+        repos
+            .ffmpeg_profile
+            .upsert(&ersatzrs_domain::FFmpegProfile {
+                id: 1,
+                name: "default".to_owned(),
+                resolution_id: 1,
+                ..ersatzrs_domain::FFmpegProfile::default()
+            })
+            .await
+            .unwrap();
+        repos
+            .channel
+            .upsert(&ersatzrs_domain::Channel {
+                id: 1,
+                unique_id: uuid::Uuid::from_u128(1),
+                number: "1".to_owned(),
+                sort_number: 1.0,
+                name: "Channel 1".to_owned(),
+                group: Some("ErsatzRS".to_owned()),
+                ffmpeg_profile_id: 1,
+                ..ersatzrs_domain::Channel::default()
+            })
+            .await
+            .unwrap();
+        state
+            .pool
+            .execute(
+                r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+                   VALUES (10, 1, 'Classic', 0), (11, 1, 'Classic', 1)"#,
+            )
+            .await
+            .unwrap();
+
+        let saved_id = save_channel_with_state(
+            &state,
+            ChannelForm {
+                id: 1,
+                number: "1".to_owned(),
+                name: "Channel 1".to_owned(),
+                group: "ErsatzRS".to_owned(),
+                ffmpeg_profile_id: 1,
+                streaming_mode: 5,
+                subtitle_mode: 3,
+                is_enabled: true,
+                show_in_epg: true,
+                ..ChannelForm::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(saved_id, 1);
+        let first = playout_build_rx.try_recv().expect("first refresh request");
+        let second = playout_build_rx.try_recv().expect("second refresh request");
+        assert_eq!(
+            (first.playout_id, first.mode),
+            (10, ersatzrs_core::scheduling::PlayoutBuildMode::Refresh)
+        );
+        assert_eq!(
+            (second.playout_id, second.mode),
+            (11, ersatzrs_core::scheduling::PlayoutBuildMode::Refresh)
+        );
+        assert!(playout_build_rx.try_recv().is_err());
     }
 }

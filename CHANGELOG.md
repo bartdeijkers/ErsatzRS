@@ -69,6 +69,9 @@ release section when tagging a release.
   scheduled window instead of appending past stale items; classic refresh also
   preserves same-day checkpoint anchors so enumerator/shuffle continuity
   survives while per-item settings are re-stamped.
+- Saving a channel now enqueues a playout `Refresh` for each channel playout
+  when playback-impacting fields change, including subtitle/audio preferences,
+  watermark, streaming mode, FFmpeg profile, and playout offset.
 - Collection detail pages now hydrate cleanly after adding items from media
   pages and following the explicit "View Collection" toast action.
 - Creating a channel at `/channels/add` now pre-fills the Group field with

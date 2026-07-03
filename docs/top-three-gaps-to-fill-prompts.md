@@ -33,11 +33,13 @@ ADRs, active Docker release plans, and module-split work. The three prompts are
 ordered foundational-first: the engine Refresh/Reset semantics unblock the
 channel-save enqueue and the Reset Playout rewrite.
 
-Sequential closeout status (2026-07-03): gap 1's scheduler-core
-Refresh/Reset semantics have been implemented and source-reviewed in the active
-sequence. Verification commands are intentionally deferred until gap 3 has been
-committed, per the combined goal. Continue with gap 2 next; do not restart gap
-1 unless the deferred verification later contradicts the review.
+Sequential closeout status (2026-07-03): gaps 1 and 2 have been implemented
+and source-reviewed in the active sequence. Gap 1 added scheduler-core
+Refresh/Reset semantics; gap 2 added channel-save Refresh enqueueing plus
+deferred save-path and worker regressions. Verification commands are
+intentionally deferred until gap 3 has been committed, per the combined goal.
+Continue with gap 3 next; do not restart gaps 1 or 2 unless the deferred
+verification later contradicts the review.
 
 ---
 
@@ -105,7 +107,7 @@ When done, report the Source Map, behavior implemented, any remaining
 
 ---
 
-## 2. Fix the next ErsatzRS parity-infrastructure gap: channel save must enqueue playout Refresh (slug `playout-rebuild-on-impacting-changes`)
+## 2. Reviewed in sequence: channel save must enqueue playout Refresh (slug `playout-rebuild-on-impacting-changes`)
 
 Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is an
 ErsatzTV parity gap governed by

@@ -4,18 +4,22 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::locking::EntityLocker;
+use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
+use ersatzrs_domain::{
+    ChannelSubtitleMode, CollectionType, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
+};
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db::DatabaseSchemaStatus;
 use ersatzrs_infra::maintenance::{
     load_library_refresh_interval, run_maintenance_once, run_requested_playout_build,
     LibraryDispatchConfig,
 };
-use ersatzrs_infra::repositories::make_repositories;
-use sqlx::{Executor, Row};
+use ersatzrs_infra::repositories::{make_repositories, Repositories};
+use sqlx::{Executor, Row, SqlitePool};
 
 #[derive(Default)]
 struct FakeHlsRegistry {
@@ -333,6 +337,146 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
             .expect("fake hls registry lock"),
         vec!["1".to_owned()]
     );
+}
+
+#[tokio::test]
+async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    let built = run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(built);
+    assert_eq!(
+        first_playout_item_subtitle_mode(&pool, 88).await,
+        Some(1),
+        "initial build should materialize the old override"
+    );
+
+    sqlx::query(r#"UPDATE "ProgramScheduleItem" SET "SubtitleMode" = 3 WHERE "Id" = 401"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let refreshed = run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Refresh,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(refreshed);
+
+    let item_count: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem" WHERE "PlayoutId" = 88"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(item_count > 0);
+    assert_eq!(
+        first_playout_item_subtitle_mode(&pool, 88).await,
+        Some(3),
+        "Refresh should clear stale rows and rebuild upcoming items with the new override"
+    );
+}
+
+async fn seed_refresh_rebuild_fixture(pool: &SqlitePool, repos: &Repositories) {
+    common::seed_media_path(pool, 1, 1, 1).await;
+    common::seed_media_item(pool, 100, 1).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (100)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MovieMetadata" (
+              "Id", "MovieId", "MetadataKind", "Title", "SortTitle",
+              "DateAdded", "DateUpdated"
+           ) VALUES (
+              100, 100, 0, 'Refresh Fixture', 'Refresh Fixture',
+              '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaVersion" (
+              "Id", "MovieId", "Name", "Duration", "VideoScanKind",
+              "DateAdded", "DateUpdated", "Width", "Height"
+           ) VALUES (
+              1000, 100, 'main', '00:10:00', 0,
+              '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 1920, 1080
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+           VALUES (1, 'Refresh Collection', 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (1, 100)"#)
+        .await
+        .unwrap();
+
+    repos
+        .program_schedule
+        .upsert(&common::schedule(301, vec![401]))
+        .await
+        .unwrap();
+    repos
+        .program_schedule
+        .upsert_item(&ProgramScheduleItem {
+            id: 401,
+            program_schedule_id: 301,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(1),
+            playout_mode: PlayoutMode::One,
+            playback_order: PlaybackOrder::Chronological,
+            subtitle_mode: Some(ChannelSubtitleMode::Forced),
+            sort_order: 1,
+            ..ProgramScheduleItem::default()
+        })
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (88, 1, 301, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+}
+
+async fn first_playout_item_subtitle_mode(pool: &SqlitePool, playout_id: i64) -> Option<i64> {
+    sqlx::query_scalar::<_, Option<i64>>(
+        r#"SELECT "SubtitleMode"
+           FROM "PlayoutItem"
+           WHERE "PlayoutId" = ?
+           ORDER BY "Start", "Id"
+           LIMIT 1"#,
+    )
+    .bind(playout_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap()
+    .flatten()
 }
 
 #[tokio::test]

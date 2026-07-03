@@ -11,8 +11,12 @@ rewrite request for classic, YAML, and scripted playouts. Classic builds consume
 `PlayoutBuildMode`: `Continue` keeps the normal main anchor path, `Refresh`
 clears generated items while ignoring the stale main anchor and retaining the
 same-day checkpoint anchors needed for enumerator/shuffle continuity, and
-`Reset` starts with no retained anchors. The deferred verification gate for the
-sequential closeout still needs to run after the remaining ADR 0020 slices land.
+`Reset` starts with no retained anchors. Channel saves now compare the
+playback-impacting channel signature (FFmpeg profile, subtitle/audio
+preferences, watermark, streaming mode, and playout offset) and enqueue one
+`Refresh` build per affected playout when that signature changes. The deferred
+verification gate for the sequential closeout still needs to run after the
+remaining ADR 0020 slices land.
 
 ## Context
 
