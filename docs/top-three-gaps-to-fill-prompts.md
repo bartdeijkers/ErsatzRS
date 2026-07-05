@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-03
-last_processed_commit: f7afb3ccabf74461934b5b82dc599e56fe5ef61d
+generated: 2026-07-05
+last_processed_commit: 0e2cba696aba6882aeec5ea284ee7465219321e6
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,18 +13,22 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: renewed 2026-07-03 after the ADR 0020 playout-rebuild
-sequence closed. The completed `playout-rebuild-on-impacting-changes` prompts
-were removed because the parity slug is `Ported`, its three targeted debts are
-resolved, and ADR 0020 is now implemented after the post-sequence gates. The
-candidate sweep found one remaining whole-feature parity/spec gap,
-`similar-video-cooldown`, plus proposed localization ADRs, active release Docker
-plans, the module-split backlog, and deferred contract work. Applying the
-selection rules, ADR 0019 leads because it is the only remaining non-ported
+Current selection: carried over unchanged on 2026-07-05. The change window
+(`f7afb3cc..0e2cba6`) was a single `fix(core)` commit that stabilized the ADR
+0020 playout-rebuild verification and flipped ADR 0020 to
+`Accepted 2026-07-03` / Implemented; it touched only already-`Ported`
+`playout-rebuild-on-impacting-changes` code and docs, closed none of the three
+published prompts, and introduced no new open debt, so no parity status
+changed. The full candidate sweep is unchanged: one remaining whole-feature
+parity/spec gap (`similar-video-cooldown`), the proposed admin localization ADRs
+(0021–0047), the active release Docker plan
+(`plans/docker-sequential-platform-publishing.md`), the module-split plan
+(`plans/web-server-wasm-crate-split.md`), and deferred contract work. Applying
+the selection rules, ADR 0019 leads because it is the only remaining non-ported
 feature and is maintainer-requested scheduling behavior. The next two slots go
 to the first proposed, maintainer-requested admin localization ADRs by stable
 ADR-number order: French (France), then German (Germany). The release Docker
-plans and module-split work remain actionable follow-ups after these higher
+plan and module-split work remain actionable follow-ups after these higher
 ranked spec chores unless phase focus changes.
 
 ---
