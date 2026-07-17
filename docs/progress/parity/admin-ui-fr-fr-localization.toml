@@ -23,5 +23,7 @@ and passes in Chromium — language switch persists, `html lang` becomes
 `fr-fr`, all seven settings routes render French headings/markers/save actions
 with zero English fallback markers and a clean console; desktop (1280px) and
 mobile (390px) captures of `/settings/ui`, `/settings/ffmpeg`, and
-`/settings/playout` verified label fit.
+`/settings/playout` verified label fit. The current key set also covers ADR
+0019's cooldown presets, scopes, thresholds, similarity rules, and effective-tag
+preview states after rebasing onto its implementation.
 '''

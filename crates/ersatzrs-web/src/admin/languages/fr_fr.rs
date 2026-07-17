@@ -941,6 +941,25 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItems => "Éléments de grille",
         TextKey::ScheduleNotFound => "Grille introuvable.",
         TextKey::ScheduleSaveFailed => "Échec de l'enregistrement de la grille.",
+        TextKey::SimilarVideoCooldown => "Intervalle entre vidéos similaires",
+        TextKey::CooldownPreset => "Préréglage d'intervalle",
+        TextKey::Balanced => "Équilibré",
+        TextKey::CooldownScope => "Portée de l'intervalle",
+        TextKey::CooldownScopePlayout => "Diffusion",
+        TextKey::CooldownScopeScheduleItem => "Élément de grille",
+        TextKey::CooldownScopeContentSource => "Source de contenu",
+        TextKey::CooldownAfterItems => "Vidéos entre les éléments similaires",
+        TextKey::CooldownAfterDurationMinutes => "Durée de l'intervalle (minutes)",
+        TextKey::CooldownIncludeFiller => "Inclure le filler",
+        TextKey::CooldownPreview => "Prévisualiser les tags effectifs",
+        TextKey::CooldownPreviewEmpty => {
+            "Aucun média correspondant n'a produit de tag d'intervalle."
+        }
+        TextKey::CooldownPreviewFailed => "Échec de l'aperçu des tags d'intervalle.",
+        TextKey::SimilarityRules => "Règles de similarité",
+        TextKey::AlbumArtist => "Artiste de l'album",
+        TextKey::ContentParent => "Parent ou variante",
+        TextKey::CooldownFilterRules => "Règles de filtre",
         TextKey::SearchForSchedules => "Rechercher des grilles",
         TextKey::SearchForManualCollections => "Rechercher des collections manuelles",
         TextKey::SearchForRerunCollections => "Rechercher des collections de rediffusions",
@@ -2368,13 +2387,22 @@ mod tests {
 
     #[test]
     fn fallback_item_labels() {
-        assert_eq!(STRINGS.media_item_fallback_label(42), "Élément multimédia #42");
-        assert_eq!(STRINGS.schedule_item_fallback_label(7), "Élément de grille #7");
+        assert_eq!(
+            STRINGS.media_item_fallback_label(42),
+            "Élément multimédia #42"
+        );
+        assert_eq!(
+            STRINGS.schedule_item_fallback_label(7),
+            "Élément de grille #7"
+        );
     }
 
     #[test]
     fn log_level_labels() {
-        assert_eq!(log_level_text(UiLanguage::French, "Warning"), "Avertissement");
+        assert_eq!(
+            log_level_text(UiLanguage::French, "Warning"),
+            "Avertissement"
+        );
         assert_eq!(log_level_text(UiLanguage::French, "TRACE"), "TRACE");
     }
 
@@ -2394,7 +2422,10 @@ mod tests {
 
     #[test]
     fn playout_schedule_kind_labels() {
-        assert_eq!(playout_schedule_kind_text(UiLanguage::French, 1), "Classique");
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::French, 1),
+            "Classique"
+        );
         assert_eq!(
             playout_schedule_kind_text(UiLanguage::French, 20),
             "JSON (dizqueTV)"
@@ -2420,7 +2451,10 @@ mod tests {
             ffmpeg_tonemap_algorithm_text(UiLanguage::French, 99),
             "Inconnu (99)"
         );
-        assert_eq!(ffmpeg_loudness_mode_text(UiLanguage::French, 0), "Désactivé");
+        assert_eq!(
+            ffmpeg_loudness_mode_text(UiLanguage::French, 0),
+            "Désactivé"
+        );
         assert_eq!(
             ffmpeg_profile_video_format_text(UiLanguage::French, 42, 0),
             "Inconnu (42)"
@@ -2440,6 +2474,22 @@ mod tests {
         assert_eq!(
             STRINGS.text(TextKey::AddDecoToTemplate),
             "Ajouter une déco au modèle"
+        );
+    }
+
+    #[test]
+    fn cooldown_policy_labels() {
+        assert_eq!(
+            STRINGS.text(TextKey::SimilarVideoCooldown),
+            "Intervalle entre vidéos similaires"
+        );
+        assert_eq!(
+            STRINGS.text(TextKey::CooldownAfterItems),
+            "Vidéos entre les éléments similaires"
+        );
+        assert_eq!(
+            STRINGS.text(TextKey::CooldownPreview),
+            "Prévisualiser les tags effectifs"
         );
     }
 
