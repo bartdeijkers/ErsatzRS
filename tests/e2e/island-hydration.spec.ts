@@ -148,7 +148,7 @@ for (const { route, islands } of ISLAND_ROUTES) {
     });
     const diag = () => `\n--- console ---\n${consoleLog.join('\n')}\n--- page errors ---\n${pageErrors.join('\n')}`;
 
-    const response = await page.goto(route);
+    const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), `GET ${route} should return HTTP 200`).toBe(200);
 
     // The route resolved to a real page (not the SPA 404 catch-all), so the

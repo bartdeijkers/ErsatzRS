@@ -12,6 +12,7 @@
       },
       "minItems": 1
     },
+    "cooldown": { "$ref": "#/$defs/cooldown/policy" },
     "content": {
       "description": "Content definitions",
       "type": "array",
@@ -117,6 +118,45 @@
   ],
   "additionalProperties": false,
   "$defs": {
+    "cooldown": {
+      "policy": {
+        "type": "object",
+        "properties": {
+          "version": { "const": 1 },
+          "enabled": { "type": "boolean", "default": false },
+          "preset": { "enum": [ "off", "light", "balanced", "custom" ] },
+          "scope": { "enum": [ "playout", "schedule_item", "content_source" ] },
+          "mode": { "const": "soft" },
+          "after_items": { "type": "integer", "minimum": 1 },
+          "after_duration": {
+            "type": "string",
+            "pattern": "^[0-9]+:[0-5][0-9]:[0-5][0-9]$"
+          },
+          "include_filler": { "type": "boolean", "default": false },
+          "rules": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/cooldown/rule" }
+          }
+        },
+        "required": [ "version", "enabled", "scope", "mode", "rules" ],
+        "additionalProperties": false
+      },
+      "rule": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": [
+              "artist", "album_artist", "show", "season", "content_parent",
+              "collection", "tag", "genre", "studio", "filter"
+            ]
+          },
+          "search": { "type": "string", "minLength": 1 }
+        },
+        "required": [ "id", "kind" ],
+        "additionalProperties": false
+      }
+    },
     "enums": {
       "filler_kind": { "enum": [ "none", "preroll", "postroll", "midroll" ] }
     },

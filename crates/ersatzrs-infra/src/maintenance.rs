@@ -470,9 +470,23 @@ async fn build_playout(
                 .yaml_reference_data(playout.id, schedule_file, window)
                 .await?
         }
-        PlayoutScheduleKind::Scripted | PlayoutScheduleKind::ExternalJson => {
-            scheduling.configured_playout_options().await?
+        PlayoutScheduleKind::Scripted => {
+            let definition_policy = playout
+                .schedule_file
+                .as_deref()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(|script| {
+                    ersatzrs_core::scheduling::ScriptedSchedulingEngine::cooldown_policy_from_script(
+                        &script,
+                    )
+                    .ok()
+                    .flatten()
+                });
+            scheduling
+                .scripted_reference_data(playout.id, definition_policy)
+                .await?
         }
+        PlayoutScheduleKind::ExternalJson => scheduling.configured_playout_options().await?,
         PlayoutScheduleKind::None => return Ok(()),
     };
 

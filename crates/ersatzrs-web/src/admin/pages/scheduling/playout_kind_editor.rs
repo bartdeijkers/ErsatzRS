@@ -14,8 +14,9 @@ use leptos_router::hooks::use_params_map;
 use crate::admin::i18n::{save_failed, tr, TextKey};
 use crate::admin::server_fns::playouts::{
     erase_playout_items, erase_playout_items_and_history, get_playout_kind_editor,
-    list_locked_playouts, save_playout_default_deco, save_scripted_playout, PlayoutDecoOption,
-    PlayoutKindEditorForm, KIND_BLOCK, KIND_CLASSIC, KIND_SCRIPTED,
+    list_locked_playouts, save_playout_cooldown, save_playout_default_deco, save_scripted_playout,
+    PlayoutCooldownForm, PlayoutDecoOption, PlayoutKindEditorForm, KIND_BLOCK, KIND_CLASSIC,
+    KIND_SCRIPTED,
 };
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -106,6 +107,13 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
     let selected_group_id = RwSignal::new(initial_group_id);
     let deco_groups = form.deco_groups.clone();
     let decos = form.decos.clone();
+    let cooldown_preset = RwSignal::new(form.cooldown.preset.clone());
+    let cooldown_scope = RwSignal::new(form.cooldown.scope.clone());
+    let cooldown_after_items = RwSignal::new(form.cooldown.after_items);
+    let cooldown_after_duration_minutes = RwSignal::new(form.cooldown.after_duration_minutes);
+    let cooldown_include_filler = RwSignal::new(form.cooldown.include_filler);
+    let cooldown_rules = RwSignal::new(form.cooldown.rules.clone());
+    let cooldown_filter_rules = RwSignal::new(form.cooldown.filter_rules.clone());
 
     let toast = use_toast();
     let save_scripted = Action::new(|(id, file): &(i64, String)| {
@@ -117,6 +125,10 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
         let id = *id;
         let deco_id = *deco_id;
         async move { save_playout_default_deco(id, deco_id).await }
+    });
+    let save_cooldown = Action::new(|(id, kind, form): &(i64, i32, PlayoutCooldownForm)| {
+        let (id, kind, form) = (*id, *kind, form.clone());
+        async move { save_playout_cooldown(id, kind, form).await }
     });
     let erase_items_action = Action::new(|id: &i64| {
         let id = *id;
@@ -135,6 +147,21 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
             }
         }
     });
+    Effect::new(move |_| {
+        if let Some(Err(error)) = save_cooldown.value().get() {
+            toast.push(save_failed(error), ToastSeverity::Error);
+        }
+    });
+
+    let current_cooldown_form = move || PlayoutCooldownForm {
+        preset: cooldown_preset.get_untracked(),
+        scope: cooldown_scope.get_untracked(),
+        after_items: cooldown_after_items.get_untracked(),
+        after_duration_minutes: cooldown_after_duration_minutes.get_untracked(),
+        include_filler: cooldown_include_filler.get_untracked(),
+        rules: cooldown_rules.get_untracked(),
+        filter_rules: cooldown_filter_rules.get_untracked(),
+    };
     Effect::new(move |_| {
         if let Some(result) = save_deco.value().get() {
             match result {
@@ -170,9 +197,10 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
                     KIND_SCRIPTED => view! {
                         <button
                             class=style::btn_primary
-                            disabled=move || is_locked || save_scripted.pending().get()
+                            disabled=move || is_locked || save_scripted.pending().get() || save_cooldown.pending().get()
                             on:click=move |_| {
                                 save_scripted.dispatch((playout_id, schedule_file.get_untracked()));
+                                save_cooldown.dispatch((playout_id, KIND_SCRIPTED, current_cooldown_form()));
                             }
                         >
                             {tr(TextKey::SaveScriptedSchedule)}
@@ -182,7 +210,7 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
                     KIND_BLOCK => view! {
                         <button
                             class=style::btn_primary
-                            disabled=move || is_locked || save_deco.pending().get()
+                            disabled=move || is_locked || save_deco.pending().get() || save_cooldown.pending().get()
                             on:click=move |_| {
                                 let deco_id = if enable_default_deco.get_untracked() {
                                     Some(selected_deco_id.get_untracked()).filter(|id| *id > 0)
@@ -190,6 +218,7 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
                                     None
                                 };
                                 save_deco.dispatch((playout_id, deco_id));
+                                save_cooldown.dispatch((playout_id, KIND_BLOCK, current_cooldown_form()));
                             }
                         >
                             {tr(TextKey::SaveDefaultDeco)}
@@ -219,6 +248,21 @@ fn PlayoutKindEditorForm(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> i
                     KIND_SCRIPTED => scripted_fields(schedule_file).into_any(),
                     _ => view! { <p class=style::empty>{tr(TextKey::UnsupportedPlayoutKind)}</p> }.into_any(),
                 }}
+
+                <div style:display=move || {
+                    if matches!(form.schedule_kind, KIND_BLOCK | KIND_SCRIPTED) { "" } else { "none" }
+                }>
+                    {cooldown_fields(
+                        is_locked,
+                        cooldown_preset,
+                        cooldown_scope,
+                        cooldown_after_items,
+                        cooldown_after_duration_minutes,
+                        cooldown_include_filler,
+                        cooldown_rules,
+                        cooldown_filter_rules,
+                    )}
+                </div>
 
                 <h2 class=style::section_title>{tr(TextKey::Maintenance)}</h2>
                 <div class=style::divider></div>
@@ -354,6 +398,204 @@ fn scripted_fields(schedule_file: RwSignal<String>) -> impl IntoView {
                 on:input=move |event| schedule_file.set(event_target_value(&event))
             />
         </div>
+    }
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn cooldown_fields(
+    is_locked: bool,
+    preset: RwSignal<String>,
+    scope: RwSignal<String>,
+    after_items: RwSignal<u32>,
+    after_duration_minutes: RwSignal<u32>,
+    include_filler: RwSignal<bool>,
+    rules: RwSignal<Vec<String>>,
+    filter_rules: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <h2 class=style::section_title>{tr(TextKey::SimilarVideoCooldown)}</h2>
+        <div class=style::divider></div>
+        <div class=style::field_row>
+            <label class=style::label for="playout-cooldown-preset">{tr(TextKey::CooldownPreset)}</label>
+            <select
+                id="playout-cooldown-preset"
+                class=style::select
+                prop:value=move || preset.get()
+                disabled=is_locked
+                on:change=move |event| {
+                    let value = event_target_value(&event);
+                    apply_playout_cooldown_preset(
+                        &value,
+                        after_items,
+                        after_duration_minutes,
+                        rules,
+                    );
+                    preset.set(value);
+                }
+            >
+                <option value="off">{tr(TextKey::Off)}</option>
+                <option value="light">{tr(TextKey::Light)}</option>
+                <option value="balanced">{tr(TextKey::Balanced)}</option>
+                <option value="custom">{tr(TextKey::Custom)}</option>
+            </select>
+        </div>
+        <div style:display=move || if preset.get() == "off" { "none" } else { "" }>
+            <div class=style::field_row>
+                <label class=style::label for="playout-cooldown-scope">{tr(TextKey::CooldownScope)}</label>
+                <select
+                    id="playout-cooldown-scope"
+                    class=style::select
+                    prop:value=move || scope.get()
+                    disabled=is_locked
+                    on:change=move |event| {
+                        scope.set(event_target_value(&event));
+                        preset.set("custom".to_owned());
+                    }
+                >
+                    <option value="playout">{tr(TextKey::CooldownScopePlayout)}</option>
+                    <option value="schedule_item">{tr(TextKey::CooldownScopeScheduleItem)}</option>
+                    <option value="content_source">{tr(TextKey::CooldownScopeContentSource)}</option>
+                </select>
+            </div>
+            <div class=style::field_row>
+                <label class=style::label for="playout-cooldown-items">{tr(TextKey::CooldownAfterItems)}</label>
+                <input
+                    id="playout-cooldown-items"
+                    class=style::input
+                    type="number"
+                    min="0"
+                    prop:value=move || after_items.get().to_string()
+                    disabled=is_locked
+                    on:input=move |event| {
+                        after_items.set(event_target_value(&event).parse().unwrap_or_default());
+                        preset.set("custom".to_owned());
+                    }
+                />
+            </div>
+            <div class=style::field_row>
+                <label class=style::label for="playout-cooldown-duration">{tr(TextKey::CooldownAfterDurationMinutes)}</label>
+                <input
+                    id="playout-cooldown-duration"
+                    class=style::input
+                    type="number"
+                    min="0"
+                    prop:value=move || after_duration_minutes.get().to_string()
+                    disabled=is_locked
+                    on:input=move |event| {
+                        after_duration_minutes.set(event_target_value(&event).parse().unwrap_or_default());
+                        preset.set("custom".to_owned());
+                    }
+                />
+            </div>
+            <div class=style::field_row>
+                <label class=style::label for="playout-cooldown-filler">{tr(TextKey::CooldownIncludeFiller)}</label>
+                <input
+                    id="playout-cooldown-filler"
+                    class=style::checkbox
+                    type="checkbox"
+                    prop:checked=move || include_filler.get()
+                    disabled=is_locked
+                    on:change=move |event| {
+                        include_filler.set(event_target_checked(&event));
+                        preset.set("custom".to_owned());
+                    }
+                />
+            </div>
+            <div class=style::field_row>
+                <div class=style::label>{tr(TextKey::SimilarityRules)}</div>
+                <div class=style::rule_grid>
+                    {[
+                        ("artist", TextKey::Artist),
+                        ("album_artist", TextKey::AlbumArtist),
+                        ("show", TextKey::Show),
+                        ("season", TextKey::Season),
+                        ("content_parent", TextKey::ContentParent),
+                        ("collection", TextKey::Collection),
+                        ("tag", TextKey::Tags),
+                        ("genre", TextKey::Genres),
+                        ("studio", TextKey::Studios),
+                    ].into_iter().map(|(name, label)| {
+                        let name = name.to_owned();
+                        let checked_name = name.clone();
+                        view! {
+                            <label class=style::rule_option>
+                                <input
+                                    type="checkbox"
+                                    prop:checked=move || rules.with(|values| values.contains(&checked_name))
+                                    disabled=is_locked
+                                    on:change=move |event| {
+                                        let checked = event_target_checked(&event);
+                                        rules.update(|values| {
+                                            values.retain(|value| value != &name);
+                                            if checked { values.push(name.clone()); }
+                                        });
+                                        preset.set("custom".to_owned());
+                                    }
+                                />
+                                <span>{tr(label)}</span>
+                            </label>
+                        }
+                    }).collect_view()}
+                </div>
+            </div>
+            <div class=style::field_row>
+                <label class=style::label for="playout-cooldown-filters">{tr(TextKey::CooldownFilterRules)}</label>
+                <textarea
+                    id="playout-cooldown-filters"
+                    class=style::textarea
+                    rows="4"
+                    prop:value=move || filter_rules.get()
+                    disabled=is_locked
+                    on:input=move |event| {
+                        filter_rules.set(event_target_value(&event));
+                        preset.set("custom".to_owned());
+                    }
+                ></textarea>
+            </div>
+        </div>
+    }
+}
+
+fn apply_playout_cooldown_preset(
+    preset: &str,
+    after_items: RwSignal<u32>,
+    after_duration_minutes: RwSignal<u32>,
+    rules: RwSignal<Vec<String>>,
+) {
+    match preset {
+        "light" => {
+            after_items.set(2);
+            after_duration_minutes.set(0);
+            rules.set(
+                vec!["artist", "show", "content_parent"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            );
+        }
+        "balanced" => {
+            after_items.set(4);
+            after_duration_minutes.set(30);
+            rules.set(
+                vec![
+                    "artist",
+                    "show",
+                    "season",
+                    "content_parent",
+                    "collection",
+                    "tag",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            );
+        }
+        "off" => {
+            after_items.set(0);
+            after_duration_minutes.set(0);
+            rules.set(Vec::new());
+        }
+        _ => {}
     }
 }
 

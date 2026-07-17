@@ -6,6 +6,12 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+#[cfg(feature = "ssr")]
+use ersatzrs_core::scheduling::{
+    program_schedule_cooldown_config_key, SchedulingCooldownPolicy, SchedulingCooldownPreset,
+    SchedulingCooldownRule, SchedulingCooldownRuleKind, SchedulingCooldownScope,
+};
+
 const SCHEDULES_PAGE_SIZE_KEY: &str = "pages.schedules.page_size";
 const SCHEDULES_DETAIL_PAGE_SIZE_KEY: &str = "pages.schedules.detail_page_size";
 
@@ -222,6 +228,21 @@ pub struct ScheduleForm {
     pub shuffle_schedule_items: bool,
     pub random_start_point: bool,
     pub fixed_start_time_behavior: i32,
+    pub cooldown_preset: String,
+    pub cooldown_scope: String,
+    pub cooldown_after_items: u32,
+    pub cooldown_after_duration_minutes: u32,
+    pub cooldown_include_filler: bool,
+    #[serde(default)]
+    pub cooldown_rules: Vec<String>,
+    pub cooldown_filter_rules: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduleCooldownPreviewRow {
+    pub media_item_id: i64,
+    pub title: String,
+    pub tags: Vec<String>,
 }
 
 impl Default for ScheduleForm {
@@ -234,6 +255,13 @@ impl Default for ScheduleForm {
             shuffle_schedule_items: false,
             random_start_point: false,
             fixed_start_time_behavior: 0,
+            cooldown_preset: "off".to_owned(),
+            cooldown_scope: "playout".to_owned(),
+            cooldown_after_items: 0,
+            cooldown_after_duration_minutes: 0,
+            cooldown_include_filler: false,
+            cooldown_rules: Vec::new(),
+            cooldown_filter_rules: String::new(),
         }
     }
 }
@@ -288,6 +316,33 @@ pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFn
 
     let state = expect_context::<AppState>();
     get_schedule_form_with_pool(&state.pool, id).await
+}
+
+#[server]
+pub async fn preview_schedule_cooldown(
+    form: ScheduleForm,
+) -> Result<Vec<ScheduleCooldownPreviewRow>, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+
+    let state = expect_context::<AppState>();
+    let policy = cooldown_policy_from_schedule_form(&form);
+    let repository = SqliteSchedulingContentRepository::new(state.pool.clone());
+    repository
+        .cooldown_tag_preview(policy, 5)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| ScheduleCooldownPreviewRow {
+                    media_item_id: row.media_item_id,
+                    title: row
+                        .title
+                        .unwrap_or_else(|| format!("Media {}", row.media_item_id)),
+                    tags: row.tags,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -443,7 +498,10 @@ pub async fn get_schedule_form_with_pool(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| ScheduleForm {
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let mut form = ScheduleForm {
         id: row.try_get("Id").unwrap_or(0),
         name: row.try_get("Name").unwrap_or_default(),
         keep_multi_part_episodes_together: read_bool(&row, "KeepMultiPartEpisodesTogether"),
@@ -451,7 +509,12 @@ pub async fn get_schedule_form_with_pool(
         shuffle_schedule_items: read_bool(&row, "ShuffleScheduleItems"),
         random_start_point: read_bool(&row, "RandomStartPoint"),
         fixed_start_time_behavior: row.try_get("FixedStartTimeBehavior").unwrap_or(0),
-    }))
+        ..ScheduleForm::default()
+    };
+    if let Some(policy) = load_schedule_cooldown_policy(pool, id).await? {
+        apply_policy_to_schedule_form(&mut form, &policy);
+    }
+    Ok(Some(form))
 }
 
 #[cfg(feature = "ssr")]
@@ -491,7 +554,7 @@ pub async fn save_schedule_with_pool(
     let treat_collections_as_shows =
         form.keep_multi_part_episodes_together && form.treat_collections_as_shows;
 
-    if form.id == 0 {
+    let saved_id = if form.id == 0 {
         let result = sqlx::query(
             r#"INSERT INTO "ProgramSchedule" (
                    "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
@@ -508,14 +571,13 @@ pub async fn save_schedule_with_pool(
         .await?;
         let id = ersatzrs_infra::db::last_insert_id(result);
         if id != 0 {
-            return Ok(id);
+            id
+        } else {
+            sqlx::query_scalar(r#"SELECT "Id" FROM "ProgramSchedule" WHERE "Name" = ?"#)
+                .bind(name)
+                .fetch_one(pool)
+                .await?
         }
-
-        let id = sqlx::query_scalar(r#"SELECT "Id" FROM "ProgramSchedule" WHERE "Name" = ?"#)
-            .bind(name)
-            .fetch_one(pool)
-            .await?;
-        Ok(id)
     } else {
         let result = sqlx::query(
             r#"UPDATE "ProgramSchedule"
@@ -539,12 +601,194 @@ pub async fn save_schedule_with_pool(
         if result.rows_affected() == 0 {
             return Err(ServerFnError::new("Schedule does not exist"));
         }
-        Ok(form.id)
+        form.id
+    };
+    save_schedule_cooldown_policy(pool, saved_id, &cooldown_policy_from_schedule_form(&form))
+        .await?;
+    Ok(saved_id)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_schedule_cooldown_policy(
+    pool: &DbPool,
+    schedule_id: i64,
+) -> Result<Option<SchedulingCooldownPolicy>, ServerFnError> {
+    let value =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(program_schedule_cooldown_config_key(schedule_id))
+            .fetch_optional(pool)
+            .await?;
+    value
+        .map(|json| serde_json::from_str(&json).map_err(ServerFnError::new))
+        .transpose()
+}
+
+#[cfg(feature = "ssr")]
+async fn save_schedule_cooldown_policy(
+    pool: &DbPool,
+    schedule_id: i64,
+    policy: &SchedulingCooldownPolicy,
+) -> Result<(), ServerFnError> {
+    let key = program_schedule_cooldown_config_key(schedule_id);
+    if !policy.is_active() {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(key)
+            .execute(pool)
+            .await?;
+        return Ok(());
+    }
+    let value = serde_json::to_string(policy).map_err(ServerFnError::new)?;
+    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
+        .bind(&value)
+        .bind(&key)
+        .execute(pool)
+        .await?;
+    if updated.rows_affected() == 0 {
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(key)
+            .bind(value)
+            .execute(pool)
+            .await?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+fn cooldown_policy_from_schedule_form(form: &ScheduleForm) -> SchedulingCooldownPolicy {
+    let preset = match form.cooldown_preset.as_str() {
+        "light" => SchedulingCooldownPreset::Light,
+        "balanced" => SchedulingCooldownPreset::Balanced,
+        "custom" => SchedulingCooldownPreset::Custom,
+        _ => SchedulingCooldownPreset::Off,
+    };
+    if preset == SchedulingCooldownPreset::Off {
+        return SchedulingCooldownPolicy::default();
+    }
+    if matches!(
+        preset,
+        SchedulingCooldownPreset::Light | SchedulingCooldownPreset::Balanced
+    ) {
+        return SchedulingCooldownPolicy::for_preset(preset);
+    }
+    let scope = match form.cooldown_scope.as_str() {
+        "schedule_item" => SchedulingCooldownScope::ScheduleItem,
+        "content_source" => SchedulingCooldownScope::ContentSource,
+        _ => SchedulingCooldownScope::Playout,
+    };
+    let mut rules = form
+        .cooldown_rules
+        .iter()
+        .filter_map(|kind| cooldown_rule_kind(kind).map(|rule_kind| (kind, rule_kind)))
+        .map(|(id, kind)| SchedulingCooldownRule {
+            id: id.clone(),
+            kind,
+            search: None,
+        })
+        .collect::<Vec<_>>();
+    rules.extend(form.cooldown_filter_rules.lines().filter_map(|line| {
+        let (id, search) = line.split_once('=')?;
+        let id = id.trim();
+        let search = search.trim();
+        (!id.is_empty() && !search.is_empty()).then(|| SchedulingCooldownRule {
+            id: id.to_owned(),
+            kind: SchedulingCooldownRuleKind::Filter,
+            search: Some(search.to_owned()),
+        })
+    }));
+    SchedulingCooldownPolicy {
+        enabled: true,
+        preset,
+        scope,
+        after_items: (form.cooldown_after_items > 0).then_some(form.cooldown_after_items),
+        after_duration: (form.cooldown_after_duration_minutes > 0).then(|| {
+            let hours = form.cooldown_after_duration_minutes / 60;
+            let minutes = form.cooldown_after_duration_minutes % 60;
+            format!("{hours:02}:{minutes:02}:00")
+        }),
+        include_filler: form.cooldown_include_filler,
+        rules,
+        ..SchedulingCooldownPolicy::default()
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn apply_policy_to_schedule_form(form: &mut ScheduleForm, policy: &SchedulingCooldownPolicy) {
+    match policy.preset {
+        SchedulingCooldownPreset::Off => "off",
+        SchedulingCooldownPreset::Light => "light",
+        SchedulingCooldownPreset::Balanced => "balanced",
+        SchedulingCooldownPreset::Custom => "custom",
+    }
+    .clone_into(&mut form.cooldown_preset);
+    match policy.scope {
+        SchedulingCooldownScope::Playout => "playout",
+        SchedulingCooldownScope::ScheduleItem => "schedule_item",
+        SchedulingCooldownScope::ContentSource => "content_source",
+    }
+    .clone_into(&mut form.cooldown_scope);
+    form.cooldown_after_items = policy.after_items.unwrap_or_default();
+    form.cooldown_after_duration_minutes = policy
+        .after_duration_value()
+        .and_then(|duration| u32::try_from(duration.num_minutes()).ok())
+        .unwrap_or_default();
+    form.cooldown_include_filler = policy.include_filler;
+    form.cooldown_rules = policy
+        .rules
+        .iter()
+        .filter(|rule| rule.kind != SchedulingCooldownRuleKind::Filter)
+        .map(|rule| cooldown_rule_name(rule.kind).to_owned())
+        .collect();
+    form.cooldown_filter_rules = policy
+        .rules
+        .iter()
+        .filter(|rule| rule.kind == SchedulingCooldownRuleKind::Filter)
+        .filter_map(|rule| {
+            rule.search
+                .as_deref()
+                .map(|search| format!("{}={search}", rule.id))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+}
+
+#[cfg(feature = "ssr")]
+fn cooldown_rule_kind(value: &str) -> Option<SchedulingCooldownRuleKind> {
+    match value {
+        "artist" => Some(SchedulingCooldownRuleKind::Artist),
+        "album_artist" => Some(SchedulingCooldownRuleKind::AlbumArtist),
+        "show" => Some(SchedulingCooldownRuleKind::Show),
+        "season" => Some(SchedulingCooldownRuleKind::Season),
+        "content_parent" => Some(SchedulingCooldownRuleKind::ContentParent),
+        "collection" => Some(SchedulingCooldownRuleKind::Collection),
+        "tag" => Some(SchedulingCooldownRuleKind::Tag),
+        "genre" => Some(SchedulingCooldownRuleKind::Genre),
+        "studio" => Some(SchedulingCooldownRuleKind::Studio),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn cooldown_rule_name(kind: SchedulingCooldownRuleKind) -> &'static str {
+    match kind {
+        SchedulingCooldownRuleKind::Artist => "artist",
+        SchedulingCooldownRuleKind::AlbumArtist => "album_artist",
+        SchedulingCooldownRuleKind::Show => "show",
+        SchedulingCooldownRuleKind::Season => "season",
+        SchedulingCooldownRuleKind::ContentParent => "content_parent",
+        SchedulingCooldownRuleKind::Collection => "collection",
+        SchedulingCooldownRuleKind::Tag => "tag",
+        SchedulingCooldownRuleKind::Genre => "genre",
+        SchedulingCooldownRuleKind::Studio => "studio",
+        SchedulingCooldownRuleKind::Filter => "filter",
     }
 }
 
 #[cfg(feature = "ssr")]
 pub async fn delete_schedule_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
+    sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(program_schedule_cooldown_config_key(id))
+        .execute(pool)
+        .await?;
     sqlx::query(r#"DELETE FROM "ProgramSchedule" WHERE "Id" = ?"#)
         .bind(id)
         .execute(pool)
@@ -631,6 +875,15 @@ pub async fn copy_schedule_with_pool(
 
         copy_subtype_and_joins(&mut tx, old_item_id, new_item_id).await?;
     }
+
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value")
+           SELECT ?, "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+    )
+    .bind(program_schedule_cooldown_config_key(new_schedule_id))
+    .bind(program_schedule_cooldown_config_key(id))
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
     Ok(new_schedule_id)
@@ -744,13 +997,18 @@ async fn schedule_update_needs_refresh(
 
     let treat_collections_as_shows =
         form.keep_multi_part_episodes_together && form.treat_collections_as_shows;
+    let existing_policy = load_schedule_cooldown_policy(pool, schedule_id)
+        .await?
+        .unwrap_or_default();
+    let desired_policy = cooldown_policy_from_schedule_form(form);
     Ok(
         read_bool(&row, "KeepMultiPartEpisodesTogether") != form.keep_multi_part_episodes_together
             || read_bool(&row, "TreatCollectionsAsShows") != treat_collections_as_shows
             || read_bool(&row, "ShuffleScheduleItems") != form.shuffle_schedule_items
             || read_bool(&row, "RandomStartPoint") != form.random_start_point
             || row.try_get::<i32, _>("FixedStartTimeBehavior").unwrap_or(0)
-                != form.fixed_start_time_behavior,
+                != form.fixed_start_time_behavior
+            || existing_policy != desired_policy,
     )
 }
 
@@ -1658,6 +1916,16 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Key" TEXT NOT NULL UNIQUE,
+                "Value" TEXT NOT NULL
+            )"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
     }
 
     fn valid_item() -> ScheduleItemForm {
@@ -1863,6 +2131,55 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(stored, 0);
+    }
+
+    #[tokio::test]
+    async fn schedule_cooldown_policy_save_load_round_trip_and_off_removes_attachment() {
+        let pool = test_db().await;
+        create_program_schedule_table(&pool).await;
+
+        let id = save_schedule_with_pool(
+            &pool,
+            ScheduleForm {
+                name: "Cooldown Schedule".to_owned(),
+                cooldown_preset: "custom".to_owned(),
+                cooldown_scope: "content_source".to_owned(),
+                cooldown_after_items: 3,
+                cooldown_after_duration_minutes: 45,
+                cooldown_include_filler: true,
+                cooldown_rules: vec!["artist".to_owned(), "content_parent".to_owned()],
+                cooldown_filter_rules: "marvel=tag:marvel".to_owned(),
+                ..ScheduleForm::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let loaded = get_schedule_form_with_pool(&pool, id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.cooldown_preset, "custom");
+        assert_eq!(loaded.cooldown_scope, "content_source");
+        assert_eq!(loaded.cooldown_after_items, 3);
+        assert_eq!(loaded.cooldown_after_duration_minutes, 45);
+        assert!(loaded.cooldown_include_filler);
+        assert_eq!(loaded.cooldown_filter_rules, "marvel=tag:marvel");
+
+        save_schedule_with_pool(
+            &pool,
+            ScheduleForm {
+                id,
+                name: "Cooldown Schedule".to_owned(),
+                ..ScheduleForm::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(load_schedule_cooldown_policy(&pool, id)
+            .await
+            .unwrap()
+            .is_none());
     }
 
     #[test]

@@ -558,7 +558,7 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
     }
 
     #[test]
