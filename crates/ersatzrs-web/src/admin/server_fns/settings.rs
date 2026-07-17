@@ -1475,5 +1475,9 @@ mod tests {
         assert_eq!(normalize_ui_language("pl"), "pl");
         assert_eq!(normalize_ui_language("pt-br"), "pt-br");
         assert_eq!(normalize_ui_language("nl-NL"), "nl");
+        assert_eq!(normalize_ui_language("fr"), "fr-fr");
+        assert_eq!(normalize_ui_language("fr-FR"), "fr-fr");
+        assert_eq!(normalize_ui_language("fr_FR"), "fr-fr");
+        assert_eq!(normalize_ui_language("unknown"), "en-us");
     }
 }

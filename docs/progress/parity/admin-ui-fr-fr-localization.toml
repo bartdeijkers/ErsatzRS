@@ -1,0 +1,27 @@
+feature    = 'French (France) admin UI localization'
+etv_source = 'ErsatzRS ADR 0021 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
+rs_target  = '`crates/ersatzrs-web/src/admin/languages/fr_fr.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
+status     = 'Ported'
+adr        = ['0012', '0021']
+summary    = '''
+Implemented 2026-07-17: French (France) is a first-class admin UI language.
+`crates/ersatzrs-web/src/admin/languages/fr_fr.rs` follows the file-driven
+per-culture contract (SORT_ORDER 50, code `fr-fr`, label `français (France)`,
+aliases `fr`/`fr-fr`/`fr_fr` with case/underscore normalization) and implements
+the full `LanguageStrings` trait: every admin `TextKey`, the dynamic helper
+methods (counts, pagination, fallback labels, provider titles, health summary,
+playout reset prompt), and the localized server-error mappings for schedules,
+scheduling content, watermarks, settings, media actions, filler presets, media
+browsers, media sources, Trakt, and uploads. Technical identifiers (product and
+provider names, codecs, routes, configuration keys, search tokens) stay
+verbatim per ADR 0012's translation boundary, and unknown dynamic server errors
+pass through untranslated. Coverage is enforced by
+`all_languages_translate_each_key` and the supported-scope tests (now
+`en-us, pl, pt-br, nl, fr-fr`), plus module tests mirroring the Dutch slice.
+Browser proof: `tests/e2e/settings-i18n.spec.ts` gained an `fr-fr` culture leg
+and passes in Chromium — language switch persists, `html lang` becomes
+`fr-fr`, all seven settings routes render French headings/markers/save actions
+with zero English fallback markers and a clean console; desktop (1280px) and
+mobile (390px) captures of `/settings/ui`, `/settings/ffmpeg`, and
+`/settings/playout` verified label fit.
+'''

@@ -23,6 +23,8 @@ impl UiLanguage {
     pub const PortugueseBrazil: Self = Self { code: "pt-br" };
     #[allow(non_upper_case_globals)]
     pub const Dutch: Self = Self { code: "nl" };
+    #[allow(non_upper_case_globals)]
+    pub const French: Self = Self { code: "fr-fr" };
 
     pub const fn code(self) -> &'static str {
         self.code
@@ -2892,7 +2894,7 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
     }
 
     #[test]
@@ -2902,6 +2904,7 @@ mod tests {
             UiLanguage::Polish,
             UiLanguage::PortugueseBrazil,
             UiLanguage::Dutch,
+            UiLanguage::French,
         ];
         for language in languages {
             for key in ALL_TEXT_KEYS {

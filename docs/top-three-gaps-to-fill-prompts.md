@@ -22,6 +22,12 @@ proposed admin-localization ADRs now lead in stable ADR-number order: French
 
 ## 1. Build the next ErsatzRS spec chore: ADR 0021 French (France) admin UI localization (new slug `admin-ui-fr-fr-localization`)
 
+**Status: completed 2026-07-17.** ADR 0021 is Accepted/Implemented, the slug
+`admin-ui-fr-fr-localization` is registered as `Ported` in
+`docs/progress/parity/`, and the settings-i18n browser proof covers `fr-fr`.
+The next daily sweep should replace this slot (ADR 0022 German is the next
+proposed localization ADR by stable order).
+
 Use the repo workflow from AGENTS.md. This is a spec-backed localization chore
 governed by [ADR 0021](adr/0021-admin-ui-fr-fr-localization.md) and ADR 0012's
 translation boundary, not a parity-slice port. The goal is first-class French

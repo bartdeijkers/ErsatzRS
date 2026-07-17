@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- French (France) admin UI localization (ADR 0021): the admin UI can now be
+  used entirely in French. Selecting `français (France)` on `/settings/ui`
+  persists `fr-fr` (aliases `fr`, `fr-FR`, `fr_FR`), and every admin page,
+  dynamic label, and stable workflow/error message renders in French while
+  technical identifiers (FFmpeg, Plex, codec names, routes, configuration
+  keys) stay verbatim. Covered by i18n coverage tests and the settings-i18n
+  browser proof.
 - Collection and playlist items can now persist item-level audio/subtitle
   playback overrides, so admins can add a movie with a commentary or alternate
   audio track and see the saved override on collection/playlist inspection.
