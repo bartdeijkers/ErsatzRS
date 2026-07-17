@@ -97,6 +97,9 @@ async function createSchedule(page: Page, name: string): Promise<string> {
   await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Schedule' })).toBeVisible();
   await page.locator('input[name="name"]').fill(name);
+  await page.getByLabel('Cooldown Preset').selectOption('balanced');
+  await expect(page.getByLabel('Videos Between Similar Items')).toHaveValue('4');
+  await expect(page.getByLabel('Cooldown Duration (Minutes)')).toHaveValue('30');
   await page.getByRole('button', { name: /add schedule/i }).click();
   await expect(page).toHaveURL(/\/schedules\/\d+\/items$/);
   return page.url().match(/\/schedules\/(\d+)\/items$/)?.[1] ?? '0';
@@ -217,6 +220,40 @@ test.describe('scheduling route-family parity', () => {
     const scheduleName = uniqueName('E2E Schedule');
     const scheduleId = await createSchedule(page, scheduleName);
     expect(Number(scheduleId)).toBeGreaterThan(0);
+    await page.goto(`/schedules/${scheduleId}`);
+    await waitForHydration(page);
+    await expect(page.getByLabel('Cooldown Preset')).toHaveValue('balanced');
+    await expect(page.getByLabel('Videos Between Similar Items')).toHaveValue('4');
+    await expect(page.getByLabel('Cooldown Duration (Minutes)')).toHaveValue('30');
+    await page.getByRole('button', { name: 'Preview Effective Tags' }).click();
+    await expect(page.getByText('No matching media emitted cooldown tags.')).toBeVisible();
+    await page.getByLabel('Cooldown Preset').scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: screenshotPath(testInfo, 'schedule-cooldown-desktop'),
+    });
+    const mobileContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 390, height: 844 },
+    });
+    const mobilePage = await mobileContext.newPage();
+    const mobileRuntimeErrors: string[] = [];
+    mobilePage.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        mobileRuntimeErrors.push(message.text());
+      }
+    });
+    mobilePage.on('pageerror', (error) => mobileRuntimeErrors.push(error.message));
+    await forceEnglish(mobilePage);
+    await mobilePage.goto(`/schedules/${scheduleId}`);
+    await waitForHydration(mobilePage);
+    await expect(mobilePage.getByLabel('Cooldown Preset')).toHaveValue('balanced');
+    await mobilePage.getByLabel('Cooldown Preset').scrollIntoViewIfNeeded();
+    await mobilePage.screenshot({
+      path: screenshotPath(testInfo, 'schedule-cooldown-mobile'),
+    });
+    await expectNoRuntimeErrors(mobilePage, mobileRuntimeErrors);
+    await mobileContext.close();
+    await page.goto(`/schedules/${scheduleId}/items`);
     await expect(page.getByRole('heading', { name: 'Schedule Items' })).toBeVisible();
     await clickUntilVisible(
       page,

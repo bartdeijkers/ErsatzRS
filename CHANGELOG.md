@@ -30,8 +30,14 @@ release section when tagging a release.
   video (including alternate versions) has a checkbox, and the shared
   selection toolbar bulk-adds the selected videos to a collection or playlist.
   Per-video Add To Collection keeps working.
-- ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
-  shuffling, covering artist/show/franchise-like grouping and custom filters.
+- Schedules can now opt into ADR 0019's deterministic similar-video cooldown
+  policy across Classic, Block, Sequential YAML, and Scripted playouts. Shared
+  count/duration thresholds diversify artist, show, season, parent variant,
+  collection, tag, genre, studio, and operator-filter groups, persist through
+  Continue builds, and relax impossible constraints without dead air; Off
+  remains byte- and behavior-compatible with imported ErsatzTV schedules.
+  Localized admin controls include presets, custom thresholds and rules, and a
+  deterministic effective-tag preview.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or
   referenced library content change, so already-scheduled items pick up new
   settings (e.g. subtitle mode) instead of only being appended past — including

@@ -11,10 +11,11 @@ use crate::admin::i18n::{
 };
 use crate::admin::server_fns::schedules::{
     copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
-    get_schedules_page_size, list_schedules, replace_schedule_items, save_schedule,
-    save_schedules_detail_page_size, FillerOption, PlaylistOption, ScheduleForm, ScheduleItemForm,
-    ScheduleItemListRow, ScheduleItemOption, ScheduleItemsEditorOptions, ScheduleItemsPageData,
-    ScheduleLanguageOption, ScheduleListRow, COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION,
+    get_schedules_page_size, list_schedules, preview_schedule_cooldown, replace_schedule_items,
+    save_schedule, save_schedules_detail_page_size, FillerOption, PlaylistOption,
+    ScheduleCooldownPreviewRow, ScheduleForm, ScheduleItemForm, ScheduleItemListRow,
+    ScheduleItemOption, ScheduleItemsEditorOptions, ScheduleItemsPageData, ScheduleLanguageOption,
+    ScheduleListRow, COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION,
     COLLECTION_TYPE_MULTI_COLLECTION, COLLECTION_TYPE_PLAYLIST, COLLECTION_TYPE_RERUN_FIRST_RUN,
     COLLECTION_TYPE_RERUN_RERUN, COLLECTION_TYPE_SEARCH_QUERY, COLLECTION_TYPE_SMART_COLLECTION,
     COLLECTION_TYPE_TELEVISION_SEASON, COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE,
@@ -494,12 +495,20 @@ pub fn ScheduleEditorPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <ScheduleEditorIsland id initial_error=error/> }
+    let initial_form = load_schedule_no_script_data(id);
+    view! { <ScheduleEditorIsland id initial_form initial_error=error/> }
 }
 
 #[island]
-fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
-    let form = RwSignal::new(ScheduleForm::default());
+fn ScheduleEditorIsland(
+    id: i64,
+    initial_form: ScheduleForm,
+    initial_error: String,
+) -> impl IntoView {
+    let form = RwSignal::new(initial_form);
+    let preview_rows = RwSignal::new(Vec::<ScheduleCooldownPreviewRow>::new());
+    let preview_error = RwSignal::new(String::new());
+    let preview_requested = RwSignal::new(false);
     let save_error = RwSignal::new(if initial_error.is_empty() {
         String::new()
     } else {
@@ -512,6 +521,19 @@ fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     Effect::new(move |_| {
         if let Some(Some(loaded)) = data.get() {
             form.set(loaded);
+        }
+    });
+
+    let preview_action = Action::new(|form: &ScheduleForm| preview_schedule_cooldown(form.clone()));
+    Effect::new(move |_| {
+        if let Some(result) = preview_action.value().get() {
+            if let Ok(rows) = result {
+                preview_rows.set(rows);
+                preview_error.set(String::new());
+            } else {
+                preview_rows.set(Vec::new());
+                preview_error.set(tr(TextKey::CooldownPreviewFailed).to_owned());
+            }
         }
     });
 
@@ -587,9 +609,191 @@ fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                             <option value="1">{tr(TextKey::FlexibleStartSoonAsPossible)}</option>
                         </select>
                     </label>
+                    <h2 class=style::section_title>{tr(TextKey::SimilarVideoCooldown)}</h2>
+                    <label class=style::field>
+                        <span>{tr(TextKey::CooldownPreset)}</span>
+                        <select
+                            id="cooldown-preset"
+                            class=style::select
+                            name="cooldown_preset"
+                            prop:value=move || form.get().cooldown_preset
+                            on:change=move |event| {
+                                let value = event_target_value(&event);
+                                form.update(|form| apply_cooldown_preset(form, &value));
+                            }
+                        >
+                            <option value="off">{tr(TextKey::Off)}</option>
+                            <option value="light">{tr(TextKey::Light)}</option>
+                            <option value="balanced">{tr(TextKey::Balanced)}</option>
+                            <option value="custom">{tr(TextKey::Custom)}</option>
+                        </select>
+                    </label>
+                    <div class=style::cooldown_fields style:display=move || if form.get().cooldown_preset == "off" { "none" } else { "contents" }>
+                        <label class=style::field>
+                            <span>{tr(TextKey::CooldownScope)}</span>
+                            <select class=style::select name="cooldown_scope" prop:value=move || form.get().cooldown_scope on:change=move |event| {
+                                let value = event_target_value(&event);
+                                form.update(|form| {
+                                    form.cooldown_scope.clone_from(&value);
+                                    "custom".clone_into(&mut form.cooldown_preset);
+                                });
+                            }>
+                                <option value="playout">{tr(TextKey::CooldownScopePlayout)}</option>
+                                <option value="schedule_item">{tr(TextKey::CooldownScopeScheduleItem)}</option>
+                                <option value="content_source">{tr(TextKey::CooldownScopeContentSource)}</option>
+                            </select>
+                        </label>
+                        <label class=style::field>
+                            <span>{tr(TextKey::CooldownAfterItems)}</span>
+                            <input class=style::input name="cooldown_after_items" type="number" min="0" prop:value=move || form.get().cooldown_after_items.to_string() on:input=move |event| {
+                                if let Ok(value) = event_target_value(&event).parse::<u32>() { form.update(|form| { form.cooldown_after_items = value; "custom".clone_into(&mut form.cooldown_preset); }); }
+                            }/>
+                        </label>
+                        <label class=style::field>
+                            <span>{tr(TextKey::CooldownAfterDurationMinutes)}</span>
+                            <input class=style::input name="cooldown_after_duration_minutes" type="number" min="0" prop:value=move || form.get().cooldown_after_duration_minutes.to_string() on:input=move |event| {
+                                if let Ok(value) = event_target_value(&event).parse::<u32>() { form.update(|form| { form.cooldown_after_duration_minutes = value; "custom".clone_into(&mut form.cooldown_preset); }); }
+                            }/>
+                        </label>
+                        {checkbox_field(tr(TextKey::CooldownIncludeFiller), "", "cooldown_include_filler", form, |form| form.cooldown_include_filler, |form, value| { form.cooldown_include_filler = value; "custom".clone_into(&mut form.cooldown_preset); }, false)}
+                        <span class=style::section_title>{tr(TextKey::SimilarityRules)}</span>
+                        <div class=style::check_list>
+                            {cooldown_rule_checkbox(form, "artist", TextKey::Artist)}
+                            {cooldown_rule_checkbox(form, "album_artist", TextKey::AlbumArtist)}
+                            {cooldown_rule_checkbox(form, "show", TextKey::Show)}
+                            {cooldown_rule_checkbox(form, "season", TextKey::Season)}
+                            {cooldown_rule_checkbox(form, "content_parent", TextKey::ContentParent)}
+                            {cooldown_rule_checkbox(form, "collection", TextKey::Collection)}
+                            {cooldown_rule_checkbox(form, "tag", TextKey::Tags)}
+                            {cooldown_rule_checkbox(form, "genre", TextKey::Genres)}
+                            {cooldown_rule_checkbox(form, "studio", TextKey::Studios)}
+                        </div>
+                        <label class=style::field>
+                            <span>{tr(TextKey::CooldownFilterRules)}</span>
+                            <textarea class=style::textarea name="cooldown_filter_rules" prop:value=move || form.get().cooldown_filter_rules on:input=move |event| {
+                                let value = event_target_value(&event);
+                                form.update(|form| {
+                                    form.cooldown_filter_rules.clone_from(&value);
+                                    "custom".clone_into(&mut form.cooldown_preset);
+                                });
+                            }></textarea>
+                        </label>
+                        <div>
+                            <button
+                                type="button"
+                                class=style::btn_default
+                                disabled=move || preview_action.pending().get()
+                                on:click=move |_| {
+                                    preview_requested.set(true);
+                                    preview_action.dispatch(form.get_untracked());
+                                }
+                            >
+                                {tr(TextKey::CooldownPreview)}
+                            </button>
+                        </div>
+                        <p class=style::error style:display=move || if preview_error.get().is_empty() { "none" } else { "" }>
+                            {move || preview_error.get()}
+                        </p>
+                        <p class=style::caption style:display=move || if preview_requested.get() && preview_error.get().is_empty() && preview_rows.get().is_empty() && !preview_action.pending().get() { "" } else { "none" }>
+                            {tr(TextKey::CooldownPreviewEmpty)}
+                        </p>
+                        <ul class=style::preview_list>
+                            {move || preview_rows.get().into_iter().map(|row| {
+                                let tags = row.tags.join(", ");
+                                view! {
+                                    <li>
+                                        <strong>{row.title}</strong>
+                                        <span>{tags}</span>
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    </div>
                 </form>
             </section>
         </div>
+    }
+}
+
+fn apply_cooldown_preset(form: &mut ScheduleForm, preset: &str) {
+    preset.clone_into(&mut form.cooldown_preset);
+    match preset {
+        "light" => {
+            "playout".clone_into(&mut form.cooldown_scope);
+            form.cooldown_after_items = 2;
+            form.cooldown_after_duration_minutes = 0;
+            form.cooldown_include_filler = false;
+            form.cooldown_rules = vec!["artist", "show", "content_parent"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+        }
+        "balanced" => {
+            "playout".clone_into(&mut form.cooldown_scope);
+            form.cooldown_after_items = 4;
+            form.cooldown_after_duration_minutes = 30;
+            form.cooldown_include_filler = false;
+            form.cooldown_rules = vec![
+                "artist",
+                "show",
+                "season",
+                "content_parent",
+                "collection",
+                "tag",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        }
+        _ => {}
+    }
+}
+
+fn cooldown_rule_checkbox(
+    form: RwSignal<ScheduleForm>,
+    rule: &'static str,
+    label: TextKey,
+) -> AnyView {
+    view! {
+        <label class=style::check>
+            <input
+                type="checkbox"
+                name="cooldown_rules"
+                value=rule
+                checked=move || form.get().cooldown_rules.iter().any(|value| value == rule)
+                on:change=move |event| {
+                    let checked = event_target_checked(&event);
+                    form.update(|form| {
+                        form.cooldown_rules.retain(|value| value != rule);
+                        if checked { form.cooldown_rules.push(rule.to_owned()); }
+                        "custom".clone_into(&mut form.cooldown_preset);
+                    });
+                }
+            />
+            <span>{tr(label)}</span>
+        </label>
+    }
+    .into_any()
+}
+
+fn load_schedule_no_script_data(id: i64) -> ScheduleForm {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::admin::server_fns::schedules::get_schedule_form_with_pool;
+
+        let state = expect_context::<crate::host::state::AppState>();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(get_schedule_form_with_pool(&state.pool, id))
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        ScheduleForm::default()
     }
 }
 

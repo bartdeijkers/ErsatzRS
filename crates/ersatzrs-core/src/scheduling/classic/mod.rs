@@ -12,8 +12,9 @@ use serde::{Deserialize, Serialize};
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
     playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
-    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingError, SchedulingMediaItem,
-    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingCooldownState,
+    SchedulingCooldownUnit, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
+    SchedulingRequest, SchedulingResult,
 };
 
 /// ErsatzTV-compatible scheduler for Classic program schedules.
@@ -47,6 +48,18 @@ struct ClassicState {
     in_flood: bool,
     in_duration_filler: bool,
     next_guide_group: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ClassicAnchorContext {
+    #[serde(default = "classic_anchor_context_version")]
+    version: u32,
+    #[serde(default)]
+    cooldown: SchedulingCooldownState,
+}
+
+fn classic_anchor_context_version() -> u32 {
+    1
 }
 
 impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
@@ -104,12 +117,14 @@ struct ClassicContext {
     collection_anchors: Vec<PlayoutProgramScheduleAnchor>,
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
+    cooldown_state: SchedulingCooldownState,
     result: SchedulingResult,
     next_anchor_id: EntityId,
     next_fill_group_id: EntityId,
 }
 
 impl ClassicContext {
+    #[allow(clippy::too_many_lines)]
     fn new(
         request: SchedulingRequest,
         schedule_items: Vec<ProgramScheduleItem>,
@@ -119,6 +134,18 @@ impl ClassicContext {
         let mut playlists = BTreeMap::new();
         let mut media_states = BTreeMap::new();
         let collection_anchors = retained_collection_anchors(&request);
+        let cooldown_state = if request.mode == PlayoutBuildMode::Continue {
+            request
+                .playout
+                .anchor
+                .as_ref()
+                .and_then(|anchor| anchor.context.as_deref())
+                .and_then(|context| serde_json::from_str::<ClassicAnchorContext>(context).ok())
+                .map(|context| context.cooldown)
+                .unwrap_or_default()
+        } else {
+            SchedulingCooldownState::default()
+        };
         for item in &schedule_items {
             let key = item_key(item);
             let seed = request.playout.seed;
@@ -211,6 +238,7 @@ impl ClassicContext {
             collection_anchors,
             filler_media,
             fill_group_states,
+            cooldown_state,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
@@ -628,6 +656,7 @@ impl ClassicContext {
                 history_details_for_media_item(&history_media),
                 false,
             ));
+            self.record_cooldown_item(schedule_item, &item);
             self.result.added_items.push(item);
         }
         true
@@ -1188,6 +1217,18 @@ impl ClassicContext {
             in_flood: self.state.in_flood,
             in_duration_filler: self.state.in_duration_filler,
             next_guide_group: self.state.next_guide_group,
+            context: self
+                .request
+                .reference_data
+                .cooldown_policy
+                .is_active()
+                .then(|| {
+                    serde_json::to_string(&ClassicAnchorContext {
+                        version: classic_anchor_context_version(),
+                        cooldown: self.cooldown_state.clone(),
+                    })
+                    .unwrap_or_default()
+                }),
             ..PlayoutAnchor::default()
         });
         self.result.program_schedule_anchors = self.program_schedule_anchors();
@@ -1330,8 +1371,33 @@ impl ClassicContext {
         })
     }
 
-    fn current_media(&self, schedule_item: &ProgramScheduleItem) -> Option<SchedulingMediaItem> {
+    fn current_media(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+    ) -> Option<SchedulingMediaItem> {
         let key = item_key(schedule_item);
+        let scope_key = self.request.reference_data.cooldown_policy.scope_key(
+            self.request.playout.id,
+            Some(schedule_item.id),
+            Some(&key),
+        );
+        if let Some(playlist) = self.playlists.get_mut(&key) {
+            playlist.select_with_cooldown(
+                &self.request.reference_data.cooldown_policy,
+                &self.cooldown_state,
+                &scope_key,
+                self.state.current_time,
+                &self.request.reference_data.cooldown_tags_by_media_id,
+            );
+        } else if let Some(enumerator) = self.media.get_mut(&key) {
+            enumerator.select_with_cooldown(
+                &self.request.reference_data.cooldown_policy,
+                &self.cooldown_state,
+                &scope_key,
+                self.state.current_time,
+                &self.request.reference_data.cooldown_tags_by_media_id,
+            );
+        }
         self.playlists
             .get(&key)
             .and_then(PlaylistEnumerator::current)
@@ -1342,6 +1408,39 @@ impl ClassicContext {
                     .and_then(MediaEnumerator::current)
                     .cloned()
             })
+    }
+
+    fn record_cooldown_item(&mut self, schedule_item: &ProgramScheduleItem, item: &PlayoutItem) {
+        let key = item_key(schedule_item);
+        let scope_key = self.request.reference_data.cooldown_policy.scope_key(
+            self.request.playout.id,
+            Some(schedule_item.id),
+            Some(&key),
+        );
+        let unit = if let Some(playlist) = self.playlists.get(&key) {
+            let Some(unit) =
+                playlist.cooldown_unit(&self.request.reference_data.cooldown_tags_by_media_id)
+            else {
+                return;
+            };
+            unit
+        } else {
+            SchedulingCooldownUnit::single(
+                item.media_item_id,
+                self.request
+                    .reference_data
+                    .cooldown_tags(item.media_item_id)
+                    .clone(),
+                item.finish - item.start,
+            )
+        };
+        self.cooldown_state.record_unit(
+            &self.request.reference_data.cooldown_policy,
+            &scope_key,
+            item.start,
+            &unit,
+            item.filler_kind != FillerKind::None,
+        );
     }
 
     fn enumerator_len(&self, schedule_item: &ProgramScheduleItem) -> usize {

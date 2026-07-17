@@ -282,6 +282,45 @@ tbody tr:hover {
     font-size: 0.75rem;
 }
 
+.cooldown-fields {
+    display: contents;
+}
+
+.preview-list {
+    display: grid;
+    gap: 0.5rem;
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.preview-list li {
+    display: grid;
+    gap: 0.25rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 0.5rem;
+}
+
+.preview-list span {
+    color: var(--color-muted);
+    font-family: monospace;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+}
+
+.textarea {
+    min-height: 6rem;
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background-color: transparent;
+    color: var(--color-gray-100);
+    font: inherit;
+    padding: 0.625rem;
+}
+
 .error {
     margin-bottom: 1rem;
     color: var(--color-danger, #ff7961);
