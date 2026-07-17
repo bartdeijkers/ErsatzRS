@@ -9,11 +9,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
 use ersatzrs_core::scheduling::{
-    classic_schedule_item_key, BlockDefinition, BlockTemplate, BlockTemplateItem,
-    BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
-    EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
-    SchedulingContentRepository, SchedulingContentSource, SchedulingFallbackPreset,
-    SchedulingFillerPreset, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
+    classic_schedule_item_key, playout_cooldown_config_key, program_schedule_cooldown_config_key,
+    BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
+    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, EffectiveDecoSelection,
+    EffectiveDecoTemplateItem, SchedulingCollectionKey, SchedulingContentRepository,
+    SchedulingContentSource, SchedulingCooldownPolicy, SchedulingCooldownRuleKind,
+    SchedulingFallbackPreset, SchedulingFillerPreset, SchedulingMediaItem, SchedulingPlaylistItem,
+    SchedulingReferenceData,
 };
 use ersatzrs_core::search::{
     search_page_map, SearchDocument, SearchExpression, SearchField, SearchPageMap,
@@ -38,6 +40,13 @@ pub struct SqliteSchedulingContentRepository(
     /// Memoized `playout.skip_missing_items` config flag, resolved on first use.
     tokio::sync::OnceCell<bool>,
 );
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulingCooldownTagPreview {
+    pub media_item_id: EntityId,
+    pub title: Option<String>,
+    pub tags: Vec<String>,
+}
 
 impl SqliteSchedulingContentRepository {
     /// Construct the repository over a database pool.
@@ -303,23 +312,30 @@ impl SqliteSchedulingContentRepository {
             }
         }
 
-        self.with_configured_playout_options(SchedulingReferenceData {
-            media_by_key,
-            classic_schedule_id: Some(schedule.id),
-            classic_schedule_name: Some(schedule.name),
-            classic_schedule_items: schedule_items,
-            classic_shuffle_schedule_items: schedule.shuffle_schedule_items,
-            classic_random_start_point: schedule.random_start_point,
-            classic_fixed_start_time_behavior: schedule.fixed_start_time_behavior,
-            existing_program_schedule_anchors: self.program_schedule_anchors(playout_id).await?,
-            existing_fill_group_indices: self.fill_group_indices(playout_id).await?,
-            existing_items: self.playout_items(playout_id).await?,
-            existing_history: self.playout_history(playout_id).await?,
-            max_playout_offset,
-            classic_filler_presets,
-            ..SchedulingReferenceData::default()
-        })
-        .await
+        let reference_data = self
+            .with_configured_playout_options(SchedulingReferenceData {
+                media_by_key,
+                classic_schedule_id: Some(schedule.id),
+                classic_schedule_name: Some(schedule.name),
+                classic_schedule_items: schedule_items,
+                classic_shuffle_schedule_items: schedule.shuffle_schedule_items,
+                classic_random_start_point: schedule.random_start_point,
+                classic_fixed_start_time_behavior: schedule.fixed_start_time_behavior,
+                existing_program_schedule_anchors: self
+                    .program_schedule_anchors(playout_id)
+                    .await?,
+                existing_fill_group_indices: self.fill_group_indices(playout_id).await?,
+                existing_items: self.playout_items(playout_id).await?,
+                existing_history: self.playout_history(playout_id).await?,
+                max_playout_offset,
+                classic_filler_presets,
+                ..SchedulingReferenceData::default()
+            })
+            .await?;
+        let policy = self
+            .load_cooldown_policy(&program_schedule_cooldown_config_key(schedule.id))
+            .await?;
+        self.with_cooldown_policy(reference_data, policy).await
     }
 
     async fn active_classic_schedule_id(
@@ -373,15 +389,20 @@ impl SqliteSchedulingContentRepository {
             .await?;
         let effective_blocks = EffectiveBlock::from_templates(&schedules, start, days_to_build);
 
-        self.with_configured_playout_options(SchedulingReferenceData {
-            media_by_key,
-            effective_blocks,
-            existing_items: self.playout_items(playout_id).await?,
-            existing_history: self.playout_history(playout_id).await?,
-            max_playout_offset,
-            ..SchedulingReferenceData::default()
-        })
-        .await
+        let reference_data = self
+            .with_configured_playout_options(SchedulingReferenceData {
+                media_by_key,
+                effective_blocks,
+                existing_items: self.playout_items(playout_id).await?,
+                existing_history: self.playout_history(playout_id).await?,
+                max_playout_offset,
+                ..SchedulingReferenceData::default()
+            })
+            .await?;
+        let policy = self
+            .load_cooldown_policy(&playout_cooldown_config_key(playout_id))
+            .await?;
+        self.with_cooldown_policy(reference_data, policy).await
     }
 
     /// Prepare SQL-backed reference data for a YAML/Sequential scripted
@@ -416,14 +437,17 @@ impl SqliteSchedulingContentRepository {
             media_by_key.insert(item.key.clone(), items);
         }
 
-        self.with_configured_playout_options(SchedulingReferenceData {
-            media_by_key,
-            existing_items: self.playout_items(playout_id).await?,
-            existing_history: self.playout_history(playout_id).await?,
-            max_playout_offset,
-            ..SchedulingReferenceData::default()
-        })
-        .await
+        let reference_data = self
+            .with_configured_playout_options(SchedulingReferenceData {
+                media_by_key,
+                existing_items: self.playout_items(playout_id).await?,
+                existing_history: self.playout_history(playout_id).await?,
+                max_playout_offset,
+                ..SchedulingReferenceData::default()
+            })
+            .await?;
+        self.with_cooldown_policy(reference_data, definition.cooldown)
+            .await
     }
 
     /// Load only persisted playout-wide config reference data.
@@ -440,6 +464,68 @@ impl SqliteSchedulingContentRepository {
             .await
     }
 
+    /// Prepare Scripted reference data, using an in-file policy declaration
+    /// ahead of the additive playout attachment when one is present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when configured options, the policy attachment, or
+    /// similarity-tag hydration cannot be loaded.
+    pub async fn scripted_reference_data(
+        &self,
+        playout_id: EntityId,
+        definition_policy: Option<SchedulingCooldownPolicy>,
+    ) -> Result<SchedulingReferenceData> {
+        let reference_data = self.configured_playout_options().await?;
+        let policy = if let Some(policy) = definition_policy {
+            policy
+        } else {
+            self.load_cooldown_policy(&playout_cooldown_config_key(playout_id))
+                .await?
+        };
+        self.with_cooldown_policy(reference_data, policy).await
+    }
+
+    /// Return a deterministic sample of the effective tags emitted by a
+    /// cooldown policy. This is an admin preview and is not used by the
+    /// scheduling hot loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when search reference data cannot be loaded.
+    pub async fn cooldown_tag_preview(
+        &self,
+        policy: SchedulingCooldownPolicy,
+        limit: usize,
+    ) -> Result<Vec<SchedulingCooldownTagPreview>> {
+        if !policy.is_active() || limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let reference_data = SchedulingReferenceData {
+            cooldown_policy: policy,
+            ..SchedulingReferenceData::default()
+        };
+        let tags_by_media_id = self.cooldown_tags(&reference_data).await?;
+        let mut documents = self
+            .search_documents(&SearchHydrationNeeds::default())
+            .await?;
+        documents.sort_by_key(|document| document.media_item_id);
+
+        Ok(documents
+            .into_iter()
+            .filter_map(|document| {
+                let tags = tags_by_media_id.get(&document.media_item_id)?;
+                (!tags.is_empty()).then(|| SchedulingCooldownTagPreview {
+                    media_item_id: document.media_item_id,
+                    title: document.title,
+                    tags: tags.iter().cloned().collect(),
+                })
+            })
+            .take(limit)
+            .collect())
+    }
+
     async fn with_configured_playout_options(
         &self,
         mut reference_data: SchedulingReferenceData,
@@ -449,6 +535,136 @@ impl SqliteSchedulingContentRepository {
             .await?;
         reference_data.global_fallback = self.global_fallback_preset().await?;
         Ok(reference_data)
+    }
+
+    async fn load_cooldown_policy(&self, key: &str) -> Result<SchedulingCooldownPolicy> {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(&self.0)
+        .await?;
+        value.map_or_else(
+            || Ok(SchedulingCooldownPolicy::default()),
+            |json| {
+                serde_json::from_str(&json).map_err(|error| {
+                    ersatzrs_core::repositories::RepositoryError::Decode {
+                        kind: "scheduling cooldown policy",
+                        value: error.to_string(),
+                    }
+                })
+            },
+        )
+    }
+
+    async fn with_cooldown_policy(
+        &self,
+        mut reference_data: SchedulingReferenceData,
+        policy: SchedulingCooldownPolicy,
+    ) -> Result<SchedulingReferenceData> {
+        reference_data.cooldown_policy = policy;
+        if !reference_data.cooldown_policy.is_active() {
+            return Ok(reference_data);
+        }
+        reference_data.cooldown_tags_by_media_id = self.cooldown_tags(&reference_data).await?;
+        Ok(reference_data)
+    }
+
+    async fn cooldown_tags(
+        &self,
+        reference_data: &SchedulingReferenceData,
+    ) -> Result<BTreeMap<EntityId, BTreeSet<String>>> {
+        let target_ids = reference_data_media_ids(reference_data);
+
+        let mut hydration = SearchHydrationNeeds::default();
+        let mut filters = Vec::new();
+        for rule in &reference_data.cooldown_policy.rules {
+            match rule.kind {
+                SchedulingCooldownRuleKind::Artist => hydration.insert(SEARCH_NEED_ARTISTS),
+                SchedulingCooldownRuleKind::AlbumArtist => {
+                    hydration.insert(SEARCH_NEED_ALBUM_ARTISTS);
+                }
+                SchedulingCooldownRuleKind::Collection => {
+                    hydration.insert(SEARCH_NEED_COLLECTIONS);
+                }
+                SchedulingCooldownRuleKind::Tag => hydration.insert(SEARCH_NEED_TAGS),
+                SchedulingCooldownRuleKind::Genre => hydration.insert(SEARCH_NEED_GENRES),
+                SchedulingCooldownRuleKind::Studio => hydration.insert(SEARCH_NEED_STUDIOS),
+                SchedulingCooldownRuleKind::Filter => {
+                    if let Some(search) = rule.search.as_deref() {
+                        let expression = SearchExpression::parse(search);
+                        hydration.visit_expression(&expression);
+                        filters.push((rule.id.as_str(), expression));
+                    }
+                }
+                SchedulingCooldownRuleKind::Show
+                | SchedulingCooldownRuleKind::Season
+                | SchedulingCooldownRuleKind::ContentParent => {}
+            }
+        }
+
+        let documents = self.search_documents(&hydration).await?;
+        let mut result = BTreeMap::<EntityId, BTreeSet<String>>::new();
+        for document in documents.iter().filter(|document| {
+            target_ids.is_empty() || target_ids.contains(&document.media_item_id)
+        }) {
+            let tags = result.entry(document.media_item_id).or_default();
+            for rule in &reference_data.cooldown_policy.rules {
+                match rule.kind {
+                    SchedulingCooldownRuleKind::Artist => {
+                        extend_cooldown_tags(tags, &rule.id, &document.artists);
+                    }
+                    SchedulingCooldownRuleKind::AlbumArtist => {
+                        extend_cooldown_tags(tags, &rule.id, &document.album_artists);
+                    }
+                    SchedulingCooldownRuleKind::Show => {
+                        extend_optional_cooldown_tag(
+                            tags,
+                            &rule.id,
+                            document.show_title.as_deref(),
+                        );
+                    }
+                    SchedulingCooldownRuleKind::Season => {
+                        if let (Some(show), Some(season)) =
+                            (document.show_title.as_deref(), document.season_number)
+                        {
+                            tags.insert(format!(
+                                "{}:{}:{}",
+                                rule.id,
+                                normalize_cooldown_value(show),
+                                season
+                            ));
+                        }
+                    }
+                    SchedulingCooldownRuleKind::ContentParent => {
+                        let root = document
+                            .parent_media_item_id
+                            .unwrap_or(document.media_item_id);
+                        tags.insert(format!("{}:{root}", rule.id));
+                    }
+                    SchedulingCooldownRuleKind::Collection => {
+                        extend_cooldown_tags(tags, &rule.id, &document.collections);
+                    }
+                    SchedulingCooldownRuleKind::Tag => {
+                        extend_cooldown_tags(tags, &rule.id, &document.tags);
+                    }
+                    SchedulingCooldownRuleKind::Genre => {
+                        extend_cooldown_tags(tags, &rule.id, &document.genres);
+                    }
+                    SchedulingCooldownRuleKind::Studio => {
+                        extend_cooldown_tags(tags, &rule.id, &document.studios);
+                    }
+                    SchedulingCooldownRuleKind::Filter => {
+                        if filters.iter().any(|(id, expression)| {
+                            *id == rule.id.as_str() && expression.matches(document)
+                        }) {
+                            tags.insert(format!("filter:{}", rule.id));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(result)
     }
 
     async fn global_fallback_preset(&self) -> Result<Option<SchedulingFallbackPreset>> {
@@ -1227,6 +1443,7 @@ impl SqliteSchedulingContentRepository {
 
         Ok(SearchDocument {
             media_item_id: item_id,
+            parent_media_item_id,
             media_kind: row.try_get("media_kind")?,
             metadata_kind: metadata_kind.clone(),
             title: row.try_get("title")?,
@@ -2627,6 +2844,64 @@ impl SqliteSchedulingContentRepository {
             })
             .collect()
     }
+}
+
+fn reference_data_media_ids(reference_data: &SchedulingReferenceData) -> BTreeSet<EntityId> {
+    let mut ids = BTreeSet::new();
+    for items in reference_data
+        .media_by_key
+        .values()
+        .chain(reference_data.collections_by_name.values())
+        .chain(reference_data.multi_collections_by_name.values())
+        .chain(reference_data.smart_collections_by_name.values())
+        .chain(reference_data.playlists_by_group_and_name.values())
+        .chain(reference_data.searches_by_query.values())
+        .chain(reference_data.shows_by_name.values())
+        .chain(reference_data.media_by_show_guid.values())
+    {
+        extend_media_item_ids(&mut ids, items);
+    }
+    for playlist_items in reference_data
+        .playlist_items_by_group_and_name
+        .values()
+        .chain(reference_data.playlist_items_by_key.values())
+    {
+        for item in playlist_items {
+            extend_media_item_ids(&mut ids, &item.media_items);
+        }
+    }
+    ids.extend(reference_data.media_items_by_id.keys().copied());
+    if let Some(fallback) = &reference_data.global_fallback {
+        extend_media_item_ids(&mut ids, &fallback.media_items);
+    }
+    for preset in reference_data.classic_filler_presets.values() {
+        extend_media_item_ids(&mut ids, &preset.media_items);
+    }
+    ids
+}
+
+fn extend_media_item_ids(ids: &mut BTreeSet<EntityId>, items: &[SchedulingMediaItem]) {
+    ids.extend(items.iter().map(|item| item.id));
+}
+
+fn extend_cooldown_tags(tags: &mut BTreeSet<String>, rule_id: &str, values: &[String]) {
+    for value in values {
+        extend_optional_cooldown_tag(tags, rule_id, Some(value));
+    }
+}
+
+fn extend_optional_cooldown_tag(tags: &mut BTreeSet<String>, rule_id: &str, value: Option<&str>) {
+    let Some(value) = value
+        .map(normalize_cooldown_value)
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+    tags.insert(format!("{rule_id}:{value}"));
+}
+
+fn normalize_cooldown_value(value: &str) -> String {
+    value.trim().to_lowercase()
 }
 
 fn program_schedule_item_filler_ids(item: &ProgramScheduleItem) -> impl Iterator<Item = EntityId> {

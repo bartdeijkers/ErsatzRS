@@ -2,11 +2,21 @@
 
 ## Status
 
-Proposed
+Accepted 2026-07-17
 
 ## Implementation
 
-Not implemented
+Implemented 2026-07-17 — French (France) translations live in
+`crates/ersatzrs-web/src/admin/languages/fr_fr.rs` (code `fr-fr`, label
+`français (France)`, aliases `fr`/`fr-FR`/`fr_FR`), covering every admin
+`TextKey`, the dynamic `LanguageStrings` helpers, and the localized
+server-error mappings, including the ADR 0019 cooldown editor controls and
+preview states, with ADR 0012's translation boundary preserved.
+Coverage is enforced by the `all_languages_translate_each_key` and
+supported-scope tests, and the `tests/e2e/settings-i18n.spec.ts` browser proof
+verifies French selection, `html lang`, translated route markers, and the
+absence of English fallback text across the settings route family. Progress is
+tracked in `docs/progress/parity/admin-ui-fr-fr-localization.toml`.
 
 ## Context
 

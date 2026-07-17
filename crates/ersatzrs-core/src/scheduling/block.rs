@@ -320,9 +320,33 @@ pub struct BlockDefinition {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BlockSchedulingEngine;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BlockAnchorContext {
+    #[serde(default = "block_anchor_context_version")]
+    version: u32,
+    #[serde(default)]
+    cooldown: super::SchedulingCooldownState,
+}
+
+fn block_anchor_context_version() -> u32 {
+    1
+}
+
 impl PlayoutSchedulingEngine for BlockSchedulingEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         let mut result = SchedulingResult::default();
+        let mut cooldown_state = if request.mode == super::PlayoutBuildMode::Continue {
+            request
+                .playout
+                .anchor
+                .as_ref()
+                .and_then(|anchor| anchor.context.as_deref())
+                .and_then(|context| serde_json::from_str::<BlockAnchorContext>(context).ok())
+                .map(|context| context.cooldown)
+                .unwrap_or_default()
+        } else {
+            super::SchedulingCooldownState::default()
+        };
 
         let mut blocks = request.reference_data.effective_blocks.clone();
         blocks.sort_by_key(|block| block.start);
@@ -349,6 +373,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             blocks,
             &block_starts_to_update,
             &collection_etags,
+            &mut cooldown_state,
             &mut result,
         );
 
@@ -365,6 +390,32 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             request.start,
             request.reference_data.max_playout_offset,
         ));
+        if request.reference_data.cooldown_policy.is_active() {
+            let next_start = result
+                .added_items
+                .iter()
+                .map(|item| item.finish)
+                .max()
+                .or_else(|| {
+                    request
+                        .playout
+                        .anchor
+                        .as_ref()
+                        .map(|anchor| anchor.next_start)
+                })
+                .unwrap_or(request.start);
+            result.anchor = Some(ersatzrs_domain::PlayoutAnchor {
+                next_start,
+                context: Some(
+                    serde_json::to_string(&BlockAnchorContext {
+                        version: block_anchor_context_version(),
+                        cooldown: cooldown_state,
+                    })
+                    .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?,
+                ),
+                ..ersatzrs_domain::PlayoutAnchor::default()
+            });
+        }
         Ok(result)
     }
 }
@@ -374,13 +425,14 @@ fn schedule_updated_blocks(
     blocks: Vec<EffectiveBlock>,
     block_starts_to_update: &BTreeSet<DateTime<Utc>>,
     collection_etags: &BTreeMap<String, String>,
+    cooldown_state: &mut super::SchedulingCooldownState,
     result: &mut SchedulingResult,
 ) {
     for block in blocks {
         if !block_starts_to_update.contains(&block.start) || block.start >= request.finish {
             continue;
         }
-        schedule_block_items(request, &block, collection_etags, result);
+        schedule_block_items(request, &block, collection_etags, cooldown_state, result);
     }
 }
 
@@ -388,6 +440,7 @@ fn schedule_block_items(
     request: &SchedulingRequest,
     block: &EffectiveBlock,
     collection_etags: &BTreeMap<String, String>,
+    cooldown_state: &mut super::SchedulingCooldownState,
     result: &mut SchedulingResult,
 ) {
     let block_finish = block.start + block.duration;
@@ -408,6 +461,18 @@ fn schedule_block_items(
             continue;
         }
 
+        let scope_key = request.reference_data.cooldown_policy.scope_key(
+            request.playout.id,
+            Some(block_item.id),
+            Some(&block_item.content),
+        );
+        enumerator.select_with_cooldown(
+            &request.reference_data.cooldown_policy,
+            cooldown_state,
+            &scope_key,
+            current_time,
+            &request.reference_data.cooldown_tags_by_media_id,
+        );
         let Some(media_item) = enumerator.current().cloned() else {
             break;
         };
@@ -437,6 +502,17 @@ fn schedule_block_items(
             false,
         ));
         current_time = item.finish;
+        cooldown_state.record_unit(
+            &request.reference_data.cooldown_policy,
+            &scope_key,
+            item.start,
+            &super::SchedulingCooldownUnit::single(
+                media_item.id,
+                request.reference_data.cooldown_tags(media_item.id).clone(),
+                media_item.duration,
+            ),
+            false,
+        );
         result.added_items.push(item);
         enumerator.advance();
     }
@@ -1254,6 +1330,75 @@ mod tests {
                 "index": history.index,
             })).collect::<Vec<_>>(),
         }));
+    }
+
+    #[test]
+    fn block_shuffle_uses_shared_cooldown_across_effective_blocks() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference_data = SchedulingReferenceData {
+            cooldown_policy: super::super::SchedulingCooldownPolicy {
+                enabled: true,
+                preset: super::super::SchedulingCooldownPreset::Custom,
+                after_items: Some(2),
+                rules: vec![super::super::SchedulingCooldownRule {
+                    id: "show".to_owned(),
+                    kind: super::super::SchedulingCooldownRuleKind::Show,
+                    search: None,
+                }],
+                ..super::super::SchedulingCooldownPolicy::default()
+            },
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            "shows".to_owned(),
+            vec![
+                SchedulingMediaItem::new(1, Duration::minutes(10)),
+                SchedulingMediaItem::new(2, Duration::minutes(10)),
+            ],
+        );
+        reference_data
+            .cooldown_tags_by_media_id
+            .insert(1, BTreeSet::from(["show:same".to_owned()]));
+        reference_data
+            .cooldown_tags_by_media_id
+            .insert(2, BTreeSet::from(["show:other".to_owned()]));
+        for (index, block_start) in [start, start + Duration::minutes(30)]
+            .into_iter()
+            .enumerate()
+        {
+            let mut item = block_item(
+                i64::try_from(index + 1).unwrap(),
+                i64::try_from(index + 10).unwrap(),
+                "shows",
+                true,
+            );
+            item.playback_order = PlaybackOrder::Shuffle;
+            reference_data.effective_blocks.push(EffectiveBlock {
+                block_id: i64::try_from(index + 10).unwrap(),
+                block_key: None,
+                template_item_id: i64::try_from(index + 20).unwrap(),
+                name: format!("Block {index}"),
+                start: block_start,
+                duration: Duration::minutes(20),
+                stop_scheduling: BlockStopScheduling::BeforeDurationEnd,
+                items: vec![item],
+                deco: None,
+            });
+        }
+
+        let result = schedule(reference_data, start, Duration::hours(1), 100, 0);
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert!(result
+            .anchor
+            .and_then(|anchor| anchor.context)
+            .is_some_and(|context| context.contains("show:other")));
     }
 
     #[test]

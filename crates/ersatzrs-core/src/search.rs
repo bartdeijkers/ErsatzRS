@@ -105,6 +105,7 @@ pub enum SearchValue {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchDocument {
     pub media_item_id: i64,
+    pub parent_media_item_id: Option<i64>,
     pub media_kind: String,
     pub metadata_kind: String,
     pub title: Option<String>,

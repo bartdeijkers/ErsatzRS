@@ -121,9 +121,11 @@ detail collection/artwork proof is restored, and show detail now uses the same
 SSR-loaded island shape as movie and season details. The in-app Zero Duration
 health warning for static images is closed as well; ordinary still-image media
 versions no longer warn while animated-capable image paths and duration-bearing
-media remain warning candidates. ADR 0019 is now proposed for an opt-in
-similar-video cooldown scheduling extension; it is tracked separately and is
-not implemented. The three 2026-07-01 reopened items all closed on 2026-07-02:
+media remain warning candidates. ADR 0019's opt-in similar-video cooldown
+scheduling extension was implemented on 2026-07-17 across all four engines
+with deterministic soft selection, pre-hydrated similarity tags,
+Continue-anchor state, native YAML/Lua definitions, and localized DB-backed
+editor controls. The three 2026-07-01 reopened items all closed on 2026-07-02:
 the `/channels/add` default group regression (fresh Add Channel forms default
 `Group` to `ErsatzRS` with focused repository and browser-proof coverage,
 while existing channels keep their saved groups), the FFmpeg profile editor
