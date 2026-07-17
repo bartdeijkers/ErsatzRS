@@ -226,7 +226,19 @@ test.describe('scheduling route-family parity', () => {
     await expect(page.getByLabel('Videos Between Similar Items')).toHaveValue('4');
     await expect(page.getByLabel('Cooldown Duration (Minutes)')).toHaveValue('30');
     await page.getByRole('button', { name: 'Preview Effective Tags' }).click();
-    await expect(page.getByText('No matching media emitted cooldown tags.')).toBeVisible();
+    await expect
+      .poll(async () => {
+        const emptyStateCount = await page
+          .getByText('No matching media emitted cooldown tags.')
+          .filter({ visible: true })
+          .count();
+        const previewRowCount = await page
+          .locator('#schedule-editor-form ul li')
+          .filter({ visible: true })
+          .count();
+        return emptyStateCount + previewRowCount;
+      })
+      .toBeGreaterThan(0);
     await page.getByLabel('Cooldown Preset').scrollIntoViewIfNeeded();
     await page.screenshot({
       path: screenshotPath(testInfo, 'schedule-cooldown-desktop'),

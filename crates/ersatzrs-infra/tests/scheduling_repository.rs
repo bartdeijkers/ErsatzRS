@@ -20,6 +20,37 @@ use ersatzrs_domain::{
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
 
+fn persisted_cooldown_policy() -> SchedulingCooldownPolicy {
+    SchedulingCooldownPolicy {
+        enabled: true,
+        preset: SchedulingCooldownPreset::Custom,
+        after_items: Some(2),
+        rules: vec![
+            SchedulingCooldownRule {
+                id: "show".to_owned(),
+                kind: SchedulingCooldownRuleKind::Show,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "season".to_owned(),
+                kind: SchedulingCooldownRuleKind::Season,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "tag".to_owned(),
+                kind: SchedulingCooldownRuleKind::Tag,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "pilot".to_owned(),
+                kind: SchedulingCooldownRuleKind::Filter,
+                search: Some("title contains Pilot".to_owned()),
+            },
+        ],
+        ..SchedulingCooldownPolicy::default()
+    }
+}
+
 #[tokio::test]
 async fn scheduling_repository_skips_missing_items_when_configured() {
     let pool = common::test_db().await;
@@ -1094,34 +1125,7 @@ async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity
     .await
     .unwrap();
 
-    let policy = SchedulingCooldownPolicy {
-        enabled: true,
-        preset: SchedulingCooldownPreset::Custom,
-        after_items: Some(2),
-        rules: vec![
-            SchedulingCooldownRule {
-                id: "show".to_owned(),
-                kind: SchedulingCooldownRuleKind::Show,
-                search: None,
-            },
-            SchedulingCooldownRule {
-                id: "season".to_owned(),
-                kind: SchedulingCooldownRuleKind::Season,
-                search: None,
-            },
-            SchedulingCooldownRule {
-                id: "tag".to_owned(),
-                kind: SchedulingCooldownRuleKind::Tag,
-                search: None,
-            },
-            SchedulingCooldownRule {
-                id: "pilot".to_owned(),
-                kind: SchedulingCooldownRuleKind::Filter,
-                search: Some("title contains Pilot".to_owned()),
-            },
-        ],
-        ..SchedulingCooldownPolicy::default()
-    };
+    let policy = persisted_cooldown_policy();
     sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
         .bind(program_schedule_cooldown_config_key(303))
         .bind(serde_json::to_string(&policy).unwrap())

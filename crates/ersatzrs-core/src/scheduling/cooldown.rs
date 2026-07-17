@@ -464,8 +464,8 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
 
-    fn at(minute: i64) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 7, 17, 12, minute as u32, 0)
+    fn at(minute: u32) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 7, 17, 12, minute, 0)
             .single()
             .unwrap()
     }
