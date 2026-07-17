@@ -177,6 +177,14 @@ test.describe('Windows release interaction regressions', () => {
     const seed = seedReleaseRegressionFixture(testInfo);
     await forceEnglish(page);
 
+    // Prove the seeded episode interaction before the scan worker is allowed to
+    // reconcile the deliberately nonexistent fixture path in the background.
+    await page.goto(`/media/tv/seasons/${seed.seasonId}`);
+    await expect(page.getByText('E2E Windows Show')).toBeVisible();
+    await page.getByRole('button', { name: 'Show Media Info' }).first().click();
+    await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
+    await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
+
     await page.goto('/media/libraries');
     const libraryRow = page.getByRole('row').filter({ hasText: 'E2E Windows TV' });
     await expect(libraryRow).toBeVisible();
@@ -191,10 +199,5 @@ test.describe('Windows release interaction regressions', () => {
     await expect(page.locator('body')).not.toContainText('last_page on');
     await expect(page.locator('body')).not.toContainText('u32::try_from');
 
-    await page.goto(`/media/tv/seasons/${seed.seasonId}`);
-    await expect(page.getByText('E2E Windows Show')).toBeVisible();
-    await page.getByRole('button', { name: 'Show Media Info' }).first().click();
-    await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
-    await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
   });
 });
