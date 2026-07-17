@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- French (France) admin UI localization (ADR 0021): the admin UI can now be
+  used entirely in French. Selecting `français (France)` on `/settings/ui`
+  persists `fr-fr` (aliases `fr`, `fr-FR`, `fr_FR`), and every admin page,
+  dynamic label, and stable workflow/error message renders in French while
+  technical identifiers (FFmpeg, Plex, codec names, routes, configuration
+  keys) stay verbatim. This includes ADR 0019's cooldown presets, thresholds,
+  rules, and tag-preview states. Covered by i18n coverage tests and the
+  settings-i18n browser proof.
 - Collection and playlist items can now persist item-level audio/subtitle
   playback overrides, so admins can add a movie with a commentary or alternate
   audio track and see the saved override on collection/playlist inspection.
@@ -30,8 +38,14 @@ release section when tagging a release.
   video (including alternate versions) has a checkbox, and the shared
   selection toolbar bulk-adds the selected videos to a collection or playlist.
   Per-video Add To Collection keeps working.
-- ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
-  shuffling, covering artist/show/franchise-like grouping and custom filters.
+- Schedules can now opt into ADR 0019's deterministic similar-video cooldown
+  policy across Classic, Block, Sequential YAML, and Scripted playouts. Shared
+  count/duration thresholds diversify artist, show, season, parent variant,
+  collection, tag, genre, studio, and operator-filter groups, persist through
+  Continue builds, and relax impossible constraints without dead air; Off
+  remains byte- and behavior-compatible with imported ErsatzTV schedules.
+  Localized admin controls include presets, custom thresholds and rules, and a
+  deterministic effective-tag preview.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or
   referenced library content change, so already-scheduled items pick up new
   settings (e.g. subtitle mode) instead of only being appended past — including

@@ -156,6 +156,49 @@ const languages: LanguageExpectation[] = [
       },
     ],
   },
+  {
+    code: 'fr-fr',
+    save: 'Enregistrer les paramètres',
+    routes: [
+      {
+        path: '/settings/ffmpeg',
+        heading: 'FFmpeg',
+        marker: 'Chemin de FFmpeg',
+        englishMarker: 'FFmpeg Path',
+      },
+      {
+        path: '/settings/logging',
+        heading: 'Journalisation',
+        marker: 'Niveau de journalisation minimal par défaut',
+        englishMarker: 'Default Minimum Log Level',
+      },
+      {
+        path: '/settings/hdhr',
+        heading: 'HDHomeRun',
+        marker: 'Nombre de tuners',
+        englishMarker: 'Tuner Count',
+      },
+      {
+        path: '/settings/scanner',
+        heading: 'Scanner',
+        marker: "Intervalle d'actualisation des bibliothèques",
+        englishMarker: 'Library Refresh Interval',
+      },
+      {
+        path: '/settings/playout',
+        heading: 'Diffusion',
+        marker: 'Ignorer les éléments manquants',
+        englishMarker: 'Skip Missing Items',
+      },
+      { path: '/settings/ui', heading: 'Interface', marker: 'Thème', englishMarker: 'Theme' },
+      {
+        path: '/settings/xmltv',
+        heading: 'XMLTV',
+        marker: 'Fuseau horaire XMLTV',
+        englishMarker: 'XMLTV Time Zone',
+      },
+    ],
+  },
 ];
 
 async function switchLanguage(page: Page, code: string): Promise<void> {

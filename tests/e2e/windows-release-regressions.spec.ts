@@ -163,6 +163,21 @@ async function forceEnglish(page: Page): Promise<void> {
   });
 }
 
+async function gotoHydrated(page: Page, route: string): Promise<void> {
+  const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
+  expect(response?.status(), `GET ${route}`).toBe(200);
+  await expect(page.locator('[data-not-found]')).toHaveCount(0);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
 test.describe('Windows release interaction regressions', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed media rows');
 
@@ -177,24 +192,27 @@ test.describe('Windows release interaction regressions', () => {
     const seed = seedReleaseRegressionFixture(testInfo);
     await forceEnglish(page);
 
-    await page.goto('/media/libraries');
+    // Prove the seeded episode interaction before the scan worker is allowed to
+    // reconcile the deliberately nonexistent fixture path in the background.
+    await gotoHydrated(page, `/media/tv/seasons/${seed.seasonId}`);
+    await expect(page.getByText('E2E Windows Show')).toBeVisible();
+    await page.getByRole('button', { name: 'Show Media Info' }).first().click();
+    await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
+    await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
+
+    await gotoHydrated(page, '/media/libraries');
     const libraryRow = page.getByRole('row').filter({ hasText: 'E2E Windows TV' });
     await expect(libraryRow).toBeVisible();
     await libraryRow.getByRole('button', { name: 'Scan Library' }).click();
     await expect(page.getByRole('status')).toHaveText(/Scan queued/);
     await expect(page.locator('body')).not.toContainText('Scan failed');
 
-    await page.goto('/system/logs');
+    await gotoHydrated(page, '/system/logs');
     await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('25');
     await expect(page.getByRole('button', { name: 'Next page' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Last page' })).toBeVisible();
     await expect(page.locator('body')).not.toContainText('last_page on');
     await expect(page.locator('body')).not.toContainText('u32::try_from');
 
-    await page.goto(`/media/tv/seasons/${seed.seasonId}`);
-    await expect(page.getByText('E2E Windows Show')).toBeVisible();
-    await page.getByRole('button', { name: 'Show Media Info' }).first().click();
-    await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
-    await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
   });
 });

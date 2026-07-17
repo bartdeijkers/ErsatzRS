@@ -11,11 +11,14 @@
 //! world schema), then snapshot the produced `PlayoutItem` ordering with `insta`.
 mod common;
 
+use std::collections::BTreeSet;
+
 use chrono::{Duration, Utc};
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{GraphicsRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::{
-    PlayoutBuildMode, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    PlayoutBuildMode, SchedulingCooldownPolicy, SchedulingCooldownPreset, SchedulingCooldownState,
+    SchedulingCooldownUnit, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
     YamlPlayoutEngine,
 };
 use ersatzrs_domain::{
@@ -309,6 +312,20 @@ async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
 
     let start = common::fixed_time();
     let next_start = start + Duration::hours(48);
+    let policy = SchedulingCooldownPolicy::for_preset(SchedulingCooldownPreset::Balanced);
+    let mut cooldown_state = SchedulingCooldownState::default();
+    cooldown_state.record_unit(
+        &policy,
+        "playout:1",
+        start,
+        &SchedulingCooldownUnit::single(
+            1,
+            BTreeSet::from(["show:example".to_owned()]),
+            Duration::minutes(30),
+        ),
+        false,
+    );
+    let cooldown_context = serde_json::to_string(&cooldown_state).unwrap();
 
     // Input playout has no anchor yet (first build); the engine result carries one.
     let playout = Playout {
@@ -324,6 +341,7 @@ async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
         anchor: Some(PlayoutAnchor {
             next_start,
             next_guide_group: 3,
+            context: Some(cooldown_context.clone()),
             ..Default::default()
         }),
         ..Default::default()
@@ -344,6 +362,7 @@ async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
         "persisted anchor must come from the build result"
     );
     assert_eq!(anchor.next_guide_group, 3);
+    assert_eq!(anchor.context.as_deref(), Some(cooldown_context.as_str()));
 }
 
 // ── YAML engine round-trip (in-memory, no file I/O) ───────────────────────────
