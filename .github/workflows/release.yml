@@ -17,7 +17,6 @@ jobs:
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       LEPTOS_HASH_FILES: "false"
-      ERSATZRS_SKIP_STYLANCE: "1"
     steps:
       - uses: actions/checkout@v7
       - name: Prefer Git Bash on Windows
@@ -48,6 +47,7 @@ jobs:
           Push-Location crates/ersatzrs-web
           cargo leptos build --release --frontend-only --lib-features hydrate
           Pop-Location
+          $env:ERSATZRS_SKIP_STYLANCE = "1"
           cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --bin ersatzrs-launcher --target x86_64-pc-windows-msvc
       - name: Stage archive
         shell: pwsh
@@ -64,10 +64,21 @@ jobs:
           Copy-Item "$bin/ersatzrs-scanner.exe" $stage
           Copy-Item "$bin/ersatzrs-healthcheck.exe" $stage
           Copy-Item "$bin/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-          Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site" "$stage/site"
+          New-Item -ItemType Directory "$stage/site" | Out-Null
+          Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site/pkg" "$stage/site/pkg"
           Copy-Item -Recurse crates/ersatzrs-web/public "$stage/public"
           Copy-Item -Recurse assets "$stage/assets"
           Copy-Item LICENSE, README.md $stage
+          $css = Get-Item "$stage/public/bundle.css" -ErrorAction Stop
+          if ($css.Length -eq 0) {
+            throw 'release archive must contain a non-empty public/bundle.css'
+          }
+          if (-not (Test-Path "$stage/site/pkg/ersatzrs-web.js") -or -not (Test-Path "$stage/site/pkg/ersatzrs-web.wasm")) {
+            throw 'release archive must contain Leptos JavaScript and WASM assets under site/pkg'
+          }
+          if (Test-Path "$stage/site/fonts") {
+            throw 'release archive must stage public assets only under public, not site'
+          }
           if (Get-ChildItem -Path $stage -Recurse -File -Include 'ffmpeg*', 'ffprobe*' | Select-Object -First 1) {
             throw 'release archives must not bundle ffmpeg or ffprobe'
           }

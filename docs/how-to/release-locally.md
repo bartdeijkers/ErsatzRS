@@ -70,7 +70,7 @@ cargo build --release `
 Set the release tag and create the workflow-compatible stage directory:
 
 ```powershell
-$Tag = "v1.0.15-beta.7"
+$Tag = "v1.0.15-beta.8"
 $Stage = "ersatzrs-$Tag-win-x64"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Stage | Out-Null
