@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.7] - 2026-07-17
+
+### Fixed
+
+- Windows-only beta releases now select Git Bash before the Rust toolchain
+  action, so its temporary scripts execute on the self-hosted Windows runner.
+
 ## [1.0.15-beta.6] - 2026-07-17
 
 ### Added
@@ -787,7 +794,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.6...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.7...HEAD
+[1.0.15-beta.7]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.6...v1.0.15-beta.7
 [1.0.15-beta.6]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.5...v1.0.15-beta.6
 [1.0.15-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.14-alpha...v1.0.15-beta.1
 [1.0.14-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.13-alpha...v1.0.14-alpha
