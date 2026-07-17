@@ -23,6 +23,8 @@ impl UiLanguage {
     pub const PortugueseBrazil: Self = Self { code: "pt-br" };
     #[allow(non_upper_case_globals)]
     pub const Dutch: Self = Self { code: "nl" };
+    #[allow(non_upper_case_globals)]
+    pub const French: Self = Self { code: "fr-fr" };
 
     pub const fn code(self) -> &'static str {
         self.code
@@ -94,10 +96,12 @@ pub enum TextKey {
     All,
     AreYouSureDelete,
     Actors,
+    AlbumArtist,
     Artist,
     ArtistNotFound,
     AfterDurationEnd,
     AutomaticRefresh,
+    Balanced,
     Back,
     BackToSettings,
     BackToArtists,
@@ -123,6 +127,19 @@ pub enum TextKey {
     BlockName,
     BlockNotFound,
     Blocks,
+    CooldownAfterDurationMinutes,
+    CooldownAfterItems,
+    CooldownFilterRules,
+    CooldownIncludeFiller,
+    CooldownPreset,
+    CooldownPreview,
+    CooldownPreviewEmpty,
+    CooldownPreviewFailed,
+    CooldownScope,
+    CooldownScopeContentSource,
+    CooldownScopePlayout,
+    CooldownScopeScheduleItem,
+    ContentParent,
     BlockToRemove,
     BlockWillNotFit,
     Bitrate,
@@ -539,6 +556,8 @@ pub enum TextKey {
     ShuffleScheduleItemsHelp,
     ShuffledGroups,
     Show,
+    SimilarityRules,
+    SimilarVideoCooldown,
     ShowNotFound,
     Shows,
     Start,
@@ -1233,10 +1252,12 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::All,
     TextKey::AreYouSureDelete,
     TextKey::Actors,
+    TextKey::AlbumArtist,
     TextKey::Artist,
     TextKey::ArtistNotFound,
     TextKey::AfterDurationEnd,
     TextKey::AutomaticRefresh,
+    TextKey::Balanced,
     TextKey::Back,
     TextKey::BackToSettings,
     TextKey::BackToArtists,
@@ -1262,6 +1283,19 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::BlockName,
     TextKey::BlockNotFound,
     TextKey::Blocks,
+    TextKey::CooldownAfterDurationMinutes,
+    TextKey::CooldownAfterItems,
+    TextKey::CooldownFilterRules,
+    TextKey::CooldownIncludeFiller,
+    TextKey::CooldownPreset,
+    TextKey::CooldownPreview,
+    TextKey::CooldownPreviewEmpty,
+    TextKey::CooldownPreviewFailed,
+    TextKey::CooldownScope,
+    TextKey::CooldownScopeContentSource,
+    TextKey::CooldownScopePlayout,
+    TextKey::CooldownScopeScheduleItem,
+    TextKey::ContentParent,
     TextKey::BlockToRemove,
     TextKey::BlockWillNotFit,
     TextKey::Cancel,
@@ -1672,6 +1706,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ShuffleInOrder,
     TextKey::ShuffleScheduleItems,
     TextKey::ShuffleScheduleItemsHelp,
+    TextKey::SimilarityRules,
+    TextKey::SimilarVideoCooldown,
     TextKey::ShuffledGroups,
     TextKey::Show,
     TextKey::ShowNotFound,
@@ -2858,7 +2894,7 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
     }
 
     #[test]
@@ -2868,6 +2904,7 @@ mod tests {
             UiLanguage::Polish,
             UiLanguage::PortugueseBrazil,
             UiLanguage::Dutch,
+            UiLanguage::French,
         ];
         for language in languages {
             for key in ALL_TEXT_KEYS {

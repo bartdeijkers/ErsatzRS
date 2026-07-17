@@ -2,11 +2,35 @@
 
 ## Status
 
-Proposed
+Accepted 2026-07-17
 
 ## Implementation
 
-Not implemented
+Implemented 2026-07-17. `ersatzrs-core::scheduling` owns the versioned,
+disabled-by-default policy/rule/state model and deterministic soft selector.
+Classic, Block, YAML, and Scripted scheduling use the selector only for
+randomized sources; impossible constraints emit a warning and select the
+least-blocked candidate by stable penalty, base rank, and media id. Playlist
+`play_all` and counted batches are recorded as one indivisible unit with unioned
+tags and duration.
+
+`ersatzrs-infra::repositories::scheduling` hydrates artist, album-artist, show,
+season, ADR 0018 parent lineage, collection, tag, genre, studio, and
+search-expression tags before engine execution. Cooldown state is serialized
+in each engine's existing playout-anchor context and restored by Continue
+builds. ProgramSchedule and Block/Scripted playout policies use additive
+versioned JSON `ConfigElement` attachments; absent attachments leave imported
+ErsatzTV rows and disabled scheduler snapshots unchanged. Sequential YAML uses
+the same `cooldown` JSON shape in YAML, while Scripted Lua declares it through
+`set_cooldown_policy([[...json...]])`.
+
+The localized ProgramSchedule add/edit routes and the Block/Scripted playout
+editors expose Off, Light, Balanced, and Custom controls, including scope,
+item-count and duration thresholds, filler participation, built-in facets, and
+operator filter rules. ProgramSchedule editors can request a deterministic
+five-item preview of the effective hydrated tags before saving. Focused core,
+SQL hydration and anchor persistence, admin persistence, schema, hydration,
+and desktop/mobile browser coverage protect the implemented path.
 
 ## Context
 

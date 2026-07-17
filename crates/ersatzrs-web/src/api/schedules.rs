@@ -29,6 +29,20 @@ pub struct ScheduleSaveForm {
     #[serde(default)]
     random_start_point: bool,
     fixed_start_time_behavior: i32,
+    #[serde(default)]
+    cooldown_preset: String,
+    #[serde(default)]
+    cooldown_scope: String,
+    #[serde(default)]
+    cooldown_after_items: u32,
+    #[serde(default)]
+    cooldown_after_duration_minutes: u32,
+    #[serde(default)]
+    cooldown_include_filler: bool,
+    #[serde(default)]
+    cooldown_rules: Vec<String>,
+    #[serde(default)]
+    cooldown_filter_rules: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,6 +168,13 @@ pub async fn save_schedule_form(
         shuffle_schedule_items: input.shuffle_schedule_items,
         random_start_point: input.random_start_point,
         fixed_start_time_behavior: input.fixed_start_time_behavior,
+        cooldown_preset: input.cooldown_preset,
+        cooldown_scope: input.cooldown_scope,
+        cooldown_after_items: input.cooldown_after_items,
+        cooldown_after_duration_minutes: input.cooldown_after_duration_minutes,
+        cooldown_include_filler: input.cooldown_include_filler,
+        cooldown_rules: input.cooldown_rules,
+        cooldown_filter_rules: input.cooldown_filter_rules,
     };
 
     match save_schedule_with_state(&state, form).await {

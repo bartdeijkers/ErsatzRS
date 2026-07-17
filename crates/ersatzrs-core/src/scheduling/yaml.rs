@@ -28,6 +28,11 @@ pub struct YamlContentGuid {
 pub struct YamlPlayoutDefinition {
     #[serde(default)]
     pub import: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "super::SchedulingCooldownPolicy::is_disabled"
+    )]
+    pub cooldown: super::SchedulingCooldownPolicy,
     #[serde(default)]
     pub content: Vec<YamlContentItem>,
     #[serde(default)]
@@ -357,10 +362,11 @@ impl YamlPlayoutEngine {
     pub fn schedule_definition(
         &self,
         mut definition: YamlPlayoutDefinition,
-        request: SchedulingRequest,
+        mut request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
         detect_cycle(&definition)?;
         flatten_sequences(&mut definition)?;
+        request.reference_data.cooldown_policy = definition.cooldown.clone();
 
         let mut result = SchedulingResult {
             remove_before: Some(request.start),
@@ -466,6 +472,11 @@ struct SerializedYamlContext {
     guide_group_locked: bool,
     watermark_ids: Vec<EntityId>,
     pre_roll_sequence: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "super::SchedulingCooldownState::is_empty"
+    )]
+    cooldown: super::SchedulingCooldownState,
 }
 
 #[derive(Debug, Clone)]
@@ -489,6 +500,7 @@ struct YamlContext {
     enumerators: BTreeMap<String, MediaEnumerator>,
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
     content_sources: BTreeMap<String, ResolvedYamlContent>,
+    cooldown_state: super::SchedulingCooldownState,
 }
 
 #[derive(Debug, Clone)]
@@ -525,6 +537,7 @@ impl YamlContext {
             enumerators: BTreeMap::new(),
             playlist_enumerators: BTreeMap::new(),
             content_sources,
+            cooldown_state: super::SchedulingCooldownState::default(),
         }
     }
 
@@ -535,6 +548,7 @@ impl YamlContext {
             guide_group_locked: self.guide_group_locked,
             watermark_ids: self.watermark_ids.iter().copied().collect(),
             pre_roll_sequence: self.pre_roll_sequence.clone(),
+            cooldown: self.cooldown_state.clone(),
         };
         serde_json::to_string(&state)
             .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))
@@ -551,6 +565,7 @@ impl YamlContext {
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();
                 self.pre_roll_sequence = state.pre_roll_sequence;
+                self.cooldown_state = state.cooldown;
             }
         }
         Ok(())
@@ -686,13 +701,32 @@ impl YamlContext {
         &mut self,
         content: &str,
     ) -> Option<(SchedulingMediaItem, CurrentHistoryContext)> {
+        let policy = self.reference_data.cooldown_policy.clone();
+        let cooldown_state = self.cooldown_state.clone();
+        let tags_by_media_id = self.reference_data.cooldown_tags_by_media_id.clone();
+        let scope_key = policy.scope_key(self.playout.id, None, Some(content));
+        let scheduled_at = self.current_time;
         if let Some(playlist) = self.playlist_enumerator(content) {
+            playlist.select_with_cooldown(
+                &policy,
+                &cooldown_state,
+                &scope_key,
+                scheduled_at,
+                &tags_by_media_id,
+            );
             playlist
                 .current()
                 .cloned()
                 .map(|media_item| (media_item, playlist.current_history_context()))
         } else {
             let enumerator = self.enumerator(content);
+            enumerator.select_with_cooldown(
+                &policy,
+                &cooldown_state,
+                &scope_key,
+                scheduled_at,
+                &tags_by_media_id,
+            );
             enumerator.current().cloned().map(|media_item| {
                 (
                     media_item,
@@ -1246,6 +1280,30 @@ fn add_media_item(
             content, context.instruction_index
         )),
     );
+    let scope_key =
+        context
+            .reference_data
+            .cooldown_policy
+            .scope_key(context.playout.id, None, Some(content));
+    let cooldown_tags = context.reference_data.cooldown_tags_by_media_id.clone();
+    let unit = if let Some(playlist) = context.playlist_enumerator(content) {
+        playlist.cooldown_unit(&cooldown_tags)
+    } else {
+        Some(super::SchedulingCooldownUnit::single(
+            media_item.id,
+            context.reference_data.cooldown_tags(media_item.id).clone(),
+            duration,
+        ))
+    };
+    if let Some(unit) = unit {
+        context.cooldown_state.record_unit(
+            &context.reference_data.cooldown_policy,
+            &scope_key,
+            item.start,
+            &unit,
+            item.filler_kind != FillerKind::None,
+        );
+    }
     item.graphics_elements = context
         .graphics_elements
         .iter()
@@ -1626,6 +1684,34 @@ mod tests {
             })).collect::<Vec<_>>(),
             "anchor": result.anchor.as_ref().map(|anchor| anchor.next_start.to_rfc3339()),
         })
+    }
+
+    #[test]
+    fn yaml_cooldown_policy_round_trip_is_additive_and_absent_by_default() {
+        let without_policy = YamlPlayoutEngine::definition_from_str(
+            "content:\n  - key: main\n    search: all\n    order: shuffle\nplayout:\n  - count: 1\n    content: main\n",
+        )
+        .expect("definition without policy");
+        assert!(without_policy.cooldown.is_disabled());
+        assert!(!serde_yaml::to_string(&without_policy)
+            .expect("serialize definition")
+            .contains("cooldown:"));
+
+        let with_policy = YamlPlayoutEngine::definition_from_str(
+            "cooldown:\n  version: 1\n  enabled: true\n  preset: custom\n  scope: playout\n  mode: soft\n  after_items: 3\n  after_duration: 01:00:00\n  include_filler: false\n  rules:\n    - id: show\n      kind: show\ncontent:\n  - key: main\n    search: all\n    order: shuffle\nplayout:\n  - count: 1\n    content: main\n",
+        )
+        .expect("definition with policy");
+        assert!(with_policy.cooldown.is_active());
+        assert_eq!(with_policy.cooldown.after_items, Some(3));
+        assert_eq!(
+            with_policy.cooldown.after_duration.as_deref(),
+            Some("01:00:00")
+        );
+        let round_trip = serde_yaml::from_str::<YamlPlayoutDefinition>(
+            &serde_yaml::to_string(&with_policy).expect("serialize policy"),
+        )
+        .expect("deserialize policy");
+        assert_eq!(round_trip.cooldown, with_policy.cooldown);
     }
 
     fn schedule_yaml(yaml: &str) -> SchedulingResult {
