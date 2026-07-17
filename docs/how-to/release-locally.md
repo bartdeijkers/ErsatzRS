@@ -5,8 +5,9 @@ need to build the `win-x64` archive locally, push the tag, and attach the archiv
 to the GitHub release.
 
 This guide assumes you are intentionally producing only the Windows archive.
-Pushing the tag still triggers `.github/workflows/release.yml`; if Actions
-minutes are unavailable, GitHub will not produce the Linux archives.
+Use a beta tag (`v*.*.*-beta.*`) when the active Windows runner should publish
+the archive: that tag runs the Windows-only prerelease workflow and does not
+produce Linux archives or a Docker image.
 
 For a normal release that produces the Linux and Windows GitHub assets, use
 [Publish a full release](publish-release.md). Do not use `./run.ps1 build` for
@@ -69,7 +70,7 @@ cargo build --release `
 Set the release tag and create the workflow-compatible stage directory:
 
 ```powershell
-$Tag = "v0.0.6-alpha"
+$Tag = "v1.0.15-beta.6"
 $Stage = "ersatzrs-$Tag-win-x64"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Stage | Out-Null

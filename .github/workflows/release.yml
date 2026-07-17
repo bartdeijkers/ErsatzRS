@@ -6,8 +6,80 @@ on:
       - "v*.*.*"
 
 jobs:
+  beta-windows:
+    # Beta tags deliberately exercise only the active Windows release runner.
+    # They are pre-release packages, not a Linux or Docker publication.
+    if: ${{ contains(github.ref_name, '-beta.') }}
+    name: Windows beta archive
+    runs-on: [self-hosted, ersatzrs-windows-release]
+    permissions:
+      contents: write
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      LEPTOS_HASH_FILES: "false"
+      ERSATZRS_SKIP_STYLANCE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-win-x64-beta
+          cache-bin: "true"
+      - name: Install web asset tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command stylance -ErrorAction SilentlyContinue) -or (stylance --version) -ne 'stylance-cli 0.8.2') {
+            cargo install stylance-cli --version 0.8.2 --locked
+          }
+          if (-not (Get-Command cargo-leptos -ErrorAction SilentlyContinue) -or (cargo leptos --version) -ne 'cargo-leptos 0.3.6') {
+            cargo install cargo-leptos --version 0.3.6 --locked
+          }
+      - name: Build web assets and Windows binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location crates/ersatzrs-web
+          cargo leptos build --release --frontend-only --lib-features hydrate
+          Pop-Location
+          cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --bin ersatzrs-launcher --target x86_64-pc-windows-msvc
+      - name: Stage archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $stage = "ersatzrs-$tag-win-x64"
+          $archive = "$stage.zip"
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Remove-Item -Force $archive -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory $stage | Out-Null
+          $bin = Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc/release'
+          Copy-Item "$bin/ersatzrs-web.exe" $stage
+          Copy-Item "$bin/ersatzrs-scanner.exe" $stage
+          Copy-Item "$bin/ersatzrs-healthcheck.exe" $stage
+          Copy-Item "$bin/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
+          Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site" "$stage/site"
+          Copy-Item -Recurse crates/ersatzrs-web/public "$stage/public"
+          Copy-Item -Recurse assets "$stage/assets"
+          Copy-Item LICENSE, README.md $stage
+          if (Get-ChildItem -Path $stage -Recurse -File -Include 'ffmpeg*', 'ffprobe*' | Select-Object -First 1) {
+            throw 'release archives must not bundle ffmpeg or ffprobe'
+          }
+          Compress-Archive -Path $stage -DestinationPath $archive
+          "ARCHIVE_PATH=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Create prerelease and upload archive
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release create $env:GITHUB_REF_NAME $env:ARCHIVE_PATH --generate-notes --prerelease --verify-tag --repo $env:GITHUB_REPOSITORY
+
   release:
     name: Create GitHub release
+    if: ${{ !contains(github.ref_name, '-beta.') }}
     runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
       contents: write
@@ -20,6 +92,7 @@ jobs:
 
   web-assets:
     name: Build web assets
+    if: ${{ !contains(github.ref_name, '-beta.') }}
     needs: release
     runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
@@ -69,6 +142,7 @@ jobs:
     # active release line for now; Docker/GHCR publication is handled by the
     # docker job below.
     name: Release archive (${{ matrix.rid }})
+    if: ${{ !contains(github.ref_name, '-beta.') }}
     needs: [release, web-assets]
     runs-on: ${{ fromJSON(matrix.runner) }}
     permissions:
@@ -269,6 +343,7 @@ jobs:
 
   docker:
     name: Publish Docker image
+    if: ${{ !contains(github.ref_name, '-beta.') }}
     needs: [release, web-assets]
     runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:

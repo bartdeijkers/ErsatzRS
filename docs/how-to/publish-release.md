@@ -1,7 +1,7 @@
 # Publish a full release
 
-Use this guide to publish a release through the release workflow. The active
-matrix currently produces the GitHub release archives and Docker image:
+Use this guide to publish a non-beta release through the release workflow. The
+active matrix currently produces the GitHub release archives and Docker image:
 
 - `ersatzrs-<tag>-linux-x64.tar.gz`
 - `ersatzrs-<tag>-linux-arm64.tar.gz`
@@ -14,6 +14,11 @@ matrix currently produces the GitHub release archives and Docker image:
 macOS archives are intentionally omitted for now. Keep this release line focused
 on Linux and Windows archives plus GHCR Docker images; restore the two `osx-*`
 matrix entries only in a future macOS-targeted release.
+
+Beta tags (`v*.*.*-beta.*`) intentionally take a separate Windows-only path.
+They run only on `[self-hosted, ersatzrs-windows-release]`, publish the
+`ersatzrs-<tag>-win-x64.zip` prerelease, and do not create Linux archives or a
+Docker/GHCR image. This keeps beta validation tied to the active Windows runner.
 
 Do not use `./run.ps1 build` for release packaging. That command is a local dev
 one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create a
@@ -39,7 +44,7 @@ requires them.
 Create and push an annotated tag:
 
 ```bash
-tag=v1.0.15-beta.1
+tag=v1.0.15
 git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 ```
