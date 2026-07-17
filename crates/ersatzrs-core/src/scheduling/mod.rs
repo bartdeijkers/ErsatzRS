@@ -1,5 +1,6 @@
 mod block;
 mod classic;
+mod cooldown;
 mod scripted;
 mod yaml;
 
@@ -22,6 +23,12 @@ pub use block::{
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
 pub use classic::{classic_schedule_item_key, ClassicSchedulingContext, ClassicSchedulingEngine};
+pub use cooldown::{
+    playout_cooldown_config_key, program_schedule_cooldown_config_key, SchedulingCooldownCandidate,
+    SchedulingCooldownMode, SchedulingCooldownPolicy, SchedulingCooldownPreset,
+    SchedulingCooldownRule, SchedulingCooldownRuleKind, SchedulingCooldownScope,
+    SchedulingCooldownState, SchedulingCooldownUnit,
+};
 pub use scripted::ScriptedSchedulingEngine;
 pub use yaml::{
     YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
@@ -195,6 +202,8 @@ pub trait SchedulingContentRepository: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
+    pub cooldown_policy: SchedulingCooldownPolicy,
+    pub cooldown_tags_by_media_id: BTreeMap<EntityId, BTreeSet<String>>,
     pub media_by_key: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub multi_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
@@ -248,6 +257,15 @@ pub struct SchedulingFillerPreset {
 }
 
 impl SchedulingReferenceData {
+    #[must_use]
+    pub fn cooldown_tags(&self, media_item_id: EntityId) -> &BTreeSet<String> {
+        static EMPTY: std::sync::LazyLock<BTreeSet<String>> =
+            std::sync::LazyLock::new(BTreeSet::new);
+        self.cooldown_tags_by_media_id
+            .get(&media_item_id)
+            .unwrap_or(&EMPTY)
+    }
+
     fn media_items_for_show(
         &self,
         name: Option<&String>,
@@ -584,6 +602,36 @@ impl MediaEnumerator {
         }
     }
 
+    fn select_with_cooldown(
+        &mut self,
+        policy: &SchedulingCooldownPolicy,
+        state: &SchedulingCooldownState,
+        scope_key: &str,
+        scheduled_at: DateTime<Utc>,
+        tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
+    ) {
+        if !policy.is_active() || !is_randomized_playback_order(self.playback_order) {
+            return;
+        }
+        let empty = BTreeSet::new();
+        let candidates = (0..self.items.len())
+            .map(|offset| {
+                let index = (self.index + offset) % self.items.len();
+                let item = &self.items[index];
+                SchedulingCooldownCandidate {
+                    media_item_id: item.id,
+                    tags: tags_by_media_id.get(&item.id).unwrap_or(&empty),
+                }
+            })
+            .collect::<Vec<_>>();
+        let Some(offset) = state.select_candidate(policy, scope_key, scheduled_at, &candidates)
+        else {
+            return;
+        };
+        let selected = (self.index + offset) % self.items.len();
+        self.items.swap(self.index, selected);
+    }
+
     fn set_index(&mut self, index: usize) {
         self.index = if self.items.is_empty() {
             0
@@ -665,6 +713,18 @@ impl MediaEnumerator {
                 .position(|item| item.release_date == Some(release_date))
         })
     }
+}
+
+fn is_randomized_playback_order(playback_order: PlaybackOrder) -> bool {
+    matches!(
+        playback_order,
+        PlaybackOrder::Random
+            | PlaybackOrder::Shuffle
+            | PlaybackOrder::ShuffleInOrder
+            | PlaybackOrder::MultiEpisodeShuffle
+            | PlaybackOrder::RandomRotation
+            | PlaybackOrder::Marathon
+    )
 }
 
 fn lookup_media(reference_data: &SchedulingReferenceData, key: &str) -> MediaEnumerator {
@@ -985,6 +1045,61 @@ impl PlaylistEnumerator {
     pub fn current(&self) -> Option<&SchedulingMediaItem> {
         self.current_child()
             .and_then(|child| child.enumerator.current())
+    }
+
+    fn select_with_cooldown(
+        &mut self,
+        policy: &SchedulingCooldownPolicy,
+        state: &SchedulingCooldownState,
+        scope_key: &str,
+        scheduled_at: DateTime<Utc>,
+        tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
+    ) {
+        if let Some(child) = self.current_child_mut() {
+            if child.play_all || child.count.is_some_and(|count| count > 1) {
+                return;
+            }
+            child.enumerator.select_with_cooldown(
+                policy,
+                state,
+                scope_key,
+                scheduled_at,
+                tags_by_media_id,
+            );
+        }
+    }
+
+    fn cooldown_unit(
+        &self,
+        tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
+    ) -> Option<SchedulingCooldownUnit> {
+        let child = self.current_child()?;
+        let grouped = child.play_all || child.count.is_some_and(|count| count > 1);
+        if grouped && child.items_taken_from_current > 0 {
+            return None;
+        }
+        let take = if child.play_all {
+            child.enumerator.len()
+        } else {
+            child.count.unwrap_or(1).max(1)
+        };
+        let children = (0..take).filter_map(|offset| {
+            let len = child.enumerator.items.len();
+            let item = child
+                .enumerator
+                .items
+                .get((child.enumerator.index + offset) % len)?;
+            Some(SchedulingCooldownUnit::single(
+                item.id,
+                tags_by_media_id.get(&item.id).cloned().unwrap_or_default(),
+                item.duration,
+            ))
+        });
+        Some(if grouped {
+            SchedulingCooldownUnit::grouped(children)
+        } else {
+            children.into_iter().next()?
+        })
     }
 
     pub fn current_history_context(&self) -> CurrentHistoryContext {

@@ -5,9 +5,11 @@ use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
 use ersatzrs_core::repositories::{FillerRepository, ProgramScheduleRepository};
 use ersatzrs_core::scheduling::{
-    classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
-    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
-    SchedulingContentSource, SchedulingRequest,
+    classic_schedule_item_key, program_schedule_cooldown_config_key, BlockSchedulingEngine,
+    ClassicSchedulingEngine, PlayoutSchedulingEngine, SchedulingCollectionKey,
+    SchedulingContentGuid, SchedulingContentSource, SchedulingCooldownPolicy,
+    SchedulingCooldownPreset, SchedulingCooldownRule, SchedulingCooldownRuleKind,
+    SchedulingRequest,
 };
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode,
@@ -17,6 +19,37 @@ use ersatzrs_domain::{
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
+
+fn persisted_cooldown_policy() -> SchedulingCooldownPolicy {
+    SchedulingCooldownPolicy {
+        enabled: true,
+        preset: SchedulingCooldownPreset::Custom,
+        after_items: Some(2),
+        rules: vec![
+            SchedulingCooldownRule {
+                id: "show".to_owned(),
+                kind: SchedulingCooldownRuleKind::Show,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "season".to_owned(),
+                kind: SchedulingCooldownRuleKind::Season,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "tag".to_owned(),
+                kind: SchedulingCooldownRuleKind::Tag,
+                search: None,
+            },
+            SchedulingCooldownRule {
+                id: "pilot".to_owned(),
+                kind: SchedulingCooldownRuleKind::Filter,
+                search: Some("title contains Pilot".to_owned()),
+            },
+        ],
+        ..SchedulingCooldownPolicy::default()
+    }
+}
 
 #[tokio::test]
 async fn scheduling_repository_skips_missing_items_when_configured() {
@@ -415,7 +448,6 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
     let repos = make_repositories(pool.clone());
     seed_scheduling_fixture(&pool).await;
     seed_search_enrichment(&pool).await;
-
     let movie = repos
         .scheduling
         .media_items_for_source(&SchedulingContentSource::Search(
@@ -1046,6 +1078,91 @@ async fn scheduling_repository_loads_classic_reference_data_from_sql() {
             .collect::<Vec<_>>(),
         vec![20]
     );
+}
+
+#[tokio::test]
+async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity_tags() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Tag" ("Id", "Name", "EpisodeMetadataId")
+           VALUES (99, 'Network', 120)"#,
+    )
+    .await
+    .unwrap();
+    common::seed_profile_and_channel(&repos, 903).await;
+
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 303,
+            name: "Cooldown Prime".to_owned(),
+            item_ids: vec![403],
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    repos
+        .program_schedule
+        .upsert_item(&ProgramScheduleItem {
+            id: 403,
+            program_schedule_id: 303,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(1),
+            playout_mode: PlayoutMode::One,
+            playback_order: PlaybackOrder::Shuffle,
+            sort_order: 1,
+            ..ProgramScheduleItem::default()
+        })
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (903, 903, 303, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+
+    let policy = persisted_cooldown_policy();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(program_schedule_cooldown_config_key(303))
+        .bind(serde_json::to_string(&policy).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(
+            903,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(reference_data.cooldown_policy, policy);
+    let pilot = reference_data.cooldown_tags(12);
+    assert!(pilot.contains("show:the show"));
+    assert!(pilot.contains("season:the show:1"));
+    assert!(pilot.contains("tag:network"));
+    assert!(pilot.contains("filter:pilot"));
+    let finale = reference_data.cooldown_tags(13);
+    assert!(finale.contains("show:the show"));
+    assert!(!finale.contains("filter:pilot"));
+
+    let preview = repos
+        .scheduling
+        .cooldown_tag_preview(policy, 5)
+        .await
+        .unwrap();
+    let pilot_preview = preview
+        .iter()
+        .find(|row| row.media_item_id == 12)
+        .expect("pilot should be included in the deterministic preview");
+    assert!(pilot_preview.tags.contains(&"filter:pilot".to_owned()));
 }
 
 #[tokio::test]

@@ -3,6 +3,7 @@ use std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc};
 use chrono::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
 use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
 use mlua::{Lua, Table};
+use serde::{Deserialize, Serialize};
 
 use super::{
     history, history_details_for_media_item, history_key_for_content,
@@ -40,14 +41,30 @@ impl ScriptedSchedulingEngine {
     pub fn schedule_script(
         &self,
         script: &str,
-        request: SchedulingRequest,
+        mut request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
+        if let Some(policy) = Self::cooldown_policy_from_script(script)? {
+            request.reference_data.cooldown_policy = policy;
+        }
+        let cooldown_state = if request.mode == PlayoutBuildMode::Continue {
+            request
+                .playout
+                .anchor
+                .as_ref()
+                .and_then(|anchor| anchor.context.as_deref())
+                .and_then(|context| serde_json::from_str::<ScriptedAnchorContext>(context).ok())
+                .map(|context| context.cooldown)
+                .unwrap_or_default()
+        } else {
+            super::SchedulingCooldownState::default()
+        };
         let state = Rc::new(RefCell::new(ScriptState::new(
             request.playout.id,
             request.start,
             request.finish,
             request.mode,
             request.reference_data,
+            cooldown_state,
         )));
         let lua = Lua::new();
         register_all(&lua, &state).map_err(lua_error)?;
@@ -68,6 +85,13 @@ impl ScriptedSchedulingEngine {
             remove_before: Some(request.start),
             anchor: Some(PlayoutAnchor {
                 next_start: anchor_time,
+                context: state.reference_data.cooldown_policy.is_active().then(|| {
+                    serde_json::to_string(&ScriptedAnchorContext {
+                        version: scripted_anchor_context_version(),
+                        cooldown: state.cooldown_state.clone(),
+                    })
+                    .unwrap_or_default()
+                }),
                 ..PlayoutAnchor::default()
             }),
             added_items: std::mem::take(&mut state.added_items),
@@ -76,6 +100,42 @@ impl ScriptedSchedulingEngine {
             ..SchedulingResult::default()
         })
     }
+
+    /// Read the native `set_cooldown_policy([[...json...]])` declaration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a declaration is present but contains invalid JSON.
+    pub fn cooldown_policy_from_script(
+        script: &str,
+    ) -> Result<Option<super::SchedulingCooldownPolicy>, SchedulingError> {
+        const START: &str = "set_cooldown_policy([[";
+        let Some(start) = script.find(START) else {
+            return Ok(None);
+        };
+        let value_start = start + START.len();
+        let Some(relative_end) = script[value_start..].find("]])") else {
+            return Err(SchedulingError::Script(
+                "unterminated set_cooldown_policy declaration".to_owned(),
+            ));
+        };
+        let json = &script[value_start..value_start + relative_end];
+        serde_json::from_str(json)
+            .map(Some)
+            .map_err(|error| SchedulingError::Script(error.to_string()))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ScriptedAnchorContext {
+    #[serde(default = "scripted_anchor_context_version")]
+    version: u32,
+    #[serde(default)]
+    cooldown: super::SchedulingCooldownState,
+}
+
+fn scripted_anchor_context_version() -> u32 {
+    1
 }
 
 fn run_lua_script(lua: &Lua, script: &str) -> Result<(), mlua::Error> {
@@ -167,6 +227,18 @@ fn parse_playback_order(s: Option<&str>) -> PlaybackOrder {
 #[allow(clippy::too_many_lines)]
 fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua::Error> {
     let globals = lua.globals();
+
+    {
+        let s = Rc::clone(state);
+        globals.set(
+            "set_cooldown_policy",
+            lua.create_function_mut(move |_, json: String| {
+                let policy = serde_json::from_str(&json).map_err(mlua::Error::external)?;
+                s.borrow_mut().reference_data.cooldown_policy = policy;
+                Ok(())
+            })?,
+        )?;
+    }
 
     // schedule_count(content, count)  [legacy alias]
     {
@@ -956,6 +1028,7 @@ struct ScriptState {
     pre_roll_key: Option<String>,
     last_progress_time: Option<DateTime<Utc>>,
     no_progress_counter: u32,
+    cooldown_state: super::SchedulingCooldownState,
 }
 
 impl ScriptState {
@@ -965,6 +1038,7 @@ impl ScriptState {
         finish: DateTime<Utc>,
         mode: PlayoutBuildMode,
         reference_data: SchedulingReferenceData,
+        cooldown_state: super::SchedulingCooldownState,
     ) -> Self {
         let mut st = Self {
             playout_id,
@@ -989,6 +1063,7 @@ impl ScriptState {
             pre_roll_key: None,
             last_progress_time: None,
             no_progress_counter: 0,
+            cooldown_state,
         };
         if mode == PlayoutBuildMode::Reset {
             st.history_to_remove = st
@@ -1006,18 +1081,66 @@ impl ScriptState {
         &mut self,
         key: &str,
     ) -> Option<(super::SchedulingMediaItem, CurrentHistoryContext)> {
+        let policy = self.reference_data.cooldown_policy.clone();
+        let cooldown_state = self.cooldown_state.clone();
+        let tags_by_media_id = self.reference_data.cooldown_tags_by_media_id.clone();
+        let scope_key = policy.scope_key(self.playout_id, None, Some(key));
+        let scheduled_at = self.current_time;
         if self.playlist_enumerators.contains_key(key) {
-            let playlist = self.playlist_enumerators.get(key).unwrap();
+            let playlist = self.playlist_enumerators.get_mut(key).unwrap();
+            playlist.select_with_cooldown(
+                &policy,
+                &cooldown_state,
+                &scope_key,
+                scheduled_at,
+                &tags_by_media_id,
+            );
             let media_item = playlist.current().cloned()?;
             let ctx = playlist.current_history_context();
             Some((media_item, ctx))
         } else {
             // lazy-load from media_by_key, mirroring the old enumerator() behaviour
             let e = self.enumerator(key);
+            e.select_with_cooldown(
+                &policy,
+                &cooldown_state,
+                &scope_key,
+                scheduled_at,
+                &tags_by_media_id,
+            );
             let media_item = e.current().cloned()?;
             let idx = e.current_index();
             Some((media_item, CurrentHistoryContext::Single { index: idx }))
         }
+    }
+
+    fn record_cooldown_item(&mut self, key: &str, item: &ersatzrs_domain::PlayoutItem) {
+        let scope_key =
+            self.reference_data
+                .cooldown_policy
+                .scope_key(self.playout_id, None, Some(key));
+        let unit = if let Some(playlist) = self.playlist_enumerators.get(key) {
+            let Some(unit) = playlist.cooldown_unit(&self.reference_data.cooldown_tags_by_media_id)
+            else {
+                return;
+            };
+            unit
+        } else {
+            super::SchedulingCooldownUnit::single(
+                item.media_item_id,
+                self.reference_data
+                    .cooldown_tags(item.media_item_id)
+                    .clone(),
+                item.finish - item.start,
+            )
+        };
+        self.cooldown_state.record_unit(
+            &self.reference_data.cooldown_policy,
+            &scope_key,
+            item.start,
+            &unit,
+            item.filler_kind != FillerKind::None,
+        );
     }
 
     fn advance_key(&mut self, key: &str) {
@@ -1236,6 +1359,7 @@ impl ScriptState {
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
+        self.record_cooldown_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1276,6 +1400,7 @@ impl ScriptState {
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
+        self.record_cooldown_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1304,6 +1429,7 @@ impl ScriptState {
             Vec::new(),
             None,
         );
+        self.record_cooldown_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1514,6 +1640,76 @@ schedule_duration("main", "00:05:00")
                 "graphics": item.graphics_element_ids,
             })).collect::<Vec<_>>(),
         }));
+    }
+
+    #[test]
+    fn scripted_cooldown_state_survives_continue_anchor() {
+        let script = r#"
+set_cooldown_policy([[{"version":1,"enabled":true,"preset":"custom","scope":"playout","mode":"soft","after_items":2,"include_filler":false,"rules":[{"id":"artist","kind":"artist"}]}]])
+add_collection("main", "Main", "shuffle")
+add_count("main", 1)
+"#;
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.collections_by_name.insert(
+            "Main".to_owned(),
+            vec![
+                SchedulingMediaItem::new(1, Duration::minutes(10)),
+                SchedulingMediaItem::new(2, Duration::minutes(10)),
+                SchedulingMediaItem::new(3, Duration::minutes(10)),
+            ],
+        );
+        reference_data.cooldown_tags_by_media_id.insert(
+            1,
+            std::collections::BTreeSet::from(["artist:same".to_owned()]),
+        );
+        reference_data.cooldown_tags_by_media_id.insert(
+            2,
+            std::collections::BTreeSet::from(["artist:other".to_owned()]),
+        );
+        reference_data.cooldown_tags_by_media_id.insert(
+            3,
+            std::collections::BTreeSet::from(["artist:same".to_owned()]),
+        );
+
+        let first = ScriptedSchedulingEngine
+            .schedule_script(
+                script,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start: base_start(),
+                    finish: base_start() + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data: reference_data.clone(),
+                },
+            )
+            .expect("initial script succeeds");
+        assert_eq!(first.added_items[0].media_item_id, 1);
+        let anchor = first.anchor.expect("cooldown anchor");
+        assert!(anchor
+            .context
+            .as_deref()
+            .is_some_and(|value| value.contains("artist:same")));
+
+        let continued = ScriptedSchedulingEngine
+            .schedule_script(
+                script,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        anchor: Some(anchor.clone()),
+                        ..Playout::default()
+                    },
+                    start: anchor.next_start,
+                    finish: anchor.next_start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                },
+            )
+            .expect("continued script succeeds");
+        assert_eq!(continued.added_items[0].media_item_id, 2);
     }
 
     // ── add_all ───────────────────────────────────────────────────────────────
