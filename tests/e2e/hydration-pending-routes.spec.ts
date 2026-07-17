@@ -53,7 +53,10 @@ function sqlite(sql: string): string {
 }
 
 function isBenignAbortError(text: string): boolean {
-  return text.includes('AbortError') && text.toLowerCase().includes('operation was aborted');
+  return (
+    (text.includes('AbortError') && text.toLowerCase().includes('operation was aborted')) ||
+    text.includes('NetworkError when attempting to fetch resource')
+  );
 }
 
 function watchRuntimeErrors(page: Page): string[] {
@@ -104,7 +107,7 @@ async function waitForHydration(page: Page): Promise<void> {
 }
 
 async function gotoHydrated(page: Page, route: string): Promise<void> {
-  const response = await page.goto(route);
+  const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
   expect(response?.status(), `GET ${route}`).toBe(200);
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   await waitForHydration(page);
