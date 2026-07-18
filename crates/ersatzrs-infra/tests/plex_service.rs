@@ -40,7 +40,7 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
 #[tokio::test]
 async fn plex_movie_sync_classifies_provider_extras_and_alternate_versions() {
     let server = MockServer::start_async().await;
-    server
+    let items = server
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/sections/9/all")
@@ -86,6 +86,17 @@ async fn plex_movie_sync_classifies_provider_extras_and_alternate_versions() {
     sync_plex_movie_library(&pool, &service, &config, 1, 9, "9", false)
         .await
         .unwrap();
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = 0, "SubKind" = NULL, "ParentMediaItemId" = NULL"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 9, "9", false)
+        .await
+        .unwrap();
 
     assert_eq!(
         content_variant_rows(&pool, "MovieMetadata", "MovieId").await,
@@ -110,6 +121,7 @@ async fn plex_movie_sync_classifies_provider_extras_and_alternate_versions() {
             }
         ])
     );
+    assert_eq!(items.calls_async().await, 2);
 }
 
 #[tokio::test]
