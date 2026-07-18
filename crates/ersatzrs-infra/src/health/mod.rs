@@ -22,9 +22,9 @@ use checks::{
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
     HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MovieMetadataHealthCheck,
-    ProviderConnectivityHealthCheck, SearchProjectionHealthCheck, TsduckAvailabilityHealthCheck,
-    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
-    ZeroDurationHealthCheck,
+    ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
+    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -48,10 +48,11 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 19] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 20] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
+    "SQLite Connection Defaults",
     "Search Projection",
     "FFmpeg Version",
     "FFmpeg Runtime",
@@ -164,6 +165,7 @@ fn registered_health_checks(
         Box::new(DowngradeHealthCheck::new(downgrade_schema_status)),
         Box::new(DirtyMigrationHealthCheck::new(dirty_schema_status)),
         Box::new(MigrationChecksumHealthCheck::new(schema_status)),
+        Box::new(SqliteConnectionDefaultsHealthCheck::new(pool.clone())),
         Box::new(SearchProjectionHealthCheck::new(pool.clone())),
         Box::new(FFmpegVersionHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegRuntimeAcquisitionHealthCheck::new(

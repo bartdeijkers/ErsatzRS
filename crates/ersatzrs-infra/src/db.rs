@@ -27,6 +27,7 @@ use sqlx::any::{AnyPoolOptions, AnyRow};
 #[cfg(not(feature = "mysql"))]
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult, SqliteRow,
+    SqliteSynchronous,
 };
 #[cfg(feature = "mysql")]
 use sqlx::{Any, AnyPool};
@@ -70,8 +71,7 @@ pub enum DatabaseBackend {
 pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
 pub const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
 pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
-#[cfg(not(feature = "mysql"))]
-const SQLITE_BUSY_TIMEOUT_MS: u64 = 30_000;
+pub(crate) const SQLITE_BUSY_TIMEOUT_MS: u32 = 30_000;
 
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
@@ -360,36 +360,52 @@ async fn bootstrap_media_server_database_from_url(
 }
 
 #[cfg(not(feature = "mysql"))]
-async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    let options = database_url
+fn sqlite_connect_options(database_url: &str) -> Result<SqliteConnectOptions, sqlx::Error> {
+    Ok(database_url
         .parse::<SqliteConnectOptions>()?
         .create_if_missing(true)
         .foreign_keys(true)
+        .busy_timeout(Duration::from_millis(u64::from(SQLITE_BUSY_TIMEOUT_MS)))
         .journal_mode(SqliteJournalMode::Wal)
-        .busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
-        .disable_statement_logging();
+        .synchronous(SqliteSynchronous::Normal)
+        .disable_statement_logging())
+}
 
-    SqlitePoolOptions::new().connect_with(options).await
+#[cfg(not(feature = "mysql"))]
+async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
+    SqlitePoolOptions::new()
+        .connect_with(sqlite_connect_options(database_url)?)
+        .await
+}
+
+#[cfg(feature = "mysql")]
+fn sqlite_any_pool_options() -> AnyPoolOptions {
+    AnyPoolOptions::new().after_connect(|connection, _metadata| {
+        Box::pin(async move {
+            connection.execute("PRAGMA foreign_keys = ON").await?;
+            connection.execute("PRAGMA busy_timeout = 30000").await?;
+            connection.execute("PRAGMA journal_mode = WAL").await?;
+            connection.execute("PRAGMA synchronous = NORMAL").await?;
+            Ok(())
+        })
+    })
+}
+
+#[cfg(feature = "mysql")]
+fn sqlite_any_connect_options(
+    database_url: &str,
+) -> Result<sqlx::any::AnyConnectOptions, sqlx::Error> {
+    let database_url = sqlite_url_with_create_mode(database_url);
+    Ok(database_url
+        .parse::<sqlx::any::AnyConnectOptions>()?
+        .disable_statement_logging())
 }
 
 #[cfg(feature = "mysql")]
 async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
     sqlx::any::install_default_drivers();
-    let database_url = sqlite_url_with_create_mode(database_url);
-    let options = database_url
-        .parse::<sqlx::any::AnyConnectOptions>()?
-        .disable_statement_logging();
-
-    AnyPoolOptions::new()
-        .after_connect(|connection, _metadata| {
-            Box::pin(async move {
-                connection.execute("PRAGMA foreign_keys = ON").await?;
-                connection.execute("PRAGMA journal_mode = WAL").await?;
-                connection.execute("PRAGMA busy_timeout = 30000").await?;
-                Ok(())
-            })
-        })
-        .connect_with(options)
+    sqlite_any_pool_options()
+        .connect_with(sqlite_any_connect_options(database_url)?)
         .await
 }
 
@@ -551,12 +567,11 @@ pub fn lazy_sqlite_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
     #[cfg(feature = "mysql")]
     {
         sqlx::any::install_default_drivers();
-        let database_url = sqlite_url_with_create_mode(database_url);
-        AnyPoolOptions::new().connect_lazy(&database_url)
+        Ok(sqlite_any_pool_options().connect_lazy_with(sqlite_any_connect_options(database_url)?))
     }
     #[cfg(not(feature = "mysql"))]
     {
-        SqlitePoolOptions::new().connect_lazy(database_url)
+        Ok(SqlitePoolOptions::new().connect_lazy_with(sqlite_connect_options(database_url)?))
     }
 }
 
@@ -937,9 +952,9 @@ mod tests {
     use super::{
         apply_default_ffmpeg_profile_hardware_acceleration,
         bootstrap_media_server_database_from_url, connect_database, database_backend, init,
-        initialize_media_server_database, inspect_database_schema, resolve_database_url_from_parts,
-        DatabaseBackend, DatabaseUrlError, DbRow, DEFAULT_SQLITE_DIR_NAME,
-        DEFAULT_SQLITE_FILE_NAME,
+        initialize_media_server_database, inspect_database_schema, lazy_sqlite_pool,
+        resolve_database_url_from_parts, DatabaseBackend, DatabaseUrlError, DbRow,
+        DEFAULT_SQLITE_DIR_NAME, DEFAULT_SQLITE_FILE_NAME, SQLITE_BUSY_TIMEOUT_MS,
     };
     use ersatzrs_domain::HardwareAccelerationKind;
     use sqlx::Row;
@@ -1532,6 +1547,59 @@ mod tests {
 
         assert_eq!(resolution_table_count, 0);
         assert!(!startup.schema_status.is_ready());
+    }
+
+    #[tokio::test]
+    async fn sqlite_pool_applies_connection_defaults_and_migration() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        assert_sqlite_connection_defaults(&pool).await;
+
+        let migration_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 202607181016",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load SQLite defaults migration");
+        assert_eq!(migration_count, 1);
+    }
+
+    #[tokio::test]
+    async fn lazy_sqlite_pool_applies_defaults_to_every_connection() {
+        let database_url = temp_sqlite_database_url();
+        let pool = lazy_sqlite_pool(&database_url).expect("create lazy SQLite pool");
+
+        assert_sqlite_connection_defaults(&pool).await;
+    }
+
+    async fn assert_sqlite_connection_defaults(pool: &super::DbPool) {
+        let mut first = pool.acquire().await.expect("acquire first connection");
+        let mut second = pool.acquire().await.expect("acquire second connection");
+
+        for connection in [&mut first, &mut second] {
+            let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("load foreign_keys");
+            let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("load busy_timeout");
+            let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("load journal_mode");
+            let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("load synchronous");
+
+            assert_eq!(foreign_keys, 1);
+            assert_eq!(busy_timeout, i64::from(SQLITE_BUSY_TIMEOUT_MS));
+            assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
+            assert_eq!(synchronous, 1);
+        }
     }
 
     fn temp_sqlite_database_url() -> String {
