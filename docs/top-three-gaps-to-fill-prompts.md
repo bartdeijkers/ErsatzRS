@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-17
-last_processed_commit: 2d268966e46fef7f146b69a861bbcfb3020044e0
+generated: 2026-07-18
+last_processed_commit: 0f7741b7f341f2496b7f0474c2a47db17e66d9fa
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,10 +13,14 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: ADR 0021 French (France) localization closed on 2026-07-17
-and was removed from the actionable queue. The next three maintainer-requested,
-proposed admin-localization ADRs now lead in stable ADR-number order: German
-(Germany), Hindi (India), and Indonesian (Indonesia).
+Current selection: the `2d268966..0f7741b` window (2026-07-18 reconcile) was
+maintenance-only — dependency bumps, Windows release/CI packaging fixes, and
+E2E hydration test hardening — with no parity, route, or hydration change; every
+tracked feature stays `Ported` and all structured `[[debt]]` items remain
+resolved. The candidate set is therefore the proposed admin-localization ADR
+queue: with ADR 0021 French (France) already Implemented, the next three
+maintainer-requested ADRs carry over unchanged in stable ADR-number order —
+German (Germany), Hindi (India), and Indonesian (Indonesia).
 
 ---
 
