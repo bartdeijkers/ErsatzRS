@@ -22,11 +22,16 @@ admin-triggered Music Videos scans after the scanner learned to retry SQLite
 busy/locked write contention at the per-write import/link/finalization boundary.
 That pass created an MTV Unplugged smart collection, channel, Classic schedule,
 and playout from the admin UI, with the existing MTV watermark and a bumper
-after every three unplugged videos.
+after every three unplugged videos. A 2026-07-18 verification closeout aligned
+Plex/Jellyfin/Emby ETag short-circuit behavior with ErsatzTV: unchanged
+`Normal` and `RemoteOnly` rows skip metadata refresh while provider page data
+still reapplies content-variant classification, and recoverable non-normal
+states continue through a full rescan.
 
 <!--
-Tracked by `plans/extras-alternate-versions-and-stream-roles.md`. Parity slug
-to be created at first implementation slice: `content-variants`.
+Implementation evidence lives in
+`docs/progress/parity/content-variants.toml`. The completed standalone plan was
+retired after its full verification checklist closed on 2026-07-18.
 -->
 
 ## Context
@@ -238,7 +243,7 @@ an accurate port-completeness indicator.
   heuristics need tests against real folder layouts; provider (Plex/Jellyfin/
   Emby) extras import is deferred until the API surface is mapped; the derived
   `commentary` classifier starts deliberately conservative; new UI strings must
-  be localized across all four cultures (Language Contract); the stream-role
+  be localized across all supported cultures (Language Contract); the stream-role
   *playback* half depends on completing the channel custom-stream-selector port.
 - **Search cost**: a few more indexed multi-valued fields per document; within
   the in-process SQL-backed model (ADR 0009), no new service.
@@ -270,7 +275,8 @@ an accurate port-completeness indicator.
 
 ## References
 
-- `plans/extras-alternate-versions-and-stream-roles.md` — implementation plan.
+- `docs/progress/parity/content-variants.toml` — implementation and verification
+  record.
 - `docs/reference/content-variant-scheduling-examples.md` — operator examples
   for unplugged renditions, commentary channels, and featurette pre-roll.
 - [ADR 0004: collapsed initial schema](0004-collapsed-initial-schema.md) —

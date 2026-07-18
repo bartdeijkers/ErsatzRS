@@ -67,7 +67,7 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
 #[tokio::test]
 async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions() {
     let server = MockServer::start_async().await;
-    server
+    let items = server
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/Items")
@@ -108,15 +108,26 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
             }));
         })
         .await;
-    let _primary_playback = mock_jellyfin_playback(&server, "movie-primary").await;
-    let _alternate_playback = mock_jellyfin_playback(&server, "movie-directors-cut").await;
-    let _extra_playback = mock_jellyfin_playback(&server, "movie-featurette").await;
+    let primary_playback = mock_jellyfin_playback(&server, "movie-primary").await;
+    let alternate_playback = mock_jellyfin_playback(&server, "movie-directors-cut").await;
+    let extra_playback = mock_jellyfin_playback(&server, "movie-featurette").await;
     let pool = common::test_db().await;
     let service = JellyfinService::new();
     let config = JellyfinConnectionConfig {
         address: server.base_url(),
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
+
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-variants", false)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = 0, "SubKind" = NULL, "ParentMediaItemId" = NULL"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-variants", false)
         .await
@@ -145,6 +156,10 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
             }
         ])
     );
+    assert_eq!(items.calls_async().await, 2);
+    assert_eq!(primary_playback.calls_async().await, 1);
+    assert_eq!(alternate_playback.calls_async().await, 1);
+    assert_eq!(extra_playback.calls_async().await, 1);
 }
 
 #[tokio::test]
@@ -257,7 +272,7 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
             then.status(200).json_body(movie_page_json(
                 1,
                 "movie-restore",
-                "/srv/media/restored.mkv",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
             ));
         })
         .await;
@@ -283,7 +298,10 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
         .unwrap();
 
     assert_eq!(media_item_state(&pool).await, 0);
-    assert_eq!(media_file_path(&pool).await, "/srv/media/restored.mkv");
+    assert_eq!(
+        media_file_path(&pool).await,
+        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")
+    );
     assert_eq!(playback.calls_async().await, 2);
 }
 

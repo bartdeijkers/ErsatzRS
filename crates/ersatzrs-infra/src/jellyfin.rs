@@ -2039,7 +2039,11 @@ async fn item_etag_matches(
     let state: i64 = row.try_get("State")?;
     let has_metadata = !matches!(table, "JellyfinMovie" | "JellyfinEpisode")
         || row.try_get::<Option<i64>, _>("MetadataId")?.is_some();
-    Ok(state == 0 && has_metadata && existing_etag.as_deref() == etag)
+    Ok(
+        crate::media_server::provider_item_state_allows_etag_skip(state)
+            && has_metadata
+            && existing_etag.as_deref() == etag,
+    )
 }
 
 /// Synchronizes the set of Jellyfin libraries for a media source.

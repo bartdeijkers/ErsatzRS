@@ -2028,7 +2028,10 @@ async fn item_etag_matches(
 
     let existing_etag: Option<String> = row.try_get("Etag")?;
     let state: i64 = row.try_get("State")?;
-    Ok(state == 0 && existing_etag.as_deref() == etag)
+    Ok(
+        crate::media_server::provider_item_state_allows_etag_skip(state)
+            && existing_etag.as_deref() == etag,
+    )
 }
 
 async fn ensure_simple_media_item(
