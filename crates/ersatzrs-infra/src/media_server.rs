@@ -27,6 +27,16 @@ pub(crate) const STATE_FILE_NOT_FOUND: i64 = 1;
 pub(crate) const STATE_UNAVAILABLE: i64 = 2;
 pub(crate) const STATE_REMOTE_ONLY: i64 = 3;
 
+/// Return whether an unchanged provider item may skip metadata refresh.
+///
+/// Mirrors `MediaServerMovieLibraryScanner.ShouldScanItem` in ErsatzTV:
+/// `Normal` and `RemoteOnly` rows short-circuit when their provider `ETag` is
+/// unchanged, while `FileNotFound` and `Unavailable` rows rescan so they can
+/// recover when the provider or local file becomes usable again.
+pub(crate) fn provider_item_state_allows_etag_skip(state: i64) -> bool {
+    matches!(state, STATE_NORMAL | STATE_REMOTE_ONLY)
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ProviderVariantCandidate {
     pub item_id: i64,
@@ -466,4 +476,20 @@ pub(crate) async fn flag_media_items(
     }
     query.execute(pool).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        provider_item_state_allows_etag_skip, STATE_FILE_NOT_FOUND, STATE_NORMAL,
+        STATE_REMOTE_ONLY, STATE_UNAVAILABLE,
+    };
+
+    #[test]
+    fn etag_skip_accepts_normal_and_remote_only_provider_items() {
+        assert!(provider_item_state_allows_etag_skip(STATE_NORMAL));
+        assert!(provider_item_state_allows_etag_skip(STATE_REMOTE_ONLY));
+        assert!(!provider_item_state_allows_etag_skip(STATE_FILE_NOT_FOUND));
+        assert!(!provider_item_state_allows_etag_skip(STATE_UNAVAILABLE));
+    }
 }

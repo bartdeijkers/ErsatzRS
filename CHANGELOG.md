@@ -34,6 +34,14 @@ release section when tagging a release.
   the matching migration enables WAL for existing databases, and health
   reporting detects any runtime drift from those defaults.
 
+### Fixed
+
+- Unchanged Plex, Jellyfin, and Emby items in `RemoteOnly` state now honor the
+  provider ETag short-circuit instead of refetching metadata and overwriting
+  persisted media-file data on every scan. Content-variant classification still
+  reapplies from provider page data, while `FileNotFound` and `Unavailable`
+  items continue through a full rescan so they can recover.
+
 ## [1.0.15-beta.8] - 2026-07-17
 
 ### Fixed

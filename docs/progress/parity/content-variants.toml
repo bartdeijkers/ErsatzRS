@@ -39,6 +39,11 @@ server-reported extras from title/path/tag signals are imported as hidden
 `ContentKind=Extra` rows and provider alternate versions are linked back to
 their canonical primary through `ParentMediaItemId`.
 
+The provider ETag path now matches ErsatzTV's media-server scanner state
+contract: unchanged `Normal` and `RemoteOnly` items skip metadata refresh while
+still contributing page data to content-variant classification;
+`FileNotFound` and `Unavailable` items rescan so they can recover.
+
 Dogfood on 2026-06-27 found and resolved the live-admin path for the documented
 Unplugged smart-collection example: Music Videos library scans launched from the
 admin UI now retry per-row SQLite busy/locked write contention long enough to
@@ -67,6 +72,14 @@ adr         = '0018'
 description = 'Plex/Jellyfin/Emby provider sync needed to classify server-reported extras and alternate versions instead of leaving ADR 0018 limited to local libraries.'
 discovered  = '2026-06-25'
 evidence    = 'Resolved 2026-06-25: shared content-variant classifiers moved to ersatzrs-domain; Plex/Jellyfin/Emby movie-library sync applies provider variant fields after each page, including ETag-skipped rows; focused tests plex_movie_sync_classifies_provider_extras_and_alternate_versions, jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions, and emby_movie_sync_classifies_provider_extras_and_alternate_versions prove primary, extra, and alternate-version rows.'
+resolved    = true
+
+[[debt]]
+id          = 'provider-etag-remote-only-short-circuit'
+adr         = '0018'
+description = 'Plex/Jellyfin/Emby ETag checks only skipped unchanged Normal rows, so unchanged RemoteOnly movies were refetched and their persisted media-file data was overwritten on every scan; the plan-level infrastructure gate exposed the regression.'
+discovered  = '2026-07-18'
+evidence    = 'Resolved 2026-07-18: all three providers share the ErsatzTV state rule that unchanged Normal and RemoteOnly rows may take the ETag short-circuit while FileNotFound and Unavailable rows rescan. Provider integration suites prove skipped rows preserve media-file data, recover when local files return, and reapply extras/alternate-version classification from provider page data without repeating playback metadata requests. The default and MySQL-feature infra suites, web parity gate, and live IPTV/HLS smoke gate passed.'
 resolved    = true
 
 [[debt]]
