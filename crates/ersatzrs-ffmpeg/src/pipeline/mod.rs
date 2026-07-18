@@ -1576,22 +1576,7 @@ fn apply_source_video_filters(
         filter_chain.video.push(scale);
         target_state.scaled_size = request.desired.scaled_size;
         target_state.padded_size = request.desired.scaled_size;
-        if acceleration == HardwareAccelerationKind::Qsv {
-            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
-            target_state.pixel_format = match request.desired.bit_depth {
-                FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
-                FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
-            };
-        } else if acceleration == HardwareAccelerationKind::Nvenc && uploaded_cuda_fallback {
-            // The cuda software-decode fallback uploads frames to the GPU as
-            // the first input filter step, so after `scale_cuda` the surface
-            // is hardware even when no deinterlace filter consumed the upload.
-            // Track location and surface format so downstream software
-            // filters (pad/crop/subtitle burn) prepend the matching
-            // `hwdownload,format=…`.
-            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
-            target_state.pixel_format = cuda_surface_pixel_format(request.desired.bit_depth);
-        }
+        track_hardware_scale_output(acceleration, request.desired.bit_depth, target_state);
     }
 
     if request.desired.cropped_size.is_none()
@@ -1616,6 +1601,28 @@ fn apply_source_video_filters(
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
         upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    }
+}
+
+fn track_hardware_scale_output(
+    acceleration: HardwareAccelerationKind,
+    bit_depth: FFmpegProfileBitDepth,
+    target_state: &mut FrameState,
+) {
+    if acceleration == HardwareAccelerationKind::Qsv {
+        target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+        target_state.pixel_format = match bit_depth {
+            FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
+            FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
+        };
+    } else if acceleration == HardwareAccelerationKind::Nvenc
+        && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+    {
+        // Every NVENC scale operating on hardware frames emits `scale_cuda`,
+        // which normalizes the CUDA surface to nv12/p010. Track that actual
+        // output even after Vulkan HDR tonemapping; stale yuv420p state would
+        // omit the conversion required before a yuva420p `overlay_cuda` input.
+        target_state.pixel_format = cuda_surface_pixel_format(bit_depth);
     }
 }
 

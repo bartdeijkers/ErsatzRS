@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-07-18","summary":"Fixed NVENC HDR downscale plus alpha-watermark CUDA surface tracking; added snapshot coverage and Windows FFmpeg runtime proof."}
 {"agent":"Codex","date":"2026-07-18","summary":"Closed ADR 0018 provider ETag verification gap across Plex, Jellyfin, and Emby; strengthened skipped-row content-variant coverage; completed infra, web parity, and live playback gates; retired the completed plan."}
 {"agent":"Codex","date":"2026-07-18","summary":"Re-audited the documentation as a new user, separated operator and contributor navigation, corrected Diátaxis placement and runtime facts, and added Jellyfin, media-source, admin-navigation, and content-variant guidance."}
 {"agent":"Codex","date":"2026-07-18","summary":"Refreshed end-user documentation across tutorials, how-to guides, reference, and explanation with current release, configuration, channel, IPTV, backup, and troubleshooting guidance."}

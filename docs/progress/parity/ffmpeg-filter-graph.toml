@@ -15,6 +15,13 @@ combined with graphics elements) join the z-ordered graphics overlay plan per
 ADR 0005, while a single permanent watermark can stay on the native ffmpeg
 watermark path.
 
+The 2026-07-19 NVENC regression fix keeps `FrameState` aligned with the real
+CUDA surface produced by HDR tonemapping plus hardware scaling. A 4K HDR source
+downscaled to an 8-bit 1080p profile now records the intermediate `nv12` surface
+and inserts `scale_cuda=format=yuv420p` before compositing a `yuva420p` alpha
+watermark, avoiding `overlay_cuda` filter initialization failures. A focused
+argv snapshot covers the complete HDR-downscale/watermark graph.
+
 Opacity-expression parity now covers both expression syntax and live clock
 semantics. The translator rewrites ErsatzTV/NCalc operators and
 `LinearFadePoints` / `LinearFadeDuration` helpers into FFmpeg eval syntax,

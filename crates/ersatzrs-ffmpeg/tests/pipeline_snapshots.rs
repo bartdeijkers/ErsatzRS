@@ -2919,6 +2919,50 @@ fn nvenc_pipeline_uses_vulkan_hwaccel_for_hdr_tonemap_snapshot() {
 }
 
 #[test]
+fn nvenc_hdr_downscale_with_watermark_normalizes_cuda_overlay_surface_snapshot() {
+    let mut source = source_1080p(SourceVideoCodec::Hevc, 3840, 2160);
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    source.color_params = SourceColorParams {
+        is_hdr: true,
+        is_bt2020_ten: true,
+        ..SourceColorParams::default()
+    };
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    let mut request = PipelineRequest::new(
+        InputFile::video("/media/hdr-movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source)
+    .with_runtime_capabilities(report);
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 8.0,
+        opacity: 35,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    let nv12_scale = arguments
+        .find("scale_cuda=1920:1080:format=nv12")
+        .expect("HDR downscale must produce an nv12 CUDA surface");
+    let overlay_format = arguments
+        .find("scale_cuda=format=yuv420p")
+        .expect("CUDA overlay main input must be converted to yuv420p");
+    let overlay = arguments
+        .find("overlay_cuda=")
+        .expect("watermark must use CUDA overlay");
+    assert!(nv12_scale < overlay_format && overlay_format < overlay);
+    assert!(arguments.contains("format=yuva420p,hwupload_cuda[wm0]"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn software_pipeline_uses_output_frame_rate_when_source_differs_snapshot() {
     let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
     source.frame_rate = Some(FrameRate::new(25, 1));

@@ -36,6 +36,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- NVENC channels can now downscale HDR sources and composite alpha watermarks
+  without feeding an `nv12` main surface into a `yuva420p` CUDA overlay. The
+  pipeline tracks the real post-scale CUDA format and inserts the required
+  `yuv420p` conversion before `overlay_cuda`, preventing HLS segmenter startup
+  failures on affected Windows/NVIDIA systems.
 - Unchanged Plex, Jellyfin, and Emby items in `RemoteOnly` state now honor the
   provider ETag short-circuit instead of refetching metadata and overwriting
   persisted media-file data on every scan. Content-variant classification still
