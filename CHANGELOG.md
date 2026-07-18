@@ -13,6 +13,16 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the required Rust toolchain from 1.85 to the latest stable release,
+  Rust 1.97.1, across workspace manifests, local development, CI, release
+  builds, and Docker builders.
+- Formalized cargo-nextest as the preferred focused/local Rust test runner
+  with complete failure reporting, no retries, and slow-test visibility, while
+  retaining the full doctest-capable `cargo test` workflow for canonical
+  closeout and leaving the existing Cargo test CI selection unchanged.
+
 ## [1.0.15-beta.8] - 2026-07-17
 
 ### Fixed

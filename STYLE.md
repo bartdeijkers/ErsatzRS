@@ -13,8 +13,10 @@ this file. Do not create a second style document.
 
 ## Baseline
 
-- Use stable Rust through [rust-toolchain.toml](rust-toolchain.toml).
-- Keep the MSRV policy at "current stable minus one" once releases begin.
+- Use the latest stable Rust release through
+  [rust-toolchain.toml](rust-toolchain.toml).
+- The workspace minimum supported Rust version (MSRV) tracks that exact stable
+  release; update the toolchain, workspace manifest, CI, and builders together.
 - Use Rust 2021 until an ADR upgrades the edition.
 - Prefer explicit modules and small files over large catch-all modules.
 - Keep public APIs documented in library crates.

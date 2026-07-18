@@ -3,7 +3,7 @@
 # Release image builder. Unlike the general Dockerfile, this consumes the
 # release workflow's prebuilt Leptos web-assets artifact so multi-arch image
 # builds do not compile cargo-leptos under QEMU.
-FROM rust:slim-bookworm AS builder
+FROM rust:1.97.1-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
