@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 # ─── Stage 1: builder ────────────────────────────────────────────────────────
-# Match the stable Rust toolchain used by CI and release jobs.
-FROM rust:slim-bookworm AS builder
+# Match the exact Rust toolchain required by the workspace, CI, and releases.
+FROM rust:1.97.1-slim-bookworm AS builder
 
 # Build-time dependencies for ring / openssl crates used by axum/sqlx
 RUN apt-get update && apt-get install -y --no-install-recommends \

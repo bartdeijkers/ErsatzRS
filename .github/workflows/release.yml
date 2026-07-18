@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         run: |
           "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown,x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
@@ -117,7 +117,7 @@ jobs:
       LEPTOS_HASH_FILES: "false"
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
@@ -232,7 +232,7 @@ jobs:
         run: |
           # WSL bash cannot execute GitHub Actions' Windows temp script paths.
           "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2

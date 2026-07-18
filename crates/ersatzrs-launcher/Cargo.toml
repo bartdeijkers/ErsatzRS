@@ -2,6 +2,7 @@
 name = "ersatzrs-launcher"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 # Packaged into the Windows release zip as `ErsatzRS.exe` (the tray launcher the

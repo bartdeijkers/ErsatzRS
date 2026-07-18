@@ -1,5 +1,4 @@
-# Keep the numeric MSRV out of this file until the first release locks it.
-# The policy is defined in STYLE.md: current stable minus one.
+msrv = "1.97.1"
 avoid-breaking-exported-api = true
 
 # Project/domain identifiers that legitimately appear CamelCase in prose

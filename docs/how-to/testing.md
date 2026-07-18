@@ -2,6 +2,28 @@
 
 Use the narrowest test that proves the behavior.
 
+## Running tests
+
+Use cargo-nextest as the preferred focused/local runner:
+
+```bash
+cargo nextest run -p <crate>
+cargo nextest run -p <crate> <test-filter>
+```
+
+The repository profile in `.config/nextest.toml` runs through all failures,
+does not retry failures, and reports tests that exceed 60 seconds. This keeps
+flaky or hanging Phase 7 tests visible rather than hiding them behind retries.
+
+For closeout, run the canonical Cargo gate:
+
+```bash
+cargo test --workspace --all-features
+```
+
+Nextest does not run doctests, so it supplements rather than replaces the
+closeout command and current CI runner.
+
 ## Unit Tests
 
 Place unit tests next to the module under `#[cfg(test)]`. Use them for pure

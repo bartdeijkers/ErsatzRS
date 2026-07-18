@@ -109,7 +109,12 @@ cargo test --workspace --all-features
 # the wasm target between runs re-runs rustc over the whole tree. Keep the loop
 # in ONE configuration:
 #   ./run.sh check -p <crate>        # fast type-check, no codegen/link
-#   cargo nextest run -p <crate>     # focused tests
+#   cargo nextest run -p <crate>     # preferred focused/local test runner
+# The checked-in `.config/nextest.toml` runs through all failures, performs no
+# retries, and reports tests that exceed 60 seconds. Keep `cargo test
+# --workspace --all-features` as the canonical closeout gate: nextest does not
+# run doctests, and CI intentionally remains on cargo test until a CI benchmark
+# justifies changing it.
 #   ./run.sh dev                     # UI work (leptos watch, SSR+WASM in sync)
 # Run the full multi-config gate (two clippy passes, cargo test --all-features,
 # cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.

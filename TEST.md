@@ -34,9 +34,16 @@ References:
   diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
   files. The `mysql-integration` feature is enabled there, so the
   testcontainers MariaDB run is part of CI.
-- **Local dev**: layers 1–3 by default (`cargo test --workspace`). Add
-  `--all-features` to include the MySQL integration locally — it pulls a
-  MariaDB image so it is slow on a cold cache.
+- **Focused/local dev**: use `cargo nextest run -p <crate>` as the preferred
+  runner and append a test filter when one regression is sufficient. The
+  repository profile runs through all failures, retries nothing, and reports
+  tests slower than 60 seconds. Add the relevant feature flags when the change
+  crosses a gated path.
+- **Closeout**: keep `cargo test --workspace --all-features` as the canonical
+  local gate. It includes doctests, which nextest does not run, and the MySQL
+  integration feature may pull a MariaDB image on a cold cache. CI remains on
+  its existing Cargo test selection until a CI benchmark justifies changing
+  runners.
 - **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
   run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
   For exploratory work, a browser probe through Playwright MCP or another

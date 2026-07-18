@@ -8,7 +8,13 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 
 ## Prerequisites
 
-- Rust toolchain pinned at MSRV `1.85` (workspace `Cargo.toml`).
+- Rust `1.97.1` exactly, pinned in `rust-toolchain.toml` and required by the
+  workspace `Cargo.toml`. CI, release jobs, and Docker builders use the same
+  version.
+- `cargo-nextest` for the preferred focused/local Rust test loop. Install a
+  prebuilt release using the
+  [official instructions](https://nexte.st/docs/installation/pre-built-binaries/).
+  It is optional for CI and the canonical closeout gate.
 - `cargo install cargo-leptos --locked` (the web crate is built through it,
   not plain cargo, because of the SSR + WASM dual target).
 - Network access for the first managed FFmpeg runtime download, or an explicit
@@ -110,14 +116,25 @@ re-runs `rustc` over everything that differs, which is brutal on the `/mnt/f`
 Keep the edit loop cheap by **not** flipping configurations while iterating:
 
 - **Logic/crate work:** `./run.sh check -p <crate>` (skips codegen *and*
-  linking — linking the big binary to 9p is a major cost). Use
-  `cargo nextest run -p <crate>` for focused tests.
+  linking — linking the big binary to 9p is a major cost). Use `cargo nextest
+  run -p <crate>` as the preferred focused/local runner; append a test filter
+  when one regression is sufficient. The checked-in `.config/nextest.toml`
+  keeps running after failures, retries nothing, and reports tests slower than
+  60 seconds in the final summary.
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.
 - Run the full multi-config gate (the two clippy passes, `cargo test
   --all-features`, `cargo leptos build`, `cargo xtask parity-check`) **once at
   closeout**, not per edit.
+
+Nextest does not run doctests. Keep `cargo test --workspace --all-features` as
+the canonical closeout command so unit, integration, binary, and documentation
+tests retain one authoritative gate. CI intentionally remains on its existing
+`cargo test --workspace --all-features --lib --bins --tests` selection until a
+CI benchmark justifies changing it. The 2026-07-18 warm-cache pilot below
+supports nextest for local execution but did not show enough absolute savings
+to change CI.
 
 ### Optional: sccache (recommended on the 9p-target setup)
 
@@ -349,6 +366,22 @@ web-bundle gate above.
 
 Record measurements here when you change profile flags or `run.sh`. Format:
 `<date> — <command> — <cold s> / <warm s>`.
+
+### Focused test-runner pilot (2026-07-18)
+
+With the all-features test binaries already warm (`cargo test --workspace
+--all-features --lib --bins --tests --no-run` took 0.77s), two passing runs of
+each runner produced:
+
+| Runner | Run 1 | Run 2 | Mean |
+| --- | ---: | ---: | ---: |
+| `cargo test --workspace --all-features --lib --bins --tests --no-fail-fast` | 16.20s | 18.10s | 17.15s |
+| `cargo nextest run --workspace --all-features --lib --bins --tests --no-fail-fast` | 6.23s | 4.91s | 5.57s |
+
+Nextest 0.9.140 ran 914 tests across 51 binaries with 11 skipped. It was about
+3.1x faster for this warm execution slice, but saved only about 11.6 seconds in
+absolute terms. That supports the focused/local workflow while leaving CI and
+the doctest-capable closeout on `cargo test`.
 
 ### Docker dependency layer cache (2026-06-26)
 

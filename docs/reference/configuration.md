@@ -31,6 +31,10 @@ accepted for shell/orchestrator environments, and legacy `DATABASE_URL` remains
 accepted so Docker keeps using `DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db`.
 When none of those is set, ErsatzRS defaults SQLite to
 `~/.ersatzrs/ErsatzRS.db` and creates the `~/.ersatzrs` directory on startup.
+Every SQLite pool connection enables foreign-key enforcement, waits up to 30
+seconds for locked writes, uses WAL journaling, and uses NORMAL synchronization.
+WAL mode persists in the database file; the other settings are connection-local
+and are reapplied whenever ErsatzRS opens a connection.
 
 ## FFmpeg runtime
 

@@ -1,0 +1,9 @@
+[profile.default]
+# Focused runs should report the complete failure set without masking flakes.
+fail-fast = false
+retries = 0
+
+# Report tests as slow after one minute and include them in the final summary.
+# A string threshold reports slow tests but does not terminate them.
+slow-timeout = "60s"
+final-status-level = "slow"

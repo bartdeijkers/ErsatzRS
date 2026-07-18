@@ -20,7 +20,8 @@ changes the ErsatzTV parity contract.
 
 ## Development Setup
 
-The baseline setup is:
+Rust `1.97.1` is the minimum supported toolchain and is selected automatically
+by the checked-in `rust-toolchain.toml`. The baseline setup is:
 
 ```bash
 rustup show
@@ -35,6 +36,14 @@ cargo deny check
 
 FFmpeg 8.1 or newer is required at runtime because ErsatzRS uses the `drawvg`
 filter. Startup code must fail fast when an older FFmpeg is detected.
+
+For the edit loop, install cargo-nextest using its
+[official prebuilt-binary instructions](https://nexte.st/docs/installation/pre-built-binaries/)
+and prefer `cargo nextest run -p <crate>` for focused/local tests. The
+repository profile reports the complete failure set without retries and marks
+tests slow after 60 seconds. Keep the baseline `cargo test --workspace
+--all-features` command for doctest-capable closeout. CI remains on its
+existing Cargo test selection until a CI benchmark justifies changing runners.
 
 ## Workflow
 
