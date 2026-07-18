@@ -74,4 +74,3 @@ readable media -> populated content source -> saved schedule -> populated playou
 
 The admin **Support** pages expose health and troubleshooting information at
 each boundary.
-

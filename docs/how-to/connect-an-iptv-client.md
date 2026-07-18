@@ -77,4 +77,3 @@ ErsatzRS propagates the query token into guide and stream URLs.
 
 The token must contain an `exp` claim. Treat both the signing key and generated
 tokens as secrets. See the [configuration reference](../reference/configuration.md).
-

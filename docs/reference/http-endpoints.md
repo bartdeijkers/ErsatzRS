@@ -84,4 +84,3 @@ Paths under `/api/`, `/ffmpeg/`, `/iptv/session/`, and `/iptv/hls-direct/` are
 used by the admin UI or generated stream pipelines. They are not stable
 operator APIs. Use the documented user-facing endpoints instead of constructing
 internal URLs.
-
