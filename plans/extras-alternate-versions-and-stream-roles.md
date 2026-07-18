@@ -62,7 +62,7 @@ Three maintainer use cases are the acceptance yardstick:
     `condition.rs`, `repositories/channel.rs`.
   - Phase 5 examples: `crates/ersatzrs-core/src/content_variants.rs`,
     `crates/ersatzrs-infra/tests/scheduling_repository.rs`, and
-    `docs/reference/content-variant-scheduling-examples.md`.
+    `docs/how-to/schedule-content-variants.md`.
 
 ## Data Model
 

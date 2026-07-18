@@ -114,7 +114,7 @@ id          = 'scheduling-examples-and-preroll'
 adr         = '0018'
 description = 'Phase 5 remains open: templated smart collections and schedule/filler examples for unplugged renditions, commentary channels, and featurette-before-movie pre-roll are not shipped.'
 discovered  = '2026-06-23'
-evidence    = 'Resolved 2026-06-24: `ersatzrs-core::content_variants` now ships smart-collection examples for unplugged renditions, commentary movies, featurette pre-roll, and primary movies, plus builders for the featurette pre-roll filler preset and movie schedule item. `docs/reference/content-variant-scheduling-examples.md` documents the operator workflow. Covered by content_variants::tests::examples_use_variant_tokens_that_opt_into_hidden_rows, content_variants::tests::featurette_pre_roll_templates_do_not_attach_to_a_schedule_by_default, and scheduling_repository::scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll; focused gates passed.'
+evidence    = 'Resolved 2026-06-24: `ersatzrs-core::content_variants` now ships smart-collection examples for unplugged renditions, commentary movies, featurette pre-roll, and primary movies, plus builders for the featurette pre-roll filler preset and movie schedule item. `docs/how-to/schedule-content-variants.md` documents the operator workflow. Covered by content_variants::tests::examples_use_variant_tokens_that_opt_into_hidden_rows, content_variants::tests::featurette_pre_roll_templates_do_not_attach_to_a_schedule_by_default, and scheduling_repository::scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll; focused gates passed.'
 resolved    = true
 
 [[debt]]

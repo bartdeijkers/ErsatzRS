@@ -1,4 +1,4 @@
-# Testing
+# Run tests
 
 Use the narrowest test that proves the behavior.
 
@@ -24,12 +24,12 @@ cargo test --workspace --all-features
 Nextest does not run doctests, so it supplements rather than replaces the
 closeout command and current CI runner.
 
-## Unit Tests
+## Unit tests
 
 Place unit tests next to the module under `#[cfg(test)]`. Use them for pure
 domain logic, small parsers, builder invariants, and error mapping.
 
-## Integration Tests
+## Integration tests
 
 Use crate-level `tests/` directories for behavior that crosses module
 boundaries. Keep fixtures small and deterministic.
@@ -37,7 +37,7 @@ boundaries. Keep fixtures small and deterministic.
 Ignored integration tests remain part of the contract when they depend on
 local tooling or large fixtures. Run them explicitly with `cargo test -- --ignored`.
 
-## Snapshot Tests
+## Snapshot tests
 
 Use `insta` for generated output that must not drift silently:
 
@@ -48,12 +48,19 @@ Use `insta` for generated output that must not drift silently:
 
 See [snapshot-tests.md](snapshot-tests.md).
 
-## End-to-End Tests
+## End-to-end tests
 
-Put cross-crate HTTP and streaming tests under `ersatzrs-web/tests/` once the web
-crate exists. E2E tests may be slower and should focus on critical user flows.
+Put browser workflows under `tests/e2e/` and run them through:
 
-## Database Tests
+```bash
+scripts/e2e/playwright-e2e.sh
+```
+
+The wrapper boots the real web host and runs serially by default because the
+specs share a seeded database. Use the TSDuck playback gate under `scripts/e2e/`
+for transport-stream correctness that browser tests cannot prove.
+
+## Database tests
 
 - Use an in-memory `sqlx::SqlitePool` per test where possible.
 - Use MySQL through testcontainers only at integration tier.

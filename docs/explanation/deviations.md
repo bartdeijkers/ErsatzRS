@@ -1,4 +1,4 @@
-# Deliberate Deviations from ErsatzTV
+# Deliberate deviations from ErsatzTV
 
 ErsatzRS preserves ErsatzTV behavior by default. Deliberate deviations must be
 listed here and backed by ADRs.
@@ -14,18 +14,21 @@ ADR: [0005](../adr/0005-drawvg-graphics-engine.md)
 
 Follow-up ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 
-## In-repository FFmpeg packaging
+## Managed first-party FFmpeg runtime
 
-ErsatzTV packages its FFmpeg integration in a separate `ErsatzTV-ffmpeg`
-repository. ErsatzRS intentionally keeps FFmpeg and ffprobe packaging in this
-repository so the application binaries, migrations, admin UI assets, FFmpeg
-8.1 build, and startup runtime checks are released together.
+ErsatzTV relies on its separate `ErsatzTV-ffmpeg` build project. ErsatzRS uses
+the same separation of responsibilities through the first-party
+`ErsatzRS-ffmpeg` repository, but adds an application-side runtime manager that
+can download, validate, update, and report the selected FFmpeg and ffprobe pair
+at startup.
 
-The active release line publishes Linux and Windows GitHub archives plus GHCR
-Docker images, while macOS archives remain intentionally omitted for now.
-Release images follow the managed FFmpeg runtime model and must not enable
-`--enable-nonfree`, bundle the CUDA toolkit, include libnpp, or include
-non-redistributable codecs such as libfdk_aac.
+Application archives and container images do not bundle FFmpeg. Normal release
+tags can publish Linux and Windows archives plus a multi-architecture container
+image; the current beta line publishes only the Windows archive. macOS remains
+a supported build target but is not published by the active application
+workflow. First-party runtime packages must not enable `--enable-nonfree`,
+bundle the CUDA toolkit, include libnpp, or include non-redistributable codecs
+such as libfdk_aac.
 
 ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 

@@ -1,4 +1,4 @@
-# Add an FFmpeg Pipeline
+# Add an FFmpeg pipeline
 
 Use this guide when adding a new software or hardware FFmpeg path.
 
@@ -10,9 +10,9 @@ Use this guide when adding a new software or hardware FFmpeg path.
 4. Add unit tests for builder invariants.
 5. Add `insta` snapshots for generated argv and filter graphs.
 6. Add an end-to-end manual verification note if the path requires hardware.
-7. Update the parity matrix.
+7. Update the owning `docs/progress/parity/<slug>.toml` file.
 
-## Required Snapshot Coverage
+## Required snapshot coverage
 
 Every pipeline must include snapshots for:
 
@@ -21,7 +21,7 @@ Every pipeline must include snapshots for:
 - Watermark or graphics overlay when supported.
 - Subtitle handling when supported.
 
-## Hardware Paths
+## Hardware paths
 
 Hardware-specific paths such as NVENC, VAAPI, QSV, AMF, VideoToolbox, RKMPP, and
 V4L2M2M must document the required FFmpeg build capabilities.

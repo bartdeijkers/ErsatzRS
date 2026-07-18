@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Rebuilt the end-user documentation around Diátaxis with a first-channel
+  tutorial; goal-oriented Windows, Docker, local-library, Jellyfin, IPTV,
+  backup, content-variant, and troubleshooting guides; and current operator
+  references for configuration, endpoints, navigation, media-source support,
+  system requirements, release bundles, channel architecture, and the managed
+  FFmpeg runtime. Contributor, parity, testing, and release-maintainer material
+  now has a separate navigation map so it does not obscure the new-user path.
 - Raised the required Rust toolchain from 1.85 to the latest stable release,
   Rust 1.97.1, across workspace manifests, local development, CI, release
   builds, and Docker builders.

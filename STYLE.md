@@ -81,7 +81,15 @@ the Rust/C# boundary, the C# shape wins by default.
 - Log operational state with fields, not string interpolation alone.
 - Never log secrets, bearer tokens, cookies, database passwords, or full config
   dumps.
-- Follow [docs/how-to/logging.md](docs/how-to/logging.md).
+- Name spans `<crate>::<module>::<operation>` and include stable identifiers
+  such as `channel_id`, `playout_id`, `media_id`, `media_source_id`,
+  `ffmpeg_profile_id`, and `request_id` when they apply.
+- Use `info` for accepted HTTP requests and FFmpeg process lifecycle events,
+  `debug` for scheduling decisions and ordinary FFmpeg stderr, `warn` for
+  recoverable user or configuration errors, and `error` for process crashes or
+  data-corruption risks.
+- Follow the operator-facing [logging reference](docs/reference/logging.md) when
+  changing persisted logger names or accepted levels.
 
 ## Public API Documentation
 

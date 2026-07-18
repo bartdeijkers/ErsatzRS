@@ -1,57 +1,66 @@
-# Documentation
+# ErsatzRS documentation
 
-ErsatzRS documentation follows Diataxis. Every document should fit one of four
-purposes.
+ErsatzRS turns media from local folders, Plex, Jellyfin, or Emby into linear
+channels for IPTV, HLS, and HDHomeRun-compatible clients.
 
-## Tutorials
+ErsatzRS is beta software. Back up persistent state before every update, and
+do not expose the unauthenticated admin UI directly to the public internet.
 
-Tutorials teach by walking through a complete path. They assume the reader wants
-to learn the system, not merely complete a task.
+## New to ErsatzRS?
 
-Location: [tutorials/](tutorials/)
+Follow [Build your first channel](tutorials/getting-started.md). It uses the
+currently published Windows beta archive and leads from first startup to a
+playable local-media channel.
 
-## How-to Guides
+Already know the basic workflow? Choose the result you need below.
 
-How-to guides solve one practical problem. They should be short, direct, and
-task-oriented.
+## Install and update
 
-Location: [how-to/](how-to/)
+- [Install on Windows](how-to/install-on-windows.md)
+- [Install with Docker](how-to/install-with-docker.md) when a normal release
+  publishes a container image
+- [Back up and restore ErsatzRS](how-to/back-up-and-restore.md)
 
-Current how-to guides:
+Before installing, check the [system requirements](reference/system-requirements.md)
+and [release bundle reference](reference/release-bundle.md).
 
-- [Publish a full release](how-to/publish-release.md)
-- [Publish a release without GitHub-hosted minutes](how-to/publish-release-with-self-hosted-runners.md)
-- [Build and publish a local Windows release](how-to/release-locally.md)
+## Add media
 
-## Reference
+- [Add and scan a local library](how-to/add-and-scan-a-local-library.md)
+- [Connect a Jellyfin server](how-to/connect-a-jellyfin-server.md)
+- [Media source support](reference/media-source-support.md)
 
-Reference pages are lookup material. They should be complete, structured, and
-stable.
+## Build and watch channels
 
-Location: [reference/](reference/)
+- [Connect an IPTV client](how-to/connect-an-iptv-client.md)
+- [Schedule extras and alternate versions](how-to/schedule-content-variants.md)
+- [Admin navigation](reference/admin-navigation.md)
+- [HTTP endpoints](reference/http-endpoints.md)
 
-Current reference pages:
+To understand how sources, libraries, schedules, playouts, and channels fit
+together, read [How ErsatzRS builds a channel](explanation/how-ersatzrs-builds-a-channel.md).
 
+## Operate and troubleshoot
+
+- [Troubleshoot startup and playback](how-to/troubleshoot-startup-and-playback.md)
 - [Configuration](reference/configuration.md)
+- [Logging](reference/logging.md)
 - [Glossary](reference/glossary.md)
-- [Parity matrix](reference/parity-matrix.md)
-- [Release bundle](reference/release-bundle.md)
+- [Why ErsatzRS manages FFmpeg](explanation/managed-ffmpeg-runtime.md)
 
-## Explanation
+## Contributors and maintainers
 
-Explanation pages discuss background, tradeoffs, and reasons.
+Development, parity, architecture, test, and release documentation has a
+separate [contributor documentation map](CONTRIBUTING.md#contributor-documentation-map),
+so the end-user path above stays focused on operating ErsatzRS.
 
-Location: [explanation/](explanation/)
+## How this documentation is organized
 
-Current explanation pages:
+This documentation follows [Diátaxis](https://diataxis.fr/):
 
-- [Leptos runtime configuration](explanation/leptos-runtime-config.md)
-- [Avoiding the inspection paradox in streaming-reliability testing](explanation/streaming-reliability-sampling.md)
+- tutorials provide a guided learning experience;
+- how-to guides help accomplish a specific goal;
+- reference pages provide facts and interfaces for lookup; and
+- explanation pages build understanding of concepts and tradeoffs.
 
-## Rule of Thumb
-
-- Do not put "why" material in a how-to guide.
-- Do not put step-by-step task instructions in an explanation page.
-- Do not use tutorials as reference dumps.
-- Do not hide policy in reference pages when contributors need it in
-  [docs/CONTRIBUTING.md](CONTRIBUTING.md).
+Architecture decisions live separately in [ADRs](adr/).

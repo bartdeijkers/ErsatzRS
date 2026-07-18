@@ -1,4 +1,4 @@
-# Persistence Gap Matrix
+# Persistence gap matrix
 
 This matrix tracks repository and real-world decode coverage for the 138
 ErsatzTV tables represented by `migrations/0001_initial.sql`.
@@ -145,7 +145,7 @@ Recommended order:
 | `PlexSeason` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `PlexShow` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `ProgramSchedule` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository | Yes, env-gated direct decode | Covered root fields; root upserts preserve existing child item rows while typed item methods cover subtype and overlay writes. | P1 done in Slice 14 |
-| `ProgramScheduleAlternate` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository writes EF-compatible date-window rows and day/month converters | Yes, through program schedule decode | Low/medium; alternate schedule selection is consumed by the future Classic scheduler slice. | P1 done in Slice 14 |
+| `ProgramScheduleAlternate` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository writes EF-compatible date-window rows and day/month converters | Yes, through program schedule decode | Low; alternate schedule selection is consumed by Classic playout scheduling. | P1 done in Slice 14 |
 | `ProgramScheduleDurationItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Yes, through focused SQLite repository tests | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
 | `ProgramScheduleFloodItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Partial, typed write path covered; real-world decode remains env-gated when data exists | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
 | `ProgramScheduleItem` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository typed item upserts cover target fields, language/subtitle fields, start-time behavior, and subtype dispatch | Yes, through program schedule decode | Low/medium; filler preset and `SearchTitle` fields are still outside the compact domain item shape. | P1 done in Slice 14 |

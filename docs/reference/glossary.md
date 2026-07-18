@@ -17,7 +17,7 @@ consistent with ErsatzTV where parity matters.
 | Term | Definition |
 | --- | --- |
 | Block | A schedule unit that groups one or more playout items, often with rules for ordering, padding, filler, watermarks, and graphics. |
-| Block scheduling | The scheduling engine that builds channel timelines from configured blocks. It is one of the three ErsatzTV scheduling models to port. |
+| Block scheduling | Scheduling model that builds channel timelines from configured, reusable blocks. |
 
 ## C
 
@@ -28,13 +28,13 @@ consistent with ErsatzTV where parity matters.
 | Complex filter | An FFmpeg filter graph with labeled inputs and outputs. ErsatzRS mirrors ErsatzTV's label-routing patterns when building these graphs. |
 | Content resolver | A core abstraction that turns scheduling references, such as collections, playlists, searches, and shows, into concrete media items. |
 | Crate | A Rust package or library unit. ErsatzRS is organized as a Cargo workspace with domain, core, FFmpeg, infrastructure, app, web, and scanner crates. |
-| CQRS | Command Query Responsibility Segregation. ErsatzRS uses plain async handlers instead of a MediatR-style framework. |
+| Classic scheduling | Scheduling model that fills a channel timeline from ordered program schedule items and reusable content sources. |
 
 ## D
 
 | Term | Definition |
 | --- | --- |
-| Diataxis | Documentation framework that separates tutorials, how-to guides, reference material, and explanation. This glossary is reference material. |
+| Diátaxis | Documentation framework that separates tutorials, how-to guides, reference material, and explanation. This glossary is reference material. |
 | Direct stream | Serving media without transcoding when the original container, codecs, and stream properties are already suitable for the target client. |
 | Drawvg | FFmpeg 8.1 filter that renders vector graphics inside the FFmpeg filter graph. ErsatzRS uses it for channel graphics instead of an external renderer process. |
 
@@ -67,7 +67,7 @@ consistent with ErsatzTV where parity matters.
 | Term | Definition |
 | --- | --- |
 | HLS | HTTP Live Streaming. A segmented streaming protocol used by many IPTV and browser clients. ErsatzRS delegates media segment generation to FFmpeg. |
-| HDHomeRun | Network tuner protocol and device model that IPTV clients can discover. ErsatzRS will provide compatible discovery, lineup, and streaming endpoints. |
+| HDHomeRun | Network tuner protocol and device model that IPTV clients can discover. ErsatzRS provides compatible discovery, lineup, and streaming endpoints. |
 | History | Previously scheduled or played media state used by scheduling engines to avoid unwanted repeats and resume deterministic timelines. |
 | Hydration | Client-side activation of server-rendered Leptos UI islands. ErsatzRS starts SSR-first and hydrates only workflows that need browser interactivity. |
 
@@ -85,7 +85,7 @@ consistent with ErsatzTV where parity matters.
 | Leptos | The Rust UI framework used for the admin interface. ErsatzRS uses SSR first and adds hydrated islands where needed. |
 | Library | A top-level grouping of media from a provider or local source, such as movies, shows, music, or other categorized content. |
 | Lineup | HDHomeRun-compatible channel list that tells clients which channels are available and where to stream them. |
-| Lua scheduling | Scripted scheduling engine that evaluates Lua 5.4 scripts through `mlua`. It is one of the three ErsatzTV scheduling models to port. |
+| Lua scheduling | Scripted scheduling model that evaluates Lua 5.4 instructions to build a playout. |
 
 ## M
 
@@ -121,9 +121,9 @@ consistent with ErsatzTV where parity matters.
 
 | Term | Definition |
 | --- | --- |
-| Scanner | `ersatzrs-scanner`, the binary that imports or refreshes media metadata and file information. |
+| Scanner | Background or one-shot process that imports or refreshes media metadata, files, streams, artwork, and provider state. |
 | Schedule | Rules and source references used to generate a playout timeline for a channel. |
-| Scheduling engine | Component that converts configured schedule rules into playout items. ErsatzRS ports block, YAML, and Lua scheduling. |
+| Scheduling engine | Component that converts configured schedule rules into playout items. ErsatzRS supports Classic, Block, Sequential YAML, Scripted Lua, and external JSON playout models. |
 | Search index | Searchable projection of media metadata used by smart collections and schedule content resolution. |
 | Smart collection | Dynamic collection defined by a search query or filter rather than a fixed list of media items. |
 | SQLx | Rust database toolkit used by ErsatzRS for SQLite by default and optional MySQL support behind a feature flag. |
@@ -147,10 +147,10 @@ consistent with ErsatzTV where parity matters.
 
 | Term | Definition |
 | --- | --- |
-| XMLTV | XML format commonly used to exchange EPG data. ErsatzRS will expose XMLTV output for IPTV clients. |
+| XMLTV | XML format commonly used to exchange EPG data. ErsatzRS exposes it at `/iptv/xmltv.xml`. |
 
 ## Y
 
 | Term | Definition |
 | --- | --- |
-| YAML scheduling | Scheduling engine that reads YAML instructions and dispatches each instruction type to a handler. It is one of the three ErsatzTV scheduling models to port. |
+| YAML scheduling | Sequential scheduling model that reads YAML instructions and dispatches each instruction type to a handler. |

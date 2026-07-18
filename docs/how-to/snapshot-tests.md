@@ -1,9 +1,9 @@
-# Snapshot Tests
+# Run snapshot tests
 
 Snapshot tests are mandatory when generated command or timeline output is the
 behavior under test.
 
-## Required Uses
+## Required uses
 
 - Every FFmpeg argv generator.
 - Every filter-complex builder.

@@ -64,19 +64,14 @@ public open-source project.
   `progress.db` index is rebuilt from it by `cargo xtask progress`.
 - `docs/explanation/deviations.md`
 
-### Diataxis Documentation
+### Diátaxis documentation
 
-- `docs/README.md`
-- `docs/CONTRIBUTING.md`
-- `docs/tutorials/.gitkeep`
-- `docs/how-to/testing.md`
-- `docs/how-to/snapshot-tests.md`
-- `docs/how-to/logging.md`
-- `docs/how-to/add-migration.md`
-- `docs/how-to/add-ffmpeg-pipeline.md`
-- `docs/reference/configuration.md`
-- `docs/explanation/architecture.md`
-- `docs/explanation/test-strategy.md`
+- `docs/README.md` — end-user navigation.
+- `docs/CONTRIBUTING.md` — documentation policy and contributor navigation.
+- `docs/tutorials/` — guided learning paths.
+- `docs/how-to/` — operator, contributor, and release tasks.
+- `docs/reference/` — operator and contributor lookup material.
+- `docs/explanation/` — product and engineering background and tradeoffs.
 
 ### GitHub Process
 

@@ -24,18 +24,18 @@ FFmpeg pipeline, playout scheduling, media source scanning, IPTV/HDHomeRun endpo
 admin UI slices through Trakt list integration are all in place. See [STATUS.md](STATUS.md)
 for the current phase checklist, parity matrix, and session log.
 
-## Quick Start
+## Quick start
 
-Build and run. On first startup, ErsatzRS downloads and validates the matching
-first-party FFmpeg runtime when no explicit override or managed copy exists:
+The current beta release line publishes a Windows x86-64 archive. Download and
+extract `ersatzrs-<tag>-win-x64.zip`, then run `ErsatzRS.exe` from the extracted
+folder. On first startup, ErsatzRS downloads and validates its matching
+first-party FFmpeg runtime.
 
-```bash
-cargo build --workspace
-cargo run --bin ersatzrs-web
-```
-
-The admin UI is at http://127.0.0.1:8409. See [BUILD.md](BUILD.md) for full development
-instructions, including database setup, Leptos hot-reload, and per-platform build targets.
+Follow [Build your first channel](docs/tutorials/getting-started.md) for the
+complete local-media workflow. Normal release tags can also publish the
+multi-architecture image described in
+[Install with Docker](docs/how-to/install-with-docker.md). Development setup
+lives in [BUILD.md](BUILD.md).
 
 ## Key Resources
 
@@ -52,12 +52,21 @@ Project contracts and decisions:
 
 ## Documentation
 
-Documentation follows the Diataxis structure under [docs/](docs/README.md):
+Documentation follows the Diátaxis structure under [docs/](docs/README.md):
 
 - Tutorials teach through a guided path.
 - How-to guides solve specific tasks.
 - Reference pages provide lookup material.
 - Explanation pages describe background and tradeoffs.
+
+Common end-user guides:
+
+- [Install on Windows](docs/how-to/install-on-windows.md)
+- [Add and scan a local library](docs/how-to/add-and-scan-a-local-library.md)
+- [Connect a Jellyfin server](docs/how-to/connect-a-jellyfin-server.md)
+- [Connect an IPTV client](docs/how-to/connect-an-iptv-client.md)
+- [Back up and restore ErsatzRS](docs/how-to/back-up-and-restore.md)
+- [Troubleshoot startup and playback](docs/how-to/troubleshoot-startup-and-playback.md)
 
 ## Development Requirements
 

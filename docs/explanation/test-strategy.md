@@ -1,4 +1,4 @@
-# Test Strategy
+# Test strategy
 
 ErsatzRS relies on a layered test strategy because the highest-risk behavior is not
 only pure Rust logic. Generated FFmpeg arguments, filter graphs, scheduling
@@ -6,7 +6,9 @@ timelines, migrations, and protocol output are all project contracts.
 
 Unit tests protect small invariants. Integration tests protect crate
 collaboration. Snapshot tests protect generated output from unreviewed drift.
-End-to-end tests protect the main user workflows once the web host exists.
+End-to-end tests protect the main user workflows through the real web host and
+hydrated browser bundle. CI runs the full Playwright suite serially by default
+to avoid shared-database races.
 
 There is no coverage percentage gate. A percentage can look precise while
 missing the behavior that matters most. Reviewers should instead ask whether the

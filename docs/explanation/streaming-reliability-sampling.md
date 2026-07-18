@@ -1,4 +1,4 @@
-# Avoiding the Inspection Paradox in Streaming-Reliability Testing
+# Avoiding the inspection paradox in streaming-reliability testing
 
 Background and tradeoffs for how we sample streams when we test playback
 reliability with TSDuck. This is an *explanation* page: it argues for a

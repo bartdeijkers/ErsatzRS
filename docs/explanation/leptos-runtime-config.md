@@ -1,4 +1,4 @@
-# Leptos Runtime Configuration in Release Builds
+# Leptos runtime configuration in release builds
 
 ErsatzRS release archives build the frontend and server in two different steps:
 

@@ -1,5 +1,6 @@
-# Add a Migration
+# Add a migration
 
+Use this guide to add a schema change for SQLite and, where supported, MySQL.
 Migrations live under `migrations/`.
 
 ## Naming
@@ -26,5 +27,6 @@ Example:
 
 ## Testing
 
-Test SQLite migrations first. Add MySQL coverage behind the MySQL integration
-feature once that backend exists.
+Test SQLite migrations first. Add the matching migration under
+`migrations/mysql/` and run MySQL-feature coverage for changes supported by both
+backends.

@@ -1,149 +1,201 @@
-# Configuration Reference
+# Configuration reference
 
-ErsatzRS configuration will be layered through `figment` or an equivalent
-structured configuration crate.
+ErsatzRS has two configuration boundaries:
 
-## Layer Order
+- startup settings that must be known before the database opens come from
+  environment variables; and
+- day-to-day media server settings are persisted in the database and edited
+  through the admin **Settings** pages.
 
-Later layers override earlier layers:
+There is currently no general `config.toml` or CLI-flag layer. Do not rely on
+the aspirational configuration examples found in older releases.
 
-1. Built-in defaults.
-2. `config.toml`.
-3. Environment variables.
-4. CLI flags.
+## Startup database URL
 
-## Environment Prefix
+The first non-empty variable wins:
 
-Use the `ErsatzRS_` prefix for environment variables.
+| Priority | Variable | Notes |
+|---:|---|---|
+| 1 | `ErsatzRS_DATABASE__URL` | Preferred repository spelling |
+| 2 | `ERSATZRS_DATABASE__URL` | Uppercase shell and orchestrator spelling |
+| 3 | `DATABASE_URL` | Compatibility spelling used by Docker and SQLx tooling |
 
-Examples:
-
-```text
-ErsatzRS_DATABASE__URL=sqlite:$HOME/.ersatzrs/ErsatzRS.db
-ErsatzRS_HTTP__BIND=0.0.0.0:8080
-ErsatzRS_FFMPEG__PATH=/usr/local/bin/ffmpeg
-ErsatzRS_FFPROBE__PATH=/usr/local/bin/ffprobe
-```
-
-Startup database URL resolution now goes through the startup configuration
-helper. `ErsatzRS_DATABASE__URL` is preferred, `ERSATZRS_DATABASE__URL` is
-accepted for shell/orchestrator environments, and legacy `DATABASE_URL` remains
-accepted so Docker keeps using `DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db`.
-When none of those is set, ErsatzRS defaults SQLite to
-`~/.ersatzrs/ErsatzRS.db` and creates the `~/.ersatzrs` directory on startup.
-Every SQLite pool connection enables foreign-key enforcement, waits up to 30
-seconds for locked writes, uses WAL journaling, and uses NORMAL synchronization.
-WAL mode persists in the database file; the other settings are connection-local
-and are reapplied whenever ErsatzRS opens a connection.
-
-## FFmpeg runtime
-
-ErsatzRS checks both FFmpeg and ffprobe at web startup. Both tools must be
-version 8.1 or newer and FFmpeg must expose the required capabilities described
-by [ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md). The
-normal path is the managed runtime under the ErsatzRS state directory
-(`~/.ersatzrs/ffmpeg` by default). Startup downloads the matching
-[`ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg) release
-when no managed runtime exists, and updates a managed runtime when a newer
-release is available. Release archives and Docker images do not bundle
-FFmpeg/ffprobe; both follow the same managed-runtime model.
-
-The startup resolution order is:
-
-1. Explicit path override from environment or persisted config.
-2. Managed runtime under the state directory, auto-updated at startup.
-3. Managed download from the latest or pinned `ErsatzRS-ffmpeg` release.
-4. `PATH` fallback when managed download is disabled or fails.
-
-In particular FFmpeg must expose:
-
-- `drawvg` (built with `--enable-cairo`) for the graphics engine.
-- `zscale` (built with `--enable-libzimg`) for the HDR/tonemap color pipeline.
-
-Startup fails fast when the selected FFmpeg binary is missing a required
-capability, for example:
+When none is set, ErsatzRS creates and opens:
 
 ```text
-FFmpeg runtime is missing required capabilities: [RequiredFilter { name: "zscale" }]
+$HOME/.ersatzrs/ErsatzRS.db
 ```
 
-This is a runtime packaging gap, not an application bug. Diagnose the configured
-binary with:
-
-```bash
-ffmpeg -hide_banner -buildconf | grep -- --enable-libzimg
-ffmpeg -hide_banner -filters | grep -w zscale
-ffmpeg -hide_banner -buildconf | grep -- --enable-cairo
-ffmpeg -hide_banner -filters | grep -w drawvg
-```
-
-If `zscale` (or `drawvg`) is absent, replace it with a compliant FFmpeg 8.1
-binary or let the managed runtime download the first-party ErsatzRS-ffmpeg
-package. When multiple FFmpeg installs exist, point ErsatzRS at the compliant
-one with the path override variables below rather than weakening the runtime
-check.
-
-Accepted path override variables:
+The Docker image sets:
 
 ```text
-ErsatzRS_FFMPEG__PATH=/opt/ffmpeg/bin/ffmpeg
-ErsatzRS_FFPROBE__PATH=/opt/ffmpeg/bin/ffprobe
+DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db
+```
+
+SQLite connections always enable foreign keys, use a 30-second busy timeout,
+select WAL journaling, and use NORMAL synchronization. WAL mode persists in the
+database file; the connection-local settings are reapplied to pooled and lazy
+connections.
+
+MySQL and MariaDB URLs require an application binary built with the `mysql`
+feature:
+
+```text
+DATABASE_URL=mysql://user:password@database-host/ersatzrs
+```
+
+Treat URLs containing credentials as secrets.
+
+## Server listen address
+
+Leptos provides the native server listen setting:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LEPTOS_SITE_ADDR` | `0.0.0.0:8409` | Admin, API, IPTV, XMLTV, and HDHomeRun HTTP listener |
+
+For Docker, keep the container address on `0.0.0.0` and change the host-side
+port publication when needed, for example `--publish 8410:8409`.
+
+## Browser asset settings
+
+Official archives and images set or normalize these values. Operators normally
+should not override them.
+
+| Variable | Release value | Purpose |
+|---|---|---|
+| `LEPTOS_SITE_ROOT` | archive/image `site` directory | Root containing the hydration package |
+| `LEPTOS_SITE_PKG_DIR` | `pkg` | Package directory below the site root |
+| `LEPTOS_OUTPUT_NAME` | `ersatzrs-web` | JavaScript and WASM basename |
+
+The native server binary and browser assets must come from the same release.
+Mismatched values or mixed artifacts can render HTML while leaving buttons and
+dialogs unresponsive.
+
+## FFmpeg and ffprobe
+
+ErsatzRS validates both tools at web startup. They must be version 8.1 or newer
+and FFmpeg must expose the capabilities required by
+[ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md), including
+`drawvg` and `zscale`.
+
+Runtime resolution order:
+
+1. explicit environment or persisted path;
+2. an existing managed runtime under `$HOME/.ersatzrs/ffmpeg`;
+3. a managed download from `bartdeijkers/ErsatzRS-ffmpeg`;
+4. a compatible `PATH` pair when managed acquisition cannot be used.
+
+### Path overrides
+
+The first available value in each tool's resolution chain is used. Set both
+paths to keep FFmpeg and ffprobe on the same build.
+
+| Tool | Accepted variables |
+|---|---|
+| FFmpeg | `ErsatzRS_FFMPEG__PATH`, `ERSATZRS_FFMPEG__PATH`, `FFMPEG_PATH` |
+| ffprobe | `ErsatzRS_FFPROBE__PATH`, `ERSATZRS_FFPROBE__PATH`, `FFPROBE_PATH` |
+
+`ERSATZRS_FFPROBE` remains accepted by older scanner test workflows but is not
+the preferred server setting.
+
+Example:
+
+```text
 ERSATZRS_FFMPEG__PATH=/opt/ffmpeg/bin/ffmpeg
 ERSATZRS_FFPROBE__PATH=/opt/ffmpeg/bin/ffprobe
-FFMPEG_PATH=/opt/ffmpeg/bin/ffmpeg
-FFPROBE_PATH=/opt/ffmpeg/bin/ffprobe
 ```
 
-`ERSATZRS_FFPROBE` remains accepted for older scanner test workflows.
+### Managed runtime controls
 
-Managed runtime controls:
+| Variable | Default | Purpose |
+|---|---|---|
+| `ERSATZRS_FFMPEG_RELEASE_TAG` | latest compatible release, with a built-in known-good fallback | Pin acquisition and update checks to one runtime tag |
+| `ERSATZRS_FFMPEG_DOWNLOAD` | enabled | Set to `0` to disable managed downloads |
 
-```text
-ERSATZRS_FFMPEG_RELEASE_TAG=v1.0.1
-ERSATZRS_FFMPEG_DOWNLOAD=0
-```
-
-`ERSATZRS_FFMPEG_RELEASE_TAG` pins managed acquisition/update to a specific
-`ErsatzRS-ffmpeg` release tag. Without it, startup uses the latest published
-release and falls back to the built-in known-good tag when the latest lookup is
-unavailable during first install. `ERSATZRS_FFMPEG_DOWNLOAD=0` disables managed
-downloads; use it only when an explicit override, a pre-placed managed runtime,
-or a compliant `PATH` runtime is available.
-
-Managed download requires a release asset for the current RID. If the selected
-`ErsatzRS-ffmpeg` release does not publish that asset, startup falls back to an
-explicit override, a pre-placed managed runtime, or `PATH` when one is usable;
-otherwise startup fails with the missing asset error.
-
-## Trakt
-
-Trakt list add/refresh operations require a Trakt API client id. Keep the
-actual value in the process environment or a deployment secret manager.
-
-Accepted environment variable names:
-
-```text
-TRAKT__CLIENTID=<client-id>
-ErsatzRS_TRAKT__CLIENTID=<client-id>
-```
-
-`TRAKT__CLIENTID` matches ErsatzTV's documented configuration shape. Existing
-Trakt list match, settings update, generated playlist cleanup, and delete
-operations are DB-only and do not require this value.
-
-## Secrets
-
-Secrets belong in environment variables or a deployment secret manager, not in
-committed files.
-
-Treat these as secrets:
-
-- Database passwords.
-- Plex, Jellyfin, Emby, and Trakt tokens.
-- Session keys.
-- API keys.
-- Cookie signing material.
+Disable downloads only when an explicit, pre-placed, or `PATH` runtime already
+satisfies startup validation.
 
 ## Logging
 
-Configuration debug output must redact secrets before logging.
+| Variable | Default | Purpose |
+|---|---|---|
+| `RUST_LOG` | `info` | Base `tracing` filter |
+
+The admin **Settings** -> **Logging** page persists the default minimum level
+and per-subsystem overrides for scanning, scheduling, searching, streaming, and
+HTTP. Persisted directives are applied after the base `RUST_LOG` filter and can
+be reloaded without replacing application files.
+
+The default log file is `ErsatzRS.log` under the platform's local application
+data `ErsatzRS/logs` directory. The Windows launcher's **Show Logs** action opens
+that directory.
+
+## IPTV JWT protection
+
+| Variable | Purpose |
+|---|---|
+| `JWT__IssuerSigningKey` | Enables HS256 JWT validation for IPTV routes |
+| `JWT:IssuerSigningKey` | Compatibility spelling where the environment supports colons |
+
+When neither variable contains a non-empty value, IPTV routes are open. When a
+key is configured, clients must supply a valid HS256 JWT with an `exp` claim as
+a bearer token or an `access_token` query value.
+
+Treat the signing key and generated tokens as secrets. See the
+[HTTP endpoint reference](http-endpoints.md) for request forms.
+
+## Trakt
+
+Trakt list add and refresh operations require a client ID:
+
+| Variable | Notes |
+|---|---|
+| `TRAKT__CLIENTID` | ErsatzTV-compatible spelling |
+| `ErsatzRS_TRAKT__CLIENTID` | ErsatzRS compatibility spelling |
+
+An optional `ErsatzRS_TRAKT__BASEURL` override exists for controlled testing;
+normal deployments should use the default Trakt API URL.
+
+Keep the client ID in the process environment or a deployment secret manager.
+Existing database-only Trakt list operations do not require a live client ID.
+
+## Healthcheck binary
+
+Release bundles contain `ersatzrs-healthcheck` (or
+`ersatzrs-healthcheck.exe`). It checks the server readiness URL.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ERSATZRS_HEALTHCHECK_URL` | `http://127.0.0.1:8409/healthz` | Override the readiness target |
+
+The Docker image uses this binary for its container health check.
+
+## Database-backed settings pages
+
+Use the admin UI for settings that can be loaded after database startup:
+
+| Page | Examples |
+|---|---|
+| **Settings** -> **FFmpeg** | runtime paths, segmenter behavior, subtitle extraction, transcode limits |
+| **Settings** -> **Logging** | global and subsystem log levels |
+| **Settings** -> **HDHomeRun** | tuner and discovery settings |
+| **Settings** -> **Scanner** | library refresh behavior |
+| **Settings** -> **Playout** | playout build horizon and scheduling behavior |
+| **Settings** -> **UI** | language and theme |
+| **Settings** -> **XMLTV** | guide days, time zone, and block behavior |
+
+These values live in the database and move with a database backup.
+
+## Secret handling
+
+Treat these values as secrets:
+
+- database passwords;
+- Plex, Jellyfin, Emby, and Trakt tokens;
+- JWT signing keys and access tokens; and
+- reverse-proxy or session credentials.
+
+Do not commit them, paste them into issue reports, or include them in
+screenshots. The troubleshooting export redacts recognized secret-bearing
+configuration, but review diagnostics before sharing them.

@@ -1,4 +1,4 @@
-# Parity Matrix
+# Parity matrix
 
 > **Moved.** The per-feature parity data that used to live in one large table
 > here is now the structured source of truth under
@@ -15,8 +15,9 @@
 > ```
 
 This is the living map from ErsatzTV behavior to ErsatzRS implementation.
-Phase-level progress is in [STATUS.md](../../STATUS.md). Persistence-level table
-coverage is tracked separately in
+Phase-level progress comes from `cargo xtask progress next`; [STATUS.md](../../STATUS.md)
+is a short pointer to that structured state. Persistence-level table coverage
+is tracked separately in
 [persistence-gap-matrix.md](persistence-gap-matrix.md).
 
 Each `parity/<slug>.toml` records the ErsatzTV source, the ErsatzRS target, a
@@ -33,7 +34,7 @@ Every PR that completes or intentionally changes parity updates the relevant
 `docs/progress/parity/<slug>.toml` (see the `update-parity` skill) and runs
 `cargo xtask progress check`.
 
-## Admin UI Route Coverage
+## Admin UI route coverage
 
 Route coverage (advertised nav link → backing route, plus advertised-but-404
 placeholders) now lives in [`docs/progress/routes.toml`](../progress/routes.toml).

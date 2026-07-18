@@ -271,7 +271,7 @@ an accurate port-completeness indicator.
 ## References
 
 - `plans/extras-alternate-versions-and-stream-roles.md` — implementation plan.
-- `docs/reference/content-variant-scheduling-examples.md` — operator examples
+- `docs/how-to/schedule-content-variants.md` — operator workflow
   for unplugged renditions, commentary channels, and featurette pre-roll.
 - [ADR 0004: collapsed initial schema](0004-collapsed-initial-schema.md) —
   "collapse then evolve" migration rule this change follows.
