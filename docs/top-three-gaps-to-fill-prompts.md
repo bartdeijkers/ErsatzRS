@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-18
-last_processed_commit: 0f7741b7f341f2496b7f0474c2a47db17e66d9fa
+generated: 2026-07-19
+last_processed_commit: 1c9355be5b21a71d5753af9e2cdf441b138c487e
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,14 +13,20 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: the `2d268966..0f7741b` window (2026-07-18 reconcile) was
-maintenance-only — dependency bumps, Windows release/CI packaging fixes, and
-E2E hydration test hardening — with no parity, route, or hydration change; every
-tracked feature stays `Ported` and all structured `[[debt]]` items remain
-resolved. The candidate set is therefore the proposed admin-localization ADR
-queue: with ADR 0021 French (France) already Implemented, the next three
-maintainer-requested ADRs carry over unchanged in stable ADR-number order —
-German (Germany), Hindi (India), and Indonesian (Indonesia).
+Current selection: the `0f7741b..1c9355b` window (2026-07-19 reconcile) landed
+real feature fixes — NVENC/CUDA overlay surface normalization, provider ETag
+remote-only short-circuiting, SQLite connection defaults enforcement — plus a
+Rust toolchain/nextest formalization and an end-user documentation refactor.
+Each feature commit reconciled its own parity file in the same change, so no
+status flip was owed here: `ffmpeg-filter-graph`, `content-variants`, and
+`initial-schema-database-backends` all stay `Ported`, no route or hydration
+state changed, and every structured `[[debt]]` item across the parity set
+remains resolved. With `cargo xtask progress gaps` clear and no open parity
+debt, ADR-backed hardening, or unblocked plan goal outranking it, the candidate
+set is the maintainer-requested admin-localization ADR queue (ADRs 0022–0047).
+With ADR 0021 French (France) already Implemented, the three lowest-numbered
+unimplemented ADRs carry over unchanged in stable ADR-number order — German
+(Germany), Hindi (India), and Indonesian (Indonesia).
 
 ---
 
