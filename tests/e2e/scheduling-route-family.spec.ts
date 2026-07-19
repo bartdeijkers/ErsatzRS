@@ -245,10 +245,14 @@ test.describe('scheduling route-family parity', () => {
     await scheduleItemControl(page, 'Search Query', 'input').fill('type:music_video');
     await scheduleItemControl(page, 'Playout Mode', 'select').selectOption('3');
     await scheduleItemControl(page, 'Multiple Count', 'input').fill('3');
-    await page.getByText('Smart Shuffle', { exact: true }).click();
+    await scheduleItemControl(page, 'Playback Order', 'select').selectOption('-1');
     await page.getByLabel('Spacing preset').selectOption('balanced');
     await expect(page.getByLabel('Videos between similar items')).toHaveValue('4');
     await expect(page.getByLabel('Minutes between similar items')).toHaveValue('30');
+    await scheduleItemControl(page, 'Playback Order', 'select').selectOption('2');
+    await expect(page.getByLabel('Spacing preset')).toBeHidden();
+    await scheduleItemControl(page, 'Playback Order', 'select').selectOption('-1');
+    await expect(page.getByLabel('Spacing preset')).toBeVisible();
 
     await page.getByRole('button', { name: /add schedule item/i }).click();
     await scheduleItemControl(page, 'Collection Type', 'select').selectOption('9');
@@ -262,6 +266,7 @@ test.describe('scheduling route-family parity', () => {
     await expect(page.locator('tbody tr').nth(1)).toContainText('Bumpers');
     await expect(page.locator('tbody tr').nth(1)).toContainText('One');
     await page.locator('tbody tr').nth(0).click();
+    await expect(scheduleItemControl(page, 'Playback Order', 'select')).toHaveValue('-1');
     await expect(page.getByLabel('Spacing preset')).toHaveValue('balanced');
     await page.getByRole('heading', { name: 'Smart Shuffle Overview' }).scrollIntoViewIfNeeded();
     await page.getByRole('button', { name: 'Refresh' }).click();
@@ -279,8 +284,9 @@ test.describe('scheduling route-family parity', () => {
     await mobilePage.goto(`/schedules/${scheduleId}/items`);
     await waitForHydration(mobilePage);
     await mobilePage.locator('tbody tr').nth(0).click();
+    await expect(scheduleItemControl(mobilePage, 'Playback Order', 'select')).toHaveValue('-1');
     await expect(mobilePage.getByLabel('Spacing preset')).toHaveValue('balanced');
-    await mobilePage.getByText('Smart Shuffle', { exact: true }).scrollIntoViewIfNeeded();
+    await scheduleItemControl(mobilePage, 'Playback Order', 'select').scrollIntoViewIfNeeded();
     await mobilePage.screenshot({ path: screenshotPath(testInfo, 'schedule-smart-shuffle-mobile') });
     await expectNoRuntimeErrors(mobilePage, mobileRuntimeErrors);
     await mobileContext.close();

@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Classic schedule items now present Smart Shuffle as a Playback Order option.
+  Selecting it keeps the compatible persisted Shuffle order and enables the
+  item policy; its spacing controls appear inline only while selected. Existing
+  Smart Shuffle policies attached to other randomized Classic orders normalize
+  to Shuffle when next saved.
+
 ## [1.0.15-beta.9] - 2026-07-19
 
 ### Changed

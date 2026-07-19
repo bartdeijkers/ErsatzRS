@@ -2032,6 +2032,21 @@ fn normalize_schedule_item_dependencies(item: &mut ScheduleItemForm) {
         item.playback_order = PLAYBACK_ORDER_SHUFFLE;
     }
 
+    // The Classic editor presents Smart Shuffle as a playback-order choice,
+    // while persistence remains the compatible Shuffle order plus an additive
+    // policy attachment. Saving any enabled policy therefore canonicalizes its
+    // underlying randomized order to Shuffle.
+    if item.smart_shuffle.preset != "off"
+        && !matches!(
+            item.collection_type,
+            COLLECTION_TYPE_PLAYLIST
+                | COLLECTION_TYPE_RERUN_FIRST_RUN
+                | COLLECTION_TYPE_RERUN_RERUN
+        )
+    {
+        item.playback_order = PLAYBACK_ORDER_SHUFFLE;
+    }
+
     if item.playback_order != PLAYBACK_ORDER_CHRONOLOGICAL
         && item.multiple_mode == MULTIPLE_MODE_MULTI_EPISODE_GROUP_SIZE
     {
@@ -2587,6 +2602,7 @@ mod tests {
             filter_rules: "marvel=tag:marvel".to_owned(),
             inherited_legacy: false,
         };
+        item.playback_order = PLAYBACK_ORDER_RANDOM;
         replace_schedule_items_with_pool(&pool, 1, vec![item])
             .await
             .unwrap();
@@ -2598,6 +2614,7 @@ mod tests {
         assert_eq!(loaded[0].smart_shuffle.after_duration_minutes, 45);
         assert!(loaded[0].smart_shuffle.include_filler);
         assert_eq!(loaded[0].smart_shuffle.filter_rules, "marvel=tag:marvel");
+        assert_eq!(loaded[0].playback_order, PLAYBACK_ORDER_SHUFFLE);
 
         loaded[0].smart_shuffle = SmartShuffleForm::default();
         replace_schedule_items_with_pool(&pool, 1, loaded)
@@ -2712,6 +2729,12 @@ mod tests {
         normalize_schedule_item_dependencies(&mut multi_collection);
         assert_eq!(multi_collection.playback_order, PLAYBACK_ORDER_SHUFFLE);
         assert_eq!(multi_collection.multiple_mode, MULTIPLE_MODE_COUNT);
+
+        let mut smart_shuffle = valid_item();
+        smart_shuffle.playback_order = PLAYBACK_ORDER_MARATHON;
+        smart_shuffle.smart_shuffle.preset = "balanced".to_owned();
+        normalize_schedule_item_dependencies(&mut smart_shuffle);
+        assert_eq!(smart_shuffle.playback_order, PLAYBACK_ORDER_SHUFFLE);
     }
 
     #[test]

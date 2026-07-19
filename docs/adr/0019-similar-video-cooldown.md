@@ -30,12 +30,16 @@ an item override. A Sequential YAML content entry that explicitly declares
 `smart_shuffle`, including an Off value, overrides rather than inherits the
 legacy root `cooldown` policy.
 
-The localized Classic Schedule Item and Block Item editors expose Off, Light,
-Balanced, and Custom controls directly after playback order, including scope,
-item-count and duration thresholds, filler participation, built-in facets, and
-operator filter rules. Their draft-aware Smart Shuffle Overview reports every
-selection unit and exposes all candidates through search, tag filters, and
-50-row pages with localized warning states. Sequential YAML uses
+The localized Classic Schedule Item editor presents Smart Shuffle as a
+Playback Order option backed by the compatible Shuffle order plus its policy;
+its Light, Balanced, and Custom controls appear inline only while that option
+is selected. Existing enabled Classic policies normalize their underlying
+randomized order to Shuffle when next saved. The Block Item editor exposes
+Off, Light, Balanced, and Custom controls directly after playback order,
+including scope, item-count and duration thresholds, filler participation,
+built-in facets, and operator filter rules. Their draft-aware Smart Shuffle
+Overview reports every selection unit and exposes all candidates through
+search, tag filters, and 50-row pages with localized warning states. Sequential YAML uses
 `content[].smart_shuffle`; Scripted Lua uses
 `set_smart_shuffle_policy(content_key, json)`. Focused core,
 SQL hydration and anchor persistence, admin persistence, schema, hydration,

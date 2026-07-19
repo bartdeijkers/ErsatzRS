@@ -34,6 +34,10 @@ stylance::import_crate_style!(style, "src/admin/pages/scheduling/schedules.modul
 
 type ScheduleInitialResourceValue = ((u32, u32), (Vec<ScheduleListRow>, u64));
 
+// Smart Shuffle is an editor-only selection. Persisted schedules continue to
+// use ErsatzTV-compatible Shuffle plus the additive Smart Shuffle policy.
+const PLAYBACK_ORDER_SMART_SHUFFLE: i32 = -1;
+
 #[component]
 pub fn SchedulesPage() -> impl IntoView {
     let query = use_query_map();
@@ -761,7 +765,7 @@ fn schedule_item_fallback_row_html(
         playback = select_html(
             "item_playback_order",
             item.playback_order,
-            &playback_options(item.collection_type)
+            &persisted_playback_options(item.collection_type)
         ),
         custom_title = escape_html(&item.custom_title),
         custom_title_label = tr(TextKey::CustomTitle),
@@ -956,7 +960,7 @@ fn schedule_item_add_fields_html(options: &ScheduleItemsEditorOptions) -> String
         playback = select_html(
             "new_playback_order",
             PLAYBACK_ORDER_SHUFFLE,
-            &playback_options(COLLECTION_TYPE_COLLECTION)
+            &persisted_playback_options(COLLECTION_TYPE_COLLECTION)
         ),
         playout_mode = tr(TextKey::PlayoutMode),
         playout = select_html("new_playout_mode", PLAYOUT_MODE_ONE, &playout_options()),
@@ -1406,7 +1410,7 @@ fn schedule_item_editor(
 ) -> AnyView {
     let selected_collection_type = item.collection_type;
     let selected_playout_mode = item.playout_mode;
-    let selected_playback_order = item.playback_order;
+    let selected_playback_order = playback_order_selection(item);
     let start_type_options = if shuffle_schedule_items {
         vec![(START_TYPE_DYNAMIC, tr(TextKey::Dynamic))]
     } else {
@@ -1452,9 +1456,9 @@ fn schedule_item_editor(
                 });
             })}
             {collection_picker(index, item, items, options)}
-            {select_i32(tr(TextKey::PlaybackOrder), item.playback_order, playback_options(item.collection_type), move |value| {
+            {select_i32(tr(TextKey::PlaybackOrder), playback_order_selection(item), playback_options(item.collection_type), move |value| {
                 update_item(items, index, |item| {
-                    item.playback_order = value;
+                    apply_playback_order_selection(item, value);
                     apply_playback_order_rules(item);
                 });
             })}
@@ -1557,18 +1561,13 @@ fn schedule_item_smart_shuffle_editor(
     items: RwSignal<Vec<ScheduleItemForm>>,
 ) -> AnyView {
     let form = item.smart_shuffle.clone();
-    let supported = is_randomized_playback_order_value(item.playback_order);
+    let enabled = smart_shuffle_enabled(item);
     let invalid = form.preset == "custom"
         && ((form.after_items == 0 && form.after_duration_minutes == 0)
             || (form.rules.is_empty() && form.filter_rules.trim().is_empty()));
 
     view! {
-        <details class=style::smart_shuffle_panel>
-            <summary class=style::section_title>{tr(TextKey::SmartShuffle)}</summary>
-            <p class=style::caption style:display=if supported { "none" } else { "" }>
-                {tr(TextKey::SmartShuffleInactive)}
-            </p>
-            <fieldset class=style::smart_shuffle_fields disabled=!supported>
+        <fieldset style:display=if enabled { "contents" } else { "none" }>
                 <label class=style::field>
                     <span>{tr(TextKey::SmartShufflePreset)}</span>
                     <select class=style::select prop:value=form.preset.clone() on:change=move |event| {
@@ -1642,8 +1641,7 @@ fn schedule_item_smart_shuffle_editor(
                 <p class=style::error style:display=if invalid { "" } else { "none" }>
                     {tr(TextKey::SmartShuffleValidation)}
                 </p>
-            </fieldset>
-        </details>
+        </fieldset>
     }
     .into_any()
 }
@@ -1723,8 +1721,37 @@ fn apply_smart_shuffle_preset(form: &mut SmartShuffleForm, preset: &str) {
     }
 }
 
-fn is_randomized_playback_order_value(value: i32) -> bool {
-    matches!(value, 2 | 3 | 4 | 5 | 7 | 8)
+fn smart_shuffle_enabled(item: &ScheduleItemForm) -> bool {
+    item.smart_shuffle.preset != "off" && supports_smart_shuffle(item.collection_type)
+}
+
+fn playback_order_selection(item: &ScheduleItemForm) -> i32 {
+    if smart_shuffle_enabled(item) {
+        PLAYBACK_ORDER_SMART_SHUFFLE
+    } else {
+        item.playback_order
+    }
+}
+
+fn supports_smart_shuffle(collection_type: i32) -> bool {
+    !matches!(
+        collection_type,
+        COLLECTION_TYPE_PLAYLIST | COLLECTION_TYPE_RERUN_FIRST_RUN | COLLECTION_TYPE_RERUN_RERUN
+    )
+}
+
+fn apply_playback_order_selection(item: &mut ScheduleItemForm, selection: i32) {
+    if selection == PLAYBACK_ORDER_SMART_SHUFFLE {
+        item.playback_order = PLAYBACK_ORDER_SHUFFLE;
+        if item.smart_shuffle.preset == "off" {
+            apply_smart_shuffle_preset(&mut item.smart_shuffle, "balanced");
+        }
+        item.smart_shuffle.inherited_legacy = false;
+    } else {
+        item.playback_order = selection;
+        "off".clone_into(&mut item.smart_shuffle.preset);
+        item.smart_shuffle.inherited_legacy = false;
+    }
 }
 
 fn collection_picker(
@@ -2048,6 +2075,8 @@ fn apply_collection_type_rules(item: &mut ScheduleItemForm) {
         COLLECTION_TYPE_PLAYLIST | COLLECTION_TYPE_RERUN_FIRST_RUN | COLLECTION_TYPE_RERUN_RERUN
     ) {
         item.playback_order = PLAYBACK_ORDER_NONE;
+        "off".clone_into(&mut item.smart_shuffle.preset);
+        item.smart_shuffle.inherited_legacy = false;
     }
 
     if item.collection_type == COLLECTION_TYPE_MULTI_COLLECTION {
@@ -2170,6 +2199,7 @@ fn playback_options(collection_type: i32) -> Vec<(i32, &'static str)> {
     match collection_type {
         COLLECTION_TYPE_MULTI_COLLECTION => vec![
             (PLAYBACK_ORDER_SHUFFLE, tr(TextKey::Shuffle)),
+            (PLAYBACK_ORDER_SMART_SHUFFLE, tr(TextKey::SmartShuffle)),
             (PLAYBACK_ORDER_SHUFFLE_IN_ORDER, tr(TextKey::ShuffleInOrder)),
         ],
         COLLECTION_TYPE_TELEVISION_SHOW => vec![
@@ -2177,6 +2207,7 @@ fn playback_options(collection_type: i32) -> Vec<(i32, &'static str)> {
             (PLAYBACK_ORDER_SEASON_EPISODE, tr(TextKey::SeasonEpisode)),
             (PLAYBACK_ORDER_RANDOM, tr(TextKey::Random)),
             (PLAYBACK_ORDER_SHUFFLE, tr(TextKey::Shuffle)),
+            (PLAYBACK_ORDER_SMART_SHUFFLE, tr(TextKey::SmartShuffle)),
             (5, tr(TextKey::MultiEpisodeShuffle)),
         ],
         COLLECTION_TYPE_PLAYLIST
@@ -2188,10 +2219,18 @@ fn playback_options(collection_type: i32) -> Vec<(i32, &'static str)> {
             (PLAYBACK_ORDER_CHRONOLOGICAL, tr(TextKey::Chronological)),
             (PLAYBACK_ORDER_RANDOM, tr(TextKey::Random)),
             (PLAYBACK_ORDER_SHUFFLE, tr(TextKey::Shuffle)),
+            (PLAYBACK_ORDER_SMART_SHUFFLE, tr(TextKey::SmartShuffle)),
             (PLAYBACK_ORDER_SHUFFLE_IN_ORDER, tr(TextKey::ShuffleInOrder)),
             (PLAYBACK_ORDER_MARATHON, tr(TextKey::Marathon)),
         ],
     }
+}
+
+fn persisted_playback_options(collection_type: i32) -> Vec<(i32, &'static str)> {
+    playback_options(collection_type)
+        .into_iter()
+        .filter(|(value, _)| *value != PLAYBACK_ORDER_SMART_SHUFFLE)
+        .collect()
 }
 
 fn can_fill_with_groups(item: &ScheduleItemForm) -> bool {
@@ -2302,4 +2341,45 @@ fn checkbox_field(
         </label>
     }
     .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smart_shuffle_selection_uses_shuffle_and_balanced_policy() {
+        let mut item = ScheduleItemForm::default();
+
+        apply_playback_order_selection(&mut item, PLAYBACK_ORDER_SMART_SHUFFLE);
+
+        assert_eq!(item.playback_order, PLAYBACK_ORDER_SHUFFLE);
+        assert_eq!(item.smart_shuffle.preset, "balanced");
+        assert_eq!(
+            playback_order_selection(&item),
+            PLAYBACK_ORDER_SMART_SHUFFLE
+        );
+    }
+
+    #[test]
+    fn ordinary_playback_selection_disables_smart_shuffle() {
+        let mut item = ScheduleItemForm::default();
+        apply_playback_order_selection(&mut item, PLAYBACK_ORDER_SMART_SHUFFLE);
+
+        apply_playback_order_selection(&mut item, PLAYBACK_ORDER_RANDOM);
+
+        assert_eq!(item.playback_order, PLAYBACK_ORDER_RANDOM);
+        assert_eq!(item.smart_shuffle.preset, "off");
+        assert_eq!(playback_order_selection(&item), PLAYBACK_ORDER_RANDOM);
+    }
+
+    #[test]
+    fn smart_shuffle_option_is_not_rendered_by_the_no_js_fallback() {
+        assert!(playback_options(COLLECTION_TYPE_COLLECTION)
+            .iter()
+            .any(|(value, _)| *value == PLAYBACK_ORDER_SMART_SHUFFLE));
+        assert!(persisted_playback_options(COLLECTION_TYPE_COLLECTION)
+            .iter()
+            .all(|(value, _)| *value != PLAYBACK_ORDER_SMART_SHUFFLE));
+    }
 }
