@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.9] - 2026-07-19
+
 ### Changed
 
 - Renamed Similar Video Cooldown to Smart Shuffle and moved its opt-in policy
@@ -855,7 +857,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.8...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...HEAD
+[1.0.15-beta.9]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.8...v1.0.15-beta.9
 [1.0.15-beta.8]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.7...v1.0.15-beta.8
 [1.0.15-beta.7]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.6...v1.0.15-beta.7
 [1.0.15-beta.6]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.5...v1.0.15-beta.6
