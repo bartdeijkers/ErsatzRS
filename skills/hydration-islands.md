@@ -105,7 +105,7 @@ release-sensitive changes:
 ```bash
 cargo check -p ersatzrs-web --target wasm32-unknown-unknown --no-default-features --features hydrate
 cargo xtask hydration-lint -p ersatzrs-web
-cargo test -p ersatzrs-web --all-targets <route_or_module_filter>
+./run.sh test -p ersatzrs-web <route_or_module_filter>
 cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 ```
 

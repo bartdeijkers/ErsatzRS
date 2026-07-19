@@ -229,7 +229,7 @@ Use the repo workflow from AGENTS.md. Details are in `plans/module-split-survey.
 
 Before editing:
 1. Read `plans/module-split-survey.md` (candidate 5).
-2. Establish the green baseline FIRST: `cargo test -p ersatzrs-infra --test jellyfin_service` and `--test emby_service`. Capture the output as the regression baseline. Do NOT start if these are red.
+2. Establish the green baseline FIRST: `./run.sh test -p ersatzrs-infra --test jellyfin_service` and `./run.sh test -p ersatzrs-infra --test emby_service`. Capture the output as the regression baseline. Do NOT start if these are red.
 3. Diff jellyfin.rs against emby.rs to enumerate the exact divergences.
 
 Implement:

@@ -77,8 +77,8 @@ Visual verification:
   clean.
 
 Verification:
-- `cargo test -p ersatzrs-web all_languages_translate_each_key`
-- `cargo test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
+- `./run.sh test -p ersatzrs-web all_languages_translate_each_key`
+- `./run.sh test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
 - `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
 - `cargo xtask hydration-lint -p ersatzrs-web`
 - `cargo xtask parity-check web`
@@ -137,8 +137,8 @@ Visual verification:
   are expected, and the browser console is clean.
 
 Verification:
-- `cargo test -p ersatzrs-web all_languages_translate_each_key`
-- `cargo test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
+- `./run.sh test -p ersatzrs-web all_languages_translate_each_key`
+- `./run.sh test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
 - `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
 - `cargo xtask hydration-lint -p ersatzrs-web`
 - `cargo xtask parity-check web`
@@ -196,8 +196,8 @@ Visual verification:
   is clean.
 
 Verification:
-- `cargo test -p ersatzrs-web all_languages_translate_each_key`
-- `cargo test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
+- `./run.sh test -p ersatzrs-web all_languages_translate_each_key`
+- `./run.sh test -p ersatzrs-web supported_languages_match_requested_i18n_scope`
 - `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
 - `cargo xtask hydration-lint -p ersatzrs-web`
 - `cargo xtask parity-check web`

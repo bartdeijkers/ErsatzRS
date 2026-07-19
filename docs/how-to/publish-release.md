@@ -33,7 +33,7 @@ git status --short
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features mysql -- -D warnings
-cargo test --workspace --all-features
+./run.sh test-closeout
 ```
 
 Update `CHANGELOG.md` and any release notes in the same commit if the release

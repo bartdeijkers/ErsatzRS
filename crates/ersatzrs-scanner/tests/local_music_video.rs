@@ -3,7 +3,7 @@
 //! the enriched metadata, child rows, and artwork all reach the database.
 //!
 //! Like [`local_scan.rs`] this is `#[ignore]`-gated on `ffprobe` + the Big
-//! Buck Bunny fixture; run with `cargo test -p ersatzrs-scanner -- --ignored`.
+//! Buck Bunny fixture; run with `./run.sh test -p ersatzrs-scanner --run-ignored ignored-only`.
 
 #![cfg(not(feature = "mysql"))]
 
@@ -15,7 +15,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Executor, Row, SqlitePool};
 
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 #[allow(clippy::too_many_lines)]
 async fn local_music_video_scan_writes_full_metadata_and_child_rows() {
     let Some(ffprobe) = ffprobe_binary() else {

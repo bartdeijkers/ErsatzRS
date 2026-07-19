@@ -34,16 +34,16 @@ References:
   diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
   files. The `mysql-integration` feature is enabled there, so the
   testcontainers MariaDB run is part of CI.
-- **Focused/local dev**: use `cargo nextest run -p <crate>` as the preferred
-  runner and append a test filter when one regression is sufficient. The
+- **Focused/local dev**: use `./run.sh test -p <crate>` as the required runner
+  and append a test filter when one regression is sufficient. Agent command
+  hooks reject direct `cargo test` invocations. The
   repository profile runs through all failures, retries nothing, and reports
   tests slower than 60 seconds. Add the relevant feature flags when the change
   crosses a gated path.
-- **Closeout**: keep `cargo test --workspace --all-features` as the canonical
-  local gate. It includes doctests, which nextest does not run, and the MySQL
-  integration feature may pull a MariaDB image on a cold cache. CI remains on
-  its existing Cargo test selection until a CI benchmark justifies changing
-  runners.
+- **Closeout**: use `./run.sh test-closeout`. It runs all workspace
+  unit/integration/binary tests through nextest, then Cargo doctests because
+  nextest cannot execute them. The MySQL integration feature may pull a MariaDB
+  image on a cold cache. CI remains on its existing direct Cargo test selection.
 - **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
   run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
   For exploratory work, a browser probe through Playwright MCP or another
@@ -164,7 +164,7 @@ This wraps the cheap checks that have repeatedly caught late parity bugs:
 - `cargo xtask target-size` warning check before the gate ladder
 - `cargo fmt --all -- --check`
 - `cargo xtask hydration-lint -p ersatzrs-web`
-- `cargo test -p ersatzrs-web`
+- `cargo nextest run -p ersatzrs-web`
 - `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`
 
 Use extra scope words for traceability when the slice spans more than web UI,
@@ -205,7 +205,7 @@ The **human** runs, before committing:
 - `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo clippy --workspace --all-targets --features mysql -- -D warnings`
   (mirror CI: two passes, neither with `--all-features`).
-- `cargo test --workspace --all-features`
+- `./run.sh test-closeout`
 - `cargo leptos build` from `crates/ersatzrs-web` (rebuilds hydration assets).
 - A runnable Playwright spec for the touched page when one exists or is added;
   otherwise a documented browser smoke using Playwright MCP or an equivalent

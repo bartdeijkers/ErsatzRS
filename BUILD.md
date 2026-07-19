@@ -11,10 +11,11 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 - Rust `1.97.1` exactly, pinned in `rust-toolchain.toml` and required by the
   workspace `Cargo.toml`. CI, release jobs, and Docker builders use the same
   version.
-- `cargo-nextest` for the preferred focused/local Rust test loop. Install a
+- `cargo-nextest` for the required focused/local Rust test loop. Install a
   prebuilt release using the
   [official instructions](https://nexte.st/docs/installation/pre-built-binaries/).
-  It is optional for CI and the canonical closeout gate.
+  It is optional only for CI; the local closeout wrapper uses it before running
+  Cargo doctests.
 - `cargo install cargo-leptos --locked` (the web crate is built through it,
   not plain cargo, because of the SSR + WASM dual target).
 - Network access for the first managed FFmpeg runtime download, or an explicit
@@ -36,6 +37,8 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh`       | Alias for `dev`.                                            |
 | `./run.sh dev`   | `cargo leptos watch` — edit-save-refresh hot loop.          |
 | `./run.sh check` | Fast inner-loop `cargo check` (no codegen/link); scope with `-p <crate>`. |
+| `./run.sh test`  | Focused/local nextest run; requires explicit crate/filter arguments. |
+| `./run.sh test-closeout` | Workspace nextest run followed by Cargo doctests. |
 | `./run.sh build` | One-shot `cargo leptos build` + `cargo run`. Matches CI.    |
 | `./run.sh serve` | Rebuild once, serve via cargo-leptos (no watch).            |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
@@ -62,6 +65,9 @@ Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
 ```powershell
 .\run.cmd            # alias for `dev`
 .\run.cmd dev        # cargo leptos watch
+.\run.cmd check -p ersatzrs-core
+.\run.cmd test -p ersatzrs-core scheduling
+.\run.cmd test-closeout
 .\run.cmd build      # cargo leptos build + cargo run
 .\run.cmd serve      # cargo leptos serve
 .\run.cmd seed       # seed the SQLite db from tests/fixtures/seed_admin.sql
@@ -116,25 +122,24 @@ re-runs `rustc` over everything that differs, which is brutal on the `/mnt/f`
 Keep the edit loop cheap by **not** flipping configurations while iterating:
 
 - **Logic/crate work:** `./run.sh check -p <crate>` (skips codegen *and*
-  linking — linking the big binary to 9p is a major cost). Use `cargo nextest
-  run -p <crate>` as the preferred focused/local runner; append a test filter
+  linking — linking the big binary to 9p is a major cost). Use `./run.sh test
+  -p <crate>` as the required focused/local runner; append a test filter
   when one regression is sufficient. The checked-in `.config/nextest.toml`
   keeps running after failures, retries nothing, and reports tests slower than
   60 seconds in the final summary.
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.
-- Run the full multi-config gate (the two clippy passes, `cargo test
-  --all-features`, `cargo leptos build`, `cargo xtask parity-check`) **once at
+- Run the full multi-config gate (the two clippy passes, `./run.sh
+  test-closeout`, `cargo leptos build`, `cargo xtask parity-check`) **once at
   closeout**, not per edit.
 
-Nextest does not run doctests. Keep `cargo test --workspace --all-features` as
-the canonical closeout command so unit, integration, binary, and documentation
-tests retain one authoritative gate. CI intentionally remains on its existing
-`cargo test --workspace --all-features --lib --bins --tests` selection until a
-CI benchmark justifies changing it. The 2026-07-18 warm-cache pilot below
-supports nextest for local execution but did not show enough absolute savings
-to change CI.
+Nextest does not run doctests. `./run.sh test-closeout` therefore runs `cargo
+nextest run --workspace --all-features` for unit/integration/binary tests and
+then uses Cargo only for workspace doctests. Direct agent `cargo test` commands
+are blocked by the checked-in Codex/Claude hooks; use the wrappers so focused
+testing cannot drift back to Cargo. CI intentionally remains on its existing
+`cargo test --workspace --all-features --lib --bins --tests` selection.
 
 ### Optional: sccache (recommended on the 9p-target setup)
 
@@ -156,7 +161,8 @@ where it is usable instead:
 
 - `./run.sh` enables sccache for its subcommands automatically when `sccache` is
   on `PATH` (it runs as the cache owner).
-- To also cache the manual closeout gate (the two clippy passes, `cargo test`),
+- To also cache the manual closeout gate (the two clippy passes and
+  `./run.sh test-closeout`),
   `export RUSTC_WRAPPER=sccache` in your own interactive shell (`~/.bashrc`).
 - Keep only the cache location in your global `~/.cargo/config.toml` `[env]`
   (inert unless `RUSTC_WRAPPER=sccache` is set), pointed at fast ext4, not the
@@ -170,6 +176,11 @@ where it is usable instead:
 
 Check it is working with `sccache --show-stats` (compile requests climb; cache
 hit rate rises once the same dependency/feature union is built a second time).
+
+The wrappers apply the conventional local FFmpeg path overrides only to
+`dev`, `build`, and `serve`. Test and check commands do not inject those
+variables, so managed-runtime tests observe the same environment as direct
+Cargo/CI unless the caller explicitly supplied an override.
 
 ## Profile tuning
 

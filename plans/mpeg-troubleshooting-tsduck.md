@@ -179,8 +179,8 @@ yields `NotAvailable` and never fails startup or `/healthz`.
   ```bash
   cargo fmt --all -- --check
   cargo check -p ersatzrs-web --features ssr
-  cargo test -p ersatzrs-infra tsduck --all-features
-  cargo test -p ersatzrs-web troubleshooting --features ssr
+  ./run.sh test -p ersatzrs-infra tsduck --all-features
+  ./run.sh test -p ersatzrs-web troubleshooting --features ssr
   ```
 
 ## Assumptions

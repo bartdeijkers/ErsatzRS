@@ -21,7 +21,7 @@ cargo fmt --all -- --check
 # Lint mirrors CI: two passes, neither with --all-features.
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features mysql -- -D warnings
-cargo test --workspace --all-features
+./run.sh test-closeout
 cargo deny check
 ```
 
@@ -29,6 +29,8 @@ cargo deny check
 
 - Read the ErsatzTV source before writing Rust ports.
 - Preserve ErsatzTV behavior unless an ADR records a deviation.
+- Use `./run.sh test -p <crate> [filter]` for focused Rust tests. Do not invoke
+  `cargo test` directly; CI is the only direct-Cargo exception.
 - Snapshot-test generated FFmpeg argv with `insta`.
 - Follow [STYLE.md](../../STYLE.md), [ARCHITECTURE.md](../../ARCHITECTURE.md),
   and [PORTING.md](../../PORTING.md).

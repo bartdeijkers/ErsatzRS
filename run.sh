@@ -5,6 +5,8 @@
 #   ./run.sh           # alias for `dev`
 #   ./run.sh dev       # cargo leptos watch (hot-reload)
 #   ./run.sh check     # fast inner-loop type-check (one config; no codegen/link)
+#   ./run.sh test      # focused/local Rust tests through cargo-nextest
+#   ./run.sh test-closeout # workspace nextest run plus Cargo doctests
 #   ./run.sh build     # one-shot build + run (CI parity)
 #   ./run.sh serve     # rebuild once and serve (no watch loop)
 #   ./run.sh seed      # apply migrations + seed admin fixture data
@@ -14,16 +16,18 @@
 # `./run.sh dev` for UI work) and DO NOT flip --features / --all-features /
 # --all-targets between runs. Each flip is a separate compilation graph that
 # re-runs rustc across the whole tree. Run the full multi-config gate
-# (cargo xtask parity-check, the two clippy passes, cargo test --all-features,
+# (cargo xtask parity-check, the two clippy passes, ./run.sh test-closeout,
 # cargo leptos build) once at closeout, not per edit.
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-export LD_LIBRARY_PATH="$HOME/.local/ffmpeg-8.1/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export ErsatzRS_FFMPEG__PATH="$HOME/.local/ffmpeg-8.1/bin/ffmpeg"
-export ErsatzRS_FFPROBE__PATH="$HOME/.local/ffmpeg-8.1/bin/ffprobe"
+configure_local_ffmpeg() {
+  export LD_LIBRARY_PATH="$HOME/.local/ffmpeg-8.1/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export ErsatzRS_FFMPEG__PATH="$HOME/.local/ffmpeg-8.1/bin/ffmpeg"
+  export ErsatzRS_FFPROBE__PATH="$HOME/.local/ffmpeg-8.1/bin/ffprobe"
+}
 
 # Opt-in sccache (caches dependency compiles on fast ext4 so config switches
 # don't recompile on the slow 9p target). Enabled here only — NOT forced
@@ -86,6 +90,7 @@ cmd="${1:-dev}"
 case "$cmd" in
   dev)
     check_target_size
+    configure_local_ffmpeg
     cd crates/ersatzrs-web
     exec cargo leptos watch
     ;;
@@ -103,13 +108,48 @@ case "$cmd" in
     fi
     exec cargo check "$@"
     ;;
+  test)
+    # Agents and local contributors use nextest for all focused Rust test
+    # execution. Requiring an explicit selector prevents an accidental broad
+    # run during the edit loop.
+    check_target_size
+    shift || true
+    if [[ $# -eq 0 ]]; then
+      echo "usage: $0 test -p <crate> [nextest args or test filter]" >&2
+      exit 2
+    fi
+    if ! command -v cargo-nextest >/dev/null 2>&1; then
+      echo "cargo-nextest is required; see BUILD.md installation instructions" >&2
+      exit 1
+    fi
+    exec cargo nextest run "$@"
+    ;;
+  test-closeout)
+    # Nextest owns unit/integration execution locally. Cargo is retained only
+    # for the doctests that nextest cannot execute; CI keeps its existing
+    # direct cargo-test command.
+    check_target_size
+    shift || true
+    if [[ $# -ne 0 ]]; then
+      echo "usage: $0 test-closeout" >&2
+      exit 2
+    fi
+    if ! command -v cargo-nextest >/dev/null 2>&1; then
+      echo "cargo-nextest is required; see BUILD.md installation instructions" >&2
+      exit 1
+    fi
+    cargo nextest run --workspace --all-features
+    exec cargo test --workspace --all-features --doc
+    ;;
   build)
     check_target_size
+    configure_local_ffmpeg
     (cd crates/ersatzrs-web && cargo leptos build)
     cargo run --bin ersatzrs-web 2>&1 | tee ersatzrs.log
     ;;
   serve)
     check_target_size
+    configure_local_ffmpeg
     cd crates/ersatzrs-web
     exec cargo leptos serve
     ;;
@@ -128,7 +168,7 @@ case "$cmd" in
     exec tail -F ersatzrs.log
     ;;
   *)
-    echo "usage: $0 [dev|check|build|serve|seed|log]" >&2
+    echo "usage: $0 [dev|check|test|test-closeout|build|serve|seed|log]" >&2
     exit 1
     ;;
 esac

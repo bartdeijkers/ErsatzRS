@@ -3,6 +3,9 @@
 # Usage:
 #   .\run.ps1           # alias for `dev`
 #   .\run.ps1 dev       # cargo leptos watch (hot-reload)
+#   .\run.ps1 check     # fast inner-loop type-check
+#   .\run.ps1 test      # focused/local Rust tests through cargo-nextest
+#   .\run.ps1 test-closeout # workspace nextest run plus Cargo doctests
 #   .\run.ps1 build     # one-shot build + run (CI parity)
 #   .\run.ps1 serve     # rebuild once and serve (no watch loop)
 #   .\run.ps1 seed      # apply migrations + seed admin fixture data
@@ -11,8 +14,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('dev', 'build', 'serve', 'seed', 'log')]
-    [string]$Command = 'dev'
+    [ValidateSet('dev', 'check', 'test', 'test-closeout', 'build', 'serve', 'seed', 'log')]
+    [string]$Command = 'dev',
+
+    [Parameter(Position = 1, ValueFromRemainingArguments = $true)]
+    [string[]]$CommandArgs = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,14 +27,16 @@ Set-Location -Path $PSScriptRoot
 # Default to a Windows-conventional FFmpeg 8.1 install if present. Users with
 # a different layout should set ErsatzRS_FFMPEG__PATH / ErsatzRS_FFPROBE__PATH
 # (or put ffmpeg on PATH) before running this script.
-$ffmpegRoot = Join-Path $HOME '.local\ffmpeg-8.1'
-$ffmpegBin = Join-Path $ffmpegRoot 'bin\ffmpeg.exe'
-$ffprobeBin = Join-Path $ffmpegRoot 'bin\ffprobe.exe'
-if ((Test-Path $ffmpegBin) -and -not $env:ErsatzRS_FFMPEG__PATH) {
-    $env:ErsatzRS_FFMPEG__PATH = $ffmpegBin
-}
-if ((Test-Path $ffprobeBin) -and -not $env:ErsatzRS_FFPROBE__PATH) {
-    $env:ErsatzRS_FFPROBE__PATH = $ffprobeBin
+function Set-LocalFfmpegOverrides {
+    $ffmpegRoot = Join-Path $HOME '.local\ffmpeg-8.1'
+    $ffmpegBin = Join-Path $ffmpegRoot 'bin\ffmpeg.exe'
+    $ffprobeBin = Join-Path $ffmpegRoot 'bin\ffprobe.exe'
+    if ((Test-Path $ffmpegBin) -and -not $env:ErsatzRS_FFMPEG__PATH) {
+        $env:ErsatzRS_FFMPEG__PATH = $ffmpegBin
+    }
+    if ((Test-Path $ffprobeBin) -and -not $env:ErsatzRS_FFPROBE__PATH) {
+        $env:ErsatzRS_FFPROBE__PATH = $ffprobeBin
+    }
 }
 
 function Resolve-TargetDir {
@@ -74,12 +82,50 @@ function Test-TargetSize {
 switch ($Command) {
     'dev' {
         Test-TargetSize
+        Set-LocalFfmpegOverrides
         Set-Location -Path 'crates/ersatzrs-web'
         cargo leptos watch
         exit $LASTEXITCODE
     }
+    'check' {
+        Test-TargetSize
+        if ($CommandArgs.Count -eq 0) {
+            $CommandArgs = @('--workspace')
+        }
+        cargo check @CommandArgs
+        exit $LASTEXITCODE
+    }
+    'test' {
+        Test-TargetSize
+        if ($CommandArgs.Count -eq 0) {
+            Write-Error 'usage: .\run.ps1 test -p <crate> [nextest args or test filter]'
+            exit 2
+        }
+        if (-not (Get-Command cargo-nextest -ErrorAction SilentlyContinue)) {
+            Write-Error 'cargo-nextest is required; see BUILD.md installation instructions'
+            exit 1
+        }
+        cargo nextest run @CommandArgs
+        exit $LASTEXITCODE
+    }
+    'test-closeout' {
+        Test-TargetSize
+        if ($CommandArgs.Count -ne 0) {
+            Write-Error 'usage: .\run.ps1 test-closeout'
+            exit 2
+        }
+        if (-not (Get-Command cargo-nextest -ErrorAction SilentlyContinue)) {
+            Write-Error 'cargo-nextest is required; see BUILD.md installation instructions'
+            exit 1
+        }
+        cargo nextest run --workspace --all-features
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        cargo test --workspace --all-features --doc
+        exit $LASTEXITCODE
+    }
     'build' {
         Test-TargetSize
+        Set-LocalFfmpegOverrides
         Push-Location 'crates/ersatzrs-web'
         try {
             cargo leptos build
@@ -92,6 +138,7 @@ switch ($Command) {
     }
     'serve' {
         Test-TargetSize
+        Set-LocalFfmpegOverrides
         Set-Location -Path 'crates/ersatzrs-web'
         cargo leptos serve
         exit $LASTEXITCODE

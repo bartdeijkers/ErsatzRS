@@ -2,6 +2,17 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/guard_test_runner.py\"",
+            "timeout": 30,
+            "statusMessage": "Enforcing the repository test runner"
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write|apply_patch",
         "hooks": [
           {

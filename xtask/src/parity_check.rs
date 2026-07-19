@@ -62,7 +62,7 @@ fn run_inner(opts: &Opts) -> ExitCode {
         steps.push(Step::new(
             "focused web tests",
             ".",
-            ["cargo", "test", "-p", "ersatzrs-web"],
+            ["cargo", "nextest", "run", "-p", "ersatzrs-web"],
         ));
     }
     if !opts.skip_clippy {
@@ -209,6 +209,6 @@ fn print_help() {
     eprintln!("    --skip-progress     Skip cargo xtask progress check");
     eprintln!("    --skip-fmt          Skip cargo fmt --all -- --check");
     eprintln!("    --skip-hydration    Skip cargo xtask hydration-lint -p ersatzrs-web");
-    eprintln!("    --skip-tests        Skip cargo test -p ersatzrs-web");
+    eprintln!("    --skip-tests        Skip cargo nextest run -p ersatzrs-web");
     eprintln!("    --skip-clippy       Skip cargo clippy -p ersatzrs-web --all-targets");
 }

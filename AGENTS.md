@@ -97,8 +97,8 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
-# Test
-cargo test --workspace --all-features
+# Test closeout (nextest for unit/integration tests, then Cargo doctests)
+./run.sh test-closeout
 
 # Inner-loop verification
 # Use focused commands while iterating; reserve the full parity gate for
@@ -109,21 +109,21 @@ cargo test --workspace --all-features
 # the wasm target between runs re-runs rustc over the whole tree. Keep the loop
 # in ONE configuration:
 #   ./run.sh check -p <crate>        # fast type-check, no codegen/link
-#   cargo nextest run -p <crate>     # preferred focused/local test runner
+#   ./run.sh test -p <crate>         # required focused/local test runner
 # The checked-in `.config/nextest.toml` runs through all failures, performs no
-# retries, and reports tests that exceed 60 seconds. Keep `cargo test
-# --workspace --all-features` as the canonical closeout gate: nextest does not
-# run doctests, and CI intentionally remains on cargo test until a CI benchmark
-# justifies changing it.
+# retries, and reports tests that exceed 60 seconds. Agent hooks block direct
+# `cargo test` commands: use `./run.sh test-closeout` for the canonical local
+# gate, which runs nextest for unit/integration tests and Cargo only for
+# doctests. CI intentionally retains its direct Cargo test selection.
 #   ./run.sh dev                     # UI work (leptos watch, SSR+WASM in sync)
-# Run the full multi-config gate (two clippy passes, cargo test --all-features,
+# Run the full multi-config gate (two clippy passes, ./run.sh test-closeout,
 # cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.
 # sccache (cache on ext4) makes the unavoidable config switches cheap, but it is
 # the maintainer's local shell optimization and is enabled per-shell/run.sh, not
 # machine-wide — agents need not (and under a sandboxed uid cannot) enable it, so
 # do not set RUSTC_WRAPPER yourself. See BUILD.md "Inner-loop strategy". For
 # admin UI work, start with route/module filters such as:
-#   cargo test -p ersatzrs-web --all-targets <route_or_module_filter>
+#   ./run.sh test -p ersatzrs-web <route_or_module_filter>
 #   cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 #   cargo xtask hydration-lint -p ersatzrs-web
 # Run `cargo xtask parity-check web` once before claiming admin UI parity
@@ -180,7 +180,7 @@ cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
 
 # The ignored scanner integration tests need LD_LIBRARY_PATH pointed at the
 # FFmpeg 8.1 libs, or they silently skip exercising ffprobe:
-#   LD_LIBRARY_PATH=<ffmpeg-8.1>/lib cargo test -p ersatzrs-scanner -- --ignored
+#   LD_LIBRARY_PATH=<ffmpeg-8.1>/lib ./run.sh test -p ersatzrs-scanner --run-ignored ignored-only
 
 # Dependency audit
 cargo deny check
@@ -300,8 +300,9 @@ Read the relevant contract before changing that area:
   `[Unreleased]` current for notable changes.
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags,
   `run.sh`, or anything that builds the WASM bundle / SSR binary / release
-  artifacts — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
-  cargo-leptos hot-reload, compile-cost troubleshooting, and the mandatory
+  artifacts — covers `./run.sh dev|check|test|test-closeout|build|serve|seed`,
+  dev profile tuning, cargo-leptos hot-reload, compile-cost troubleshooting,
+  the required nextest/Cargo-doctest runner split, and the mandatory
   **hydration build consistency** ("wasm checksum") rules + the
   `scripts/release/verify-web-bundle.sh` release gate.
 - [TEST.md](TEST.md) before adding admin-UI tests or hydration playbooks, or

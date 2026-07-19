@@ -30,7 +30,7 @@ cargo fmt --all -- --check
 # test files do not escape lint.
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features mysql -- -D warnings
-cargo test --workspace --all-features
+./run.sh test-closeout
 cargo deny check
 ```
 
@@ -39,11 +39,12 @@ filter. Startup code must fail fast when an older FFmpeg is detected.
 
 For the edit loop, install cargo-nextest using its
 [official prebuilt-binary instructions](https://nexte.st/docs/installation/pre-built-binaries/)
-and prefer `cargo nextest run -p <crate>` for focused/local tests. The
-repository profile reports the complete failure set without retries and marks
-tests slow after 60 seconds. Keep the baseline `cargo test --workspace
---all-features` command for doctest-capable closeout. CI remains on its
-existing Cargo test selection until a CI benchmark justifies changing runners.
+and use `./run.sh test -p <crate>` for focused/local tests. Agent command hooks
+reject direct `cargo test` invocations so the runner choice cannot silently
+drift. The repository profile reports the complete failure set without retries
+and marks tests slow after 60 seconds. Use `./run.sh test-closeout` for the
+canonical local gate: it runs nextest across the workspace, then invokes Cargo
+only for doctests. CI remains on its existing direct Cargo test selection.
 
 ## Workflow
 
@@ -120,7 +121,8 @@ explicitly in the relevant changelog entry.
 - The relevant contract files were followed.
 - Tests were added or the absence of tests is explained.
 - Snapshots were reviewed when generated output changed.
-- `cargo fmt`, `cargo clippy`, `cargo test`, and `cargo deny check` were run.
+- `cargo fmt`, `cargo clippy`, `./run.sh test-closeout`, and `cargo deny check`
+  were run.
 - `CHANGELOG.md` was updated.
 - `docs/progress/` parity files were updated for ported behavior.
 - An ADR is linked when the change affects architecture or deviates from

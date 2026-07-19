@@ -4,25 +4,27 @@ Use the narrowest test that proves the behavior.
 
 ## Running tests
 
-Use cargo-nextest as the preferred focused/local runner:
+Use the repository wrapper for every focused/local Rust test run:
 
 ```bash
-cargo nextest run -p <crate>
-cargo nextest run -p <crate> <test-filter>
+./run.sh test -p <crate>
+./run.sh test -p <crate> <test-filter>
 ```
 
 The repository profile in `.config/nextest.toml` runs through all failures,
 does not retry failures, and reports tests that exceed 60 seconds. This keeps
 flaky or hanging Phase 7 tests visible rather than hiding them behind retries.
 
-For closeout, run the canonical Cargo gate:
+For closeout, run the canonical repository gate:
 
 ```bash
-cargo test --workspace --all-features
+./run.sh test-closeout
 ```
 
-Nextest does not run doctests, so it supplements rather than replaces the
-closeout command and current CI runner.
+The wrapper runs nextest for workspace unit/integration/binary tests, then
+Cargo only for doctests, which nextest cannot execute. Checked-in Codex and
+Claude hooks reject direct agent `cargo test` commands. CI keeps using Cargo's
+built-in runner.
 
 ## Unit tests
 
@@ -35,7 +37,8 @@ Use crate-level `tests/` directories for behavior that crosses module
 boundaries. Keep fixtures small and deterministic.
 
 Ignored integration tests remain part of the contract when they depend on
-local tooling or large fixtures. Run them explicitly with `cargo test -- --ignored`.
+local tooling or large fixtures. Run them explicitly with `./run.sh test -p
+<crate> --run-ignored ignored-only`.
 
 ## Snapshot tests
 

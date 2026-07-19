@@ -4,7 +4,7 @@
 //! populated.
 //!
 //! Like [`local_scan.rs`] this is `#[ignore]`-gated on `ffprobe` and the Big
-//! Buck Bunny fixture; run with `cargo test -p ersatzrs-scanner -- --ignored`.
+//! Buck Bunny fixture; run with `./run.sh test -p ersatzrs-scanner --run-ignored ignored-only`.
 
 #![cfg(not(feature = "mysql"))]
 
@@ -16,7 +16,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Executor, Row, SqlitePool};
 
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 #[allow(clippy::too_many_lines)]
 async fn local_show_scan_writes_full_metadata_and_child_rows() {
     let Some(ffprobe) = ffprobe_binary() else {
@@ -181,7 +181,7 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
 /// fast path (no episode probing, `scanned_files == 0`), while touching a
 /// file under the season folder changes the etag and forces a rescan.
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 async fn second_scan_skips_unchanged_season_via_etag() {
     let Some(ffprobe) = ffprobe_binary() else {
         eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
@@ -260,7 +260,7 @@ async fn second_scan_skips_unchanged_season_via_etag() {
 /// otherwise unchanged season disables the etag fast path so the episode is
 /// re-probed and restored to `Normal` (State 0).
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 async fn trashed_episode_disables_etag_skip_and_restores_normal() {
     let Some(ffprobe) = ffprobe_binary() else {
         eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
@@ -332,7 +332,7 @@ async fn trashed_episode_disables_etag_skip_and_restores_normal() {
 /// behavior. The unit test `clean_keeps_referenced_and_removes_stale` covers
 /// the fully-unreferenced deletion path.
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 async fn stale_library_folders_cleaned_after_scan() {
     let Some(ffprobe) = ffprobe_binary() else {
         eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");

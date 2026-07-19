@@ -7,7 +7,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Executor, Row, SqlitePool};
 
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 async fn local_scan_populates_media_rows_from_test_mp4() {
     let temp = TempDir::new("ersatzrs-local-scan");
     let Some(ffprobe) = ffprobe_binary(temp.path()) else {
@@ -46,7 +46,7 @@ async fn local_scan_populates_media_rows_from_test_mp4() {
 }
 
 #[tokio::test]
-#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 #[allow(clippy::too_many_lines)]
 async fn local_movie_scan_enriches_sidecars_artwork_and_is_idempotent() {
     let temp = TempDir::new("ersatzrs-local-movie-scan");
