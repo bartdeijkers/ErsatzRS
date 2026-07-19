@@ -1538,6 +1538,7 @@ fn schedule_item_editor(
             })}
 
             <h2 class=style::section_title>{tr(TextKey::ScheduleItemFiller)}</h2>
+            <p class=style::filler_help>{tr(TextKey::ScheduleItemFillerHelp)}</p>
             {filler_picker(tr(TextKey::PreRollFiller), item.pre_roll_filler_id, &options.fillers, move |value| {
                 update_item(items, index, |item| item.pre_roll_filler_id = value);
             })}

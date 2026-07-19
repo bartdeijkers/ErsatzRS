@@ -1901,6 +1901,21 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "mysql"))]
+    async fn migrated_test_db() -> DbPool {
+        use sqlx::Executor;
+
+        let pool = test_db().await;
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("enable foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
     async fn create_program_schedule_table(pool: &DbPool) {
         sqlx::query(
             r#"CREATE TABLE "ProgramSchedule" (
@@ -2131,6 +2146,68 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(stored, 0);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn replace_schedule_items_round_trips_multiple_then_one_without_post_roll() {
+        let pool = migrated_test_db().await;
+        sqlx::query(
+            r#"INSERT INTO "ProgramSchedule" (
+                "Id", "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
+                "ShuffleScheduleItems", "RandomStartPoint", "FixedStartTimeBehavior"
+            ) VALUES (1, 'Three Then One', 0, 0, 0, 0, 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query") VALUES
+               (11, 'Primary Videos', 'type:music_video'),
+               (12, 'Bumpers', 'library_id:2')"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let primary = ScheduleItemForm {
+            index: 0,
+            collection_type: COLLECTION_TYPE_SMART_COLLECTION,
+            smart_collection_id: Some(11),
+            collection_name: "Primary Videos".to_owned(),
+            playback_order: PLAYBACK_ORDER_SHUFFLE_IN_ORDER,
+            playout_mode: PLAYOUT_MODE_MULTIPLE,
+            multiple_mode: MULTIPLE_MODE_COUNT,
+            multiple_count: "3".to_owned(),
+            ..ScheduleItemForm::default()
+        };
+        let bumper = ScheduleItemForm {
+            index: 1,
+            collection_type: COLLECTION_TYPE_SMART_COLLECTION,
+            smart_collection_id: Some(12),
+            collection_name: "Bumpers".to_owned(),
+            playback_order: PLAYBACK_ORDER_SHUFFLE,
+            playout_mode: PLAYOUT_MODE_ONE,
+            ..ScheduleItemForm::default()
+        };
+
+        replace_schedule_items_with_pool(&pool, 1, vec![bumper, primary])
+            .await
+            .unwrap();
+
+        let loaded = list_schedule_items_with_pool(&pool, 1).await.unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].index, 0);
+        assert_eq!(loaded[0].collection_name, "Primary Videos");
+        assert_eq!(loaded[0].smart_collection_id, Some(11));
+        assert_eq!(loaded[0].playout_mode, PLAYOUT_MODE_MULTIPLE);
+        assert_eq!(loaded[0].multiple_count, "3");
+        assert_eq!(loaded[0].post_roll_filler_id, None);
+        assert_eq!(loaded[1].index, 1);
+        assert_eq!(loaded[1].collection_name, "Bumpers");
+        assert_eq!(loaded[1].smart_collection_id, Some(12));
+        assert_eq!(loaded[1].playout_mode, PLAYOUT_MODE_ONE);
+        assert_eq!(loaded[1].post_roll_filler_id, None);
     }
 
     #[tokio::test]

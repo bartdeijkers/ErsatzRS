@@ -7,6 +7,8 @@ summary    = '''
 Ported: `/schedules`, `/schedules/add`, `/schedules/:id`, and `/schedules/:id/items` provide the ErsatzTV-shaped schedule list/editor/items surface with persisted list/detail page sizes, search, add/edit save, copy dialog, delete confirmation dialog, hydrated item add/copy/reorder/delete, full item field persistence including media-code-backed language selectors, schedule item validation and dependency normalization, playout refresh side effects, no-JS form fallback endpoints for schedule and item save/action paths, and browser visual/action evidence. The schedule list/editor/item editor visible labels, actions, option labels, generated copy-name defaults, fallback collection labels, and no-JS item fallback strings use the persisted-language i18n layer with per-culture translation modules. `/blocks` and `/blocks/:id` port block group/block add/copy/delete, grouped search table, block editor item add/copy/reorder/delete, preview playout modal/table, HTML POST fallback save/add/action rows, and persisted-language list/editor labels/actions/dialogs/toasts/copy-name defaults/duration hour adornment/no-JS labels. `/templates` and `/templates/:id` port template group/template add/copy/delete, grouped search table with dummy empty-group rows, template editor block add/remove/drag, item replacement persistence, overlap/name validation, delete/copy dialogs, HTML POST fallbacks, and persisted-language list/editor labels/actions/dialogs/toasts/copy-name defaults. `/decos`, `/decos/:id`, `/deco-templates`, and `/deco-templates/:id` port deco/deco-template group and item CRUD, MudTreeView-derived row surfaces, deco editor field sections, break-content add/select/delete table behavior, default filler/dead-air fallback fields, deco-template add/remove save flow, raw POST fallbacks, validation/persistence, and the `/deco-templates/:id` day timeline surface. Their visible list/editor labels, option labels, validation/toast text, and no-JS fallback labels use the persisted-language i18n layer. The closeout Source Map / Visual Source Map plan was pruned after completion; durable Playwright route-family proof lives in `tests/e2e/scheduling-route-family.spec.ts`.
 
 Reopened 2026-06-27 from MTV channel dogfood: the generated schedule-items server function could persist a fully populated schedule, but the raw HTML fallback endpoint did not deserialize repeated schedule-item vectors reliably. Resolved 2026-06-28: `/api/schedules/items/save` now parses the raw URL-encoded body before reconstructing `ScheduleItemForm` rows, so repeated no-JS row fields, checkbox index sets, encoded values, filler IDs, watermark IDs, graphics element IDs, language selectors, and add-item fields survive the fallback save path.
+
+Resolved 2026-07-19 from Windows MTV dogfood: the intended three-video/one-bumper loop is represented by two ordered schedule items, `Multiple (3)` followed by `One`, both without roll filler. The editor now explains that schedule-item pre-, mid-, and post-roll filler applies to every selected media item. Persistence and hydrated browser regressions prove that the two-row topology and order survive replace/save/reload.
 '''
 
 [[debt]]
@@ -14,6 +16,13 @@ id          = 'schedule-items-add-button-regression'
 description = 'The hydrated Add Schedule Item button on `/schedules/:id/items` stopped opening a new editable schedule item reliably.'
 discovered  = '2026-06-22'
 evidence    = 'Fixed 2026-06-22: `ScheduleItemsIsland` now updates selection outside the `items.update` mutation and marks hydrated command buttons as `type="button"` so add/copy/reorder/delete clicks cannot be interpreted as implicit form submits.'
+resolved    = true
+
+[[debt]]
+id          = 'schedule-multiple-then-one-cycle-regression'
+description = 'Schedule item coverage did not protect an ordered Multiple (3) then One topology, allowing a three-video/one-bumper loop to be reconfigured as one Multiple item with post-roll filler, which inserts a bumper after every video.'
+discovered  = '2026-07-19'
+evidence    = 'Resolved 2026-07-19: server-function integration coverage round-trips two ordered rows with no post-roll filler, the scheduling route-family Playwright proof saves and reloads Multiple (3) then One, and the localized editor guidance states that roll filler applies to every selected media item.'
 resolved    = true
 
 [[debt]]

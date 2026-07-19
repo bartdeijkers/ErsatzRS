@@ -925,6 +925,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItem => "Schedule Item",
         TextKey::ScheduleItemActionFailed => "Schedule item action failed.",
         TextKey::ScheduleItemFiller => "Schedule Item Filler",
+        TextKey::ScheduleItemFillerHelp => {
+            "Pre-, mid-, and post-roll filler applies to every media item selected by this schedule item. To play content once after a Multiple block, add it as the next schedule item."
+        },
         TextKey::ScheduleItemOverrides => "Schedule Item Overrides",
         TextKey::ScheduleItems => "Schedule Items",
         TextKey::ScheduleNotFound => "Schedule not found.",

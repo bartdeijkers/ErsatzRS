@@ -937,6 +937,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItem => "Élément de grille",
         TextKey::ScheduleItemActionFailed => "Échec de l'action sur l'élément de grille.",
         TextKey::ScheduleItemFiller => "Filler d'élément de grille",
+        TextKey::ScheduleItemFillerHelp => {
+            "Les fillers pre-roll, mid-roll et post-roll s'appliquent à chaque média sélectionné par cet élément de grille. Pour lire un contenu une seule fois après un bloc Multiple, ajoutez-le comme élément de grille suivant."
+        },
         TextKey::ScheduleItemOverrides => "Surcharges de l'élément de grille",
         TextKey::ScheduleItems => "Éléments de grille",
         TextKey::ScheduleNotFound => "Grille introuvable.",

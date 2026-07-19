@@ -2034,6 +2034,85 @@ mod tests {
     }
 
     #[test]
+    fn classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh() {
+        let start = Utc.with_ymd_and_hms(2026, 7, 19, 8, 0, 0).unwrap();
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_id: Some(10),
+            classic_schedule_items: vec![
+                schedule_item(1, PlayoutMode::Multiple, 1, Some("3")),
+                schedule_item(2, PlayoutMode::One, 2, None),
+            ],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            item_key(&reference_data.classic_schedule_items[0]),
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(1)),
+                SchedulingMediaItem::new(102, Duration::minutes(1)),
+                SchedulingMediaItem::new(103, Duration::minutes(1)),
+                SchedulingMediaItem::new(104, Duration::minutes(1)),
+            ],
+        );
+        reference_data.media_by_key.insert(
+            item_key(&reference_data.classic_schedule_items[1]),
+            vec![SchedulingMediaItem::new(201, Duration::minutes(1))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(8),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        assert!(result.clear_items);
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>(),
+            vec![101, 102, 103, 201, 104, 101, 102, 201]
+        );
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| {
+                    item.scheduling_context
+                        .as_deref()
+                        .and_then(|context| serde_json::from_str::<serde_json::Value>(context).ok())
+                        .and_then(|context| {
+                            context.get("ItemId").and_then(serde_json::Value::as_i64)
+                        })
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                Some(1),
+                Some(1),
+                Some(1),
+                Some(2),
+                Some(1),
+                Some(1),
+                Some(1),
+                Some(2)
+            ]
+        );
+        assert!(result
+            .added_items
+            .iter()
+            .all(|item| item.filler_kind == FillerKind::None));
+    }
+
+    #[test]
     fn classic_fixed_start_strict_wraps_to_next_day() {
         let current_time = Utc.with_ymd_and_hms(2026, 4, 26, 9, 0, 0).unwrap();
         let item = ProgramScheduleItem {

@@ -1583,6 +1583,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItem => "Schema-item",
         TextKey::ScheduleItemActionFailed => "Schema-itemactie mislukt.",
         TextKey::ScheduleItemFiller => "Filler voor schema-item",
+        TextKey::ScheduleItemFillerHelp => {
+            "Pre-, mid- en post-roll filler wordt toegepast op elk media-item dat door dit schema-item wordt geselecteerd. Voeg content als volgend schema-item toe om deze eenmaal na een blok met Meerdere af te spelen."
+        },
         TextKey::ScheduleItemOverrides => "Overschrijvingen voor schema-item",
         TextKey::ScheduleItems => "Schema-items",
         TextKey::ScheduleNotFound => "Schema niet gevonden.",

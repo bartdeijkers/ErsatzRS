@@ -14,6 +14,8 @@ Continue-build seam fix (2026-06-14): the Classic engine now clamps the persiste
 Shuffled collection fix (2026-06-14): Classic shuffled media collections now mirror `ShuffledMediaCollectionEnumerator.MoveNext` by remembering the previous cycle's tail item and advancing the reshuffle seed until the next cycle starts with a different media item. Runtime localization with a direct cyclic calibration playout showed HLS Segmenter and the modern MPEG-TS wrapper can advance a 1->2->3 persisted timeline correctly; a separate fresh-HOME Classic HLS startup replay was tracked and fixed under `hls-variant-playlists-segmenter`.
 
 Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
+
+Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
 '''
 
 [[debt]]

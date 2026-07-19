@@ -36,6 +36,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Schedule item editing now explains that pre-, mid-, and post-roll filler
+  applies to every media item selected by that schedule item. Regression
+  coverage preserves ordered `Multiple (3)` then `One` schedules through
+  save/reload and Classic Refresh rebuilds, protecting three-videos/one-bumper
+  channel loops from collapsing into per-video post-roll filler.
 - NVENC channels can now downscale HDR sources and composite alpha watermarks
   without feeding an `nv12` main surface into a `yuva420p` CUDA overlay. The
   pipeline tracks the real post-scale CUDA format and inserts the required

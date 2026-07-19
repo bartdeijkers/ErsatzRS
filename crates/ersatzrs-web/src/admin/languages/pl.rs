@@ -1593,6 +1593,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItem => "Element harmonogramu",
         TextKey::ScheduleItemActionFailed => "Akcja elementu harmonogramu nie powiodła się.",
         TextKey::ScheduleItemFiller => "Wypełniacz elementu harmonogramu",
+        TextKey::ScheduleItemFillerHelp => {
+            "Wypełniacz przed, w trakcie i po emisji jest stosowany do każdego medium wybranego przez ten element harmonogramu. Aby odtworzyć zawartość raz po bloku wielu elementów, dodaj ją jako następny element harmonogramu."
+        },
         TextKey::ScheduleItemOverrides => "Nadpisania elementu harmonogramu",
         TextKey::ScheduleItems => "Elementy harmonogramu",
         TextKey::ScheduleNotFound => "Nie znaleziono harmonogramu.",

@@ -1609,6 +1609,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItem => "Item do horário",
         TextKey::ScheduleItemActionFailed => "A ação do item do horário falhou.",
         TextKey::ScheduleItemFiller => "Preenchimento do item do horário",
+        TextKey::ScheduleItemFillerHelp => {
+            "O preenchimento pré-roll, mid-roll e pós-roll se aplica a cada mídia selecionada por este item do horário. Para reproduzir um conteúdo uma vez após um bloco de múltiplos, adicione-o como o próximo item do horário."
+        },
         TextKey::ScheduleItemOverrides => "Substituições do item do horário",
         TextKey::ScheduleItems => "Itens do horário",
         TextKey::ScheduleNotFound => "Horário não encontrado.",

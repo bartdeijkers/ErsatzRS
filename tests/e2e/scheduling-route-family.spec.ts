@@ -52,6 +52,18 @@ async function fillStable(locator: Locator, value: string): Promise<void> {
     .toBe(value);
 }
 
+function scheduleItemControl(
+  page: Page,
+  label: string,
+  control: 'input' | 'select',
+): Locator {
+  return page
+    .locator('form[class^="item-editor"] label')
+    .filter({ hasText: label })
+    .locator(control)
+    .first();
+}
+
 async function clickUntilVisible(
   page: Page,
   trigger: Locator,
@@ -272,6 +284,32 @@ test.describe('scheduling route-family parity', () => {
       page.getByRole('button', { name: /add schedule item/i }),
       page.getByText('Schedule Item Filler'),
     );
+    await expect(
+      page.getByText(/pre-, mid-, and post-roll filler applies to every media item/i),
+    ).toBeVisible();
+    await scheduleItemControl(page, 'Collection Type', 'select').selectOption('9');
+    await scheduleItemControl(page, 'Search Title', 'input').fill('Primary Videos');
+    await scheduleItemControl(page, 'Search Query', 'input').fill('type:music_video');
+    await scheduleItemControl(page, 'Playout Mode', 'select').selectOption('3');
+    await scheduleItemControl(page, 'Multiple Count', 'input').fill('3');
+
+    await page.getByRole('button', { name: /add schedule item/i }).click();
+    await scheduleItemControl(page, 'Collection Type', 'select').selectOption('9');
+    await scheduleItemControl(page, 'Search Title', 'input').fill('Bumpers');
+    await scheduleItemControl(page, 'Search Query', 'input').fill('library_id:2');
+    await page.getByRole('button', { name: /save schedule items/i }).click();
+
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await expect(page.locator('tbody tr').nth(0)).toContainText('Primary Videos');
+    await expect(page.locator('tbody tr').nth(0)).toContainText('Multiple (3)');
+    await expect(page.locator('tbody tr').nth(1)).toContainText('Bumpers');
+    await expect(page.locator('tbody tr').nth(1)).toContainText('One');
+
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await expect(page.locator('tbody tr').nth(0)).toContainText('Primary Videos');
+    await expect(page.locator('tbody tr').nth(1)).toContainText('Bumpers');
     await expect(page.locator('form#schedule-items-fallback-form')).toHaveCount(0);
     await expectNoJsForm(
       browser,
