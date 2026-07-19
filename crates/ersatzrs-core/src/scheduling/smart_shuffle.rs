@@ -9,19 +9,29 @@ const POLICY_VERSION: u32 = 1;
 const STATE_VERSION: u32 = 1;
 
 #[must_use]
-pub fn program_schedule_cooldown_config_key(schedule_id: EntityId) -> String {
+pub fn legacy_program_schedule_cooldown_config_key(schedule_id: EntityId) -> String {
     format!("scheduling.cooldown.program_schedule.{schedule_id}")
 }
 
 #[must_use]
-pub fn playout_cooldown_config_key(playout_id: EntityId) -> String {
+pub fn legacy_playout_cooldown_config_key(playout_id: EntityId) -> String {
     format!("scheduling.cooldown.playout.{playout_id}")
 }
 
-/// Scope used to isolate active cooldown tags.
+#[must_use]
+pub fn program_schedule_item_smart_shuffle_config_key(item_id: EntityId) -> String {
+    format!("scheduling.smart_shuffle.program_schedule_item.{item_id}")
+}
+
+#[must_use]
+pub fn block_item_smart_shuffle_config_key(item_id: EntityId) -> String {
+    format!("scheduling.smart_shuffle.block_item.{item_id}")
+}
+
+/// Scope used to isolate active Smart Shuffle tags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum SchedulingCooldownScope {
+pub enum SchedulingSmartShuffleScope {
     #[default]
     Playout,
     ScheduleItem,
@@ -31,7 +41,7 @@ pub enum SchedulingCooldownScope {
 /// Constraint behavior used when every deterministic candidate is blocked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum SchedulingCooldownMode {
+pub enum SchedulingSmartShuffleMode {
     #[default]
     Soft,
 }
@@ -39,7 +49,7 @@ pub enum SchedulingCooldownMode {
 /// Admin-facing presets. `Custom` leaves all explicit policy fields intact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum SchedulingCooldownPreset {
+pub enum SchedulingSmartShufflePreset {
     #[default]
     Off,
     Light,
@@ -50,7 +60,7 @@ pub enum SchedulingCooldownPreset {
 /// Similarity facet emitted for one scheduling candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SchedulingCooldownRuleKind {
+pub enum SchedulingSmartShuffleRuleKind {
     Artist,
     AlbumArtist,
     Show,
@@ -65,45 +75,45 @@ pub enum SchedulingCooldownRuleKind {
 
 /// One ordered similarity rule from ADR 0019.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SchedulingCooldownRule {
+pub struct SchedulingSmartShuffleRule {
     pub id: String,
-    pub kind: SchedulingCooldownRuleKind,
+    pub kind: SchedulingSmartShuffleRuleKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search: Option<String>,
 }
 
-/// Versioned, disabled-by-default cooldown policy.
+/// Versioned, disabled-by-default Smart Shuffle policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SchedulingCooldownPolicy {
+pub struct SchedulingSmartShufflePolicy {
     #[serde(default = "policy_version")]
     pub version: u32,
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub preset: SchedulingCooldownPreset,
+    pub preset: SchedulingSmartShufflePreset,
     #[serde(default)]
-    pub scope: SchedulingCooldownScope,
+    pub scope: SchedulingSmartShuffleScope,
     #[serde(default)]
-    pub mode: SchedulingCooldownMode,
+    pub mode: SchedulingSmartShuffleMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_items: Option<u32>,
-    /// Cooldown after the whole scheduling unit finishes, formatted as HH:MM:SS.
+    /// Spacing after the whole scheduling unit finishes, formatted as HH:MM:SS.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_duration: Option<String>,
     #[serde(default)]
     pub include_filler: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub rules: Vec<SchedulingCooldownRule>,
+    pub rules: Vec<SchedulingSmartShuffleRule>,
 }
 
-impl Default for SchedulingCooldownPolicy {
+impl Default for SchedulingSmartShufflePolicy {
     fn default() -> Self {
         Self {
             version: POLICY_VERSION,
             enabled: false,
-            preset: SchedulingCooldownPreset::Off,
-            scope: SchedulingCooldownScope::Playout,
-            mode: SchedulingCooldownMode::Soft,
+            preset: SchedulingSmartShufflePreset::Off,
+            scope: SchedulingSmartShuffleScope::Playout,
+            mode: SchedulingSmartShuffleMode::Soft,
             after_items: None,
             after_duration: None,
             include_filler: false,
@@ -112,7 +122,7 @@ impl Default for SchedulingCooldownPolicy {
     }
 }
 
-impl SchedulingCooldownPolicy {
+impl SchedulingSmartShufflePolicy {
     #[must_use]
     pub fn is_disabled(&self) -> bool {
         *self == Self::default()
@@ -120,24 +130,27 @@ impl SchedulingCooldownPolicy {
 
     /// Return the effective policy for an admin preset.
     #[must_use]
-    pub fn for_preset(preset: SchedulingCooldownPreset) -> Self {
+    pub fn for_preset(preset: SchedulingSmartShufflePreset) -> Self {
         let common_rules = || {
             vec![
-                rule("artist", SchedulingCooldownRuleKind::Artist),
-                rule("show", SchedulingCooldownRuleKind::Show),
-                rule("content_parent", SchedulingCooldownRuleKind::ContentParent),
+                rule("artist", SchedulingSmartShuffleRuleKind::Artist),
+                rule("show", SchedulingSmartShuffleRuleKind::Show),
+                rule(
+                    "content_parent",
+                    SchedulingSmartShuffleRuleKind::ContentParent,
+                ),
             ]
         };
         match preset {
-            SchedulingCooldownPreset::Off => Self::default(),
-            SchedulingCooldownPreset::Light => Self {
+            SchedulingSmartShufflePreset::Off => Self::default(),
+            SchedulingSmartShufflePreset::Light => Self {
                 enabled: true,
                 preset,
                 after_items: Some(2),
                 rules: common_rules(),
                 ..Self::default()
             },
-            SchedulingCooldownPreset::Balanced => Self {
+            SchedulingSmartShufflePreset::Balanced => Self {
                 enabled: true,
                 preset,
                 after_items: Some(4),
@@ -145,14 +158,14 @@ impl SchedulingCooldownPolicy {
                 rules: common_rules()
                     .into_iter()
                     .chain([
-                        rule("season", SchedulingCooldownRuleKind::Season),
-                        rule("collection", SchedulingCooldownRuleKind::Collection),
-                        rule("tag", SchedulingCooldownRuleKind::Tag),
+                        rule("season", SchedulingSmartShuffleRuleKind::Season),
+                        rule("collection", SchedulingSmartShuffleRuleKind::Collection),
+                        rule("tag", SchedulingSmartShuffleRuleKind::Tag),
                     ])
                     .collect(),
                 ..Self::default()
             },
-            SchedulingCooldownPreset::Custom => Self {
+            SchedulingSmartShufflePreset::Custom => Self {
                 enabled: true,
                 preset,
                 ..Self::default()
@@ -183,12 +196,12 @@ impl SchedulingCooldownPolicy {
         content_source: Option<&str>,
     ) -> String {
         match self.scope {
-            SchedulingCooldownScope::Playout => format!("playout:{playout_id}"),
-            SchedulingCooldownScope::ScheduleItem => schedule_item.map_or_else(
+            SchedulingSmartShuffleScope::Playout => format!("playout:{playout_id}"),
+            SchedulingSmartShuffleScope::ScheduleItem => schedule_item.map_or_else(
                 || format!("playout:{playout_id}"),
                 |id| format!("schedule_item:{id}"),
             ),
-            SchedulingCooldownScope::ContentSource => content_source.map_or_else(
+            SchedulingSmartShuffleScope::ContentSource => content_source.map_or_else(
                 || format!("playout:{playout_id}"),
                 |key| format!("content_source:{key}"),
             ),
@@ -200,8 +213,8 @@ fn policy_version() -> u32 {
     POLICY_VERSION
 }
 
-fn rule(id: &str, kind: SchedulingCooldownRuleKind) -> SchedulingCooldownRule {
-    SchedulingCooldownRule {
+fn rule(id: &str, kind: SchedulingSmartShuffleRuleKind) -> SchedulingSmartShuffleRule {
+    SchedulingSmartShuffleRule {
         id: id.to_owned(),
         kind,
         search: None,
@@ -229,20 +242,37 @@ fn parse_policy_duration(value: &str) -> Option<Duration> {
 
 /// One candidate in the scheduler's existing deterministic base order.
 #[derive(Debug, Clone, Copy)]
-pub struct SchedulingCooldownCandidate<'a> {
+pub struct SchedulingSmartShuffleCandidate<'a> {
     pub media_item_id: EntityId,
     pub tags: &'a BTreeSet<String>,
 }
 
 /// An indivisible scheduling unit. Tags are the union of all child tags.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SchedulingCooldownUnit {
+pub struct SchedulingSmartShuffleUnit {
     pub media_item_ids: Vec<EntityId>,
     pub tags: BTreeSet<String>,
     pub duration: Duration,
 }
 
-impl SchedulingCooldownUnit {
+/// Playback capability and filler participation for one recorded unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SchedulingSmartShuffleRecordContext {
+    pub playback_order_randomized: bool,
+    pub is_filler: bool,
+}
+
+impl SchedulingSmartShuffleRecordContext {
+    #[must_use]
+    pub const fn new(playback_order_randomized: bool, is_filler: bool) -> Self {
+        Self {
+            playback_order_randomized,
+            is_filler,
+        }
+    }
+}
+
+impl SchedulingSmartShuffleUnit {
     #[must_use]
     pub fn single(media_item_id: EntityId, tags: BTreeSet<String>, duration: Duration) -> Self {
         Self {
@@ -271,7 +301,7 @@ impl SchedulingCooldownUnit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct SchedulingCooldownEntry {
+struct SchedulingSmartShuffleEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     release_after_items: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -279,21 +309,21 @@ struct SchedulingCooldownEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-struct SchedulingCooldownBucket {
+struct SchedulingSmartShuffleBucket {
     completed_items: u64,
-    active: BTreeMap<String, SchedulingCooldownEntry>,
+    active: BTreeMap<String, SchedulingSmartShuffleEntry>,
 }
 
 /// Versioned runtime state persisted in `PlayoutAnchor.Context`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SchedulingCooldownState {
+pub struct SchedulingSmartShuffleState {
     #[serde(default = "state_version")]
     pub version: u32,
     #[serde(default)]
-    buckets: BTreeMap<String, SchedulingCooldownBucket>,
+    buckets: BTreeMap<String, SchedulingSmartShuffleBucket>,
 }
 
-impl Default for SchedulingCooldownState {
+impl Default for SchedulingSmartShuffleState {
     fn default() -> Self {
         Self {
             version: STATE_VERSION,
@@ -302,7 +332,7 @@ impl Default for SchedulingCooldownState {
     }
 }
 
-impl SchedulingCooldownState {
+impl SchedulingSmartShuffleState {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buckets.is_empty()
@@ -312,10 +342,10 @@ impl SchedulingCooldownState {
     #[must_use]
     pub fn select_candidate(
         &self,
-        policy: &SchedulingCooldownPolicy,
+        policy: &SchedulingSmartShufflePolicy,
         scope_key: &str,
         scheduled_at: DateTime<Utc>,
-        candidates: &[SchedulingCooldownCandidate<'_>],
+        candidates: &[SchedulingSmartShuffleCandidate<'_>],
     ) -> Option<usize> {
         if candidates.is_empty() {
             return None;
@@ -324,7 +354,7 @@ impl SchedulingCooldownState {
             return Some(0);
         }
 
-        let empty_bucket = SchedulingCooldownBucket::default();
+        let empty_bucket = SchedulingSmartShuffleBucket::default();
         let bucket = self.buckets.get(scope_key).unwrap_or(&empty_bucket);
         let selected =
             candidates
@@ -345,7 +375,7 @@ impl SchedulingCooldownState {
                     scope = scope_key,
                     media_item_id = candidate.media_item_id,
                     blocked_tags = score.blocked_tags,
-                    "all cooldown candidates were blocked; selected deterministic soft fallback"
+                    "all Smart Shuffle candidates were blocked; selected deterministic soft fallback"
                 );
             }
             Some(base_rank)
@@ -354,35 +384,37 @@ impl SchedulingCooldownState {
         }
     }
 
-    /// Advance cooldowns once and activate all tags emitted by the chosen unit.
+    /// Advance shared playout spacing and activate tags for a randomized unit.
     pub fn record_unit(
         &mut self,
-        policy: &SchedulingCooldownPolicy,
+        policy: &SchedulingSmartShufflePolicy,
+        playout_id: EntityId,
         scope_key: &str,
         scheduled_at: DateTime<Utc>,
-        unit: &SchedulingCooldownUnit,
-        is_filler: bool,
+        unit: &SchedulingSmartShuffleUnit,
+        context: SchedulingSmartShuffleRecordContext,
     ) {
-        if !policy.is_active() || (is_filler && !policy.include_filler) {
+        let playout_scope_key = format!("playout:{playout_id}");
+        let advanced_playout =
+            !context.is_filler && self.advance_existing_bucket(&playout_scope_key, scheduled_at);
+
+        if !context.playback_order_randomized
+            || !policy.is_active()
+            || (context.is_filler && !policy.include_filler)
+        {
             return;
         }
 
         let bucket = self.buckets.entry(scope_key.to_owned()).or_default();
-        bucket.completed_items = bucket.completed_items.saturating_add(1);
-        bucket.active.retain(|_, entry| {
-            entry
-                .release_after_items
-                .is_some_and(|release| bucket.completed_items < release)
-                || entry
-                    .release_at
-                    .is_some_and(|release| scheduled_at < release)
-        });
+        if scope_key != playout_scope_key || !advanced_playout {
+            Self::advance_bucket(bucket, scheduled_at);
+        }
 
         let finish = scheduled_at + unit.duration;
         for tag in &unit.tags {
             bucket.active.insert(
                 tag.clone(),
-                SchedulingCooldownEntry {
+                SchedulingSmartShuffleEntry {
                     release_after_items: policy
                         .after_items
                         .map(|count| bucket.completed_items.saturating_add(u64::from(count))),
@@ -392,6 +424,26 @@ impl SchedulingCooldownState {
                 },
             );
         }
+    }
+
+    fn advance_existing_bucket(&mut self, scope_key: &str, scheduled_at: DateTime<Utc>) -> bool {
+        let Some(bucket) = self.buckets.get_mut(scope_key) else {
+            return false;
+        };
+        Self::advance_bucket(bucket, scheduled_at);
+        true
+    }
+
+    fn advance_bucket(bucket: &mut SchedulingSmartShuffleBucket, scheduled_at: DateTime<Utc>) {
+        bucket.completed_items = bucket.completed_items.saturating_add(1);
+        bucket.active.retain(|_, entry| {
+            entry
+                .release_after_items
+                .is_some_and(|release| bucket.completed_items < release)
+                || entry
+                    .release_at
+                    .is_some_and(|release| scheduled_at < release)
+        });
     }
 }
 
@@ -426,10 +478,10 @@ impl PartialOrd for CandidateScore {
 }
 
 fn candidate_score(
-    bucket: &SchedulingCooldownBucket,
+    bucket: &SchedulingSmartShuffleBucket,
     scheduled_at: DateTime<Utc>,
     base_rank: usize,
-    candidate: &SchedulingCooldownCandidate<'_>,
+    candidate: &SchedulingSmartShuffleCandidate<'_>,
 ) -> CandidateScore {
     let blocked = candidate
         .tags
@@ -474,31 +526,35 @@ mod tests {
         values.iter().map(|value| (*value).to_owned()).collect()
     }
 
+    fn primary(randomized: bool) -> SchedulingSmartShuffleRecordContext {
+        SchedulingSmartShuffleRecordContext::new(randomized, false)
+    }
+
     fn custom_policy(
         after_items: Option<u32>,
         after_duration: Option<&str>,
-    ) -> SchedulingCooldownPolicy {
-        SchedulingCooldownPolicy {
+    ) -> SchedulingSmartShufflePolicy {
+        SchedulingSmartShufflePolicy {
             enabled: true,
-            preset: SchedulingCooldownPreset::Custom,
+            preset: SchedulingSmartShufflePreset::Custom,
             after_items,
             after_duration: after_duration.map(str::to_owned),
-            rules: vec![rule("artist", SchedulingCooldownRuleKind::Artist)],
-            ..SchedulingCooldownPolicy::default()
+            rules: vec![rule("artist", SchedulingSmartShuffleRuleKind::Artist)],
+            ..SchedulingSmartShufflePolicy::default()
         }
     }
 
     #[test]
     fn disabled_policy_preserves_base_order_and_empty_state() {
-        let state = SchedulingCooldownState::default();
+        let state = SchedulingSmartShuffleState::default();
         let first = tags(&["artist:1"]);
         let second = tags(&["artist:2"]);
         let candidates = [
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 9,
                 tags: &first,
             },
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 3,
                 tags: &second,
             },
@@ -506,32 +562,32 @@ mod tests {
 
         assert_eq!(
             state.select_candidate(
-                &SchedulingCooldownPolicy::default(),
+                &SchedulingSmartShufflePolicy::default(),
                 "playout:1",
                 at(0),
                 &candidates
             ),
             Some(0)
         );
-        assert_eq!(state, SchedulingCooldownState::default());
+        assert_eq!(state, SchedulingSmartShuffleState::default());
     }
 
     #[test]
     fn item_count_cooldown_avoids_then_releases_a_group() {
         let policy = custom_policy(Some(2), None);
-        let mut state = SchedulingCooldownState::default();
+        let mut state = SchedulingSmartShuffleState::default();
         let first_tags = tags(&["artist:1"]);
         let other_tags = tags(&["artist:2"]);
         let first_unit =
-            SchedulingCooldownUnit::single(1, first_tags.clone(), Duration::minutes(3));
-        state.record_unit(&policy, "playout:1", at(0), &first_unit, false);
+            SchedulingSmartShuffleUnit::single(1, first_tags.clone(), Duration::minutes(3));
+        state.record_unit(&policy, 1, "playout:1", at(0), &first_unit, primary(true));
 
         let candidates = [
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 2,
                 tags: &first_tags,
             },
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 3,
                 tags: &other_tags,
             },
@@ -542,8 +598,9 @@ mod tests {
         );
 
         for minute in [3, 6] {
-            let unit = SchedulingCooldownUnit::single(3, other_tags.clone(), Duration::minutes(3));
-            state.record_unit(&policy, "playout:1", at(minute), &unit, false);
+            let unit =
+                SchedulingSmartShuffleUnit::single(3, other_tags.clone(), Duration::minutes(3));
+            state.record_unit(&policy, 1, "playout:1", at(minute), &unit, primary(true));
         }
         assert_eq!(
             state.select_candidate(&policy, "playout:1", at(9), &candidates),
@@ -552,24 +609,149 @@ mod tests {
     }
 
     #[test]
+    fn playout_item_count_advances_across_disabled_units() {
+        let policy = custom_policy(Some(2), None);
+        let disabled = SchedulingSmartShufflePolicy {
+            scope: SchedulingSmartShuffleScope::ScheduleItem,
+            ..SchedulingSmartShufflePolicy::default()
+        };
+        let mut state = SchedulingSmartShuffleState::default();
+        let repeated_tags = tags(&["artist:1"]);
+        let other_tags = tags(&["artist:2"]);
+        state.record_unit(
+            &policy,
+            1,
+            "playout:1",
+            at(0),
+            &SchedulingSmartShuffleUnit::single(1, repeated_tags.clone(), Duration::minutes(1)),
+            primary(true),
+        );
+
+        let candidates = [
+            SchedulingSmartShuffleCandidate {
+                media_item_id: 2,
+                tags: &repeated_tags,
+            },
+            SchedulingSmartShuffleCandidate {
+                media_item_id: 3,
+                tags: &other_tags,
+            },
+        ];
+        let off_unit =
+            SchedulingSmartShuffleUnit::single(3, other_tags.clone(), Duration::minutes(1));
+        state.record_unit(
+            &disabled,
+            1,
+            "schedule_item:2",
+            at(1),
+            &off_unit,
+            primary(true),
+        );
+        assert_eq!(
+            state.select_candidate(&policy, "playout:1", at(2), &candidates),
+            Some(1)
+        );
+
+        state.record_unit(
+            &disabled,
+            1,
+            "schedule_item:3",
+            at(2),
+            &off_unit,
+            primary(true),
+        );
+        assert_eq!(
+            state.select_candidate(&policy, "playout:1", at(3), &candidates),
+            Some(0)
+        );
+        assert!(!state.buckets.contains_key("schedule_item:2"));
+        assert!(!state.buckets.contains_key("schedule_item:3"));
+    }
+
+    #[test]
+    fn chronological_primary_units_advance_playout_spacing_without_activating_tags() {
+        let playout_policy = custom_policy(Some(2), None);
+        let item_policy = SchedulingSmartShufflePolicy {
+            scope: SchedulingSmartShuffleScope::ScheduleItem,
+            ..custom_policy(Some(2), None)
+        };
+        let mut state = SchedulingSmartShuffleState::default();
+        let repeated_tags = tags(&["artist:1"]);
+        let other_tags = tags(&["artist:2"]);
+        state.record_unit(
+            &playout_policy,
+            1,
+            "playout:1",
+            at(0),
+            &SchedulingSmartShuffleUnit::single(1, repeated_tags.clone(), Duration::minutes(1)),
+            primary(true),
+        );
+
+        let chronological = SchedulingSmartShuffleUnit::single(
+            3,
+            tags(&["artist:chronological"]),
+            Duration::minutes(1),
+        );
+        state.record_unit(
+            &item_policy,
+            1,
+            "schedule_item:2",
+            at(1),
+            &chronological,
+            primary(false),
+        );
+        assert!(!state.buckets.contains_key("schedule_item:2"));
+
+        let candidates = [
+            SchedulingSmartShuffleCandidate {
+                media_item_id: 2,
+                tags: &repeated_tags,
+            },
+            SchedulingSmartShuffleCandidate {
+                media_item_id: 3,
+                tags: &other_tags,
+            },
+        ];
+        assert_eq!(
+            state.select_candidate(&playout_policy, "playout:1", at(2), &candidates),
+            Some(1)
+        );
+
+        state.record_unit(
+            &item_policy,
+            1,
+            "schedule_item:3",
+            at(2),
+            &chronological,
+            primary(false),
+        );
+        assert_eq!(
+            state.select_candidate(&playout_policy, "playout:1", at(3), &candidates),
+            Some(0)
+        );
+        assert!(!state.buckets.contains_key("schedule_item:3"));
+    }
+
+    #[test]
     fn duration_cooldown_uses_unit_finish_and_longer_threshold_wins() {
         let policy = custom_policy(Some(1), Some("00:10:00"));
-        let mut state = SchedulingCooldownState::default();
+        let mut state = SchedulingSmartShuffleState::default();
         let first_tags = tags(&["show:1"]);
         let other_tags = tags(&["show:2"]);
         state.record_unit(
             &policy,
+            1,
             "playout:1",
             at(0),
-            &SchedulingCooldownUnit::single(1, first_tags.clone(), Duration::minutes(5)),
-            false,
+            &SchedulingSmartShuffleUnit::single(1, first_tags.clone(), Duration::minutes(5)),
+            primary(true),
         );
         let candidates = [
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 2,
                 tags: &first_tags,
             },
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 3,
                 tags: &other_tags,
             },
@@ -580,10 +762,11 @@ mod tests {
         );
         state.record_unit(
             &policy,
+            1,
             "playout:1",
             at(5),
-            &SchedulingCooldownUnit::single(3, other_tags.clone(), Duration::minutes(1)),
-            false,
+            &SchedulingSmartShuffleUnit::single(3, other_tags.clone(), Duration::minutes(1)),
+            primary(true),
         );
         assert_eq!(
             state.select_candidate(&policy, "playout:1", at(15), &candidates),
@@ -594,24 +777,25 @@ mod tests {
     #[test]
     fn impossible_constraints_relax_by_penalty_then_base_rank() {
         let policy = custom_policy(Some(5), None);
-        let mut state = SchedulingCooldownState::default();
+        let mut state = SchedulingSmartShuffleState::default();
         let many_tags = tags(&["artist:1", "tag:live"]);
         let one_tag = tags(&["artist:2"]);
         for (id, item_tags) in [(1, many_tags.clone()), (2, one_tag.clone())] {
             state.record_unit(
                 &policy,
+                1,
                 "playout:1",
                 at(0),
-                &SchedulingCooldownUnit::single(id, item_tags, Duration::minutes(1)),
-                false,
+                &SchedulingSmartShuffleUnit::single(id, item_tags, Duration::minutes(1)),
+                primary(true),
             );
         }
         let candidates = [
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 9,
                 tags: &many_tags,
             },
-            SchedulingCooldownCandidate {
+            SchedulingSmartShuffleCandidate {
                 media_item_id: 8,
                 tags: &one_tag,
             },
@@ -624,9 +808,13 @@ mod tests {
 
     #[test]
     fn grouped_unit_unions_tags_and_duration() {
-        let unit = SchedulingCooldownUnit::grouped([
-            SchedulingCooldownUnit::single(1, tags(&["show:1"]), Duration::minutes(20)),
-            SchedulingCooldownUnit::single(2, tags(&["show:1", "season:2"]), Duration::minutes(22)),
+        let unit = SchedulingSmartShuffleUnit::grouped([
+            SchedulingSmartShuffleUnit::single(1, tags(&["show:1"]), Duration::minutes(20)),
+            SchedulingSmartShuffleUnit::single(
+                2,
+                tags(&["show:1", "season:2"]),
+                Duration::minutes(22),
+            ),
         ]);
         assert_eq!(unit.media_item_ids, vec![1, 2]);
         assert_eq!(unit.tags, tags(&["show:1", "season:2"]));
@@ -636,18 +824,19 @@ mod tests {
     #[test]
     fn state_round_trip_is_versioned_and_deterministic() {
         let policy = custom_policy(Some(3), Some("00:05:00"));
-        let mut state = SchedulingCooldownState::default();
+        let mut state = SchedulingSmartShuffleState::default();
         state.record_unit(
             &policy,
+            1,
             "content_source:music",
             at(0),
-            &SchedulingCooldownUnit::single(1, tags(&["artist:1"]), Duration::minutes(3)),
-            false,
+            &SchedulingSmartShuffleUnit::single(1, tags(&["artist:1"]), Duration::minutes(3)),
+            primary(true),
         );
         let json = serde_json::to_string(&state).unwrap();
         assert!(json.contains("\"version\":1"));
         assert_eq!(
-            serde_json::from_str::<SchedulingCooldownState>(&json).unwrap(),
+            serde_json::from_str::<SchedulingSmartShuffleState>(&json).unwrap(),
             state
         );
     }

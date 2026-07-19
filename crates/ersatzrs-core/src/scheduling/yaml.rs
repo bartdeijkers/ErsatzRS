@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
-use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor};
+use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor, PlayoutItem};
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -28,11 +28,8 @@ pub struct YamlContentGuid {
 pub struct YamlPlayoutDefinition {
     #[serde(default)]
     pub import: Vec<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "super::SchedulingCooldownPolicy::is_disabled"
-    )]
-    pub cooldown: super::SchedulingCooldownPolicy,
+    #[serde(default, rename = "cooldown", skip_serializing)]
+    pub legacy_smart_shuffle: super::SchedulingSmartShufflePolicy,
     #[serde(default)]
     pub content: Vec<YamlContentItem>,
     #[serde(default)]
@@ -46,6 +43,11 @@ pub struct YamlPlayoutDefinition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct YamlContentItem {
     pub key: String,
+    #[serde(
+        default,
+        skip_serializing_if = "super::SchedulingSmartShufflePolicy::is_disabled"
+    )]
+    pub smart_shuffle: super::SchedulingSmartShufflePolicy,
     #[serde(default)]
     pub order: Option<String>,
     #[serde(default)]
@@ -271,7 +273,22 @@ impl YamlPlayoutEngine {
     ///
     /// Returns an error when the YAML cannot be deserialized.
     pub fn definition_from_str(yaml: &str) -> Result<YamlPlayoutDefinition, SchedulingError> {
-        serde_yaml::from_str(yaml).map_err(|error| SchedulingError::InvalidYaml(error.to_string()))
+        let value: serde_yaml::Value = serde_yaml::from_str(yaml)
+            .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?;
+        let explicit_item_policies = yaml_content_smart_shuffle_presence(&value);
+        let mut definition: YamlPlayoutDefinition = serde_yaml::from_str(yaml)
+            .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?;
+        if definition.legacy_smart_shuffle.is_active() {
+            for (index, content) in definition.content.iter_mut().enumerate() {
+                if !explicit_item_policies.get(index).copied().unwrap_or(false)
+                    && content.smart_shuffle.is_disabled()
+                {
+                    content.smart_shuffle = definition.legacy_smart_shuffle.clone();
+                }
+            }
+            definition.legacy_smart_shuffle = super::SchedulingSmartShufflePolicy::default();
+        }
+        Ok(definition)
     }
 
     /// Merge an imported YAML definition into `base`.
@@ -366,7 +383,18 @@ impl YamlPlayoutEngine {
     ) -> Result<SchedulingResult, SchedulingError> {
         detect_cycle(&definition)?;
         flatten_sequences(&mut definition)?;
-        request.reference_data.cooldown_policy = definition.cooldown.clone();
+        request.reference_data.smart_shuffle_policy = definition.legacy_smart_shuffle.clone();
+        for content in &definition.content {
+            let policy = if content.smart_shuffle.is_disabled() {
+                definition.legacy_smart_shuffle.clone()
+            } else {
+                content.smart_shuffle.clone()
+            };
+            request
+                .reference_data
+                .smart_shuffle_policies_by_unit
+                .insert(content.key.clone(), policy);
+        }
 
         let mut result = SchedulingResult {
             remove_before: Some(request.start),
@@ -458,6 +486,26 @@ impl YamlPlayoutEngine {
     }
 }
 
+fn yaml_content_smart_shuffle_presence(value: &serde_yaml::Value) -> Vec<bool> {
+    let serde_yaml::Value::Mapping(root) = value else {
+        return Vec::new();
+    };
+    let content_key = serde_yaml::Value::String("content".to_owned());
+    let smart_shuffle_key = serde_yaml::Value::String("smart_shuffle".to_owned());
+    root.get(&content_key)
+        .and_then(serde_yaml::Value::as_sequence)
+        .map(|content| {
+            content
+                .iter()
+                .map(|item| {
+                    item.as_mapping()
+                        .is_some_and(|mapping| mapping.contains_key(&smart_shuffle_key))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 impl PlayoutSchedulingEngine for YamlPlayoutEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         let definition = Self::definition_for_playout(&request.playout)?;
@@ -474,9 +522,10 @@ struct SerializedYamlContext {
     pre_roll_sequence: Option<String>,
     #[serde(
         default,
-        skip_serializing_if = "super::SchedulingCooldownState::is_empty"
+        alias = "cooldown",
+        skip_serializing_if = "super::SchedulingSmartShuffleState::is_empty"
     )]
-    cooldown: super::SchedulingCooldownState,
+    smart_shuffle: super::SchedulingSmartShuffleState,
 }
 
 #[derive(Debug, Clone)]
@@ -500,7 +549,7 @@ struct YamlContext {
     enumerators: BTreeMap<String, MediaEnumerator>,
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
     content_sources: BTreeMap<String, ResolvedYamlContent>,
-    cooldown_state: super::SchedulingCooldownState,
+    smart_shuffle_state: super::SchedulingSmartShuffleState,
 }
 
 #[derive(Debug, Clone)]
@@ -537,7 +586,7 @@ impl YamlContext {
             enumerators: BTreeMap::new(),
             playlist_enumerators: BTreeMap::new(),
             content_sources,
-            cooldown_state: super::SchedulingCooldownState::default(),
+            smart_shuffle_state: super::SchedulingSmartShuffleState::default(),
         }
     }
 
@@ -548,7 +597,7 @@ impl YamlContext {
             guide_group_locked: self.guide_group_locked,
             watermark_ids: self.watermark_ids.iter().copied().collect(),
             pre_roll_sequence: self.pre_roll_sequence.clone(),
-            cooldown: self.cooldown_state.clone(),
+            smart_shuffle: self.smart_shuffle_state.clone(),
         };
         serde_json::to_string(&state)
             .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))
@@ -565,7 +614,7 @@ impl YamlContext {
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();
                 self.pre_roll_sequence = state.pre_roll_sequence;
-                self.cooldown_state = state.cooldown;
+                self.smart_shuffle_state = state.smart_shuffle;
             }
         }
         Ok(())
@@ -701,15 +750,21 @@ impl YamlContext {
         &mut self,
         content: &str,
     ) -> Option<(SchedulingMediaItem, CurrentHistoryContext)> {
-        let policy = self.reference_data.cooldown_policy.clone();
-        let cooldown_state = self.cooldown_state.clone();
-        let tags_by_media_id = self.reference_data.cooldown_tags_by_media_id.clone();
+        let policy = self
+            .reference_data
+            .smart_shuffle_policy_for_unit(content)
+            .clone();
+        let smart_shuffle_state = self.smart_shuffle_state.clone();
+        let tags_by_media_id = self
+            .reference_data
+            .smart_shuffle_tags_for_unit(content)
+            .clone();
         let scope_key = policy.scope_key(self.playout.id, None, Some(content));
         let scheduled_at = self.current_time;
         if let Some(playlist) = self.playlist_enumerator(content) {
-            playlist.select_with_cooldown(
+            playlist.select_with_smart_shuffle(
                 &policy,
-                &cooldown_state,
+                &smart_shuffle_state,
                 &scope_key,
                 scheduled_at,
                 &tags_by_media_id,
@@ -720,9 +775,9 @@ impl YamlContext {
                 .map(|media_item| (media_item, playlist.current_history_context()))
         } else {
             let enumerator = self.enumerator(content);
-            enumerator.select_with_cooldown(
+            enumerator.select_with_smart_shuffle(
                 &policy,
-                &cooldown_state,
+                &smart_shuffle_state,
                 &scope_key,
                 scheduled_at,
                 &tags_by_media_id,
@@ -1280,30 +1335,7 @@ fn add_media_item(
             content, context.instruction_index
         )),
     );
-    let scope_key =
-        context
-            .reference_data
-            .cooldown_policy
-            .scope_key(context.playout.id, None, Some(content));
-    let cooldown_tags = context.reference_data.cooldown_tags_by_media_id.clone();
-    let unit = if let Some(playlist) = context.playlist_enumerator(content) {
-        playlist.cooldown_unit(&cooldown_tags)
-    } else {
-        Some(super::SchedulingCooldownUnit::single(
-            media_item.id,
-            context.reference_data.cooldown_tags(media_item.id).clone(),
-            duration,
-        ))
-    };
-    if let Some(unit) = unit {
-        context.cooldown_state.record_unit(
-            &context.reference_data.cooldown_policy,
-            &scope_key,
-            item.start,
-            &unit,
-            item.filler_kind != FillerKind::None,
-        );
-    }
+    record_smart_shuffle_unit(context, content, media_item, duration, &item);
     item.graphics_elements = context
         .graphics_elements
         .iter()
@@ -1357,6 +1389,64 @@ fn add_media_item(
     context.current_time = item.finish;
     context.added_items.push(item);
     context.advance_guide_group();
+}
+
+fn record_smart_shuffle_unit(
+    context: &mut YamlContext,
+    content: &str,
+    media_item: &SchedulingMediaItem,
+    duration: Duration,
+    item: &PlayoutItem,
+) {
+    let playback_order = context
+        .playlist_enumerators
+        .get(content)
+        .map(super::PlaylistEnumerator::current_playback_order)
+        .or_else(|| {
+            context
+                .enumerators
+                .get(content)
+                .map(super::MediaEnumerator::playback_order)
+        })
+        .or_else(|| {
+            context
+                .content_sources
+                .get(content)
+                .map(|resolved| resolved.playback_order)
+        })
+        .unwrap_or(PlaybackOrder::None);
+    let policy = context
+        .reference_data
+        .smart_shuffle_policy_for_unit(content)
+        .clone();
+    let scope_key = policy.scope_key(context.playout.id, None, Some(content));
+    let tags = context
+        .reference_data
+        .smart_shuffle_tags_for_unit(content)
+        .clone();
+    let unit = context.playlist_enumerator(content).map_or_else(
+        || {
+            Some(super::SchedulingSmartShuffleUnit::single(
+                media_item.id,
+                tags.get(&media_item.id).cloned().unwrap_or_default(),
+                duration,
+            ))
+        },
+        |playlist| playlist.smart_shuffle_unit(&tags),
+    );
+    if let Some(unit) = unit {
+        context.smart_shuffle_state.record_unit(
+            &policy,
+            context.playout.id,
+            &scope_key,
+            item.start,
+            &unit,
+            super::SchedulingSmartShuffleRecordContext::new(
+                super::is_randomized_playback_order(playback_order),
+                item.filler_kind != FillerKind::None,
+            ),
+        );
+    }
 }
 
 fn content_sources(definition: &YamlPlayoutDefinition) -> BTreeMap<String, ResolvedYamlContent> {
@@ -1687,12 +1777,12 @@ mod tests {
     }
 
     #[test]
-    fn yaml_cooldown_policy_round_trip_is_additive_and_absent_by_default() {
+    fn yaml_smart_shuffle_policy_round_trip_is_additive_and_absent_by_default() {
         let without_policy = YamlPlayoutEngine::definition_from_str(
             "content:\n  - key: main\n    search: all\n    order: shuffle\nplayout:\n  - count: 1\n    content: main\n",
         )
         .expect("definition without policy");
-        assert!(without_policy.cooldown.is_disabled());
+        assert!(without_policy.content[0].smart_shuffle.is_disabled());
         assert!(!serde_yaml::to_string(&without_policy)
             .expect("serialize definition")
             .contains("cooldown:"));
@@ -1701,17 +1791,36 @@ mod tests {
             "cooldown:\n  version: 1\n  enabled: true\n  preset: custom\n  scope: playout\n  mode: soft\n  after_items: 3\n  after_duration: 01:00:00\n  include_filler: false\n  rules:\n    - id: show\n      kind: show\ncontent:\n  - key: main\n    search: all\n    order: shuffle\nplayout:\n  - count: 1\n    content: main\n",
         )
         .expect("definition with policy");
-        assert!(with_policy.cooldown.is_active());
-        assert_eq!(with_policy.cooldown.after_items, Some(3));
+        assert!(with_policy.content[0].smart_shuffle.is_active());
+        assert_eq!(with_policy.content[0].smart_shuffle.after_items, Some(3));
         assert_eq!(
-            with_policy.cooldown.after_duration.as_deref(),
+            with_policy.content[0]
+                .smart_shuffle
+                .after_duration
+                .as_deref(),
             Some("01:00:00")
         );
-        let round_trip = serde_yaml::from_str::<YamlPlayoutDefinition>(
-            &serde_yaml::to_string(&with_policy).expect("serialize policy"),
+        let serialized = serde_yaml::to_string(&with_policy).expect("serialize policy");
+        assert!(serialized.contains("smart_shuffle:"));
+        assert!(!serialized.contains("cooldown:"));
+        let round_trip =
+            YamlPlayoutEngine::definition_from_str(&serialized).expect("deserialize policy");
+        assert_eq!(
+            round_trip.content[0].smart_shuffle,
+            with_policy.content[0].smart_shuffle
+        );
+    }
+
+    #[test]
+    fn yaml_explicit_off_item_does_not_inherit_legacy_policy() {
+        let definition = YamlPlayoutEngine::definition_from_str(
+            "cooldown:\n  enabled: true\n  preset: custom\n  after_items: 3\n  rules:\n    - id: show\n      kind: show\ncontent:\n  - key: inherited\n    search: all\n  - key: opted-out\n    search: all\n    smart_shuffle: {}\n",
         )
-        .expect("deserialize policy");
-        assert_eq!(round_trip.cooldown, with_policy.cooldown);
+        .expect("definition with an explicit item opt-out");
+
+        assert!(definition.content[0].smart_shuffle.is_active());
+        assert!(definition.content[1].smart_shuffle.is_disabled());
+        assert!(definition.legacy_smart_shuffle.is_disabled());
     }
 
     fn schedule_yaml(yaml: &str) -> SchedulingResult {

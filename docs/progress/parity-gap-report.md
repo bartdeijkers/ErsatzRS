@@ -133,23 +133,6 @@ Closeout requires channel saves and schedule/library/collection changes to
 enqueue coalesced refresh builds, Classic Refresh/Reset semantics to rewrite the
 build window instead of appending only, and focused scheduler/browser proof.
 
-### Similar video cooldown scheduling
-
-- Slug: `similar-video-cooldown`
-- Status: `Not started`
-- Open debt: `similar-video-cooldown-scheduling`
-- Discovered: 2026-07-01
-
-ADR 0019 proposes an opt-in, shared cooldown-aware shuffle policy for schedules
-so groupable media can be diversified by artist, TV show, movie franchise-like
-metadata, ADR 0018 parent/variant lineage, collection/smart-collection/tag
-metadata, or operator-defined search filters.
-
-Closeout requires deterministic cooldown-aware selection, persisted
-Continue-build state, disabled-by-default ErsatzTV parity behavior, focused
-scheduler tests, and admin or schedule-definition controls for item-count and
-duration cooldown thresholds.
-
 ## Adjacent work not counted as these parity gaps
 
 The standing module-split survey remains useful maintainer hardening work, but

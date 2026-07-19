@@ -9,13 +9,15 @@ use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
 use ersatzrs_core::scheduling::{
-    classic_schedule_item_key, playout_cooldown_config_key, program_schedule_cooldown_config_key,
+    block_item_smart_shuffle_config_key, classic_schedule_item_key,
+    classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
+    legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
     EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, EffectiveDecoSelection,
     EffectiveDecoTemplateItem, SchedulingCollectionKey, SchedulingContentRepository,
-    SchedulingContentSource, SchedulingCooldownPolicy, SchedulingCooldownRuleKind,
-    SchedulingFallbackPreset, SchedulingFillerPreset, SchedulingMediaItem, SchedulingPlaylistItem,
-    SchedulingReferenceData,
+    SchedulingContentSource, SchedulingFallbackPreset, SchedulingFillerPreset, SchedulingMediaItem,
+    SchedulingPlaylistItem, SchedulingReferenceData, SchedulingSmartShufflePolicy,
+    SchedulingSmartShuffleRuleKind,
 };
 use ersatzrs_core::search::{
     search_page_map, SearchDocument, SearchExpression, SearchField, SearchPageMap,
@@ -42,9 +44,10 @@ pub struct SqliteSchedulingContentRepository(
 );
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SchedulingCooldownTagPreview {
+pub struct SchedulingSmartShuffleTagPreview {
     pub media_item_id: EntityId,
     pub title: Option<String>,
+    pub media_type: String,
     pub tags: Vec<String>,
 }
 
@@ -332,10 +335,34 @@ impl SqliteSchedulingContentRepository {
                 ..SchedulingReferenceData::default()
             })
             .await?;
-        let policy = self
-            .load_cooldown_policy(&program_schedule_cooldown_config_key(schedule.id))
+        let legacy_policy = self
+            .load_smart_shuffle_policy(&legacy_program_schedule_cooldown_config_key(schedule.id))
             .await?;
-        self.with_cooldown_policy(reference_data, policy).await
+        let mut policies = BTreeMap::new();
+        let mut target_ids = BTreeMap::new();
+        for item in &reference_data.classic_schedule_items {
+            let content_key = classic_schedule_item_key(item);
+            let policy_key = classic_schedule_item_policy_key(item);
+            let policy = self
+                .load_optional_smart_shuffle_policy(
+                    &program_schedule_item_smart_shuffle_config_key(item.id),
+                )
+                .await?
+                .unwrap_or_else(|| legacy_policy.clone());
+            policies.insert(policy_key.clone(), policy);
+            target_ids.insert(
+                policy_key,
+                reference_data
+                    .media_by_key
+                    .get(&content_key)
+                    .into_iter()
+                    .flatten()
+                    .map(|media| media.id)
+                    .collect(),
+            );
+        }
+        self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
+            .await
     }
 
     async fn active_classic_schedule_id(
@@ -399,10 +426,37 @@ impl SqliteSchedulingContentRepository {
                 ..SchedulingReferenceData::default()
             })
             .await?;
-        let policy = self
-            .load_cooldown_policy(&playout_cooldown_config_key(playout_id))
+        let legacy_policy = self
+            .load_smart_shuffle_policy(&legacy_playout_cooldown_config_key(playout_id))
             .await?;
-        self.with_cooldown_policy(reference_data, policy).await
+        let mut policies = BTreeMap::new();
+        let mut target_ids = BTreeMap::new();
+        let mut seen = BTreeSet::new();
+        for item in reference_data
+            .effective_blocks
+            .iter()
+            .flat_map(|block| &block.items)
+            .filter(|item| seen.insert(item.id))
+        {
+            let unit_key = item.id.to_string();
+            let policy = self
+                .load_optional_smart_shuffle_policy(&block_item_smart_shuffle_config_key(item.id))
+                .await?
+                .unwrap_or_else(|| legacy_policy.clone());
+            policies.insert(unit_key.clone(), policy);
+            target_ids.insert(
+                unit_key,
+                reference_data
+                    .media_by_key
+                    .get(&item.content)
+                    .into_iter()
+                    .flatten()
+                    .map(|media| media.id)
+                    .collect(),
+            );
+        }
+        self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
+            .await
     }
 
     /// Prepare SQL-backed reference data for a YAML/Sequential scripted
@@ -446,7 +500,28 @@ impl SqliteSchedulingContentRepository {
                 ..SchedulingReferenceData::default()
             })
             .await?;
-        self.with_cooldown_policy(reference_data, definition.cooldown)
+        let legacy_policy = definition.legacy_smart_shuffle;
+        let mut policies = BTreeMap::new();
+        let mut target_ids = BTreeMap::new();
+        for item in definition.content {
+            let policy = if item.smart_shuffle.is_disabled() {
+                legacy_policy.clone()
+            } else {
+                item.smart_shuffle
+            };
+            target_ids.insert(
+                item.key.clone(),
+                reference_data
+                    .media_by_key
+                    .get(&item.key)
+                    .into_iter()
+                    .flatten()
+                    .map(|media| media.id)
+                    .collect(),
+            );
+            policies.insert(item.key, policy);
+        }
+        self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
             .await
     }
 
@@ -474,55 +549,67 @@ impl SqliteSchedulingContentRepository {
     pub async fn scripted_reference_data(
         &self,
         playout_id: EntityId,
-        definition_policy: Option<SchedulingCooldownPolicy>,
+        definition_policies: BTreeMap<String, SchedulingSmartShufflePolicy>,
+        definition_legacy_policy: Option<SchedulingSmartShufflePolicy>,
     ) -> Result<SchedulingReferenceData> {
         let reference_data = self.configured_playout_options().await?;
-        let policy = if let Some(policy) = definition_policy {
+        let legacy_policy = if let Some(policy) = definition_legacy_policy {
             policy
         } else {
-            self.load_cooldown_policy(&playout_cooldown_config_key(playout_id))
+            self.load_smart_shuffle_policy(&legacy_playout_cooldown_config_key(playout_id))
                 .await?
         };
-        self.with_cooldown_policy(reference_data, policy).await
+        self.with_smart_shuffle_policies(
+            reference_data,
+            legacy_policy,
+            definition_policies,
+            BTreeMap::new(),
+        )
+        .await
     }
 
-    /// Return a deterministic sample of the effective tags emitted by a
-    /// cooldown policy. This is an admin preview and is not used by the
-    /// scheduling hot loop.
+    /// Return all candidates and effective tags for one scheduling selection
+    /// unit. Admin callers paginate the result; the scheduling hot loop does
+    /// not use this method.
     ///
     /// # Errors
     ///
     /// Returns an error when search reference data cannot be loaded.
-    pub async fn cooldown_tag_preview(
+    pub async fn smart_shuffle_candidates(
         &self,
-        policy: SchedulingCooldownPolicy,
-        limit: usize,
-    ) -> Result<Vec<SchedulingCooldownTagPreview>> {
-        if !policy.is_active() || limit == 0 {
-            return Ok(Vec::new());
-        }
-
-        let reference_data = SchedulingReferenceData {
-            cooldown_policy: policy,
-            ..SchedulingReferenceData::default()
-        };
-        let tags_by_media_id = self.cooldown_tags(&reference_data).await?;
-        let mut documents = self
+        collection_key: &SchedulingCollectionKey,
+        policy: SchedulingSmartShufflePolicy,
+    ) -> Result<Vec<SchedulingSmartShuffleTagPreview>> {
+        let media_items = self.items_for_collection_key(collection_key, 0).await?;
+        let target_ids = media_items.iter().map(|item| item.id).collect();
+        let tags_by_media_id = self
+            .smart_shuffle_tags_for_policy(&policy, target_ids, None)
+            .await?;
+        let documents = self
             .search_documents(&SearchHydrationNeeds::default())
             .await?;
-        documents.sort_by_key(|document| document.media_item_id);
-
-        Ok(documents
+        let documents = documents
             .into_iter()
-            .filter_map(|document| {
-                let tags = tags_by_media_id.get(&document.media_item_id)?;
-                (!tags.is_empty()).then(|| SchedulingCooldownTagPreview {
-                    media_item_id: document.media_item_id,
-                    title: document.title,
-                    tags: tags.iter().cloned().collect(),
-                })
+            .map(|document| (document.media_item_id, document))
+            .collect::<BTreeMap<_, _>>();
+
+        Ok(media_items
+            .into_iter()
+            .map(|item| {
+                let document = documents.get(&item.id);
+                SchedulingSmartShuffleTagPreview {
+                    media_item_id: item.id,
+                    title: document
+                        .and_then(|value| value.title.clone())
+                        .or(item.title),
+                    media_type: document
+                        .map_or_else(|| "media".to_owned(), |value| value.media_kind.clone()),
+                    tags: tags_by_media_id
+                        .get(&item.id)
+                        .map(|tags| tags.iter().cloned().collect())
+                        .unwrap_or_default(),
+                }
             })
-            .take(limit)
             .collect())
     }
 
@@ -537,69 +624,101 @@ impl SqliteSchedulingContentRepository {
         Ok(reference_data)
     }
 
-    async fn load_cooldown_policy(&self, key: &str) -> Result<SchedulingCooldownPolicy> {
+    async fn load_smart_shuffle_policy(&self, key: &str) -> Result<SchedulingSmartShufflePolicy> {
+        Ok(self
+            .load_optional_smart_shuffle_policy(key)
+            .await?
+            .unwrap_or_default())
+    }
+
+    async fn load_optional_smart_shuffle_policy(
+        &self,
+        key: &str,
+    ) -> Result<Option<SchedulingSmartShufflePolicy>> {
         let value = sqlx::query_scalar::<_, String>(
             r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
         )
         .bind(key)
         .fetch_optional(&self.0)
         .await?;
-        value.map_or_else(
-            || Ok(SchedulingCooldownPolicy::default()),
-            |json| {
+        value
+            .map(|json| {
                 serde_json::from_str(&json).map_err(|error| {
                     ersatzrs_core::repositories::RepositoryError::Decode {
-                        kind: "scheduling cooldown policy",
+                        kind: "scheduling Smart Shuffle policy",
                         value: error.to_string(),
                     }
                 })
-            },
-        )
+            })
+            .transpose()
     }
 
-    async fn with_cooldown_policy(
+    async fn with_smart_shuffle_policies(
         &self,
         mut reference_data: SchedulingReferenceData,
-        policy: SchedulingCooldownPolicy,
+        legacy_policy: SchedulingSmartShufflePolicy,
+        policies: BTreeMap<String, SchedulingSmartShufflePolicy>,
+        target_ids: BTreeMap<String, BTreeSet<EntityId>>,
     ) -> Result<SchedulingReferenceData> {
-        reference_data.cooldown_policy = policy;
-        if !reference_data.cooldown_policy.is_active() {
-            return Ok(reference_data);
+        reference_data.smart_shuffle_policy = legacy_policy;
+        reference_data.smart_shuffle_policies_by_unit = policies;
+        for (unit_key, policy) in &reference_data.smart_shuffle_policies_by_unit {
+            if !policy.is_active() {
+                continue;
+            }
+            let tags = self
+                .smart_shuffle_tags_for_policy(
+                    policy,
+                    target_ids.get(unit_key).cloned().unwrap_or_default(),
+                    Some(unit_key),
+                )
+                .await?;
+            reference_data
+                .smart_shuffle_tags_by_unit
+                .insert(unit_key.clone(), tags);
         }
-        reference_data.cooldown_tags_by_media_id = self.cooldown_tags(&reference_data).await?;
+        if reference_data.smart_shuffle_policy.is_active() {
+            reference_data.smart_shuffle_tags_by_media_id = self
+                .smart_shuffle_tags_for_policy(
+                    &reference_data.smart_shuffle_policy,
+                    reference_data_media_ids(&reference_data),
+                    None,
+                )
+                .await?;
+        }
         Ok(reference_data)
     }
 
-    async fn cooldown_tags(
+    async fn smart_shuffle_tags_for_policy(
         &self,
-        reference_data: &SchedulingReferenceData,
+        policy: &SchedulingSmartShufflePolicy,
+        target_ids: BTreeSet<EntityId>,
+        filter_namespace: Option<&str>,
     ) -> Result<BTreeMap<EntityId, BTreeSet<String>>> {
-        let target_ids = reference_data_media_ids(reference_data);
-
         let mut hydration = SearchHydrationNeeds::default();
         let mut filters = Vec::new();
-        for rule in &reference_data.cooldown_policy.rules {
+        for rule in &policy.rules {
             match rule.kind {
-                SchedulingCooldownRuleKind::Artist => hydration.insert(SEARCH_NEED_ARTISTS),
-                SchedulingCooldownRuleKind::AlbumArtist => {
+                SchedulingSmartShuffleRuleKind::Artist => hydration.insert(SEARCH_NEED_ARTISTS),
+                SchedulingSmartShuffleRuleKind::AlbumArtist => {
                     hydration.insert(SEARCH_NEED_ALBUM_ARTISTS);
                 }
-                SchedulingCooldownRuleKind::Collection => {
+                SchedulingSmartShuffleRuleKind::Collection => {
                     hydration.insert(SEARCH_NEED_COLLECTIONS);
                 }
-                SchedulingCooldownRuleKind::Tag => hydration.insert(SEARCH_NEED_TAGS),
-                SchedulingCooldownRuleKind::Genre => hydration.insert(SEARCH_NEED_GENRES),
-                SchedulingCooldownRuleKind::Studio => hydration.insert(SEARCH_NEED_STUDIOS),
-                SchedulingCooldownRuleKind::Filter => {
+                SchedulingSmartShuffleRuleKind::Tag => hydration.insert(SEARCH_NEED_TAGS),
+                SchedulingSmartShuffleRuleKind::Genre => hydration.insert(SEARCH_NEED_GENRES),
+                SchedulingSmartShuffleRuleKind::Studio => hydration.insert(SEARCH_NEED_STUDIOS),
+                SchedulingSmartShuffleRuleKind::Filter => {
                     if let Some(search) = rule.search.as_deref() {
                         let expression = SearchExpression::parse(search);
                         hydration.visit_expression(&expression);
                         filters.push((rule.id.as_str(), expression));
                     }
                 }
-                SchedulingCooldownRuleKind::Show
-                | SchedulingCooldownRuleKind::Season
-                | SchedulingCooldownRuleKind::ContentParent => {}
+                SchedulingSmartShuffleRuleKind::Show
+                | SchedulingSmartShuffleRuleKind::Season
+                | SchedulingSmartShuffleRuleKind::ContentParent => {}
             }
         }
 
@@ -609,56 +728,59 @@ impl SqliteSchedulingContentRepository {
             target_ids.is_empty() || target_ids.contains(&document.media_item_id)
         }) {
             let tags = result.entry(document.media_item_id).or_default();
-            for rule in &reference_data.cooldown_policy.rules {
+            for rule in &policy.rules {
                 match rule.kind {
-                    SchedulingCooldownRuleKind::Artist => {
-                        extend_cooldown_tags(tags, &rule.id, &document.artists);
+                    SchedulingSmartShuffleRuleKind::Artist => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.artists);
                     }
-                    SchedulingCooldownRuleKind::AlbumArtist => {
-                        extend_cooldown_tags(tags, &rule.id, &document.album_artists);
+                    SchedulingSmartShuffleRuleKind::AlbumArtist => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.album_artists);
                     }
-                    SchedulingCooldownRuleKind::Show => {
-                        extend_optional_cooldown_tag(
+                    SchedulingSmartShuffleRuleKind::Show => {
+                        extend_optional_smart_shuffle_tag(
                             tags,
                             &rule.id,
                             document.show_title.as_deref(),
                         );
                     }
-                    SchedulingCooldownRuleKind::Season => {
+                    SchedulingSmartShuffleRuleKind::Season => {
                         if let (Some(show), Some(season)) =
                             (document.show_title.as_deref(), document.season_number)
                         {
                             tags.insert(format!(
                                 "{}:{}:{}",
                                 rule.id,
-                                normalize_cooldown_value(show),
+                                normalize_smart_shuffle_value(show),
                                 season
                             ));
                         }
                     }
-                    SchedulingCooldownRuleKind::ContentParent => {
+                    SchedulingSmartShuffleRuleKind::ContentParent => {
                         let root = document
                             .parent_media_item_id
                             .unwrap_or(document.media_item_id);
                         tags.insert(format!("{}:{root}", rule.id));
                     }
-                    SchedulingCooldownRuleKind::Collection => {
-                        extend_cooldown_tags(tags, &rule.id, &document.collections);
+                    SchedulingSmartShuffleRuleKind::Collection => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.collections);
                     }
-                    SchedulingCooldownRuleKind::Tag => {
-                        extend_cooldown_tags(tags, &rule.id, &document.tags);
+                    SchedulingSmartShuffleRuleKind::Tag => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.tags);
                     }
-                    SchedulingCooldownRuleKind::Genre => {
-                        extend_cooldown_tags(tags, &rule.id, &document.genres);
+                    SchedulingSmartShuffleRuleKind::Genre => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.genres);
                     }
-                    SchedulingCooldownRuleKind::Studio => {
-                        extend_cooldown_tags(tags, &rule.id, &document.studios);
+                    SchedulingSmartShuffleRuleKind::Studio => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.studios);
                     }
-                    SchedulingCooldownRuleKind::Filter => {
+                    SchedulingSmartShuffleRuleKind::Filter => {
                         if filters.iter().any(|(id, expression)| {
                             *id == rule.id.as_str() && expression.matches(document)
                         }) {
-                            tags.insert(format!("filter:{}", rule.id));
+                            tags.insert(filter_namespace.map_or_else(
+                                || format!("filter:{}", rule.id),
+                                |namespace| format!("filter:{namespace}:{}", rule.id),
+                            ));
                         }
                     }
                 }
@@ -2884,15 +3006,19 @@ fn extend_media_item_ids(ids: &mut BTreeSet<EntityId>, items: &[SchedulingMediaI
     ids.extend(items.iter().map(|item| item.id));
 }
 
-fn extend_cooldown_tags(tags: &mut BTreeSet<String>, rule_id: &str, values: &[String]) {
+fn extend_smart_shuffle_tags(tags: &mut BTreeSet<String>, rule_id: &str, values: &[String]) {
     for value in values {
-        extend_optional_cooldown_tag(tags, rule_id, Some(value));
+        extend_optional_smart_shuffle_tag(tags, rule_id, Some(value));
     }
 }
 
-fn extend_optional_cooldown_tag(tags: &mut BTreeSet<String>, rule_id: &str, value: Option<&str>) {
+fn extend_optional_smart_shuffle_tag(
+    tags: &mut BTreeSet<String>,
+    rule_id: &str,
+    value: Option<&str>,
+) {
     let Some(value) = value
-        .map(normalize_cooldown_value)
+        .map(normalize_smart_shuffle_value)
         .filter(|value| !value.is_empty())
     else {
         return;
@@ -2900,7 +3026,7 @@ fn extend_optional_cooldown_tag(tags: &mut BTreeSet<String>, rule_id: &str, valu
     tags.insert(format!("{rule_id}:{value}"));
 }
 
-fn normalize_cooldown_value(value: &str) -> String {
+fn normalize_smart_shuffle_value(value: &str) -> String {
     value.trim().to_lowercase()
 }
 

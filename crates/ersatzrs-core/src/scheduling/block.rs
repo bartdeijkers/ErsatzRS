@@ -324,8 +324,8 @@ pub struct BlockSchedulingEngine;
 struct BlockAnchorContext {
     #[serde(default = "block_anchor_context_version")]
     version: u32,
-    #[serde(default)]
-    cooldown: super::SchedulingCooldownState,
+    #[serde(default, alias = "cooldown")]
+    smart_shuffle: super::SchedulingSmartShuffleState,
 }
 
 fn block_anchor_context_version() -> u32 {
@@ -335,17 +335,17 @@ fn block_anchor_context_version() -> u32 {
 impl PlayoutSchedulingEngine for BlockSchedulingEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         let mut result = SchedulingResult::default();
-        let mut cooldown_state = if request.mode == super::PlayoutBuildMode::Continue {
+        let mut smart_shuffle_state = if request.mode == super::PlayoutBuildMode::Continue {
             request
                 .playout
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
                 .and_then(|context| serde_json::from_str::<BlockAnchorContext>(context).ok())
-                .map(|context| context.cooldown)
+                .map(|context| context.smart_shuffle)
                 .unwrap_or_default()
         } else {
-            super::SchedulingCooldownState::default()
+            super::SchedulingSmartShuffleState::default()
         };
 
         let mut blocks = request.reference_data.effective_blocks.clone();
@@ -373,7 +373,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             blocks,
             &block_starts_to_update,
             &collection_etags,
-            &mut cooldown_state,
+            &mut smart_shuffle_state,
             &mut result,
         );
 
@@ -390,7 +390,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             request.start,
             request.reference_data.max_playout_offset,
         ));
-        if request.reference_data.cooldown_policy.is_active() {
+        if request.reference_data.has_active_smart_shuffle() {
             let next_start = result
                 .added_items
                 .iter()
@@ -409,7 +409,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
                 context: Some(
                     serde_json::to_string(&BlockAnchorContext {
                         version: block_anchor_context_version(),
-                        cooldown: cooldown_state,
+                        smart_shuffle: smart_shuffle_state,
                     })
                     .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?,
                 ),
@@ -425,14 +425,20 @@ fn schedule_updated_blocks(
     blocks: Vec<EffectiveBlock>,
     block_starts_to_update: &BTreeSet<DateTime<Utc>>,
     collection_etags: &BTreeMap<String, String>,
-    cooldown_state: &mut super::SchedulingCooldownState,
+    smart_shuffle_state: &mut super::SchedulingSmartShuffleState,
     result: &mut SchedulingResult,
 ) {
     for block in blocks {
         if !block_starts_to_update.contains(&block.start) || block.start >= request.finish {
             continue;
         }
-        schedule_block_items(request, &block, collection_etags, cooldown_state, result);
+        schedule_block_items(
+            request,
+            &block,
+            collection_etags,
+            smart_shuffle_state,
+            result,
+        );
     }
 }
 
@@ -440,7 +446,7 @@ fn schedule_block_items(
     request: &SchedulingRequest,
     block: &EffectiveBlock,
     collection_etags: &BTreeMap<String, String>,
-    cooldown_state: &mut super::SchedulingCooldownState,
+    smart_shuffle_state: &mut super::SchedulingSmartShuffleState,
     result: &mut SchedulingResult,
 ) {
     let block_finish = block.start + block.duration;
@@ -461,17 +467,24 @@ fn schedule_block_items(
             continue;
         }
 
-        let scope_key = request.reference_data.cooldown_policy.scope_key(
+        let unit_key = block_item.id.to_string();
+        let policy = request
+            .reference_data
+            .smart_shuffle_policy_for_unit(&unit_key);
+        let tags_by_media_id = request
+            .reference_data
+            .smart_shuffle_tags_for_unit(&unit_key);
+        let scope_key = policy.scope_key(
             request.playout.id,
             Some(block_item.id),
             Some(&block_item.content),
         );
-        enumerator.select_with_cooldown(
-            &request.reference_data.cooldown_policy,
-            cooldown_state,
+        enumerator.select_with_smart_shuffle(
+            policy,
+            smart_shuffle_state,
             &scope_key,
             current_time,
-            &request.reference_data.cooldown_tags_by_media_id,
+            tags_by_media_id,
         );
         let Some(media_item) = enumerator.current().cloned() else {
             break;
@@ -502,16 +515,23 @@ fn schedule_block_items(
             false,
         ));
         current_time = item.finish;
-        cooldown_state.record_unit(
-            &request.reference_data.cooldown_policy,
+        smart_shuffle_state.record_unit(
+            policy,
+            request.playout.id,
             &scope_key,
             item.start,
-            &super::SchedulingCooldownUnit::single(
+            &super::SchedulingSmartShuffleUnit::single(
                 media_item.id,
-                request.reference_data.cooldown_tags(media_item.id).clone(),
+                request
+                    .reference_data
+                    .smart_shuffle_tags_for_media(&unit_key, media_item.id)
+                    .clone(),
                 media_item.duration,
             ),
-            false,
+            super::SchedulingSmartShuffleRecordContext::new(
+                super::is_randomized_playback_order(block_item.playback_order),
+                false,
+            ),
         );
         result.added_items.push(item);
         enumerator.advance();
@@ -1336,16 +1356,16 @@ mod tests {
     fn block_shuffle_uses_shared_cooldown_across_effective_blocks() {
         let start = utc("2026-04-15T08:00:00Z");
         let mut reference_data = SchedulingReferenceData {
-            cooldown_policy: super::super::SchedulingCooldownPolicy {
+            smart_shuffle_policy: super::super::SchedulingSmartShufflePolicy {
                 enabled: true,
-                preset: super::super::SchedulingCooldownPreset::Custom,
+                preset: super::super::SchedulingSmartShufflePreset::Custom,
                 after_items: Some(2),
-                rules: vec![super::super::SchedulingCooldownRule {
+                rules: vec![super::super::SchedulingSmartShuffleRule {
                     id: "show".to_owned(),
-                    kind: super::super::SchedulingCooldownRuleKind::Show,
+                    kind: super::super::SchedulingSmartShuffleRuleKind::Show,
                     search: None,
                 }],
-                ..super::super::SchedulingCooldownPolicy::default()
+                ..super::super::SchedulingSmartShufflePolicy::default()
             },
             ..SchedulingReferenceData::default()
         };
@@ -1357,10 +1377,10 @@ mod tests {
             ],
         );
         reference_data
-            .cooldown_tags_by_media_id
+            .smart_shuffle_tags_by_media_id
             .insert(1, BTreeSet::from(["show:same".to_owned()]));
         reference_data
-            .cooldown_tags_by_media_id
+            .smart_shuffle_tags_by_media_id
             .insert(2, BTreeSet::from(["show:other".to_owned()]));
         for (index, block_start) in [start, start + Duration::minutes(30)]
             .into_iter()

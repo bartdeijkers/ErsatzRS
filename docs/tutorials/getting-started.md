@@ -87,18 +87,18 @@ draw items from that source.
 1. Expand **Scheduling** and open **Schedules**.
 2. Select **Add Schedule**.
 3. Name it `Tutorial Schedule`.
-4. Leave **Similar Video Cooldown** set to **Off** for this first channel.
-5. Save the schedule. ErsatzRS opens its schedule items.
-6. Select **Add Schedule Item**.
-7. Choose **Collection** as the collection type.
-8. Select `Tutorial Movies`.
-9. Choose **Shuffle** as the playback order.
+4. Save the schedule. ErsatzRS opens its schedule items.
+5. Select **Add Schedule Item**.
+6. Choose **Collection** as the collection type.
+7. Select `Tutorial Movies`.
+8. Choose **Shuffle** as the playback order.
+9. Leave the item's **Smart Shuffle** section set to **Off**.
 10. Choose **Flood** as the playout mode.
 11. Save the schedule items.
 
 `Flood` keeps selecting content from the collection to fill the available
 timeline. Later, you can combine fixed start times, duration limits, filler,
-watermarks, stream overrides, and cooldown rules.
+watermarks, stream overrides, and Smart Shuffle rules.
 
 ## 6. Attach the schedule to a channel
 

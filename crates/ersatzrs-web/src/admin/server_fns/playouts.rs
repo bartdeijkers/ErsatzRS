@@ -33,12 +33,6 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "ssr")]
-use ersatzrs_core::scheduling::{
-    playout_cooldown_config_key, SchedulingCooldownPolicy, SchedulingCooldownPreset,
-    SchedulingCooldownRule, SchedulingCooldownRuleKind, SchedulingCooldownScope,
-};
-
 /// `ScheduleKind` integer values (mirrors `PlayoutScheduleKind`).
 pub const KIND_CLASSIC: i32 = 1;
 pub const KIND_BLOCK: i32 = 2;
@@ -140,33 +134,6 @@ pub struct PlayoutKindEditorForm {
     pub default_deco_id: Option<i64>,
     pub deco_groups: Vec<PlayoutDecoGroupOption>,
     pub decos: Vec<PlayoutDecoOption>,
-    pub cooldown: PlayoutCooldownForm,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlayoutCooldownForm {
-    pub preset: String,
-    pub scope: String,
-    pub after_items: u32,
-    pub after_duration_minutes: u32,
-    pub include_filler: bool,
-    #[serde(default)]
-    pub rules: Vec<String>,
-    pub filter_rules: String,
-}
-
-impl Default for PlayoutCooldownForm {
-    fn default() -> Self {
-        Self {
-            preset: "off".to_owned(),
-            scope: "playout".to_owned(),
-            after_items: 0,
-            after_duration_minutes: 0,
-            include_filler: false,
-            rules: Vec::new(),
-            filter_rules: String::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -700,8 +667,6 @@ pub async fn get_playout_kind_editor(
     } else {
         (Vec::new(), Vec::new())
     };
-    let cooldown = load_playout_cooldown_form(&state.pool, id).await?;
-
     Ok(Some(PlayoutKindEditorForm {
         id: row.try_get("Id").unwrap_or(0),
         schedule_kind: row.try_get("ScheduleKind").unwrap_or(0),
@@ -711,7 +676,6 @@ pub async fn get_playout_kind_editor(
         default_deco_id: row.try_get::<Option<i64>, _>("DecoId").ok().flatten(),
         deco_groups,
         decos,
-        cooldown,
     }))
 }
 
@@ -764,220 +728,6 @@ pub async fn save_playout_default_deco(id: i64, deco_id: Option<i64>) -> Result<
         .await?;
 
     Ok(())
-}
-
-/// Persists the additive ADR 0019 policy for Block and Scripted playouts.
-#[server]
-pub async fn save_playout_cooldown(
-    id: i64,
-    schedule_kind: i32,
-    form: PlayoutCooldownForm,
-) -> Result<(), ServerFnError> {
-    use crate::host::state::AppState;
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
-
-    if !matches!(schedule_kind, KIND_BLOCK | KIND_SCRIPTED) {
-        return Err(ServerFnError::new(
-            "Cooldown policy is only attached at playout level for Block and Scripted schedules.",
-        ));
-    }
-    let state = expect_context::<AppState>();
-    let exists: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Playout" WHERE "Id" = ? AND "ScheduleKind" = ?"#,
-    )
-    .bind(id)
-    .bind(schedule_kind)
-    .fetch_one(&state.pool)
-    .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Playout does not exist."));
-    }
-    save_playout_cooldown_policy(&state.pool, id, &cooldown_policy_from_playout_form(&form))
-        .await?;
-    enqueue_build(&state, id, PlayoutBuildMode::Reset);
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn load_playout_cooldown_form(
-    pool: &sqlx::Pool<ersatzrs_infra::db::Db>,
-    playout_id: i64,
-) -> Result<PlayoutCooldownForm, ServerFnError> {
-    let value =
-        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(playout_cooldown_config_key(playout_id))
-            .fetch_optional(pool)
-            .await?;
-    value.map_or_else(
-        || Ok(PlayoutCooldownForm::default()),
-        |json| {
-            serde_json::from_str::<SchedulingCooldownPolicy>(&json)
-                .map(|policy| playout_form_from_cooldown_policy(&policy))
-                .map_err(ServerFnError::new)
-        },
-    )
-}
-
-#[cfg(feature = "ssr")]
-async fn save_playout_cooldown_policy(
-    pool: &sqlx::Pool<ersatzrs_infra::db::Db>,
-    playout_id: i64,
-    policy: &SchedulingCooldownPolicy,
-) -> Result<(), ServerFnError> {
-    let key = playout_cooldown_config_key(playout_id);
-    if !policy.is_active() {
-        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(key)
-            .execute(pool)
-            .await?;
-        return Ok(());
-    }
-    let value = serde_json::to_string(policy).map_err(ServerFnError::new)?;
-    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
-        .bind(&value)
-        .bind(&key)
-        .execute(pool)
-        .await?;
-    if updated.rows_affected() == 0 {
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-            .bind(key)
-            .bind(value)
-            .execute(pool)
-            .await?;
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-fn cooldown_policy_from_playout_form(form: &PlayoutCooldownForm) -> SchedulingCooldownPolicy {
-    let preset = match form.preset.as_str() {
-        "light" => SchedulingCooldownPreset::Light,
-        "balanced" => SchedulingCooldownPreset::Balanced,
-        "custom" => SchedulingCooldownPreset::Custom,
-        _ => SchedulingCooldownPreset::Off,
-    };
-    if preset == SchedulingCooldownPreset::Off {
-        return SchedulingCooldownPolicy::default();
-    }
-    if matches!(
-        preset,
-        SchedulingCooldownPreset::Light | SchedulingCooldownPreset::Balanced
-    ) {
-        return SchedulingCooldownPolicy::for_preset(preset);
-    }
-    let mut rules = form
-        .rules
-        .iter()
-        .filter_map(|name| playout_cooldown_rule_kind(name).map(|kind| (name, kind)))
-        .map(|(name, kind)| SchedulingCooldownRule {
-            id: name.clone(),
-            kind,
-            search: None,
-        })
-        .collect::<Vec<_>>();
-    rules.extend(form.filter_rules.lines().filter_map(|line| {
-        let (id, search) = line.split_once('=')?;
-        let (id, search) = (id.trim(), search.trim());
-        (!id.is_empty() && !search.is_empty()).then(|| SchedulingCooldownRule {
-            id: id.to_owned(),
-            kind: SchedulingCooldownRuleKind::Filter,
-            search: Some(search.to_owned()),
-        })
-    }));
-    SchedulingCooldownPolicy {
-        enabled: true,
-        preset,
-        scope: match form.scope.as_str() {
-            "schedule_item" => SchedulingCooldownScope::ScheduleItem,
-            "content_source" => SchedulingCooldownScope::ContentSource,
-            _ => SchedulingCooldownScope::Playout,
-        },
-        after_items: (form.after_items > 0).then_some(form.after_items),
-        after_duration: (form.after_duration_minutes > 0).then(|| {
-            format!(
-                "{:02}:{:02}:00",
-                form.after_duration_minutes / 60,
-                form.after_duration_minutes % 60
-            )
-        }),
-        include_filler: form.include_filler,
-        rules,
-        ..SchedulingCooldownPolicy::default()
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn playout_form_from_cooldown_policy(policy: &SchedulingCooldownPolicy) -> PlayoutCooldownForm {
-    PlayoutCooldownForm {
-        preset: match policy.preset {
-            SchedulingCooldownPreset::Off => "off",
-            SchedulingCooldownPreset::Light => "light",
-            SchedulingCooldownPreset::Balanced => "balanced",
-            SchedulingCooldownPreset::Custom => "custom",
-        }
-        .to_owned(),
-        scope: match policy.scope {
-            SchedulingCooldownScope::Playout => "playout",
-            SchedulingCooldownScope::ScheduleItem => "schedule_item",
-            SchedulingCooldownScope::ContentSource => "content_source",
-        }
-        .to_owned(),
-        after_items: policy.after_items.unwrap_or_default(),
-        after_duration_minutes: policy
-            .after_duration_value()
-            .and_then(|duration| u32::try_from(duration.num_minutes()).ok())
-            .unwrap_or_default(),
-        include_filler: policy.include_filler,
-        rules: policy
-            .rules
-            .iter()
-            .filter(|rule| rule.kind != SchedulingCooldownRuleKind::Filter)
-            .map(|rule| playout_cooldown_rule_name(rule.kind).to_owned())
-            .collect(),
-        filter_rules: policy
-            .rules
-            .iter()
-            .filter(|rule| rule.kind == SchedulingCooldownRuleKind::Filter)
-            .filter_map(|rule| {
-                rule.search
-                    .as_deref()
-                    .map(|search| format!("{}={search}", rule.id))
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn playout_cooldown_rule_kind(value: &str) -> Option<SchedulingCooldownRuleKind> {
-    Some(match value {
-        "artist" => SchedulingCooldownRuleKind::Artist,
-        "album_artist" => SchedulingCooldownRuleKind::AlbumArtist,
-        "show" => SchedulingCooldownRuleKind::Show,
-        "season" => SchedulingCooldownRuleKind::Season,
-        "content_parent" => SchedulingCooldownRuleKind::ContentParent,
-        "collection" => SchedulingCooldownRuleKind::Collection,
-        "tag" => SchedulingCooldownRuleKind::Tag,
-        "genre" => SchedulingCooldownRuleKind::Genre,
-        "studio" => SchedulingCooldownRuleKind::Studio,
-        _ => return None,
-    })
-}
-
-#[cfg(feature = "ssr")]
-fn playout_cooldown_rule_name(kind: SchedulingCooldownRuleKind) -> &'static str {
-    match kind {
-        SchedulingCooldownRuleKind::Artist => "artist",
-        SchedulingCooldownRuleKind::AlbumArtist => "album_artist",
-        SchedulingCooldownRuleKind::Show => "show",
-        SchedulingCooldownRuleKind::Season => "season",
-        SchedulingCooldownRuleKind::ContentParent => "content_parent",
-        SchedulingCooldownRuleKind::Collection => "collection",
-        SchedulingCooldownRuleKind::Tag => "tag",
-        SchedulingCooldownRuleKind::Genre => "genre",
-        SchedulingCooldownRuleKind::Studio => "studio",
-        SchedulingCooldownRuleKind::Filter => "filter",
-    }
 }
 
 /// Loads the Classic nested alternate schedule editor. ErsatzTV appends the

@@ -17,8 +17,9 @@ use chrono::{Duration, Utc};
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{GraphicsRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::{
-    PlayoutBuildMode, SchedulingCooldownPolicy, SchedulingCooldownPreset, SchedulingCooldownState,
-    SchedulingCooldownUnit, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    PlayoutBuildMode, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset,
+    SchedulingSmartShuffleRecordContext, SchedulingSmartShuffleState, SchedulingSmartShuffleUnit,
     YamlPlayoutEngine,
 };
 use ersatzrs_domain::{
@@ -312,20 +313,21 @@ async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
 
     let start = common::fixed_time();
     let next_start = start + Duration::hours(48);
-    let policy = SchedulingCooldownPolicy::for_preset(SchedulingCooldownPreset::Balanced);
-    let mut cooldown_state = SchedulingCooldownState::default();
-    cooldown_state.record_unit(
+    let policy = SchedulingSmartShufflePolicy::for_preset(SchedulingSmartShufflePreset::Balanced);
+    let mut smart_shuffle_state = SchedulingSmartShuffleState::default();
+    smart_shuffle_state.record_unit(
         &policy,
+        1,
         "playout:1",
         start,
-        &SchedulingCooldownUnit::single(
+        &SchedulingSmartShuffleUnit::single(
             1,
             BTreeSet::from(["show:example".to_owned()]),
             Duration::minutes(30),
         ),
-        false,
+        SchedulingSmartShuffleRecordContext::new(true, false),
     );
-    let cooldown_context = serde_json::to_string(&cooldown_state).unwrap();
+    let cooldown_context = serde_json::to_string(&smart_shuffle_state).unwrap();
 
     // Input playout has no anchor yet (first build); the engine result carries one.
     let playout = Playout {

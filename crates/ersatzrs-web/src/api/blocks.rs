@@ -1,7 +1,4 @@
-use axum::{
-    extract::{Form, State},
-    response::Redirect,
-};
+use axum::{body::Bytes, extract::State, response::Redirect};
 use serde::Deserialize;
 
 use crate::{
@@ -9,6 +6,7 @@ use crate::{
         collection_type, playback_order, save_block_with_pool, stop_scheduling, BlockItemForm,
         BlockWithItemsForm,
     },
+    admin::server_fns::schedules::SmartShuffleForm,
     host::state::AppState,
 };
 
@@ -49,6 +47,22 @@ pub struct BlockItemsSaveForm {
     #[serde(default)]
     item_playback_order: Vec<String>,
     #[serde(default)]
+    item_smart_shuffle_preset: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_scope: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_after_items: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_after_duration_minutes: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_include_filler: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_rules: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_filter_rules: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_inherited_legacy: Vec<String>,
+    #[serde(default)]
     item_include_in_program_guide_index: Vec<String>,
     #[serde(default)]
     item_disable_watermarks_index: Vec<String>,
@@ -60,10 +74,8 @@ pub struct BlockItemsSaveForm {
     new_collection_id: String,
 }
 
-pub async fn save_block_items_form(
-    State(state): State<AppState>,
-    Form(input): Form<BlockItemsSaveForm>,
-) -> Redirect {
+pub async fn save_block_items_form(State(state): State<AppState>, body: Bytes) -> Redirect {
+    let input = BlockItemsSaveForm::from_urlencoded_bytes(&body);
     let block_id = input.block_id;
     let mut items = input.to_items();
     let (action, action_index) = parse_action(&input.action);
@@ -120,6 +132,64 @@ pub async fn save_block_items_form(
 }
 
 impl BlockItemsSaveForm {
+    fn from_urlencoded_bytes(body: &[u8]) -> Self {
+        let mut form = Self::default();
+        let body = String::from_utf8_lossy(body);
+        for pair in body.split('&').filter(|pair| !pair.is_empty()) {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            let value = decode_form_value(value);
+            match key {
+                "block_id" => form.block_id = value.trim().parse().unwrap_or_default(),
+                "group_id" => form.group_id = value.trim().parse().unwrap_or_default(),
+                "name" => form.name = value,
+                "duration_hours" => form.duration_hours = value,
+                "duration_minutes" => form.duration_minutes = value,
+                "stop_scheduling" => form.stop_scheduling = value,
+                "action" => form.action = value,
+                "item_index" => form.item_index.push(value),
+                "item_id" => form.item_id.push(value),
+                "item_collection_type" => form.item_collection_type.push(value),
+                "item_collection_id" => form.item_collection_id.push(value),
+                "item_multi_collection_id" => form.item_multi_collection_id.push(value),
+                "item_smart_collection_id" => form.item_smart_collection_id.push(value),
+                "item_media_item_id" => form.item_media_item_id.push(value),
+                "item_search_title" => form.item_search_title.push(value),
+                "item_search_query" => form.item_search_query.push(value),
+                "item_collection_name" => form.item_collection_name.push(value),
+                "item_playback_order" => form.item_playback_order.push(value),
+                "item_smart_shuffle_preset" => form.item_smart_shuffle_preset.push(value),
+                "item_smart_shuffle_scope" => form.item_smart_shuffle_scope.push(value),
+                "item_smart_shuffle_after_items" => {
+                    form.item_smart_shuffle_after_items.push(value);
+                }
+                "item_smart_shuffle_after_duration_minutes" => {
+                    form.item_smart_shuffle_after_duration_minutes.push(value);
+                }
+                "item_smart_shuffle_include_filler" => {
+                    form.item_smart_shuffle_include_filler.push(value);
+                }
+                "item_smart_shuffle_rules" => form.item_smart_shuffle_rules.push(value),
+                "item_smart_shuffle_filter_rules" => {
+                    form.item_smart_shuffle_filter_rules.push(value);
+                }
+                "item_smart_shuffle_inherited_legacy" => {
+                    form.item_smart_shuffle_inherited_legacy.push(value);
+                }
+                "item_include_in_program_guide_index" => {
+                    form.item_include_in_program_guide_index.push(value);
+                }
+                "item_disable_watermarks_index" => {
+                    form.item_disable_watermarks_index.push(value);
+                }
+                "item_watermark_ids" => form.item_watermark_ids.push(value),
+                "item_graphics_element_ids" => form.item_graphics_element_ids.push(value),
+                "new_collection_id" => form.new_collection_id = value,
+                _ => {}
+            }
+        }
+        form
+    }
+
     fn to_items(&self) -> Vec<BlockItemForm> {
         let epg_indexes = parse_index_set(&self.item_include_in_program_guide_index);
         let disable_watermark_indexes = parse_index_set(&self.item_disable_watermarks_index);
@@ -139,6 +209,33 @@ impl BlockItemsSaveForm {
                 search_query: parse_optional_string(self.item_search_query.get(pos)),
                 playback_order: parse_i32(self.item_playback_order.get(pos))
                     .unwrap_or(playback_order::CHRONOLOGICAL),
+                smart_shuffle: SmartShuffleForm {
+                    preset: self
+                        .item_smart_shuffle_preset
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_else(|| "off".to_owned()),
+                    scope: self
+                        .item_smart_shuffle_scope
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_else(|| "playout".to_owned()),
+                    after_items: parse_u32(self.item_smart_shuffle_after_items.get(pos)),
+                    after_duration_minutes: parse_u32(
+                        self.item_smart_shuffle_after_duration_minutes.get(pos),
+                    ),
+                    include_filler: parse_bool(self.item_smart_shuffle_include_filler.get(pos)),
+                    rules: parse_string_list(self.item_smart_shuffle_rules.get(pos)),
+                    filter_rules: self
+                        .item_smart_shuffle_filter_rules
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_default(),
+                    inherited_legacy: self
+                        .item_smart_shuffle_inherited_legacy
+                        .get(pos)
+                        .is_none_or(|value| parse_bool(Some(value))),
+                },
                 include_in_program_guide: epg_indexes.contains(&form_index),
                 disable_watermarks: disable_watermark_indexes.contains(&form_index),
                 collection_name: self
@@ -194,6 +291,27 @@ fn parse_i64(value: Option<&String>) -> Option<i64> {
         .filter(|value| *value != 0)
 }
 
+fn parse_u32(value: Option<&String>) -> u32 {
+    value
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or_default()
+}
+
+fn parse_bool(value: Option<&String>) -> bool {
+    value.is_some_and(|value| matches!(value.trim(), "true" | "1" | "on"))
+}
+
+fn parse_string_list(value: Option<&String>) -> Vec<String> {
+    value
+        .map(String::as_str)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 fn parse_optional_string(value: Option<&String>) -> Option<String> {
     value
         .map(|value| value.trim())
@@ -209,6 +327,13 @@ fn parse_id_list(value: Option<&String>) -> Vec<i64> {
         .filter_map(|value| value.trim().parse::<i64>().ok())
         .filter(|value| *value != 0)
         .collect()
+}
+
+fn decode_form_value(value: &str) -> String {
+    let value = value.replace('+', " ");
+    urlencoding::decode(&value)
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or(value)
 }
 
 #[cfg(test)]
@@ -259,5 +384,57 @@ mod tests {
         assert_eq!(item.collection_type, collection_type::COLLECTION);
         assert_eq!(item.collection_id, Some(42));
         assert!(item.include_in_program_guide);
+        assert!(!item.smart_shuffle.inherited_legacy);
+    }
+
+    #[test]
+    fn block_items_parser_preserves_inherited_attachment_marker() {
+        let inherited = BlockItemsSaveForm {
+            item_index: vec!["0".to_owned()],
+            item_smart_shuffle_preset: vec!["off".to_owned()],
+            ..BlockItemsSaveForm::default()
+        }
+        .to_items();
+        assert!(inherited[0].smart_shuffle.inherited_legacy);
+
+        let explicit = BlockItemsSaveForm {
+            item_index: vec!["0".to_owned()],
+            item_smart_shuffle_preset: vec!["off".to_owned()],
+            item_smart_shuffle_inherited_legacy: vec!["false".to_owned()],
+            ..BlockItemsSaveForm::default()
+        }
+        .to_items();
+        assert!(!explicit[0].smart_shuffle.inherited_legacy);
+    }
+
+    #[test]
+    fn block_items_form_parses_repeated_fields_and_defaults_missing_marker_to_inherited() {
+        let form = BlockItemsSaveForm::from_urlencoded_bytes(
+            b"block_id=7&group_id=2&name=Prime+Time&duration_hours=1&duration_minutes=30\
+              &stop_scheduling=0&action=save&item_index=0&item_id=11\
+              &item_collection_type=9&item_collection_id=&item_multi_collection_id=\
+              &item_smart_collection_id=&item_media_item_id=&item_search_title=Music%20Videos\
+              &item_search_query=type%3Amusic_video&item_collection_name=Music+Videos\
+              &item_playback_order=2&item_smart_shuffle_preset=off\
+              &item_smart_shuffle_scope=playout&item_smart_shuffle_after_items=0\
+              &item_smart_shuffle_after_duration_minutes=0\
+              &item_smart_shuffle_include_filler=false&item_smart_shuffle_rules=\
+              &item_smart_shuffle_filter_rules=&item_watermark_ids=1%2C2\
+              &item_graphics_element_ids=3",
+        );
+
+        assert_eq!(form.block_id, 7);
+        assert_eq!(form.group_id, 2);
+        assert_eq!(form.name, "Prime Time");
+
+        let items = form.to_items();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, 11);
+        assert_eq!(items[0].search_title.as_deref(), Some("Music Videos"));
+        assert_eq!(items[0].search_query.as_deref(), Some("type:music_video"));
+        assert_eq!(items[0].watermark_ids, vec![1, 2]);
+        assert_eq!(items[0].graphics_element_ids, vec![3]);
+        assert!(items[0].smart_shuffle.inherited_legacy);
     }
 }

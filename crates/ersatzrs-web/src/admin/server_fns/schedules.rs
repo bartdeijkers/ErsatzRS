@@ -7,9 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "ssr")]
+use std::collections::BTreeSet;
+
+#[cfg(feature = "ssr")]
 use ersatzrs_core::scheduling::{
-    program_schedule_cooldown_config_key, SchedulingCooldownPolicy, SchedulingCooldownPreset,
-    SchedulingCooldownRule, SchedulingCooldownRuleKind, SchedulingCooldownScope,
+    legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
+    SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset, SchedulingSmartShuffleRule,
+    SchedulingSmartShuffleRuleKind, SchedulingSmartShuffleScope,
 };
 
 const SCHEDULES_PAGE_SIZE_KEY: &str = "pages.schedules.page_size";
@@ -78,6 +82,41 @@ pub struct ScheduleItemListRow {
     pub duration: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SmartShuffleForm {
+    pub preset: String,
+    pub scope: String,
+    pub after_items: u32,
+    pub after_duration_minutes: u32,
+    pub include_filler: bool,
+    #[serde(default)]
+    pub rules: Vec<String>,
+    pub filter_rules: String,
+    /// True only while an old schedule/playout-wide policy is being presented
+    /// as an item policy. Saving materializes the item attachment.
+    #[serde(default = "legacy_inherited_default")]
+    pub inherited_legacy: bool,
+}
+
+fn legacy_inherited_default() -> bool {
+    true
+}
+
+impl Default for SmartShuffleForm {
+    fn default() -> Self {
+        Self {
+            preset: "off".to_owned(),
+            scope: "playout".to_owned(),
+            after_items: 0,
+            after_duration_minutes: 0,
+            include_filler: false,
+            rules: Vec::new(),
+            filter_rules: String::new(),
+            inherited_legacy: false,
+        }
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScheduleItemForm {
@@ -97,6 +136,8 @@ pub struct ScheduleItemForm {
     pub search_query: Option<String>,
     pub collection_name: String,
     pub playback_order: i32,
+    #[serde(default)]
+    pub smart_shuffle: SmartShuffleForm,
     pub marathon_group_by: i32,
     pub marathon_shuffle_groups: bool,
     pub marathon_shuffle_items: bool,
@@ -145,6 +186,7 @@ impl Default for ScheduleItemForm {
             search_query: None,
             collection_name: String::new(),
             playback_order: PLAYBACK_ORDER_SHUFFLE,
+            smart_shuffle: SmartShuffleForm::default(),
             marathon_group_by: MARATHON_GROUP_BY_NONE,
             marathon_shuffle_groups: false,
             marathon_shuffle_items: false,
@@ -228,21 +270,20 @@ pub struct ScheduleForm {
     pub shuffle_schedule_items: bool,
     pub random_start_point: bool,
     pub fixed_start_time_behavior: i32,
-    pub cooldown_preset: String,
-    pub cooldown_scope: String,
-    pub cooldown_after_items: u32,
-    pub cooldown_after_duration_minutes: u32,
-    pub cooldown_include_filler: bool,
-    #[serde(default)]
-    pub cooldown_rules: Vec<String>,
-    pub cooldown_filter_rules: String,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ScheduleCooldownPreviewRow {
-    pub media_item_id: i64,
-    pub title: String,
-    pub tags: Vec<String>,
+    #[serde(default, alias = "cooldown_preset", skip_serializing)]
+    pub legacy_smart_shuffle_preset: String,
+    #[serde(default, alias = "cooldown_scope", skip_serializing)]
+    pub legacy_smart_shuffle_scope: String,
+    #[serde(default, alias = "cooldown_after_items", skip_serializing)]
+    pub legacy_smart_shuffle_after_items: u32,
+    #[serde(default, alias = "cooldown_after_duration_minutes", skip_serializing)]
+    pub legacy_smart_shuffle_after_duration_minutes: u32,
+    #[serde(default, alias = "cooldown_include_filler", skip_serializing)]
+    pub legacy_smart_shuffle_include_filler: bool,
+    #[serde(default, alias = "cooldown_rules", skip_serializing)]
+    pub legacy_smart_shuffle_rules: Vec<String>,
+    #[serde(default, alias = "cooldown_filter_rules", skip_serializing)]
+    pub legacy_smart_shuffle_filter_rules: String,
 }
 
 impl Default for ScheduleForm {
@@ -255,13 +296,13 @@ impl Default for ScheduleForm {
             shuffle_schedule_items: false,
             random_start_point: false,
             fixed_start_time_behavior: 0,
-            cooldown_preset: "off".to_owned(),
-            cooldown_scope: "playout".to_owned(),
-            cooldown_after_items: 0,
-            cooldown_after_duration_minutes: 0,
-            cooldown_include_filler: false,
-            cooldown_rules: Vec::new(),
-            cooldown_filter_rules: String::new(),
+            legacy_smart_shuffle_preset: "off".to_owned(),
+            legacy_smart_shuffle_scope: "playout".to_owned(),
+            legacy_smart_shuffle_after_items: 0,
+            legacy_smart_shuffle_after_duration_minutes: 0,
+            legacy_smart_shuffle_include_filler: false,
+            legacy_smart_shuffle_rules: Vec::new(),
+            legacy_smart_shuffle_filter_rules: String::new(),
         }
     }
 }
@@ -271,6 +312,51 @@ pub struct ScheduleItemsPageData {
     pub schedule: ScheduleForm,
     pub items: Vec<ScheduleItemForm>,
     pub options: ScheduleItemsEditorOptions,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SmartShuffleTagSummary {
+    pub rule: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SmartShuffleCandidateDetail {
+    pub media_item_id: i64,
+    pub title: String,
+    pub media_type: String,
+    pub tags: Vec<SmartShuffleTagSummary>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SmartShuffleUnitSummary {
+    pub index: usize,
+    pub source_name: String,
+    pub playback_order: i32,
+    pub preset: String,
+    pub candidate_count: usize,
+    pub tagged_candidate_count: usize,
+    pub distinct_effective_tags: usize,
+    pub warnings: Vec<SmartShuffleOverviewWarning>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SmartShuffleOverviewWarning {
+    InactivePlaybackOrder,
+    Off,
+    EmptySource,
+    NoMatchingRules,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SmartShuffleOverview {
+    pub summaries: Vec<SmartShuffleUnitSummary>,
+    pub candidates: Vec<SmartShuffleCandidateDetail>,
+    pub selected_index: usize,
+    pub total_candidates: usize,
+    pub page: u32,
+    pub page_size: u32,
 }
 
 #[server]
@@ -319,30 +405,17 @@ pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFn
 }
 
 #[server]
-pub async fn preview_schedule_cooldown(
-    form: ScheduleForm,
-) -> Result<Vec<ScheduleCooldownPreviewRow>, ServerFnError> {
+pub async fn preview_smart_shuffle_overview(
+    items: Vec<ScheduleItemForm>,
+    selected_index: usize,
+    query: String,
+    tag: String,
+    page: u32,
+) -> Result<SmartShuffleOverview, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
 
     let state = expect_context::<AppState>();
-    let policy = cooldown_policy_from_schedule_form(&form);
-    let repository = SqliteSchedulingContentRepository::new(state.pool.clone());
-    repository
-        .cooldown_tag_preview(policy, 5)
-        .await
-        .map(|rows| {
-            rows.into_iter()
-                .map(|row| ScheduleCooldownPreviewRow {
-                    media_item_id: row.media_item_id,
-                    title: row
-                        .title
-                        .unwrap_or_else(|| format!("Media {}", row.media_item_id)),
-                    tags: row.tags,
-                })
-                .collect()
-        })
-        .map_err(ServerFnError::new)
+    smart_shuffle_overview_with_pool(&state.pool, items, selected_index, &query, &tag, page).await
 }
 
 #[server]
@@ -501,7 +574,7 @@ pub async fn get_schedule_form_with_pool(
     let Some(row) = row else {
         return Ok(None);
     };
-    let mut form = ScheduleForm {
+    let form = ScheduleForm {
         id: row.try_get("Id").unwrap_or(0),
         name: row.try_get("Name").unwrap_or_default(),
         keep_multi_part_episodes_together: read_bool(&row, "KeepMultiPartEpisodesTogether"),
@@ -511,9 +584,6 @@ pub async fn get_schedule_form_with_pool(
         fixed_start_time_behavior: row.try_get("FixedStartTimeBehavior").unwrap_or(0),
         ..ScheduleForm::default()
     };
-    if let Some(policy) = load_schedule_cooldown_policy(pool, id).await? {
-        apply_policy_to_schedule_form(&mut form, &policy);
-    }
     Ok(Some(form))
 }
 
@@ -603,19 +673,17 @@ pub async fn save_schedule_with_pool(
         }
         form.id
     };
-    save_schedule_cooldown_policy(pool, saved_id, &cooldown_policy_from_schedule_form(&form))
-        .await?;
     Ok(saved_id)
 }
 
 #[cfg(feature = "ssr")]
-async fn load_schedule_cooldown_policy(
+async fn load_legacy_schedule_smart_shuffle_policy(
     pool: &DbPool,
     schedule_id: i64,
-) -> Result<Option<SchedulingCooldownPolicy>, ServerFnError> {
+) -> Result<Option<SchedulingSmartShufflePolicy>, ServerFnError> {
     let value =
         sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(program_schedule_cooldown_config_key(schedule_id))
+            .bind(legacy_program_schedule_cooldown_config_key(schedule_id))
             .fetch_optional(pool)
             .await?;
     value
@@ -624,124 +692,96 @@ async fn load_schedule_cooldown_policy(
 }
 
 #[cfg(feature = "ssr")]
-async fn save_schedule_cooldown_policy(
-    pool: &DbPool,
-    schedule_id: i64,
-    policy: &SchedulingCooldownPolicy,
-) -> Result<(), ServerFnError> {
-    let key = program_schedule_cooldown_config_key(schedule_id);
-    if !policy.is_active() {
-        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(key)
-            .execute(pool)
-            .await?;
-        return Ok(());
-    }
-    let value = serde_json::to_string(policy).map_err(ServerFnError::new)?;
-    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
-        .bind(&value)
-        .bind(&key)
-        .execute(pool)
-        .await?;
-    if updated.rows_affected() == 0 {
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-            .bind(key)
-            .bind(value)
-            .execute(pool)
-            .await?;
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-fn cooldown_policy_from_schedule_form(form: &ScheduleForm) -> SchedulingCooldownPolicy {
-    let preset = match form.cooldown_preset.as_str() {
-        "light" => SchedulingCooldownPreset::Light,
-        "balanced" => SchedulingCooldownPreset::Balanced,
-        "custom" => SchedulingCooldownPreset::Custom,
-        _ => SchedulingCooldownPreset::Off,
+pub(crate) fn smart_shuffle_policy_from_form(
+    form: &SmartShuffleForm,
+) -> SchedulingSmartShufflePolicy {
+    let preset = match form.preset.as_str() {
+        "light" => SchedulingSmartShufflePreset::Light,
+        "balanced" => SchedulingSmartShufflePreset::Balanced,
+        "custom" => SchedulingSmartShufflePreset::Custom,
+        _ => SchedulingSmartShufflePreset::Off,
     };
-    if preset == SchedulingCooldownPreset::Off {
-        return SchedulingCooldownPolicy::default();
+    if preset == SchedulingSmartShufflePreset::Off {
+        return SchedulingSmartShufflePolicy::default();
     }
     if matches!(
         preset,
-        SchedulingCooldownPreset::Light | SchedulingCooldownPreset::Balanced
+        SchedulingSmartShufflePreset::Light | SchedulingSmartShufflePreset::Balanced
     ) {
-        return SchedulingCooldownPolicy::for_preset(preset);
+        return SchedulingSmartShufflePolicy::for_preset(preset);
     }
-    let scope = match form.cooldown_scope.as_str() {
-        "schedule_item" => SchedulingCooldownScope::ScheduleItem,
-        "content_source" => SchedulingCooldownScope::ContentSource,
-        _ => SchedulingCooldownScope::Playout,
+    let scope = match form.scope.as_str() {
+        "schedule_item" => SchedulingSmartShuffleScope::ScheduleItem,
+        "content_source" => SchedulingSmartShuffleScope::ContentSource,
+        _ => SchedulingSmartShuffleScope::Playout,
     };
     let mut rules = form
-        .cooldown_rules
+        .rules
         .iter()
-        .filter_map(|kind| cooldown_rule_kind(kind).map(|rule_kind| (kind, rule_kind)))
-        .map(|(id, kind)| SchedulingCooldownRule {
+        .filter_map(|kind| smart_shuffle_rule_kind(kind).map(|rule_kind| (kind, rule_kind)))
+        .map(|(id, kind)| SchedulingSmartShuffleRule {
             id: id.clone(),
             kind,
             search: None,
         })
         .collect::<Vec<_>>();
-    rules.extend(form.cooldown_filter_rules.lines().filter_map(|line| {
+    rules.extend(form.filter_rules.lines().filter_map(|line| {
         let (id, search) = line.split_once('=')?;
         let id = id.trim();
         let search = search.trim();
-        (!id.is_empty() && !search.is_empty()).then(|| SchedulingCooldownRule {
+        (!id.is_empty() && !search.is_empty()).then(|| SchedulingSmartShuffleRule {
             id: id.to_owned(),
-            kind: SchedulingCooldownRuleKind::Filter,
+            kind: SchedulingSmartShuffleRuleKind::Filter,
             search: Some(search.to_owned()),
         })
     }));
-    SchedulingCooldownPolicy {
+    SchedulingSmartShufflePolicy {
         enabled: true,
         preset,
         scope,
-        after_items: (form.cooldown_after_items > 0).then_some(form.cooldown_after_items),
-        after_duration: (form.cooldown_after_duration_minutes > 0).then(|| {
-            let hours = form.cooldown_after_duration_minutes / 60;
-            let minutes = form.cooldown_after_duration_minutes % 60;
+        after_items: (form.after_items > 0).then_some(form.after_items),
+        after_duration: (form.after_duration_minutes > 0).then(|| {
+            let hours = form.after_duration_minutes / 60;
+            let minutes = form.after_duration_minutes % 60;
             format!("{hours:02}:{minutes:02}:00")
         }),
-        include_filler: form.cooldown_include_filler,
+        include_filler: form.include_filler,
         rules,
-        ..SchedulingCooldownPolicy::default()
+        ..SchedulingSmartShufflePolicy::default()
     }
 }
 
 #[cfg(feature = "ssr")]
-fn apply_policy_to_schedule_form(form: &mut ScheduleForm, policy: &SchedulingCooldownPolicy) {
-    match policy.preset {
-        SchedulingCooldownPreset::Off => "off",
-        SchedulingCooldownPreset::Light => "light",
-        SchedulingCooldownPreset::Balanced => "balanced",
-        SchedulingCooldownPreset::Custom => "custom",
+pub(crate) fn smart_shuffle_form_from_policy(
+    policy: &SchedulingSmartShufflePolicy,
+) -> SmartShuffleForm {
+    let preset = match policy.preset {
+        SchedulingSmartShufflePreset::Off => "off",
+        SchedulingSmartShufflePreset::Light => "light",
+        SchedulingSmartShufflePreset::Balanced => "balanced",
+        SchedulingSmartShufflePreset::Custom => "custom",
     }
-    .clone_into(&mut form.cooldown_preset);
-    match policy.scope {
-        SchedulingCooldownScope::Playout => "playout",
-        SchedulingCooldownScope::ScheduleItem => "schedule_item",
-        SchedulingCooldownScope::ContentSource => "content_source",
+    .to_owned();
+    let scope = match policy.scope {
+        SchedulingSmartShuffleScope::Playout => "playout",
+        SchedulingSmartShuffleScope::ScheduleItem => "schedule_item",
+        SchedulingSmartShuffleScope::ContentSource => "content_source",
     }
-    .clone_into(&mut form.cooldown_scope);
-    form.cooldown_after_items = policy.after_items.unwrap_or_default();
-    form.cooldown_after_duration_minutes = policy
+    .to_owned();
+    let after_duration_minutes = policy
         .after_duration_value()
         .and_then(|duration| u32::try_from(duration.num_minutes()).ok())
         .unwrap_or_default();
-    form.cooldown_include_filler = policy.include_filler;
-    form.cooldown_rules = policy
+    let rules = policy
         .rules
         .iter()
-        .filter(|rule| rule.kind != SchedulingCooldownRuleKind::Filter)
-        .map(|rule| cooldown_rule_name(rule.kind).to_owned())
+        .filter(|rule| rule.kind != SchedulingSmartShuffleRuleKind::Filter)
+        .map(|rule| smart_shuffle_rule_name(rule.kind).to_owned())
         .collect();
-    form.cooldown_filter_rules = policy
+    let filter_rules = policy
         .rules
         .iter()
-        .filter(|rule| rule.kind == SchedulingCooldownRuleKind::Filter)
+        .filter(|rule| rule.kind == SchedulingSmartShuffleRuleKind::Filter)
         .filter_map(|rule| {
             rule.search
                 .as_deref()
@@ -749,44 +789,67 @@ fn apply_policy_to_schedule_form(form: &mut ScheduleForm, policy: &SchedulingCoo
         })
         .collect::<Vec<_>>()
         .join("\n");
+    SmartShuffleForm {
+        preset,
+        scope,
+        after_items: policy.after_items.unwrap_or_default(),
+        after_duration_minutes,
+        include_filler: policy.include_filler,
+        rules,
+        filter_rules,
+        inherited_legacy: false,
+    }
 }
 
 #[cfg(feature = "ssr")]
-fn cooldown_rule_kind(value: &str) -> Option<SchedulingCooldownRuleKind> {
+#[cfg(feature = "ssr")]
+fn smart_shuffle_rule_kind(value: &str) -> Option<SchedulingSmartShuffleRuleKind> {
     match value {
-        "artist" => Some(SchedulingCooldownRuleKind::Artist),
-        "album_artist" => Some(SchedulingCooldownRuleKind::AlbumArtist),
-        "show" => Some(SchedulingCooldownRuleKind::Show),
-        "season" => Some(SchedulingCooldownRuleKind::Season),
-        "content_parent" => Some(SchedulingCooldownRuleKind::ContentParent),
-        "collection" => Some(SchedulingCooldownRuleKind::Collection),
-        "tag" => Some(SchedulingCooldownRuleKind::Tag),
-        "genre" => Some(SchedulingCooldownRuleKind::Genre),
-        "studio" => Some(SchedulingCooldownRuleKind::Studio),
+        "artist" => Some(SchedulingSmartShuffleRuleKind::Artist),
+        "album_artist" => Some(SchedulingSmartShuffleRuleKind::AlbumArtist),
+        "show" => Some(SchedulingSmartShuffleRuleKind::Show),
+        "season" => Some(SchedulingSmartShuffleRuleKind::Season),
+        "content_parent" => Some(SchedulingSmartShuffleRuleKind::ContentParent),
+        "collection" => Some(SchedulingSmartShuffleRuleKind::Collection),
+        "tag" => Some(SchedulingSmartShuffleRuleKind::Tag),
+        "genre" => Some(SchedulingSmartShuffleRuleKind::Genre),
+        "studio" => Some(SchedulingSmartShuffleRuleKind::Studio),
         _ => None,
     }
 }
 
 #[cfg(feature = "ssr")]
-fn cooldown_rule_name(kind: SchedulingCooldownRuleKind) -> &'static str {
+fn smart_shuffle_rule_name(kind: SchedulingSmartShuffleRuleKind) -> &'static str {
     match kind {
-        SchedulingCooldownRuleKind::Artist => "artist",
-        SchedulingCooldownRuleKind::AlbumArtist => "album_artist",
-        SchedulingCooldownRuleKind::Show => "show",
-        SchedulingCooldownRuleKind::Season => "season",
-        SchedulingCooldownRuleKind::ContentParent => "content_parent",
-        SchedulingCooldownRuleKind::Collection => "collection",
-        SchedulingCooldownRuleKind::Tag => "tag",
-        SchedulingCooldownRuleKind::Genre => "genre",
-        SchedulingCooldownRuleKind::Studio => "studio",
-        SchedulingCooldownRuleKind::Filter => "filter",
+        SchedulingSmartShuffleRuleKind::Artist => "artist",
+        SchedulingSmartShuffleRuleKind::AlbumArtist => "album_artist",
+        SchedulingSmartShuffleRuleKind::Show => "show",
+        SchedulingSmartShuffleRuleKind::Season => "season",
+        SchedulingSmartShuffleRuleKind::ContentParent => "content_parent",
+        SchedulingSmartShuffleRuleKind::Collection => "collection",
+        SchedulingSmartShuffleRuleKind::Tag => "tag",
+        SchedulingSmartShuffleRuleKind::Genre => "genre",
+        SchedulingSmartShuffleRuleKind::Studio => "studio",
+        SchedulingSmartShuffleRuleKind::Filter => "filter",
     }
 }
 
 #[cfg(feature = "ssr")]
 pub async fn delete_schedule_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
+    let item_ids: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+    for item_id in item_ids {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(program_schedule_item_smart_shuffle_config_key(item_id))
+            .execute(pool)
+            .await?;
+    }
     sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
-        .bind(program_schedule_cooldown_config_key(id))
+        .bind(legacy_program_schedule_cooldown_config_key(id))
         .execute(pool)
         .await?;
     sqlx::query(r#"DELETE FROM "ProgramSchedule" WHERE "Id" = ?"#)
@@ -812,6 +875,7 @@ pub async fn copy_schedule_with_pool(
         ));
     }
     validate_unique_schedule_name(pool, 0, name).await?;
+    let legacy_policy = load_legacy_schedule_smart_shuffle_policy(pool, id).await?;
 
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
@@ -874,16 +938,24 @@ pub async fn copy_schedule_with_pool(
         let new_item_id = ersatzrs_infra::db::last_insert_id(item_result);
 
         copy_subtype_and_joins(&mut tx, old_item_id, new_item_id).await?;
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(program_schedule_item_smart_shuffle_config_key(old_item_id))
+        .fetch_optional(&mut *tx)
+        .await?;
+        let policy = value
+            .map(|json| serde_json::from_str(&json).map_err(ServerFnError::new))
+            .transpose()?
+            .or_else(|| legacy_policy.clone())
+            .unwrap_or_default();
+        persist_smart_shuffle_policy_tx(
+            &mut tx,
+            &program_schedule_item_smart_shuffle_config_key(new_item_id),
+            &policy,
+        )
+        .await?;
     }
-
-    sqlx::query(
-        r#"INSERT INTO "ConfigElement" ("Key", "Value")
-           SELECT ?, "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
-    )
-    .bind(program_schedule_cooldown_config_key(new_schedule_id))
-    .bind(program_schedule_cooldown_config_key(id))
-    .execute(&mut *tx)
-    .await?;
 
     tx.commit().await?;
     Ok(new_schedule_id)
@@ -997,18 +1069,13 @@ async fn schedule_update_needs_refresh(
 
     let treat_collections_as_shows =
         form.keep_multi_part_episodes_together && form.treat_collections_as_shows;
-    let existing_policy = load_schedule_cooldown_policy(pool, schedule_id)
-        .await?
-        .unwrap_or_default();
-    let desired_policy = cooldown_policy_from_schedule_form(form);
     Ok(
         read_bool(&row, "KeepMultiPartEpisodesTogether") != form.keep_multi_part_episodes_together
             || read_bool(&row, "TreatCollectionsAsShows") != treat_collections_as_shows
             || read_bool(&row, "ShuffleScheduleItems") != form.shuffle_schedule_items
             || read_bool(&row, "RandomStartPoint") != form.random_start_point
             || row.try_get::<i32, _>("FixedStartTimeBehavior").unwrap_or(0)
-                != form.fixed_start_time_behavior
-            || existing_policy != desired_policy,
+                != form.fixed_start_time_behavior,
     )
 }
 
@@ -1074,7 +1141,7 @@ pub async fn list_schedule_items_with_pool(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
+    let mut items = rows
         .iter()
         .map(|row| {
             let id = row.try_get("Id").unwrap_or(0);
@@ -1108,6 +1175,7 @@ pub async fn list_schedule_items_with_pool(
                 playback_order: row
                     .try_get("PlaybackOrder")
                     .unwrap_or(PLAYBACK_ORDER_SHUFFLE),
+                smart_shuffle: SmartShuffleForm::default(),
                 marathon_group_by: row
                     .try_get("MarathonGroupBy")
                     .unwrap_or(MARATHON_GROUP_BY_NONE),
@@ -1155,7 +1223,26 @@ pub async fn list_schedule_items_with_pool(
                 subtitle_mode: row.try_get("SubtitleMode").ok().flatten(),
             }
         })
-        .collect())
+        .collect::<Vec<_>>();
+    let legacy_policy = load_legacy_schedule_smart_shuffle_policy(pool, schedule_id).await?;
+    for item in &mut items {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(program_schedule_item_smart_shuffle_config_key(item.id))
+        .fetch_optional(pool)
+        .await?;
+        let explicit_policy = value
+            .map(|json| serde_json::from_str(&json).map_err(ServerFnError::new))
+            .transpose()?;
+        let inherited = explicit_policy.is_none() && legacy_policy.is_some();
+        let policy = explicit_policy
+            .or_else(|| legacy_policy.clone())
+            .unwrap_or_default();
+        item.smart_shuffle = smart_shuffle_form_from_policy(&policy);
+        item.smart_shuffle.inherited_legacy = inherited;
+    }
+    Ok(items)
 }
 
 #[cfg(feature = "ssr")]
@@ -1326,8 +1413,21 @@ pub async fn replace_schedule_items_with_pool(
     }
     let padded_filler_ids = padded_filler_ids(pool).await?;
     validate_schedule_items(&normalized_items, &padded_filler_ids)?;
+    let legacy_policy = load_legacy_schedule_smart_shuffle_policy(pool, schedule_id).await?;
+    let old_item_ids: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
+    )
+    .bind(schedule_id)
+    .fetch_all(pool)
+    .await?;
 
     let mut tx = pool.begin().await?;
+    for old_item_id in &old_item_ids {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(program_schedule_item_smart_shuffle_config_key(*old_item_id))
+            .execute(&mut *tx)
+            .await?;
+    }
     sqlx::query(r#"DELETE FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#)
         .bind(schedule_id)
         .execute(&mut *tx)
@@ -1392,6 +1492,17 @@ pub async fn replace_schedule_items_with_pool(
         .execute(&mut *tx)
         .await?;
         let new_item_id = ersatzrs_infra::db::last_insert_id(result);
+        let policy = if item.smart_shuffle.inherited_legacy {
+            legacy_policy.clone().unwrap_or_default()
+        } else {
+            smart_shuffle_policy_from_form(&item.smart_shuffle)
+        };
+        persist_smart_shuffle_policy_tx(
+            &mut tx,
+            &program_schedule_item_smart_shuffle_config_key(new_item_id),
+            &policy,
+        )
+        .await?;
 
         match item.playout_mode {
             PLAYOUT_MODE_FLOOD => {
@@ -1456,7 +1567,59 @@ pub async fn replace_schedule_items_with_pool(
         }
     }
 
+    sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(legacy_program_schedule_cooldown_config_key(schedule_id))
+        .execute(&mut *tx)
+        .await?;
+
     tx.commit().await?;
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) async fn persist_smart_shuffle_policy_tx(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    key: &str,
+    policy: &SchedulingSmartShufflePolicy,
+) -> Result<(), ServerFnError> {
+    if !policy.is_active() {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(key)
+            .execute(&mut **tx)
+            .await?;
+        return Ok(());
+    }
+    upsert_smart_shuffle_policy_tx(tx, key, policy).await
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) async fn persist_smart_shuffle_attachment_tx(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    key: &str,
+    policy: &SchedulingSmartShufflePolicy,
+) -> Result<(), ServerFnError> {
+    upsert_smart_shuffle_policy_tx(tx, key, policy).await
+}
+
+#[cfg(feature = "ssr")]
+async fn upsert_smart_shuffle_policy_tx(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    key: &str,
+    policy: &SchedulingSmartShufflePolicy,
+) -> Result<(), ServerFnError> {
+    let value = serde_json::to_string(policy).map_err(ServerFnError::new)?;
+    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
+        .bind(&value)
+        .bind(key)
+        .execute(&mut **tx)
+        .await?;
+    if updated.rows_affected() == 0 {
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(key)
+            .bind(value)
+            .execute(&mut **tx)
+            .await?;
+    }
     Ok(())
 }
 
@@ -1508,6 +1671,7 @@ fn validate_schedule_items(
 
     for item in items {
         validate_schedule_item(item, padded_filler_ids)?;
+        validate_smart_shuffle_form(&item.smart_shuffle)?;
         if let Some(key) = collection_key(item) {
             if let Some(existing) = playback_by_key.insert(key, item.playback_order) {
                 if existing != item.playback_order {
@@ -1527,6 +1691,182 @@ fn validate_schedule_items(
     }
 
     Ok(())
+}
+
+pub(crate) fn validate_smart_shuffle_form(form: &SmartShuffleForm) -> Result<(), ServerFnError> {
+    if form.preset == "off" {
+        return Ok(());
+    }
+    if form.preset == "custom" && form.after_items == 0 && form.after_duration_minutes == 0 {
+        return Err(ServerFnError::new(
+            "Smart Shuffle requires videos-between or duration spacing.",
+        ));
+    }
+    if form.preset == "custom"
+        && form.rules.is_empty()
+        && form.filter_rules.lines().all(|line| line.trim().is_empty())
+    {
+        return Err(ServerFnError::new(
+            "Smart Shuffle requires at least one similarity rule.",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn smart_shuffle_overview_with_pool(
+    pool: &DbPool,
+    items: Vec<ScheduleItemForm>,
+    selected_index: usize,
+    query: &str,
+    tag: &str,
+    page: u32,
+) -> Result<SmartShuffleOverview, ServerFnError> {
+    use ersatzrs_core::scheduling::SchedulingCollectionKey;
+    use ersatzrs_domain::CollectionType;
+    use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+
+    let repository = SqliteSchedulingContentRepository::new(pool.clone());
+    let mut summaries = Vec::with_capacity(items.len());
+    let mut selected_candidates = Vec::new();
+
+    for (index, item) in items.iter().enumerate() {
+        let collection_type = match item.collection_type {
+            COLLECTION_TYPE_COLLECTION => CollectionType::Collection,
+            COLLECTION_TYPE_TELEVISION_SHOW => CollectionType::TelevisionShow,
+            COLLECTION_TYPE_TELEVISION_SEASON => CollectionType::TelevisionSeason,
+            COLLECTION_TYPE_ARTIST => CollectionType::Artist,
+            COLLECTION_TYPE_MULTI_COLLECTION => CollectionType::MultiCollection,
+            COLLECTION_TYPE_SMART_COLLECTION => CollectionType::SmartCollection,
+            COLLECTION_TYPE_PLAYLIST => CollectionType::Playlist,
+            COLLECTION_TYPE_RERUN_FIRST_RUN => CollectionType::RerunFirstRun,
+            COLLECTION_TYPE_RERUN_RERUN => CollectionType::RerunRerun,
+            COLLECTION_TYPE_SEARCH_QUERY => CollectionType::SearchQuery,
+            _ => {
+                return Err(ServerFnError::new(
+                    "Unsupported Smart Shuffle content source.",
+                ))
+            }
+        };
+        let key = SchedulingCollectionKey {
+            collection_type,
+            collection_id: item.collection_id,
+            multi_collection_id: item.multi_collection_id,
+            smart_collection_id: item.smart_collection_id,
+            media_item_id: item.media_item_id,
+            playlist_id: item.playlist_id,
+            search_query: item.search_query.clone(),
+            fake_collection_key: None,
+        };
+        let policy = smart_shuffle_policy_from_form(&item.smart_shuffle);
+        let candidates = repository
+            .smart_shuffle_candidates(&key, policy.clone())
+            .await
+            .map_err(ServerFnError::new)?;
+        let tagged_candidate_count = candidates
+            .iter()
+            .filter(|candidate| !candidate.tags.is_empty())
+            .count();
+        let distinct_effective_tags = candidates
+            .iter()
+            .flat_map(|candidate| candidate.tags.iter().cloned())
+            .collect::<BTreeSet<_>>()
+            .len();
+        let mut warnings = Vec::new();
+        if !smart_shuffle_playback_order_supported(item.playback_order) {
+            warnings.push(SmartShuffleOverviewWarning::InactivePlaybackOrder);
+        } else if !policy.is_active() {
+            warnings.push(SmartShuffleOverviewWarning::Off);
+        } else if candidates.is_empty() {
+            warnings.push(SmartShuffleOverviewWarning::EmptySource);
+        } else if tagged_candidate_count == 0 {
+            warnings.push(SmartShuffleOverviewWarning::NoMatchingRules);
+        }
+        summaries.push(SmartShuffleUnitSummary {
+            index,
+            source_name: item.collection_name.clone(),
+            playback_order: item.playback_order,
+            preset: item.smart_shuffle.preset.clone(),
+            candidate_count: candidates.len(),
+            tagged_candidate_count,
+            distinct_effective_tags,
+            warnings,
+        });
+        if index == selected_index {
+            selected_candidates = candidates;
+        }
+    }
+
+    let query = query.trim().to_lowercase();
+    let tag = tag.trim().to_lowercase();
+    let mut candidates = selected_candidates
+        .into_iter()
+        .filter(|candidate| {
+            (query.is_empty()
+                || candidate
+                    .title
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query))
+                && (tag.is_empty()
+                    || candidate
+                        .tags
+                        .iter()
+                        .any(|value| value.to_lowercase().contains(&tag)))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|candidate| candidate.media_item_id);
+    let total_candidates = candidates.len();
+    let page_size = 50_u32;
+    let start = usize::try_from(page.saturating_sub(1).saturating_mul(page_size)).unwrap_or(0);
+    let candidates = candidates
+        .into_iter()
+        .skip(start)
+        .take(page_size as usize)
+        .map(|candidate| SmartShuffleCandidateDetail {
+            media_item_id: candidate.media_item_id,
+            title: candidate
+                .title
+                .unwrap_or_else(|| format!("Media {}", candidate.media_item_id)),
+            media_type: candidate.media_type,
+            tags: candidate
+                .tags
+                .into_iter()
+                .map(|tag| {
+                    let (rule, value) = tag
+                        .split_once(':')
+                        .map_or(("similarity", tag.as_str()), |parts| parts);
+                    SmartShuffleTagSummary {
+                        rule: rule.replace('_', " "),
+                        value: value.replace('_', " "),
+                    }
+                })
+                .collect(),
+        })
+        .collect();
+
+    Ok(SmartShuffleOverview {
+        summaries,
+        candidates,
+        selected_index,
+        total_candidates,
+        page: page.max(1),
+        page_size,
+    })
+}
+
+fn smart_shuffle_playback_order_supported(playback_order: i32) -> bool {
+    matches!(
+        playback_order,
+        PLAYBACK_ORDER_RANDOM
+            | PLAYBACK_ORDER_SHUFFLE
+            | PLAYBACK_ORDER_SHUFFLE_IN_ORDER
+            | PLAYBACK_ORDER_MULTI_EPISODE_SHUFFLE
+            | PLAYBACK_ORDER_RANDOM_ROTATION
+            | PLAYBACK_ORDER_MARATHON
+    )
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2211,52 +2551,66 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn schedule_cooldown_policy_save_load_round_trip_and_off_removes_attachment() {
-        let pool = test_db().await;
-        create_program_schedule_table(&pool).await;
-
-        let id = save_schedule_with_pool(
-            &pool,
-            ScheduleForm {
-                name: "Cooldown Schedule".to_owned(),
-                cooldown_preset: "custom".to_owned(),
-                cooldown_scope: "content_source".to_owned(),
-                cooldown_after_items: 3,
-                cooldown_after_duration_minutes: 45,
-                cooldown_include_filler: true,
-                cooldown_rules: vec!["artist".to_owned(), "content_parent".to_owned()],
-                cooldown_filter_rules: "marvel=tag:marvel".to_owned(),
-                ..ScheduleForm::default()
-            },
+    #[cfg(not(feature = "mysql"))]
+    async fn schedule_smart_shuffle_policy_save_load_round_trip_and_off_removes_attachment() {
+        let pool = migrated_test_db().await;
+        sqlx::query(
+            r#"INSERT INTO "ProgramSchedule" (
+                "Id", "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
+                "ShuffleScheduleItems", "RandomStartPoint", "FixedStartTimeBehavior"
+            ) VALUES (1, 'Smart Shuffle Schedule', 0, 0, 0, 0, 0)"#,
         )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query")
+               VALUES (11, 'Music Videos', 'type:music_video')"#,
+        )
+        .execute(&pool)
         .await
         .unwrap();
 
-        let loaded = get_schedule_form_with_pool(&pool, id)
+        let mut item = ScheduleItemForm {
+            collection_type: COLLECTION_TYPE_SMART_COLLECTION,
+            smart_collection_id: Some(11),
+            collection_name: "Music Videos".to_owned(),
+            ..ScheduleItemForm::default()
+        };
+        item.smart_shuffle = SmartShuffleForm {
+            preset: "custom".to_owned(),
+            scope: "content_source".to_owned(),
+            after_items: 3,
+            after_duration_minutes: 45,
+            include_filler: true,
+            rules: vec!["artist".to_owned(), "content_parent".to_owned()],
+            filter_rules: "marvel=tag:marvel".to_owned(),
+            inherited_legacy: false,
+        };
+        replace_schedule_items_with_pool(&pool, 1, vec![item])
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(loaded.cooldown_preset, "custom");
-        assert_eq!(loaded.cooldown_scope, "content_source");
-        assert_eq!(loaded.cooldown_after_items, 3);
-        assert_eq!(loaded.cooldown_after_duration_minutes, 45);
-        assert!(loaded.cooldown_include_filler);
-        assert_eq!(loaded.cooldown_filter_rules, "marvel=tag:marvel");
 
-        save_schedule_with_pool(
-            &pool,
-            ScheduleForm {
-                id,
-                name: "Cooldown Schedule".to_owned(),
-                ..ScheduleForm::default()
-            },
+        let mut loaded = list_schedule_items_with_pool(&pool, 1).await.unwrap();
+        assert_eq!(loaded[0].smart_shuffle.preset, "custom");
+        assert_eq!(loaded[0].smart_shuffle.scope, "content_source");
+        assert_eq!(loaded[0].smart_shuffle.after_items, 3);
+        assert_eq!(loaded[0].smart_shuffle.after_duration_minutes, 45);
+        assert!(loaded[0].smart_shuffle.include_filler);
+        assert_eq!(loaded[0].smart_shuffle.filter_rules, "marvel=tag:marvel");
+
+        loaded[0].smart_shuffle = SmartShuffleForm::default();
+        replace_schedule_items_with_pool(&pool, 1, loaded)
+            .await
+            .unwrap();
+        let attachment_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "ConfigElement"
+               WHERE "Key" LIKE 'scheduling.smart_shuffle.program_schedule_item.%'"#,
         )
+        .fetch_one(&pool)
         .await
         .unwrap();
-        assert!(load_schedule_cooldown_policy(&pool, id)
-            .await
-            .unwrap()
-            .is_none());
+        assert_eq!(attachment_count, 0);
     }
 
     #[test]
@@ -2408,5 +2762,25 @@ mod tests {
 
         assert!(item.watermark_ids.is_empty());
         assert!(item.graphics_element_ids.is_empty());
+    }
+
+    #[test]
+    fn smart_shuffle_overview_warnings_serialize_as_status_identifiers() {
+        let warnings = [
+            SmartShuffleOverviewWarning::InactivePlaybackOrder,
+            SmartShuffleOverviewWarning::Off,
+            SmartShuffleOverviewWarning::EmptySource,
+            SmartShuffleOverviewWarning::NoMatchingRules,
+        ];
+
+        assert_eq!(
+            serde_json::to_value(warnings).unwrap(),
+            serde_json::json!([
+                "inactive_playback_order",
+                "off",
+                "empty_source",
+                "no_matching_rules"
+            ])
+        );
     }
 }

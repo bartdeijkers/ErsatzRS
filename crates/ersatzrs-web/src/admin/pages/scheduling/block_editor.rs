@@ -10,12 +10,15 @@ use std::fmt::Write;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{save_failed, scheduling_content_error_message, tr, TextKey};
+use super::smart_shuffle_overview_warning_text;
+use crate::admin::i18n::{range_of, save_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
-    preview_block_playout, save_block_with_items, stop_scheduling, BlockEditorOptions, BlockForm,
-    BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
+    preview_block_playout, preview_block_smart_shuffle_overview, save_block_with_items,
+    stop_scheduling, BlockEditorOptions, BlockForm, BlockItemForm, BlockWithItemsForm,
+    PlayoutPreviewRow,
 };
+use crate::admin::server_fns::schedules::{SmartShuffleForm, SmartShuffleOverview};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/block_editor.module.css");
@@ -56,18 +59,18 @@ pub fn BlockEditorPage() -> impl IntoView {
                     .map_or_else(
                         || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
                         |(maybe_block, items, options)| match maybe_block {
-                        Some(block) => view! {
-                            <BlockEditorIsland
-                                initial_block=block
-                                initial_items=items
-                                options=options
-                            />
-                        }.into_any(),
-                        None => view! {
-                            <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
-                        }.into_any(),
-                    },
-                )
+                            Some(block) => view! {
+                                <BlockEditorIsland
+                                    initial_block=block
+                                    initial_items=items
+                                    options=options
+                                />
+                            }.into_any(),
+                            None => view! {
+                                <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
+                            }.into_any(),
+                        },
+                    )
             }}
         </div>
     }
@@ -455,6 +458,7 @@ fn BlockEditorForm(
                         })
                     }}
                 </div>
+                <BlockSmartShuffleOverview items=items/>
             </div>
 
             // ── Preview modal ───────────────────────────────────────────
@@ -516,6 +520,87 @@ fn BlockEditorForm(
                 </table>
             </div>
         </div>
+    }
+}
+
+#[component]
+fn BlockSmartShuffleOverview(items: RwSignal<Vec<BlockItemForm>>) -> impl IntoView {
+    let overview = RwSignal::new(None::<SmartShuffleOverview>);
+    let selected = RwSignal::new(0_usize);
+    let query = RwSignal::new(String::new());
+    let tag = RwSignal::new(String::new());
+    let page = RwSignal::new(1_u32);
+    let stale = RwSignal::new(true);
+    let refresh = Action::new(
+        |(items, selected, query, tag, page): &(Vec<BlockItemForm>, usize, String, String, u32)| {
+            preview_block_smart_shuffle_overview(
+                items.clone(),
+                *selected,
+                query.clone(),
+                tag.clone(),
+                *page,
+            )
+        },
+    );
+    Effect::new(move |_| {
+        let _ = items.get();
+        stale.set(true);
+    });
+    Effect::new(move |_| {
+        if let Some(Ok(value)) = refresh.value().get() {
+            overview.set(Some(value));
+            stale.set(false);
+        }
+    });
+    let run = move || {
+        refresh.dispatch((
+            items.get_untracked(),
+            selected.get_untracked(),
+            query.get_untracked(),
+            tag.get_untracked(),
+            page.get_untracked(),
+        ));
+    };
+    view! {
+        <section class=style::smart_shuffle_overview>
+            <div class=style::overview_header>
+                <h2>{tr(TextKey::SmartShufflePreview)}</h2>
+                <span class=style::stale_indicator style:display=move || if stale.get() { "" } else { "none" }>{tr(TextKey::SmartShuffleOverviewStale)}</span>
+                <button type="button" class=style::btn_secondary disabled=move || refresh.pending().get() on:click=move |_| run()>{tr(TextKey::SmartShuffleOverviewRefresh)}</button>
+            </div>
+            {move || match overview.get() { Some(data) => {
+                let rows = data.candidates.clone();
+                view! {
+                    <div class=style::overview_groups>
+                        {data.summaries.into_iter().map(|summary| {
+                            let index = summary.index;
+                            view! {
+                                <details class=style::overview_group open=move || selected.get() == index>
+                                    <summary on:click=move |_| { selected.set(index); page.set(1); stale.set(true); }>
+                                        <strong>{summary.source_name}</strong>
+                                        <span>{format!("{} · {} / {} · {}", summary.preset, summary.tagged_candidate_count, summary.candidate_count, summary.distinct_effective_tags)}</span>
+                                    </summary>
+                                    {summary.warnings.into_iter().map(|warning| view! { <p>{smart_shuffle_overview_warning_text(warning)}</p> }).collect_view()}
+                                </details>
+                            }
+                        }).collect_view()}
+                    </div>
+                    <div class=style::overview_filters>
+                        <label>{tr(TextKey::Search)}<input class=style::input prop:value=query on:input=move |event| { query.set(event_target_value(&event)); stale.set(true); }/></label>
+                        <label>{tr(TextKey::Tags)}<input class=style::input prop:value=tag on:input=move |event| { tag.set(event_target_value(&event)); stale.set(true); }/></label>
+                    </div>
+                    <div class=style::items_table_wrap><table class=style::items_table>
+                        <thead><tr><th>{tr(TextKey::Title)}</th><th>{tr(TextKey::Type)}</th><th>{tr(TextKey::Tags)}</th></tr></thead>
+                        <tbody>{if rows.is_empty() { view! { <tr><td colspan="3">{tr(TextKey::SmartShufflePreviewEmpty)}</td></tr> }.into_any() } else { rows.into_iter().map(|candidate| view! { <tr><td>{candidate.title}</td><td>{candidate.media_type}</td><td>{candidate.tags.into_iter().map(|tag| format!("{}: {}", tag.rule, tag.value)).collect::<Vec<_>>().join(", ")}</td></tr> }).collect_view().into_any() }}</tbody>
+                    </table></div>
+                    <div class=style::pagination>
+                        <button type="button" class=style::btn_secondary disabled=data.page <= 1 on:click=move |_| { page.update(|value| *value = value.saturating_sub(1).max(1)); run(); }>{tr(TextKey::PreviousPage)}</button>
+                        <span>{range_of(data.page, data.page_size, data.total_candidates as u64)}</span>
+                        <button type="button" class=style::btn_secondary disabled=data.page as usize * data.page_size as usize >= data.total_candidates on:click=move |_| { page.update(|value| *value += 1); run(); }>{tr(TextKey::NextPage)}</button>
+                    </div>
+                }.into_any()
+            }, None => view! { <p>{tr(TextKey::SmartShufflePreviewEmpty)}</p> }.into_any()}}
+        </section>
     }
 }
 
@@ -650,9 +735,10 @@ fn block_item_fallback_row_html(
     options: &BlockEditorOptions,
 ) -> String {
     format!(
-        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
+        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{smart_shuffle_hidden}{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
         item_index = item.index,
         id = item.id,
+        smart_shuffle_hidden = smart_shuffle_hidden_fields_html(item),
         collection_type = select_html(
             "item_collection_type",
             item.collection_type,
@@ -740,6 +826,50 @@ fn block_item_fallback_row_html(
         delete = escape_html(tr(TextKey::Delete)),
         move_up_disabled = if index == 0 { "disabled" } else { "" },
     )
+}
+
+fn smart_shuffle_hidden_fields_html(item: &BlockItemForm) -> String {
+    [
+        (
+            "item_smart_shuffle_preset",
+            item.smart_shuffle.preset.clone(),
+        ),
+        ("item_smart_shuffle_scope", item.smart_shuffle.scope.clone()),
+        (
+            "item_smart_shuffle_after_items",
+            item.smart_shuffle.after_items.to_string(),
+        ),
+        (
+            "item_smart_shuffle_after_duration_minutes",
+            item.smart_shuffle.after_duration_minutes.to_string(),
+        ),
+        (
+            "item_smart_shuffle_include_filler",
+            item.smart_shuffle.include_filler.to_string(),
+        ),
+        (
+            "item_smart_shuffle_rules",
+            item.smart_shuffle.rules.join(","),
+        ),
+        (
+            "item_smart_shuffle_filter_rules",
+            item.smart_shuffle.filter_rules.clone(),
+        ),
+        (
+            "item_smart_shuffle_inherited_legacy",
+            item.smart_shuffle.inherited_legacy.to_string(),
+        ),
+    ]
+    .into_iter()
+    .fold(String::new(), |mut html, (name, value)| {
+        let _ = write!(
+            html,
+            r#"<input type="hidden" name="{}" value="{}">"#,
+            escape_html(name),
+            escape_html(&value)
+        );
+        html
+    })
 }
 
 fn media_item_select_html(item: &BlockItemForm, options: &BlockEditorOptions) -> String {
@@ -1143,6 +1273,7 @@ fn ItemEditor(
                     }).collect_view()}
                 </select>
             </div>
+            {block_item_smart_shuffle_editor(idx, &item.smart_shuffle, pb_order.get(), items)}
             {multi_select_i64(tr(TextKey::Watermarks), &item.watermark_ids, options.watermarks.clone(), move |values| {
                 update_item(items, idx, |item| item.watermark_ids = values);
             })}
@@ -1150,6 +1281,180 @@ fn ItemEditor(
                 update_item(items, idx, |item| item.graphics_element_ids = values);
             })}
         </div>
+    }
+}
+
+fn block_item_smart_shuffle_editor(
+    idx: usize,
+    form: &SmartShuffleForm,
+    playback_order: i32,
+    items: RwSignal<Vec<BlockItemForm>>,
+) -> AnyView {
+    let form = form.clone();
+    let supported = matches!(playback_order, 2 | 3 | 4 | 7);
+    let invalid = form.preset == "custom"
+        && ((form.after_items == 0 && form.after_duration_minutes == 0)
+            || (form.rules.is_empty() && form.filter_rules.trim().is_empty()));
+    view! {
+        <details class=style::smart_shuffle_panel>
+            <summary>{tr(TextKey::SmartShuffle)}</summary>
+            <p class=style::help style:display=if supported { "none" } else { "" }>{tr(TextKey::SmartShuffleInactive)}</p>
+            <div class=style::smart_shuffle_inherited style:display=if form.inherited_legacy { "" } else { "none" }>
+                <p class=style::help>{tr(TextKey::SmartShuffleInheritedBlock)}</p>
+                <button type="button" class=style::btn_secondary on:click=move |_| {
+                    update_item(items, idx, |item| item.smart_shuffle.inherited_legacy = false);
+                }>{tr(TextKey::SmartShuffleOverrideBlock)}</button>
+            </div>
+            <fieldset class=style::smart_shuffle_fields disabled=!supported || form.inherited_legacy>
+                <label class=style::field>
+                    <span class=style::label>{tr(TextKey::SmartShufflePreset)}</span>
+                    <select class=style::select prop:value=form.preset.clone() on:change=move |event| {
+                        let preset = event_target_value(&event);
+                        update_item(items, idx, |item| {
+                            apply_block_smart_shuffle_preset(&mut item.smart_shuffle, &preset);
+                            item.smart_shuffle.inherited_legacy = false;
+                        });
+                    }>
+                        <option value="off">{tr(TextKey::Off)}</option>
+                        <option value="light">{tr(TextKey::Light)}</option>
+                        <option value="balanced">{tr(TextKey::Balanced)}</option>
+                        <option value="custom">{tr(TextKey::Custom)}</option>
+                    </select>
+                </label>
+                <div style:display=if form.preset == "off" { "none" } else { "contents" }>
+                    <div class=style::field>
+                        <label class=style::label>{tr(TextKey::SmartShuffleScope)}</label>
+                        <select class=style::select prop:value=form.scope.clone() on:change=move |event| {
+                            let value = event_target_value(&event);
+                            update_item(items, idx, |item| {
+                                item.smart_shuffle.scope = value;
+                                "custom".clone_into(&mut item.smart_shuffle.preset);
+                                item.smart_shuffle.inherited_legacy = false;
+                            });
+                        }>
+                            <option value="playout">{tr(TextKey::SmartShuffleScopePlayout)}</option>
+                            <option value="schedule_item">{tr(TextKey::SmartShuffleScopeScheduleItem)}</option>
+                            <option value="content_source">{tr(TextKey::SmartShuffleScopeContentSource)}</option>
+                        </select>
+                    </div>
+                    {block_number_field(idx, items, tr(TextKey::SmartShuffleAfterItems), form.after_items, false)}
+                    {block_number_field(idx, items, tr(TextKey::SmartShuffleAfterDurationMinutes), form.after_duration_minutes, true)}
+                    <label class=style::rule_option>
+                        <input type="checkbox" checked=form.include_filler on:change=move |event| {
+                            let checked = event_target_checked(&event);
+                            update_item(items, idx, |item| {
+                                item.smart_shuffle.include_filler = checked;
+                                "custom".clone_into(&mut item.smart_shuffle.preset);
+                                item.smart_shuffle.inherited_legacy = false;
+                            });
+                        }/>
+                        <span>{tr(TextKey::SmartShuffleIncludeFiller)}</span>
+                    </label>
+                    <div class=style::field>
+                        <label class=style::label>{tr(TextKey::SimilarityRules)}</label>
+                        <div class=style::rule_grid>
+                            {block_smart_shuffle_rules(idx, items, &form.rules)}
+                        </div>
+                    </div>
+                    <div class=style::field>
+                        <label class=style::label>{tr(TextKey::SmartShuffleFilterRules)}</label>
+                        <textarea class=style::textarea prop:value=form.filter_rules on:input=move |event| {
+                            let value = event_target_value(&event);
+                            update_item(items, idx, |item| {
+                                item.smart_shuffle.filter_rules = value;
+                                "custom".clone_into(&mut item.smart_shuffle.preset);
+                                item.smart_shuffle.inherited_legacy = false;
+                            });
+                        }></textarea>
+                    </div>
+                </div>
+                <p class=style::error style:display=if invalid { "" } else { "none" }>{tr(TextKey::SmartShuffleValidation)}</p>
+            </fieldset>
+        </details>
+    }.into_any()
+}
+
+fn block_number_field(
+    idx: usize,
+    items: RwSignal<Vec<BlockItemForm>>,
+    label: &'static str,
+    value: u32,
+    duration: bool,
+) -> AnyView {
+    view! {
+        <div class=style::field>
+            <label class=style::label>{label}</label>
+            <input class=style::input type="number" min="0" value=value on:input=move |event| {
+                let value = event_target_value(&event).parse().unwrap_or_default();
+                update_item(items, idx, |item| {
+                    if duration { item.smart_shuffle.after_duration_minutes = value; }
+                    else { item.smart_shuffle.after_items = value; }
+                    "custom".clone_into(&mut item.smart_shuffle.preset);
+                    item.smart_shuffle.inherited_legacy = false;
+                });
+            }/>
+        </div>
+    }
+    .into_any()
+}
+
+fn block_smart_shuffle_rules(
+    idx: usize,
+    items: RwSignal<Vec<BlockItemForm>>,
+    selected: &[String],
+) -> AnyView {
+    [
+        ("artist", TextKey::Artist), ("album_artist", TextKey::AlbumArtist),
+        ("show", TextKey::Show), ("season", TextKey::Season),
+        ("content_parent", TextKey::ContentParent), ("collection", TextKey::Collection),
+        ("tag", TextKey::Tags), ("genre", TextKey::Genres), ("studio", TextKey::Studios),
+    ].into_iter().map(|(rule, label)| {
+        let checked = selected.iter().any(|value| value == rule);
+        view! { <label class=style::rule_option><input type="checkbox" checked=checked on:change=move |event| {
+            let checked = event_target_checked(&event);
+            update_item(items, idx, |item| {
+                item.smart_shuffle.rules.retain(|value| value != rule);
+                if checked { item.smart_shuffle.rules.push(rule.to_owned()); }
+                "custom".clone_into(&mut item.smart_shuffle.preset);
+                item.smart_shuffle.inherited_legacy = false;
+            });
+        }/><span>{tr(label)}</span></label> }
+    }).collect_view().into_any()
+}
+
+fn apply_block_smart_shuffle_preset(form: &mut SmartShuffleForm, preset: &str) {
+    preset.clone_into(&mut form.preset);
+    match preset {
+        "light" => {
+            form.after_items = 2;
+            form.after_duration_minutes = 0;
+            form.rules = ["artist", "show", "content_parent"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+        }
+        "balanced" => {
+            form.after_items = 4;
+            form.after_duration_minutes = 30;
+            form.rules = [
+                "artist",
+                "show",
+                "season",
+                "content_parent",
+                "collection",
+                "tag",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        }
+        "off" => {
+            form.after_items = 0;
+            form.after_duration_minutes = 0;
+            form.rules.clear();
+            form.filter_rules.clear();
+        }
+        _ => {}
     }
 }
 
@@ -1209,4 +1514,19 @@ where
         </label>
     }
     .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_script_rows_repeat_the_block_inheritance_marker() {
+        let mut item = BlockItemForm::default();
+        item.smart_shuffle.inherited_legacy = true;
+
+        let html = smart_shuffle_hidden_fields_html(&item);
+
+        assert!(html.contains(r#"name="item_smart_shuffle_inherited_legacy" value="true""#));
+    }
 }

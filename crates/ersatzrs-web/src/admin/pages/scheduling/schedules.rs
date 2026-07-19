@@ -5,17 +5,18 @@ use std::fmt::Write as _;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use super::smart_shuffle_overview_warning_text;
 use crate::admin::i18n::{
     media_item_fallback_label, range_of, schedule_error_message, schedule_item_fallback_label, tr,
     TextKey,
 };
 use crate::admin::server_fns::schedules::{
     copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
-    get_schedules_page_size, list_schedules, preview_schedule_cooldown, replace_schedule_items,
-    save_schedule, save_schedules_detail_page_size, FillerOption, PlaylistOption,
-    ScheduleCooldownPreviewRow, ScheduleForm, ScheduleItemForm, ScheduleItemListRow,
-    ScheduleItemOption, ScheduleItemsEditorOptions, ScheduleItemsPageData, ScheduleLanguageOption,
-    ScheduleListRow, COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION,
+    get_schedules_page_size, list_schedules, preview_smart_shuffle_overview,
+    replace_schedule_items, save_schedule, save_schedules_detail_page_size, FillerOption,
+    PlaylistOption, ScheduleForm, ScheduleItemForm, ScheduleItemListRow, ScheduleItemOption,
+    ScheduleItemsEditorOptions, ScheduleItemsPageData, ScheduleLanguageOption, ScheduleListRow,
+    SmartShuffleForm, SmartShuffleOverview, COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION,
     COLLECTION_TYPE_MULTI_COLLECTION, COLLECTION_TYPE_PLAYLIST, COLLECTION_TYPE_RERUN_FIRST_RUN,
     COLLECTION_TYPE_RERUN_RERUN, COLLECTION_TYPE_SEARCH_QUERY, COLLECTION_TYPE_SMART_COLLECTION,
     COLLECTION_TYPE_TELEVISION_SEASON, COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE,
@@ -506,9 +507,6 @@ fn ScheduleEditorIsland(
     initial_error: String,
 ) -> impl IntoView {
     let form = RwSignal::new(initial_form);
-    let preview_rows = RwSignal::new(Vec::<ScheduleCooldownPreviewRow>::new());
-    let preview_error = RwSignal::new(String::new());
-    let preview_requested = RwSignal::new(false);
     let save_error = RwSignal::new(if initial_error.is_empty() {
         String::new()
     } else {
@@ -521,19 +519,6 @@ fn ScheduleEditorIsland(
     Effect::new(move |_| {
         if let Some(Some(loaded)) = data.get() {
             form.set(loaded);
-        }
-    });
-
-    let preview_action = Action::new(|form: &ScheduleForm| preview_schedule_cooldown(form.clone()));
-    Effect::new(move |_| {
-        if let Some(result) = preview_action.value().get() {
-            if let Ok(rows) = result {
-                preview_rows.set(rows);
-                preview_error.set(String::new());
-            } else {
-                preview_rows.set(Vec::new());
-                preview_error.set(tr(TextKey::CooldownPreviewFailed).to_owned());
-            }
         }
     });
 
@@ -609,171 +594,10 @@ fn ScheduleEditorIsland(
                             <option value="1">{tr(TextKey::FlexibleStartSoonAsPossible)}</option>
                         </select>
                     </label>
-                    <h2 class=style::section_title>{tr(TextKey::SimilarVideoCooldown)}</h2>
-                    <label class=style::field>
-                        <span>{tr(TextKey::CooldownPreset)}</span>
-                        <select
-                            id="cooldown-preset"
-                            class=style::select
-                            name="cooldown_preset"
-                            prop:value=move || form.get().cooldown_preset
-                            on:change=move |event| {
-                                let value = event_target_value(&event);
-                                form.update(|form| apply_cooldown_preset(form, &value));
-                            }
-                        >
-                            <option value="off">{tr(TextKey::Off)}</option>
-                            <option value="light">{tr(TextKey::Light)}</option>
-                            <option value="balanced">{tr(TextKey::Balanced)}</option>
-                            <option value="custom">{tr(TextKey::Custom)}</option>
-                        </select>
-                    </label>
-                    <div class=style::cooldown_fields style:display=move || if form.get().cooldown_preset == "off" { "none" } else { "contents" }>
-                        <label class=style::field>
-                            <span>{tr(TextKey::CooldownScope)}</span>
-                            <select class=style::select name="cooldown_scope" prop:value=move || form.get().cooldown_scope on:change=move |event| {
-                                let value = event_target_value(&event);
-                                form.update(|form| {
-                                    form.cooldown_scope.clone_from(&value);
-                                    "custom".clone_into(&mut form.cooldown_preset);
-                                });
-                            }>
-                                <option value="playout">{tr(TextKey::CooldownScopePlayout)}</option>
-                                <option value="schedule_item">{tr(TextKey::CooldownScopeScheduleItem)}</option>
-                                <option value="content_source">{tr(TextKey::CooldownScopeContentSource)}</option>
-                            </select>
-                        </label>
-                        <label class=style::field>
-                            <span>{tr(TextKey::CooldownAfterItems)}</span>
-                            <input class=style::input name="cooldown_after_items" type="number" min="0" prop:value=move || form.get().cooldown_after_items.to_string() on:input=move |event| {
-                                if let Ok(value) = event_target_value(&event).parse::<u32>() { form.update(|form| { form.cooldown_after_items = value; "custom".clone_into(&mut form.cooldown_preset); }); }
-                            }/>
-                        </label>
-                        <label class=style::field>
-                            <span>{tr(TextKey::CooldownAfterDurationMinutes)}</span>
-                            <input class=style::input name="cooldown_after_duration_minutes" type="number" min="0" prop:value=move || form.get().cooldown_after_duration_minutes.to_string() on:input=move |event| {
-                                if let Ok(value) = event_target_value(&event).parse::<u32>() { form.update(|form| { form.cooldown_after_duration_minutes = value; "custom".clone_into(&mut form.cooldown_preset); }); }
-                            }/>
-                        </label>
-                        {checkbox_field(tr(TextKey::CooldownIncludeFiller), "", "cooldown_include_filler", form, |form| form.cooldown_include_filler, |form, value| { form.cooldown_include_filler = value; "custom".clone_into(&mut form.cooldown_preset); }, false)}
-                        <span class=style::section_title>{tr(TextKey::SimilarityRules)}</span>
-                        <div class=style::check_list>
-                            {cooldown_rule_checkbox(form, "artist", TextKey::Artist)}
-                            {cooldown_rule_checkbox(form, "album_artist", TextKey::AlbumArtist)}
-                            {cooldown_rule_checkbox(form, "show", TextKey::Show)}
-                            {cooldown_rule_checkbox(form, "season", TextKey::Season)}
-                            {cooldown_rule_checkbox(form, "content_parent", TextKey::ContentParent)}
-                            {cooldown_rule_checkbox(form, "collection", TextKey::Collection)}
-                            {cooldown_rule_checkbox(form, "tag", TextKey::Tags)}
-                            {cooldown_rule_checkbox(form, "genre", TextKey::Genres)}
-                            {cooldown_rule_checkbox(form, "studio", TextKey::Studios)}
-                        </div>
-                        <label class=style::field>
-                            <span>{tr(TextKey::CooldownFilterRules)}</span>
-                            <textarea class=style::textarea name="cooldown_filter_rules" prop:value=move || form.get().cooldown_filter_rules on:input=move |event| {
-                                let value = event_target_value(&event);
-                                form.update(|form| {
-                                    form.cooldown_filter_rules.clone_from(&value);
-                                    "custom".clone_into(&mut form.cooldown_preset);
-                                });
-                            }></textarea>
-                        </label>
-                        <div>
-                            <button
-                                type="button"
-                                class=style::btn_default
-                                disabled=move || preview_action.pending().get()
-                                on:click=move |_| {
-                                    preview_requested.set(true);
-                                    preview_action.dispatch(form.get_untracked());
-                                }
-                            >
-                                {tr(TextKey::CooldownPreview)}
-                            </button>
-                        </div>
-                        <p class=style::error style:display=move || if preview_error.get().is_empty() { "none" } else { "" }>
-                            {move || preview_error.get()}
-                        </p>
-                        <p class=style::caption style:display=move || if preview_requested.get() && preview_error.get().is_empty() && preview_rows.get().is_empty() && !preview_action.pending().get() { "" } else { "none" }>
-                            {tr(TextKey::CooldownPreviewEmpty)}
-                        </p>
-                        <ul class=style::preview_list>
-                            {move || preview_rows.get().into_iter().map(|row| {
-                                let tags = row.tags.join(", ");
-                                view! {
-                                    <li>
-                                        <strong>{row.title}</strong>
-                                        <span>{tags}</span>
-                                    </li>
-                                }
-                            }).collect_view()}
-                        </ul>
-                    </div>
                 </form>
             </section>
         </div>
     }
-}
-
-fn apply_cooldown_preset(form: &mut ScheduleForm, preset: &str) {
-    preset.clone_into(&mut form.cooldown_preset);
-    match preset {
-        "light" => {
-            "playout".clone_into(&mut form.cooldown_scope);
-            form.cooldown_after_items = 2;
-            form.cooldown_after_duration_minutes = 0;
-            form.cooldown_include_filler = false;
-            form.cooldown_rules = vec!["artist", "show", "content_parent"]
-                .into_iter()
-                .map(str::to_owned)
-                .collect();
-        }
-        "balanced" => {
-            "playout".clone_into(&mut form.cooldown_scope);
-            form.cooldown_after_items = 4;
-            form.cooldown_after_duration_minutes = 30;
-            form.cooldown_include_filler = false;
-            form.cooldown_rules = vec![
-                "artist",
-                "show",
-                "season",
-                "content_parent",
-                "collection",
-                "tag",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
-        }
-        _ => {}
-    }
-}
-
-fn cooldown_rule_checkbox(
-    form: RwSignal<ScheduleForm>,
-    rule: &'static str,
-    label: TextKey,
-) -> AnyView {
-    view! {
-        <label class=style::check>
-            <input
-                type="checkbox"
-                name="cooldown_rules"
-                value=rule
-                checked=move || form.get().cooldown_rules.iter().any(|value| value == rule)
-                on:change=move |event| {
-                    let checked = event_target_checked(&event);
-                    form.update(|form| {
-                        form.cooldown_rules.retain(|value| value != rule);
-                        if checked { form.cooldown_rules.push(rule.to_owned()); }
-                        "custom".clone_into(&mut form.cooldown_preset);
-                    });
-                }
-            />
-            <span>{tr(label)}</span>
-        </label>
-    }
-    .into_any()
 }
 
 fn load_schedule_no_script_data(id: i64) -> ScheduleForm {
@@ -1006,6 +830,35 @@ fn schedule_item_hidden_fields_html(item: &ScheduleItemForm) -> String {
             item.search_query.clone().unwrap_or_default(),
         ),
         ("item_collection_name", item.collection_name.clone()),
+        (
+            "item_smart_shuffle_preset",
+            item.smart_shuffle.preset.clone(),
+        ),
+        ("item_smart_shuffle_scope", item.smart_shuffle.scope.clone()),
+        (
+            "item_smart_shuffle_after_items",
+            item.smart_shuffle.after_items.to_string(),
+        ),
+        (
+            "item_smart_shuffle_after_duration_minutes",
+            item.smart_shuffle.after_duration_minutes.to_string(),
+        ),
+        (
+            "item_smart_shuffle_include_filler",
+            item.smart_shuffle.include_filler.to_string(),
+        ),
+        (
+            "item_smart_shuffle_rules",
+            item.smart_shuffle.rules.join(","),
+        ),
+        (
+            "item_smart_shuffle_filter_rules",
+            item.smart_shuffle.filter_rules.clone(),
+        ),
+        (
+            "item_smart_shuffle_inherited_legacy",
+            item.smart_shuffle.inherited_legacy.to_string(),
+        ),
         ("item_marathon_group_by", item.marathon_group_by.to_string()),
         (
             "item_marathon_batch_size",
@@ -1389,6 +1242,7 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                                     let editor_options = options.get();
                                     schedule_item_editor(index, &item, items, &editor_options, shuffle_schedule_items.get())
                                 })).unwrap_or_else(|| view! { <p class=style::empty>{tr(TextKey::SelectScheduleItemPrompt)}</p> }.into_any())}
+                                <SmartShuffleOverviewPanel items=items/>
                             }.into_any()
                     } else {
                         view! { <p class=style::empty>{tr(TextKey::ScheduleNotFound)}</p> }.into_any()
@@ -1396,6 +1250,123 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                 }}
             </section>
         </div>
+    }
+}
+
+#[component]
+fn SmartShuffleOverviewPanel(items: RwSignal<Vec<ScheduleItemForm>>) -> impl IntoView {
+    let overview = RwSignal::new(None::<SmartShuffleOverview>);
+    let selected_index = RwSignal::new(0_usize);
+    let query = RwSignal::new(String::new());
+    let tag = RwSignal::new(String::new());
+    let page = RwSignal::new(1_u32);
+    let stale = RwSignal::new(true);
+    let error = RwSignal::new(String::new());
+    let refresh = Action::new(
+        |(items, selected, query, tag, page): &(
+            Vec<ScheduleItemForm>,
+            usize,
+            String,
+            String,
+            u32,
+        )| {
+            preview_smart_shuffle_overview(
+                items.clone(),
+                *selected,
+                query.clone(),
+                tag.clone(),
+                *page,
+            )
+        },
+    );
+    Effect::new(move |_| {
+        let _ = items.get();
+        stale.set(true);
+    });
+    Effect::new(move |_| {
+        if let Some(result) = refresh.value().get() {
+            match result {
+                Ok(value) => {
+                    overview.set(Some(value));
+                    error.set(String::new());
+                    stale.set(false);
+                }
+                Err(value) => error.set(value.to_string()),
+            }
+        }
+    });
+    let run_refresh = move || {
+        refresh.dispatch((
+            items.get_untracked(),
+            selected_index.get_untracked(),
+            query.get_untracked(),
+            tag.get_untracked(),
+            page.get_untracked(),
+        ));
+    };
+
+    view! {
+        <section class=style::smart_shuffle_overview>
+            <div class=style::overview_header>
+                <h2>{tr(TextKey::SmartShufflePreview)}</h2>
+                <span class=style::stale_indicator style:display=move || if stale.get() { "" } else { "none" }>
+                    {tr(TextKey::SmartShuffleOverviewStale)}
+                </span>
+                <button type="button" class=style::btn_default disabled=move || refresh.pending().get() on:click=move |_| run_refresh()>
+                    {tr(TextKey::SmartShuffleOverviewRefresh)}
+                </button>
+            </div>
+            <p class=style::error style:display=move || if error.get().is_empty() { "none" } else { "" }>
+                {move || format!("{}: {}", tr(TextKey::SmartShufflePreviewFailed), error.get())}
+            </p>
+            {move || match overview.get() { Some(data) => {
+                let summaries = data.summaries.clone();
+                let candidate_rows = data.candidates.clone();
+                view! {
+                    <div class=style::overview_groups>
+                        {summaries.into_iter().map(|summary| {
+                            let index = summary.index;
+                            view! {
+                                <details class=style::overview_group open=move || selected_index.get() == index>
+                                    <summary on:click=move |_| {
+                                        selected_index.set(index);
+                                        page.set(1);
+                                        stale.set(true);
+                                    }>
+                                        <strong>{summary.source_name}</strong>
+                                        <span>{format!("{} · {} / {} · {}", summary.preset, summary.tagged_candidate_count, summary.candidate_count, summary.distinct_effective_tags)}</span>
+                                    </summary>
+                                    {summary.warnings.into_iter().map(|warning| view! { <p class=style::help>{smart_shuffle_overview_warning_text(warning)}</p> }).collect_view()}
+                                </details>
+                            }
+                        }).collect_view()}
+                    </div>
+                    <div class=style::overview_filters>
+                        <label>{tr(TextKey::Search)}<input class=style::input prop:value=query on:input=move |event| { query.set(event_target_value(&event)); stale.set(true); }/></label>
+                        <label>{tr(TextKey::Tags)}<input class=style::input prop:value=tag on:input=move |event| { tag.set(event_target_value(&event)); stale.set(true); }/></label>
+                    </div>
+                    <div class=style::table_wrap>
+                        <table>
+                            <thead><tr><th>{tr(TextKey::Title)}</th><th>{tr(TextKey::Type)}</th><th>{tr(TextKey::Tags)}</th></tr></thead>
+                            <tbody>
+                                {if candidate_rows.is_empty() {
+                                    view! { <tr><td colspan="3" class=style::empty>{tr(TextKey::SmartShufflePreviewEmpty)}</td></tr> }.into_any()
+                                } else {
+                                    candidate_rows.into_iter().map(|candidate| view! {
+                                        <tr><td>{candidate.title}</td><td>{candidate.media_type}</td><td>{candidate.tags.into_iter().map(|tag| format!("{}: {}", tag.rule, tag.value)).collect::<Vec<_>>().join(", ")}</td></tr>
+                                    }).collect_view().into_any()
+                                }}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class=style::pagination>
+                        <button type="button" class=style::btn_default disabled=data.page <= 1 on:click=move |_| { page.update(|value| *value = value.saturating_sub(1).max(1)); run_refresh(); }>{tr(TextKey::PreviousPage)}</button>
+                        <span>{range_of(data.page, data.page_size, data.total_candidates as u64)}</span>
+                        <button type="button" class=style::btn_default disabled=data.page as usize * data.page_size as usize >= data.total_candidates on:click=move |_| { page.update(|value| *value += 1); run_refresh(); }>{tr(TextKey::NextPage)}</button>
+                    </div>
+                }.into_any()
+            }, None => view! { <p class=style::empty>{tr(TextKey::SmartShufflePreviewEmpty)}</p> }.into_any()}}
+        </section>
     }
 }
 
@@ -1487,6 +1458,7 @@ fn schedule_item_editor(
                     apply_playback_order_rules(item);
                 });
             })}
+            {schedule_item_smart_shuffle_editor(index, item, items)}
             <div style:display=move || if selected_playback_order == PLAYBACK_ORDER_MARATHON { "" } else { "none" }>
                 {select_i32(tr(TextKey::MarathonGroupBy), item.marathon_group_by, vec![(4, tr(TextKey::Album)), (3, tr(TextKey::Artist)), (2, tr(TextKey::Season)), (1, tr(TextKey::Show)), (5, tr(TextKey::Director))], move |value| {
                     update_item(items, index, |item| item.marathon_group_by = value);
@@ -1577,6 +1549,182 @@ fn schedule_item_editor(
         </form>
     }
     .into_any()
+}
+
+fn schedule_item_smart_shuffle_editor(
+    index: usize,
+    item: &ScheduleItemForm,
+    items: RwSignal<Vec<ScheduleItemForm>>,
+) -> AnyView {
+    let form = item.smart_shuffle.clone();
+    let supported = is_randomized_playback_order_value(item.playback_order);
+    let invalid = form.preset == "custom"
+        && ((form.after_items == 0 && form.after_duration_minutes == 0)
+            || (form.rules.is_empty() && form.filter_rules.trim().is_empty()));
+
+    view! {
+        <details class=style::smart_shuffle_panel>
+            <summary class=style::section_title>{tr(TextKey::SmartShuffle)}</summary>
+            <p class=style::caption style:display=if supported { "none" } else { "" }>
+                {tr(TextKey::SmartShuffleInactive)}
+            </p>
+            <fieldset class=style::smart_shuffle_fields disabled=!supported>
+                <label class=style::field>
+                    <span>{tr(TextKey::SmartShufflePreset)}</span>
+                    <select class=style::select prop:value=form.preset.clone() on:change=move |event| {
+                        let preset = event_target_value(&event);
+                        update_item(items, index, |item| {
+                            apply_smart_shuffle_preset(&mut item.smart_shuffle, &preset);
+                            item.smart_shuffle.inherited_legacy = false;
+                        });
+                    }>
+                        <option value="off">{tr(TextKey::Off)}</option>
+                        <option value="light">{tr(TextKey::Light)}</option>
+                        <option value="balanced">{tr(TextKey::Balanced)}</option>
+                        <option value="custom">{tr(TextKey::Custom)}</option>
+                    </select>
+                </label>
+                <div style:display=if form.preset == "off" { "none" } else { "contents" }>
+                    <label class=style::field>
+                        <span>{tr(TextKey::SmartShuffleScope)}</span>
+                        <select class=style::select prop:value=form.scope.clone() on:change=move |event| {
+                            let value = event_target_value(&event);
+                            update_item(items, index, |item| {
+                                item.smart_shuffle.scope = value;
+                                "custom".clone_into(&mut item.smart_shuffle.preset);
+                                item.smart_shuffle.inherited_legacy = false;
+                            });
+                        }>
+                            <option value="playout">{tr(TextKey::SmartShuffleScopePlayout)}</option>
+                            <option value="schedule_item">{tr(TextKey::SmartShuffleScopeScheduleItem)}</option>
+                            <option value="content_source">{tr(TextKey::SmartShuffleScopeContentSource)}</option>
+                        </select>
+                    </label>
+                    {number_field(tr(TextKey::SmartShuffleAfterItems), i32::try_from(form.after_items).unwrap_or(i32::MAX), move |value| {
+                        update_item(items, index, |item| {
+                            item.smart_shuffle.after_items = u32::try_from(value.max(0)).unwrap_or_default();
+                            "custom".clone_into(&mut item.smart_shuffle.preset);
+                            item.smart_shuffle.inherited_legacy = false;
+                        });
+                    })}
+                    {number_field(tr(TextKey::SmartShuffleAfterDurationMinutes), i32::try_from(form.after_duration_minutes).unwrap_or(i32::MAX), move |value| {
+                        update_item(items, index, |item| {
+                            item.smart_shuffle.after_duration_minutes = u32::try_from(value.max(0)).unwrap_or_default();
+                            "custom".clone_into(&mut item.smart_shuffle.preset);
+                            item.smart_shuffle.inherited_legacy = false;
+                        });
+                    })}
+                    {bool_field(tr(TextKey::SmartShuffleIncludeFiller), form.include_filler, move |value| {
+                        update_item(items, index, |item| {
+                            item.smart_shuffle.include_filler = value;
+                            "custom".clone_into(&mut item.smart_shuffle.preset);
+                            item.smart_shuffle.inherited_legacy = false;
+                        });
+                    })}
+                    <div class=style::field>
+                        <span>{tr(TextKey::SimilarityRules)}</span>
+                        <div class=style::check_list>
+                            {smart_shuffle_rule_options(index, &form, items)}
+                        </div>
+                    </div>
+                    <label class=style::field>
+                        <span>{tr(TextKey::SmartShuffleFilterRules)}</span>
+                        <textarea class=style::textarea prop:value=form.filter_rules on:input=move |event| {
+                            let value = event_target_value(&event);
+                            update_item(items, index, |item| {
+                                item.smart_shuffle.filter_rules = value;
+                                "custom".clone_into(&mut item.smart_shuffle.preset);
+                                item.smart_shuffle.inherited_legacy = false;
+                            });
+                        }></textarea>
+                    </label>
+                </div>
+                <p class=style::error style:display=if invalid { "" } else { "none" }>
+                    {tr(TextKey::SmartShuffleValidation)}
+                </p>
+            </fieldset>
+        </details>
+    }
+    .into_any()
+}
+
+fn smart_shuffle_rule_options(
+    index: usize,
+    form: &SmartShuffleForm,
+    items: RwSignal<Vec<ScheduleItemForm>>,
+) -> AnyView {
+    let selected = form.rules.clone();
+    [
+        ("artist", TextKey::Artist),
+        ("album_artist", TextKey::AlbumArtist),
+        ("show", TextKey::Show),
+        ("season", TextKey::Season),
+        ("content_parent", TextKey::ContentParent),
+        ("collection", TextKey::Collection),
+        ("tag", TextKey::Tags),
+        ("genre", TextKey::Genres),
+        ("studio", TextKey::Studios),
+    ]
+    .into_iter()
+    .map(|(rule, label)| {
+        let checked = selected.iter().any(|value| value == rule);
+        view! {
+            <label class=style::check>
+                <input type="checkbox" checked=checked on:change=move |event| {
+                    let checked = event_target_checked(&event);
+                    update_item(items, index, |item| {
+                        item.smart_shuffle.rules.retain(|value| value != rule);
+                        if checked { item.smart_shuffle.rules.push(rule.to_owned()); }
+                        "custom".clone_into(&mut item.smart_shuffle.preset);
+                        item.smart_shuffle.inherited_legacy = false;
+                    });
+                }/>
+                <span>{tr(label)}</span>
+            </label>
+        }
+    })
+    .collect_view()
+    .into_any()
+}
+
+fn apply_smart_shuffle_preset(form: &mut SmartShuffleForm, preset: &str) {
+    preset.clone_into(&mut form.preset);
+    match preset {
+        "light" => {
+            form.after_items = 2;
+            form.after_duration_minutes = 0;
+            form.rules = ["artist", "show", "content_parent"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+        }
+        "balanced" => {
+            form.after_items = 4;
+            form.after_duration_minutes = 30;
+            form.rules = [
+                "artist",
+                "show",
+                "season",
+                "content_parent",
+                "collection",
+                "tag",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        }
+        "off" => {
+            form.after_items = 0;
+            form.after_duration_minutes = 0;
+            form.rules.clear();
+            form.filter_rules.clear();
+        }
+        _ => {}
+    }
+}
+
+fn is_randomized_playback_order_value(value: i32) -> bool {
+    matches!(value, 2 | 3 | 4 | 5 | 7 | 8)
 }
 
 fn collection_picker(

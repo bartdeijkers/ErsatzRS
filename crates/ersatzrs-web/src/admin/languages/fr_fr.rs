@@ -944,25 +944,36 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItems => "Éléments de grille",
         TextKey::ScheduleNotFound => "Grille introuvable.",
         TextKey::ScheduleSaveFailed => "Échec de l'enregistrement de la grille.",
-        TextKey::SimilarVideoCooldown => "Intervalle entre vidéos similaires",
-        TextKey::CooldownPreset => "Préréglage d'intervalle",
+        TextKey::SmartShuffle => "Lecture aléatoire intelligente",
+        TextKey::SmartShufflePreset => "Préréglage d'intervalle",
         TextKey::Balanced => "Équilibré",
-        TextKey::CooldownScope => "Portée de l'intervalle",
-        TextKey::CooldownScopePlayout => "Diffusion",
-        TextKey::CooldownScopeScheduleItem => "Élément de grille",
-        TextKey::CooldownScopeContentSource => "Source de contenu",
-        TextKey::CooldownAfterItems => "Vidéos entre les éléments similaires",
-        TextKey::CooldownAfterDurationMinutes => "Durée de l'intervalle (minutes)",
-        TextKey::CooldownIncludeFiller => "Inclure le filler",
-        TextKey::CooldownPreview => "Prévisualiser les tags effectifs",
-        TextKey::CooldownPreviewEmpty => {
-            "Aucun média correspondant n'a produit de tag d'intervalle."
+        TextKey::SmartShuffleScope => "Portée de l'intervalle",
+        TextKey::SmartShuffleScopePlayout => "Diffusion",
+        TextKey::SmartShuffleScopeScheduleItem => "Élément de grille",
+        TextKey::SmartShuffleValidation => "Choisissez un seuil d'espacement et au moins une règle de similarité.",
+        TextKey::SmartShuffleScopeContentSource => "Source de contenu",
+        TextKey::SmartShuffleAfterItems => "Vidéos entre les éléments similaires",
+        TextKey::SmartShuffleAfterDurationMinutes => "Durée de l'intervalle (minutes)",
+        TextKey::SmartShuffleIncludeFiller => "Inclure le filler",
+        TextKey::SmartShuffleInheritedBlock => {
+            "Cet élément n'a pas de remplacement Smart Shuffle et conserve toute stratégie de diffusion héritée."
         }
-        TextKey::CooldownPreviewFailed => "Échec de l'aperçu des tags d'intervalle.",
+        TextKey::SmartShuffleInactive => "La lecture aléatoire intelligente est inactive car cet ordre de lecture n'est pas aléatoire.",
+        TextKey::SmartShuffleOverviewEmptySource => "La source de contenu est vide.",
+        TextKey::SmartShuffleOverviewNoMatchingRules => {
+            "Aucun candidat ne correspond aux règles de similarité configurées."
+        }
+        TextKey::SmartShuffleOverviewOff => "Smart Shuffle est désactivé.",
+        TextKey::SmartShuffleOverviewRefresh => "Actualiser",
+        TextKey::SmartShuffleOverviewStale => "Le brouillon a changé ; actualisez la vue d'ensemble.",
+        TextKey::SmartShuffleOverrideBlock => "Remplacer pour cet élément de bloc",
+        TextKey::SmartShufflePreview => "Vue d'ensemble Smart Shuffle",
+        TextKey::SmartShufflePreviewEmpty => "Aucun candidat correspondant.",
+        TextKey::SmartShufflePreviewFailed => "Échec de la vue d'ensemble Smart Shuffle.",
         TextKey::SimilarityRules => "Règles de similarité",
         TextKey::AlbumArtist => "Artiste de l'album",
         TextKey::ContentParent => "Parent ou variante",
-        TextKey::CooldownFilterRules => "Règles de filtre",
+        TextKey::SmartShuffleFilterRules => "Règles de filtre",
         TextKey::SearchForSchedules => "Rechercher des grilles",
         TextKey::SearchForManualCollections => "Rechercher des collections manuelles",
         TextKey::SearchForRerunCollections => "Rechercher des collections de rediffusions",
@@ -2481,18 +2492,18 @@ mod tests {
     }
 
     #[test]
-    fn cooldown_policy_labels() {
+    fn smart_shuffle_policy_labels() {
         assert_eq!(
-            STRINGS.text(TextKey::SimilarVideoCooldown),
-            "Intervalle entre vidéos similaires"
+            STRINGS.text(TextKey::SmartShuffle),
+            "Lecture aléatoire intelligente"
         );
         assert_eq!(
-            STRINGS.text(TextKey::CooldownAfterItems),
+            STRINGS.text(TextKey::SmartShuffleAfterItems),
             "Vidéos entre les éléments similaires"
         );
         assert_eq!(
-            STRINGS.text(TextKey::CooldownPreview),
-            "Prévisualiser les tags effectifs"
+            STRINGS.text(TextKey::SmartShufflePreview),
+            "Vue d'ensemble Smart Shuffle"
         );
     }
 

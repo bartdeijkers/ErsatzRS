@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Renamed Similar Video Cooldown to Smart Shuffle and moved its opt-in policy
+  from schedule/playout-wide settings onto each Classic schedule item, reusable
+  Block item, Sequential YAML content entry, and Scripted content key. Legacy
+  policies and anchor JSON remain readable and migrate without changing active
+  schedules. Classic and Block editors now provide draft-aware per-source
+  summaries plus searchable, tag-filtered, 50-row candidate details.
 - Rebuilt the end-user documentation around Diátaxis with a first-channel
   tutorial; goal-oriented Windows, Docker, local-library, Jellyfin, IPTV,
   backup, content-variant, and troubleshooting guides; and current operator
@@ -36,6 +42,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Smart Shuffle now isolates Classic policies and filter tags by schedule-item
+  identity even when multiple items share one content source or reuse a filter
+  rule ID for different searches, preserves explicit YAML and reusable Block
+  item Off overrides during legacy-policy migration, hydrates tags from
+  multiline Scripted Lua declarations, localizes overview warnings, and
+  advances playout-scoped item spacing across intervening randomized-Off and
+  chronological sources.
 - Schedule item editing now explains that pre-, mid-, and post-roll filler
   applies to every media item selected by that schedule item. Regression
   coverage preserves ordered `Multiple (3)` then `One` schedules through
@@ -76,7 +89,7 @@ release section when tagging a release.
   persists `fr-fr` (aliases `fr`, `fr-FR`, `fr_FR`), and every admin page,
   dynamic label, and stable workflow/error message renders in French while
   technical identifiers (FFmpeg, Plex, codec names, routes, configuration
-  keys) stay verbatim. This includes ADR 0019's cooldown presets, thresholds,
+  keys) stay verbatim. This includes ADR 0019's Smart Shuffle presets, thresholds,
   rules, and tag-preview states. Covered by i18n coverage tests and the
   settings-i18n browser proof.
 - Collection and playlist items can now persist item-level audio/subtitle
@@ -94,14 +107,15 @@ release section when tagging a release.
   video (including alternate versions) has a checkbox, and the shared
   selection toolbar bulk-adds the selected videos to a collection or playlist.
   Per-video Add To Collection keeps working.
-- Schedules can now opt into ADR 0019's deterministic similar-video cooldown
+- Schedules can now opt into ADR 0019's deterministic Smart Shuffle
   policy across Classic, Block, Sequential YAML, and Scripted playouts. Shared
   count/duration thresholds diversify artist, show, season, parent variant,
   collection, tag, genre, studio, and operator-filter groups, persist through
   Continue builds, and relax impossible constraints without dead air; Off
   remains byte- and behavior-compatible with imported ErsatzTV schedules.
   Localized admin controls include presets, custom thresholds and rules, and a
-  deterministic effective-tag preview.
+  deterministic effective-tag preview. This feature was originally named
+  Similar Video Cooldown.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or
   referenced library content change, so already-scheduled items pick up new
   settings (e.g. subtitle mode) instead of only being appended past — including

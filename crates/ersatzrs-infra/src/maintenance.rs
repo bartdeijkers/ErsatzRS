@@ -471,19 +471,19 @@ async fn build_playout(
                 .await?
         }
         PlayoutScheduleKind::Scripted => {
-            let definition_policy = playout
+            let (definition_policies, definition_legacy_policy) = playout
                 .schedule_file
                 .as_deref()
                 .and_then(|path| std::fs::read_to_string(path).ok())
                 .and_then(|script| {
-                    ersatzrs_core::scheduling::ScriptedSchedulingEngine::cooldown_policy_from_script(
+                    ersatzrs_core::scheduling::ScriptedSchedulingEngine::smart_shuffle_policies_from_script(
                         &script,
                     )
                     .ok()
-                    .flatten()
-                });
+                })
+                .unwrap_or_default();
             scheduling
-                .scripted_reference_data(playout.id, definition_policy)
+                .scripted_reference_data(playout.id, definition_policies, definition_legacy_policy)
                 .await?
         }
         PlayoutScheduleKind::ExternalJson => scheduling.configured_playout_options().await?,

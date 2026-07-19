@@ -43,20 +43,25 @@ impl ScriptedSchedulingEngine {
         script: &str,
         mut request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
-        if let Some(policy) = Self::cooldown_policy_from_script(script)? {
-            request.reference_data.cooldown_policy = policy;
+        let (item_policies, legacy_policy) = Self::smart_shuffle_policies_from_script(script)?;
+        request
+            .reference_data
+            .smart_shuffle_policies_by_unit
+            .extend(item_policies);
+        if let Some(policy) = legacy_policy {
+            request.reference_data.smart_shuffle_policy = policy;
         }
-        let cooldown_state = if request.mode == PlayoutBuildMode::Continue {
+        let smart_shuffle_state = if request.mode == PlayoutBuildMode::Continue {
             request
                 .playout
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
                 .and_then(|context| serde_json::from_str::<ScriptedAnchorContext>(context).ok())
-                .map(|context| context.cooldown)
+                .map(|context| context.smart_shuffle)
                 .unwrap_or_default()
         } else {
-            super::SchedulingCooldownState::default()
+            super::SchedulingSmartShuffleState::default()
         };
         let state = Rc::new(RefCell::new(ScriptState::new(
             request.playout.id,
@@ -64,7 +69,7 @@ impl ScriptedSchedulingEngine {
             request.finish,
             request.mode,
             request.reference_data,
-            cooldown_state,
+            smart_shuffle_state,
         )));
         let lua = Lua::new();
         register_all(&lua, &state).map_err(lua_error)?;
@@ -85,10 +90,10 @@ impl ScriptedSchedulingEngine {
             remove_before: Some(request.start),
             anchor: Some(PlayoutAnchor {
                 next_start: anchor_time,
-                context: state.reference_data.cooldown_policy.is_active().then(|| {
+                context: state.reference_data.has_active_smart_shuffle().then(|| {
                     serde_json::to_string(&ScriptedAnchorContext {
                         version: scripted_anchor_context_version(),
-                        cooldown: state.cooldown_state.clone(),
+                        smart_shuffle: state.smart_shuffle_state.clone(),
                     })
                     .unwrap_or_default()
                 }),
@@ -101,37 +106,229 @@ impl ScriptedSchedulingEngine {
         })
     }
 
-    /// Read the native `set_cooldown_policy([[...json...]])` declaration.
+    /// Read native `set_smart_shuffle_policy(content_key, [[...json...]])`
+    /// declarations plus the deprecated global fallback.
     ///
     /// # Errors
     ///
-    /// Returns an error when a declaration is present but contains invalid JSON.
-    pub fn cooldown_policy_from_script(
+    /// Returns an error when a declaration is malformed or contains invalid JSON.
+    pub fn smart_shuffle_policies_from_script(
         script: &str,
-    ) -> Result<Option<super::SchedulingCooldownPolicy>, SchedulingError> {
-        const START: &str = "set_cooldown_policy([[";
-        let Some(start) = script.find(START) else {
-            return Ok(None);
-        };
-        let value_start = start + START.len();
-        let Some(relative_end) = script[value_start..].find("]])") else {
-            return Err(SchedulingError::Script(
-                "unterminated set_cooldown_policy declaration".to_owned(),
-            ));
-        };
-        let json = &script[value_start..value_start + relative_end];
-        serde_json::from_str(json)
-            .map(Some)
-            .map_err(|error| SchedulingError::Script(error.to_string()))
+    ) -> Result<
+        (
+            BTreeMap<String, super::SchedulingSmartShufflePolicy>,
+            Option<super::SchedulingSmartShufflePolicy>,
+        ),
+        SchedulingError,
+    > {
+        let mut item_policies = BTreeMap::new();
+        let mut legacy_policy = None;
+        let bytes = script.as_bytes();
+        let mut cursor = 0;
+        while cursor < bytes.len() {
+            if bytes[cursor..].starts_with(b"--") {
+                cursor = skip_lua_comment(script, cursor);
+                continue;
+            }
+            if matches!(bytes[cursor], b'\'' | b'"') {
+                cursor = skip_lua_quoted_string(script, cursor);
+                continue;
+            }
+            if let Some((_, _, after)) = lua_long_bracket(script, cursor) {
+                cursor = after;
+                continue;
+            }
+            if !is_lua_identifier_start(bytes[cursor]) {
+                cursor += 1;
+                continue;
+            }
+
+            let identifier_start = cursor;
+            cursor += 1;
+            while cursor < bytes.len() && is_lua_identifier_continue(bytes[cursor]) {
+                cursor += 1;
+            }
+            let identifier = &script[identifier_start..cursor];
+            if !matches!(
+                identifier,
+                "set_smart_shuffle_policy" | "set_cooldown_policy"
+            ) {
+                continue;
+            }
+            let call_start = skip_ascii_whitespace(bytes, cursor);
+            if bytes.get(call_start) != Some(&b'(') {
+                continue;
+            }
+            let (content_key, json, after_call) =
+                parse_smart_shuffle_declaration(script, identifier, call_start)?;
+            let policy = serde_json::from_str(json)
+                .map_err(|error| SchedulingError::Script(error.to_string()))?;
+            if let Some(content_key) = content_key {
+                item_policies.insert(content_key, policy);
+            } else {
+                legacy_policy = Some(policy);
+            }
+            cursor = after_call;
+        }
+
+        Ok((item_policies, legacy_policy))
     }
+}
+
+fn parse_smart_shuffle_declaration<'a>(
+    script: &'a str,
+    identifier: &str,
+    call_start: usize,
+) -> Result<(Option<String>, &'a str, usize), SchedulingError> {
+    let bytes = script.as_bytes();
+    let mut cursor = skip_ascii_whitespace(bytes, call_start + 1);
+    let content_key = if identifier == "set_smart_shuffle_policy" {
+        let (key, after_key) = parse_lua_quoted_string(script, cursor).ok_or_else(|| {
+            SchedulingError::Script(
+                "set_smart_shuffle_policy content key must be a quoted string".to_owned(),
+            )
+        })?;
+        cursor = skip_ascii_whitespace(bytes, after_key);
+        if bytes.get(cursor) != Some(&b',') {
+            return Err(SchedulingError::Script(
+                "set_smart_shuffle_policy requires a content key and JSON policy".to_owned(),
+            ));
+        }
+        cursor = skip_ascii_whitespace(bytes, cursor + 1);
+        Some(key)
+    } else {
+        None
+    };
+
+    let Some((json_start, json_end, after_json)) = lua_long_bracket(script, cursor) else {
+        return Err(SchedulingError::Script(format!(
+            "{identifier} JSON must use a terminated Lua long bracket"
+        )));
+    };
+    cursor = skip_ascii_whitespace(bytes, after_json);
+    if bytes.get(cursor) != Some(&b')') {
+        return Err(SchedulingError::Script(format!(
+            "{identifier} declaration must end after the JSON policy"
+        )));
+    }
+
+    Ok((content_key, &script[json_start..json_end], cursor + 1))
+}
+
+fn parse_lua_quoted_string(script: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = script.as_bytes();
+    let quote = *bytes.get(start)?;
+    if !matches!(quote, b'\'' | b'"') {
+        return None;
+    }
+    let mut value = String::new();
+    let mut cursor = start + 1;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            current if current == quote => return Some((value, cursor + 1)),
+            b'\\' => {
+                cursor += 1;
+                let escaped = *bytes.get(cursor)?;
+                value.push(match escaped {
+                    b'n' => '\n',
+                    b'r' => '\r',
+                    b't' => '\t',
+                    b'\\' => '\\',
+                    b'\'' => '\'',
+                    b'"' => '"',
+                    other => char::from(other),
+                });
+                cursor += 1;
+            }
+            _ => {
+                let character = script[cursor..].chars().next()?;
+                value.push(character);
+                cursor += character.len_utf8();
+            }
+        }
+    }
+    None
+}
+
+fn skip_lua_quoted_string(script: &str, start: usize) -> usize {
+    let bytes = script.as_bytes();
+    let quote = bytes[start];
+    let mut cursor = start + 1;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            b'\\' => cursor = (cursor + 2).min(bytes.len()),
+            current if current == quote => return cursor + 1,
+            _ => cursor += 1,
+        }
+    }
+    bytes.len()
+}
+
+fn skip_lua_comment(script: &str, start: usize) -> usize {
+    let bytes = script.as_bytes();
+    let body_start = start + 2;
+    if let Some((_, _, after)) = lua_long_bracket(script, body_start) {
+        return after;
+    }
+    bytes[body_start..]
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .map_or(bytes.len(), |offset| body_start + offset + 1)
+}
+
+fn lua_long_bracket(script: &str, start: usize) -> Option<(usize, usize, usize)> {
+    let bytes = script.as_bytes();
+    if bytes.get(start) != Some(&b'[') {
+        return None;
+    }
+    let mut opener_end = start + 1;
+    while bytes.get(opener_end) == Some(&b'=') {
+        opener_end += 1;
+    }
+    if bytes.get(opener_end) != Some(&b'[') {
+        return None;
+    }
+    let equals_count = opener_end - start - 1;
+    let content_start = opener_end + 1;
+    let mut cursor = content_start;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b']' {
+            let equals_end = cursor + 1 + equals_count;
+            if equals_end < bytes.len()
+                && bytes[cursor + 1..equals_end]
+                    .iter()
+                    .all(|byte| *byte == b'=')
+                && bytes[equals_end] == b']'
+            {
+                return Some((content_start, cursor, equals_end + 1));
+            }
+        }
+        cursor += 1;
+    }
+    None
+}
+
+fn skip_ascii_whitespace(bytes: &[u8], mut cursor: usize) -> usize {
+    while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+        cursor += 1;
+    }
+    cursor
+}
+
+fn is_lua_identifier_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+fn is_lua_identifier_continue(byte: u8) -> bool {
+    is_lua_identifier_start(byte) || byte.is_ascii_digit()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ScriptedAnchorContext {
     #[serde(default = "scripted_anchor_context_version")]
     version: u32,
-    #[serde(default)]
-    cooldown: super::SchedulingCooldownState,
+    #[serde(default, alias = "cooldown")]
+    smart_shuffle: super::SchedulingSmartShuffleState,
 }
 
 fn scripted_anchor_context_version() -> u32 {
@@ -231,10 +428,25 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
     {
         let s = Rc::clone(state);
         globals.set(
+            "set_smart_shuffle_policy",
+            lua.create_function_mut(move |_, (content_key, json): (String, String)| {
+                let policy = serde_json::from_str(&json).map_err(mlua::Error::external)?;
+                s.borrow_mut()
+                    .reference_data
+                    .smart_shuffle_policies_by_unit
+                    .insert(content_key, policy);
+                Ok(())
+            })?,
+        )?;
+    }
+
+    {
+        let s = Rc::clone(state);
+        globals.set(
             "set_cooldown_policy",
             lua.create_function_mut(move |_, json: String| {
                 let policy = serde_json::from_str(&json).map_err(mlua::Error::external)?;
-                s.borrow_mut().reference_data.cooldown_policy = policy;
+                s.borrow_mut().reference_data.smart_shuffle_policy = policy;
                 Ok(())
             })?,
         )?;
@@ -1028,7 +1240,7 @@ struct ScriptState {
     pre_roll_key: Option<String>,
     last_progress_time: Option<DateTime<Utc>>,
     no_progress_counter: u32,
-    cooldown_state: super::SchedulingCooldownState,
+    smart_shuffle_state: super::SchedulingSmartShuffleState,
 }
 
 impl ScriptState {
@@ -1038,7 +1250,7 @@ impl ScriptState {
         finish: DateTime<Utc>,
         mode: PlayoutBuildMode,
         reference_data: SchedulingReferenceData,
-        cooldown_state: super::SchedulingCooldownState,
+        smart_shuffle_state: super::SchedulingSmartShuffleState,
     ) -> Self {
         let mut st = Self {
             playout_id,
@@ -1063,7 +1275,7 @@ impl ScriptState {
             pre_roll_key: None,
             last_progress_time: None,
             no_progress_counter: 0,
-            cooldown_state,
+            smart_shuffle_state,
         };
         if mode == PlayoutBuildMode::Reset {
             st.history_to_remove = st
@@ -1081,16 +1293,19 @@ impl ScriptState {
         &mut self,
         key: &str,
     ) -> Option<(super::SchedulingMediaItem, CurrentHistoryContext)> {
-        let policy = self.reference_data.cooldown_policy.clone();
-        let cooldown_state = self.cooldown_state.clone();
-        let tags_by_media_id = self.reference_data.cooldown_tags_by_media_id.clone();
+        let policy = self
+            .reference_data
+            .smart_shuffle_policy_for_unit(key)
+            .clone();
+        let smart_shuffle_state = self.smart_shuffle_state.clone();
+        let tags_by_media_id = self.reference_data.smart_shuffle_tags_for_unit(key).clone();
         let scope_key = policy.scope_key(self.playout_id, None, Some(key));
         let scheduled_at = self.current_time;
         if self.playlist_enumerators.contains_key(key) {
             let playlist = self.playlist_enumerators.get_mut(key).unwrap();
-            playlist.select_with_cooldown(
+            playlist.select_with_smart_shuffle(
                 &policy,
-                &cooldown_state,
+                &smart_shuffle_state,
                 &scope_key,
                 scheduled_at,
                 &tags_by_media_id,
@@ -1101,9 +1316,9 @@ impl ScriptState {
         } else {
             // lazy-load from media_by_key, mirroring the old enumerator() behaviour
             let e = self.enumerator(key);
-            e.select_with_cooldown(
+            e.select_with_smart_shuffle(
                 &policy,
-                &cooldown_state,
+                &smart_shuffle_state,
                 &scope_key,
                 scheduled_at,
                 &tags_by_media_id,
@@ -1114,32 +1329,47 @@ impl ScriptState {
         }
     }
 
-    fn record_cooldown_item(&mut self, key: &str, item: &ersatzrs_domain::PlayoutItem) {
-        let scope_key =
-            self.reference_data
-                .cooldown_policy
-                .scope_key(self.playout_id, None, Some(key));
+    fn record_smart_shuffle_item(&mut self, key: &str, item: &ersatzrs_domain::PlayoutItem) {
+        let playback_order = self
+            .playlist_enumerators
+            .get(key)
+            .map(PlaylistEnumerator::current_playback_order)
+            .or_else(|| {
+                self.enumerators
+                    .get(key)
+                    .map(MediaEnumerator::playback_order)
+            })
+            .unwrap_or(PlaybackOrder::None);
+        let policy = self
+            .reference_data
+            .smart_shuffle_policy_for_unit(key)
+            .clone();
+        let tags_by_media_id = self.reference_data.smart_shuffle_tags_for_unit(key);
+        let scope_key = policy.scope_key(self.playout_id, None, Some(key));
         let unit = if let Some(playlist) = self.playlist_enumerators.get(key) {
-            let Some(unit) = playlist.cooldown_unit(&self.reference_data.cooldown_tags_by_media_id)
-            else {
+            let Some(unit) = playlist.smart_shuffle_unit(tags_by_media_id) else {
                 return;
             };
             unit
         } else {
-            super::SchedulingCooldownUnit::single(
+            super::SchedulingSmartShuffleUnit::single(
                 item.media_item_id,
                 self.reference_data
-                    .cooldown_tags(item.media_item_id)
+                    .smart_shuffle_tags_for_media(key, item.media_item_id)
                     .clone(),
                 item.finish - item.start,
             )
         };
-        self.cooldown_state.record_unit(
-            &self.reference_data.cooldown_policy,
+        self.smart_shuffle_state.record_unit(
+            &policy,
+            self.playout_id,
             &scope_key,
             item.start,
             &unit,
-            item.filler_kind != FillerKind::None,
+            super::SchedulingSmartShuffleRecordContext::new(
+                super::is_randomized_playback_order(playback_order),
+                item.filler_kind != FillerKind::None,
+            ),
         );
     }
 
@@ -1359,7 +1589,7 @@ impl ScriptState {
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
-        self.record_cooldown_item(key, &item);
+        self.record_smart_shuffle_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1400,7 +1630,7 @@ impl ScriptState {
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
-        self.record_cooldown_item(key, &item);
+        self.record_smart_shuffle_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1429,7 +1659,7 @@ impl ScriptState {
             Vec::new(),
             None,
         );
-        self.record_cooldown_item(key, &item);
+        self.record_smart_shuffle_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
@@ -1598,6 +1828,51 @@ mod tests {
         })
     }
 
+    #[test]
+    fn smart_shuffle_declarations_support_multiline_lua_long_brackets() {
+        let script = r#"
+-- set_smart_shuffle_policy("ignored", [[not json]])
+local ignored = 'set_smart_shuffle_policy("also-ignored", [[not json]])'
+set_smart_shuffle_policy(
+    "main",
+    [=[
+        {
+            "version": 1,
+            "enabled": true,
+            "preset": "custom",
+            "scope": "playout",
+            "mode": "soft",
+            "after_items": 2,
+            "include_filler": false,
+            "rules": [{"id": "artist", "kind": "artist"}]
+        }
+    ]=]
+)
+set_cooldown_policy(
+    [[{"version":1,"enabled":false}]]
+)
+"#;
+
+        let (policies, legacy) =
+            ScriptedSchedulingEngine::smart_shuffle_policies_from_script(script)
+                .expect("multiline declarations parse");
+
+        assert_eq!(policies.len(), 1);
+        assert_eq!(policies["main"].after_items, Some(2));
+        assert!(policies["main"].is_active());
+        assert!(!legacy.expect("legacy fallback parsed").enabled);
+    }
+
+    #[test]
+    fn malformed_smart_shuffle_declaration_is_rejected() {
+        let error = ScriptedSchedulingEngine::smart_shuffle_policies_from_script(
+            r#"set_smart_shuffle_policy("main", [[{"enabled":true})"#,
+        )
+        .expect_err("unterminated long bracket must fail");
+
+        assert!(error.to_string().contains("terminated Lua long bracket"));
+    }
+
     // ── regression: original test ─────────────────────────────────────────────
 
     #[test]
@@ -1643,9 +1918,9 @@ schedule_duration("main", "00:05:00")
     }
 
     #[test]
-    fn scripted_cooldown_state_survives_continue_anchor() {
+    fn scripted_smart_shuffle_state_survives_continue_anchor() {
         let script = r#"
-set_cooldown_policy([[{"version":1,"enabled":true,"preset":"custom","scope":"playout","mode":"soft","after_items":2,"include_filler":false,"rules":[{"id":"artist","kind":"artist"}]}]])
+set_smart_shuffle_policy("main", [[{"version":1,"enabled":true,"preset":"custom","scope":"playout","mode":"soft","after_items":2,"include_filler":false,"rules":[{"id":"artist","kind":"artist"}]}]])
 add_collection("main", "Main", "shuffle")
 add_count("main", 1)
 "#;
@@ -1658,15 +1933,15 @@ add_count("main", 1)
                 SchedulingMediaItem::new(3, Duration::minutes(10)),
             ],
         );
-        reference_data.cooldown_tags_by_media_id.insert(
+        reference_data.smart_shuffle_tags_by_media_id.insert(
             1,
             std::collections::BTreeSet::from(["artist:same".to_owned()]),
         );
-        reference_data.cooldown_tags_by_media_id.insert(
+        reference_data.smart_shuffle_tags_by_media_id.insert(
             2,
             std::collections::BTreeSet::from(["artist:other".to_owned()]),
         );
-        reference_data.cooldown_tags_by_media_id.insert(
+        reference_data.smart_shuffle_tags_by_media_id.insert(
             3,
             std::collections::BTreeSet::from(["artist:same".to_owned()]),
         );

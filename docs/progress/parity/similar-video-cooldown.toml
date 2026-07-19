@@ -1,15 +1,16 @@
-feature    = 'Similar video cooldown scheduling'
+feature    = 'Smart Shuffle scheduling'
 etv_source = 'ErsatzRS ADR 0019 scheduling extension; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-core::scheduling`, `crates/ersatzrs-infra::repositories::scheduling`, admin schedule editors'
 status     = 'Ported'
 adr        = ['0019']
 summary    = '''
-ADR 0019 is implemented as an opt-in, shared cooldown-aware shuffle policy for
-Classic, Block, Sequential YAML, and Scripted schedules. Versioned policy and
-anchor state, pre-hydrated similarity tags, deterministic soft relaxation,
-indivisible playlist batches, additive DB attachments, native YAML/Lua
-definitions, localized admin controls, and deterministic effective-tag preview
-preserve imported ErsatzTV behavior when the policy is absent or Off.
+ADR 0019 is implemented as opt-in Smart Shuffle policies owned by each native
+selection unit: Classic ProgramScheduleItem, reusable BlockItem, Sequential
+YAML content entry, and Scripted content key. Versioned policy and anchor state,
+isolated pre-hydrated tags, deterministic soft relaxation, legacy defaults and
+attachments, localized item editors, and paginated draft-aware overviews
+preserve imported ErsatzTV behavior when the policy is absent or Off. Similar
+Video Cooldown was the feature's former name.
 '''
 
 [[debt]]
@@ -17,5 +18,5 @@ id          = 'similar-video-cooldown-scheduling'
 adr         = '0019'
 description = 'Scheduling has no shared opt-in cooldown-aware shuffle policy that can keep groupable media, such as the same artist, TV show, movie franchise, parent variant, collection, tag, or operator-defined filter, apart for a configured number of videos or playout duration.'
 discovered  = '2026-07-01'
-evidence    = 'Implemented 2026-07-17: shared deterministic selector and versioned state in ersatzrs-core; Classic, Block, YAML, and Scripted anchor persistence; SQL facet/filter hydration and effective-tag preview; additive ProgramSchedule and playout ConfigElement attachments; YAML schema and Lua declaration; localized schedule and Block/Scripted editors; focused core, infra anchor, web, parity, progress, and clean-console desktop/mobile browser verification.'
+evidence    = 'Implemented 2026-07-17 and redesigned 2026-07-19: shared deterministic selector and versioned state; per-selection-unit Classic, Block, YAML, and Scripted policies; isolated SQL facet/filter hydration; legacy attachment/default migration; localized Classic and Block item editors; draft-aware summary and paginated candidate overview contracts.'
 resolved    = true

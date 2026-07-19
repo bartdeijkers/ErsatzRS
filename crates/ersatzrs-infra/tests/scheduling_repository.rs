@@ -5,11 +5,13 @@ use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
 use ersatzrs_core::repositories::{FillerRepository, ProgramScheduleRepository};
 use ersatzrs_core::scheduling::{
-    classic_schedule_item_key, program_schedule_cooldown_config_key, BlockSchedulingEngine,
-    ClassicSchedulingEngine, PlayoutSchedulingEngine, SchedulingCollectionKey,
-    SchedulingContentGuid, SchedulingContentSource, SchedulingCooldownPolicy,
-    SchedulingCooldownPreset, SchedulingCooldownRule, SchedulingCooldownRuleKind,
-    SchedulingRequest,
+    block_item_smart_shuffle_config_key, classic_schedule_item_key,
+    classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
+    program_schedule_item_smart_shuffle_config_key, BlockSchedulingEngine, ClassicSchedulingEngine,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
+    SchedulingContentSource, SchedulingRequest, SchedulingSmartShufflePolicy,
+    SchedulingSmartShufflePreset, SchedulingSmartShuffleRule, SchedulingSmartShuffleRuleKind,
+    ScriptedSchedulingEngine,
 };
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode,
@@ -20,34 +22,34 @@ use ersatzrs_domain::{
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
 
-fn persisted_cooldown_policy() -> SchedulingCooldownPolicy {
-    SchedulingCooldownPolicy {
+fn persisted_smart_shuffle_policy() -> SchedulingSmartShufflePolicy {
+    SchedulingSmartShufflePolicy {
         enabled: true,
-        preset: SchedulingCooldownPreset::Custom,
+        preset: SchedulingSmartShufflePreset::Custom,
         after_items: Some(2),
         rules: vec![
-            SchedulingCooldownRule {
+            SchedulingSmartShuffleRule {
                 id: "show".to_owned(),
-                kind: SchedulingCooldownRuleKind::Show,
+                kind: SchedulingSmartShuffleRuleKind::Show,
                 search: None,
             },
-            SchedulingCooldownRule {
+            SchedulingSmartShuffleRule {
                 id: "season".to_owned(),
-                kind: SchedulingCooldownRuleKind::Season,
+                kind: SchedulingSmartShuffleRuleKind::Season,
                 search: None,
             },
-            SchedulingCooldownRule {
+            SchedulingSmartShuffleRule {
                 id: "tag".to_owned(),
-                kind: SchedulingCooldownRuleKind::Tag,
+                kind: SchedulingSmartShuffleRuleKind::Tag,
                 search: None,
             },
-            SchedulingCooldownRule {
+            SchedulingSmartShuffleRule {
                 id: "pilot".to_owned(),
-                kind: SchedulingCooldownRuleKind::Filter,
+                kind: SchedulingSmartShuffleRuleKind::Filter,
                 search: Some("title contains Pilot".to_owned()),
             },
         ],
-        ..SchedulingCooldownPolicy::default()
+        ..SchedulingSmartShufflePolicy::default()
     }
 }
 
@@ -995,6 +997,58 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
 }
 
 #[tokio::test]
+async fn disabled_block_item_policy_overrides_legacy_playout_policy() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 900).await;
+    seed_block_scheduling_fixture(&pool).await;
+
+    let legacy_policy = persisted_smart_shuffle_policy();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(legacy_playout_cooldown_config_key(900))
+        .bind(serde_json::to_string(&legacy_policy).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let inherited = repos
+        .scheduling
+        .block_reference_data(
+            900,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            1,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        inherited.smart_shuffle_policy_for_unit("711"),
+        &legacy_policy
+    );
+
+    let disabled = SchedulingSmartShufflePolicy::default();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(block_item_smart_shuffle_config_key(711))
+        .bind(serde_json::to_string(&disabled).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let overridden = repos
+        .scheduling
+        .block_reference_data(
+            900,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            1,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+    assert_eq!(overridden.smart_shuffle_policy_for_unit("711"), &disabled);
+}
+
+#[tokio::test]
 async fn scheduling_repository_loads_classic_reference_data_from_sql() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -1081,7 +1135,7 @@ async fn scheduling_repository_loads_classic_reference_data_from_sql() {
 }
 
 #[tokio::test]
-async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity_tags() {
+async fn scheduling_repository_hydrates_persisted_smart_shuffle_policy_and_similarity_tags() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     seed_scheduling_fixture(&pool).await;
@@ -1125,9 +1179,9 @@ async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity
     .await
     .unwrap();
 
-    let policy = persisted_cooldown_policy();
+    let policy = persisted_smart_shuffle_policy();
     sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-        .bind(program_schedule_cooldown_config_key(303))
+        .bind(program_schedule_item_smart_shuffle_config_key(403))
         .bind(serde_json::to_string(&policy).unwrap())
         .execute(&pool)
         .await
@@ -1143,19 +1197,39 @@ async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity
         .await
         .unwrap();
 
-    assert_eq!(reference_data.cooldown_policy, policy);
-    let pilot = reference_data.cooldown_tags(12);
+    let unit_key = classic_schedule_item_policy_key(&ProgramScheduleItem {
+        id: 403,
+        program_schedule_id: 303,
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        playout_mode: PlayoutMode::One,
+        playback_order: PlaybackOrder::Shuffle,
+        sort_order: 1,
+        ..ProgramScheduleItem::default()
+    });
+    assert_eq!(
+        reference_data.smart_shuffle_policy_for_unit(&unit_key),
+        &policy
+    );
+    let pilot = reference_data.smart_shuffle_tags_for_media(&unit_key, 12);
     assert!(pilot.contains("show:the show"));
     assert!(pilot.contains("season:the show:1"));
     assert!(pilot.contains("tag:network"));
-    assert!(pilot.contains("filter:pilot"));
-    let finale = reference_data.cooldown_tags(13);
+    assert!(pilot.contains(&format!("filter:{unit_key}:pilot")));
+    let finale = reference_data.smart_shuffle_tags_for_media(&unit_key, 13);
     assert!(finale.contains("show:the show"));
-    assert!(!finale.contains("filter:pilot"));
+    assert!(!finale.contains(&format!("filter:{unit_key}:pilot")));
 
     let preview = repos
         .scheduling
-        .cooldown_tag_preview(policy, 5)
+        .smart_shuffle_candidates(
+            &SchedulingCollectionKey {
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                ..SchedulingCollectionKey::default()
+            },
+            policy,
+        )
         .await
         .unwrap();
     let pilot_preview = preview
@@ -1163,6 +1237,170 @@ async fn scheduling_repository_hydrates_persisted_cooldown_policy_and_similarity
         .find(|row| row.media_item_id == 12)
         .expect("pilot should be included in the deterministic preview");
     assert!(pilot_preview.tags.contains(&"filter:pilot".to_owned()));
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn classic_duplicate_sources_share_media_but_isolate_item_policies_and_tags() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    common::seed_profile_and_channel(&repos, 904).await;
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 304,
+            name: "Duplicate Sources".to_owned(),
+            item_ids: vec![404, 405],
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    let item = |id, sort_order| ProgramScheduleItem {
+        id,
+        program_schedule_id: 304,
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        playout_mode: PlayoutMode::One,
+        playback_order: PlaybackOrder::Shuffle,
+        sort_order,
+        ..ProgramScheduleItem::default()
+    };
+    repos
+        .program_schedule
+        .upsert_item(&item(404, 0))
+        .await
+        .unwrap();
+    repos
+        .program_schedule
+        .upsert_item(&item(405, 1))
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (904, 904, 304, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+    let filter_policy = |search: &str| SchedulingSmartShufflePolicy {
+        enabled: true,
+        preset: SchedulingSmartShufflePreset::Custom,
+        after_items: Some(2),
+        rules: vec![SchedulingSmartShuffleRule {
+            id: "segment".to_owned(),
+            kind: SchedulingSmartShuffleRuleKind::Filter,
+            search: Some(search.to_owned()),
+        }],
+        ..SchedulingSmartShufflePolicy::default()
+    };
+    let pilot_policy = filter_policy("title contains Pilot");
+    let finale_policy = filter_policy("title contains Finale");
+    for (id, policy) in [(404_i64, &pilot_policy), (405_i64, &finale_policy)] {
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(program_schedule_item_smart_shuffle_config_key(id))
+            .bind(serde_json::to_string(policy).unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(
+            904,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+    let first = &reference_data.classic_schedule_items[0];
+    let second = &reference_data.classic_schedule_items[1];
+    let content_key = classic_schedule_item_key(first);
+    let first_policy_key = classic_schedule_item_policy_key(first);
+    let second_policy_key = classic_schedule_item_policy_key(second);
+
+    assert_eq!(content_key, classic_schedule_item_key(second));
+    assert_eq!(reference_data.media_by_key.len(), 1);
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get(&content_key)
+            .unwrap()
+            .iter()
+            .map(|media| media.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
+    );
+    assert_eq!(
+        reference_data.smart_shuffle_policy_for_unit(&first_policy_key),
+        &pilot_policy
+    );
+    assert_eq!(
+        reference_data.smart_shuffle_policy_for_unit(&second_policy_key),
+        &finale_policy
+    );
+    let first_filter_tag = format!("filter:{first_policy_key}:segment");
+    let second_filter_tag = format!("filter:{second_policy_key}:segment");
+    assert_ne!(first_filter_tag, second_filter_tag);
+    assert!(reference_data
+        .smart_shuffle_tags_for_media(&first_policy_key, 12)
+        .contains(&first_filter_tag));
+    assert!(!reference_data
+        .smart_shuffle_tags_for_media(&first_policy_key, 12)
+        .contains(&second_filter_tag));
+    assert!(reference_data
+        .smart_shuffle_tags_for_media(&first_policy_key, 13)
+        .is_empty());
+    assert!(reference_data
+        .smart_shuffle_tags_for_media(&second_policy_key, 12)
+        .is_empty());
+    assert!(reference_data
+        .smart_shuffle_tags_for_media(&second_policy_key, 13)
+        .contains(&second_filter_tag));
+    assert!(!reference_data
+        .smart_shuffle_tags_for_media(&second_policy_key, 13)
+        .contains(&first_filter_tag));
+}
+
+#[tokio::test]
+async fn scheduling_repository_hydrates_multiline_scripted_smart_shuffle_declaration() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    let script = r#"
+set_smart_shuffle_policy(
+    "main",
+    [[
+        {
+            "version": 1,
+            "enabled": true,
+            "preset": "custom",
+            "scope": "playout",
+            "mode": "soft",
+            "after_items": 2,
+            "include_filler": false,
+            "rules": [{"id": "show", "kind": "show"}]
+        }
+    ]]
+)
+"#;
+    let (policies, legacy) =
+        ScriptedSchedulingEngine::smart_shuffle_policies_from_script(script).unwrap();
+
+    let reference_data = repos
+        .scheduling
+        .scripted_reference_data(903, policies, legacy)
+        .await
+        .unwrap();
+
+    assert!(reference_data
+        .smart_shuffle_policy_for_unit("main")
+        .is_active());
+    assert!(reference_data
+        .smart_shuffle_tags_for_media("main", 12)
+        .contains("show:the show"));
 }
 
 #[tokio::test]

@@ -8,9 +8,10 @@ use serde::Deserialize;
 use crate::{
     admin::server_fns::schedules::{
         copy_schedule_with_pool, delete_schedule_with_pool, replace_schedule_items_with_state,
-        save_schedule_with_state, ScheduleForm, ScheduleItemForm, COLLECTION_TYPE_COLLECTION,
-        FILL_WITH_GROUP_MODE_NONE, GUIDE_MODE_NORMAL, MARATHON_GROUP_BY_NONE, MULTIPLE_MODE_COUNT,
-        PLAYBACK_ORDER_SHUFFLE, PLAYOUT_MODE_ONE, START_TYPE_DYNAMIC, TAIL_MODE_NONE,
+        save_schedule_with_state, ScheduleForm, ScheduleItemForm, SmartShuffleForm,
+        COLLECTION_TYPE_COLLECTION, FILL_WITH_GROUP_MODE_NONE, GUIDE_MODE_NORMAL,
+        MARATHON_GROUP_BY_NONE, MULTIPLE_MODE_COUNT, PLAYBACK_ORDER_SHUFFLE, PLAYOUT_MODE_ONE,
+        START_TYPE_DYNAMIC, TAIL_MODE_NONE,
     },
     host::state::AppState,
 };
@@ -29,20 +30,6 @@ pub struct ScheduleSaveForm {
     #[serde(default)]
     random_start_point: bool,
     fixed_start_time_behavior: i32,
-    #[serde(default)]
-    cooldown_preset: String,
-    #[serde(default)]
-    cooldown_scope: String,
-    #[serde(default)]
-    cooldown_after_items: u32,
-    #[serde(default)]
-    cooldown_after_duration_minutes: u32,
-    #[serde(default)]
-    cooldown_include_filler: bool,
-    #[serde(default)]
-    cooldown_rules: Vec<String>,
-    #[serde(default)]
-    cooldown_filter_rules: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +82,22 @@ pub struct ScheduleItemsSaveForm {
     item_collection_name: Vec<String>,
     #[serde(default)]
     item_playback_order: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_preset: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_scope: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_after_items: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_after_duration_minutes: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_include_filler: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_rules: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_filter_rules: Vec<String>,
+    #[serde(default)]
+    item_smart_shuffle_inherited_legacy: Vec<String>,
     #[serde(default)]
     item_marathon_group_by: Vec<String>,
     #[serde(default)]
@@ -168,13 +171,7 @@ pub async fn save_schedule_form(
         shuffle_schedule_items: input.shuffle_schedule_items,
         random_start_point: input.random_start_point,
         fixed_start_time_behavior: input.fixed_start_time_behavior,
-        cooldown_preset: input.cooldown_preset,
-        cooldown_scope: input.cooldown_scope,
-        cooldown_after_items: input.cooldown_after_items,
-        cooldown_after_duration_minutes: input.cooldown_after_duration_minutes,
-        cooldown_include_filler: input.cooldown_include_filler,
-        cooldown_rules: input.cooldown_rules,
-        cooldown_filter_rules: input.cooldown_filter_rules,
+        ..ScheduleForm::default()
     };
 
     match save_schedule_with_state(&state, form).await {
@@ -293,6 +290,24 @@ impl ScheduleItemsSaveForm {
                 "item_search_query" => form.item_search_query.push(value),
                 "item_collection_name" => form.item_collection_name.push(value),
                 "item_playback_order" => form.item_playback_order.push(value),
+                "item_smart_shuffle_preset" => form.item_smart_shuffle_preset.push(value),
+                "item_smart_shuffle_scope" => form.item_smart_shuffle_scope.push(value),
+                "item_smart_shuffle_after_items" => {
+                    form.item_smart_shuffle_after_items.push(value);
+                }
+                "item_smart_shuffle_after_duration_minutes" => {
+                    form.item_smart_shuffle_after_duration_minutes.push(value);
+                }
+                "item_smart_shuffle_include_filler" => {
+                    form.item_smart_shuffle_include_filler.push(value);
+                }
+                "item_smart_shuffle_rules" => form.item_smart_shuffle_rules.push(value),
+                "item_smart_shuffle_filter_rules" => {
+                    form.item_smart_shuffle_filter_rules.push(value);
+                }
+                "item_smart_shuffle_inherited_legacy" => {
+                    form.item_smart_shuffle_inherited_legacy.push(value);
+                }
                 "item_marathon_group_by" => form.item_marathon_group_by.push(value),
                 "item_marathon_shuffle_groups_index" => {
                     form.item_marathon_shuffle_groups_index.push(value);
@@ -367,6 +382,30 @@ impl ScheduleItemsSaveForm {
                     .unwrap_or_default(),
                 playback_order: parse_i32(self.item_playback_order.get(pos))
                     .unwrap_or(PLAYBACK_ORDER_SHUFFLE),
+                smart_shuffle: SmartShuffleForm {
+                    preset: self
+                        .item_smart_shuffle_preset
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_else(|| "off".to_owned()),
+                    scope: self
+                        .item_smart_shuffle_scope
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_else(|| "playout".to_owned()),
+                    after_items: parse_u32(self.item_smart_shuffle_after_items.get(pos)),
+                    after_duration_minutes: parse_u32(
+                        self.item_smart_shuffle_after_duration_minutes.get(pos),
+                    ),
+                    include_filler: parse_bool(self.item_smart_shuffle_include_filler.get(pos)),
+                    rules: parse_string_list(self.item_smart_shuffle_rules.get(pos)),
+                    filter_rules: self
+                        .item_smart_shuffle_filter_rules
+                        .get(pos)
+                        .cloned()
+                        .unwrap_or_default(),
+                    inherited_legacy: parse_bool(self.item_smart_shuffle_inherited_legacy.get(pos)),
+                },
                 marathon_group_by: parse_i32(self.item_marathon_group_by.get(pos))
                     .unwrap_or(MARATHON_GROUP_BY_NONE),
                 marathon_shuffle_groups: marathon_shuffle_groups.contains(&form_index),
@@ -467,6 +506,27 @@ fn parse_i64(value: Option<&String>) -> Option<i64> {
     value
         .and_then(|value| value.trim().parse().ok())
         .filter(|value| *value != 0)
+}
+
+fn parse_u32(value: Option<&String>) -> u32 {
+    value
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or_default()
+}
+
+fn parse_bool(value: Option<&String>) -> bool {
+    value.is_some_and(|value| matches!(value.trim(), "true" | "1" | "on"))
+}
+
+fn parse_string_list(value: Option<&String>) -> Vec<String> {
+    value
+        .map(String::as_str)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn parse_optional_string(value: Option<&String>) -> Option<String> {

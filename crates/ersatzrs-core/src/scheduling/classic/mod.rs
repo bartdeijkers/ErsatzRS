@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
     playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
-    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingCooldownState,
-    SchedulingCooldownUnit, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
-    SchedulingRequest, SchedulingResult,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingError, SchedulingMediaItem,
+    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    SchedulingSmartShuffleRecordContext, SchedulingSmartShuffleState, SchedulingSmartShuffleUnit,
 };
 
 /// ErsatzTV-compatible scheduler for Classic program schedules.
@@ -39,6 +39,12 @@ pub fn classic_schedule_item_key(item: &ProgramScheduleItem) -> String {
     item_key(item)
 }
 
+/// Return the stable identity key used for an item's Smart Shuffle attachment.
+#[must_use]
+pub fn classic_schedule_item_policy_key(item: &ProgramScheduleItem) -> String {
+    item.id.to_string()
+}
+
 #[derive(Debug, Clone)]
 struct ClassicState {
     current_time: DateTime<Utc>,
@@ -54,8 +60,8 @@ struct ClassicState {
 struct ClassicAnchorContext {
     #[serde(default = "classic_anchor_context_version")]
     version: u32,
-    #[serde(default)]
-    cooldown: SchedulingCooldownState,
+    #[serde(default, alias = "cooldown")]
+    smart_shuffle: SchedulingSmartShuffleState,
 }
 
 fn classic_anchor_context_version() -> u32 {
@@ -117,7 +123,7 @@ struct ClassicContext {
     collection_anchors: Vec<PlayoutProgramScheduleAnchor>,
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
-    cooldown_state: SchedulingCooldownState,
+    smart_shuffle_state: SchedulingSmartShuffleState,
     result: SchedulingResult,
     next_anchor_id: EntityId,
     next_fill_group_id: EntityId,
@@ -134,17 +140,17 @@ impl ClassicContext {
         let mut playlists = BTreeMap::new();
         let mut media_states = BTreeMap::new();
         let collection_anchors = retained_collection_anchors(&request);
-        let cooldown_state = if request.mode == PlayoutBuildMode::Continue {
+        let smart_shuffle_state = if request.mode == PlayoutBuildMode::Continue {
             request
                 .playout
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
                 .and_then(|context| serde_json::from_str::<ClassicAnchorContext>(context).ok())
-                .map(|context| context.cooldown)
+                .map(|context| context.smart_shuffle)
                 .unwrap_or_default()
         } else {
-            SchedulingCooldownState::default()
+            SchedulingSmartShuffleState::default()
         };
         for item in &schedule_items {
             let key = item_key(item);
@@ -238,7 +244,7 @@ impl ClassicContext {
             collection_anchors,
             filler_media,
             fill_group_states,
-            cooldown_state,
+            smart_shuffle_state,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
@@ -656,7 +662,7 @@ impl ClassicContext {
                 history_details_for_media_item(&history_media),
                 false,
             ));
-            self.record_cooldown_item(schedule_item, &item);
+            self.record_smart_shuffle_item(schedule_item, &item);
             self.result.added_items.push(item);
         }
         true
@@ -1220,12 +1226,11 @@ impl ClassicContext {
             context: self
                 .request
                 .reference_data
-                .cooldown_policy
-                .is_active()
+                .has_active_smart_shuffle()
                 .then(|| {
                     serde_json::to_string(&ClassicAnchorContext {
                         version: classic_anchor_context_version(),
-                        cooldown: self.cooldown_state.clone(),
+                        smart_shuffle: self.smart_shuffle_state.clone(),
                     })
                     .unwrap_or_default()
                 }),
@@ -1375,71 +1380,102 @@ impl ClassicContext {
         &mut self,
         schedule_item: &ProgramScheduleItem,
     ) -> Option<SchedulingMediaItem> {
-        let key = item_key(schedule_item);
-        let scope_key = self.request.reference_data.cooldown_policy.scope_key(
+        let content_key = item_key(schedule_item);
+        let policy_key = classic_schedule_item_policy_key(schedule_item);
+        let policy = self
+            .request
+            .reference_data
+            .smart_shuffle_policy_for_unit(&policy_key)
+            .clone();
+        let tags_by_media_id = self
+            .request
+            .reference_data
+            .smart_shuffle_tags_for_unit(&policy_key)
+            .clone();
+        let scope_key = policy.scope_key(
             self.request.playout.id,
             Some(schedule_item.id),
-            Some(&key),
+            Some(&content_key),
         );
-        if let Some(playlist) = self.playlists.get_mut(&key) {
-            playlist.select_with_cooldown(
-                &self.request.reference_data.cooldown_policy,
-                &self.cooldown_state,
+        if let Some(playlist) = self.playlists.get_mut(&content_key) {
+            playlist.select_with_smart_shuffle(
+                &policy,
+                &self.smart_shuffle_state,
                 &scope_key,
                 self.state.current_time,
-                &self.request.reference_data.cooldown_tags_by_media_id,
+                &tags_by_media_id,
             );
-        } else if let Some(enumerator) = self.media.get_mut(&key) {
-            enumerator.select_with_cooldown(
-                &self.request.reference_data.cooldown_policy,
-                &self.cooldown_state,
+        } else if let Some(enumerator) = self.media.get_mut(&content_key) {
+            enumerator.select_with_smart_shuffle(
+                &policy,
+                &self.smart_shuffle_state,
                 &scope_key,
                 self.state.current_time,
-                &self.request.reference_data.cooldown_tags_by_media_id,
+                &tags_by_media_id,
             );
         }
         self.playlists
-            .get(&key)
+            .get(&content_key)
             .and_then(PlaylistEnumerator::current)
             .cloned()
             .or_else(|| {
                 self.media
-                    .get(&key)
+                    .get(&content_key)
                     .and_then(MediaEnumerator::current)
                     .cloned()
             })
     }
 
-    fn record_cooldown_item(&mut self, schedule_item: &ProgramScheduleItem, item: &PlayoutItem) {
-        let key = item_key(schedule_item);
-        let scope_key = self.request.reference_data.cooldown_policy.scope_key(
+    fn record_smart_shuffle_item(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        item: &PlayoutItem,
+    ) {
+        let content_key = item_key(schedule_item);
+        let policy_key = classic_schedule_item_policy_key(schedule_item);
+        let policy = self
+            .request
+            .reference_data
+            .smart_shuffle_policy_for_unit(&policy_key)
+            .clone();
+        let tags_by_media_id = self
+            .request
+            .reference_data
+            .smart_shuffle_tags_for_unit(&policy_key);
+        let scope_key = policy.scope_key(
             self.request.playout.id,
             Some(schedule_item.id),
-            Some(&key),
+            Some(&content_key),
         );
-        let unit = if let Some(playlist) = self.playlists.get(&key) {
-            let Some(unit) =
-                playlist.cooldown_unit(&self.request.reference_data.cooldown_tags_by_media_id)
-            else {
+        let playback_order = self.playlists.get(&content_key).map_or(
+            schedule_item.playback_order,
+            PlaylistEnumerator::current_playback_order,
+        );
+        let unit = if let Some(playlist) = self.playlists.get(&content_key) {
+            let Some(unit) = playlist.smart_shuffle_unit(tags_by_media_id) else {
                 return;
             };
             unit
         } else {
-            SchedulingCooldownUnit::single(
+            SchedulingSmartShuffleUnit::single(
                 item.media_item_id,
                 self.request
                     .reference_data
-                    .cooldown_tags(item.media_item_id)
+                    .smart_shuffle_tags_for_media(&policy_key, item.media_item_id)
                     .clone(),
                 item.finish - item.start,
             )
         };
-        self.cooldown_state.record_unit(
-            &self.request.reference_data.cooldown_policy,
+        self.smart_shuffle_state.record_unit(
+            &policy,
+            self.request.playout.id,
             &scope_key,
             item.start,
             &unit,
-            item.filler_kind != FillerKind::None,
+            SchedulingSmartShuffleRecordContext::new(
+                super::is_randomized_playback_order(playback_order),
+                item.filler_kind != FillerKind::None,
+            ),
         );
     }
 
@@ -2110,6 +2146,126 @@ mod tests {
             .added_items
             .iter()
             .all(|item| item.filler_kind == FillerKind::None));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn classic_duplicate_sources_keep_item_policies_and_count_chronological_units() {
+        use super::super::{
+            SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset, SchedulingSmartShuffleRule,
+            SchedulingSmartShuffleRuleKind, SchedulingSmartShuffleScope,
+        };
+
+        let start = Utc.with_ymd_and_hms(2026, 7, 19, 8, 0, 0).unwrap();
+        let mut active_item = schedule_item(1, PlayoutMode::One, 1, None);
+        active_item.playback_order = PlaybackOrder::Shuffle;
+        active_item.sort_order = 0;
+        let mut shared_source_off = schedule_item(2, PlayoutMode::One, 1, None);
+        shared_source_off.playback_order = PlaybackOrder::Shuffle;
+        shared_source_off.sort_order = 1;
+        let mut chronological_one = schedule_item(3, PlayoutMode::One, 2, None);
+        chronological_one.sort_order = 2;
+        let mut chronological_two = schedule_item(4, PlayoutMode::One, 3, None);
+        chronological_two.sort_order = 3;
+        let active_policy = SchedulingSmartShufflePolicy {
+            enabled: true,
+            preset: SchedulingSmartShufflePreset::Custom,
+            after_items: Some(3),
+            rules: vec![SchedulingSmartShuffleRule {
+                id: "artist".to_owned(),
+                kind: SchedulingSmartShuffleRuleKind::Artist,
+                search: None,
+            }],
+            ..SchedulingSmartShufflePolicy::default()
+        };
+        let chronological_policy = SchedulingSmartShufflePolicy {
+            scope: SchedulingSmartShuffleScope::ScheduleItem,
+            ..active_policy.clone()
+        };
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_id: Some(10),
+            classic_schedule_items: vec![
+                active_item.clone(),
+                shared_source_off.clone(),
+                chronological_one.clone(),
+                chronological_two.clone(),
+            ],
+            ..SchedulingReferenceData::default()
+        };
+        let shared_content_key = item_key(&active_item);
+        assert_eq!(shared_content_key, item_key(&shared_source_off));
+        reference_data.media_by_key.insert(
+            shared_content_key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(1)),
+                SchedulingMediaItem::new(102, Duration::minutes(1)),
+            ],
+        );
+        reference_data.media_by_key.insert(
+            item_key(&chronological_one),
+            vec![SchedulingMediaItem::new(201, Duration::minutes(1))],
+        );
+        reference_data.media_by_key.insert(
+            item_key(&chronological_two),
+            vec![SchedulingMediaItem::new(301, Duration::minutes(1))],
+        );
+        reference_data.smart_shuffle_policies_by_unit.insert(
+            classic_schedule_item_policy_key(&active_item),
+            active_policy.clone(),
+        );
+        reference_data.smart_shuffle_policies_by_unit.insert(
+            classic_schedule_item_policy_key(&shared_source_off),
+            SchedulingSmartShufflePolicy::default(),
+        );
+        for item in [&chronological_one, &chronological_two] {
+            reference_data.smart_shuffle_policies_by_unit.insert(
+                classic_schedule_item_policy_key(item),
+                chronological_policy.clone(),
+            );
+            reference_data.smart_shuffle_tags_by_unit.insert(
+                classic_schedule_item_policy_key(item),
+                BTreeMap::from([(
+                    if item.id == 3 { 201 } else { 301 },
+                    BTreeSet::from([format!("artist:chronological-{}", item.id)]),
+                )]),
+            );
+        }
+        reference_data.smart_shuffle_tags_by_unit.insert(
+            classic_schedule_item_policy_key(&active_item),
+            BTreeMap::from([
+                (101, BTreeSet::from(["artist:one".to_owned()])),
+                (102, BTreeSet::from(["artist:two".to_owned()])),
+            ]),
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(5),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("mixed-order Classic schedule should build");
+        let media_ids = result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(media_ids.len(), 5);
+        assert_eq!(media_ids[0], media_ids[4]);
+        let anchor_context = result
+            .anchor
+            .and_then(|anchor| anchor.context)
+            .expect("active Smart Shuffle persists anchor state");
+        assert!(!anchor_context.contains("schedule_item:3"));
+        assert!(!anchor_context.contains("schedule_item:4"));
     }
 
     #[test]

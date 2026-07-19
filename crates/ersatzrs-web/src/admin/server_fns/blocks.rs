@@ -13,6 +13,23 @@ use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use super::schedules::{SmartShuffleForm, SmartShuffleOverview};
+
+#[cfg(feature = "ssr")]
+use super::schedules::ScheduleItemForm;
+
+#[cfg(feature = "ssr")]
+use super::schedules::{
+    persist_smart_shuffle_attachment_tx, smart_shuffle_form_from_policy,
+    smart_shuffle_overview_with_pool, smart_shuffle_policy_from_form, validate_smart_shuffle_form,
+};
+
+#[cfg(feature = "ssr")]
+use ersatzrs_core::scheduling::block_item_smart_shuffle_config_key;
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+use ersatzrs_core::scheduling::{legacy_playout_cooldown_config_key, SchedulingSmartShufflePolicy};
+
 // ---------------------------------------------------------------------------
 // Shared value types
 // ---------------------------------------------------------------------------
@@ -85,6 +102,8 @@ pub struct BlockItemForm {
     pub search_title: Option<String>,
     pub search_query: Option<String>,
     pub playback_order: i32,
+    #[serde(default)]
+    pub smart_shuffle: SmartShuffleForm,
     pub include_in_program_guide: bool,
     pub disable_watermarks: bool,
     /// Resolved display name for the referenced collection / show / season.
@@ -130,6 +149,38 @@ pub struct PlayoutPreviewRow {
     pub finish: String,
     pub title: String,
     pub duration: String,
+}
+
+#[server]
+pub async fn preview_block_smart_shuffle_overview(
+    items: Vec<BlockItemForm>,
+    selected_index: usize,
+    query: String,
+    tag: String,
+    page: u32,
+) -> Result<SmartShuffleOverview, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let items = items
+        .into_iter()
+        .map(|item| ScheduleItemForm {
+            id: item.id,
+            index: item.index,
+            collection_type: item.collection_type,
+            collection_id: item.collection_id,
+            media_item_id: item.media_item_id,
+            multi_collection_id: item.multi_collection_id,
+            smart_collection_id: item.smart_collection_id,
+            search_title: item.search_title,
+            search_query: item.search_query,
+            collection_name: item.collection_name,
+            playback_order: item.playback_order,
+            smart_shuffle: item.smart_shuffle,
+            ..ScheduleItemForm::default()
+        })
+        .collect();
+    smart_shuffle_overview_with_pool(&state.pool, items, selected_index, &query, &tag, page).await
 }
 
 // ---------------------------------------------------------------------------
@@ -265,17 +316,29 @@ pub async fn copy_block(
     new_name: String,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let new_name = validate_block_name(&state.pool, new_group_id, None, &new_name).await?;
+    copy_block_with_pool(&state.pool, block_id, new_group_id, &new_name).await
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+async fn copy_block_with_pool(
+    pool: &DbPool,
+    block_id: i64,
+    new_group_id: i64,
+    new_name: &str,
+) -> Result<i64, ServerFnError> {
+    use sqlx::Row;
+
+    let new_name = validate_block_name(pool, new_group_id, None, new_name).await?;
     let block = sqlx::query(r#"SELECT "Minutes", "StopScheduling" FROM "Block" WHERE "Id" = ?"#)
         .bind(block_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(pool)
         .await?
         .ok_or_else(|| ServerFnError::new("Block does not exist."))?;
 
-    let mut tx = state.pool.begin().await?;
+    let mut tx = pool.begin().await?;
     let result = sqlx::query(
         r#"INSERT INTO "Block" ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)"#,
@@ -371,6 +434,21 @@ pub async fn copy_block(
             new_item_id,
         )
         .await?;
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(block_item_smart_shuffle_config_key(old_item_id))
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(json) = value {
+            let policy = serde_json::from_str(&json).map_err(ServerFnError::new)?;
+            persist_smart_shuffle_attachment_tx(
+                &mut tx,
+                &block_item_smart_shuffle_config_key(new_item_id),
+                &policy,
+            )
+            .await?;
+        }
     }
 
     tx.commit().await?;
@@ -381,6 +459,17 @@ pub async fn copy_block(
 pub async fn delete_block(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
+    let item_ids: Vec<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ?"#)
+            .bind(id)
+            .fetch_all(&state.pool)
+            .await?;
+    for item_id in item_ids {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(block_item_smart_shuffle_config_key(item_id))
+            .execute(&state.pool)
+            .await?;
+    }
     sqlx::query(r#"DELETE FROM "Block" WHERE "Id" = ?"#)
         .bind(id)
         .execute(&state.pool)
@@ -531,6 +620,7 @@ async fn validate_block_form(
     validate_block_name(pool, form.group_id, Some(form.id), &form.name).await?;
     for item in &form.items {
         validate_block_item(item)?;
+        validate_smart_shuffle_form(&item.smart_shuffle)?;
     }
     Ok(())
 }
@@ -569,9 +659,18 @@ pub async fn get_block(id: i64) -> Result<Option<BlockForm>, ServerFnError> {
 #[server]
 pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
+    get_block_items_with_pool(&state.pool, block_id).await
+}
+
+#[cfg(feature = "ssr")]
+async fn get_block_items_with_pool(
+    pool: &DbPool,
+    block_id: i64,
+) -> Result<Vec<BlockItemForm>, ServerFnError> {
+    use sqlx::Row;
+
     let rows = sqlx::query(
         r#"SELECT
                bi."Id",
@@ -613,10 +712,10 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
            ORDER BY bi."Index""#,
     )
     .bind(block_id)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
 
-    Ok(rows
+    let mut items = rows
         .iter()
         .map(|r| BlockItemForm {
             id: r.try_get("Id").unwrap_or(0),
@@ -629,6 +728,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
             search_title: r.try_get("SearchTitle").unwrap_or(None),
             search_query: r.try_get("SearchQuery").unwrap_or(None),
             playback_order: r.try_get("PlaybackOrder").unwrap_or(1),
+            smart_shuffle: SmartShuffleForm::default(),
             include_in_program_guide: r
                 .try_get::<bool, _>("IncludeInProgramGuide")
                 .unwrap_or(false),
@@ -646,7 +746,23 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
             watermark_ids: parse_id_list(r.try_get("WatermarkIds").unwrap_or(None)),
             graphics_element_ids: parse_id_list(r.try_get("GraphicsElementIds").unwrap_or(None)),
         })
-        .collect())
+        .collect::<Vec<_>>();
+    for item in &mut items {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(block_item_smart_shuffle_config_key(item.id))
+        .fetch_optional(pool)
+        .await?;
+        if let Some(json) = value {
+            let policy = serde_json::from_str(&json).map_err(ServerFnError::new)?;
+            item.smart_shuffle = smart_shuffle_form_from_policy(&policy);
+            item.smart_shuffle.inherited_legacy = false;
+        } else {
+            item.smart_shuffle.inherited_legacy = true;
+        }
+    }
+    Ok(items)
 }
 
 /// Replace the block metadata and all its items atomically.
@@ -665,8 +781,19 @@ pub async fn save_block_with_pool(
 ) -> Result<(), ServerFnError> {
     validate_block_form(pool, &form).await?;
     let name = form.name.trim();
+    let old_item_ids: Vec<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ?"#)
+            .bind(form.id)
+            .fetch_all(pool)
+            .await?;
 
     let mut tx = pool.begin().await?;
+    for old_item_id in old_item_ids {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(block_item_smart_shuffle_config_key(old_item_id))
+            .execute(&mut *tx)
+            .await?;
+    }
 
     sqlx::query(
         r#"UPDATE "Block"
@@ -708,6 +835,14 @@ pub async fn save_block_with_pool(
         .execute(&mut *tx)
         .await?;
         let new_id = ersatzrs_infra::db::last_insert_id(result);
+        if !(item.smart_shuffle.inherited_legacy && item.smart_shuffle.preset == "off") {
+            persist_smart_shuffle_attachment_tx(
+                &mut tx,
+                &block_item_smart_shuffle_config_key(new_id),
+                &smart_shuffle_policy_from_form(&item.smart_shuffle),
+            )
+            .await?;
+        }
 
         for wm_id in &item.watermark_ids {
             sqlx::query(
@@ -1297,6 +1432,20 @@ const _: fn(&str) -> i64 = parse_hms;
 mod tests {
     use super::*;
 
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    async fn migrated_test_db() -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect test database");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
     #[test]
     fn block_duration_validation_matches_ersatztv_bounds() {
         assert!(validate_block_duration(5).is_ok());
@@ -1355,5 +1504,258 @@ mod tests {
             "Random Rotation"
         );
         assert_eq!(format_duration_label(30), "30m");
+    }
+
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[tokio::test]
+    async fn saving_block_item_off_persists_disabled_legacy_override() {
+        let pool = migrated_test_db().await;
+        sqlx::query(r#"INSERT INTO "BlockGroup" ("Id", "Name") VALUES (1, 'Group')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Block" (
+                "Id", "BlockGroupId", "DateUpdated", "Minutes", "Name", "StopScheduling"
+            ) VALUES (1, 1, CURRENT_TIMESTAMP, 15, 'Block', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "BlockItem" (
+                "Id", "Index", "BlockId", "CollectionType", "SearchQuery", "PlaybackOrder"
+            ) VALUES (10, 0, 1, 9, 'genre:comedy', 2)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let legacy_policy = SchedulingSmartShufflePolicy::for_preset(
+            ersatzrs_core::scheduling::SchedulingSmartShufflePreset::Balanced,
+        );
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(legacy_playout_cooldown_config_key(100))
+            .bind(serde_json::to_string(&legacy_policy).unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        save_block_with_pool(
+            &pool,
+            BlockWithItemsForm {
+                id: 1,
+                group_id: 1,
+                name: "Block".to_owned(),
+                minutes: 15,
+                stop_scheduling: 0,
+                items: vec![BlockItemForm {
+                    index: 0,
+                    collection_type: collection_type::SEARCH_QUERY,
+                    search_query: Some("genre:comedy".to_owned()),
+                    playback_order: playback_order::RANDOM,
+                    smart_shuffle: SmartShuffleForm::default(),
+                    ..BlockItemForm::default()
+                }],
+            },
+        )
+        .await
+        .expect("save block with explicit Off policy");
+
+        let new_item_id: i64 =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_ne!(new_item_id, 10);
+        let value: String =
+            sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(block_item_smart_shuffle_config_key(new_item_id))
+                .fetch_one(&pool)
+                .await
+                .expect("disabled item attachment persists");
+        let policy: SchedulingSmartShufflePolicy = serde_json::from_str(&value).unwrap();
+        assert_eq!(policy, SchedulingSmartShufflePolicy::default());
+        let legacy_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(legacy_playout_cooldown_config_key(100))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(legacy_count, 1);
+    }
+
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[tokio::test]
+    async fn saving_inherited_block_item_off_preserves_missing_attachment() {
+        let pool = migrated_test_db().await;
+        sqlx::query(r#"INSERT INTO "BlockGroup" ("Id", "Name") VALUES (1, 'Group')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Block" (
+                "Id", "BlockGroupId", "DateUpdated", "Minutes", "Name", "StopScheduling"
+            ) VALUES (1, 1, CURRENT_TIMESTAMP, 15, 'Block', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "BlockItem" (
+                "Id", "Index", "BlockId", "CollectionType", "SearchQuery", "PlaybackOrder"
+            ) VALUES (10, 0, 1, 9, 'genre:comedy', 2)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        save_block_with_pool(
+            &pool,
+            BlockWithItemsForm {
+                id: 1,
+                group_id: 1,
+                name: "Block".to_owned(),
+                minutes: 15,
+                stop_scheduling: 0,
+                items: vec![BlockItemForm {
+                    index: 0,
+                    collection_type: collection_type::SEARCH_QUERY,
+                    search_query: Some("genre:comedy".to_owned()),
+                    playback_order: playback_order::RANDOM,
+                    smart_shuffle: SmartShuffleForm {
+                        inherited_legacy: true,
+                        ..SmartShuffleForm::default()
+                    },
+                    ..BlockItemForm::default()
+                }],
+            },
+        )
+        .await
+        .expect("save inherited Block item");
+
+        let new_item_id: i64 =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_ne!(new_item_id, 10);
+        let attachment_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(block_item_smart_shuffle_config_key(new_item_id))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(attachment_count, 0);
+    }
+
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[tokio::test]
+    async fn loading_block_items_distinguishes_missing_and_explicit_attachments() {
+        let pool = migrated_test_db().await;
+        sqlx::query(r#"INSERT INTO "BlockGroup" ("Id", "Name") VALUES (1, 'Group')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Block" (
+                "Id", "BlockGroupId", "DateUpdated", "Minutes", "Name", "StopScheduling"
+            ) VALUES (1, 1, CURRENT_TIMESTAMP, 15, 'Block', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, index) in [(10_i64, 0_i32), (11, 1), (12, 2)] {
+            sqlx::query(
+                r#"INSERT INTO "BlockItem" (
+                    "Id", "Index", "BlockId", "CollectionType", "SearchQuery", "PlaybackOrder"
+                ) VALUES (?, ?, 1, 9, 'genre:comedy', 2)"#,
+            )
+            .bind(id)
+            .bind(index)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let disabled = SchedulingSmartShufflePolicy::default();
+        let active = SchedulingSmartShufflePolicy::for_preset(
+            ersatzrs_core::scheduling::SchedulingSmartShufflePreset::Balanced,
+        );
+        for (id, policy) in [(11_i64, disabled), (12_i64, active)] {
+            sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+                .bind(block_item_smart_shuffle_config_key(id))
+                .bind(serde_json::to_string(&policy).unwrap())
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        let items = get_block_items_with_pool(&pool, 1).await.unwrap();
+
+        assert!(items[0].smart_shuffle.inherited_legacy);
+        assert_eq!(items[0].smart_shuffle.preset, "off");
+        assert!(!items[1].smart_shuffle.inherited_legacy);
+        assert_eq!(items[1].smart_shuffle.preset, "off");
+        assert!(!items[2].smart_shuffle.inherited_legacy);
+        assert_eq!(items[2].smart_shuffle.preset, "balanced");
+    }
+
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[tokio::test]
+    async fn copying_block_preserves_attachment_presence() {
+        let pool = migrated_test_db().await;
+        sqlx::query(r#"INSERT INTO "BlockGroup" ("Id", "Name") VALUES (1, 'Group')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Block" (
+                "Id", "BlockGroupId", "DateUpdated", "Minutes", "Name", "StopScheduling"
+            ) VALUES (1, 1, CURRENT_TIMESTAMP, 15, 'Original', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, index) in [(10_i64, 0_i32), (11, 1)] {
+            sqlx::query(
+                r#"INSERT INTO "BlockItem" (
+                    "Id", "Index", "BlockId", "CollectionType", "SearchQuery", "PlaybackOrder"
+                ) VALUES (?, ?, 1, 9, 'genre:comedy', 2)"#,
+            )
+            .bind(id)
+            .bind(index)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(block_item_smart_shuffle_config_key(11))
+            .bind(serde_json::to_string(&SchedulingSmartShufflePolicy::default()).unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let copied_block_id = copy_block_with_pool(&pool, 1, 1, "Copy").await.unwrap();
+        let copied_item_ids: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ? ORDER BY "Index""#,
+        )
+        .bind(copied_block_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        let missing_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(block_item_smart_shuffle_config_key(copied_item_ids[0]))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let explicit_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(block_item_smart_shuffle_config_key(copied_item_ids[1]))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(missing_count, 0);
+        assert_eq!(explicit_count, 1);
     }
 }

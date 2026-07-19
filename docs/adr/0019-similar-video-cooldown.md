@@ -1,4 +1,4 @@
-# ADR 0019: Similar video cooldown for schedule shuffling
+# ADR 0019: Smart Shuffle for schedule content selection
 
 ## Status
 
@@ -6,7 +6,8 @@ Accepted 2026-07-17
 
 ## Implementation
 
-Implemented 2026-07-17. `ersatzrs-core::scheduling` owns the versioned,
+Implemented 2026-07-17 and redesigned 2026-07-19. This feature was formerly
+named Similar Video Cooldown. `ersatzrs-core::scheduling` owns the versioned,
 disabled-by-default policy/rule/state model and deterministic soft selector.
 Classic, Block, YAML, and Scripted scheduling use the selector only for
 randomized sources; impossible constraints emit a warning and select the
@@ -16,19 +17,27 @@ tags and duration.
 
 `ersatzrs-infra::repositories::scheduling` hydrates artist, album-artist, show,
 season, ADR 0018 parent lineage, collection, tag, genre, studio, and
-search-expression tags before engine execution. Cooldown state is serialized
+search-expression tags before engine execution. Smart Shuffle state is serialized
 in each engine's existing playout-anchor context and restored by Continue
-builds. ProgramSchedule and Block/Scripted playout policies use additive
-versioned JSON `ConfigElement` attachments; absent attachments leave imported
-ErsatzTV rows and disabled scheduler snapshots unchanged. Sequential YAML uses
-the same `cooldown` JSON shape in YAML, while Scripted Lua declares it through
-`set_cooldown_policy([[...json...]])`.
+builds. Policies belong to each engine's native selection unit:
+`ProgramScheduleItem`, reusable `BlockItem`, Sequential YAML `content[]` entry,
+or Scripted content/enumerator key. New JSON uses `smart_shuffle`; legacy
+schedule/playout attachments, YAML `cooldown`, Lua `set_cooldown_policy`, and
+anchor `cooldown` fields remain readable. Classic owners materialize inherited
+policies when next saved; reusable Block items preserve a missing attachment
+while their inherited form remains Off, until the operator explicitly chooses
+an item override. A Sequential YAML content entry that explicitly declares
+`smart_shuffle`, including an Off value, overrides rather than inherits the
+legacy root `cooldown` policy.
 
-The localized ProgramSchedule add/edit routes and the Block/Scripted playout
-editors expose Off, Light, Balanced, and Custom controls, including scope,
+The localized Classic Schedule Item and Block Item editors expose Off, Light,
+Balanced, and Custom controls directly after playback order, including scope,
 item-count and duration thresholds, filler participation, built-in facets, and
-operator filter rules. ProgramSchedule editors can request a deterministic
-five-item preview of the effective hydrated tags before saving. Focused core,
+operator filter rules. Their draft-aware Smart Shuffle Overview reports every
+selection unit and exposes all candidates through search, tag filters, and
+50-row pages with localized warning states. Sequential YAML uses
+`content[].smart_shuffle`; Scripted Lua uses
+`set_smart_shuffle_policy(content_key, json)`. Focused core,
 SQL hydration and anchor persistence, admin persistence, schema, hydration,
 and desktop/mobile browser coverage protect the implemented path.
 
@@ -78,10 +87,10 @@ default.
 The common model lives in `ersatzrs-core::scheduling` and is consumed by every
 engine that performs randomized or shuffled selection. It has three parts:
 
-- `SchedulingCooldownPolicy`: the configured behavior.
-- `SchedulingCooldownRule`: one rule that emits similarity tags for a media
+- `SchedulingSmartShufflePolicy`: the configured behavior.
+- `SchedulingSmartShuffleRule`: one rule that emits similarity tags for a media
   candidate.
-- `SchedulingCooldownState`: the persisted runtime state for active cooldown
+- `SchedulingSmartShuffleState`: the persisted runtime state for active cooldown
   tags.
 
 The first implementation should use a versioned JSON shape for policy and state
@@ -141,10 +150,12 @@ built-in rule without changing the policy model.
 
 For "any other filter", support filter rules backed by the scheduling search
 projection. A filter rule has a stable rule id and a search expression. Every
-candidate matching the expression receives a tag for that rule id. This supports
-use cases such as "all Marvel movies", "holiday episodes", "concert videos",
-or "videos tagged black-and-white" even when there is no dedicated schema
-column.
+candidate matching the expression receives a tag for that rule id, namespaced
+by selection-unit policy identity when it participates in shared playout state.
+This prevents unrelated per-item policies that reuse a rule id from blocking
+each other. It supports use cases such as "all Marvel movies", "holiday
+episodes", "concert videos", or "videos tagged black-and-white" even when
+there is no dedicated schema column.
 
 Reference-data loading owns tag hydration. The scheduler receives candidates
 with precomputed cooldown tags or enough preloaded facet data to compute them

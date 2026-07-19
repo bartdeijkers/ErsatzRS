@@ -109,9 +109,6 @@ async function createSchedule(page: Page, name: string): Promise<string> {
   await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Schedule' })).toBeVisible();
   await page.locator('input[name="name"]').fill(name);
-  await page.getByLabel('Cooldown Preset').selectOption('balanced');
-  await expect(page.getByLabel('Videos Between Similar Items')).toHaveValue('4');
-  await expect(page.getByLabel('Cooldown Duration (Minutes)')).toHaveValue('30');
   await page.getByRole('button', { name: /add schedule/i }).click();
   await expect(page).toHaveURL(/\/schedules\/\d+\/items$/);
   return page.url().match(/\/schedules\/(\d+)\/items$/)?.[1] ?? '0';
@@ -215,6 +212,7 @@ test.describe('scheduling route-family parity', () => {
     baseURL,
     page,
   }, testInfo) => {
+    test.setTimeout(120_000);
     test.skip(
       testInfo.project.name !== 'chromium',
       'This spec mutates shared scheduling state; Chromium proof avoids cross-project data races.',
@@ -232,51 +230,6 @@ test.describe('scheduling route-family parity', () => {
     const scheduleName = uniqueName('E2E Schedule');
     const scheduleId = await createSchedule(page, scheduleName);
     expect(Number(scheduleId)).toBeGreaterThan(0);
-    await page.goto(`/schedules/${scheduleId}`);
-    await waitForHydration(page);
-    await expect(page.getByLabel('Cooldown Preset')).toHaveValue('balanced');
-    await expect(page.getByLabel('Videos Between Similar Items')).toHaveValue('4');
-    await expect(page.getByLabel('Cooldown Duration (Minutes)')).toHaveValue('30');
-    await page.getByRole('button', { name: 'Preview Effective Tags' }).click();
-    await expect
-      .poll(async () => {
-        const emptyStateCount = await page
-          .getByText('No matching media emitted cooldown tags.')
-          .filter({ visible: true })
-          .count();
-        const previewRowCount = await page
-          .locator('#schedule-editor-form ul li')
-          .filter({ visible: true })
-          .count();
-        return emptyStateCount + previewRowCount;
-      })
-      .toBeGreaterThan(0);
-    await page.getByLabel('Cooldown Preset').scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: screenshotPath(testInfo, 'schedule-cooldown-desktop'),
-    });
-    const mobileContext = await browser.newContext({
-      baseURL,
-      viewport: { width: 390, height: 844 },
-    });
-    const mobilePage = await mobileContext.newPage();
-    const mobileRuntimeErrors: string[] = [];
-    mobilePage.on('console', (message) => {
-      if (message.type() === 'error' || message.type() === 'warning') {
-        mobileRuntimeErrors.push(message.text());
-      }
-    });
-    mobilePage.on('pageerror', (error) => mobileRuntimeErrors.push(error.message));
-    await forceEnglish(mobilePage);
-    await mobilePage.goto(`/schedules/${scheduleId}`);
-    await waitForHydration(mobilePage);
-    await expect(mobilePage.getByLabel('Cooldown Preset')).toHaveValue('balanced');
-    await mobilePage.getByLabel('Cooldown Preset').scrollIntoViewIfNeeded();
-    await mobilePage.screenshot({
-      path: screenshotPath(testInfo, 'schedule-cooldown-mobile'),
-    });
-    await expectNoRuntimeErrors(mobilePage, mobileRuntimeErrors);
-    await mobileContext.close();
     await page.goto(`/schedules/${scheduleId}/items`);
     await expect(page.getByRole('heading', { name: 'Schedule Items' })).toBeVisible();
     await clickUntilVisible(
@@ -292,6 +245,10 @@ test.describe('scheduling route-family parity', () => {
     await scheduleItemControl(page, 'Search Query', 'input').fill('type:music_video');
     await scheduleItemControl(page, 'Playout Mode', 'select').selectOption('3');
     await scheduleItemControl(page, 'Multiple Count', 'input').fill('3');
+    await page.getByText('Smart Shuffle', { exact: true }).click();
+    await page.getByLabel('Spacing preset').selectOption('balanced');
+    await expect(page.getByLabel('Videos between similar items')).toHaveValue('4');
+    await expect(page.getByLabel('Minutes between similar items')).toHaveValue('30');
 
     await page.getByRole('button', { name: /add schedule item/i }).click();
     await scheduleItemControl(page, 'Collection Type', 'select').selectOption('9');
@@ -304,6 +261,29 @@ test.describe('scheduling route-family parity', () => {
     await expect(page.locator('tbody tr').nth(0)).toContainText('Multiple (3)');
     await expect(page.locator('tbody tr').nth(1)).toContainText('Bumpers');
     await expect(page.locator('tbody tr').nth(1)).toContainText('One');
+    await page.locator('tbody tr').nth(0).click();
+    await expect(page.getByLabel('Spacing preset')).toHaveValue('balanced');
+    await page.getByRole('heading', { name: 'Smart Shuffle Overview' }).scrollIntoViewIfNeeded();
+    await page.getByRole('button', { name: 'Refresh' }).click();
+    await expect(page.locator('details').filter({ hasText: 'Primary Videos' })).toBeVisible();
+    await page.screenshot({ path: screenshotPath(testInfo, 'schedule-smart-shuffle-desktop') });
+
+    const mobileContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
+    const mobilePage = await mobileContext.newPage();
+    const mobileRuntimeErrors: string[] = [];
+    mobilePage.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') mobileRuntimeErrors.push(message.text());
+    });
+    mobilePage.on('pageerror', (error) => mobileRuntimeErrors.push(error.message));
+    await forceEnglish(mobilePage);
+    await mobilePage.goto(`/schedules/${scheduleId}/items`);
+    await waitForHydration(mobilePage);
+    await mobilePage.locator('tbody tr').nth(0).click();
+    await expect(mobilePage.getByLabel('Spacing preset')).toHaveValue('balanced');
+    await mobilePage.getByText('Smart Shuffle', { exact: true }).scrollIntoViewIfNeeded();
+    await mobilePage.screenshot({ path: screenshotPath(testInfo, 'schedule-smart-shuffle-mobile') });
+    await expectNoRuntimeErrors(mobilePage, mobileRuntimeErrors);
+    await mobileContext.close();
 
     await page.reload();
     await waitForHydration(page);
@@ -328,11 +308,70 @@ test.describe('scheduling route-family parity', () => {
     const blockName = uniqueName('E2E Block');
     const blockId = await createBlock(page, blockGroupName, blockName);
     expect(Number(blockId)).toBeGreaterThan(0);
+    const blockGroupId = await page.locator('select').first().inputValue();
+    const inheritedBlockResponse = await page.request.post('/api/blocks/items/save', {
+      form: {
+        block_id: blockId,
+        group_id: blockGroupId,
+        name: blockName,
+        duration_hours: '0',
+        duration_minutes: '30',
+        stop_scheduling: '0',
+        action: 'save',
+        item_index: '0',
+        item_id: '0',
+        item_collection_type: '9',
+        item_collection_id: '',
+        item_multi_collection_id: '',
+        item_smart_collection_id: '',
+        item_media_item_id: '',
+        item_search_title: 'Inherited Search',
+        item_search_query: 'type:music_video',
+        item_collection_name: 'Inherited Search',
+        item_playback_order: '2',
+        item_smart_shuffle_preset: 'off',
+        item_smart_shuffle_scope: 'playout',
+        item_smart_shuffle_after_items: '0',
+        item_smart_shuffle_after_duration_minutes: '0',
+        item_smart_shuffle_include_filler: 'false',
+        item_smart_shuffle_rules: '',
+        item_smart_shuffle_filter_rules: '',
+        item_watermark_ids: '',
+        item_graphics_element_ids: '',
+      },
+      maxRedirects: 0,
+    });
+    expect(inheritedBlockResponse.status()).toBe(303);
+
+    const blockFallbackContext = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const blockFallbackPage = await blockFallbackContext.newPage();
+    await blockFallbackPage.goto(`/blocks/${blockId}`);
+    const fallbackForm = blockFallbackPage.locator('form#block-items-fallback-form');
+    await expect(fallbackForm).toBeVisible();
+    await expect(
+      fallbackForm.locator('input[name="item_smart_shuffle_inherited_legacy"]'),
+    ).toHaveValue('true');
+    await Promise.all([
+      blockFallbackPage.waitForURL('/blocks'),
+      blockFallbackPage.getByRole('button', { name: /save block/i }).click(),
+    ]);
+    await blockFallbackContext.close();
+
     await page.goto(`/blocks/${blockId}`);
-    await expect(page.getByRole('heading', { name: 'Block', exact: true })).toBeVisible();
+    await waitForHydration(page);
+    await expect(page.getByRole('heading', { name: 'Block', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.getByRole('button', { name: /save block/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /preview/i })).toBeVisible();
-    await expectNoJsForm(browser, baseURL, `/blocks/${blockId}`, 'form#block-items-fallback-form');
+    await page.locator('tbody tr').first().click();
+    await page.getByText('Smart Shuffle', { exact: true }).click();
+    await expect(page.getByText(/has no Smart Shuffle override/)).toBeVisible();
+    const blockSpacingPreset = page.getByLabel('Spacing preset');
+    await expect(blockSpacingPreset).toBeDisabled();
+    await page.getByRole('button', { name: 'Override for this Block item' }).click();
+    await expect(blockSpacingPreset).toBeEnabled();
+    await expect(blockSpacingPreset).toHaveValue('off');
     await page.screenshot({ path: screenshotPath(testInfo, 'scheduling-block-editor'), fullPage: true });
 
     const templateGroupName = uniqueName('E2E Template Group');

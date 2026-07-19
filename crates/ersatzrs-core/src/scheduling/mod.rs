@@ -1,7 +1,7 @@
 mod block;
 mod classic;
-mod cooldown;
 mod scripted;
+mod smart_shuffle;
 mod yaml;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,14 +22,19 @@ pub use block::{
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
-pub use classic::{classic_schedule_item_key, ClassicSchedulingContext, ClassicSchedulingEngine};
-pub use cooldown::{
-    playout_cooldown_config_key, program_schedule_cooldown_config_key, SchedulingCooldownCandidate,
-    SchedulingCooldownMode, SchedulingCooldownPolicy, SchedulingCooldownPreset,
-    SchedulingCooldownRule, SchedulingCooldownRuleKind, SchedulingCooldownScope,
-    SchedulingCooldownState, SchedulingCooldownUnit,
+pub use classic::{
+    classic_schedule_item_key, classic_schedule_item_policy_key, ClassicSchedulingContext,
+    ClassicSchedulingEngine,
 };
 pub use scripted::ScriptedSchedulingEngine;
+pub use smart_shuffle::{
+    block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
+    legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
+    SchedulingSmartShuffleCandidate, SchedulingSmartShuffleMode, SchedulingSmartShufflePolicy,
+    SchedulingSmartShufflePreset, SchedulingSmartShuffleRecordContext, SchedulingSmartShuffleRule,
+    SchedulingSmartShuffleRuleKind, SchedulingSmartShuffleScope, SchedulingSmartShuffleState,
+    SchedulingSmartShuffleUnit,
+};
 pub use yaml::{
     YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
 };
@@ -202,8 +207,14 @@ pub trait SchedulingContentRepository: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
-    pub cooldown_policy: SchedulingCooldownPolicy,
-    pub cooldown_tags_by_media_id: BTreeMap<EntityId, BTreeSet<String>>,
+    /// Legacy schedule/playout-wide policy used only when an item has not yet
+    /// materialized its own Smart Shuffle attachment.
+    pub smart_shuffle_policy: SchedulingSmartShufflePolicy,
+    /// Legacy schedule/playout-wide tags. New loaders populate the item-keyed
+    /// map below so rules with the same id cannot bleed between units.
+    pub smart_shuffle_tags_by_media_id: BTreeMap<EntityId, BTreeSet<String>>,
+    pub smart_shuffle_policies_by_unit: BTreeMap<String, SchedulingSmartShufflePolicy>,
+    pub smart_shuffle_tags_by_unit: BTreeMap<String, BTreeMap<EntityId, BTreeSet<String>>>,
     pub media_by_key: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub multi_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
@@ -258,10 +269,49 @@ pub struct SchedulingFillerPreset {
 
 impl SchedulingReferenceData {
     #[must_use]
-    pub fn cooldown_tags(&self, media_item_id: EntityId) -> &BTreeSet<String> {
+    pub fn has_active_smart_shuffle(&self) -> bool {
+        self.smart_shuffle_policy.is_active()
+            || self
+                .smart_shuffle_policies_by_unit
+                .values()
+                .any(SchedulingSmartShufflePolicy::is_active)
+    }
+
+    #[must_use]
+    pub fn smart_shuffle_policy_for_unit(&self, unit_key: &str) -> &SchedulingSmartShufflePolicy {
+        self.smart_shuffle_policies_by_unit
+            .get(unit_key)
+            .unwrap_or(&self.smart_shuffle_policy)
+    }
+
+    #[must_use]
+    pub fn smart_shuffle_tags_for_unit(
+        &self,
+        unit_key: &str,
+    ) -> &BTreeMap<EntityId, BTreeSet<String>> {
+        self.smart_shuffle_tags_by_unit
+            .get(unit_key)
+            .unwrap_or(&self.smart_shuffle_tags_by_media_id)
+    }
+
+    #[must_use]
+    pub fn smart_shuffle_tags(&self, media_item_id: EntityId) -> &BTreeSet<String> {
         static EMPTY: std::sync::LazyLock<BTreeSet<String>> =
             std::sync::LazyLock::new(BTreeSet::new);
-        self.cooldown_tags_by_media_id
+        self.smart_shuffle_tags_by_media_id
+            .get(&media_item_id)
+            .unwrap_or(&EMPTY)
+    }
+
+    #[must_use]
+    pub fn smart_shuffle_tags_for_media(
+        &self,
+        unit_key: &str,
+        media_item_id: EntityId,
+    ) -> &BTreeSet<String> {
+        static EMPTY: std::sync::LazyLock<BTreeSet<String>> =
+            std::sync::LazyLock::new(BTreeSet::new);
+        self.smart_shuffle_tags_for_unit(unit_key)
             .get(&media_item_id)
             .unwrap_or(&EMPTY)
     }
@@ -586,6 +636,10 @@ impl MediaEnumerator {
         self
     }
 
+    fn playback_order(&self) -> PlaybackOrder {
+        self.playback_order
+    }
+
     fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
@@ -602,10 +656,10 @@ impl MediaEnumerator {
         }
     }
 
-    fn select_with_cooldown(
+    fn select_with_smart_shuffle(
         &mut self,
-        policy: &SchedulingCooldownPolicy,
-        state: &SchedulingCooldownState,
+        policy: &SchedulingSmartShufflePolicy,
+        state: &SchedulingSmartShuffleState,
         scope_key: &str,
         scheduled_at: DateTime<Utc>,
         tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
@@ -618,7 +672,7 @@ impl MediaEnumerator {
             .map(|offset| {
                 let index = (self.index + offset) % self.items.len();
                 let item = &self.items[index];
-                SchedulingCooldownCandidate {
+                SchedulingSmartShuffleCandidate {
                     media_item_id: item.id,
                     tags: tags_by_media_id.get(&item.id).unwrap_or(&empty),
                 }
@@ -1042,15 +1096,21 @@ impl PlaylistEnumerator {
         }
     }
 
+    fn current_playback_order(&self) -> PlaybackOrder {
+        self.current_child().map_or(PlaybackOrder::None, |child| {
+            child.enumerator.playback_order()
+        })
+    }
+
     pub fn current(&self) -> Option<&SchedulingMediaItem> {
         self.current_child()
             .and_then(|child| child.enumerator.current())
     }
 
-    fn select_with_cooldown(
+    fn select_with_smart_shuffle(
         &mut self,
-        policy: &SchedulingCooldownPolicy,
-        state: &SchedulingCooldownState,
+        policy: &SchedulingSmartShufflePolicy,
+        state: &SchedulingSmartShuffleState,
         scope_key: &str,
         scheduled_at: DateTime<Utc>,
         tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
@@ -1059,7 +1119,7 @@ impl PlaylistEnumerator {
             if child.play_all || child.count.is_some_and(|count| count > 1) {
                 return;
             }
-            child.enumerator.select_with_cooldown(
+            child.enumerator.select_with_smart_shuffle(
                 policy,
                 state,
                 scope_key,
@@ -1069,10 +1129,10 @@ impl PlaylistEnumerator {
         }
     }
 
-    fn cooldown_unit(
+    fn smart_shuffle_unit(
         &self,
         tags_by_media_id: &BTreeMap<EntityId, BTreeSet<String>>,
-    ) -> Option<SchedulingCooldownUnit> {
+    ) -> Option<SchedulingSmartShuffleUnit> {
         let child = self.current_child()?;
         let grouped = child.play_all || child.count.is_some_and(|count| count > 1);
         if grouped && child.items_taken_from_current > 0 {
@@ -1089,14 +1149,14 @@ impl PlaylistEnumerator {
                 .enumerator
                 .items
                 .get((child.enumerator.index + offset) % len)?;
-            Some(SchedulingCooldownUnit::single(
+            Some(SchedulingSmartShuffleUnit::single(
                 item.id,
                 tags_by_media_id.get(&item.id).cloned().unwrap_or_default(),
                 item.duration,
             ))
         });
         Some(if grouped {
-            SchedulingCooldownUnit::grouped(children)
+            SchedulingSmartShuffleUnit::grouped(children)
         } else {
             children.into_iter().next()?
         })
