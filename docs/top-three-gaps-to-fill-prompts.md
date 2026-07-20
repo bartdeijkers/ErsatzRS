@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-19
-last_processed_commit: 1c9355be5b21a71d5753af9e2cdf441b138c487e
+generated: 2026-07-20
+last_processed_commit: 8984fd583dea85d5de13ad3afc95a5e2770e1cab
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,18 +13,22 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: the `0f7741b..1c9355b` window (2026-07-19 reconcile) landed
-real feature fixes — NVENC/CUDA overlay surface normalization, provider ETag
-remote-only short-circuiting, SQLite connection defaults enforcement — plus a
-Rust toolchain/nextest formalization and an end-user documentation refactor.
-Each feature commit reconciled its own parity file in the same change, so no
-status flip was owed here: `ffmpeg-filter-graph`, `content-variants`, and
-`initial-schema-database-backends` all stay `Ported`, no route or hydration
-state changed, and every structured `[[debt]]` item across the parity set
-remains resolved. With `cargo xtask progress gaps` clear and no open parity
-debt, ADR-backed hardening, or unblocked plan goal outranking it, the candidate
-set is the maintainer-requested admin-localization ADR queue (ADRs 0022–0047).
-With ADR 0021 French (France) already Implemented, the three lowest-numbered
+Current selection: the `1c9355b..8984fd5` window (2026-07-20 reconcile) landed
+real scheduling work — a Smart Shuffle policy redesign around per-selection-unit
+Classic/Block/YAML/Scripted policies, a fix protecting the ordered `Multiple (3)`
+then `One` schedule topology from being collapsed into one filler-bearing item —
+plus nextest enforcement for local Rust tests and the `v1.0.15-beta.9` release
+preparation. Each feature commit reconciled its own parity file in the same
+change, so no status flip was owed here: `similar-video-cooldown` (Smart Shuffle),
+`classic-scheduling`, and `schedules-templates-decorations-deco-templates` all
+stay `Ported`, no route or hydration state changed, and every structured
+`[[debt]]` item across the parity set remains resolved. With `cargo xtask
+progress gaps` clear and no open parity debt, ADR-backed hardening, or unblocked
+plan goal outranking it, the candidate set is the maintainer-requested
+admin-localization ADR queue (ADRs 0022–0047); the four `Proposed` Docker/crate-
+split plans rank below it as release/build hardening and are additionally gated
+behind the pending Docker hotfix. With ADR 0021 French (France) already
+Implemented and no localization work in this window, the three lowest-numbered
 unimplemented ADRs carry over unchanged in stable ADR-number order — German
 (Germany), Hindi (India), and Indonesian (Indonesia).
 
