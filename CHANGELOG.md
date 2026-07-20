@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Made Dutch (nl) admin UI terminology consistent. "Shuffle" now uses the common
+  loanword everywhere instead of the uncommon "schudden", and the "Scripted",
+  playout, deco, and multi-collection wording is unified (one rendering each,
+  matching the surrounding labels).
 - Saving a channel no longer rebuilds its playouts automatically, matching
   ErsatzTV. Manual Refresh/Reset and Reset All requests now use a reliable
   unbounded worker queue, acknowledge queued work immediately, and show

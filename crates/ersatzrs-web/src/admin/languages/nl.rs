@@ -352,19 +352,19 @@ fn schedule_error_message(error: &str) -> String {
             "Vaste schema-items vereisen een starttijd.".to_owned()
         }
         "Multi Collection items can only use Shuffle or Shuffle In Order." => {
-            "Multicollectie-items kunnen alleen Shuffle of Shuffle in volgorde gebruiken.".to_owned()
+            "Multi-collectie-items kunnen alleen Shuffle of Shuffle in volgorde gebruiken.".to_owned()
         }
         "Playlist Item Size can only be used with Playlist schedule items." => {
             "Playlistitemgrootte kan alleen worden gebruikt met schema-items van het type playlist.".to_owned()
         }
         "Multiple playout mode with Count requires a count expression." => {
-            "Meervoudige playoutmodus met Aantal vereist een aantalexpressie.".to_owned()
+            "Meervoudige uitzendmodus met Aantal vereist een aantalexpressie.".to_owned()
         }
         "Duration playout mode requires a duration between 1 minute and 24 hours." => {
-            "Duur-playoutmodus vereist een duur tussen 1 minuut en 24 uur.".to_owned()
+            "Duur-uitzendmodus vereist een duur tussen 1 minuut en 24 uur.".to_owned()
         }
         "Duration playout mode requires discard-to-fill attempts." => {
-            "Duur-playoutmodus vereist pogingen voor discard-to-fill.".to_owned()
+            "Duur-uitzendmodus vereist pogingen voor discard-to-fill.".to_owned()
         }
         "Tail Mode Filler requires a tail filler preset." => {
             "Tailmodus Filler vereist een tail-fillerpreset.".to_owned()
@@ -374,7 +374,7 @@ fn schedule_error_message(error: &str) -> String {
         }
         "Collection is required." => "Collectie is verplicht.".to_owned(),
         "Media item is required." => "Media-item is verplicht.".to_owned(),
-        "Multi Collection is required." => "Multicollectie is verplicht.".to_owned(),
+        "Multi Collection is required." => "Multi-collectie is verplicht.".to_owned(),
         "Smart Collection is required." => "Slimme collectie is verplicht.".to_owned(),
         "Playlist is required." => "Playlist is verplicht.".to_owned(),
         "Rerun Collection is required." => "Herhalingscollectie is verplicht.".to_owned(),
@@ -474,7 +474,7 @@ fn scheduling_content_error_message(error: &str) -> String {
             "Media-item is verplicht voor collectietype Tv-seizoen.".to_owned()
         }
         "[MultiCollection] is required for collection type 'MultiCollection'" => {
-            "Multicollectie is verplicht voor collectietype Multicollectie.".to_owned()
+            "Multi-collectie is verplicht voor collectietype Multi-collectie.".to_owned()
         }
         "[SmartCollection] is required for collection type 'SmartCollection'" => {
             "Slimme collectie is verplicht voor collectietype Slimme collectie.".to_owned()
@@ -523,7 +523,7 @@ fn scheduling_content_error_message(error: &str) -> String {
             "Collectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
         }
         "Break content multi collection must have valid item" => {
-            "Multicollectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
+            "Multi-collectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
         }
         "Break content smart collection must have valid item" => {
             "Slimme collectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
@@ -544,7 +544,7 @@ fn scheduling_content_error_message(error: &str) -> String {
             "Collectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
         }
         "Break content multi collection item does not exist." => {
-            "Multicollectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
+            "Multi-collectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
         }
         "Break content smart collection item does not exist." => {
             "Slimme-collectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
@@ -727,7 +727,7 @@ fn settings_error_message(error: &str) -> String {
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
-            "Aantal XMLTV-dagen om te bouwen ({current}) mag niet groter zijn dan het aantal playout-dagen om te bouwen ({limit})"
+            "Aantal XMLTV-dagen om te bouwen ({current}) mag niet groter zijn dan het aantal uitzenddagen om te bouwen ({limit})"
         );
     }
     if let Some(name) = trimmed.strip_suffix(" path does not exist") {
@@ -754,9 +754,9 @@ fn settings_error_message(error: &str) -> String {
         "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh" => {
             "Bibliotheekverversingsinterval moet kleiner zijn dan 1.000.000. Gebruik 0 om automatisch verversen uit te schakelen.".to_owned()
         }
-        "Playout days to build must be greater than zero" => "Aantal playout-dagen om te bouwen moet groter zijn dan nul.".to_owned(),
+        "Playout days to build must be greater than zero" => "Aantal uitzenddagen om te bouwen moet groter zijn dan nul.".to_owned(),
         "Scripted schedule timeout seconds must be at least 10" => {
-            "Time-out voor scripted schema moet minstens 10 seconden zijn.".to_owned()
+            "Time-out voor Scripted schema moet minstens 10 seconden zijn.".to_owned()
         }
         "XMLTV days to build must be greater than zero" => "Aantal XMLTV-dagen om te bouwen moet groter zijn dan nul.".to_owned(),
         "Resolution width or height is invalid" => "Resolutiebreedte of -hoogte is ongeldig.".to_owned(),
@@ -1121,7 +1121,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BreakContentMode => "Breakinhoudmodus",
         TextKey::DeadAirFallback => "Dead-air fallback",
         TextKey::DeadAirFallbackBody => {
-            "Wanneer er voor de huidige tijd geen playoutitem wordt gevonden, wordt willekeurig een item uit deze collectie gekozen, herhaald en precies passend ingekort tot de start van het volgende playoutitem. Dit vervangt de afbeelding Kanaal is offline die anders zou worden getoond."
+            "Wanneer er voor de huidige tijd geen uitzenditem wordt gevonden, wordt willekeurig een item uit deze collectie gekozen, herhaald en precies passend ingekort tot de start van het volgende uitzenditem. Dit vervangt de afbeelding Kanaal is offline die anders zou worden getoond."
         },
         TextKey::DeadAirFallbackCollectionType => "Collectietype voor dead-air fallback",
         TextKey::DeadAirFallbackMode => "Dead-air fallbackmodus",
@@ -1330,7 +1330,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicScheduleMenu => "Klassiek schema",
         TextKey::BlockScheduleMenu => "Blokschema",
         TextKey::SequentialScheduleMenu => "Sequentieel schema",
-        TextKey::ScriptedScheduleMenu => "Gescript schema",
+        TextKey::ScriptedScheduleMenu => "Scripted schema",
         TextKey::JsonDizqueTvScheduleMenu => "JSON-schema (dizqueTV)",
         TextKey::ResetAllPlayouts => "Alle uitzendingen opnieuw opbouwen",
         TextKey::PlayoutBuildQueued => "Heropbouw van uitzending in wachtrij geplaatst",
@@ -1363,18 +1363,18 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Niet-ondersteund uitzendingstype.",
         TextKey::ClassicPlayout => "Klassieke uitzending",
         TextKey::BlockPlayout => "Blokuitzending",
-        TextKey::ScriptedPlayout => "Scripted schema",
+        TextKey::ScriptedPlayout => "Scripted uitzending",
         TextKey::AlternateSchedules => "Alternatieve schema's",
         TextKey::EditAlternateSchedules => "Alternatieve schema's bewerken",
         TextKey::PlayoutTemplates => "Uitzendsjablonen",
         TextKey::EditTemplates => "Sjablonen bewerken",
-        TextKey::DefaultDeco => "Standaarddeco",
-        TextKey::EnableDefaultDeco => "Standaarddeco inschakelen",
-        TextKey::SaveDefaultDeco => "Standaarddeco opslaan",
+        TextKey::DefaultDeco => "Standaarddecoratie",
+        TextKey::EnableDefaultDeco => "Standaarddecoratie inschakelen",
+        TextKey::SaveDefaultDeco => "Standaarddecoratie opslaan",
         TextKey::SaveScriptedSchedule => "Scripted schema opslaan",
         TextKey::EraseItems => "Items wissen",
         TextKey::ErasedPlayoutItems => "Uitzenditems zijn gewist.",
-        TextKey::SavedDefaultDeco => "Standaarddeco is opgeslagen.",
+        TextKey::SavedDefaultDeco => "Standaarddecoratie is opgeslagen.",
         TextKey::SavedScriptedSchedule => "Scripted schema is opgeslagen.",
         TextKey::Maintenance => "Onderhoud",
         TextKey::SaveAlternateSchedules => "Alternatieve schema's opslaan",
@@ -1508,7 +1508,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GraphicsIds => "Grafische ID's",
         TextKey::Genres => "Genres",
         TextKey::GroupName => "Groepsnaam",
-        TextKey::GroupMultiPartEpisodesHelp => "Groepeer meerdelige afleveringen bij schudden",
+        TextKey::GroupMultiPartEpisodesHelp => "Groepeer meerdelige afleveringen bij shuffle",
         TextKey::GuideMode => "Gidsmodus",
         TextKey::KeepMultiPartEpisodesTogether => "Meerdelige afleveringen bij elkaar houden",
         TextKey::Marathon => "Marathon",
@@ -1517,15 +1517,15 @@ pub fn text(key: TextKey) -> &'static str {
             "Hoeveel items uit elke groep worden afgespeeld voordat wordt doorgegaan; leeg of nul speelt alle items af"
         },
         TextKey::MarathonGroupBy => "Marathon groeperen op",
-        TextKey::MarathonShuffleGroups => "Marathongroepen schudden",
-        TextKey::MarathonShuffleItems => "Marathonitems schudden",
+        TextKey::MarathonShuffleGroups => "Shuffle op marathongroepen",
+        TextKey::MarathonShuffleItems => "Shuffle op marathonitems",
         TextKey::EditFillerPreset => "Opvulvoorinstelling bewerken",
         TextKey::MidRollFiller => "Mid-roll filler",
         TextKey::MidRoll => "Mid-roll",
         TextKey::MoveDown => "Omlaag verplaatsen",
         TextKey::MoveUp => "Omhoog verplaatsen",
         TextKey::MultiEpisodeGroupSize => "Groepsgrootte voor meerdere afleveringen",
-        TextKey::MultiEpisodeShuffle => "Meerdere afleveringen schudden",
+        TextKey::MultiEpisodeShuffle => "Shuffle op meerdere afleveringen",
         TextKey::Multiple => "Meerdere",
         TextKey::MultipleCount => "Aantal meerdere",
         TextKey::MultipleCountHelp => {
@@ -1579,7 +1579,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleKindBlock => "Blok",
         TextKey::ScheduleKindClassic => "Klassiek",
         TextKey::ScheduleKindExternalJson => "JSON (dizqueTV)",
-        TextKey::ScheduleKindScripted => "Scriptgestuurd",
+        TextKey::ScheduleKindScripted => "Scripted",
         TextKey::ScheduleKindSequential => "Sequentieel",
         TextKey::SchedulingContext => "Planningscontext",
         TextKey::ScheduleItem => "Schema-item",
@@ -1595,16 +1595,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffle => "Smart Shuffle",
         TextKey::SmartShufflePreset => "Afstandsvoorinstelling",
         TextKey::Balanced => "Gebalanceerd",
-        TextKey::SmartShuffleScope => "SmartShuffle-bereik",
+        TextKey::SmartShuffleScope => "Smart Shuffle-bereik",
         TextKey::SmartShuffleScopePlayout => "Uitzending",
         TextKey::SmartShuffleScopeScheduleItem => "Schema-item",
         TextKey::SmartShuffleValidation => "Kies een afstandsdrempel en ten minste één gelijkenisregel.",
         TextKey::SmartShuffleScopeContentSource => "Inhoudsbron",
         TextKey::SmartShuffleAfterItems => "Video's tussen vergelijkbare items",
-        TextKey::SmartShuffleAfterDurationMinutes => "SmartShuffle-duur (minuten)",
+        TextKey::SmartShuffleAfterDurationMinutes => "Smart Shuffle-duur (minuten)",
         TextKey::SmartShuffleIncludeFiller => "Filler meetellen",
         TextKey::SmartShuffleInheritedBlock => {
-            "Dit item heeft geen Smart Shuffle-overschrijving en behoudt eventueel verouderd playoutbeleid."
+            "Dit item heeft geen Smart Shuffle-overschrijving en behoudt eventueel verouderd uitzendbeleid."
         }
         TextKey::SmartShuffleInactive => "Smart Shuffle is niet actief omdat deze afspeelvolgorde niet willekeurig is.",
         TextKey::SmartShuffleOverviewEmptySource => "De inhoudsbron is leeg.",
@@ -1643,11 +1643,11 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SelectScheduleItemPrompt => "Selecteer een schema-item om te bewerken of voeg een nieuw item toe.",
         TextKey::SelectSchedule => "Selecteer een schema",
         TextKey::SelectSmartCollection => "Slimme collectie selecteren",
-        TextKey::Shuffle => "Schudden",
-        TextKey::ShuffleInOrder => "Op volgorde schudden",
-        TextKey::ShuffleScheduleItems => "Schema-items schudden",
+        TextKey::Shuffle => "Shuffle",
+        TextKey::ShuffleInOrder => "Shuffle in volgorde",
+        TextKey::ShuffleScheduleItems => "Shuffle op schema-items",
         TextKey::ShuffleScheduleItemsHelp => "Opmerking: dit schakelt vaste starttijden en flood-modus uit",
-        TextKey::ShuffledGroups => "Geschudde groepen",
+        TextKey::ShuffledGroups => "Shuffle-groepen",
         TextKey::Show => "Serie",
         TextKey::ShowNotFound => "Serie niet gevonden",
         TextKey::Shows => "Series",
@@ -1675,7 +1675,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Settings => "Instellingen",
         TextKey::SettingsSaveFailed => "Instellingen opslaan mislukt",
         TextKey::ShowMediaInfo => "Media-info weergeven",
-        TextKey::ScriptedScheduleTimeout => "Time-out voor scriptschema",
+        TextKey::ScriptedScheduleTimeout => "Time-out voor Scripted schema",
         TextKey::SkipMissingItems => "Ontbrekende items overslaan",
         TextKey::SkipMissingItemsHelp => "Bepaalt of bestand-niet-gevonden of niet-beschikbare items in uitzendingen worden opgenomen",
         TextKey::SmartCollections => "Slimme collecties",
