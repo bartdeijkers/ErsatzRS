@@ -497,6 +497,7 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
 
 /// Enqueues a build for one playout. Mirrors `Playouts.razor.ResetPlayout`:
 /// Classic playouts refresh, every other kind resets.
+#[allow(clippy::unused_async)]
 #[server]
 pub async fn reset_playout(
     id: i64,
@@ -596,6 +597,7 @@ pub async fn list_locked_playouts() -> Result<Vec<i64>, ServerFnError> {
 /// Returns queued and currently building manual playout requests. The caller
 /// polls this alongside persisted build status to acknowledge accepted work
 /// before the scheduler acquires the build lock.
+#[allow(clippy::unused_async)]
 #[server]
 pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, ServerFnError> {
     use crate::host::state::AppState;
