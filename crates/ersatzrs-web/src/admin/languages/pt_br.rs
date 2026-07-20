@@ -1359,6 +1359,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScriptedScheduleMenu => "Grade por script",
         TextKey::JsonDizqueTvScheduleMenu => "Grade JSON (dizqueTV)",
         TextKey::ResetAllPlayouts => "Reconstruir todas as programações",
+        TextKey::PlayoutBuildQueued => "Reconstrução da programação enfileirada",
+        TextKey::PlayoutBuildsQueued => "reconstruções de programação enfileiradas",
         TextKey::SearchForPlayouts => "Pesquisar programações",
         TextKey::PlayoutDetail => "Detalhes da programação",
         TextKey::ShowFiller => "Mostrar preenchimento",

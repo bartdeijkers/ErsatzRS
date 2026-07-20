@@ -675,6 +675,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScriptedScheduleMenu => "Scripted Schedule",
         TextKey::JsonDizqueTvScheduleMenu => "JSON (dizqueTV) Schedule",
         TextKey::ResetAllPlayouts => "Reset All Playouts",
+        TextKey::PlayoutBuildQueued => "Playout rebuild queued",
+        TextKey::PlayoutBuildsQueued => "playout rebuilds queued",
         TextKey::SearchForPlayouts => "Search for playouts",
         TextKey::PlayoutDetail => "Playout Detail",
         TextKey::ShowFiller => "Show Filler",

@@ -247,7 +247,11 @@ pub struct AppState {
     pub entity_locker: EntityLocker,
     pub library_scan_queue: LibraryScanQueue,
     pub scan_progress: ScanProgressMap,
-    pub playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
+    /// Upstream-compatible unbounded single-reader queue for accepted manual
+    /// and side-effect-driven playout build requests.
+    pub playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
+    /// Tracks accepted manual requests until the scheduler completes them.
+    pub playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
     /// Playout lock registry, the same instance the scheduler builds with, so
     /// the playouts page can poll which playouts are currently building. Kept
     /// separate from [`Self::entity_locker`] because that one is a web-host-only
@@ -273,7 +277,7 @@ impl AppState {
         device_uuid: Uuid,
         tuner_count: i32,
         iptv_access_token_verifier: IptvAccessTokenVerifier,
-        playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
+        playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
@@ -294,6 +298,7 @@ impl AppState {
             library_scan_queue: LibraryScanQueue::default(),
             scan_progress: ScanProgressMap::default(),
             playout_build_tx,
+            playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity::default(),
             playout_locker,
         }
     }
@@ -303,7 +308,7 @@ impl AppState {
     pub fn for_tests(iptv_access_token_verifier: IptvAccessTokenVerifier) -> Self {
         let pool =
             ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(1);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
 
         Self::new(
             pool,

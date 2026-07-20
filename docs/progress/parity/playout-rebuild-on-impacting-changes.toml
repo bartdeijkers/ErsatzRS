@@ -10,8 +10,9 @@ pick up new settings instead of only being appended past. Playout items bake a
 snapshot of settings at build time (subtitle mode, preferred subtitle/audio
 language and title, watermark/graphics/deco, filler, resolved media), and stream
 generation reads item overrides before falling back to channel settings.
-Channel edits now enqueue a Refresh for every playout on the channel when
-playback-impacting fields change. The classic engine now consumes
+Channel edits enqueue no playout build, matching ErsatzTV's
+`UpdateChannelHandler`; explicit per-playout and Reset All requests are queued
+reliably and expose queued/building activity to the admin UI. The classic engine now consumes
 `request.mode`, so classic `Refresh` clears and rebuilds the window the way
 ErsatzTV `RefreshPlayout` does.
 '''
@@ -19,9 +20,9 @@ ErsatzTV `RefreshPlayout` does.
 [[debt]]
 id          = 'channel-edit-triggers-no-playout-rebuild'
 adr         = '0020'
-description = 'Saving a channel enqueues no playout build (`server_fns/channels.rs`), so changes to subtitle mode, preferred subtitle/audio language and title, watermark, streaming mode, FFmpeg profile, or playout offset never reach already-scheduled items. Channel edits that affect playback selection or stream shape must enqueue a Refresh for every playout on that channel.'
+description = 'Saving a channel enqueues no playout build (`server_fns/channels.rs`), matching ErsatzTV `UpdateChannelHandler`. Channel saves retain channel/EPG and embedded-subtitle side effects; explicit Refresh/Reset actions rebuild materialized items when an operator requests it.'
 discovered  = '2026-07-01'
-evidence    = 'Source review: `save_channel_with_state` now loads before/after channel side-effect state, compares the playback rebuild signature (FFmpeg profile, subtitle/audio preferences, watermark, streaming mode, and playout offset), and enqueues a deduped `PlayoutBuildMode::Refresh` request for every `Playout` bound to the saved channel. Regression coverage was added for the public save path with two playouts plus the maintenance worker Refresh rewrite of stale item-level playback data. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
+evidence    = 'Source review against `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`: channel save does not write `BuildPlayout`; ErsatzRS removed its playback-signature comparison and enqueue path, while retaining embedded-subtitle extraction. Regression coverage proves a saved channel with two playouts emits no build request.'
 resolved    = true
 
 [[debt]]

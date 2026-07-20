@@ -1333,6 +1333,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScriptedScheduleMenu => "Gescript schema",
         TextKey::JsonDizqueTvScheduleMenu => "JSON-schema (dizqueTV)",
         TextKey::ResetAllPlayouts => "Alle uitzendingen opnieuw opbouwen",
+        TextKey::PlayoutBuildQueued => "Heropbouw van uitzending in wachtrij geplaatst",
+        TextKey::PlayoutBuildsQueued => "uitzendingsheropbouwen in wachtrij geplaatst",
         TextKey::SearchForPlayouts => "Zoeken naar uitzendingen",
         TextKey::PlayoutDetail => "Uitzenddetails",
         TextKey::ShowFiller => "Opvulling tonen",

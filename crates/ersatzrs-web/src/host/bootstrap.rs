@@ -26,7 +26,6 @@ const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
 const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
-const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
 const LEGACY_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const LEGACY_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const MUXRATE_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
@@ -134,8 +133,10 @@ pub async fn run() {
 
     let ffmpeg_runtime = resolve_and_check_startup_ffmpeg_runtime(&startup.pool).await;
     apply_seeded_default_profile_acceleration(&startup, &ffmpeg_runtime).await;
-    let (playout_build_tx, playout_build_rx) =
-        tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
+    // Match ErsatzTV's unbounded single-reader worker channel. A manual reset
+    // must be accepted or return an error; bounded `try_send` silently lost
+    // requests during Reset All operations.
+    let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
     // Single playout lock registry shared with the scheduler: the web host
     // clones it into AppState (so the playouts page can poll which playouts are
     // building) and hands the same instance to the scheduler (the sole builder).
@@ -189,6 +190,7 @@ pub async fn run() {
             pool: app_state.pool.clone(),
             playout_build_rx,
             playout_locker,
+            playout_build_activity: app_state.playout_build_activity.clone(),
             hls_sessions: app_state.hls_sessions.clone(),
         },
         shutdown.clone(),
@@ -789,7 +791,9 @@ async fn build_app_state(
     database_backend: DatabaseBackend,
     schema_status: ersatzrs_infra::db::DatabaseSchemaStatus,
     ffmpeg_runtime: ersatzrs_ffmpeg::FfmpegRuntimeReport,
-    playout_build_tx: tokio::sync::mpsc::Sender<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    playout_build_tx: tokio::sync::mpsc::UnboundedSender<
+        ersatzrs_core::scheduling::PlayoutBuildRequest,
+    >,
     playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());

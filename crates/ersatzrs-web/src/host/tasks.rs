@@ -29,6 +29,7 @@ pub fn spawn_background_tasks(
         tokio::spawn(run_maintenance_scheduler(
             maintenance.playout_build_rx,
             maintenance.playout_locker,
+            maintenance.playout_build_activity,
             maintenance.hls_sessions,
             shutdown,
         )),
@@ -43,20 +44,23 @@ pub struct HdhrTaskInputs {
 
 pub struct MaintenanceTaskInputs {
     pub pool: DbPool,
-    pub playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
+    pub playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
     pub playout_locker: EntityLocker,
+    pub playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
 }
 
 async fn run_maintenance_scheduler(
-    playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
+    playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
     playout_locker: EntityLocker,
+    playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
     shutdown: CancellationToken,
 ) {
     if let Err(error) = run_scheduler(SchedulerOptions {
         tick: std::time::Duration::from_mins(1),
         build_requests: Some(playout_build_rx),
+        build_activity: Some(playout_build_activity),
         hls_sessions: Some(hls_sessions),
         locker: Some(playout_locker),
         shutdown: Some(shutdown),

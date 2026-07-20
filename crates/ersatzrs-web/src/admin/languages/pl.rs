@@ -1343,6 +1343,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScriptedScheduleMenu => "Harmonogram skryptowy",
         TextKey::JsonDizqueTvScheduleMenu => "Harmonogram JSON (dizqueTV)",
         TextKey::ResetAllPlayouts => "Odbuduj wszystkie plany emisji",
+        TextKey::PlayoutBuildQueued => "Odbudowę planu emisji dodano do kolejki",
+        TextKey::PlayoutBuildsQueued => "odbudów planów emisji dodano do kolejki",
         TextKey::SearchForPlayouts => "Szukaj planów emisji",
         TextKey::PlayoutDetail => "Szczegóły planu emisji",
         TextKey::ShowFiller => "Pokaż wypełniacze",

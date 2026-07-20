@@ -12,9 +12,9 @@ classic, YAML, and scripted playouts. Classic builds consume
 clears generated items while ignoring the stale main anchor and retaining the
 same-day checkpoint anchors needed for enumerator/shuffle continuity, and
 `Reset` starts with no retained anchors. Channel saves compare the
-playback-impacting channel signature (FFmpeg profile, subtitle/audio
-preferences, watermark, streaming mode, and playout offset) and enqueue one
-coalesced `Refresh` build per affected playout when that signature changes. The
+Channel saves do not enqueue a playout build, matching ErsatzTV's
+`UpdateChannelHandler`; they retain channel/EPG side effects and embedded
+subtitle extraction. The
 Playouts admin reset path keeps ErsatzTV's mapping (classic Reset Playout
 enqueues `Refresh`; block, sequential, and scripted playouts enqueue `Reset`),
 and classic `Refresh` clears the near-term generated rows it previously left
@@ -50,10 +50,9 @@ common engine, ineffective:
   and rerun-collection membership changes) enqueue `Refresh` for playouts whose
   schedules reference them (`media_browser.rs`
   `enqueue_*_collection_playout_refresh`).
-- **Channel edits** enqueue nothing. `server_fns/channels.rs` saves the row and
-  returns; no build is requested. The channel's subtitle mode, preferred
-  languages, watermark, and streaming settings therefore never reach
-  already-scheduled items.
+- **Channel edits** enqueue no playout build. This matches ErsatzTV's
+  `UpdateChannelHandler`, which saves channel data, refreshes channel/EPG
+  metadata, and may extract embedded subtitles without calling `BuildPlayout`.
 
 Even where `Refresh` is enqueued, ErsatzRS does not rebuild existing items the
 way ErsatzTV does. In ErsatzTV `PlayoutBuilder.RefreshPlayout` sets
@@ -99,10 +98,6 @@ items reflect the change, not just extended past it.**
    playout (a playout is impacted when it belongs to the changed channel, uses
    the changed schedule, or resolves content from the changed collection/library
    set):
-   - Channel edits that affect playback selection or stream shape (subtitle mode,
-     preferred subtitle/audio language and title, watermark, streaming mode,
-     FFmpeg profile, playout offset). ErsatzRS currently enqueues nothing here;
-     this is the primary gap to close.
    - Schedule and schedule-item edits (already wired; keep).
    - Library/collection content changes that a schedule resolves —
      collection/multi-collection/smart-collection/rerun membership, and library
@@ -135,8 +130,9 @@ items reflect the change, not just extended past it.**
 
 ## Consequences
 
-- Editing a channel's subtitle/language/watermark/streaming settings takes effect
-  on upcoming items without a manual Reset, closing the reported bug class.
+- Channel saves stay lightweight and do not unexpectedly rewrite an operator's
+  playout window; operators use the explicit per-playout or Reset All action
+  when they want regenerated items.
 - Classic gains real `Refresh`/`Reset` semantics, removing a silent parity
   divergence and making the "Reset Playout" button behave as documented.
 - One correctness-sensitive area is enumerator continuity: the classic rebuild
@@ -157,10 +153,9 @@ items reflect the change, not just extended past it.**
   `playoutItem.SubtitleMode ?? channel.SubtitleMode` snapshot model, breaks
   imported-playout reproducibility, and would still leave resolved *media* stale
   (the item list itself is materialized), so a rebuild path is required regardless.
-- **Leave it manual (status quo) and only document "Reset the playout".**
-  Rejected: the reported confusion shows operators reasonably expect a saved
-  setting to apply, and for classic the Reset button does not even rewrite
-  near-term items today.
+- **Automatically rebuild on channel save.** Rejected: it diverges from
+  ErsatzTV and makes ordinary channel editing unexpectedly expensive; explicit
+  playout refresh actions already provide the intended operator control.
 - **Full `Reset` on every impacting change.** Rejected: `Reset` wipes enumerator
   anchors and reshuffles, which would visibly reorder upcoming content after a
   trivial edit. `Refresh` preserves continuity and is the ErsatzTV choice for
@@ -172,8 +167,8 @@ items reflect the change, not just extended past it.**
   enqueue.
 - `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` — collection/schedule
   refresh helpers (`enqueue_playout_refreshes`, `enqueue_*_playout_refresh`).
-- `crates/ersatzrs-web/src/admin/server_fns/channels.rs` — channel save (no build
-  enqueue; gap).
+- `crates/ersatzrs-web/src/admin/server_fns/channels.rs` — channel save parity
+  (no playout build enqueue).
 - `crates/ersatzrs-web/src/admin/server_fns/playouts.rs` — `reset_playout` /
   `reset_all_playouts` (classic → Refresh mapping).
 - `crates/ersatzrs-core/src/scheduling/classic/mod.rs` — anchor-based build,
@@ -195,3 +190,5 @@ items reflect the change, not just extended past it.**
 
 - 2026-07-01: Original decision, prompted by a channel subtitle-mode change not
   reaching already-scheduled classic items.
+- 2026-07-20: Corrected channel-save behavior to match ErsatzTV: no automatic
+  playout rebuild; manual requests now have reliable queued-work feedback.

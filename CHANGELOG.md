@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Saving a channel no longer rebuilds its playouts automatically, matching
+  ErsatzTV. Manual Refresh/Reset and Reset All requests now use a reliable
+  unbounded worker queue, acknowledge queued work immediately, and show
+  queued/building activity until the persisted build outcome is available.
 - Classic schedule items now present Smart Shuffle as a Playback Order option.
   Selecting it keeps the compatible persisted Shuffle order and enables the
   item policy; its spacing controls appear inline only while selected. Existing

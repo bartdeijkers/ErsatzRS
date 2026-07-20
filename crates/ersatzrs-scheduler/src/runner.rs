@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
 use ersatzrs_core::hls::HlsSessionRegistry;
-use ersatzrs_core::locking::EntityLocker;
+use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
@@ -33,7 +33,10 @@ pub struct SchedulerOptions {
     /// Extra arguments appended to every scanner invocation.
     pub scanner_extra_args: Vec<OsString>,
     /// Requests from the web host for immediate playout rebuilds.
-    pub build_requests: Option<mpsc::Receiver<PlayoutBuildRequest>>,
+    pub build_requests: Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
+    /// Shared activity registry used by the web host to distinguish accepted
+    /// queued work from a build that has started.
+    pub build_activity: Option<PlayoutBuildActivity>,
     /// Optional live HLS session registry supplied by the web host so playout
     /// rebuilds can notify active segmenter workers.
     pub hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
@@ -65,6 +68,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         scanner_command,
         scanner_extra_args,
         mut build_requests,
+        build_activity,
         hls_sessions,
         locker,
         shutdown,
@@ -127,6 +131,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 };
                 let playout_id = request.playout_id;
                 let mode = request.mode;
+                if let Some(activity) = &build_activity {
+                    activity.start(playout_id);
+                }
                 match run_requested_playout_build(
                     &startup.pool,
                     &locker,
@@ -140,13 +147,16 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     Ok(false) => info!(playout_id, ?mode, "requested playout build skipped because playout is locked"),
                     Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),
                 }
+                if let Some(activity) = &build_activity {
+                    activity.finish(playout_id);
+                }
             }
         }
     }
 }
 
 async fn recv_build_request(
-    receiver: &mut Option<mpsc::Receiver<PlayoutBuildRequest>>,
+    receiver: &mut Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
 ) -> Option<PlayoutBuildRequest> {
     match receiver {
         Some(receiver) => receiver.recv().await,

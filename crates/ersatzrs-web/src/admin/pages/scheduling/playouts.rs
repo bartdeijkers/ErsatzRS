@@ -99,6 +99,7 @@ fn PlayoutsIsland(
     // -- selection / detail state --
     let selected_id: RwSignal<Option<i64>> = RwSignal::new(None);
     let build_message = RwSignal::new(String::new());
+    let refresh_feedback = RwSignal::new(String::new());
     let show_filler = RwSignal::new(initial_show_filler);
     let detail_page = RwSignal::new(0u32);
 
@@ -148,19 +149,22 @@ fn PlayoutsIsland(
     });
     let detail_total = Signal::derive(move || Some(current_detail_count.get()));
 
-    // -- lock polling (mirrors libraries-page IEntityLocker poll) --
+    // -- build activity polling --
     let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
-            use crate::admin::server_fns::playouts::list_locked_playouts;
+            use crate::admin::server_fns::playouts::playout_build_activity;
             leptos::task::spawn_local(async move {
                 let mut previous: Vec<i64> = Vec::new();
                 loop {
-                    if let Ok(ids) = list_locked_playouts().await {
-                        // When a playout transitions locked -> unlocked its
-                        // build finished: refetch like ErsatzTV does on the
-                        // PlayoutUpdatedNotification unlock.
+                    if let Ok(activity) = playout_build_activity().await {
+                        let mut ids = activity.queued;
+                        ids.extend(activity.building);
+                        ids.sort_unstable();
+                        ids.dedup();
+                        // When accepted work reaches a terminal state, refetch
+                        // the persisted result and failure status.
                         let just_unlocked = previous.iter().any(|id| !ids.contains(id));
                         if just_unlocked {
                             list_rows.refetch();
@@ -197,6 +201,22 @@ fn PlayoutsIsland(
         async move { process_scheduling_context(ctx).await }
     });
     let save_filler_action = Action::new(|value: &bool| set_show_filler_pref(*value));
+    Effect::new(move |_| {
+        if let Some(Ok(_)) = reset_action.value().get() {
+            refresh_feedback.set(tr(TextKey::PlayoutBuildQueued).to_string());
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(Ok(result)) = reset_all_action.value().get() {
+            if result.accepted > 0 {
+                refresh_feedback.set(format!(
+                    "{} {}",
+                    result.accepted,
+                    tr(TextKey::PlayoutBuildsQueued)
+                ));
+            }
+        }
+    });
 
     // -- delete dialog --
     let delete_target: RwSignal<Option<PlayoutListRow>> = RwSignal::new(None);
@@ -323,6 +343,7 @@ fn PlayoutsIsland(
                     {tr(TextKey::ResetAllPlayouts)}
                 </button>
             </div>
+            <p role="status">{move || refresh_feedback.get()}</p>
 
             <section class=style::content>
                 <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
@@ -579,7 +600,10 @@ fn playout_row(
     selected_id: RwSignal<Option<i64>>,
     locked: RwSignal<Vec<i64>>,
     select_row: impl Fn(&PlayoutListRow) + Copy + 'static,
-    reset_action: Action<(i64, i32), Result<(), ServerFnError>>,
+    reset_action: Action<
+        (i64, i32),
+        Result<crate::admin::server_fns::playouts::PlayoutBuildEnqueueResult, ServerFnError>,
+    >,
     delete_target: RwSignal<Option<PlayoutListRow>>,
     delete_open: RwSignal<bool>,
     schedule_target: RwSignal<Option<PlayoutListRow>>,

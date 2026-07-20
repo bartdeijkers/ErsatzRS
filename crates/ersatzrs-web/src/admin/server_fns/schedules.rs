@@ -1653,11 +1653,11 @@ fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: 
             playout_id,
             mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
         };
-        if let Err(error) = state.playout_build_tx.try_send(request) {
+        if let Err(error) = state.playout_build_tx.send(request) {
             tracing::warn!(
                 playout_id,
                 %error,
-                "dropping requested playout refresh; periodic scheduler will retry later"
+                "unable to enqueue requested playout refresh; worker queue is unavailable"
             );
         }
     }

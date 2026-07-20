@@ -97,7 +97,7 @@ routed  = true
 
 [[route]]
 nav     = '/media/rerun-collections'
-backing = 'list + add/`:id/edit` editor with HTML POST fallback save/delete and playout-refresh side effect on update'
+backing = 'list + add/`:id/edit` editor with HTML POST fallback save/delete; channel updates retain channel/EPG and embedded-subtitle side effects without rebuilding playouts'
 routed  = true
 
 [[route]]

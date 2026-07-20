@@ -377,7 +377,7 @@ mod tests {
         pool: ersatzrs_infra::db::DbPool,
         runtime: FfmpegRuntimeReport,
     ) -> Owner {
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
         let state = AppState::new(
             pool,
             DatabaseBackend::Sqlite,

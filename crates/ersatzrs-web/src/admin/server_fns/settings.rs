@@ -1356,11 +1356,11 @@ fn enqueue_playout_builds(
 ) {
     for playout_id in playout_ids {
         let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
-        if let Err(error) = state.playout_build_tx.try_send(request) {
+        if let Err(error) = state.playout_build_tx.send(request) {
             tracing::warn!(
                 playout_id,
                 %error,
-                "dropping requested settings-triggered playout build; periodic scheduler will retry later"
+                "unable to enqueue settings-triggered playout build; worker queue is unavailable"
             );
         }
     }

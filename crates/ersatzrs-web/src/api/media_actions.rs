@@ -342,11 +342,11 @@ async fn enqueue_collection_playout_refresh(
             playout_id,
             mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
         };
-        if let Err(error) = state.playout_build_tx.try_send(request) {
+        if let Err(error) = state.playout_build_tx.send(request) {
             tracing::warn!(
                 playout_id,
                 %error,
-                "dropping requested playout refresh; periodic scheduler will retry later"
+                "unable to enqueue requested playout refresh; worker queue is unavailable"
             );
         }
     }

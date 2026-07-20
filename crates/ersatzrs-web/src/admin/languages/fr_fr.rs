@@ -675,6 +675,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScriptedScheduleMenu => "Grille scriptée",
         TextKey::JsonDizqueTvScheduleMenu => "Grille JSON (dizqueTV)",
         TextKey::ResetAllPlayouts => "Réinitialiser toutes les diffusions",
+        TextKey::PlayoutBuildQueued => "Reconstruction de la diffusion mise en file d'attente",
+        TextKey::PlayoutBuildsQueued => "reconstructions de diffusion mises en file d'attente",
         TextKey::SearchForPlayouts => "Rechercher des diffusions",
         TextKey::PlayoutDetail => "Détail de la diffusion",
         TextKey::ShowFiller => "Afficher le filler",

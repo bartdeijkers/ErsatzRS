@@ -38,6 +38,64 @@ pub struct EntityLocker {
     inner: Arc<EntityLockerInner>,
 }
 
+/// Process-local visibility for playout build requests that have been accepted
+/// by the web host but have not yet reached a terminal worker outcome.
+///
+/// ErsatzTV uses an unbounded single-reader worker channel. ErsatzRS keeps the
+/// same delivery model while exposing queued work separately from the existing
+/// [`EntityLocker`] build lock so the admin UI can acknowledge an accepted
+/// request before the scheduler starts it.
+#[derive(Debug, Default, Clone)]
+pub struct PlayoutBuildActivity {
+    inner: Arc<PlayoutBuildActivityInner>,
+}
+
+#[derive(Debug, Default)]
+struct PlayoutBuildActivityInner {
+    queued: Mutex<HashSet<EntityId>>,
+    building: Mutex<HashSet<EntityId>>,
+}
+
+impl PlayoutBuildActivity {
+    /// Marks a playout request as queued.
+    ///
+    /// Returns `false` when the playout is already queued or building, letting
+    /// callers coalesce repeated admin clicks without adding duplicate work.
+    #[must_use]
+    pub fn queue(&self, playout_id: EntityId) -> bool {
+        let mut queued = recover(self.inner.queued.lock());
+        let building = recover(self.inner.building.lock());
+        !building.contains(&playout_id) && queued.insert(playout_id)
+    }
+
+    /// Moves an accepted request from queued to building.
+    pub fn start(&self, playout_id: EntityId) {
+        let _ = recover(self.inner.queued.lock()).remove(&playout_id);
+        recover(self.inner.building.lock()).insert(playout_id);
+    }
+
+    /// Removes a request after its worker reaches a terminal outcome.
+    pub fn finish(&self, playout_id: EntityId) {
+        let _ = recover(self.inner.queued.lock()).remove(&playout_id);
+        let _ = recover(self.inner.building.lock()).remove(&playout_id);
+    }
+
+    /// Snapshot queued playout identifiers for polling UI clients.
+    #[must_use]
+    pub fn queued_playouts(&self) -> Vec<EntityId> {
+        recover(self.inner.queued.lock()).iter().copied().collect()
+    }
+
+    /// Snapshot building playout identifiers for polling UI clients.
+    #[must_use]
+    pub fn building_playouts(&self) -> Vec<EntityId> {
+        recover(self.inner.building.lock())
+            .iter()
+            .copied()
+            .collect()
+    }
+}
+
 #[derive(Debug, Default)]
 struct EntityLockerInner {
     locked_playouts: Mutex<HashSet<EntityId>>,
@@ -182,5 +240,30 @@ mod tests {
         assert!(locker.unlock_library(3));
         assert!(!locker.is_library_locked(3));
         assert!(locker.is_playout_locked(3));
+    }
+
+    #[test]
+    fn playout_build_activity_coalesces_and_tracks_lifecycle() {
+        let activity = PlayoutBuildActivity::default();
+        assert!(activity.queue(7));
+        assert!(!activity.queue(7));
+        assert_eq!(activity.queued_playouts(), [7]);
+
+        activity.start(7);
+        assert!(activity.queued_playouts().is_empty());
+        assert_eq!(activity.building_playouts(), [7]);
+        assert!(!activity.queue(7));
+
+        activity.finish(7);
+        assert!(activity.queue(7));
+    }
+
+    #[test]
+    fn playout_build_activity_retains_large_accepted_batches() {
+        let activity = PlayoutBuildActivity::default();
+        for id in 1..=512 {
+            assert!(activity.queue(id));
+        }
+        assert_eq!(activity.queued_playouts().len(), 512);
     }
 }

@@ -2041,11 +2041,11 @@ fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: 
             playout_id,
             mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
         };
-        if let Err(error) = state.playout_build_tx.try_send(request) {
+        if let Err(error) = state.playout_build_tx.send(request) {
             tracing::warn!(
                 playout_id,
                 %error,
-                "dropping requested playout refresh; periodic scheduler will retry later"
+                "unable to enqueue requested playout refresh; worker queue is unavailable"
             );
         }
     }
@@ -7414,7 +7414,7 @@ mod remote_stream_tests {
         let (_db_file, pool) = test_pool().await;
         seed_remote_stream_fixture(&pool).await;
 
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
         let state = AppState::new(
             pool,
             DatabaseBackend::Sqlite,
@@ -7617,7 +7617,7 @@ mod season_detail_tests {
         let (_db_file, pool) = test_pool().await;
         seed_season_detail_fixture(&pool).await;
 
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
         let state = AppState::new(
             pool,
             DatabaseBackend::Sqlite,
@@ -7694,7 +7694,7 @@ mod season_detail_tests {
         let (_db_file, pool) = test_pool().await;
         seed_season_detail_fixture(&pool).await;
 
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
         let state = AppState::new(
             pool,
             DatabaseBackend::Sqlite,
@@ -7733,7 +7733,7 @@ mod season_detail_tests {
         let (_db_file, pool) = test_pool().await;
         seed_season_detail_fixture(&pool).await;
 
-        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
         let state = AppState::new(
             pool,
             DatabaseBackend::Sqlite,
@@ -9834,9 +9834,9 @@ mod tests {
         pool: ersatzrs_infra::db::DbPool,
     ) -> (
         crate::host::state::AppState,
-        tokio::sync::mpsc::Receiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+        tokio::sync::mpsc::UnboundedReceiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
     ) {
-        let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::channel(4);
+        let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
         let state = crate::host::state::AppState::new(
             pool,
             ersatzrs_infra::db::DatabaseBackend::Sqlite,

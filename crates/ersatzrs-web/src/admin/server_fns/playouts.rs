@@ -61,6 +61,22 @@ pub struct PlayoutListRow {
     pub build_message: Option<String>,
 }
 
+/// Result returned immediately after an operator requests one or more playout
+/// rebuilds. Completion remains asynchronous and is exposed through the
+/// activity snapshot plus the persisted build status.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlayoutBuildEnqueueResult {
+    pub accepted: u32,
+    pub coalesced: u32,
+}
+
+/// Current accepted manual-build activity for the playouts page.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlayoutBuildActivitySnapshot {
+    pub queued: Vec<i64>,
+    pub building: Vec<i64>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlayoutDetailItem {
     pub title: String,
@@ -481,21 +497,22 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
 
 /// Enqueues a build for one playout. Mirrors `Playouts.razor.ResetPlayout`:
 /// Classic playouts refresh, every other kind resets.
-#[allow(clippy::unused_async)]
 #[server]
-pub async fn reset_playout(id: i64, schedule_kind: i32) -> Result<(), ServerFnError> {
+pub async fn reset_playout(
+    id: i64,
+    schedule_kind: i32,
+) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    enqueue_build(&state, id, reset_playout_mode(schedule_kind));
-    Ok(())
+    enqueue_build(&state, id, reset_playout_mode(schedule_kind))
 }
 
 /// Enqueues builds for every eligible playout. Mirrors `ResetAllPlayoutsHandler`:
 /// Classic → Refresh, Block/Sequential/Scripted → Reset, ExternalJson/None
-/// skipped. Locked playouts are skipped by the scheduler when it dequeues.
+/// skipped. Repeated clicks coalesce with work already accepted by the worker.
 #[server]
-pub async fn reset_all_playouts() -> Result<(), ServerFnError> {
+pub async fn reset_all_playouts() -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -504,15 +521,18 @@ pub async fn reset_all_playouts() -> Result<(), ServerFnError> {
         .fetch_all(&state.pool)
         .await?;
 
+    let mut result = PlayoutBuildEnqueueResult::default();
     for r in &rows {
         let id: i64 = r.try_get("Id").unwrap_or(0);
         let kind: i32 = r.try_get("ScheduleKind").unwrap_or(0);
         let Some(mode) = reset_all_playout_mode(kind) else {
             continue;
         };
-        enqueue_build(&state, id, mode);
+        let queued = enqueue_build(&state, id, mode)?;
+        result.accepted += queued.accepted;
+        result.coalesced += queued.coalesced;
     }
-    Ok(())
+    Ok(result)
 }
 
 /// Persists a playout's `DailyRebuildTime`. Mirrors `UpdatePlayoutHandler`:
@@ -571,6 +591,20 @@ pub async fn list_locked_playouts() -> Result<Vec<i64>, ServerFnError> {
 
     let state = expect_context::<AppState>();
     Ok(state.playout_locker.locked_playouts())
+}
+
+/// Returns queued and currently building manual playout requests. The caller
+/// polls this alongside persisted build status to acknowledge accepted work
+/// before the scheduler acquires the build lock.
+#[server]
+pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(PlayoutBuildActivitySnapshot {
+        queued: state.playout_build_activity.queued_playouts(),
+        building: state.playout_build_activity.building_playouts(),
+    })
 }
 
 /// Reads the persisted `Show Filler` detail preference
@@ -701,7 +735,7 @@ pub async fn save_scripted_playout(id: i64, schedule_file: String) -> Result<(),
         return Err(ServerFnError::new("Playout does not exist."));
     }
 
-    enqueue_build(&state, id, PlayoutBuildMode::Reset);
+    enqueue_build(&state, id, PlayoutBuildMode::Reset)?;
     Ok(())
 }
 
@@ -762,7 +796,7 @@ pub async fn save_playout_alternate_schedules(
     // matching ErsatzTV's `maybeLastPlayoutItem` guard. See ParityDebt in
     // plans/playouts-parity-slice.md.
     if playout_has_items(&state.pool, playout_id).await? {
-        enqueue_build(&state, playout_id, PlayoutBuildMode::Refresh);
+        enqueue_build(&state, playout_id, PlayoutBuildMode::Refresh)?;
     }
     Ok(())
 }
@@ -1008,16 +1042,22 @@ fn enqueue_build(
     state: &crate::host::state::AppState,
     playout_id: i64,
     mode: ersatzrs_core::scheduling::PlayoutBuildMode,
-) {
-    let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
-    if let Err(error) = state.playout_build_tx.try_send(request) {
-        tracing::warn!(
-            playout_id,
-            ?mode,
-            %error,
-            "dropping requested playout build; the periodic scheduler will retry later"
-        );
+) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
+    if !state.playout_build_activity.queue(playout_id) {
+        return Ok(PlayoutBuildEnqueueResult {
+            accepted: 0,
+            coalesced: 1,
+        });
     }
+    let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
+    state.playout_build_tx.send(request).map_err(|error| {
+        state.playout_build_activity.finish(playout_id);
+        ServerFnError::new(format!("playout build worker is unavailable: {error}"))
+    })?;
+    Ok(PlayoutBuildEnqueueResult {
+        accepted: 1,
+        coalesced: 0,
+    })
 }
 
 /// Whether the playout already has any generated items. Mirrors ErsatzTV's
@@ -1043,7 +1083,7 @@ pub async fn create_playout_with_state(
     use ersatzrs_core::scheduling::PlayoutBuildMode;
 
     let id = create_playout_with_pool(&state.pool, &form).await?;
-    enqueue_build(state, id, PlayoutBuildMode::Reset);
+    enqueue_build(state, id, PlayoutBuildMode::Reset)?;
     Ok(id)
 }
 
