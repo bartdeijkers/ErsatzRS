@@ -319,7 +319,7 @@ fn FfmpegProfileEditorForm(
     let name = RwSignal::new(initial_form.name.clone());
     let thread_count = RwSignal::new(i64::from(initial_form.thread_count));
     let normalize_video = RwSignal::new(initial_form.normalize_video);
-    let normalize_audio = RwSignal::new(initial_form.normalize_audio);
+    let transcode_audio = RwSignal::new(initial_form.transcode_audio);
     let hardware_acceleration = RwSignal::new(initial_form.hardware_acceleration);
     let vaapi_display = RwSignal::new(initial_form.vaapi_display.clone());
     let vaapi_driver = RwSignal::new(initial_form.vaapi_driver);
@@ -488,7 +488,7 @@ fn FfmpegProfileEditorForm(
         name: name.get_untracked(),
         thread_count: i32::try_from(thread_count.get_untracked()).unwrap_or(0),
         normalize_video: normalize_video.get_untracked(),
-        normalize_audio: normalize_audio.get_untracked(),
+        transcode_audio: transcode_audio.get_untracked(),
         hardware_acceleration: hardware_acceleration.get_untracked(),
         vaapi_display: vaapi_display.get_untracked(),
         vaapi_driver: vaapi_driver.get_untracked(),
@@ -776,12 +776,12 @@ fn FfmpegProfileEditorForm(
             // ── Audio section ─────────────────────────────────────────
             <div class=style::section>
                 <h2 class=style::section_title>{tr(TextKey::Audio)}</h2>
-                <CheckBox label=tr(TextKey::NormalizeAudio) value=normalize_audio/>
+                <CheckBox label=tr(TextKey::TranscodeAudio) value=transcode_audio/>
 
-                // Audio normalization fields — always rendered; hidden when normalize_audio is off.
+                // Audio transcode fields — always rendered; hidden when transcoding is off.
                 <div
                     class=style::section_fields
-                    style:display=move || if normalize_audio.get() { "" } else { "none" }
+                    style:display=move || if transcode_audio.get() { "" } else { "none" }
                 >
                     <SelectField<i32>
                         label=tr(TextKey::AudioFormat)

@@ -1143,7 +1143,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoneOption => "(None)",
         TextKey::NumHelp => "the mid-roll point number, starting with 1",
         TextKey::OptionalDisplayTitle => "Optional display title...",
-        TextKey::NormalizeAudio => "Normalize Audio",
+        TextKey::TranscodeAudio => "Transcode Audio",
         TextKey::NormalizeColors => "Normalize Colors",
         TextKey::NormalizeFramerate => "Normalize Framerate",
         TextKey::NormalizeLoudness => "Normalize Loudness",

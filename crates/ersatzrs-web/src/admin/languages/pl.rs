@@ -1807,7 +1807,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoneOption => "(Brak)",
         TextKey::NumHelp => "numer punktu śródemisji, zaczynając od 1",
         TextKey::OptionalDisplayTitle => "Opcjonalny tytuł wyświetlany...",
-        TextKey::NormalizeAudio => "Normalizuj audio",
+        TextKey::TranscodeAudio => "Transkoduj audio",
         TextKey::NormalizeColors => "Normalizuj kolory",
         TextKey::NormalizeFramerate => "Normalizuj liczbę klatek",
         TextKey::NormalizeLoudness => "Normalizuj głośność",

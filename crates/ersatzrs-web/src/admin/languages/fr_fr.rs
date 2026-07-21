@@ -1165,7 +1165,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoneOption => "(Aucun)",
         TextKey::NumHelp => "le numéro du point mid-roll, à partir de 1",
         TextKey::OptionalDisplayTitle => "Titre d'affichage facultatif...",
-        TextKey::NormalizeAudio => "Normaliser l'audio",
+        TextKey::TranscodeAudio => "Transcoder l’audio",
         TextKey::NormalizeColors => "Normaliser les couleurs",
         TextKey::NormalizeFramerate => "Normaliser la fréquence d'images",
         TextKey::NormalizeLoudness => "Normaliser le volume",

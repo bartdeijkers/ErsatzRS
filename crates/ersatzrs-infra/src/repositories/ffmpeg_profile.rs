@@ -33,7 +33,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     async fn upsert(&self, profile: &FFmpegProfile) -> Result<()> {
         sqlx::query(
             r#"REPLACE INTO "FFmpegProfile" (
-                "Id", "Name", "ThreadCount", "NormalizeAudio", "NormalizeVideo",
+                "Id", "Name", "ThreadCount", "TranscodeAudio", "NormalizeVideo",
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
@@ -46,7 +46,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.id)
         .bind(&profile.name)
         .bind(profile.thread_count)
-        .bind(profile.normalize_audio)
+        .bind(profile.transcode_audio)
         .bind(profile.normalize_video)
         .bind(encode_enum(profile.hardware_acceleration))
         .bind(&profile.vaapi_display)
@@ -93,7 +93,7 @@ fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
         id: row.try_get("Id")?,
         name: decode_string_column(row, "Name")?,
         thread_count: row.try_get("ThreadCount")?,
-        normalize_audio: decode_bool_column(row, "NormalizeAudio")?,
+        transcode_audio: decode_bool_column(row, "TranscodeAudio")?,
         normalize_video: decode_bool_column(row, "NormalizeVideo")?,
         hardware_acceleration: decode_enum_column(
             "ffmpeg profile hardware_acceleration",

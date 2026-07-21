@@ -40,7 +40,7 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
 
     sqlx::query(
         r#"REPLACE INTO "FFmpegProfile" (
-               "Id", "Name", "ThreadCount", "NormalizeVideo", "NormalizeAudio",
+               "Id", "Name", "ThreadCount", "NormalizeVideo", "TranscodeAudio",
                "ResolutionId", "ScalingBehavior", "VideoFormat", "AudioFormat",
                "VideoBitrate", "VideoBufferSize", "AudioBitrate", "AudioBufferSize",
                "NormalizeLoudnessMode", "AudioChannels", "AudioSampleRate",

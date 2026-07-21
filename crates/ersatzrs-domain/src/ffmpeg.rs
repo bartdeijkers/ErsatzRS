@@ -86,7 +86,7 @@ pub struct FFmpegProfile {
     pub id: EntityId,
     pub name: String,
     pub thread_count: i32,
-    pub normalize_audio: bool,
+    pub transcode_audio: bool,
     pub normalize_video: bool,
     pub hardware_acceleration: HardwareAccelerationKind,
     pub vaapi_display: Option<String>,

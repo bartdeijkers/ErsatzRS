@@ -1797,7 +1797,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoneOption => "(Geen)",
         TextKey::NumHelp => "het mid-roll-puntnummer, beginnend bij 1",
         TextKey::OptionalDisplayTitle => "Optionele weergavetitel...",
-        TextKey::NormalizeAudio => "Audio normaliseren",
+        TextKey::TranscodeAudio => "Audio transcoderen",
         TextKey::NormalizeColors => "Kleuren normaliseren",
         TextKey::NormalizeFramerate => "Framerate normaliseren",
         TextKey::NormalizeLoudness => "Loudness normaliseren",
