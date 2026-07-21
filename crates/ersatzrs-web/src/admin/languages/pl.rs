@@ -1811,7 +1811,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NormalizeColors => "Normalizuj kolory",
         TextKey::NormalizeFramerate => "Normalizuj liczbę klatek",
         TextKey::NormalizeLoudness => "Normalizuj głośność",
-        TextKey::NormalizeVideo => "Normalizuj wideo",
+        TextKey::TranscodeVideo => "Transkoduj wideo",
         TextKey::Off => "Wyłączone",
         TextKey::Pad => "Dopełnij",
         TextKey::PadNearestFifteenMinutes => "15 (:00, :15, :30, :45)",

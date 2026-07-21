@@ -2,10 +2,10 @@ feature    = 'FFmpeg Profile editor'
 etv_source = '`ErsatzTV/Pages/FFmpegProfile*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/`, `crates/ersatzrs-web/src/admin/languages/`'
 status     = 'Ported'
-adr        = ['0049']
+adr        = ['0049', '0050']
 
 summary    = '''
-Ported: list at `/ffmpeg/profiles` (alias `/ffmpeg`), editor `#[island]` at `/ffmpeg/profiles/add` and `/ffmpeg/profiles/:id` with all 31 fields, hardware accordion driven by `normalize_video`, video-preset parity via `presets_for_profile`, LoudNorm parity, startup-report-backed HW acceleration list using hwaccels and encoder names, preservation of a saved unavailable HW value for edit prefill, Copy Profile via `Modal`, H.264 `VideoProfile` select options (`main`, `high`, `high10`, and NVENC `high444p`) with save/load normalization, and the upstream hardware-format validation warning for unsupported NVENC MPEG-2 (`NVENC supports formats (h264, hevc, av1)`). Visible labels, generated copy-name defaults, and validation messages use the persisted-language i18n layer with per-culture translation modules. Browser coverage now proves the hydrated editor state transitions in Chromium and Firefox plus the no-JS edit fallback in Chromium.
+Ported: list at `/ffmpeg/profiles` (alias `/ffmpeg`), editor `#[island]` at `/ffmpeg/profiles/add` and `/ffmpeg/profiles/:id` with all 31 fields, hardware accordion driven by `transcode_video`, video-preset parity via `presets_for_profile`, LoudNorm parity, startup-report-backed HW acceleration list using hwaccels and encoder names, preservation of a saved unavailable HW value for edit prefill, Copy Profile via `Modal`, H.264 `VideoProfile` select options (`main`, `high`, `high10`, and NVENC `high444p`) with save/load normalization, and the upstream hardware-format validation warning for unsupported NVENC MPEG-2 (`NVENC supports formats (h264, hevc, av1)`). Visible labels, generated copy-name defaults, and validation messages use the persisted-language i18n layer with per-culture translation modules. Browser coverage now proves the hydrated editor state transitions in Chromium and Firefox plus the no-JS edit fallback in Chromium.
 
 Reopened 2026-07-01: the profile edit page has inconsistent vertical spacing
 between form elements in the Video and Audio sections compared with the General
@@ -19,6 +19,12 @@ ADR 0049 deliberately replaces ErsatzTV's ambiguous `NormalizeAudio` schema,
 backend, and UI terminology with `TranscodeAudio`; the persisted behavior is
 unchanged: disabled forces `AudioFormat = Copy`, while LoudNorm remains a
 separate control.
+
+ADR 0050 applies the same deliberate correction to ErsatzTV's
+`NormalizeVideo` terminology: the schema, backend, and UI use
+`TranscodeVideo`; disabled still forces `VideoFormat = Copy` and disables
+hardware acceleration, while framerate and color normalization remain separate
+controls.
 '''
 
 [[debt]]

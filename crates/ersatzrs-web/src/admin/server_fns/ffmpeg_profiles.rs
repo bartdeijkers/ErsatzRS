@@ -30,7 +30,7 @@ pub struct FfmpegProfileForm {
     pub id: i64,
     pub name: String,
     pub thread_count: i32,
-    pub normalize_video: bool,
+    pub transcode_video: bool,
     pub transcode_audio: bool,
     pub hardware_acceleration: i32,
     pub vaapi_display: String,
@@ -75,7 +75,7 @@ impl FfmpegProfileForm {
             id: 0,
             name: String::new(),
             thread_count: 0,
-            normalize_video: true,
+            transcode_video: true,
             transcode_audio: true,
             hardware_acceleration: 0,
             vaapi_display: String::new(),
@@ -408,7 +408,7 @@ pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm
                 .unwrap_or_default()
                 .unwrap_or_default(),
             thread_count: r.try_get("ThreadCount").unwrap_or(0),
-            normalize_video: r.try_get::<i32, _>("NormalizeVideo").unwrap_or(1) != 0,
+            transcode_video: r.try_get::<i32, _>("TranscodeVideo").unwrap_or(1) != 0,
             transcode_audio: r.try_get::<i32, _>("TranscodeAudio").unwrap_or(1) != 0,
             hardware_acceleration: r.try_get("HardwareAcceleration").unwrap_or(0),
             vaapi_display: r
@@ -487,7 +487,7 @@ fn qsv_extra_hardware_frames_for_persist(
 /// Server-side rules mirror `CreateFFmpegProfileHandler` / `UpdateFFmpegProfileHandler`:
 /// - Name: non-empty, ≤ 50 chars, unique (excluding own id on update).
 /// - `ThreadCount` ≥ 0.
-/// - When `NormalizeVideo = false`, `VideoFormat` is forced to Copy (99) and
+/// - When `TranscodeVideo = false`, `VideoFormat` is forced to Copy (99) and
 ///   `HardwareAcceleration` to None (0).
 /// - When `TranscodeAudio = false`, `AudioFormat` is forced to Copy (99).
 /// - `PadMode` is Software (1) for None, VAAPI-controlled otherwise.
@@ -533,13 +533,13 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
     }
 
     // ── Derived values (mirror handler logic) ─────────────────────────────
-    let hw_accel = if form.normalize_video {
+    let hw_accel = if form.transcode_video {
         form.hardware_acceleration
     } else {
         0
     };
-    // Copy = 99 when normalization is disabled.
-    let video_format = if form.normalize_video {
+    // Copy = 99 when video transcoding is disabled.
+    let video_format = if form.transcode_video {
         form.video_format
     } else {
         99
@@ -625,7 +625,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
 
         let result = sqlx::query(
             r#"INSERT INTO "FFmpegProfile" (
-                "Name", "ThreadCount", "NormalizeVideo", "TranscodeAudio",
+                "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
@@ -638,7 +638,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         )
         .bind(&name)
         .bind(form.thread_count)
-        .bind(i32::from(form.normalize_video))
+        .bind(i32::from(form.transcode_video))
         .bind(i32::from(form.transcode_audio))
         .bind(hw_accel)
         .bind(vaapi_display)
@@ -673,7 +673,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
     } else {
         sqlx::query(
             r#"UPDATE "FFmpegProfile" SET
-                "Name" = ?, "ThreadCount" = ?, "NormalizeVideo" = ?, "TranscodeAudio" = ?,
+                "Name" = ?, "ThreadCount" = ?, "TranscodeVideo" = ?, "TranscodeAudio" = ?,
                 "HardwareAcceleration" = ?, "VaapiDisplay" = ?, "VaapiDriver" = ?,
                 "VaapiDevice" = ?, "QsvExtraHardwareFrames" = ?, "ResolutionId" = ?,
                 "ScalingBehavior" = ?, "PadMode" = ?,
@@ -688,7 +688,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         )
         .bind(&name)
         .bind(form.thread_count)
-        .bind(i32::from(form.normalize_video))
+        .bind(i32::from(form.transcode_video))
         .bind(i32::from(form.transcode_audio))
         .bind(hw_accel)
         .bind(vaapi_display)
@@ -758,7 +758,7 @@ pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, Serve
     let state = expect_context::<AppState>();
     let result = sqlx::query(
         r#"INSERT INTO "FFmpegProfile" (
-               "Name", "ThreadCount", "NormalizeVideo", "TranscodeAudio",
+               "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
@@ -769,7 +769,7 @@ pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, Serve
                "NormalizeFramerate", "NormalizeColors", "DeinterlaceVideo"
            )
            SELECT
-               ?, "ThreadCount", "NormalizeVideo", "TranscodeAudio",
+               ?, "ThreadCount", "TranscodeVideo", "TranscodeAudio",
                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",

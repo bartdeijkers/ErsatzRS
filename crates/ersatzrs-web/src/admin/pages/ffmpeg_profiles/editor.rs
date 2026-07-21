@@ -3,7 +3,7 @@
 //! - [`FfmpegProfileEditorPage`] — SSR wrapper; loads form data and resolution
 //!   list server-side, then mounts the island (or shows "not found").
 //! - [`FfmpegProfileEditorIsland`] — fully hydrated editor. Hardware
-//!   acceleration section is visible when `normalize_video` is enabled;
+//!   acceleration section is visible when `transcode_video` is enabled;
 //!   VAAPI device/driver/display/pad-mode and QSV extra-frames sub-rows appear
 //!   only when the matching accelerator is selected.  "Copy Profile" opens a
 //!   `Modal` wired to `copy_ffmpeg_profile`; on success it navigates to the
@@ -303,7 +303,7 @@ fn localized_hw_accel_items(
 
 /// Fully hydrated `FFmpegProfile` editor body.
 ///
-/// Hardware accordion visibility is driven by `normalize_video`, not by the
+/// Hardware accordion visibility is driven by `transcode_video`, not by the
 /// selected video format.  Within the accordion, VAAPI-specific fields
 /// (device, display, driver, pad mode) appear when `HardwareAcceleration == 3`
 /// and QSV extra-hardware-frames appear when `HardwareAcceleration == 1`.
@@ -318,7 +318,7 @@ fn FfmpegProfileEditorForm(
     // ── Signals ──────────────────────────────────────────────────────────
     let name = RwSignal::new(initial_form.name.clone());
     let thread_count = RwSignal::new(i64::from(initial_form.thread_count));
-    let normalize_video = RwSignal::new(initial_form.normalize_video);
+    let transcode_video = RwSignal::new(initial_form.transcode_video);
     let transcode_audio = RwSignal::new(initial_form.transcode_audio);
     let hardware_acceleration = RwSignal::new(initial_form.hardware_acceleration);
     let vaapi_display = RwSignal::new(initial_form.vaapi_display.clone());
@@ -353,18 +353,18 @@ fn FfmpegProfileEditorForm(
     let copy_name = RwSignal::new(String::new());
 
     // ── Derived visibility ────────────────────────────────────────────────
-    // HW accordion: visible when normalize_video is enabled.
-    let show_hw_section = Signal::derive(move || normalize_video.get());
+    // HW accordion: visible when video transcoding is enabled.
+    let show_hw_section = Signal::derive(move || transcode_video.get());
     // QSV-specific sub-row: hardware == 1 (QSV).
     let show_qsv_frames =
-        Signal::derive(move || normalize_video.get() && hardware_acceleration.get() == 1);
+        Signal::derive(move || transcode_video.get() && hardware_acceleration.get() == 1);
     // VAAPI-specific sub-rows: hardware == 3 (VAAPI).
     let show_vaapi_fields =
-        Signal::derive(move || normalize_video.get() && hardware_acceleration.get() == 3);
+        Signal::derive(move || transcode_video.get() && hardware_acceleration.get() == 3);
     // Target-loudness field: loudness mode == 1 (LoudNorm).
     let show_loudness_target = Signal::derive(move || normalize_loudness_mode.get() == 1);
     let video_format_error = Signal::derive(move || {
-        normalize_video
+        transcode_video
             .get()
             .then(|| video_format_validation_error(hardware_acceleration.get(), video_format.get()))
             .flatten()
@@ -487,7 +487,7 @@ fn FfmpegProfileEditorForm(
         id: profile_id,
         name: name.get_untracked(),
         thread_count: i32::try_from(thread_count.get_untracked()).unwrap_or(0),
-        normalize_video: normalize_video.get_untracked(),
+        transcode_video: transcode_video.get_untracked(),
         transcode_audio: transcode_audio.get_untracked(),
         hardware_acceleration: hardware_acceleration.get_untracked(),
         vaapi_display: vaapi_display.get_untracked(),
@@ -648,9 +648,9 @@ fn FfmpegProfileEditorForm(
             // ── Video section ─────────────────────────────────────────
             <div class=style::section>
                 <h2 class=style::section_title>{tr(TextKey::Video)}</h2>
-                <CheckBox label=tr(TextKey::NormalizeVideo) value=normalize_video/>
+                <CheckBox label=tr(TextKey::TranscodeVideo) value=transcode_video/>
 
-                // Video normalization fields — always rendered; hidden when normalize_video is off.
+                // Video transcode fields — always rendered; hidden when transcoding is off.
                 // Stable DOM shape avoids hydration mismatches.
                 <div
                     class=style::section_fields

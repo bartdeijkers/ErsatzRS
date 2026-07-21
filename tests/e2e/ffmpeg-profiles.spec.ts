@@ -99,6 +99,22 @@ async function createNvencH264Profile(page: Page, name: string): Promise<string>
 }
 
 test.describe('ffmpeg profile editor parity', () => {
+  test('Transcode Video controls profile video settings', async ({ page }) => {
+    await gotoAddProfile(page);
+    const editor = page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]');
+    const transcodeVideo = editor.getByRole('checkbox', { name: 'Transcode Video' });
+    const name = uniqueName('Video Copy Profile');
+
+    await expect(transcodeVideo).toBeChecked();
+    await expect(editor.getByText('Video Format', { exact: true })).toBeVisible();
+    await transcodeVideo.uncheck();
+    await expect(editor.getByText('Video Format', { exact: true })).toBeHidden();
+    await editor.locator('input[name="name"]').fill(name);
+    await editor.getByRole('button', { name: /add profile/i }).first().click();
+    await expect(page).toHaveURL(/\/ffmpeg$/);
+    await expect(page.getByRole('row').filter({ hasText: name })).toContainText('Copy');
+  });
+
   test('Transcode Audio controls profile audio settings', async ({ page }) => {
     await gotoAddProfile(page);
     const editor = page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]');

@@ -810,7 +810,7 @@ async fn insert_default_ffmpeg_profile(
             "VaapiDevice", "VaapiDriver", "VideoBitrate", "VideoBufferSize",
             "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames",
             "VaapiDisplay", "TonemapAlgorithm", "TargetLoudness", "PadMode",
-            "TranscodeAudio", "NormalizeColors", "NormalizeVideo"
+            "TranscodeAudio", "NormalizeColors", "TranscodeVideo"
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(640_i32)
@@ -1402,6 +1402,34 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(column_names.iter().any(|name| name == "TranscodeAudio"));
         assert!(!column_names.iter().any(|name| name == "NormalizeAudio"));
+    }
+
+    #[tokio::test]
+    async fn transcode_video_column_is_available_after_migrations() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        initialize_media_server_database(&pool)
+            .await
+            .expect("seed mediaserver defaults");
+
+        let transcode_video: i32 =
+            sqlx::query_scalar(r#"SELECT "TranscodeVideo" FROM "FFmpegProfile" WHERE "Id" = 1"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load seeded transcode-video setting");
+        assert_eq!(transcode_video, 1);
+
+        let columns = sqlx::query(r#"PRAGMA table_info("FFmpegProfile")"#)
+            .fetch_all(&pool)
+            .await
+            .expect("inspect ffmpeg-profile columns");
+        let column_names = columns
+            .iter()
+            .map(|row| row.try_get::<String, _>("name").expect("column name"))
+            .collect::<Vec<_>>();
+        assert!(column_names.iter().any(|name| name == "TranscodeVideo"));
+        assert!(!column_names.iter().any(|name| name == "NormalizeVideo"));
     }
 
     #[tokio::test]

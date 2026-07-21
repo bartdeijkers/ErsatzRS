@@ -15,9 +15,10 @@ release section when tagging a release.
 
 ### Changed
 
-- Renamed the FFmpeg profile audio-transcoding control and database field from
-  the ambiguous `NormalizeAudio` to `TranscodeAudio`. Disabling it still copies
-  source audio; LoudNorm remains a separate volume-normalization setting.
+- Renamed the FFmpeg profile audio/video transcoding controls and database
+  fields from the ambiguous `NormalizeAudio`/`NormalizeVideo` to
+  `TranscodeAudio`/`TranscodeVideo`. Disabling them still copies the source
+  streams; LoudNorm, framerate, and color normalization remain separate.
 - Made Dutch (nl) admin UI terminology consistent. "Shuffle" now uses the common
   loanword everywhere instead of the uncommon "schudden", and the "Scripted",
   playout, deco, and multi-collection wording is unified (one rendering each,
