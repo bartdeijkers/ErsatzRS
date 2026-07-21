@@ -84,6 +84,8 @@ jobs:
         run: cargo test --workspace --all-features --lib --bins --tests
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
+      - name: Validate architecture boundaries and debt ratchets
+        run: cargo xtask architecture-lint
 
   hydration:
     name: Playwright E2E

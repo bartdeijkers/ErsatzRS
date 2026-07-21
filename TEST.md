@@ -16,7 +16,7 @@ For build commands and the dev loop, see [BUILD.md](BUILD.md).
 | MySQL backend    | `--features mysql-integration`                           | Same integration tests, run against MariaDB via testcontainers.                 |
 | Hydration smoke  | CI-gated lint plus Playwright specs or browser probes.    | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
 | Runtime smoke    | `cargo xtask smoke`                                      | Real web host, seeded SQLite fixture, IPTV MPEG-TS and HLS startup playback.    |
-| CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, hydration lint, scoped hydration smoke, cargo-deny, commitlint, docs. |
+| CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, architecture/hydration lint, scoped hydration smoke, cargo-deny, commitlint, docs. |
 
 References:
 
@@ -29,8 +29,9 @@ References:
 
 ## What runs where
 
-- **CI (every push and PR)**: layers 1–4 plus `cargo xtask hydration-lint -p
-  ersatzrs-web`. The browser island hydration smoke also runs in CI when the
+- **CI (every push and PR)**: layers 1–4 plus `cargo xtask architecture-lint`
+  and `cargo xtask hydration-lint -p ersatzrs-web`. The browser island
+  hydration smoke also runs in CI when the
   diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
   files. The `mysql-integration` feature is enabled there, so the
   testcontainers MariaDB run is part of CI.
@@ -163,6 +164,7 @@ This wraps the cheap checks that have repeatedly caught late parity bugs:
 
 - `cargo xtask target-size` warning check before the gate ladder
 - `cargo fmt --all -- --check`
+- `cargo xtask architecture-lint`
 - `cargo xtask hydration-lint -p ersatzrs-web`
 - `cargo nextest run -p ersatzrs-web`
 - `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`

@@ -6,7 +6,7 @@
 id         = 'p7a-01'
 phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Decide and enforce the application boundary'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'application-use-case-layer'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
@@ -15,7 +15,18 @@ An accepted ADR defines the application/composition boundaries, and a
 baseline-aware architecture gate prevents an empty app crate, forbidden app
 dependencies, new direct admin SQL, and new server-error-to-default loaders.
 '''
-evidence = ''
+evidence = '''
+ADR 0051 is Accepted and indexed; `ersatzrs-app::ApplicationServices` replaces
+the placeholder entry point. `cargo xtask architecture-lint` passes with exact
+production baselines for 535 direct admin SQL calls and 115 server-error
+default loaders. Its nine focused regressions cover empty-app, renamed and
+workspace dependencies, SQL aliases and glob imports, raw Executor SQL,
+production-capable cfg forms, and exact upward/downward ratcheting. The gate
+runs in CI and `cargo xtask parity-check`. Closeout passed both
+workspace clippy configurations, 946 nextest tests plus doctests, the Leptos
+build, `cargo xtask parity-check p7a-01 app` (including 378 web tests),
+`cargo deny check`, and `cargo xtask progress check`.
+'''
 
 [[milestone]]
 id         = 'p7a-02'

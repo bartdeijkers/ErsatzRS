@@ -1,5 +1,6 @@
 use std::process::ExitCode;
 
+mod architecture_lint;
 mod hydration_lint;
 mod parity_check;
 mod progress;
@@ -13,6 +14,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     match sub.as_str() {
+        "architecture-lint" => architecture_lint::run(args.collect()),
         "hydration-lint" => hydration_lint::run(args.collect()),
         "parity-check" => parity_check::run(args.collect()),
         "progress" => progress::run(args.collect()),
@@ -40,6 +42,7 @@ fn print_help() {
     eprintln!("    cargo xtask <SUBCOMMAND>");
     eprintln!();
     eprintln!("SUBCOMMANDS:");
+    eprintln!("    architecture-lint Check application-boundary and admin-debt guardrails");
     eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
     eprintln!("    parity-check      Run the fast parity gate ladder");
     eprintln!("    progress          Query/maintain the porting progress index (docs/progress/)");

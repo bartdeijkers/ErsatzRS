@@ -1,0 +1,71 @@
+# Architecture-lint debt baseline, introduced by ADR 0051.
+#
+# Each value is the exact number of production occurrences currently allowed
+# in that file. New files and count increases fail. Count reductions also fail
+# until this baseline is reduced in the same change, making it a one-way
+# ratchet rather than a permanent exemption list. Only modules/functions whose
+# cfg expression cannot compile with test=false are excluded from these rules.
+
+[direct_admin_sql]
+"crates/ersatzrs-web/src/admin/layout/badges.rs" = 1
+"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 38
+"crates/ersatzrs-web/src/admin/server_fns/channels.rs" = 7
+"crates/ersatzrs-web/src/admin/server_fns/decos.rs" = 40
+"crates/ersatzrs-web/src/admin/server_fns/ffmpeg_profiles.rs" = 11
+"crates/ersatzrs-web/src/admin/server_fns/filler.rs" = 13
+"crates/ersatzrs-web/src/admin/server_fns/layout.rs" = 4
+"crates/ersatzrs-web/src/admin/server_fns/libraries.rs" = 2
+"crates/ersatzrs-web/src/admin/server_fns/logs.rs" = 1
+"crates/ersatzrs-web/src/admin/server_fns/media_browser.rs" = 171
+"crates/ersatzrs-web/src/admin/server_fns/media_sources.rs" = 53
+"crates/ersatzrs-web/src/admin/server_fns/playouts.rs" = 53
+"crates/ersatzrs-web/src/admin/server_fns/schedules.rs" = 52
+"crates/ersatzrs-web/src/admin/server_fns/search.rs" = 1
+"crates/ersatzrs-web/src/admin/server_fns/settings.rs" = 14
+"crates/ersatzrs-web/src/admin/server_fns/templates.rs" = 23
+"crates/ersatzrs-web/src/admin/server_fns/trakt.rs" = 6
+"crates/ersatzrs-web/src/admin/server_fns/troubleshooting.rs" = 14
+"crates/ersatzrs-web/src/admin/server_fns/watermarks.rs" = 11
+"crates/ersatzrs-web/src/api/artwork.rs" = 3
+"crates/ersatzrs-web/src/api/ffmpeg_profiles.rs" = 3
+"crates/ersatzrs-web/src/api/media_actions.rs" = 10
+"crates/ersatzrs-web/src/api/troubleshooting.rs" = 4
+
+[server_error_to_default]
+"crates/ersatzrs-web/src/admin/pages/channels/editor.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/channels/list.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/list.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/libraries/mod.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/media/add_to_schedule_modal.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/media/browser.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/media/collections.rs" = 5
+"crates/ersatzrs-web/src/admin/pages/media/filler_presets.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/media/multi_collections.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/media/multi_select_browser.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/media/playlists.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/media/remote_streams.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/media/rerun_collections.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/media/smart_collections.rs" = 3
+"crates/ersatzrs-web/src/admin/pages/media/trakt_lists.rs" = 3
+"crates/ersatzrs-web/src/admin/pages/media/trash.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/media_sources/emby.rs" = 5
+"crates/ersatzrs-web/src/admin/pages/media_sources/jellyfin.rs" = 5
+"crates/ersatzrs-web/src/admin/pages/media_sources/local.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/media_sources/plex.rs" = 3
+"crates/ersatzrs-web/src/admin/pages/scheduling/block_editor.rs" = 8
+"crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/scheduling/decos.rs" = 8
+"crates/ersatzrs-web/src/admin/pages/scheduling/playout_kind_editor.rs" = 1
+"crates/ersatzrs-web/src/admin/pages/scheduling/playouts.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/scheduling/schedules.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/scheduling/templates.rs" = 5
+"crates/ersatzrs-web/src/admin/pages/search.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/settings.rs" = 7
+"crates/ersatzrs-web/src/admin/pages/system/health.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/system/logs.rs" = 2
+"crates/ersatzrs-web/src/admin/pages/system/troubleshooting.rs" = 4
+"crates/ersatzrs-web/src/admin/pages/watermarks/list.rs" = 1
+"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 4
+"crates/ersatzrs-web/src/admin/server_fns/troubleshooting.rs" = 1
+"crates/ersatzrs-web/src/admin/ui/dialogs/save_as_smart_collection.rs" = 1
+"crates/ersatzrs-web/src/api/troubleshooting.rs" = 4

@@ -1,24 +1,25 @@
 feature    = 'Application use-case layer and orchestration boundary'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Application/`, including Channels, Libraries, MediaCollections, Playouts, Scheduling, Streaming, and Troubleshooting handlers'
 rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-scheduler`, `crates/ersatzrs-web`'
-status     = 'Not started'
-adr        = []
+status     = 'In progress'
+adr        = ['0051']
 summary    = '''
-Not started: the architecture assigns use-case coordination to ersatzrs-app,
-but that crate is still an unused one-line placeholder. Application workflows
-currently live in web server functions/APIs through raw SQL, concrete
-repositories, process-local queues, and split lock registries. The active plan
-migrates complete vertical slices behind storage-neutral core ports, beginning
-with playout-build and scan orchestration, while keeping endpoint and persisted
-contracts stable.
+In progress: ADR 0051 defines the storage-neutral application boundary and
+native web composition root. `cargo xtask architecture-lint` prevents the app
+crate from returning to a placeholder, forbids dependencies on concrete
+adapter/runtime crates, and ratchets existing production admin SQL and
+server-error-default loaders. Application workflows still live in web server
+functions/APIs through raw SQL, concrete repositories, process-local queues,
+and split lock registries; Phase 7B migrates complete vertical slices while
+keeping endpoint and persisted contracts stable.
 '''
 
 [[debt]]
 id          = 'app-crate-is-unused-placeholder'
 description = 'ersatzrs-app is a one-line placeholder with no dependencies or consumers even though ARCHITECTURE.md assigns it responsibility for coordinating use cases.'
 discovered  = '2026-07-21'
-evidence    = 'Audit evidence: `crates/ersatzrs-app/src/lib.rs` contains only `// placeholder`; its manifest has no dependencies; no workspace Rust or manifest file consumes the crate. Close through milestones p7a-01 and p7b-01.'
-resolved    = false
+evidence    = 'ADR 0051 and `ApplicationServices` establish the application entry point; `cargo xtask architecture-lint` rejects an app crate without a public non-test item and has focused negative regression coverage. Concrete service construction remains tracked by p7b-01.'
+resolved    = true
 
 [[debt]]
 id          = 'web-owns-application-orchestration'

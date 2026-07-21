@@ -51,6 +51,13 @@ fn run_inner(opts: &Opts) -> ExitCode {
             ["cargo", "fmt", "--all", "--", "--check"],
         ));
     }
+    if !opts.skip_architecture {
+        steps.push(Step::new(
+            "architecture lint",
+            ".",
+            ["cargo", "xtask", "architecture-lint"],
+        ));
+    }
     if !opts.skip_hydration {
         steps.push(Step::new(
             "hydration lint",
@@ -163,6 +170,7 @@ struct Opts {
     leptos_build: bool,
     skip_progress: bool,
     skip_fmt: bool,
+    skip_architecture: bool,
     skip_hydration: bool,
     skip_tests: bool,
     skip_clippy: bool,
@@ -177,6 +185,7 @@ impl Opts {
                 "--leptos-build" => opts.leptos_build = true,
                 "--skip-progress" => opts.skip_progress = true,
                 "--skip-fmt" => opts.skip_fmt = true,
+                "--skip-architecture" => opts.skip_architecture = true,
                 "--skip-hydration" => opts.skip_hydration = true,
                 "--skip-tests" => opts.skip_tests = true,
                 "--skip-clippy" => opts.skip_clippy = true,
@@ -208,6 +217,7 @@ fn print_help() {
     eprintln!("    --leptos-build      Also run cargo leptos build in crates/ersatzrs-web");
     eprintln!("    --skip-progress     Skip cargo xtask progress check");
     eprintln!("    --skip-fmt          Skip cargo fmt --all -- --check");
+    eprintln!("    --skip-architecture Skip cargo xtask architecture-lint");
     eprintln!("    --skip-hydration    Skip cargo xtask hydration-lint -p ersatzrs-web");
     eprintln!("    --skip-tests        Skip cargo nextest run -p ersatzrs-web");
     eprintln!("    --skip-clippy       Skip cargo clippy -p ersatzrs-web --all-targets");

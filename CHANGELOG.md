@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Established the storage-neutral application-service boundary and native web
+  composition root in ADR 0051. A baseline-aware architecture gate now blocks
+  an empty app crate, forbidden adapter dependencies, new direct admin SQL, and
+  new server-error-to-default loaders while existing debt is migrated by
+  vertical slice; raw Executor SQL, SQLx glob imports, and production-capable
+  cfg forms cannot bypass its debt accounting.
 - Added dependency-aware structural milestone tracking through
   `cargo xtask progress`, with validated acceptance/evidence records for
   restoring the application layer, closing audited stopgaps, and preparing the

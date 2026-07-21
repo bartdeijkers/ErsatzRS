@@ -227,6 +227,7 @@ cargo xtask progress routes --unrouted    # advertised-but-404 admin routes
 cargo xtask progress sessions --limit 10  # recent session/handoff log
 cargo xtask progress adr list             # derived ADR index
 cargo xtask progress check                # validate the text sources (CI gate)
+cargo xtask architecture-lint             # enforce app boundary + admin debt ratchets
 cargo xtask smoke                         # boot temp web host and probe IPTV/HLS playback
 ```
 

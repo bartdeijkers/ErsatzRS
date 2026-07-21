@@ -44,6 +44,11 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
 | `./run.sh log`   | `tail -F ersatzrs.log`.                                     |
 
+Run `cargo xtask architecture-lint` after changing crate dependencies,
+`ersatzrs-app`, or production admin data loaders. It enforces ADR 0051 and
+requires the exact debt counts in `.architecture-lint-baseline.toml` to shrink
+with migrated vertical slices.
+
 On Windows, use [`run.cmd`](run.cmd) (or `pwsh -File run.ps1`) with the same
 subcommands. See [Windows development](#windows-development) below.
 

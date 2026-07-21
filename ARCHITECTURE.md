@@ -45,6 +45,10 @@ Rules:
   native FFI directly.
 - `ersatzrs-infra` implements repository and provider traits from `ersatzrs-core`.
 - `ersatzrs-app` coordinates use cases and depends on traits, not concrete storage.
+- `ersatzrs-app` must not depend on adapter/runtime crates; the native
+  `ersatzrs-web` host is the composition root that injects core-port
+  implementations into application services. See
+  [ADR 0051](docs/adr/0051-application-boundary-and-composition-root.md).
 - `ersatzrs-web` owns HTTP, Leptos, IPTV, HLS, and HDHomeRun endpoints.
 - `ersatzrs-web` follows the folder boundaries in
   [docs/reference/web-crate-structure.md](docs/reference/web-crate-structure.md):
