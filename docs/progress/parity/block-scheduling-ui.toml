@@ -1,8 +1,18 @@
 feature    = 'Block scheduling UI'
 etv_source = '`ErsatzTV/Pages/Blocks*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs`, `block_editor.rs`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
-Ported: `/blocks` has group management, empty-group display, add/edit/copy/delete block actions, editor metadata and item replacement, multi-collection targets, watermark/graphics selectors, unsaved-form preview, ErsatzTV-style validation for names/duration/item targets, hydrated browser coverage, no-JS item save fallback, and same-viewport visual evidence; see `plans/blocks-parity-slice.md`.
+Reopened 2026-07-21: `/blocks` retains its ported group/editor/action and
+hydration behavior, but unsaved-form preview is a simplified SQL projection
+instead of the real block playout preview builder used by ErsatzTV. Milestone
+p7b-04 in `plans/application-layer-and-video-jukebox.md` owns the closeout.
 '''
+
+[[debt]]
+id          = 'block-preview-bypasses-real-scheduling-engine'
+description = 'Unsaved block preview manually lists a subset of collection types and accumulates durations instead of invoking the real block playout preview builder with temporary scheduling state; query failures are returned as an empty preview.'
+discovered  = '2026-07-21'
+evidence    = 'Compared `crates/ersatzrs-web/src/admin/server_fns/blocks.rs::preview_block_playout` with `$ERSATZTV_SRC/ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`, which constructs temporary Template/Playout/reference data and calls `IBlockPlayoutPreviewBuilder.Build` in Reset mode. Close through milestone p7b-04.'
+resolved    = false

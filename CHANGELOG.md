@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Added dependency-aware structural milestone tracking through
+  `cargo xtask progress`, with validated acceptance/evidence records for
+  restoring the application layer, closing audited stopgaps, and preparing the
+  future "The Box" video-jukebox add-on API.
 - Renamed the FFmpeg profile audio/video transcoding controls and database
   fields from the ambiguous `NormalizeAudio`/`NormalizeVideo` to
   `TranscodeAudio`/`TranscodeVideo`. Disabling them still copies the source

@@ -14,7 +14,8 @@ source of truth, and is unrelated to the application's runtime database.
 
 | File | Holds |
 | --- | --- |
-| `phase.toml` | Current phase, focus, checklist, known TODOs, blocking decisions. |
+| `phase.toml` | Current phase, focus, summary, immediate next steps, and blocking decisions. |
+| `milestones.toml` | Fine-grained plan milestones, dependencies, status, acceptance, and completion evidence. |
 | `parity/<slug>.toml` | One file per ErsatzTV feature: source, target, status, ADR refs, summary. |
 | `routes.toml` | Admin UI route coverage (`routed=false` = advertised-but-404 placeholder). |
 | `hydration.toml` | Per-page Leptos islands hydration parity. |
@@ -31,6 +32,10 @@ to maintain.
 
 ```bash
 cargo xtask progress next                 # current phase + focus + in-progress + latest session
+cargo xtask progress milestones --runnable  # open milestones whose dependencies are complete
+cargo xtask progress milestones --all     # complete roadmap grouped by phase
+cargo xtask progress milestones --id p7b-02 --full  # one milestone + acceptance
+cargo xtask progress milestones --feature application-use-case-layer
 cargo xtask progress gaps                 # everything not yet Ported (the "what's left" view)
 cargo xtask progress parity --status 'In progress'
 cargo xtask progress parity --feature ffmpeg-filter-graph --full
@@ -46,6 +51,9 @@ sqlite3 progress.db "SELECT feature, status FROM parity WHERE status != 'Ported'
 
 - Parity change: edit `parity/<slug>.toml` (create a new file for a new
   feature). See the `update-parity` skill.
+- Milestone change: edit `milestones.toml`. Use only the validated statuses
+  `Not started`, `In progress`, `Complete`, `Blocked`, and `Deferred`; add
+  concrete `evidence` before marking a milestone `Complete`.
 - New session/handoff entry: `cargo xtask progress add-session --agent "…"
   --summary "…"` (appends one NDJSON line), or edit `sessions.ndjson` directly.
 - Validate before committing: `cargo xtask progress check`.

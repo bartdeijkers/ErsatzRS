@@ -1,7 +1,7 @@
 feature    = 'Media browsers (movies, shows, images, music, other videos, songs)'
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0048']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
@@ -15,13 +15,6 @@ track cards appear near the top of `/media/movies/:id`, can seed Add To
 Collection/Add To Playlist dialogs with selected audio/subtitle preferences,
 and collection/playlist inspection surfaces display saved playback override
 summaries.
-
-Reopened 2026-07-02: Add To Collection/Add To Playlist actions from media pages
-always navigate away to the target collection or playlist after adding items,
-even when the likely workflow is to keep browsing and add more items.
-`/media/music/artists/:id` also needs multi-select checkboxes/action toolbar
-for the artist's music-video rows so admins can add several music videos to a
-collection or playlist in one action.
 
 Closed 2026-07-03 for the stay-in-context add flows: every Add To Collection /
 Add To Playlist dialog (shared browser/detail modals and the search page's own
@@ -44,6 +37,12 @@ collection type; per-row Add To Collection keeps working and replaces the
 selection with that single row, matching browser-list item-menu behavior.
 Proven by the multi-select assertions in
 `tests/e2e/media-browser-actions.spec.ts`.
+
+Reopened 2026-07-21 for two explicit deferred search/browser details:
+thumbnail-kind cards still route through poster-size artwork URLs, and the
+per-kind See All pages defer richer detail/library-filter behavior without a
+recorded upstream/product disposition. Milestone p7c-03 owns the decision and
+closeout.
 '''
 
 [[debt]]
@@ -94,3 +93,17 @@ description = 'On `/media/music/artists/{artist_id}`, the artist detail page sho
 discovered  = '2026-07-02'
 evidence    = 'Maintainer request on 2026-07-02. The current artist detail page restored artist-level Add To Collection and music-video preview artwork, but the listed music videos still lack a multi-select checkbox/action toolbar for bulk Add To Collection and Add To Playlist. Reclose only after `/media/music/artists/{artist_id}` supports checkbox selection for artist music videos, bulk collection/playlist dialogs persist the selected music-video items, individual row actions still work, the route remains hydrated and console-clean, and focused browser coverage proves the bulk flow.'
 resolved    = true
+
+[[debt]]
+id          = 'search-thumbnail-size-plumbing-deferred'
+description = 'Search classifies several card kinds as Thumbnail but still builds their artwork URLs with the poster-size path, leaving the explicit Thumbnail size plumbing deferred.'
+discovered  = '2026-07-21'
+evidence    = '`crates/ersatzrs-web/src/admin/server_fns/search.rs` documents the deferred Thumbnail size in the artwork URL path. Close through milestone p7c-03 with focused search card/artwork coverage.'
+resolved    = false
+
+[[debt]]
+id          = 'see-all-detail-and-library-filter-disposition'
+description = 'Per-kind See All pages explicitly defer full detail-page behavior and the library-filter combobox, but the repository does not yet record whether upstream requires them or ErsatzRS intentionally omits them.'
+discovered  = '2026-07-21'
+evidence    = '`crates/ersatzrs-web/src/admin/pages/media/see_all_lists.rs` names the deferral. Close through milestone p7c-03 by source-checking the pinned ErsatzTV search flow and either implementing parity or recording an intentional non-goal.'
+resolved    = false

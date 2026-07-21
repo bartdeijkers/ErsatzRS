@@ -106,6 +106,11 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `application-layer-and-video-jukebox.md` — phased structural plan to restore
+  the `ersatzrs-app` use-case boundary, remove audited stopgaps and silent
+  failure fallbacks, then add a durable "The Box" music-video request queue
+  behind a stable authenticated add-on API. Fine-grained state is tracked in
+  `docs/progress/milestones.toml`.
 - `docker-prebuilt-binary-images.md` - release Docker plan to assemble GHCR
   images from already-built Linux release binaries instead of compiling Rust
   inside the Docker build.

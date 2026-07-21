@@ -1,8 +1,35 @@
 feature    = 'Watermark editor'
 etv_source = '`ErsatzTV/Pages/Watermark*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/watermarks/`, `crates/ersatzrs-web/src/admin/languages/`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
-Ported: list at `/watermarks` with ErsatzTV-like action bar/content/divider layout, image thumbnail, localized Mode/Location columns, and icon Edit/Copy/Delete row actions; SSR wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`; 17-field form with full `WatermarkEditViewModelValidator.cs` validation parity; custom image upload via axum multipart (`/api/watermarks/image`) + WASM `gloo_net` FormData POST + size guard via `ETV_MAXIMUM_UPLOAD_MB`; drawvg placement preview (320×180 PNG, debounced 400 ms).
+Reopened 2026-07-21 for preview truthfulness: the ported list/editor,
+validation, upload, and drawvg placement preview remain, but the local
+Actual Size preview uses a fixed 32-pixel placeholder instead of selected
+asset dimensions. The preview also needs visible 4:3 and 16:9 content guides
+for consistent placement plus Previous/Next navigation for comparing and
+aligning saved watermarks without returning to the list. Milestone p7c-02 owns
+the closeout.
 '''
+
+[[debt]]
+id          = 'actual-size-preview-uses-fixed-placeholder'
+description = 'The watermark preview labels size mode Actual Size but hard-codes a 32-pixel height instead of using the selected watermark asset dimensions.'
+discovered  = '2026-07-21'
+evidence    = '`preview_watermark_placement` in `crates/ersatzrs-web/src/admin/server_fns/watermarks.rs` contains `ActualSize — use a fixed placeholder size`. Close through milestone p7c-02 by loading real dimensions or explicitly labeling the preview schematic.'
+resolved    = false
+
+[[debt]]
+id          = 'preview-lacks-aspect-ratio-positioning-guides'
+description = 'The placement preview does not show clearly distinguishable 4:3 and 16:9 content-boundary helper lines, making it difficult to position a watermark consistently relative to content with different aspect ratios.'
+discovered  = '2026-07-21'
+evidence    = 'Maintainer requirement: the watermark preview must display helper lines for both 4:3 and 16:9 content framing so placement can be compared against the actual content area. Close through milestone p7c-02 with localized labels/legend as needed and desktop/mobile browser proof.'
+resolved    = false
+
+[[debt]]
+id          = 'preview-lacks-previous-next-watermark-navigation'
+description = 'The editor has no Previous/Next controls for moving directly between saved watermarks, so aligning multiple channel watermarks requires repeatedly returning to the list and reopening editors.'
+discovered  = '2026-07-21'
+evidence    = 'Maintainer requirement: deterministic Previous/Next controls must switch between saved watermark previews quickly, expose disabled/end behavior, and never silently discard unsaved edits. Close through milestone p7c-02 with localized controls and browser coverage proving comparison navigation.'
+resolved    = false

@@ -5,6 +5,12 @@
 > Each tier carries a ready-to-run `/goal` prompt (ErsatzRS `prompt.md` house
 > style) so the work can be dispatched without re-deriving context.
 
+> **Sequencing:** this backlog is milestone `p7c-04` in
+> `docs/progress/milestones.toml`. Do not mechanically split
+> `admin/server_fns/media_browser.rs` before milestone `p7b-05` extracts its
+> application use cases and data-access queries; otherwise the same code will
+> move twice. Refresh the measurements and prompts when `p7c-04` starts.
+
 ## Context
 
 The admin UI i18n layer was split so that each UI culture lives in its own file

@@ -1,212 +1,29 @@
-# Project phase + narrative state. Structured per-feature detail lives in
-# parity/*.toml; query everything with `cargo xtask progress next`.
+# Current program-level state. Feature/debt details live in parity/*.toml and
+# fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7 regression hardening and parity completion'
+current_focus = 'Phase 7A — Guardrails and failure semantics'
 
 summary = '''
-Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
-scheduling engines (Block/YAML/Classic/Scripted), media-source scanning,
-IPTV/HDHomeRun endpoints, and the admin UI through Trakt list integration are
-in place. Phase 7 hardening adds shared database URL resolution, explicit
-mediaserver bootstrap, startup readiness/downgrade/schema health reporting, and
-the non-web health-check engine in ersatzrs-core::health / ersatzrs-infra::health.
+Phases 0–6 are complete: the workspace, FFmpeg pipeline, scheduling engines,
+media-source scanning, IPTV/HDHomeRun endpoints, and the main admin UI route
+families are in place. The 2026-07-21 structural audit reopened cross-cutting
+Phase 7 work around the unused application crate, silent data-access/UI failure
+fallbacks, simplified block preview, production-visible development routes,
+and secondary placeholder/deferred behavior. Phase 8 is reserved for the
+dependency-gated "The Box" video-jukebox extension.
 '''
 
 next_steps = '''
-Broaden health / troubleshooting coverage and remaining Phase 7 hardening
-items. Support pages (health/logs/troubleshooting) closed to `Ported`
-2026-06-17, and the multi-collections / rerun collections / playlists /
-filler presets route family closed to `Ported` 2026-06-19. FFmpeg command
-generation closed to `Ported` 2026-06-20 after the encoder-only NVENC
-filter-gate proof passed. HLS variant playlists / segmenter closed to `Ported`
-2026-06-21 after ADR 0016's hard capacity ceiling, live readout, shared HLS /
-MPEG-TS transcode counting, and playable all-streams-in-use slate were
-implemented. ADR 0008 managed runtime acquisition (Accepted 2026-06-21) is now
-implemented — ErsatzRS ships without FFmpeg and downloads/updates first-party
-`ErsatzRS-ffmpeg` releases at startup, surfacing update availability on
-`/system/health`; a 2026-06-21 follow-up fix (`596a2fc`) makes Windows upgrades
-from older bundled-FFmpeg archives clear stale stored `ffmpeg.exe`/`ffprobe.exe`
-paths so managed acquisition runs instead of failing before download. As of
-2026-06-21 the release line intentionally omits the two macOS archives
-(osx-x64/osx-arm64) to preserve GitHub-hosted runner credits (tracked in
-`platform-support.toml`; CI still builds/tests all six RIDs), and as of
-2026-06-30 the first beta release line restores GHCR Docker image publication
-beside the Linux and Windows GitHub archives. The 2026-06-22
-regression pass fixed managed FFmpeg Windows path surfacing, fresh-database
-channel branding, serialized library scan queueing, schedule item add-button
-hydration, and remote-stream zero-duration health noise. The 2026-06-23 island
-hydration audit closed the stale marker-mismatch TODO with a clean 56/56
-whole-app smoke plus `/channels` Delete and seeded `/playouts`
-row-select/refresh browser proof. The 2026-06-24 HLS segmenter regression
-closeout returned HLS variant playlists / segmenter to `Ported`: normalized
-same-item appends no longer emit unjustified discontinuities, MPEG-TS HLS
-segments normalize PCR as well as continuity counters, and the default hybrid
-MPEG-TS wrapper script/fallback uses a profile-derived CBR mux rate; the live
-TSDuck gate passed all 86 checks with HLS Segmenter audio pip cadence proof.
-ADR 0018 `content-variants` Phase 0 landed on 2026-06-23: schema, domain,
-search contract, scheduling projection, and health-check readiness are in
-place. Phase 1 UI surfacing landed on 2026-06-24 and was refined on
-2026-06-29: `/media/*` browse pages always show variants with localized
-badges, TV show/season specials render as episode-style rows, detail pages
-expose linked Extras / Special Features and Versions sections, and surface the
-new search tokens. Phase 2
-local scanner import/classification also landed on 2026-06-24: movie/show
-library extras are imported as typed `OtherVideo` rows with normalized subkind,
-folder/stem-derived parent linkage when available, and default-exclusion search
-coverage. Phase 3 alternate-version linking landed on 2026-06-24: local
-music-video, song, and movie scans classify live/unplugged/acoustic/remix/
-remaster/extended/director-cut renditions, keep deterministic canonical
-primaries, link same-work alternates, and leave lone alternates typed but
-unlinked. Phase 4 commentary render acceptance landed on 2026-06-24:
-commentary-bearing smart collections now feed channels whose preferred audio
-title or custom stream selector pins commentary audio/subtitles in direct
-IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
-2026-06-24: repo-owned templates and docs cover unplugged rendition smart
-collections, commentary movie channels, and featurette pre-roll filler attached
-to primary movie schedule items while default schedules stay unchanged. The
-ADR 0018 provider-side import slice landed on 2026-06-25 (`c978cd1`):
-Plex/Jellyfin/Emby movie-library sync reuses a shared `ersatzrs-domain`
-content-variant classifier after each provider page (including ETag-skipped
-rows), so server-reported extras become hidden `ContentKind=Extra` rows and
-provider alternate versions link to their canonical primary via
-`ParentMediaItemId`; `content-variants` was marked fully `Ported` at that point
-with every structured `[[debt]]` resolved. The FFmpeg filter-graph
-opacity-expression live proof debt is now resolved, and the
-2026-06-25 healthcheck closeout replaced Docker's curl readiness probe with the
-purpose-built `ersatzrs-healthcheck` binary. The 2026-06-26 Docker/runtime
-hardening pass added manifest-keyed dependency-layer caching for local runtime
-image builds (preserving the `ersatzrs-web` plus `ersatzrs-healthcheck` runtime
-layout), kept NVIDIA CUDA/NVENC driver libraries resident so the native
-hardware probe no longer crashes container startup via `dlclose`, shipped the
-admin UI public assets and Leptos hydration bundle inside the Docker image, and
-made automatic maintenance health runs reuse the startup-resolved managed
-FFmpeg paths instead of bare `PATH` defaults. The 2026-06-27 admin e2e
-hardening pass stabilized hydrated startup state across the Playwright route
-families (library scan queued/failure status, media-collection editors keeping
-SSR data through hydration, scheduling editors loading initial data before the
-island boundary, and the FFmpeg profile no-JS fallback served from resolved SSR
-data with a hydration-resource-free `<noscript>`) and switched CI to run the
-full Playwright e2e suite by default, with the wrapper running serially unless
-`ERSATZRS_E2E_WORKERS`/`--workers` is set so shared-database specs no longer
-race. The 2026-06-27 MTV dogfood pass
-reopened two parity surfaces as real progress gaps: schedule item fallback form
-deserialization and Classic scheduling quality around duration post-roll filler
-overlap, same-artist music-video shuffle proximity, and fixed-anchor schedules
-leaving no active pre-anchor playout rows. A follow-up admin-UI-only MTV
-Unplugged attempt found and resolved an ADR 0018 live-admin scanner gap:
-Music Videos scans now retry SQLite busy/locked contention around per-write
-import/link/finalization operations, the documented
-`content_kind:alternate_version AND sub_kind:unplugged` selector returns 38
-music videos in the admin UI, and the admin UI created the MTV Unplugged smart
-collection, Classic schedule, channel, existing MTV watermark assignment, and
-playout with one MTV Bumpers item after every three unplugged videos. The
-2026-06-28 follow-up closeout resolved those dogfood parity gaps: Classic now
-advances duration post-roll filler, spaces shuffled music-video artists, starts
-dynamic rows before fixed anchors, and schedule-item HTML fallback saves parse
-repeated row fields without dropping the schedule. The 2026-06-28 spec-backed
-closeout implemented ADR 0013 in-app TSDuck MPEG-TS troubleshooting, routed
-startup database URL resolution through the startup configuration helper while
-preserving Docker `DATABASE_URL`, and completed the module-split survey's infra
-health registry pilot. As of 2026-07-01, the movie-detail ADR 0018 surfacing
-regression is closed again: `/media/movies/:id` renders extras as TV-style
-rows, supports movie-extra collection/playlist actions, and exposes
-alternate-edition plus commentary audio/subtitle playback options. ADR 0048 now
-adds persisted collection/playlist item playback overrides for those audio and
-subtitle choices, with collection/playlist inspection summaries and scheduling
-propagation into generated playout items. The
-2026-07-01 media-browser action/toolbar regression is also closed: songs and
-images use the shared right-side selection toolbar and item action menu, artist
-detail collection/artwork proof is restored, and show detail now uses the same
-SSR-loaded island shape as movie and season details. The in-app Zero Duration
-health warning for static images is closed as well; ordinary still-image media
-versions no longer warn while animated-capable image paths and duration-bearing
-media remain warning candidates. ADR 0019's opt-in Smart Shuffle scheduling
-extension was implemented on 2026-07-17 and redesigned on 2026-07-19 around
-per-selection-unit policies, isolated tag hydration, compatible anchor state,
-native YAML/Lua definitions, localized item editors, and paginated draft
-overviews. The three 2026-07-01 reopened items all closed on 2026-07-02:
-the `/channels/add` default group regression (fresh Add Channel forms default
-`Group` to `ErsatzRS` with focused repository and browser-proof coverage,
-while existing channels keep their saved groups), the FFmpeg profile editor
-Video/Audio section spacing regression (shared `section-fields` rhythm class
-with measured browser proof in desktop and mobile viewports), and the ADR 0017
-v3 default-profile bitrate retune (seeded video bitrates 4000/8000/10000/
-22500/30000 kbit/s with video buffer sizes unchanged; fresh-only, idempotent
-seed proven by focused tests). On 2026-07-02, additional media curation tasks were
-registered: ADR 0048 collection items must allow the same movie to appear more
-than once in one collection when each row has a different commentary or
-alternate-audio override, and Add To Collection/Add To Playlist should keep the
-admin in the current media browsing/detail context by default after adding
-items; `/media/music/artists/:id` also needs checkbox multi-select actions for
-bulk adding multiple artist music videos to collections or playlists. On
-2026-07-03 the ADR 0048 duplicate-row task closed: `CollectionItem` moved to a
-surrogate `Id` key in SQLite and MySQL, add flows insert duplicate same-movie
-rows when the playback-override tuple differs (identical tuples stay
-idempotent), the collection detail page selects/removes/reorders by row
-identity, and scheduling expansion dedupes on (media item, override tuple) so
-each duplicate row schedules with its own override. The stay-in-context add
-task also closed on 2026-07-03: Add To Collection/Add To Playlist dialogs keep
-the admin on the current media browse/detail/search page after a successful
-add, with a localized "View Collection"/"View Playlist" toast action link as
-the explicit navigation path. The artist-detail music-video multi-select task
-closed the same day: `/media/music/artists/:id` rows carry checkboxes feeding
-the shared media-browser selection toolbar with bulk Add To Collection / Add
-To Playlist dialogs, closing all three registered 2026-07-02 media curation
-follow-ups. Remaining Phase 7 closeout work is broad verification and
-release-readiness proof.
+Execute Phase 7A milestones p7a-01 through p7a-04, then migrate application
+vertical slices in Phase 7B before performing module splits. Phase 8 jukebox
+implementation must wait for the application boundary and an accepted product
+contract. Use `cargo xtask progress milestones --runnable` for runnable work,
+`cargo xtask progress milestones --id <id> --full` for acceptance criteria,
+and `cargo xtask progress gaps` for feature/debt state. Historical completion
+evidence remains in parity TOMLs, ADRs, sessions, the changelog, and git history
+instead of accumulating in this current-focus field.
 '''
 
-# Phase 0 checklist (all complete).
-[[checklist]]
-item = 'Documentation contracts (CONTRIBUTING, STYLE, ARCHITECTURE, PORTING)'
-done = true
-[[checklist]]
-item = 'ADRs 0001–0007'
-done = true
-[[checklist]]
-item = 'Diataxis documentation structure'
-done = true
-[[checklist]]
-item = 'Parity matrix skeleton'
-done = true
-[[checklist]]
-item = 'GitHub CI, issue templates, PR template, dependabot'
-done = true
-[[checklist]]
-item = 'Tooling config (rustfmt, clippy, deny, editorconfig, gitattributes)'
-done = true
-[[checklist]]
-item = 'Claude skills for recurring workflows'
-done = true
-[[checklist]]
-item = 'Conventional Commits and commitlint'
-done = true
-[[checklist]]
-item = 'Cargo workspace and empty crate stubs'
-done = true
-[[checklist]]
-item = 'FFmpeg 8.1 runtime detection and fail-fast'
-done = true
-[[checklist]]
-item = 'Minimal axum + Leptos SSR page'
-done = true
-[[checklist]]
-item = 'SQLite bootstrap (empty DB on first run)'
-done = true
-[[checklist]]
-item = 'Docker image with FFmpeg 8.1'
-done = true
-[[checklist]]
-item = 'Health endpoint (/healthz → 200)'
-done = true
-
-# Known TODOs carried forward.
-[[known_todo]]
-note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
-[[known_todo]]
-note = 'ffmpeg module in ersatzrs-web migrated to ersatzrs-ffmpeg in Phase 2.'
-
-# Blocking decisions.
 [[blocking_decision]]
-note = 'None. All Phase 0 decisions are recorded in ADRs 0001–0007.'
+note = 'No Phase 7 blocking decision. Milestone p8a-01 must produce an accepted ADR before Phase 8 schema or public add-on API implementation starts.'

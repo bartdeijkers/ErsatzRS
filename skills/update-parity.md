@@ -32,7 +32,10 @@ edit it for parity data.
    resolve to a file under `docs/adr/`).
 5. If a route or hydration state changed, also update
    `docs/progress/routes.toml` / `docs/progress/hydration.toml`.
-6. Validate: `cargo xtask progress check`.
+6. If an active plan milestone started, completed, blocked, or was deferred,
+   update `docs/progress/milestones.toml`; a `Complete` milestone requires
+   concrete verification evidence.
+7. Validate: `cargo xtask progress check`.
 
 ## Rule
 

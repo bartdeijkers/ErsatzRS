@@ -34,6 +34,13 @@ const STATUSES: [&str; 5] = [
     "Dropped",
 ];
 const HYDRATION_STATUSES: [&str; 3] = ["✅", "TODO", "⏳"];
+const MILESTONE_STATUSES: [&str; 5] = [
+    "Not started",
+    "In progress",
+    "Complete",
+    "Blocked",
+    "Deferred",
+];
 const SUMMARY_WARN_LIMIT: usize = 4_000;
 
 pub fn run(args: Vec<String>) -> ExitCode {
@@ -43,6 +50,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
     let result = match sub.as_str() {
         "sync" => cmd_sync(),
         "next" => cmd_next(),
+        "milestones" => cmd_milestones(&rest),
         "parity" => cmd_parity(&rest),
         "gaps" => cmd_gaps(),
         "routes" => cmd_routes(&rest),
@@ -162,6 +170,27 @@ struct Note {
 }
 
 #[derive(Deserialize)]
+struct MilestonesFile {
+    #[serde(default, rename = "milestone")]
+    milestones: Vec<Milestone>,
+}
+
+#[derive(Deserialize)]
+struct Milestone {
+    id: String,
+    phase: String,
+    title: String,
+    status: String,
+    feature: String,
+    plan: String,
+    #[serde(default)]
+    depends_on: Vec<String>,
+    acceptance: String,
+    #[serde(default)]
+    evidence: String,
+}
+
+#[derive(Deserialize)]
 struct Session {
     date: String,
     agent: String,
@@ -212,6 +241,14 @@ fn load_phase() -> Result<Phase> {
     let path = Path::new(PROGRESS_DIR).join("phase.toml");
     let text = fs::read_to_string(&path)?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+}
+
+fn load_milestones() -> Result<Vec<Milestone>> {
+    let path = Path::new(PROGRESS_DIR).join("milestones.toml");
+    let text = fs::read_to_string(&path)?;
+    let parsed: MilestonesFile =
+        toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+    Ok(parsed.milestones)
 }
 
 fn load_routes() -> Result<Vec<Route>> {
@@ -362,6 +399,7 @@ fn ensure_synced() -> Result<Connection> {
 fn sync() -> Result<Connection> {
     let parity = load_parity()?;
     let phase = load_phase()?;
+    let milestones = load_milestones()?;
     let routes = load_routes()?;
     let hydration = load_hydration()?;
     let sessions = load_sessions()?;
@@ -383,6 +421,8 @@ fn sync() -> Result<Connection> {
          CREATE TABLE phase_checklist(item TEXT, done INTEGER);
          CREATE TABLE phase_todo(note TEXT);
          CREATE TABLE phase_decision(note TEXT);
+         CREATE TABLE milestones(id TEXT PRIMARY KEY, phase TEXT, title TEXT, status TEXT, feature TEXT, plan TEXT, acceptance TEXT, evidence TEXT);
+         CREATE TABLE milestone_dependency(id TEXT, depends_on TEXT);
          CREATE TABLE meta(synced_at TEXT, source_max_mtime INTEGER);",
     )?;
 
@@ -464,6 +504,27 @@ fn sync() -> Result<Connection> {
     for n in &phase.blocking_decision {
         tx.execute("INSERT INTO phase_decision VALUES(?1)", params![n.note])?;
     }
+    for milestone in &milestones {
+        tx.execute(
+            "INSERT INTO milestones VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                milestone.id,
+                milestone.phase,
+                milestone.title,
+                milestone.status,
+                milestone.feature,
+                milestone.plan,
+                milestone.acceptance,
+                milestone.evidence,
+            ],
+        )?;
+        for dependency in &milestone.depends_on {
+            tx.execute(
+                "INSERT INTO milestone_dependency VALUES(?1,?2)",
+                params![milestone.id, dependency],
+            )?;
+        }
+    }
     tx.execute(
         "INSERT INTO meta VALUES(?1,?2)",
         params![today_iso(), source_mtime],
@@ -477,7 +538,8 @@ fn cmd_sync() -> Result<()> {
     let n: i64 = conn.query_row("SELECT COUNT(*) FROM parity", [], |r| r.get(0))?;
     let s: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0))?;
     let a: i64 = conn.query_row("SELECT COUNT(*) FROM adrs", [], |r| r.get(0))?;
-    println!("progress: synced {DB_PATH} — {n} features, {s} sessions, {a} ADRs");
+    let m: i64 = conn.query_row("SELECT COUNT(*) FROM milestones", [], |r| r.get(0))?;
+    println!("progress: synced {DB_PATH} — {n} features, {m} milestones, {s} sessions, {a} ADRs");
     Ok(())
 }
 
@@ -510,6 +572,30 @@ fn cmd_next() -> Result<()> {
         }
     }
 
+    let mut stmt = conn.prepare(
+        "SELECT m.id, m.phase, m.title, m.status
+         FROM milestones m
+         WHERE m.status IN ('In progress', 'Not started')
+           AND NOT EXISTS (
+               SELECT 1
+               FROM milestone_dependency d
+               JOIN milestones required ON required.id = d.depends_on
+               WHERE d.id = m.id AND required.status != 'Complete'
+           )
+         ORDER BY CASE m.status WHEN 'In progress' THEN 0 ELSE 1 END, m.id
+         LIMIT 3",
+    )?;
+    let milestones: Vec<(String, String, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+        .filter_map(std::result::Result::ok)
+        .collect();
+    if !milestones.is_empty() {
+        println!("\nRunnable milestones:");
+        for (id, phase, title, status) in milestones {
+            println!("  - {id} [{status}] {title} ({phase})");
+        }
+    }
+
     if !next_steps.trim().is_empty() {
         println!("\nNext steps:\n{}", next_steps.trim());
     }
@@ -526,6 +612,113 @@ fn cmd_next() -> Result<()> {
             "\nLatest session ({date}, {agent}):\n  {}",
             truncate(&summary, 280)
         );
+    }
+    Ok(())
+}
+
+fn cmd_milestones(args: &[String]) -> Result<()> {
+    let conn = ensure_synced()?;
+    let id = flag_value(args, "--id");
+    let full = args.iter().any(|arg| arg == "--full");
+
+    if let Some(id) = id {
+        let row: Option<(String, String, String, String, String, String, String)> = conn
+            .query_row(
+                "SELECT phase, title, status, feature, plan, acceptance, evidence
+                 FROM milestones WHERE id = ?1",
+                [&id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )
+            .ok();
+        let Some((phase, title, status, feature, plan, acceptance, evidence)) = row else {
+            bail!("no milestone with id `{id}` (try `cargo xtask progress milestones --all`)");
+        };
+        let mut stmt = conn.prepare(
+            "SELECT depends_on FROM milestone_dependency WHERE id = ?1 ORDER BY depends_on",
+        )?;
+        let dependencies: Vec<String> = stmt
+            .query_map([&id], |r| r.get::<_, String>(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        println!("{id}  [{status}] {title}");
+        println!("  phase:   {phase}");
+        println!("  feature: {feature}");
+        println!("  plan:    {plan}");
+        println!(
+            "  depends: {}",
+            if dependencies.is_empty() {
+                "-".to_owned()
+            } else {
+                dependencies.join(", ")
+            }
+        );
+        if full {
+            println!("\nAcceptance:\n{}", acceptance.trim());
+            if !evidence.trim().is_empty() {
+                println!("\nEvidence:\n{}", evidence.trim());
+            }
+        }
+        return Ok(());
+    }
+
+    let include_all = args.iter().any(|arg| arg == "--all");
+    let status = flag_value(args, "--status");
+    let feature = flag_value(args, "--feature");
+    let phase = flag_value(args, "--phase");
+    let only_runnable = args.iter().any(|arg| arg == "--runnable");
+    let mut predicates = Vec::new();
+    let mut bound = Vec::new();
+    if !include_all && status.is_none() {
+        predicates.push("status != 'Complete'".to_owned());
+    }
+    if only_runnable {
+        predicates.push("status IN ('In progress', 'Not started')".to_owned());
+        predicates.push(
+            "NOT EXISTS (
+                SELECT 1
+                FROM milestone_dependency d
+                JOIN milestones required ON required.id = d.depends_on
+                WHERE d.id = milestones.id AND required.status != 'Complete'
+            )"
+            .to_owned(),
+        );
+    }
+    for (column, value) in [("status", status), ("feature", feature), ("phase", phase)] {
+        if let Some(value) = value {
+            bound.push(value);
+            predicates.push(format!("{column} = ?{}", bound.len()));
+        }
+    }
+    let mut sql = "SELECT id, phase, title, status, feature FROM milestones".to_owned();
+    if !predicates.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&predicates.join(" AND "));
+    }
+    sql.push_str(" ORDER BY phase, id");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(bound.iter()), |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, phase, title, status, feature) = row?;
+        println!("{id:<8} [{status:<11}] {title}  ({phase}; {feature})");
     }
     Ok(())
 }
@@ -816,6 +1009,7 @@ fn cmd_add_session(args: &[String]) -> Result<()> {
 fn cmd_check() -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
+    let mut parity_slugs = std::collections::HashSet::new();
 
     // Known ADRs, keyed by number, for ref validation and the
     // Status-vs-Implementation contradiction lint below.
@@ -846,6 +1040,7 @@ fn cmd_check() -> Result<()> {
                 errors.push("no parity files found under docs/progress/parity".to_owned());
             }
             for row in rows {
+                parity_slugs.insert(row.slug.clone());
                 if !STATUSES.contains(&row.file.status.as_str()) {
                     errors.push(format!(
                         "{}: invalid status `{}` (expected one of {STATUSES:?})",
@@ -929,6 +1124,113 @@ fn cmd_check() -> Result<()> {
         Err(e) => errors.push(format!("parity: {e:#}")),
     }
 
+    match load_milestones() {
+        Ok(milestones) => {
+            let milestone_ids: std::collections::HashSet<&str> = milestones
+                .iter()
+                .map(|milestone| milestone.id.as_str())
+                .collect();
+            let milestone_statuses: std::collections::HashMap<&str, &str> = milestones
+                .iter()
+                .map(|milestone| (milestone.id.as_str(), milestone.status.as_str()))
+                .collect();
+            let has_duplicate_ids = !milestone_ids_are_unique(&milestones);
+            if has_duplicate_ids {
+                errors.push("milestones.toml: milestone ids must be unique".to_owned());
+            }
+            for milestone in &milestones {
+                if milestone.id.is_empty()
+                    || !milestone
+                        .id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                {
+                    errors.push(format!(
+                        "milestone `{}`: id must contain only lowercase ASCII letters, digits, and hyphens",
+                        milestone.id
+                    ));
+                }
+                if milestone.phase.trim().is_empty() || milestone.title.trim().is_empty() {
+                    errors.push(format!(
+                        "milestone `{}`: phase and title must not be empty",
+                        milestone.id
+                    ));
+                }
+                if !MILESTONE_STATUSES.contains(&milestone.status.as_str()) {
+                    errors.push(format!(
+                        "milestone `{}`: invalid status `{}` (expected one of {MILESTONE_STATUSES:?})",
+                        milestone.id, milestone.status
+                    ));
+                }
+                if !parity_slugs.contains(&milestone.feature) {
+                    errors.push(format!(
+                        "milestone `{}`: feature `{}` does not resolve to docs/progress/parity/",
+                        milestone.id, milestone.feature
+                    ));
+                }
+                let plan = Path::new(&milestone.plan);
+                if !milestone.plan.starts_with("plans/") || !plan.is_file() {
+                    errors.push(format!(
+                        "milestone `{}`: plan `{}` must be an existing file under plans/",
+                        milestone.id, milestone.plan
+                    ));
+                }
+                if milestone.acceptance.trim().is_empty() {
+                    errors.push(format!(
+                        "milestone `{}`: acceptance must not be empty",
+                        milestone.id
+                    ));
+                }
+                if milestone.status == "Complete" && milestone.evidence.trim().is_empty() {
+                    errors.push(format!(
+                        "milestone `{}`: Complete milestones require evidence",
+                        milestone.id
+                    ));
+                }
+                let unique_dependencies: std::collections::HashSet<&str> =
+                    milestone.depends_on.iter().map(String::as_str).collect();
+                if unique_dependencies.len() != milestone.depends_on.len() {
+                    errors.push(format!(
+                        "milestone `{}`: dependencies must be unique",
+                        milestone.id
+                    ));
+                }
+                for dependency in &milestone.depends_on {
+                    if dependency == &milestone.id {
+                        errors.push(format!(
+                            "milestone `{}`: milestone cannot depend on itself",
+                            milestone.id
+                        ));
+                    } else if !milestone_ids.contains(dependency.as_str()) {
+                        errors.push(format!(
+                            "milestone `{}`: dependency `{dependency}` does not resolve",
+                            milestone.id
+                        ));
+                    } else if milestone.status == "Complete"
+                        && milestone_statuses.get(dependency.as_str()).copied() != Some("Complete")
+                    {
+                        errors.push(format!(
+                            "milestone `{}`: Complete milestone depends on incomplete `{dependency}`",
+                            milestone.id
+                        ));
+                    }
+                }
+            }
+            // Duplicate ids make the dependency graph ambiguous. Report the
+            // schema error above instead of traversing a graph whose node map
+            // necessarily collapsed one or more milestone rows.
+            if !has_duplicate_ids {
+                if let Some(cycle) = milestone_dependency_cycle(&milestones) {
+                    errors.push(format!(
+                        "milestones.toml: dependency cycle contains {}",
+                        cycle.join(", ")
+                    ));
+                }
+            }
+        }
+        Err(e) => errors.push(format!("milestones.toml: {e:#}")),
+    }
+
     if let Err(e) = load_phase() {
         errors.push(format!("phase.toml: {e:#}"));
     }
@@ -975,6 +1277,75 @@ fn phase_value(conn: &Connection, key: &str) -> Result<String> {
             r.get(0)
         })
         .unwrap_or_default())
+}
+
+fn milestone_dependency_cycle(milestones: &[Milestone]) -> Option<Vec<String>> {
+    if !milestone_ids_are_unique(milestones) {
+        return None;
+    }
+    let ids: std::collections::HashSet<&str> = milestones
+        .iter()
+        .map(|milestone| milestone.id.as_str())
+        .collect();
+    let mut remaining_dependencies: std::collections::HashMap<&str, usize> = milestones
+        .iter()
+        .map(|milestone| {
+            let count = milestone
+                .depends_on
+                .iter()
+                .filter(|dependency| ids.contains(dependency.as_str()))
+                .count();
+            (milestone.id.as_str(), count)
+        })
+        .collect();
+    let mut dependents: std::collections::HashMap<&str, Vec<&str>> =
+        std::collections::HashMap::new();
+    for milestone in milestones {
+        for dependency in &milestone.depends_on {
+            if ids.contains(dependency.as_str()) {
+                dependents
+                    .entry(dependency.as_str())
+                    .or_default()
+                    .push(milestone.id.as_str());
+            }
+        }
+    }
+    let mut ready: std::collections::VecDeque<&str> = remaining_dependencies
+        .iter()
+        .filter_map(|(id, count)| (*count == 0).then_some(*id))
+        .collect();
+    let mut visited = 0;
+    while let Some(id) = ready.pop_front() {
+        visited += 1;
+        for dependent in dependents.get(id).into_iter().flatten() {
+            let Some(count) = remaining_dependencies.get_mut(dependent) else {
+                continue;
+            };
+            *count -= 1;
+            if *count == 0 {
+                ready.push_back(dependent);
+            }
+        }
+    }
+    if visited == milestones.len() {
+        None
+    } else {
+        let mut cycle: Vec<String> = remaining_dependencies
+            .into_iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(id, _)| id.to_owned())
+            .collect();
+        cycle.sort();
+        Some(cycle)
+    }
+}
+
+fn milestone_ids_are_unique(milestones: &[Milestone]) -> bool {
+    let ids: std::collections::HashSet<&str> = milestones
+        .iter()
+        .map(|milestone| milestone.id.as_str())
+        .collect();
+    ids.len() == milestones.len()
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -1026,6 +1397,8 @@ fn print_help() {
     eprintln!();
     eprintln!("SUBCOMMANDS:");
     eprintln!("    next                         Current phase, focus, in-progress features, latest session");
+    eprintln!("    milestones [--runnable] [--all] [--status S] [--feature SLUG] [--phase P]");
+    eprintln!("    milestones --id ID [--full] Show one milestone, dependencies, and acceptance");
     eprintln!(
         "    gaps                         Features not yet Ported (the \"what's left\" view)"
     );
@@ -1038,4 +1411,59 @@ fn print_help() {
     eprintln!("    add-session --agent A --summary S [--date D]   Append a session entry");
     eprintln!("    sync                         Rebuild progress.db from the text sources");
     eprintln!("    check                        Validate the text sources (CI gate)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{milestone_dependency_cycle, milestone_ids_are_unique, Milestone};
+
+    fn milestone(id: &str, depends_on: &[&str]) -> Milestone {
+        Milestone {
+            id: id.to_owned(),
+            phase: "Phase 7A".to_owned(),
+            title: id.to_owned(),
+            status: "Not started".to_owned(),
+            feature: "feature".to_owned(),
+            plan: "plans/plan.md".to_owned(),
+            depends_on: depends_on.iter().map(ToString::to_string).collect(),
+            acceptance: "accepted".to_owned(),
+            evidence: String::new(),
+        }
+    }
+
+    #[test]
+    fn milestone_dependencies_accept_an_acyclic_graph() {
+        let milestones = [
+            milestone("first", &[]),
+            milestone("second", &["first"]),
+            milestone("third", &["first", "second"]),
+        ];
+
+        assert!(milestone_dependency_cycle(&milestones).is_none());
+    }
+
+    #[test]
+    fn milestone_dependencies_report_cycles() {
+        let milestones = [
+            milestone("first", &["second"]),
+            milestone("second", &["first"]),
+        ];
+
+        assert_eq!(
+            milestone_dependency_cycle(&milestones),
+            Some(vec!["first".to_owned(), "second".to_owned()])
+        );
+    }
+
+    #[test]
+    fn milestone_dependency_traversal_skips_duplicate_ids() {
+        let milestones = [
+            milestone("root", &[]),
+            milestone("duplicate", &["root"]),
+            milestone("duplicate", &["root"]),
+        ];
+
+        assert!(!milestone_ids_are_unique(&milestones));
+        assert!(milestone_dependency_cycle(&milestones).is_none());
+    }
 }

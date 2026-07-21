@@ -1,0 +1,26 @@
+feature    = 'Admin UI load, empty, and error-state semantics'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Pages/`, `$ERSATZTV_SRC/ErsatzTV.Application/` handler result and validation flows'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages`, `crates/ersatzrs-web/src/admin/server_fns`, `crates/ersatzrs-infra` typed read models'
+status     = 'Not started'
+adr        = []
+summary    = '''
+Not started: many admin resources display empty collections or default forms
+when a server function fails, making operational and schema failures look like
+valid state. The planned hardening adds reusable localized load/error states,
+typed infrastructure read models, and route-family migrations that preserve
+real empty-state UX while making failures visible and actionable.
+'''
+
+[[debt]]
+id          = 'server-errors-render-as-empty-or-default-state'
+description = 'Admin pages frequently call server functions with `.await.unwrap_or_default()`, so settings, source, library, scheduling, and troubleshooting failures can render as plausible defaults or empty data.'
+discovered  = '2026-07-21'
+evidence    = 'The audit found 149 textual `await ... unwrap_or_default()` occurrences under `crates/ersatzrs-web/src/admin`; the settings parity history already records a real schema error that silently rendered defaults. Close incrementally through milestone p7a-03.'
+resolved    = false
+
+[[debt]]
+id          = 'admin-row-decode-defaults-hide-invalid-data'
+description = 'Direct SQL handlers frequently default failed row decoding to zero identifiers, empty strings, or false values instead of returning a typed decode/storage error.'
+discovered  = '2026-07-21'
+evidence    = 'Hundreds of direct `Row::try_get(...).unwrap_or_*`/`.ok()` paths remain in admin server functions. Close through typed infra read models in milestones p7a-03 and p7b-05.'
+resolved    = false

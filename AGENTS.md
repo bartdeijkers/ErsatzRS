@@ -219,6 +219,8 @@ status files:
 
 ```bash
 cargo xtask progress next                 # phase, focus, in-progress features, latest session
+cargo xtask progress milestones --runnable  # open milestones whose dependencies are complete
+cargo xtask progress milestones --id <id> --full   # one milestone's acceptance and evidence
 cargo xtask progress gaps                 # everything not yet Ported (what's left for a complete port)
 cargo xtask progress parity --feature <slug> --full   # one feature's full summary + ADRs
 cargo xtask progress routes --unrouted    # advertised-but-404 admin routes

@@ -1,0 +1,42 @@
+feature    = 'Application use-case layer and orchestration boundary'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Application/`, including Channels, Libraries, MediaCollections, Playouts, Scheduling, Streaming, and Troubleshooting handlers'
+rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-scheduler`, `crates/ersatzrs-web`'
+status     = 'Not started'
+adr        = []
+summary    = '''
+Not started: the architecture assigns use-case coordination to ersatzrs-app,
+but that crate is still an unused one-line placeholder. Application workflows
+currently live in web server functions/APIs through raw SQL, concrete
+repositories, process-local queues, and split lock registries. The active plan
+migrates complete vertical slices behind storage-neutral core ports, beginning
+with playout-build and scan orchestration, while keeping endpoint and persisted
+contracts stable.
+'''
+
+[[debt]]
+id          = 'app-crate-is-unused-placeholder'
+description = 'ersatzrs-app is a one-line placeholder with no dependencies or consumers even though ARCHITECTURE.md assigns it responsibility for coordinating use cases.'
+discovered  = '2026-07-21'
+evidence    = 'Audit evidence: `crates/ersatzrs-app/src/lib.rs` contains only `// placeholder`; its manifest has no dependencies; no workspace Rust or manifest file consumes the crate. Close through milestones p7a-01 and p7b-01.'
+resolved    = false
+
+[[debt]]
+id          = 'web-owns-application-orchestration'
+description = 'Admin server functions and APIs combine transport, validation, raw SQL, side effects, queues, and concrete repositories, preventing reuse from non-web adapters such as a future video-jukebox add-on API.'
+discovered  = '2026-07-21'
+evidence    = 'Audit found 264 `#[server]` functions and 726 textual `sqlx::query*` occurrences under admin server functions/APIs. `AppState` exposes the raw pool, concrete repository bundle, scan queue/progress, playout sender, and two lock registries. Close through milestones p7b-02 through p7b-05.'
+resolved    = false
+
+[[debt]]
+id          = 'core-leaks-concrete-storage-error'
+description = 'ersatzrs-core::repositories::RepositoryError contains sqlx::Error, so the core trait boundary depends on the concrete persistence implementation.'
+discovered  = '2026-07-21'
+evidence    = '`crates/ersatzrs-core/src/repositories/error.rs` exposes `Database(#[from] sqlx::Error)`, contrary to the storage-neutral core rule in ARCHITECTURE.md. Close in milestone p7b-01 with infra-side error mapping.'
+resolved    = false
+
+[[debt]]
+id          = 'operation-coordination-is-split'
+description = 'Web and scheduler maintain separate lock/queue registries for related long-running operations instead of one application-level operation coordinator.'
+discovered  = '2026-07-21'
+evidence    = '`AppState` documents a web string-keyed EntityLocker plus a separate core playout EntityLocker and also stores process-local scan/build queues. Close through milestones p7b-01 through p7b-03.'
+resolved    = false

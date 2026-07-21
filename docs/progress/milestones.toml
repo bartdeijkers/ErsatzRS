@@ -1,0 +1,277 @@
+# Fine-grained execution state for active structural plans. The `phase` value
+# groups milestones into program increments; dependencies control runnable
+# order. Query runnable work with `cargo xtask progress milestones --runnable`.
+
+[[milestone]]
+id         = 'p7a-01'
+phase      = 'Phase 7A — Guardrails and failure semantics'
+title      = 'Decide and enforce the application boundary'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = []
+acceptance = '''
+An accepted ADR defines the application/composition boundaries, and a
+baseline-aware architecture gate prevents an empty app crate, forbidden app
+dependencies, new direct admin SQL, and new server-error-to-default loaders.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7a-02'
+phase      = 'Phase 7A — Guardrails and failure semantics'
+title      = 'Make playback and HLS data-access failures explicit'
+status     = 'Not started'
+feature    = 'runtime-data-access-error-semantics'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = []
+acceptance = '''
+Playback metadata, HLS configuration/current-item, and transcode-capacity
+loaders distinguish absent data from database/decode failure; callers,
+health checks, and focused failure-path tests preserve that distinction.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7a-03'
+phase      = 'Phase 7A — Guardrails and failure semantics'
+title      = 'Introduce typed admin load and error states'
+status     = 'Not started'
+feature    = 'admin-ui-failure-semantics'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = []
+acceptance = '''
+Shared localized Loading, Ready, Empty, and Error states replace silent
+server-error defaults across the first coherent route families, and typed
+query rows preserve decode failures instead of fabricating empty values.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7a-04'
+phase      = 'Phase 7A — Guardrails and failure semantics'
+title      = 'Close development-route and tracker drift'
+status     = 'Not started'
+feature    = 'developer-surface-hardening'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = []
+acceptance = '''
+Development routes require an explicit non-production opt-in, TEST.md agrees
+with structured route/hydration evidence, the real playout workflow gap has a
+durable browser test, and misleading scanner/show notes are corrected.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7b-01'
+phase      = 'Phase 7B — Application-layer extraction'
+title      = 'Build the application service foundation'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7a-01']
+acceptance = '''
+ersatzrs-app contains documented command/query/application-error modules,
+core no longer exposes sqlx errors, infra maps concrete failures, and the
+native composition root constructs injected ApplicationServices.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7b-02'
+phase      = 'Phase 7B — Application-layer extraction'
+title      = 'Migrate playout-build orchestration'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-01']
+acceptance = '''
+One RequestPlayoutBuild use case owns admission and typed outcomes; all web/API
+senders use it while scheduler consumption, Refresh/Reset semantics, and
+queued/building feedback remain regression-proven.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7b-03'
+phase      = 'Phase 7B — Application-layer extraction'
+title      = 'Migrate scan-operation orchestration'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-01']
+acceptance = '''
+Application services own library/show scan admission, FIFO queueing, locking,
+progress, and failure lifecycle; every transport observes one operation
+registry and existing scan behavior remains regression-proven.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7b-04'
+phase      = 'Phase 7B — Application-layer extraction'
+title      = 'Replace simplified block preview with the real engine'
+status     = 'Not started'
+feature    = 'block-scheduling-ui'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7a-02', 'p7a-03', 'p7b-01']
+acceptance = '''
+Unsaved block preview constructs upstream-shaped temporary scheduling state,
+invokes the real block preview builder in Reset mode, returns actual enriched
+playout rows, and surfaces failures instead of empty results.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7b-05'
+phase      = 'Phase 7B — Application-layer extraction'
+title      = 'Migrate remaining admin use cases and queries'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-02', 'p7b-03', 'p7b-04']
+acceptance = '''
+Collection, playlist, channel, schedule, settings, Trakt, and media handlers
+are thin transport adapters over app use cases/read models; admin code no
+longer requires a raw database pool and public server-function contracts stay
+stable.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7c-01'
+phase      = 'Phase 7C — Secondary stopgap closeout'
+title      = 'Split local Trakt work from remote refresh'
+status     = 'Not started'
+feature    = 'trakt-lists'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-05']
+acceptance = '''
+Local matching/generated-playlist operations do not accept a remote API
+capability, refresh operations require a real configured client, and
+NoopTraktApiClient is removed with focused Trakt regressions passing.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7c-02'
+phase      = 'Phase 7C — Secondary stopgap closeout'
+title      = 'Make watermark preview claims truthful'
+status     = 'Not started'
+feature    = 'watermark-editor'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7a-03']
+acceptance = '''
+Watermark Actual Size uses selected-asset dimensions or is explicitly
+schematic; the preview shows distinguishable 4:3 and 16:9 content guides; and
+localized Previous/Next controls navigate deterministically between saved
+watermarks without silently discarding edits. Focused desktop/mobile browser
+coverage proves preview geometry and comparison navigation.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7c-03'
+phase      = 'Phase 7C — Secondary stopgap closeout'
+title      = 'Resolve deferred search and browser behavior'
+status     = 'Not started'
+feature    = 'media-browsers'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7a-03']
+acceptance = '''
+Search thumbnail sizing is wired; deferred See All detail/library-filter
+behavior is implemented from upstream evidence or recorded as an intentional
+non-goal with focused route/search coverage.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p7c-04'
+phase      = 'Phase 7C — Secondary stopgap closeout'
+title      = 'Split large modules after boundary extraction'
+status     = 'Not started'
+feature    = 'application-use-case-layer'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-05', 'p7c-01', 'p7c-02', 'p7c-03']
+acceptance = '''
+The module-split survey uses current measurements; reduced web transport,
+YAML/scripted registries, and provider adapters are split behind exhaustive
+dispatch/completeness gates and remain compatible with the web/WASM split.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8a-01'
+phase      = 'Phase 8A — Durable video-jukebox domain'
+title      = 'Decide the video-jukebox product and add-on contract'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7c-04']
+acceptance = '''
+An accepted ADR defines eligibility, queue policy, identity/moderation,
+cooldowns/rate limits, insertion/cancellation/retry/recovery semantics, and
+the versioned out-of-process add-on transport.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8a-02'
+phase      = 'Phase 8A — Durable video-jukebox domain'
+title      = 'Persist the request aggregate and storage ports'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-01', 'p8a-01']
+acceptance = '''
+SQLite and MySQL persist the approved request state machine, identity,
+idempotency, queue position, timestamps, and failure detail through
+storage-neutral ports; submit, claim, and transition operations are atomic.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8a-03'
+phase      = 'Phase 8A — Durable video-jukebox domain'
+title      = 'Integrate jukebox use cases with scheduling'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-02', 'p7b-04', 'p8a-02']
+acceptance = '''
+Application commands/queries cover the request lifecycle, scheduling claims
+at the approved safe boundary, materialized items retain request identity,
+current playback is preserved, and restart recovery cannot schedule a request
+twice.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8b-01'
+phase      = 'Phase 8B — Add-on ingress and runtime proof'
+title      = 'Expose a stable authenticated add-on API'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p8a-02']
+acceptance = '''
+A versioned HTTP command/query API plus status/event feed enforce
+authentication, authorization, idempotency, rate limits, and audit logging;
+adapter examples depend only on the public protocol.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8b-02'
+phase      = 'Phase 8B — Add-on ingress and runtime proof'
+title      = 'Prove jukebox operations and restart safety end to end'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p8a-03', 'p8b-01']
+acceptance = '''
+Health checks and metrics cover stalled/failed work, and an end-to-end test
+proves multi-source submissions, duplicate idempotency, policy rejection,
+restart survival, exactly-once scheduling, and Played completion.
+'''
+evidence = ''

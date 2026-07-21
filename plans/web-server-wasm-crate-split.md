@@ -3,6 +3,9 @@
 > **Type:** Structural refactor plan.
 > **Status:** Proposed. Do only after the release Docker hotfix has proven
 > stable, because this touches Leptos package metadata and release packaging.
+> Coordinate with `plans/application-layer-and-video-jukebox.md`: application,
+> core-port, infrastructure, and scheduler code stays native-only, while the
+> hydration crate may share protocol DTOs but not concrete application services.
 
 ## Problem
 
