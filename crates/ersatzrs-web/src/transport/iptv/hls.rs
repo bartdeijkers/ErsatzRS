@@ -499,15 +499,19 @@ async fn serve_hls_segmenter_playlist(
         }
     };
 
-    let path_replacements = match stream::load_path_replacements(&state.repositories.media_source)
-        .await
-    {
-        Ok(replacements) => replacements,
-        Err(error) => {
-            tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for hls worker; continuing with raw path");
-            Vec::new()
-        }
-    };
+    let path_replacements =
+        match stream::load_path_replacements(&state.repositories.media_source).await {
+            Ok(replacements) => replacements,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    "failed to load path replacements for hls worker"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
 
     ensure_segmenter_worker_running(
         state,

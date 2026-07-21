@@ -16,7 +16,9 @@ use axum::{
 use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
-use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, MediaSourceRepository};
+use ersatzrs_core::repositories::{
+    ChannelRepository, ConfigRepository, MediaSourceRepository, RepositoryError,
+};
 use ersatzrs_domain::{
     Channel, ChannelStreamSelectorMode, ChannelSubtitleMode, EmbyMediaSource,
     FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, JellyfinMediaSource, PlexMediaSource,
@@ -49,7 +51,7 @@ use ersatzrs_infra::playback::{
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
-    ActiveTranscodeReservation, ActiveTranscodeSlot,
+    ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -247,13 +249,11 @@ async fn serve_channel_stream_with_channel(
         }
     };
 
-    let replacements = match load_path_replacements(&state.repositories.media_source).await {
-        Ok(replacements) => replacements,
-        Err(error) => {
-            tracing::warn!(%error, "failed to load path replacements; continuing with raw path");
-            Vec::new()
-        }
-    };
+    let replacements =
+        match load_required_path_replacements(state, &channel, "MPEG-TS stream").await {
+            Ok(replacements) => replacements,
+            Err(response) => return response,
+        };
 
     let resolved = if replacements.is_empty() {
         active.media_path.clone()
@@ -261,9 +261,33 @@ async fn serve_channel_stream_with_channel(
         replace_path(&replacements, &active.media_path, PathPlatform::Unix)
     };
 
-    let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let source_stream = match load_source_video_stream(&state.pool, active.media_version_id).await {
+        Ok(stream) => stream,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                media_version_id = active.media_version_id,
+                "failed to load source video metadata; refusing to build FFmpeg command"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     let source_audio_streams =
-        load_source_audio_streams(&state.pool, active.media_version_id).await;
+        match load_source_audio_streams(&state.pool, active.media_version_id).await {
+            Ok(streams) => streams,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    media_version_id = active.media_version_id,
+                    "failed to load source audio metadata; refusing to build FFmpeg command"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
     let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
         Ok(Some(profile)) => profile,
         Ok(None) => {
@@ -288,8 +312,13 @@ async fn serve_channel_stream_with_channel(
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
             Ok(frame_rate) => frame_rate,
             Err(error) => {
-                tracing::warn!(%error, channel_number = %channel.number, "failed to load channel target frame rate");
-                None
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    "failed to load channel target frame rate; refusing to build FFmpeg command"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     } else {
@@ -304,7 +333,7 @@ async fn serve_channel_stream_with_channel(
     let start_position = active.content_seek_position(now);
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
-    let custom_selection = select_channel_custom_streams(
+    let custom_selection = match select_channel_custom_streams(
         &state.pool,
         active.media_version_id,
         active.media_item_id,
@@ -312,7 +341,21 @@ async fn serve_channel_stream_with_channel(
         content_start_time,
         effective_streaming_mode,
     )
-    .await;
+    .await
+    {
+        Ok(selection) => selection,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                media_item_id = active.media_item_id,
+                media_version_id = active.media_version_id,
+                "failed to execute channel stream selector; refusing fallback stream selection"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     let selected_audio_stream_index = custom_selection
         .as_ref()
         .and_then(|selection| selection.audio_stream_index)
@@ -346,8 +389,14 @@ async fn serve_channel_stream_with_channel(
         {
             Ok(subtitle) => subtitle,
             Err(error) => {
-                tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select playback subtitle");
-                None
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    media_item_id = active.media_item_id,
+                    "failed to select playback subtitle; refusing subtitle-free fallback"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     };
@@ -517,8 +566,8 @@ async fn serve_channel_stream_with_channel(
     let capacity_reservation =
         if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
             match reserve_mpeg_ts_capacity(state, &channel.number).await {
-                Some(reservation) => Some(reservation),
-                None => {
+                Ok(Some(reservation)) => Some(reservation),
+                Ok(None) => {
                     return mpeg_ts_capacity_wait_response(
                         state,
                         &channel,
@@ -531,6 +580,15 @@ async fn serve_channel_stream_with_channel(
                         Some(retry),
                     )
                     .await;
+                }
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = channel.id,
+                        channel_number = %channel.number,
+                        "failed to load MPEG-TS transcode capacity"
+                    );
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
             }
         } else {
@@ -588,19 +646,18 @@ fn resolve_transport_stream_mode(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn serve_segmenter_wrapper_stream(
     state: &AppState,
     channel: &Channel,
     headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
-    let path_replacements = match load_path_replacements(&state.repositories.media_source).await {
-        Ok(replacements) => replacements,
-        Err(error) => {
-            tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for wrapped segmenter; continuing with raw path");
-            Vec::new()
-        }
-    };
+    let path_replacements =
+        match load_required_path_replacements(state, channel, "wrapped segmenter").await {
+            Ok(replacements) => replacements,
+            Err(response) => return response,
+        };
 
     hls::ensure_segmenter_worker_running(
         state,
@@ -656,8 +713,8 @@ async fn serve_segmenter_wrapper_stream(
     .await;
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Some(reservation) => Some(reservation),
-        None => {
+        Ok(Some(reservation)) => Some(reservation),
+        Ok(None) => {
             return mpeg_ts_capacity_wait_response(
                 state,
                 channel,
@@ -670,6 +727,15 @@ async fn serve_segmenter_wrapper_stream(
                 None,
             )
             .await;
+        }
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                "failed to load wrapped-segmenter transcode capacity"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
@@ -775,8 +841,8 @@ async fn serve_legacy_concat_stream(
     let command = build_mpegts_concat_command(concat_url, &metadata, Some(wrapper_muxrate_bps));
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Some(reservation) => Some(reservation),
-        None => {
+        Ok(Some(reservation)) => Some(reservation),
+        Ok(None) => {
             return mpeg_ts_capacity_wait_response(
                 state,
                 channel,
@@ -789,6 +855,15 @@ async fn serve_legacy_concat_stream(
                 None,
             )
             .await;
+        }
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                "failed to load legacy-stream transcode capacity"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
@@ -844,12 +919,14 @@ fn channel_stream_metadata(channel: &Channel) -> OutputMetadata {
 async fn reserve_mpeg_ts_capacity(
     state: &AppState,
     channel_number: &str,
-) -> Option<ActiveTranscodeReservation> {
-    let limit = load_active_transcode_limit(&state.pool).await;
+) -> Result<Option<ActiveTranscodeReservation>, RepositoryError> {
+    let limit = load_active_transcode_limit(&state.pool)
+        .await?
+        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
     let reservation =
         try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number));
     if reservation.is_some() {
-        return reservation;
+        return Ok(reservation);
     }
 
     let reclaim_deadline = tokio::time::Instant::now() + MPEG_TS_HLS_RECLAIM_GRACE;
@@ -861,7 +938,7 @@ async fn reserve_mpeg_ts_capacity(
                 ActiveTranscodeSlot::new_mpeg_ts(channel_number),
             );
             if reservation.is_some() {
-                return reservation;
+                return Ok(reservation);
             }
         }
 
@@ -872,7 +949,7 @@ async fn reserve_mpeg_ts_capacity(
         let reservation =
             try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number));
         if reservation.is_some() {
-            return reservation;
+            return Ok(reservation);
         }
     }
 
@@ -883,7 +960,7 @@ async fn reserve_mpeg_ts_capacity(
             "mpeg-ts stream admission waiting on all-streams-in-use slate because all transcode slots are in use"
         );
     }
-    reservation
+    Ok(reservation)
 }
 
 fn request_hls_capacity_reclaim_for_mpeg_ts(channel_number: &str) -> bool {
@@ -983,30 +1060,50 @@ async fn load_capacity_slate_context(
         }
     };
     let target_frame_rate =
-        load_capacity_slate_target_frame_rate(state, channel, &playback_profile).await;
+        load_capacity_slate_target_frame_rate(state, channel, &playback_profile).await?;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
 
     Ok((playback_profile, target_frame_rate, runtime_capabilities))
+}
+
+async fn load_required_path_replacements(
+    state: &AppState,
+    channel: &Channel,
+    context: &str,
+) -> Result<Vec<PathReplacement>, Response> {
+    load_path_replacements(&state.repositories.media_source)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                context,
+                "failed to load path replacements; refusing to select an unverified FFmpeg input"
+            );
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        })
 }
 
 async fn load_capacity_slate_target_frame_rate(
     state: &AppState,
     channel: &Channel,
     playback_profile: &PlaybackProfile,
-) -> Option<FrameRate> {
+) -> Result<Option<FrameRate>, Response> {
     if !playback_profile.profile.normalize_framerate {
-        return None;
+        return Ok(None);
     }
 
     match load_channel_target_frame_rate(&state.pool, channel.id).await {
-        Ok(frame_rate) => frame_rate,
+        Ok(frame_rate) => Ok(frame_rate),
         Err(error) => {
-            tracing::warn!(
+            tracing::error!(
                 %error,
+                channel_id = channel.id,
                 channel_number = %channel.number,
-                "failed to load channel target frame rate for MPEG-TS capacity slate"
+                "failed to load channel target frame rate; refusing to build MPEG-TS capacity slate"
             );
-            None
+            Err(StatusCode::INTERNAL_SERVER_ERROR.into_response())
         }
     }
 }
@@ -1259,7 +1356,7 @@ pub(crate) async fn load_active_media_path(
     pool: &DbPool,
     channel_id: i64,
     now: DateTime<Utc>,
-) -> Result<Option<ActivePlayoutItem>, sqlx::Error> {
+) -> Result<Option<ActivePlayoutItem>, RepositoryError> {
     let now_text = encode_sql_datetime(now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
@@ -1299,48 +1396,88 @@ pub(crate) async fn load_active_media_path(
     .bind(&now_text)
     .fetch_optional(pool)
     .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let content_duration_text = decode_active_item_column::<String>(&row, "ContentDuration")?;
+    let content_duration = parse_duration_text(&content_duration_text)?;
+    let in_point_text = decode_active_item_column::<String>(&row, "InPoint")?;
+    let out_point_text = decode_active_item_column::<String>(&row, "OutPoint")?;
+    let playout_start = decode_active_item_column::<String>(&row, "PlayoutStart")?;
+    let playout_finish = decode_active_item_column::<String>(&row, "PlayoutFinish")?;
+    if parse_sqlite_utc_timestamp(&playout_start).is_none() {
+        return Err(RepositoryError::Decode {
+            kind: "active playback item",
+            value: format!("PlayoutStart: invalid timestamp {playout_start:?}"),
+        });
+    }
+    if parse_sqlite_utc_timestamp(&playout_finish).is_none() {
+        return Err(RepositoryError::Decode {
+            kind: "active playback item",
+            value: format!("PlayoutFinish: invalid timestamp {playout_finish:?}"),
+        });
+    }
+    let subtitle_mode_value = decode_active_item_column::<Option<i64>>(&row, "SubtitleMode")?;
+    let subtitle_mode = subtitle_mode_value
+        .map(|value| {
+            decode_subtitle_mode(value).ok_or_else(|| RepositoryError::Decode {
+                kind: "active playback item",
+                value: format!("SubtitleMode: unknown value {value}"),
+            })
+        })
+        .transpose()?;
 
-    Ok(row.map(|row| ActivePlayoutItem {
-        playout_item_id: row.get::<i64, _>("PlayoutItemId"),
-        media_path: row.get::<String, _>("MediaPath"),
-        media_item_id: row.get::<i64, _>("MediaItemId"),
-        media_version_id: row.get::<i64, _>("MediaVersionId"),
-        content_duration: row
-            .try_get::<Option<f64>, _>("ContentDuration")
-            .ok()
-            .flatten()
-            .and_then(duration_from_f64),
-        in_point: row
-            .try_get::<String, _>("InPoint")
-            .ok()
-            .map_or(Duration::ZERO, |value| parse_duration_text(&value)),
-        out_point: row
-            .try_get::<String, _>("OutPoint")
-            .ok()
-            .map_or(Duration::ZERO, |value| parse_duration_text(&value)),
-        playout_start: row.get::<String, _>("PlayoutStart"),
-        playout_finish: row.get::<String, _>("PlayoutFinish"),
-        disable_watermarks: row
-            .try_get::<i64, _>("DisableWatermarks")
-            .is_ok_and(|value| value != 0),
-        preferred_audio_language_code: row
-            .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
-            .ok()
-            .flatten(),
-        preferred_audio_title: row
-            .try_get::<Option<String>, _>("PreferredAudioTitle")
-            .ok()
-            .flatten(),
-        preferred_subtitle_language_code: row
-            .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
-            .ok()
-            .flatten(),
-        subtitle_mode: row
-            .try_get::<Option<i64>, _>("SubtitleMode")
-            .ok()
-            .flatten()
-            .and_then(decode_subtitle_mode),
+    Ok(Some(ActivePlayoutItem {
+        playout_item_id: decode_active_item_column(&row, "PlayoutItemId")?,
+        media_path: decode_active_item_column(&row, "MediaPath")?,
+        media_item_id: decode_active_item_column(&row, "MediaItemId")?,
+        media_version_id: decode_active_item_column(&row, "MediaVersionId")?,
+        content_duration: Some(content_duration),
+        in_point: parse_duration_text(&in_point_text)?,
+        out_point: parse_duration_text(&out_point_text)?,
+        playout_start,
+        playout_finish,
+        disable_watermarks: decode_active_item_bool(&row, "DisableWatermarks")?,
+        preferred_audio_language_code: decode_active_item_column(
+            &row,
+            "PreferredAudioLanguageCode",
+        )?,
+        preferred_audio_title: decode_active_item_column(&row, "PreferredAudioTitle")?,
+        preferred_subtitle_language_code: decode_active_item_column(
+            &row,
+            "PreferredSubtitleLanguageCode",
+        )?,
+        subtitle_mode,
     }))
+}
+
+fn decode_active_item_column<T>(
+    row: &ersatzrs_infra::db::DbRow,
+    column: &'static str,
+) -> Result<T, RepositoryError>
+where
+    for<'row> T: sqlx::Decode<'row, ersatzrs_infra::db::Db> + sqlx::Type<ersatzrs_infra::db::Db>,
+{
+    row.try_get(column)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active playback item",
+            value: format!("{column}: {error}"),
+        })
+}
+
+fn decode_active_item_bool(
+    row: &ersatzrs_infra::db::DbRow,
+    column: &'static str,
+) -> Result<bool, RepositoryError> {
+    let value = decode_active_item_column::<i64>(row, column)?;
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(RepositoryError::Decode {
+            kind: "active playback item",
+            value: format!("{column}: expected 0 or 1, found {value}"),
+        }),
+    }
 }
 
 pub(crate) async fn load_path_replacements(
@@ -1427,17 +1564,17 @@ async fn select_channel_custom_streams(
     channel: &Channel,
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
-) -> Option<CustomStreamSelection> {
+) -> Result<Option<CustomStreamSelection>, RepositoryError> {
     if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom
         || channel
             .stream_selector
             .as_deref()
             .is_none_or(|selector| selector.trim().is_empty())
     {
-        return None;
+        return Ok(None);
     }
 
-    match select_custom_playback_streams(
+    select_custom_playback_streams(
         pool,
         media_version_id,
         media_item_id,
@@ -1446,13 +1583,6 @@ async fn select_channel_custom_streams(
         streaming_mode,
     )
     .await
-    {
-        Ok(selection) => selection,
-        Err(error) => {
-            tracing::warn!(%error, media_item_id, "failed to execute channel stream selector");
-            None
-        }
-    }
 }
 
 pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'static str {
@@ -1801,15 +1931,11 @@ fn duration_as_i64_seconds(duration: Duration) -> i64 {
     i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
 }
 
-fn duration_from_f64(seconds: f64) -> Option<Duration> {
-    seconds
-        .is_finite()
-        .then_some(seconds)
-        .filter(|seconds| *seconds >= 0.0)
-        .map(Duration::from_secs_f64)
-}
-
-fn parse_duration_text(value: &str) -> Duration {
+fn parse_duration_text(value: &str) -> Result<Duration, RepositoryError> {
+    let decode_error = |message: String| RepositoryError::Decode {
+        kind: "active playback item duration",
+        value: message,
+    };
     let (day_text, time_text) = value.rsplit_once('.').map_or(("", value), |(left, right)| {
         if left.contains(':') {
             ("", value)
@@ -1819,31 +1945,57 @@ fn parse_duration_text(value: &str) -> Duration {
     });
     let parts: Vec<&str> = time_text.split(':').collect();
     let [hours_text, minutes_text, seconds_text] = parts.as_slice() else {
-        return Duration::ZERO;
+        return Err(decode_error(format!("expected HH:MM:SS, found {value:?}")));
     };
-    let days = day_text.parse::<u64>().unwrap_or(0);
-    let hours = hours_text.parse::<u64>().unwrap_or(0);
-    let minutes = minutes_text.parse::<u64>().unwrap_or(0);
-    let (seconds_text, fraction) = seconds_text
-        .split_once('.')
-        .map_or((*seconds_text, ""), |(whole, fraction)| (whole, fraction));
-    let seconds = seconds_text.parse::<u64>().unwrap_or(0);
+    let parse_component = |label: &str, text: &str| {
+        text.parse::<u64>()
+            .map_err(|error| decode_error(format!("{label}: {error}")))
+    };
+    let days = if day_text.is_empty() {
+        0
+    } else {
+        parse_component("days", day_text)?
+    };
+    let hours = parse_component("hours", hours_text)?;
+    let minutes = parse_component("minutes", minutes_text)?;
+    let (seconds_text, fraction) = match seconds_text.split_once('.') {
+        Some((_, "")) => {
+            return Err(decode_error(
+                "fraction must contain at least one decimal digit".to_owned(),
+            ));
+        }
+        Some((whole, fraction)) => (whole, fraction),
+        None => (*seconds_text, ""),
+    };
+    let seconds = parse_component("seconds", seconds_text)?;
+    if minutes >= 60 || seconds >= 60 {
+        return Err(decode_error(
+            "minutes and seconds must be below 60".to_owned(),
+        ));
+    }
     let nanos = if fraction.is_empty() {
         0
     } else {
+        if fraction.len() > 9 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(decode_error(
+                "fraction must contain at most nine decimal digits".to_owned(),
+            ));
+        }
         let mut padded = fraction.to_owned();
-        padded.truncate(9);
         while padded.len() < 9 {
             padded.push('0');
         }
-        padded.parse::<u32>().unwrap_or(0)
+        padded
+            .parse::<u32>()
+            .map_err(|error| decode_error(format!("fraction: {error}")))?
     };
-    Duration::from_secs(
-        days.saturating_mul(86_400)
-            .saturating_add(hours.saturating_mul(3_600))
-            .saturating_add(minutes.saturating_mul(60))
-            .saturating_add(seconds),
-    ) + Duration::from_nanos(u64::from(nanos))
+    let total_seconds = days
+        .checked_mul(86_400)
+        .and_then(|value| value.checked_add(hours.checked_mul(3_600)?))
+        .and_then(|value| value.checked_add(minutes.checked_mul(60)?))
+        .and_then(|value| value.checked_add(seconds))
+        .ok_or_else(|| decode_error("duration overflows supported range".to_owned()))?;
+    Ok(Duration::new(total_seconds, nanos))
 }
 
 const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
@@ -1988,7 +2140,17 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
         let registered = session_registry.try_insert(handle).await;
         let mut retry = retry;
         loop {
-            let limit = load_active_transcode_limit(&pool).await;
+            let limit = match load_active_transcode_limit(&pool).await {
+                Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_number,
+                        "failed to reload active transcode limit; ending MPEG-TS wait stream"
+                    );
+                    break;
+                }
+            };
             if let Some(reservation) = try_reserve_active_transcode(
                 limit,
                 ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
@@ -2356,6 +2518,109 @@ mod tests {
         LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
             .lock()
             .await
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn active_playback_item_loader_rejects_invalid_subtitle_state() {
+        let pool = active_playback_item_test_pool().await;
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+
+        assert!(matches!(
+            load_active_media_path(&pool, 7, now).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+        assert!(load_active_media_path(&pool, 99, now)
+            .await
+            .expect("load absent active playback item")
+            .is_none());
+    }
+
+    #[test]
+    fn active_playback_duration_rejects_empty_fraction() {
+        assert!(matches!(
+            parse_duration_text("00:00:01."),
+            Err(RepositoryError::Decode { .. })
+        ));
+        assert_eq!(
+            parse_duration_text("00:00:01").expect("parse whole-second duration"),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            parse_duration_text("00:00:01.5").expect("parse fractional duration"),
+            Duration::from_millis(1_500)
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn active_playback_item_test_pool() -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open active playback item test database");
+        for statement in [
+            r#"CREATE TABLE "Playout" (
+                "Id" INTEGER PRIMARY KEY,
+                "ChannelId" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "PlayoutItem" (
+                "Id" INTEGER PRIMARY KEY,
+                "MediaItemId" INTEGER NOT NULL,
+                "PlayoutId" INTEGER NOT NULL,
+                "InPoint" TEXT NOT NULL,
+                "OutPoint" TEXT NOT NULL,
+                "Start" TEXT NOT NULL,
+                "Finish" TEXT NOT NULL,
+                "DisableWatermarks" INTEGER NOT NULL,
+                "PreferredAudioLanguageCode" TEXT NULL,
+                "PreferredAudioTitle" TEXT NULL,
+                "PreferredSubtitleLanguageCode" TEXT NULL,
+                "SubtitleMode" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "MediaVersion" (
+                "Id" INTEGER PRIMARY KEY,
+                "Duration" TEXT NOT NULL,
+                "MovieId" INTEGER NULL,
+                "EpisodeId" INTEGER NULL,
+                "MusicVideoId" INTEGER NULL,
+                "OtherVideoId" INTEGER NULL,
+                "RemoteStreamId" INTEGER NULL,
+                "SongId" INTEGER NULL,
+                "ImageId" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "MediaFile" (
+                "MediaVersionId" INTEGER NOT NULL,
+                "Path" TEXT NULL
+            )"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("create active playback item test table");
+        }
+        for statement in [
+            r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (11, 7)"#,
+            r#"INSERT INTO "PlayoutItem" (
+                "Id", "MediaItemId", "PlayoutId", "InPoint", "OutPoint",
+                "Start", "Finish", "DisableWatermarks", "SubtitleMode"
+            ) VALUES (
+                12, 20, 11, '00:00:00', '00:02:00',
+                '2026-06-08 11:59:00', '2026-06-08 12:01:00', 0, 99
+            )"#,
+            r#"INSERT INTO "MediaVersion" ("Id", "Duration", "MovieId")
+               VALUES (21, '00:02:00', 20)"#,
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path")
+               VALUES (21, '/media/test.mkv')"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("seed active playback item test row");
+        }
+        pool
     }
 
     #[test]

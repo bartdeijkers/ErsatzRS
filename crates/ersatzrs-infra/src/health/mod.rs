@@ -22,7 +22,7 @@ use checks::{
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
     HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MovieMetadataHealthCheck,
-    ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
     SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
     VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
@@ -48,7 +48,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 20] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 21] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -59,6 +59,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 20] = [
     "FFmpeg Capabilities",
     "FFmpeg Reports",
     "Hardware Acceleration",
+    "Playback Data Access",
     "Movie Metadata",
     "Episode Metadata",
     "Zero Duration",
@@ -177,6 +178,7 @@ fn registered_health_checks(
             pool.clone(),
             ffmpeg_runtime.clone(),
         )),
+        Box::new(PlaybackDataAccessHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),
         Box::new(EpisodeMetadataHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
@@ -637,6 +639,43 @@ mod tests {
                 "raw value {raw} should warn",
             );
         }
+    }
+
+    #[tokio::test]
+    async fn playback_data_access_health_distinguishes_missing_invalid_and_unavailable_config() {
+        let pool = test_pool().await;
+        for key in [
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
+        ] {
+            sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(key)
+                .execute(&pool)
+                .await
+                .expect("remove seeded playback config");
+        }
+        let check = PlaybackDataAccessHealthCheck::new(pool.clone());
+        assert_eq!(
+            check.check().await.expect("check absent config").status,
+            HealthCheckStatus::Pass
+        );
+
+        upsert_config(
+            &pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+            "invalid",
+        )
+        .await
+        .expect("seed invalid active transcode limit");
+        let result = check.check().await.expect("check invalid config");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(result.brief_message, "Invalid active transcode limit");
+
+        pool.close().await;
+        assert!(matches!(
+            check.check().await,
+            Err(HealthCheckError::Database(_))
+        ));
     }
 
     #[tokio::test]

@@ -32,7 +32,7 @@ build, `cargo xtask parity-check p7a-01 app` (including 378 web tests),
 id         = 'p7a-02'
 phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Make playback and HLS data-access failures explicit'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'runtime-data-access-error-semantics'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
@@ -41,7 +41,21 @@ Playback metadata, HLS configuration/current-item, and transcode-capacity
 loaders distinguish absent data from database/decode failure; callers,
 health checks, and focused failure-path tests preserve that distinction.
 '''
-evidence = ''
+evidence = '''
+Playback stream and target-frame-rate loaders, HLS configuration/current-item
+loaders, and active-transcode capacity now return typed optional results and
+strictly distinguish valid absence, persisted-value/row decode failures, and
+database failures. IPTV, HLS workers and slates, path replacement, stream
+selection, and troubleshooting callers propagate operational failures before
+building a behavior-changing FFmpeg command; correlated logs and the Playback
+Data Access health check expose invalid or unavailable configuration. Focused
+SQLite failure-path regressions cover every loader family and the health
+contract. Closeout passed both workspace clippy configurations, 951 nextest
+tests plus doctests, `cargo xtask parity-check p7a-02 playback hls
+--leptos-build` (including architecture/hydration gates and 380 web tests),
+`cargo xtask smoke` MPEG-TS/HLS probes, `cargo deny check`, and
+`cargo xtask progress check`.
+'''
 
 [[milestone]]
 id         = 'p7a-03'

@@ -43,6 +43,15 @@ release section when tagging a release.
   Smart Shuffle policies attached to other randomized Classic orders normalize
   to Shuffle when next saved.
 
+### Fixed
+
+- Playback and HLS data access now distinguishes valid missing metadata or
+  configuration from database and decode failures. IPTV, HLS, capacity slates,
+  and troubleshooting previews refuse to build altered FFmpeg commands or use
+  raw paths, default capacity, or different audio, subtitle, deinterlace,
+  tonemap, and frame-rate behavior after an operational failure; correlated
+  logs and health reporting expose the cause.
+
 ## [1.0.15-beta.9] - 2026-07-19
 
 ### Changed

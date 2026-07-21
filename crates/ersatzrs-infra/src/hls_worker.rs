@@ -10,11 +10,14 @@ use std::sync::{
 use std::time::Duration;
 
 use crate::db::DbPool;
-use crate::repositories::common::{decode_duration_text, encode_datetime};
+use crate::repositories::common::{
+    encode_datetime, map_data_access_error, try_decode_duration_text,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
+use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
     FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
@@ -61,7 +64,7 @@ const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25)
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const HLS_AT_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
-const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
+pub(crate) const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 const TS_PACKET_SIZE: usize = 188;
 const TS_SYNC_BYTE: u8 = 0x47;
 const TS_NULL_PID: u16 = 0x1fff;
@@ -260,10 +263,22 @@ impl HlsSessionWorker {
         *self.playlist_start.lock().await = transcoded_until;
         let mut runtime_capabilities = self.runtime_capabilities.clone();
         let mut learned_decode_retry_used = false;
-        let slug_duration = load_channel_slug_seconds(&pool, self.channel_id)
-            .await
-            .filter(|seconds| *seconds > 0.0)
-            .map(Duration::from_secs_f64);
+        let slug_duration = match load_channel_slug_seconds(&pool, self.channel_id).await {
+            Ok(seconds) => seconds
+                .filter(|seconds| *seconds > 0.0)
+                .map(Duration::from_secs_f64),
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = self.channel_id,
+                    channel_number = %self.channel_number,
+                    "failed to load channel slug configuration; stopping hls worker"
+                );
+                let _ = cleanup_working_dir(&self.working_dir).await;
+                registry.remove(&self.channel_number).await;
+                return;
+            }
+        };
         let has_slug = slug_duration.is_some();
         if let Err(error) =
             time_shift_on_demand_playout(&pool, self.channel_id, transcoded_until).await
@@ -274,8 +289,22 @@ impl HlsSessionWorker {
                 "failed to time shift on-demand playout before starting hls segmenter"
             );
         }
+        let initial_work_ahead_limit = match load_hls_work_ahead_limit(&pool).await {
+            Ok(limit) => limit.unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT),
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = self.channel_id,
+                    channel_number = %self.channel_number,
+                    "failed to load HLS work-ahead limit; stopping hls worker"
+                );
+                let _ = cleanup_working_dir(&self.working_dir).await;
+                registry.remove(&self.channel_number).await;
+                return;
+            }
+        };
         let initial_work_ahead =
-            HLS_WORK_AHEAD_COUNT.load(Ordering::Relaxed) < load_hls_work_ahead_limit(&pool).await;
+            HLS_WORK_AHEAD_COUNT.load(Ordering::Relaxed) < initial_work_ahead_limit;
         self.set_session_state(if initial_work_ahead {
             HlsSessionState::SeekAndWorkAhead
         } else {
@@ -320,7 +349,18 @@ impl HlsSessionWorker {
             let work_ahead_reservation = if realtime_by_buffer {
                 None
             } else {
-                let work_ahead_limit = load_hls_work_ahead_limit(&pool).await;
+                let work_ahead_limit = match load_hls_work_ahead_limit(&pool).await {
+                    Ok(limit) => limit.unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT),
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            "failed to reload HLS work-ahead limit; stopping hls worker"
+                        );
+                        break;
+                    }
+                };
                 try_reserve_work_ahead(work_ahead_limit)
             };
             let realtime = realtime_by_buffer || work_ahead_reservation.is_none();
@@ -329,7 +369,20 @@ impl HlsSessionWorker {
             } else {
                 ActiveTranscodeKind::HlsWorkAhead
             };
-            let active_limit = load_active_transcode_limit(&pool).await;
+            let active_limit = match load_active_transcode_limit(&pool).await {
+                Ok(limit) => {
+                    limit.unwrap_or(crate::transcode_capacity::DEFAULT_ACTIVE_TRANSCODE_LIMIT)
+                }
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = self.channel_id,
+                        channel_number = %self.channel_number,
+                        "failed to load active transcode limit; stopping hls worker"
+                    );
+                    break;
+                }
+            };
             let active_transcode_reservation = try_reserve_active_transcode(
                 active_limit,
                 ActiveTranscodeSlot::new_hls(
@@ -431,10 +484,22 @@ impl HlsSessionWorker {
                             continue;
                         }
                     };
-                let channel_name = load_channel_name(&pool, self.channel_id)
-                    .await
-                    .unwrap_or_else(|| self.channel_number.clone());
-                let target_frame_rate = self.load_target_frame_rate(&pool, "hls slug").await;
+                let channel_name = match load_channel_name(&pool, self.channel_id).await {
+                    Ok(name) => name.unwrap_or_else(|| self.channel_number.clone()),
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            "failed to load channel name for hls slug; stopping hls worker"
+                        );
+                        break;
+                    }
+                };
+                let Ok(target_frame_rate) = self.load_target_frame_rate(&pool, "hls slug").await
+                else {
+                    break;
+                };
                 let output_ts_offset = self
                     .next_output_ts_offset(is_first, next_mpegts_output_ts_offset)
                     .await;
@@ -502,16 +567,29 @@ impl HlsSessionWorker {
                 break;
             }
 
-            let Some(active) = load_active_hls_item(
+            let active = match load_active_hls_item(
                 &pool,
                 self.channel_id,
                 &self.path_replacements,
                 decision.request_time,
             )
             .await
-            else {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                continue;
+            {
+                Ok(Some(active)) => active,
+                Ok(None) => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = self.channel_id,
+                        channel_number = %self.channel_number,
+                        "failed to load active HLS item; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
             };
             let elapsed = if decision.start_at_zero {
                 Duration::ZERO
@@ -531,9 +609,36 @@ impl HlsSessionWorker {
                 continue;
             }
 
-            let source_stream = load_source_video_stream(&pool, active.media_version_id).await;
+            let source_stream = match load_source_video_stream(&pool, active.media_version_id).await
+            {
+                Ok(stream) => stream,
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = self.channel_id,
+                        channel_number = %self.channel_number,
+                        media_version_id = active.media_version_id,
+                        "failed to load source video metadata; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             let source_audio_streams =
-                load_source_audio_streams(&pool, active.media_version_id).await;
+                match load_source_audio_streams(&pool, active.media_version_id).await {
+                    Ok(streams) => streams,
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            media_version_id = active.media_version_id,
+                            "failed to load source audio metadata; delaying hls worker"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
             let playback_profile = match load_channel_playback_profile(&pool, self.channel_id).await
             {
                 Ok(Some(profile)) => profile,
@@ -561,7 +666,11 @@ impl HlsSessionWorker {
                 &active.media_path,
             )
             .await;
-            let target_frame_rate = self.load_target_frame_rate(&pool, "hls worker").await;
+            let Ok(target_frame_rate) = self.load_target_frame_rate(&pool, "hls worker").await
+            else {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            };
             let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
             let preferred_subtitle_language = active
                 .preferred_subtitle_language_code
@@ -569,7 +678,7 @@ impl HlsSessionWorker {
                 .or(active.channel_preferred_subtitle_language_code.as_deref());
             let channel_for_streams =
                 active.channel_for_runtime_streams(self.channel_id, self.channel_number.clone());
-            let custom_selection = select_channel_custom_streams(
+            let custom_selection = match select_channel_custom_streams(
                 &pool,
                 active.media_version_id,
                 active.media_item_id,
@@ -577,7 +686,22 @@ impl HlsSessionWorker {
                 active.playout_start,
                 StreamingMode::HttpLiveStreamingSegmenter,
             )
-            .await;
+            .await
+            {
+                Ok(selection) => selection,
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = self.channel_id,
+                        channel_number = %self.channel_number,
+                        media_item_id = active.media_item_id,
+                        media_version_id = active.media_version_id,
+                        "failed to execute HLS channel stream selector; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             let selected_audio_stream_index = custom_selection
                 .as_ref()
                 .and_then(|selection| selection.audio_stream_index)
@@ -611,8 +735,15 @@ impl HlsSessionWorker {
                 {
                     Ok(subtitle) => subtitle,
                     Err(error) => {
-                        tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select HLS subtitle");
-                        None
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            media_item_id = active.media_item_id,
+                            "failed to select HLS subtitle; delaying hls worker"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
                     }
                 }
             };
@@ -942,10 +1073,22 @@ impl HlsSessionWorker {
                 ));
             }
         };
-        let channel_name = load_channel_name(pool, self.channel_id)
-            .await
-            .unwrap_or_else(|| self.channel_number.clone());
-        let target_frame_rate = self.load_target_frame_rate(pool, "capacity slate").await;
+        let channel_name = match load_channel_name(pool, self.channel_id).await {
+            Ok(name) => name.unwrap_or_else(|| self.channel_number.clone()),
+            Err(error) => {
+                return HlsProcessOutcome::Failed(format!(
+                    "failed to load channel name for capacity slate: {error}"
+                ));
+            }
+        };
+        let target_frame_rate = match self.load_target_frame_rate(pool, "capacity slate").await {
+            Ok(frame_rate) => frame_rate,
+            Err(error) => {
+                return HlsProcessOutcome::Failed(format!(
+                    "failed to load channel target frame rate for capacity slate: {error}"
+                ));
+            }
+        };
         let output_ts_offset = self
             .next_output_ts_offset(is_first_transcode, next_mpegts_output_ts_offset)
             .await;
@@ -1164,17 +1307,22 @@ impl HlsSessionWorker {
         self.idle_for_duration() < HLS_ACTIVE_WATCH_WINDOW
     }
 
-    async fn load_target_frame_rate(&self, pool: &DbPool, context: &str) -> Option<FrameRate> {
+    async fn load_target_frame_rate(
+        &self,
+        pool: &DbPool,
+        context: &str,
+    ) -> RepositoryResult<Option<FrameRate>> {
         match load_channel_target_frame_rate(pool, self.channel_id).await {
-            Ok(frame_rate) => frame_rate,
+            Ok(frame_rate) => Ok(frame_rate),
             Err(error) => {
-                tracing::warn!(
+                tracing::error!(
                     %error,
+                    channel_id = self.channel_id,
                     channel_number = %self.channel_number,
                     context,
-                    "failed to load channel target frame rate for hls segmenter"
+                    "failed to load channel target frame rate; refusing to build HLS FFmpeg command"
                 );
-                None
+                Err(error)
             }
         }
     }
@@ -2407,35 +2555,66 @@ fn transcode_watch_idle_timeout(session_idle_timeout: Option<Duration>) -> Optio
         .then_some(HLS_ACTIVE_WATCH_WINDOW)
 }
 
-async fn load_hls_work_ahead_limit(pool: &DbPool) -> i32 {
-    sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|value| value.trim().parse::<i32>().ok())
-        .unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT)
-        .max(0)
+pub(crate) async fn load_hls_work_ahead_limit(pool: &DbPool) -> RepositoryResult<Option<i32>> {
+    let value = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+    )
+    .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| map_data_access_error("HLS work-ahead limit", error))?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.ok_or_else(|| RepositoryError::Decode {
+        kind: "HLS work-ahead limit",
+        value: "persisted value is null".to_owned(),
+    })?;
+    let value = value
+        .trim()
+        .parse::<i32>()
+        .map_err(|error| RepositoryError::Decode {
+            kind: "HLS work-ahead limit",
+            value: error.to_string(),
+        })?;
+    if value < 0 {
+        return Err(RepositoryError::Decode {
+            kind: "HLS work-ahead limit",
+            value: format!("expected a value greater than or equal to 0, found {value}"),
+        });
+    }
+    Ok(Some(value))
 }
 
-async fn load_channel_slug_seconds(pool: &DbPool, channel_id: i64) -> Option<f64> {
-    sqlx::query_scalar::<_, Option<f64>>(r#"SELECT "SlugSeconds" FROM "Channel" WHERE "Id" = ?"#)
-        .bind(channel_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .flatten()
+async fn load_channel_slug_seconds(
+    pool: &DbPool,
+    channel_id: i64,
+) -> RepositoryResult<Option<f64>> {
+    let value = sqlx::query_scalar::<_, Option<f64>>(
+        r#"SELECT "SlugSeconds" FROM "Channel" WHERE "Id" = ?"#,
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| map_data_access_error("channel slug duration", error))?;
+    match value.flatten() {
+        None => Ok(None),
+        Some(seconds) if seconds.is_finite() && seconds >= 0.0 => Ok(Some(seconds)),
+        Some(seconds) => Err(RepositoryError::Decode {
+            kind: "channel slug duration",
+            value: format!("expected a finite, non-negative value, found {seconds}"),
+        }),
+    }
 }
 
-async fn load_channel_name(pool: &DbPool, channel_id: i64) -> Option<String> {
-    sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Channel" WHERE "Id" = ?"#)
-        .bind(channel_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
+async fn load_channel_name(pool: &DbPool, channel_id: i64) -> RepositoryResult<Option<String>> {
+    let value =
+        sqlx::query_scalar::<_, Option<String>>(r#"SELECT "Name" FROM "Channel" WHERE "Id" = ?"#)
+            .bind(channel_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|error| map_data_access_error("channel name", error))?;
+    Ok(value.flatten())
 }
 
 async fn time_shift_on_demand_playout(
@@ -3007,17 +3186,17 @@ async fn select_channel_custom_streams(
     channel: &Channel,
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
-) -> Option<CustomStreamSelection> {
+) -> RepositoryResult<Option<CustomStreamSelection>> {
     if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom
         || channel
             .stream_selector
             .as_deref()
             .is_none_or(|selector| selector.trim().is_empty())
     {
-        return None;
+        return Ok(None);
     }
 
-    match select_custom_playback_streams(
+    select_custom_playback_streams(
         pool,
         media_version_id,
         media_item_id,
@@ -3026,13 +3205,6 @@ async fn select_channel_custom_streams(
         streaming_mode,
     )
     .await
-    {
-        Ok(selection) => selection,
-        Err(error) => {
-            tracing::warn!(%error, media_item_id, "failed to execute HLS channel stream selector");
-            None
-        }
-    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -3041,7 +3213,7 @@ async fn load_active_hls_item(
     channel_id: i64,
     path_replacements: &[PathReplacement],
     now: DateTime<Utc>,
-) -> Option<ActiveHlsItem> {
+) -> RepositoryResult<Option<ActiveHlsItem>> {
     let now_text = encode_datetime(now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
@@ -3090,107 +3262,144 @@ async fn load_active_hls_item(
     .bind(&now_text)
     .bind(&now_text)
     .fetch_optional(pool)
-    .await
-    .ok()??;
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
 
-    let media_path = row.get::<String, _>("MediaPath");
+    let media_path = decode_hls_column::<String>(&row, "MediaPath")?;
     let resolved = if path_replacements.is_empty() {
         media_path
     } else {
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
-    let playout_start = parse_sqlite_utc_timestamp(&row.get::<String, _>("PlayoutStart"))?;
-    let program_duration = row
-        .try_get::<String, _>("PlayoutFinish")
-        .ok()
-        .and_then(|finish| parse_sqlite_utc_timestamp(&finish))
-        .and_then(|finish| (finish - playout_start).to_std().ok());
-    let playout_finish = row
-        .try_get::<String, _>("PlayoutFinish")
-        .ok()
-        .and_then(|finish| parse_sqlite_utc_timestamp(&finish));
-    Some(ActiveHlsItem {
+    let playout_start_text = decode_hls_column::<String>(&row, "PlayoutStart")?;
+    let playout_start =
+        parse_sqlite_utc_timestamp(&playout_start_text).ok_or_else(|| RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("PlayoutStart: invalid timestamp {playout_start_text:?}"),
+        })?;
+    let playout_finish_text = decode_hls_column::<String>(&row, "PlayoutFinish")?;
+    let playout_finish = parse_sqlite_utc_timestamp(&playout_finish_text).ok_or_else(|| {
+        RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("PlayoutFinish: invalid timestamp {playout_finish_text:?}"),
+        }
+    })?;
+    let program_duration =
+        (playout_finish - playout_start)
+            .to_std()
+            .map_err(|error| RepositoryError::Decode {
+                kind: "active HLS item",
+                value: format!("PlayoutFinish precedes PlayoutStart: {error}"),
+            })?;
+    let content_duration_text = decode_hls_column::<String>(&row, "ContentDuration")?;
+    let content_duration = try_decode_duration_text(&content_duration_text)?
+        .to_std()
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("ContentDuration: {error}"),
+        })?;
+    let in_point_text = decode_hls_column::<String>(&row, "InPoint")?;
+    let in_point = try_decode_duration_text(&in_point_text)?
+        .to_std()
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("InPoint: {error}"),
+        })?;
+    let subtitle_mode_value = decode_hls_column::<Option<i64>>(&row, "SubtitleMode")?;
+    let subtitle_mode = subtitle_mode_value
+        .map(|value| {
+            decode_subtitle_mode(value).ok_or_else(|| RepositoryError::Decode {
+                kind: "active HLS item",
+                value: format!("SubtitleMode: unknown value {value}"),
+            })
+        })
+        .transpose()?;
+    let stream_selector_mode_value = decode_hls_column::<i64>(&row, "ChannelStreamSelectorMode")?;
+    let channel_stream_selector_mode = decode_stream_selector_mode(stream_selector_mode_value)
+        .ok_or_else(|| RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("ChannelStreamSelectorMode: unknown value {stream_selector_mode_value}"),
+        })?;
+    let channel_subtitle_mode_value = decode_hls_column::<i64>(&row, "ChannelSubtitleMode")?;
+    let channel_subtitle_mode =
+        decode_subtitle_mode(channel_subtitle_mode_value).ok_or_else(|| {
+            RepositoryError::Decode {
+                kind: "active HLS item",
+                value: format!("ChannelSubtitleMode: unknown value {channel_subtitle_mode_value}"),
+            }
+        })?;
+    let music_video_credits_mode_value =
+        decode_hls_column::<i64>(&row, "ChannelMusicVideoCreditsMode")?;
+    let channel_music_video_credits_mode =
+        decode_music_video_credits_mode(music_video_credits_mode_value).ok_or_else(|| {
+            RepositoryError::Decode {
+                kind: "active HLS item",
+                value: format!(
+                    "ChannelMusicVideoCreditsMode: unknown value {music_video_credits_mode_value}"
+                ),
+            }
+        })?;
+
+    Ok(Some(ActiveHlsItem {
         media_path: resolved,
-        playout_item_id: row.get::<i64, _>("PlayoutItemId"),
-        media_item_id: row.get::<i64, _>("MediaItemId"),
-        media_version_id: row.get::<i64, _>("MediaVersionId"),
-        content_duration: row
-            .try_get::<Option<f64>, _>("ContentDuration")
-            .ok()
-            .flatten()
-            .and_then(duration_from_f64),
-        in_point: row
-            .try_get::<String, _>("InPoint")
-            .ok()
-            .map_or(Duration::ZERO, |value| {
-                decode_duration_text(&value).to_std().unwrap_or_default()
-            }),
-        program_duration,
+        playout_item_id: decode_hls_column(&row, "PlayoutItemId")?,
+        media_item_id: decode_hls_column(&row, "MediaItemId")?,
+        media_version_id: decode_hls_column(&row, "MediaVersionId")?,
+        content_duration: Some(content_duration),
+        in_point,
+        program_duration: Some(program_duration),
         playout_start,
-        playout_finish,
-        disable_watermarks: row
-            .try_get::<i64, _>("DisableWatermarks")
-            .is_ok_and(|value| value != 0),
-        preferred_audio_language_code: row
-            .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
-            .ok()
-            .flatten(),
-        preferred_audio_title: row
-            .try_get::<Option<String>, _>("PreferredAudioTitle")
-            .ok()
-            .flatten(),
-        preferred_subtitle_language_code: row
-            .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
-            .ok()
-            .flatten(),
-        subtitle_mode: row
-            .try_get::<Option<i64>, _>("SubtitleMode")
-            .ok()
-            .flatten()
-            .and_then(decode_subtitle_mode),
-        channel_name: row
-            .try_get::<String, _>("ChannelName")
-            .unwrap_or_else(|_| String::new()),
-        channel_preferred_audio_language_code: row
-            .try_get::<Option<String>, _>("ChannelPreferredAudioLanguageCode")
-            .ok()
-            .flatten(),
-        channel_preferred_audio_title: row
-            .try_get::<Option<String>, _>("ChannelPreferredAudioTitle")
-            .ok()
-            .flatten(),
-        channel_stream_selector_mode: row
-            .try_get::<i64, _>("ChannelStreamSelectorMode")
-            .ok()
-            .and_then(decode_stream_selector_mode)
-            .unwrap_or(ChannelStreamSelectorMode::Default),
-        channel_stream_selector: row
-            .try_get::<Option<String>, _>("ChannelStreamSelector")
-            .ok()
-            .flatten(),
-        channel_preferred_subtitle_language_code: row
-            .try_get::<Option<String>, _>("ChannelPreferredSubtitleLanguageCode")
-            .ok()
-            .flatten(),
-        channel_subtitle_mode: row
-            .try_get::<i64, _>("ChannelSubtitleMode")
-            .ok()
-            .and_then(decode_subtitle_mode)
-            .unwrap_or(ChannelSubtitleMode::None),
-        channel_watermark_id: row
-            .try_get::<Option<i64>, _>("ChannelWatermarkId")
-            .ok()
-            .flatten(),
-        channel_music_video_credits_mode: row
-            .try_get::<i64, _>("ChannelMusicVideoCreditsMode")
-            .ok()
-            .and_then(decode_music_video_credits_mode)
-            .unwrap_or(ChannelMusicVideoCreditsMode::None),
-        channel_music_video_credits_template: row
-            .try_get::<Option<String>, _>("ChannelMusicVideoCreditsTemplate")
-            .ok()
-            .flatten(),
-    })
+        playout_finish: Some(playout_finish),
+        disable_watermarks: decode_hls_bool(&row, "DisableWatermarks")?,
+        preferred_audio_language_code: decode_hls_column(&row, "PreferredAudioLanguageCode")?,
+        preferred_audio_title: decode_hls_column(&row, "PreferredAudioTitle")?,
+        preferred_subtitle_language_code: decode_hls_column(&row, "PreferredSubtitleLanguageCode")?,
+        subtitle_mode,
+        channel_name: decode_hls_column::<Option<String>>(&row, "ChannelName")?.unwrap_or_default(),
+        channel_preferred_audio_language_code: decode_hls_column(
+            &row,
+            "ChannelPreferredAudioLanguageCode",
+        )?,
+        channel_preferred_audio_title: decode_hls_column(&row, "ChannelPreferredAudioTitle")?,
+        channel_stream_selector_mode,
+        channel_stream_selector: decode_hls_column(&row, "ChannelStreamSelector")?,
+        channel_preferred_subtitle_language_code: decode_hls_column(
+            &row,
+            "ChannelPreferredSubtitleLanguageCode",
+        )?,
+        channel_subtitle_mode,
+        channel_watermark_id: decode_hls_column(&row, "ChannelWatermarkId")?,
+        channel_music_video_credits_mode,
+        channel_music_video_credits_template: decode_hls_column(
+            &row,
+            "ChannelMusicVideoCreditsTemplate",
+        )?,
+    }))
+}
+
+fn decode_hls_column<T>(row: &crate::db::DbRow, column: &'static str) -> RepositoryResult<T>
+where
+    for<'row> T: sqlx::Decode<'row, crate::db::Db> + sqlx::Type<crate::db::Db>,
+{
+    row.try_get(column)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("{column}: {error}"),
+        })
+}
+
+fn decode_hls_bool(row: &crate::db::DbRow, column: &'static str) -> RepositoryResult<bool> {
+    let value = decode_hls_column::<i64>(row, column)?;
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(RepositoryError::Decode {
+            kind: "active HLS item",
+            value: format!("{column}: expected 0 or 1, found {value}"),
+        }),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -3286,14 +3495,6 @@ fn playout_start_duration(now: DateTime<Utc>, playout_start: DateTime<Utc>) -> D
 
 fn duration_as_i64_seconds(duration: Duration) -> i64 {
     i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
-}
-
-fn duration_from_f64(seconds: f64) -> Option<Duration> {
-    seconds
-        .is_finite()
-        .then_some(seconds)
-        .filter(|seconds| *seconds >= 0.0)
-        .map(Duration::from_secs_f64)
 }
 
 fn watermark_opacity_clock_at_spawn(
@@ -4601,13 +4802,193 @@ mod tests {
 
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
+    async fn hls_work_ahead_loader_distinguishes_absence_invalid_and_database_failure() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open HLS config test database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT NULL,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create ConfigElement");
+        sqlx::query(
+            r#"CREATE TABLE "Channel" (
+                "Id" INTEGER PRIMARY KEY,
+                "Name" TEXT NULL,
+                "SlugSeconds" REAL NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create Channel");
+        assert_eq!(
+            load_hls_work_ahead_limit(&pool)
+                .await
+                .expect("load absent HLS work-ahead limit"),
+            None
+        );
+
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, 'invalid')"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
+            .execute(&pool)
+            .await
+            .expect("seed invalid HLS work-ahead limit");
+        assert!(matches!(
+            load_hls_work_ahead_limit(&pool).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        sqlx::query(
+            r#"INSERT INTO "Channel" ("Id", "Name", "SlugSeconds")
+               VALUES (7, x'FF', 'invalid')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed malformed channel configuration");
+        assert!(matches!(
+            load_channel_slug_seconds(&pool, 7).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+        assert!(matches!(
+            load_channel_name(&pool, 7).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        pool.close().await;
+        assert!(matches!(
+            load_hls_work_ahead_limit(&pool).await,
+            Err(RepositoryError::Database(_))
+        ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn active_hls_item_loader_preserves_absence_decode_and_database_failure() {
+        let pool = active_hls_item_test_pool().await;
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        assert!(load_active_hls_item(&pool, 99, &[], now)
+            .await
+            .expect("load absent active item")
+            .is_none());
+        assert!(matches!(
+            load_active_hls_item(&pool, 7, &[], now).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        pool.close().await;
+        assert!(matches!(
+            load_active_hls_item(&pool, 7, &[], now).await,
+            Err(RepositoryError::Database(_))
+        ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn active_hls_item_test_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open active HLS item test database");
+        for statement in [
+            r#"CREATE TABLE "Channel" (
+                "Id" INTEGER PRIMARY KEY,
+                "Name" TEXT NULL,
+                "WatermarkId" INTEGER NULL,
+                "StreamSelectorMode" INTEGER NOT NULL,
+                "StreamSelector" TEXT NULL,
+                "PreferredAudioLanguageCode" TEXT NULL,
+                "PreferredAudioTitle" TEXT NULL,
+                "PreferredSubtitleLanguageCode" TEXT NULL,
+                "SubtitleMode" INTEGER NOT NULL,
+                "MusicVideoCreditsMode" INTEGER NOT NULL,
+                "MusicVideoCreditsTemplate" TEXT NULL
+            )"#,
+            r#"CREATE TABLE "Playout" (
+                "Id" INTEGER PRIMARY KEY,
+                "ChannelId" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "PlayoutItem" (
+                "Id" INTEGER PRIMARY KEY,
+                "MediaItemId" INTEGER NOT NULL,
+                "PlayoutId" INTEGER NOT NULL,
+                "InPoint" TEXT NOT NULL,
+                "Start" TEXT NOT NULL,
+                "Finish" TEXT NOT NULL,
+                "DisableWatermarks" INTEGER NOT NULL,
+                "PreferredAudioLanguageCode" TEXT NULL,
+                "PreferredAudioTitle" TEXT NULL,
+                "PreferredSubtitleLanguageCode" TEXT NULL,
+                "SubtitleMode" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "MediaVersion" (
+                "Id" INTEGER PRIMARY KEY,
+                "Duration" TEXT NOT NULL,
+                "MovieId" INTEGER NULL,
+                "EpisodeId" INTEGER NULL,
+                "MusicVideoId" INTEGER NULL,
+                "OtherVideoId" INTEGER NULL,
+                "RemoteStreamId" INTEGER NULL,
+                "SongId" INTEGER NULL,
+                "ImageId" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "MediaFile" (
+                "MediaVersionId" INTEGER NOT NULL,
+                "Path" TEXT NULL
+            )"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("create active HLS item test table");
+        }
+        for statement in [
+            r#"INSERT INTO "Channel" (
+                "Id", "Name", "StreamSelectorMode", "SubtitleMode",
+                "MusicVideoCreditsMode"
+            ) VALUES (7, 'Seven', 0, 0, 0)"#,
+            r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (11, 7)"#,
+            r#"INSERT INTO "PlayoutItem" (
+                "Id", "MediaItemId", "PlayoutId", "InPoint", "Start", "Finish",
+                "DisableWatermarks", "SubtitleMode"
+            ) VALUES (
+                12, 20, 11, '00:00:00', '2026-06-08 11:59:00',
+                '2026-06-08 12:01:00', 0, 99
+            )"#,
+            r#"INSERT INTO "MediaVersion" ("Id", "Duration", "MovieId")
+               VALUES (21, '00:02:00', 20)"#,
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path")
+               VALUES (21, '/media/test.mkv')"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("seed active HLS item test row");
+        }
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
     async fn on_demand_startup_timeshifts_playout_and_updates_checkpoint() {
         let pool = on_demand_test_pool().await;
 
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        assert_eq!(load_channel_slug_seconds(&pool, 7).await, Some(2.5));
+        assert_eq!(
+            load_channel_slug_seconds(&pool, 7)
+                .await
+                .expect("load channel slug seconds"),
+            Some(2.5)
+        );
         time_shift_on_demand_playout(&pool, 7, now)
             .await
             .expect("time shift on-demand playout");

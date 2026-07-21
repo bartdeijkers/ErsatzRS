@@ -139,13 +139,13 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
 
-    let path_replacements = stream::load_path_replacements(&state.repositories.media_source)
-        .await
-        .unwrap_or_default();
+    let path_replacements =
+        stream::load_path_replacements(&state.repositories.media_source).await?;
     let media_path = apply_unix_path_replacements(&path_replacements, &media.path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
-    let source_stream = load_source_video_stream(&state.pool, media.media_version_id).await;
-    let source_audio_streams = load_source_audio_streams(&state.pool, media.media_version_id).await;
+    let source_stream = load_source_video_stream(&state.pool, media.media_version_id).await?;
+    let source_audio_streams =
+        load_source_audio_streams(&state.pool, media.media_version_id).await?;
     let source_stream = enrich_source_video_stream_for_playback(
         source_stream,
         playback_profile.profile.hardware_acceleration,
@@ -272,14 +272,13 @@ async fn start_channel_playback_preview(
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
 
-    let path_replacements = stream::load_path_replacements(&state.repositories.media_source)
-        .await
-        .unwrap_or_default();
+    let path_replacements =
+        stream::load_path_replacements(&state.repositories.media_source).await?;
     let media_path = apply_unix_path_replacements(&path_replacements, &active.media_path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
-    let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await?;
     let source_audio_streams =
-        load_source_audio_streams(&state.pool, active.media_version_id).await;
+        load_source_audio_streams(&state.pool, active.media_version_id).await?;
     let source_stream = enrich_source_video_stream_for_playback(
         source_stream,
         playback_profile.profile.hardware_acceleration,
@@ -287,9 +286,7 @@ async fn start_channel_playback_preview(
     )
     .await;
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
-        load_channel_target_frame_rate(&state.pool, channel.id)
-            .await
-            .unwrap_or_default()
+        load_channel_target_frame_rate(&state.pool, channel.id).await?
     } else {
         None
     };

@@ -38,7 +38,7 @@ use crate::metadata::subtitle_kind;
 use crate::music_video_credits::generate_music_video_credits_subtitle;
 use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
-    decode_optional_string_column, decode_string_column,
+    decode_optional_string_column, decode_string_column, map_data_access_error,
 };
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -144,12 +144,17 @@ struct PlaybackGraphicsDeco {
 /// ErsatzTV-parity decisions (decoder selection, deinterlace, tonemap, and the
 /// 10-bit → 8-bit pixel-format conversion handled by `SetPixelFormat`).
 ///
-/// Returns `None` when the media version has no recorded video stream, in
+/// Returns `Ok(None)` when the media version has no recorded video stream, in
 /// which case the pipeline falls back to its format-agnostic defaults.
+///
+/// # Errors
+///
+/// Returns a database error when the query fails and a decode error when a
+/// persisted row cannot be projected without changing playback behavior.
 pub async fn load_source_video_stream(
     pool: &DbPool,
     media_version_id: i64,
-) -> Option<SourceVideoStream> {
+) -> Result<Option<SourceVideoStream>> {
     let row = sqlx::query(
         r#"SELECT ms."Index" AS "Index",
                   ms."Codec" AS "Codec",
@@ -174,27 +179,32 @@ pub async fn load_source_video_stream(
     )
     .bind(media_version_id)
     .fetch_optional(pool)
-    .await
-    .ok()??;
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
 
-    let codec: String = row.try_get("Codec").ok()?;
-    let index = row
-        .try_get::<i64, _>("Index")
-        .ok()
-        .and_then(|index| usize::try_from(index).ok())
-        .unwrap_or_default();
-    let pixel_format: Option<String> = row.try_get("PixelFormat").ok().flatten();
-    let color_range: Option<String> = row.try_get("ColorRange").ok().flatten();
-    let color_transfer: Option<String> = row.try_get("ColorTransfer").ok().flatten();
-    let color_primaries: Option<String> = row.try_get("ColorPrimaries").ok().flatten();
-    let color_space: Option<String> = row.try_get("ColorSpace").ok().flatten();
-    let width: Option<i32> = row.try_get("Width").ok().flatten();
-    let height: Option<i32> = row.try_get("Height").ok().flatten();
-    let frame_rate: Option<String> = row.try_get("RFrameRate").ok().flatten();
-    let scan_kind = row
-        .try_get::<i64, _>("VideoScanKind")
-        .ok()
-        .map_or(VideoScanKind::Unknown, scan_kind_from_db);
+    let Some(codec) = decode_playback_column::<Option<String>>(&row, "Codec")? else {
+        return Ok(None);
+    };
+    let index = decode_playback_column::<i64>(&row, "Index")?;
+    let index = usize::try_from(index).map_err(|error| RepositoryError::Decode {
+        kind: "source video stream",
+        value: format!("Index: {error}"),
+    })?;
+    let pixel_format: Option<String> = decode_playback_column(&row, "PixelFormat")?;
+    let color_range: Option<String> = decode_playback_column(&row, "ColorRange")?;
+    let color_transfer: Option<String> = decode_playback_column(&row, "ColorTransfer")?;
+    let color_primaries: Option<String> = decode_playback_column(&row, "ColorPrimaries")?;
+    let color_space: Option<String> = decode_playback_column(&row, "ColorSpace")?;
+    let width: i32 = decode_playback_column(&row, "Width")?;
+    let height: i32 = decode_playback_column(&row, "Height")?;
+    let frame_rate: Option<String> = decode_playback_column(&row, "RFrameRate")?;
+    let scan_kind_value = decode_playback_column::<i64>(&row, "VideoScanKind")?;
+    let scan_kind = scan_kind_from_db(scan_kind_value).ok_or_else(|| RepositoryError::Decode {
+        kind: "source video stream",
+        value: format!("VideoScanKind: unknown value {scan_kind_value}"),
+    })?;
 
     let mut stream =
         SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(&codec)).with_index(index);
@@ -202,16 +212,11 @@ pub async fn load_source_video_stream(
         .as_deref()
         .and_then(PixelFormat::from_ffmpeg_name);
     stream.scan_kind = scan_kind;
-    stream.frame_size = width
-        .zip(height)
-        .and_then(|(width, height)| frame_size_from_db(width, height));
+    stream.frame_size = frame_size_from_db(width, height);
     stream.frame_rate = frame_rate.as_deref().and_then(parse_frame_rate);
-    stream.sample_aspect_ratio = row.try_get("SampleAspectRatio").ok().flatten();
-    stream.display_aspect_ratio = row.try_get("DisplayAspectRatio").ok().flatten();
-    stream.is_still_image = row
-        .try_get::<i64, _>("IsStillImage")
-        .ok()
-        .is_some_and(|value| value != 0);
+    stream.sample_aspect_ratio = decode_playback_column(&row, "SampleAspectRatio")?;
+    stream.display_aspect_ratio = decode_playback_column(&row, "DisplayAspectRatio")?;
+    stream.is_still_image = decode_playback_bool(&row, "IsStillImage")?;
     stream.color_params = derive_color_params(
         pixel_format.as_deref(),
         color_range.as_deref(),
@@ -220,13 +225,20 @@ pub async fn load_source_video_stream(
         color_space.as_deref(),
     );
 
-    Some(stream)
+    Ok(Some(stream))
 }
 
+/// Load every persisted source audio stream for a media version.
+///
+/// # Errors
+///
+/// Returns a database error when the query fails and a decode error when any
+/// row is malformed. A malformed row is never dropped because doing so could
+/// silently select a different audio stream.
 pub async fn load_source_audio_streams(
     pool: &DbPool,
     media_version_id: i64,
-) -> Vec<SourceAudioStream> {
+) -> Result<Vec<SourceAudioStream>> {
     let rows = sqlx::query(
         r#"SELECT "Index", "Codec", "Channels", "Default", "Language", "Title"
            FROM "MediaStream"
@@ -235,33 +247,59 @@ pub async fn load_source_audio_streams(
     )
     .bind(media_version_id)
     .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
     rows.into_iter()
-        .filter_map(|row| {
-            let index = row.try_get::<i64, _>("Index").ok()?;
-            let index = usize::try_from(index).ok()?;
-            let codec: Option<String> = row.try_get("Codec").ok().flatten();
-            let channels: Option<i32> = row.try_get("Channels").ok().flatten();
-            let default = row
-                .try_get::<i64, _>("Default")
-                .ok()
-                .is_some_and(|value| value != 0);
-            let language: Option<String> = row.try_get("Language").ok().flatten();
-            let title: Option<String> = row.try_get("Title").ok().flatten();
+        .map(|row| {
+            let index = decode_playback_column::<i64>(&row, "Index")?;
+            let index = usize::try_from(index).map_err(|error| RepositoryError::Decode {
+                kind: "source audio stream",
+                value: format!("Index: {error}"),
+            })?;
+            let codec: Option<String> = decode_playback_column(&row, "Codec")?;
+            let channels = decode_playback_column::<i32>(&row, "Channels")?;
+            let channels = u32::try_from(channels).map_err(|error| RepositoryError::Decode {
+                kind: "source audio stream",
+                value: format!("Channels: {error}"),
+            })?;
+            let default = decode_playback_bool(&row, "Default")?;
+            let language: Option<String> = decode_playback_column(&row, "Language")?;
+            let title: Option<String> = decode_playback_column(&row, "Title")?;
 
             let mut stream = SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name(
                 codec.as_deref().unwrap_or_default(),
             ))
             .with_index(index);
-            stream.channels = channels.and_then(|channels| u32::try_from(channels).ok());
+            stream.channels = Some(channels);
             stream.default = default;
             stream.language = language.as_deref().and_then(non_empty_string);
             stream.title = title.as_deref().and_then(non_empty_string);
-            Some(stream)
+            Ok(stream)
         })
         .collect()
+}
+
+fn decode_playback_column<T>(row: &crate::db::DbRow, column: &'static str) -> Result<T>
+where
+    for<'row> T: sqlx::Decode<'row, crate::db::Db> + sqlx::Type<crate::db::Db>,
+{
+    row.try_get(column)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "playback metadata row",
+            value: format!("{column}: {error}"),
+        })
+}
+
+fn decode_playback_bool(row: &crate::db::DbRow, column: &'static str) -> Result<bool> {
+    let value = decode_playback_column::<i64>(row, column)?;
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(RepositoryError::Decode {
+            kind: "playback metadata row",
+            value: format!("{column}: expected 0 or 1, found {value}"),
+        }),
+    }
 }
 
 #[must_use]
@@ -611,7 +649,7 @@ pub async fn load_playback_profile(
 pub async fn load_channel_target_frame_rate(
     pool: &DbPool,
     channel_id: i64,
-) -> std::result::Result<Option<FrameRate>, sqlx::Error> {
+) -> Result<Option<FrameRate>> {
     let rows = sqlx::query(
         r#"SELECT mv."RFrameRate" AS "RFrameRate"
            FROM "Playout" p
@@ -629,13 +667,18 @@ pub async fn load_channel_target_frame_rate(
     )
     .bind(channel_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .map_err(|error| map_data_access_error("channel target frame rate", error))?;
 
-    let mut rates = rows
-        .iter()
-        .filter_map(|row| row.try_get::<String, _>("RFrameRate").ok())
-        .filter_map(|value| parse_frame_rate(&value))
-        .collect::<Vec<_>>();
+    let mut rates = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let value = decode_playback_column::<String>(row, "RFrameRate")?;
+        let frame_rate = parse_frame_rate(&value).ok_or_else(|| RepositoryError::Decode {
+            kind: "channel target frame rate",
+            value,
+        })?;
+        rates.push(frame_rate);
+    }
     rates.sort_by(|a, b| a.parsed().total_cmp(&b.parsed()));
     rates.dedup();
 
@@ -2342,11 +2385,12 @@ impl PlaybackSubtitle {
     }
 }
 
-const fn scan_kind_from_db(value: i64) -> VideoScanKind {
+const fn scan_kind_from_db(value: i64) -> Option<VideoScanKind> {
     match value {
-        1 => VideoScanKind::Progressive,
-        2 => VideoScanKind::Interlaced,
-        _ => VideoScanKind::Unknown,
+        0 => Some(VideoScanKind::Unknown),
+        1 => Some(VideoScanKind::Progressive),
+        2 => Some(VideoScanKind::Interlaced),
+        _ => None,
     }
 }
 
@@ -2412,6 +2456,194 @@ fn derive_color_params(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[cfg(not(feature = "mysql"))]
+    async fn source_stream_test_pool() -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open playback metadata test database");
+        for statement in [
+            r#"CREATE TABLE "MediaVersion" (
+                "Id" INTEGER PRIMARY KEY,
+                "VideoScanKind" INTEGER NOT NULL,
+                "Width" INTEGER NOT NULL,
+                "Height" INTEGER NOT NULL,
+                "RFrameRate" TEXT NULL,
+                "SampleAspectRatio" TEXT NULL,
+                "DisplayAspectRatio" TEXT NULL,
+                "MovieId" INTEGER NULL,
+                "EpisodeId" INTEGER NULL,
+                "MusicVideoId" INTEGER NULL,
+                "OtherVideoId" INTEGER NULL,
+                "RemoteStreamId" INTEGER NULL,
+                "SongId" INTEGER NULL,
+                "ImageId" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "MediaStream" (
+                "Id" INTEGER PRIMARY KEY,
+                "Index" INTEGER NOT NULL,
+                "Codec" TEXT NULL,
+                "PixelFormat" TEXT NULL,
+                "ColorRange" TEXT NULL,
+                "ColorTransfer" TEXT NULL,
+                "ColorPrimaries" TEXT NULL,
+                "ColorSpace" TEXT NULL,
+                "MediaVersionId" INTEGER NOT NULL,
+                "MediaStreamKind" INTEGER NOT NULL,
+                "Channels" INTEGER NOT NULL,
+                "Default" INTEGER NOT NULL,
+                "Language" TEXT NULL,
+                "Title" TEXT NULL
+            )"#,
+            r#"CREATE TABLE "Playout" (
+                "Id" INTEGER PRIMARY KEY,
+                "ChannelId" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "PlayoutItem" (
+                "Id" INTEGER PRIMARY KEY,
+                "PlayoutId" INTEGER NOT NULL,
+                "MediaItemId" INTEGER NOT NULL
+            )"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("create playback metadata test table");
+        }
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn source_video_loader_distinguishes_absence_decode_and_database_failure() {
+        let pool = source_stream_test_pool().await;
+        assert_eq!(
+            load_source_video_stream(&pool, 10)
+                .await
+                .expect("load absent source video"),
+            None
+        );
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "VideoScanKind", "Width", "Height", "RFrameRate"
+            ) VALUES (10, 1, 1920, 1080, '30000/1001')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                "Id", "Index", "Codec", "MediaVersionId", "MediaStreamKind",
+                "Channels", "Default"
+            ) VALUES (1, -1, 'h264', 10, 1, 0, 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed malformed video stream");
+        assert!(matches!(
+            load_source_video_stream(&pool, 10).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        pool.close().await;
+        assert!(matches!(
+            load_source_video_stream(&pool, 10).await,
+            Err(RepositoryError::Database(_))
+        ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn source_video_loader_preserves_null_codec_as_absent_metadata() {
+        let pool = source_stream_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "VideoScanKind", "Width", "Height", "RFrameRate"
+            ) VALUES (12, 1, 1920, 1080, '30000/1001')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                "Id", "Index", "Codec", "MediaVersionId", "MediaStreamKind",
+                "Channels", "Default"
+            ) VALUES (12, 0, NULL, 12, 1, 0, 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed video stream without codec metadata");
+
+        assert_eq!(
+            load_source_video_stream(&pool, 12)
+                .await
+                .expect("load source video without codec metadata"),
+            None
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn source_audio_loader_rejects_malformed_rows_instead_of_dropping_them() {
+        let pool = source_stream_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                "Id", "Index", "Codec", "MediaVersionId", "MediaStreamKind",
+                "Channels", "Default", "Language", "Title"
+            ) VALUES (2, 1, 'aac', 10, 2, 2, 2, 'eng', 'Main')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed malformed audio stream");
+
+        assert!(matches!(
+            load_source_audio_streams(&pool, 10).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn target_frame_rate_loader_distinguishes_absence_decode_and_database_failure() {
+        let pool = source_stream_test_pool().await;
+        assert_eq!(
+            load_channel_target_frame_rate(&pool, 5)
+                .await
+                .expect("load absent target frame rate"),
+            None
+        );
+        sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (1, 5)"#)
+            .execute(&pool)
+            .await
+            .expect("seed playout");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "MediaItemId")
+               VALUES (1, 1, 77)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed playout item");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "VideoScanKind", "Width", "Height", "RFrameRate", "MovieId"
+            ) VALUES (11, 1, 1920, 1080, 'invalid', 77)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed malformed frame rate");
+        assert!(matches!(
+            load_channel_target_frame_rate(&pool, 5).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        pool.close().await;
+        assert!(matches!(
+            load_channel_target_frame_rate(&pool, 5).await,
+            Err(RepositoryError::Database(_))
+        ));
+    }
 
     #[test]
     fn qsv_h264_profile_count_probe_uses_ersatztv_trace_headers_args() {

@@ -6,11 +6,14 @@ use std::sync::{
 use std::time::Duration;
 
 use chrono::Utc;
+use ersatzrs_core::repositories::{RepositoryError, Result};
 use tokio::sync::Notify;
 
 use crate::db::DbPool;
+use crate::repositories::common::map_data_access_error;
 
-const DEFAULT_ACTIVE_TRANSCODE_LIMIT: i32 = 2;
+/// Effective active-transcode limit when the persisted setting is absent.
+pub const DEFAULT_ACTIVE_TRANSCODE_LIMIT: i32 = 2;
 
 static ACTIVE_TRANSCODE_SLOT_ID: AtomicU64 = AtomicU64::new(1);
 static ACTIVE_TRANSCODE_PEAK: AtomicI32 = AtomicI32::new(0);
@@ -177,16 +180,44 @@ pub fn active_transcode_snapshot(limit: i32) -> ActiveTranscodeSnapshot {
     }
 }
 
-pub async fn load_active_transcode_limit(pool: &DbPool) -> i32 {
-    sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|value| value.trim().parse::<i32>().ok())
-        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT)
-        .max(1)
+/// Load the configured active-transcode limit.
+///
+/// `Ok(None)` means the setting is absent and callers may apply
+/// [`DEFAULT_ACTIVE_TRANSCODE_LIMIT`].
+///
+/// # Errors
+///
+/// Returns a database error when the query fails and a decode error for null,
+/// non-numeric, or out-of-range persisted values.
+pub async fn load_active_transcode_limit(pool: &DbPool) -> Result<Option<i32>> {
+    let value = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+    )
+    .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| map_data_access_error("active transcode limit", error))?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.ok_or_else(|| RepositoryError::Decode {
+        kind: "active transcode limit",
+        value: "persisted value is null".to_owned(),
+    })?;
+    let value = value
+        .trim()
+        .parse::<i32>()
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active transcode limit",
+            value: error.to_string(),
+        })?;
+    if value < 1 {
+        return Err(RepositoryError::Decode {
+            kind: "active transcode limit",
+            value: format!("expected a value greater than or equal to 1, found {value}"),
+        });
+    }
+    Ok(Some(value))
 }
 
 #[must_use]
@@ -317,6 +348,58 @@ pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(feature = "mysql"))]
+    async fn config_pool(value: Option<&str>) -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open transcode-capacity test database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT NULL,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create ConfigElement");
+        if let Some(value) = value {
+            sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+                .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+                .bind(value)
+                .execute(&pool)
+                .await
+                .expect("seed active transcode limit");
+        }
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn active_transcode_limit_distinguishes_absence_invalid_value_and_database_failure() {
+        let absent_pool = config_pool(None).await;
+        assert_eq!(
+            load_active_transcode_limit(&absent_pool)
+                .await
+                .expect("load absent limit"),
+            None
+        );
+
+        let invalid_pool = config_pool(Some("not-a-number")).await;
+        assert!(matches!(
+            load_active_transcode_limit(&invalid_pool).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+
+        let closed_pool = config_pool(Some("2")).await;
+        closed_pool.close().await;
+        assert!(matches!(
+            load_active_transcode_limit(&closed_pool).await,
+            Err(RepositoryError::Database(_))
+        ));
+    }
 
     #[test]
     fn snapshot_tracks_active_limit_and_peak() {

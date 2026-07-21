@@ -68,4 +68,4 @@
 "crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 4
 "crates/ersatzrs-web/src/admin/server_fns/troubleshooting.rs" = 1
 "crates/ersatzrs-web/src/admin/ui/dialogs/save_as_smart_collection.rs" = 1
-"crates/ersatzrs-web/src/api/troubleshooting.rs" = 4
+"crates/ersatzrs-web/src/api/troubleshooting.rs" = 1

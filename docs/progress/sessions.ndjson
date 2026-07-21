@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-07-21","summary":"Resolved p7a-02 review follow-ups for null video codecs, channel-preview path-replacement failures, and empty fractional playback durations."}
+{"agent":"Codex","date":"2026-07-21","summary":"Completed p7a-02 by making playback, HLS, and transcode-capacity data-access failures explicit across loaders, callers, health, tests, and tracking."}
 {"agent":"Codex","date":"2026-07-21","summary":"Hardened the p7a-01 architecture ratchet against raw sqlx Executor calls, SQLx glob-imported constructors, statement macros, and cfg expressions that remain production-capable."}
 {"agent":"Codex","date":"2026-07-21","summary":"Completed p7a-01 with accepted ADR 0051, an application-service entry point, and CI-enforced architecture debt ratchets for app dependencies, admin SQL, and server-error defaults."}
 {"agent":"Codex","date":"2026-07-21","summary":"Fixed duplicate milestone ID validation so malformed dependency graphs report errors without traversal underflow, added the regression, and expanded watermark preview debt for 4:3/16:9 guides plus safe Previous/Next comparison navigation."}

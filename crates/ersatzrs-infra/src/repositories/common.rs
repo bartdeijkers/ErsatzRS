@@ -17,6 +17,23 @@ use ersatzrs_domain::{
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
 
+pub(crate) fn map_data_access_error(kind: &'static str, error: sqlx::Error) -> RepositoryError {
+    if matches!(
+        &error,
+        sqlx::Error::ColumnIndexOutOfBounds { .. }
+            | sqlx::Error::ColumnNotFound(_)
+            | sqlx::Error::ColumnDecode { .. }
+            | sqlx::Error::Decode(_)
+    ) {
+        RepositoryError::Decode {
+            kind,
+            value: error.to_string(),
+        }
+    } else {
+        RepositoryError::Database(error)
+    }
+}
+
 pub fn decode_enum<T>(kind: &'static str, value: &str) -> Result<T>
 where
     T: DbEnum,
@@ -195,6 +212,15 @@ pub fn encode_duration(value: Duration) -> String {
 /// Decode an `HH:MM:SS` (or similar) TEXT duration stored by `ErsatzTV`.
 #[must_use]
 pub fn decode_duration_text(value: &str) -> Duration {
+    try_decode_duration_text(value).unwrap_or_else(|_| Duration::zero())
+}
+
+/// Strictly decode an `HH:MM:SS` (or similar) duration stored by `ErsatzTV`.
+///
+/// # Errors
+///
+/// Returns a decode error for malformed, negative, or overflowing values.
+pub fn try_decode_duration_text(value: &str) -> Result<Duration> {
     let (day_text, time_text) = value.rsplit_once('.').map_or(("", value), |(left, right)| {
         if left.contains(':') {
             ("", value)
@@ -204,27 +230,54 @@ pub fn decode_duration_text(value: &str) -> Duration {
     });
     let parts: Vec<&str> = time_text.split(':').collect();
     let [hours_text, minutes_text, seconds_text] = parts.as_slice() else {
-        return Duration::zero();
+        return Err(decode_message("duration", "expected HH:MM:SS"));
     };
 
-    let days = day_text.parse::<i64>().unwrap_or(0);
-    let hours = hours_text.parse::<i64>().unwrap_or(0);
-    let minutes = minutes_text.parse::<i64>().unwrap_or(0);
-    let (seconds, nanos) =
-        seconds_text
-            .split_once('.')
-            .map_or((*seconds_text, 0), |(whole, fraction)| {
-                let padded = format!("{fraction:0<9}");
-                let nanos = padded[..9].parse::<i64>().unwrap_or(0);
-                (whole, nanos)
-            });
-    let seconds = seconds.parse::<i64>().unwrap_or(0);
+    let parse_component = |label: &'static str, text: &str| {
+        text.parse::<i64>()
+            .map_err(|error| decode_message(label, &error.to_string()))
+    };
+    let days = if day_text.is_empty() {
+        0
+    } else {
+        parse_component("duration days", day_text)?
+    };
+    let hours = parse_component("duration hours", hours_text)?;
+    let minutes = parse_component("duration minutes", minutes_text)?;
+    let (seconds_text, nanos) = seconds_text.split_once('.').map_or_else(
+        || Ok((*seconds_text, 0)),
+        |(whole, fraction)| {
+            if fraction.is_empty()
+                || fraction.len() > 9
+                || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return Err(decode_message(
+                    "duration fraction",
+                    "expected one to nine decimal digits",
+                ));
+            }
+            let padded = format!("{fraction:0<9}");
+            let nanos = padded
+                .parse::<i64>()
+                .map_err(|error| decode_message("duration fraction", &error.to_string()))?;
+            Ok((whole, nanos))
+        },
+    )?;
+    let seconds = parse_component("duration seconds", seconds_text)?;
+    if days < 0 || hours < 0 || !(0..60).contains(&minutes) || !(0..60).contains(&seconds) {
+        return Err(decode_message(
+            "duration",
+            "components must be non-negative and minutes/seconds below 60",
+        ));
+    }
 
-    Duration::days(days)
-        + Duration::hours(hours)
-        + Duration::minutes(minutes)
-        + Duration::seconds(seconds)
-        + Duration::nanoseconds(nanos)
+    let duration = Duration::try_days(days)
+        .and_then(|value| value.checked_add(&Duration::try_hours(hours)?))
+        .and_then(|value| value.checked_add(&Duration::try_minutes(minutes)?))
+        .and_then(|value| value.checked_add(&Duration::try_seconds(seconds)?))
+        .and_then(|value| value.checked_add(&Duration::nanoseconds(nanos)))
+        .ok_or_else(|| decode_message("duration", "value overflows supported range"))?;
+    Ok(duration)
 }
 
 db_enum!(ArtworkKind {

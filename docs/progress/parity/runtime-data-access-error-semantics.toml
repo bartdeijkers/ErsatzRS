@@ -1,26 +1,27 @@
 feature    = 'Playback and HLS data-access error semantics'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/`, `$ERSATZTV_SRC/ErsatzTV.Application/Hls/`'
-rs_target  = '`crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-infra/src/hls_worker.rs`, `crates/ersatzrs-infra/src/transcode_capacity.rs`, `crates/ersatzrs-web/src/transport/iptv/`'
-status     = 'Not started'
+rs_target  = '`crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-infra/src/hls_worker.rs`, `crates/ersatzrs-infra/src/transcode_capacity.rs`, `crates/ersatzrs-infra/src/health/checks/playback_data_access.rs`, `crates/ersatzrs-web/src/transport/iptv/`, `crates/ersatzrs-web/src/api/troubleshooting.rs`'
+status     = 'Ported'
 adr        = []
 summary    = '''
-Not started: playback-critical loaders currently collapse storage and row
-decode failures into ordinary absence or configured defaults. The Phase 7A
-hardening slice will make absence and failure distinct, propagate typed errors
-through IPTV/HLS/troubleshooting callers, and surface operational failures in
-health reporting without changing valid missing-metadata fallbacks.
+Playback metadata, target-frame-rate, HLS configuration/current-item, and
+active-transcode-capacity loaders now preserve valid absence while returning
+typed database or decode failures. IPTV, HLS, capacity slates, and
+troubleshooting previews stop before choosing altered FFmpeg inputs, stream
+selection, normalization, or capacity defaults after an operational failure.
+Correlated logs and the Playback Data Access health check expose those failures.
 '''
 
 [[debt]]
 id          = 'playback-stream-loaders-swallow-storage-failures'
 description = 'Source video/audio stream loaders treat SQL and row-decoding failures as no video stream, no audio streams, or default fields, which can silently change FFmpeg selection behavior.'
 discovered  = '2026-07-21'
-evidence    = '`load_source_video_stream` uses `.await.ok()??` and optional `try_get(...).ok()` decoding; `load_source_audio_streams` uses `.await.unwrap_or_default()` and drops malformed rows. Close in milestone p7a-02 with focused database/decode failure tests.'
-resolved    = false
+evidence    = '`load_source_video_stream`, `load_source_audio_streams`, and `load_channel_target_frame_rate` return typed repository results with strict row/value decoding. IPTV, HLS, and troubleshooting callers propagate failures before command construction. Focused SQLite tests cover valid absence, malformed persisted values, and unavailable databases.'
+resolved    = true
 
 [[debt]]
 id          = 'hls-config-and-current-item-loaders-swallow-failures'
 description = 'HLS work-ahead/channel/current-item queries and active-transcode configuration use defaults or None after database errors, conflating an unavailable store with valid missing configuration or no current playout item.'
 discovered  = '2026-07-21'
-evidence    = '`load_hls_work_ahead_limit`, `load_channel_slug_seconds`, `load_channel_name`, the active-item lookup in hls_worker, and `load_active_transcode_limit` contain query `.ok()`/default paths. Close in milestone p7a-02.'
-resolved    = false
+evidence    = '`load_hls_work_ahead_limit`, `load_channel_slug_seconds`, `load_channel_name`, `load_active_hls_item`, and `load_active_transcode_limit` return typed optional results and reject invalid persisted values. Workers stop or retry on failure, capacity admission never substitutes a default after failure, and Playback Data Access health distinguishes missing configuration from invalid or unavailable storage.'
+resolved    = true
