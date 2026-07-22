@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{MediaSourceRepository, Result};
 use ersatzrs_domain::{
@@ -32,7 +33,8 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let replacement_rows = sqlx::query(
             r#"SELECT "Id", "PlexMediaSourceId", "PlexPath", "LocalPath"
@@ -42,12 +44,13 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         Ok(PlexMediaSource {
             media_source: base,
-            server_name: row.try_get("ServerName")?,
-            machine_identifier: row.try_get("ClientIdentifier")?,
+            server_name: row.try_get("ServerName").repository()?,
+            machine_identifier: row.try_get("ClientIdentifier").repository()?,
             connections: connection_rows
                 .iter()
                 .map(|connection| PlexConnection {
@@ -93,7 +96,8 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let replacement_rows = sqlx::query(
             r#"SELECT "Id", "JellyfinMediaSourceId", "JellyfinPath", "LocalPath"
@@ -103,12 +107,13 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         Ok(JellyfinMediaSource {
             media_source: base,
-            server_name: row.try_get("ServerName")?,
-            operating_system: row.try_get("OperatingSystem")?,
+            server_name: row.try_get("ServerName").repository()?,
+            operating_system: row.try_get("OperatingSystem").repository()?,
             connections: connection_rows
                 .iter()
                 .map(|connection| JellyfinConnection {
@@ -132,7 +137,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 .collect(),
             last_collections_scan: decode_optional_datetime(
                 "jellyfin media source last_collections_scan",
-                row.try_get("LastCollectionsScan")?,
+                row.try_get("LastCollectionsScan").repository()?,
             )?,
         })
     }
@@ -157,7 +162,8 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let replacement_rows = sqlx::query(
             r#"SELECT "Id", "EmbyMediaSourceId", "EmbyPath", "LocalPath"
@@ -167,12 +173,13 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         )
         .bind(id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         Ok(EmbyMediaSource {
             media_source: base,
-            server_name: row.try_get("ServerName")?,
-            operating_system: row.try_get("OperatingSystem")?,
+            server_name: row.try_get("ServerName").repository()?,
+            operating_system: row.try_get("OperatingSystem").repository()?,
             connections: connection_rows
                 .iter()
                 .map(|connection| EmbyConnection {
@@ -196,7 +203,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 .collect(),
             last_collections_scan: decode_optional_datetime(
                 "emby media source last_collections_scan",
-                row.try_get("LastCollectionsScan")?,
+                row.try_get("LastCollectionsScan").repository()?,
             )?,
         })
     }
@@ -207,22 +214,26 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
             r#"SELECT "Id" FROM "PlexMediaSource" ORDER BY "Id""#,
         )
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         let jellyfin_ids = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "Id" FROM "JellyfinMediaSource" ORDER BY "Id""#,
         )
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         let emby_ids = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "Id" FROM "EmbyMediaSource" ORDER BY "Id""#,
         )
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         let local_ids = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "Id" FROM "LocalMediaSource" ORDER BY "Id""#,
         )
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut sources = Vec::new();
         for id in plex_ids {
@@ -282,16 +293,17 @@ async fn upsert_source<T>(
 where
     T: ProviderUpsert + Sync,
 {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     // "MediaSource" only has "Id"
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(base.id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
 
     provider.upsert(&mut tx).await?;
 
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -316,12 +328,14 @@ impl ProviderUpsert for PlexMediaSource {
             .bind(&self.server_name)
             .bind(&self.machine_identifier)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
 
             sqlx::query(r#"DELETE FROM "PlexConnection" WHERE "PlexMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             for connection in &self.connections {
                 sqlx::query(
                     r#"REPLACE INTO "PlexConnection" ("Id", "PlexMediaSourceId", "IsActive", "Uri")
@@ -332,13 +346,15 @@ impl ProviderUpsert for PlexMediaSource {
                 .bind(connection.is_active)
                 .bind(&connection.uri)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             sqlx::query(r#"DELETE FROM "PlexPathReplacement" WHERE "PlexMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             for replacement in &self.path_replacements {
                 sqlx::query(
                     r#"REPLACE INTO "PlexPathReplacement" (
@@ -350,7 +366,8 @@ impl ProviderUpsert for PlexMediaSource {
                 .bind(&replacement.path)
                 .bind(&replacement.replacement_path)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             Ok(())
@@ -374,12 +391,14 @@ impl ProviderUpsert for JellyfinMediaSource {
             .bind(&self.operating_system)
             .bind(encode_optional_datetime(self.last_collections_scan))
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
 
             sqlx::query(r#"DELETE FROM "JellyfinConnection" WHERE "JellyfinMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             for connection in &self.connections {
                 sqlx::query(
                     r#"REPLACE INTO "JellyfinConnection" ("Id", "JellyfinMediaSourceId", "Address")
@@ -389,7 +408,8 @@ impl ProviderUpsert for JellyfinMediaSource {
                 .bind(self.media_source.id)
                 .bind(&connection.address)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             sqlx::query(
@@ -397,7 +417,8 @@ impl ProviderUpsert for JellyfinMediaSource {
             )
             .bind(self.media_source.id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
             for replacement in &self.path_replacements {
                 sqlx::query(
                     r#"REPLACE INTO "JellyfinPathReplacement" (
@@ -409,7 +430,8 @@ impl ProviderUpsert for JellyfinMediaSource {
                 .bind(&replacement.path)
                 .bind(&replacement.replacement_path)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             Ok(())
@@ -433,12 +455,14 @@ impl ProviderUpsert for EmbyMediaSource {
             .bind(&self.operating_system)
             .bind(encode_optional_datetime(self.last_collections_scan))
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
 
             sqlx::query(r#"DELETE FROM "EmbyConnection" WHERE "EmbyMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             for connection in &self.connections {
                 sqlx::query(
                     r#"REPLACE INTO "EmbyConnection" ("Id", "EmbyMediaSourceId", "Address")
@@ -448,13 +472,15 @@ impl ProviderUpsert for EmbyMediaSource {
                 .bind(self.media_source.id)
                 .bind(&connection.address)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             sqlx::query(r#"DELETE FROM "EmbyPathReplacement" WHERE "EmbyMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             for replacement in &self.path_replacements {
                 sqlx::query(
                     r#"REPLACE INTO "EmbyPathReplacement" (
@@ -466,7 +492,8 @@ impl ProviderUpsert for EmbyMediaSource {
                 .bind(&replacement.path)
                 .bind(&replacement.replacement_path)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
             }
 
             Ok(())
@@ -485,7 +512,8 @@ async fn fetch_base_source(
     )
     .bind(id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
 
     if !exists {
         return Err(super::common::not_found(

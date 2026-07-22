@@ -1,5 +1,6 @@
 use crate::db::DbPool;
 use crate::repositories::common::decode_enum_column;
+use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
@@ -454,7 +455,8 @@ impl PlexService {
         )
         .bind(PLEX_CLIENT_IDENTIFIER_KEY)
         .fetch_optional(pool)
-        .await?
+        .await
+        .repository()?
         .filter(|v| !v.is_empty())
         {
             return Ok(id);
@@ -467,7 +469,8 @@ impl PlexService {
         .bind(PLEX_CLIENT_IDENTIFIER_KEY)
         .bind(&id)
         .execute(pool)
-        .await?;
+        .await
+        .repository()?;
         Ok(id)
     }
 
@@ -625,19 +628,22 @@ impl PlexService {
             )
             .bind(&server.client_identifier)
             .fetch_optional(pool)
-            .await?;
+            .await
+            .repository()?;
 
             let ms_id = if let Some(id) = existing {
                 sqlx::query(r#"UPDATE "PlexMediaSource" SET "ServerName" = ? WHERE "Id" = ?"#)
                     .bind(&server.name)
                     .bind(id)
                     .execute(pool)
-                    .await?;
+                    .await
+                    .repository()?;
                 id
             } else {
                 let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
                     .execute(pool)
-                    .await?;
+                    .await
+                    .repository()?;
                 let ms_id = crate::db::last_insert_id(ms);
                 sqlx::query(
                     r#"INSERT INTO "PlexMediaSource"
@@ -648,7 +654,8 @@ impl PlexService {
                 .bind(&server.name)
                 .bind(&server.client_identifier)
                 .execute(pool)
-                .await?;
+                .await
+                .repository()?;
                 ms_id
             };
 
@@ -660,7 +667,8 @@ impl PlexService {
                 .bind(ms_id)
                 .bind(uri)
                 .fetch_one(pool)
-                .await?
+                .await
+                .repository()?
                     > 0;
                 if !already {
                     sqlx::query(
@@ -671,7 +679,8 @@ impl PlexService {
                     .bind(uri)
                     .bind(ms_id)
                     .execute(pool)
-                    .await?;
+                    .await
+                    .repository()?;
                 }
             }
 
@@ -683,7 +692,8 @@ impl PlexService {
                 .bind(ms_id)
                 .bind(first_uri)
                 .execute(pool)
-                .await?;
+                .await
+                .repository()?;
             }
 
             sqlx::query(
@@ -696,7 +706,8 @@ impl PlexService {
             ))
             .bind(&server.server_auth_token)
             .execute(pool)
-            .await?;
+            .await
+            .repository()?;
 
             sqlx::query(
                 r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
@@ -705,7 +716,8 @@ impl PlexService {
             .bind(PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY)
             .bind(&server.server_auth_token)
             .execute(pool)
-            .await?;
+            .await
+            .repository()?;
         }
         Ok(())
     }
@@ -794,7 +806,8 @@ pub async fn sync_plex_movie_library_with_progress(
                     library_id,
                     &item.key,
                 )
-                .await?
+                .await
+                .repository()?
             } else {
                 let item_id =
                     upsert_plex_movie(pool, config, media_source_id, library_id, library_key, item)
@@ -826,6 +839,28 @@ pub async fn sync_plex_movie_library_with_progress(
             .await?;
     }
 
+    finalize_plex_movie_library_sync(
+        pool,
+        media_source_id,
+        library_id,
+        &present_item_ids,
+        &variant_candidates,
+    )
+    .await?;
+
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
+    Ok(synced)
+}
+
+async fn finalize_plex_movie_library_sync(
+    pool: &DbPool,
+    media_source_id: i64,
+    library_id: i64,
+    present_item_ids: &std::collections::HashSet<String>,
+    variant_candidates: &[crate::media_server::ProviderVariantCandidate],
+) -> Result<()> {
     // Trash movies no longer present on the server, then flag those still on
     // the server whose local file is missing (RemoteOnly — Plex supports
     // remote streaming).
@@ -834,9 +869,10 @@ pub async fn sync_plex_movie_library_with_progress(
         "PlexMovie",
         "Key",
         library_id,
-        &present_item_ids,
+        present_item_ids,
     )
-    .await?;
+    .await
+    .repository()?;
     let replacements = crate::media_server::load_media_server_path_replacements(
         pool,
         "PlexPathReplacement",
@@ -844,23 +880,23 @@ pub async fn sync_plex_movie_library_with_progress(
         "PlexMediaSourceId",
         media_source_id,
     )
-    .await?;
+    .await
+    .repository()?;
     crate::media_server::flag_unavailable_media_server_items(
         pool,
         "PlexMovie",
         "Key",
         library_id,
-        &present_item_ids,
+        present_item_ids,
         &replacements,
         true,
     )
-    .await?;
-    crate::media_server::apply_provider_content_variants(pool, &variant_candidates).await?;
-
-    if let Some(sink) = progress {
-        sink.report(1.0);
-    }
-    Ok(synced)
+    .await
+    .repository()?;
+    crate::media_server::apply_provider_content_variants(pool, variant_candidates)
+        .await
+        .repository()?;
+    Ok(())
 }
 
 /// Sync Plex shows, seasons, and episodes into media rows.
@@ -970,7 +1006,8 @@ pub async fn sync_plex_show_library_with_progress(
         crate::media_server::flag_missing_media_server_items(
             pool, table, "Key", library_id, present,
         )
-        .await?;
+        .await
+        .repository()?;
     }
     // Flag episodes still on the server whose local file is missing
     // (RemoteOnly — Plex supports remote streaming).
@@ -981,7 +1018,8 @@ pub async fn sync_plex_show_library_with_progress(
         "PlexMediaSourceId",
         media_source_id,
     )
-    .await?;
+    .await
+    .repository()?;
     crate::media_server::flag_unavailable_media_server_items(
         pool,
         "PlexEpisode",
@@ -991,7 +1029,8 @@ pub async fn sync_plex_show_library_with_progress(
         &replacements,
         true,
     )
-    .await?;
+    .await
+    .repository()?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -1205,7 +1244,7 @@ async fn upsert_plex_movie(
     library_key: &str,
     item: &PlexMediaItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1221,7 +1260,7 @@ async fn upsert_plex_movie(
         &streams,
     )
     .await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(item_id)
 }
 
@@ -1232,12 +1271,12 @@ async fn upsert_plex_show(
     library_key: &str,
     item: &PlexShowItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_show_item(&mut tx, library_path_id, item).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1249,12 +1288,12 @@ async fn upsert_plex_season(
     show_id: i64,
     item: &PlexSeasonItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_season_item(&mut tx, library_path_id, show_id, item).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1267,7 +1306,7 @@ async fn upsert_plex_episode(
     item: &PlexMediaItem,
     config: &PlexConnectionConfig,
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1281,7 +1320,7 @@ async fn upsert_plex_episode(
     // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):
     // Plex subtitle streams are diffed into Subtitle rows after stream writes.
     crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &streams).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -1524,7 +1563,8 @@ pub async fn sync_plex_libraries(
     )
     .bind(media_source_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
         .into_iter()
@@ -1538,7 +1578,7 @@ pub async fn sync_plex_libraries(
         })
         .collect();
 
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     for incoming_library in incoming {
         let position = existing
             .iter()
@@ -1552,13 +1592,15 @@ pub async fn sync_plex_libraries(
                     .bind(&incoming_library.name)
                     .bind(id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
             } else {
                 sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
                     .bind(&incoming_library.name)
                     .bind(id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
             }
         } else {
             let result = sqlx::query(
@@ -1569,7 +1611,8 @@ pub async fn sync_plex_libraries(
             .bind(encode_library_media_kind(incoming_library.media_kind))
             .bind(media_source_id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
             let id = crate::db::last_insert_id(result);
             sqlx::query(
                 r#"INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
@@ -1578,12 +1621,14 @@ pub async fn sync_plex_libraries(
             .bind(id)
             .bind(&incoming_library.key)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
             sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
                 .bind(id)
                 .bind(format!("plex://{id}"))
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .repository()?;
         }
     }
 
@@ -1591,10 +1636,11 @@ pub async fn sync_plex_libraries(
         sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
     }
 
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -1619,11 +1665,13 @@ async fn ensure_plex_library(
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "PlexMediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(
         r#"INSERT OR IGNORE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
            VALUES (?, 'Plex', 0, ?)"#,
@@ -1631,7 +1679,8 @@ async fn ensure_plex_library(
     .bind(library_id)
     .bind(media_source_id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     sqlx::query(
         r#"INSERT OR IGNORE INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
            VALUES (?, ?, 1)"#,
@@ -1639,7 +1688,8 @@ async fn ensure_plex_library(
     .bind(library_id)
     .bind(key)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -1651,7 +1701,8 @@ async fn ensure_library_path(
     if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
         .bind(library_id)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
     {
         return Ok(row.get("Id"));
     }
@@ -1659,7 +1710,8 @@ async fn ensure_library_path(
         .bind(library_id)
         .bind(path)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -1716,25 +1768,29 @@ async fn ensure_plex_season_item(
     .bind(library_path_id)
     .bind(&item.key)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexSeason" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Season" SET "ShowId" = ?, "SeasonNumber" = ? WHERE "Id" = ?"#)
             .bind(show_id)
             .bind(item.season_number)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
     let id = insert_media_item(tx, library_path_id).await?;
@@ -1743,13 +1799,15 @@ async fn ensure_plex_season_item(
         .bind(show_id)
         .bind(item.season_number)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "PlexSeason" ("Id", "Key", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.key)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -1772,24 +1830,28 @@ async fn ensure_plex_episode_item(
     .bind(library_path_id)
     .bind(&item.key)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
     let id = insert_media_item(tx, library_path_id).await?;
@@ -1797,13 +1859,15 @@ async fn ensure_plex_episode_item(
         .bind(id)
         .bind(season_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "PlexEpisode" ("Id", "Key", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.key)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -1816,7 +1880,8 @@ async fn upsert_plex_movie_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
             .bind(movie_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let date_added = encode_datetime(item.date_added);
     let date_updated = encode_datetime(item.date_updated);
 
@@ -1833,7 +1898,8 @@ async fn upsert_plex_movie_metadata(
         .bind(&item.title)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         return Ok(id);
     }
 
@@ -1848,7 +1914,8 @@ async fn upsert_plex_movie_metadata(
     .bind(&item.title)
     .bind(&item.title)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -1861,7 +1928,8 @@ async fn upsert_plex_episode_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
             .bind(episode_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let date_added = encode_datetime(item.date_added);
     let date_updated = encode_datetime(item.date_updated);
 
@@ -1879,7 +1947,8 @@ async fn upsert_plex_episode_metadata(
         .bind(&item.title)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         return Ok(id);
     }
 
@@ -1896,7 +1965,8 @@ async fn upsert_plex_episode_metadata(
     .bind(&item.title)
     .bind(&item.title)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -1905,20 +1975,23 @@ async fn upsert_plex_collection(
     media_source_id: i64,
     item: &PlexCollectionItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "PlexMediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
 
     let id = if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexCollection" WHERE "Key" = ?"#)
         .bind(&item.key)
         .fetch_optional(&mut *tx)
-        .await?
+        .await
+        .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
@@ -1926,12 +1999,14 @@ async fn upsert_plex_collection(
             .bind(&item.title)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(&item.title)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -1939,7 +2014,8 @@ async fn upsert_plex_collection(
         )
         .bind(&item.title)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         let id = crate::db::last_insert_id(result);
         sqlx::query(
             r#"INSERT INTO "PlexCollection" ("Id", "Key", "Etag", "Name")
@@ -1950,11 +2026,12 @@ async fn upsert_plex_collection(
         .bind(&item.etag)
         .bind(&item.title)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         id
     };
 
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1963,11 +2040,12 @@ async fn replace_plex_collection_items(
     collection_id: i64,
     items: &[PlexCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
         .bind(collection_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     for (index, item) in items.iter().enumerate() {
         if let Some(media_item_id) = find_plex_media_item(&mut tx, item).await? {
             sqlx::query(
@@ -1978,10 +2056,11 @@ async fn replace_plex_collection_items(
             .bind(media_item_id)
             .bind(i32::try_from(index).unwrap_or_default())
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         }
     }
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -1999,7 +2078,8 @@ async fn find_plex_media_item(
     Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.key)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
         .map(|row| row.get("Id")))
 }
 
@@ -2021,13 +2101,14 @@ async fn item_etag_matches(
         .bind(key)
         .bind(library_id)
         .fetch_optional(pool)
-        .await?
+        .await
+        .repository()?
     else {
         return Ok(false);
     };
 
-    let existing_etag: Option<String> = row.try_get("Etag")?;
-    let state: i64 = row.try_get("State")?;
+    let existing_etag: Option<String> = row.try_get("Etag").repository()?;
+    let state: i64 = row.try_get("State").repository()?;
     Ok(
         crate::media_server::provider_item_state_allows_etag_skip(state)
             && existing_etag.as_deref() == etag,
@@ -2057,7 +2138,8 @@ async fn ensure_simple_media_item(
         .bind(library_path_id)
         .bind(key)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
     {
         let id = row.get("Id");
         let update_sql = format!(r#"UPDATE "{provider_table}" SET "Etag" = ? WHERE "Id" = ?"#);
@@ -2065,12 +2147,14 @@ async fn ensure_simple_media_item(
             .bind(etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
     let id = insert_media_item(tx, library_path_id).await?;
@@ -2078,7 +2162,8 @@ async fn ensure_simple_media_item(
     sqlx::query(crate::db::assert_sql_safe(&base_sql))
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     let provider_sql = format!(
         r#"INSERT INTO "{provider_table}" ("Id", "{provider_key_column}", "Etag") VALUES (?, ?, ?)"#
     );
@@ -2087,7 +2172,8 @@ async fn ensure_simple_media_item(
         .bind(key)
         .bind(etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -2098,7 +2184,8 @@ async fn insert_media_item(
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -2121,7 +2208,8 @@ async fn ensure_media_version(
     if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&select_sql))
         .bind(item_id)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
     {
         let id = row.get("Id");
         update_media_version(tx, id, item).await?;
@@ -2145,7 +2233,8 @@ async fn ensure_media_version(
         .bind(item.video_scan_kind.db_value())
         .bind(item.width)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -2172,7 +2261,8 @@ async fn update_media_version(
     .bind(item.width)
     .bind(id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -2189,14 +2279,16 @@ async fn ensure_media_file(
     .bind(&item.path)
     .bind(path_hash(&item.path))
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     let file_id = crate::db::last_insert_id(result);
     sqlx::query(r#"REPLACE INTO "PlexMediaFile" ("Id", "PlexId", "Key") VALUES (?, ?, ?)"#)
         .bind(file_id)
         .bind(item.plex_part_id)
         .bind(&item.part_key)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(())
 }
 
@@ -2208,7 +2300,8 @@ async fn replace_streams(
     sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId" = ?"#)
         .bind(version_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
@@ -2238,7 +2331,8 @@ async fn replace_streams(
         .bind(&stream.file_name)
         .bind(&stream.mime_type)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
     Ok(())
 }
@@ -2292,7 +2386,8 @@ pub async fn sync_library_by_id_with_progress(
     )
     .bind(library_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "plex library",
         value: format!("library {library_id} not found"),
@@ -2310,7 +2405,8 @@ pub async fn sync_library_by_id_with_progress(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "plex connection",
         value: format!("no active connection for source {media_source_id}"),
@@ -2325,7 +2421,8 @@ pub async fn sync_library_by_id_with_progress(
         sqlx::query_scalar(r#"SELECT "Key" FROM "PlexLibrary" WHERE "Id" = ?"#)
             .bind(library_id)
             .fetch_optional(pool)
-            .await?
+            .await
+            .repository()?
             .and_then(|v: Option<String>| v)
             .ok_or_else(|| RepositoryError::Decode {
                 kind: "plex library",
@@ -2497,7 +2594,8 @@ async fn load_target_plex_show_scan(
     .bind(show_id)
     .bind(library_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "plex show",
         value: format!("show {show_id} does not exist in library {library_id}"),
@@ -2542,7 +2640,8 @@ async fn load_active_plex_connection_config(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "plex connection",
         value: format!("no active connection for source {media_source_id}"),
@@ -2578,7 +2677,8 @@ pub async fn sync_collections_for_media_source(
     )
     .bind(media_source_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     if library_ids.is_empty() {
         return Ok(0);
@@ -2594,7 +2694,8 @@ pub async fn sync_collections_for_media_source(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "plex connection",
         value: format!("no active connection for source {media_source_id}"),
@@ -2611,7 +2712,8 @@ pub async fn sync_collections_for_media_source(
             sqlx::query_scalar(r#"SELECT "Key" FROM "PlexLibrary" WHERE "Id" = ?"#)
                 .bind(library_id)
                 .fetch_optional(pool)
-                .await?
+                .await
+                .repository()?
                 .and_then(|v: Option<String>| v);
         let Some(library_key) = library_key else {
             continue;
@@ -2633,7 +2735,8 @@ async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<Strin
         )
         .bind(key)
         .fetch_optional(pool)
-        .await?
+        .await
+        .repository()?
         .filter(|v| !v.is_empty())
         {
             return Ok(v);

@@ -1063,6 +1063,13 @@ dependencies = [
 [[package]]
 name = "ersatzrs-app"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "ersatzrs-core",
+ "ersatzrs-domain",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "ersatzrs-core"
@@ -1076,7 +1083,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "sqlx",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1209,6 +1215,7 @@ dependencies = [
  "base64",
  "chrono",
  "dunce",
+ "ersatzrs-app",
  "ersatzrs-core",
  "ersatzrs-domain",
  "ersatzrs-ffmpeg",

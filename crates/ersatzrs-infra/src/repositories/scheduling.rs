@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::{
     collections::{BTreeMap, BTreeSet},
     future::Future,
@@ -63,7 +64,8 @@ impl SqliteSchedulingContentRepository {
                 )
                 .bind(ersatzrs_domain::CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS)
                 .fetch_optional(&self.0)
-                .await?;
+                .await
+                .repository()?;
                 Ok::<bool, ersatzrs_core::repositories::RepositoryError>(matches!(
                     value.as_deref().map(str::trim),
                     Some("True" | "true" | "1" | "on")
@@ -275,7 +277,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_optional(&self.0)
-        .await?
+        .await
+        .repository()?
         .flatten()
         .ok_or_else(|| {
             super::common::decode_message("classic playout", "missing program schedule")
@@ -384,7 +387,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter().map(map_program_schedule_alternate).collect()
     }
@@ -587,7 +591,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(key)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
         value
             .map(|json| {
                 serde_json::from_str(&json).map_err(|error| {
@@ -747,7 +752,8 @@ impl SqliteSchedulingContentRepository {
         let row = sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
             .bind(filler_id)
             .fetch_optional(&self.0)
-            .await?;
+            .await
+            .repository()?;
 
         let Some(row) = row else {
             return Ok(None);
@@ -759,18 +765,18 @@ impl SqliteSchedulingContentRepository {
                 &row,
                 "CollectionType",
             )?,
-            collection_id: row.try_get("CollectionId")?,
-            media_item_id: row.try_get("MediaItemId")?,
-            multi_collection_id: row.try_get("MultiCollectionId")?,
-            smart_collection_id: row.try_get("SmartCollectionId")?,
-            playlist_id: row.try_get("PlaylistId")?,
+            collection_id: row.try_get("CollectionId").repository()?,
+            media_item_id: row.try_get("MediaItemId").repository()?,
+            multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+            smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+            playlist_id: row.try_get("PlaylistId").repository()?,
             ..SchedulingCollectionKey::default()
         };
 
         let media_items = self.items_for_collection_key(&collection_key, 0).await?;
         Ok(Some(SchedulingFallbackPreset {
             id: filler_id,
-            allow_watermarks: row.try_get("AllowWatermarks")?,
+            allow_watermarks: row.try_get("AllowWatermarks").repository()?,
             media_items,
         }))
     }
@@ -782,7 +788,8 @@ impl SqliteSchedulingContentRepository {
         let row = sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
             .bind(filler_id)
             .fetch_optional(&self.0)
-            .await?;
+            .await
+            .repository()?;
 
         let Some(row) = row else {
             return Ok(None);
@@ -794,11 +801,11 @@ impl SqliteSchedulingContentRepository {
                 &row,
                 "CollectionType",
             )?,
-            collection_id: row.try_get("CollectionId")?,
-            media_item_id: row.try_get("MediaItemId")?,
-            multi_collection_id: row.try_get("MultiCollectionId")?,
-            smart_collection_id: row.try_get("SmartCollectionId")?,
-            playlist_id: row.try_get("PlaylistId")?,
+            collection_id: row.try_get("CollectionId").repository()?,
+            media_item_id: row.try_get("MediaItemId").repository()?,
+            multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+            smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+            playlist_id: row.try_get("PlaylistId").repository()?,
             ..SchedulingCollectionKey::default()
         };
         let media_items = self.items_for_collection_key(&collection_key, 0).await?;
@@ -808,11 +815,13 @@ impl SqliteSchedulingContentRepository {
             filler_kind: decode_enum_column("schedule item filler kind", &row, "FillerKind")?,
             filler_mode: decode_enum_column("schedule item filler mode", &row, "FillerMode")?,
             duration: decode_optional_duration_text(
-                row.try_get::<Option<String>, _>("Duration")?.as_deref(),
+                row.try_get::<Option<String>, _>("Duration")
+                    .repository()?
+                    .as_deref(),
             ),
-            count: row.try_get("Count")?,
-            pad_to_nearest_minute: row.try_get("PadToNearestMinute")?,
-            allow_watermarks: row.try_get("AllowWatermarks")?,
+            count: row.try_get("Count").repository()?,
+            pad_to_nearest_minute: row.try_get("PadToNearestMinute").repository()?,
+            allow_watermarks: row.try_get("AllowWatermarks").repository()?,
             media_items,
         }))
     }
@@ -823,7 +832,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(key)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         Ok(value.and_then(|value| value.trim().parse::<EntityId>().ok()))
     }
@@ -927,7 +937,7 @@ impl SqliteSchedulingContentRepository {
         .bind(format!("%{name}%"))
         .fetch_optional(&self.0)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     /// Find a graphics element by exact or template-relative path.
@@ -949,7 +959,7 @@ impl SqliteSchedulingContentRepository {
         .bind(format!("%/{normalized}"))
         .fetch_optional(&self.0)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn collection_items_by_name(&self, name: &str) -> Result<Vec<SchedulingMediaItem>> {
@@ -958,7 +968,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(name)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         match collection_id {
             Some(id) => self.items_for_collection_id(id).await,
@@ -978,7 +989,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(collection_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         self.expand_collection_item_rows(rows, 0).await
     }
@@ -989,7 +1001,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(name)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         match multi_collection_id {
             Some(id) => self.items_for_multi_collection_id(id, 0).await,
@@ -1015,7 +1028,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(multi_collection_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
@@ -1033,7 +1047,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(multi_collection_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         for smart_id in smart_ids {
             let smart_items = self.items_for_smart_collection_id(smart_id).await?;
@@ -1049,11 +1064,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(name)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         match row {
             Some(row) => {
-                let query = row.try_get::<String, _>("Query")?;
+                let query = row.try_get::<String, _>("Query").repository()?;
                 self.search_items(&query).await
             }
             None => Ok(Vec::new()),
@@ -1069,7 +1085,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(smart_collection_id)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         match query {
             Some(query) => self.search_items(&query).await,
@@ -1108,14 +1125,16 @@ impl SqliteSchedulingContentRepository {
             .bind(name)
             .bind(group)
             .fetch_optional(&self.0)
-            .await?
+            .await
+            .repository()?
         } else {
             sqlx::query_scalar::<_, EntityId>(
                 r#"SELECT "Id" FROM "Playlist" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
             )
             .bind(name)
             .fetch_optional(&self.0)
-            .await?
+            .await
+            .repository()?
         };
 
         let Some(playlist_id) = playlist_id else {
@@ -1130,7 +1149,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playlist_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
@@ -1144,9 +1164,10 @@ impl SqliteSchedulingContentRepository {
                     &row,
                     "PlaybackOrder",
                 )?,
-                play_all: row.try_get::<bool, _>("PlayAll")?,
+                play_all: row.try_get::<bool, _>("PlayAll").repository()?,
                 count: row
-                    .try_get::<Option<i64>, _>("Count")?
+                    .try_get::<Option<i64>, _>("Count")
+                    .repository()?
                     .map(usize::try_from)
                     .transpose()
                     .map_err(|error| decode_message("playlist item count", &error.to_string()))?,
@@ -1174,7 +1195,8 @@ impl SqliteSchedulingContentRepository {
             sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Playlist" WHERE "Id" = ?"#)
                 .bind(playlist_id)
                 .fetch_optional(&self.0)
-                .await?;
+                .await
+                .repository()?;
 
         match name {
             Some(name) => Box::pin(self.playlist_media_items(None, &name)).await,
@@ -1220,7 +1242,7 @@ impl SqliteSchedulingContentRepository {
         let mut result = Vec::new();
         let mut seen = BTreeSet::new();
         for row in rows {
-            let id: EntityId = row.try_get("MediaItemId")?;
+            let id: EntityId = row.try_get("MediaItemId").repository()?;
             let playback = playback_override_from_row(&row)?;
             let mut items = if self.is_show(id).await? {
                 self.items_for_show_id(id).await?
@@ -1262,7 +1284,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(show_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         self.load_media_items(ids).await
     }
 
@@ -1276,7 +1299,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(season_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         self.load_media_items(ids).await
     }
 
@@ -1290,7 +1314,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(artist_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         self.load_media_items(ids).await
     }
 
@@ -1305,7 +1330,7 @@ impl SqliteSchedulingContentRepository {
         .bind(name)
         .fetch_all(&self.0)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn show_items_by_guid(
@@ -1324,7 +1349,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(format!("{source}://{value}"))
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         // Also try plain guid format
         let show_id = if show_id.is_none() {
@@ -1338,7 +1364,8 @@ impl SqliteSchedulingContentRepository {
             )
             .bind(format!("%{value}%"))
             .fetch_optional(&self.0)
-            .await?
+            .await
+            .repository()?
         } else {
             show_id
         };
@@ -1465,14 +1492,17 @@ impl SqliteSchedulingContentRepository {
         .bind(name)
         .fetch_optional(&self.0)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn search_documents(
         &self,
         hydration: &SearchHydrationNeeds,
     ) -> Result<Vec<SearchDocument>> {
-        let rows = sqlx::query(SEARCH_DOCUMENT_SQL).fetch_all(&self.0).await?;
+        let rows = sqlx::query(SEARCH_DOCUMENT_SQL)
+            .fetch_all(&self.0)
+            .await
+            .repository()?;
 
         let mut documents = Vec::with_capacity(rows.len());
         for row in rows {
@@ -1488,21 +1518,25 @@ impl SqliteSchedulingContentRepository {
         row: &DbRow,
         hydration: &SearchHydrationNeeds,
     ) -> Result<SearchDocument> {
-        let metadata_kind = row.try_get::<String, _>("metadata_kind")?;
-        let metadata_id = row.try_get::<EntityId, _>("metadata_id")?;
-        let show_id = row.try_get::<Option<EntityId>, _>("show_id")?;
+        let metadata_kind = row.try_get::<String, _>("metadata_kind").repository()?;
+        let metadata_id = row.try_get::<EntityId, _>("metadata_id").repository()?;
+        let show_id = row.try_get::<Option<EntityId>, _>("show_id").repository()?;
         let release_date = row
-            .try_get::<Option<String>, _>("release_date")?
+            .try_get::<Option<String>, _>("release_date")
+            .repository()?
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("search release_date", &value))
             .transpose()?;
         let added_date = row
-            .try_get::<Option<String>, _>("added_date")?
+            .try_get::<Option<String>, _>("added_date")
+            .repository()?
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("search added_date", &value))
             .transpose()?;
-        let item_id = row.try_get::<EntityId, _>("item_id")?;
-        let parent_media_item_id = row.try_get::<Option<EntityId>, _>("parent_media_item_id")?;
+        let item_id = row.try_get::<EntityId, _>("item_id").repository()?;
+        let parent_media_item_id = row
+            .try_get::<Option<EntityId>, _>("parent_media_item_id")
+            .repository()?;
         let stream_fields = if hydration.contains(SEARCH_NEED_STREAM_FIELDS) {
             self.stream_search_fields(&metadata_kind, metadata_id, item_id)
                 .await?
@@ -1513,12 +1547,12 @@ impl SqliteSchedulingContentRepository {
         Ok(SearchDocument {
             media_item_id: item_id,
             parent_media_item_id,
-            media_kind: row.try_get("media_kind")?,
+            media_kind: row.try_get("media_kind").repository()?,
             metadata_kind: metadata_kind.clone(),
-            title: row.try_get("title")?,
-            sort_title: row.try_get("sort_title")?,
-            original_title: row.try_get("original_title")?,
-            year: row.try_get("year")?,
+            title: row.try_get("title").repository()?,
+            sort_title: row.try_get("sort_title").repository()?,
+            original_title: row.try_get("original_title").repository()?,
+            year: row.try_get("year").repository()?,
             release_date,
             added_date,
             genres: if hydration.contains(SEARCH_NEED_GENRES) {
@@ -1665,7 +1699,7 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
-            library_name: row.try_get("library_name")?,
+            library_name: row.try_get("library_name").repository()?,
             library_folder_ids: if hydration.contains(SEARCH_NEED_LIBRARY_FOLDER_IDS) {
                 stream_fields.library_folder_ids.clone()
             } else {
@@ -1673,7 +1707,8 @@ impl SqliteSchedulingContentRepository {
             },
             content_kind: decode_enum_column("content kind", row, "content_kind")?,
             sub_kind: row
-                .try_get::<Option<String>, _>("sub_kind")?
+                .try_get::<Option<String>, _>("sub_kind")
+                .repository()?
                 .and_then(|value| normalize_sub_kind_token(&value)),
             parent_title: if hydration.contains(SEARCH_NEED_PARENT_TITLE) {
                 match parent_media_item_id {
@@ -1684,11 +1719,14 @@ impl SqliteSchedulingContentRepository {
                 None
             },
             content_ratings: if hydration.contains(SEARCH_NEED_CONTENT_RATINGS) {
-                split_content_ratings(row.try_get::<Option<String>, _>("content_rating")?)
+                split_content_ratings(
+                    row.try_get::<Option<String>, _>("content_rating")
+                        .repository()?,
+                )
             } else {
                 Vec::new()
             },
-            show_title: row.try_get("show_title")?,
+            show_title: row.try_get("show_title").repository()?,
             show_genres: if hydration.contains(SEARCH_NEED_SHOW_GENRES) {
                 self.show_lookup_values("Genre", show_id).await?
             } else {
@@ -1715,8 +1753,8 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
-            season_number: row.try_get("season_number")?,
-            episode_number: row.try_get("episode_number")?,
+            season_number: row.try_get("season_number").repository()?,
+            episode_number: row.try_get("episode_number").repository()?,
             trakt_lists: if hydration.contains(SEARCH_NEED_TRAKT_LISTS) {
                 self.trakt_list_values(item_id).await?
             } else {
@@ -1749,7 +1787,7 @@ impl SqliteSchedulingContentRepository {
                 Vec::new()
             },
             albums: if hydration.contains(SEARCH_NEED_ALBUMS) {
-                option_values_vec([row.try_get::<Option<String>, _>("album")?])
+                option_values_vec([row.try_get::<Option<String>, _>("album").repository()?])
             } else {
                 Vec::new()
             },
@@ -1760,11 +1798,16 @@ impl SqliteSchedulingContentRepository {
                 Vec::new()
             },
             album_artists: if hydration.contains(SEARCH_NEED_ALBUM_ARTISTS) {
-                parse_string_list(row.try_get::<Option<String>, _>("album_artists")?)
+                parse_string_list(
+                    row.try_get::<Option<String>, _>("album_artists")
+                        .repository()?,
+                )
             } else {
                 Vec::new()
             },
-            library_id: row.try_get::<Option<EntityId>, _>("library_id")?,
+            library_id: row
+                .try_get::<Option<EntityId>, _>("library_id")
+                .repository()?,
             provider_guids: if hydration.contains(SEARCH_NEED_PROVIDER_GUIDS) {
                 self.metadata_guids(&metadata_kind, metadata_id).await?
             } else {
@@ -1803,7 +1846,7 @@ impl SqliteSchedulingContentRepository {
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
-            .map_err(Into::into)
+            .repository()
     }
 
     async fn trakt_list_values(&self, item_id: EntityId) -> Result<Vec<String>> {
@@ -1816,11 +1859,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(item_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter()
             .map(|row| {
-                let trakt_id: i32 = row.try_get("TraktId")?;
+                let trakt_id: i32 = row.try_get("TraktId").repository()?;
                 Ok(trakt_id.to_string())
             })
             .collect()
@@ -1837,7 +1881,7 @@ impl SqliteSchedulingContentRepository {
         .bind(item_id)
         .fetch_all(&self.0)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn media_item_title(&self, item_id: EntityId) -> Result<Option<String>> {
@@ -1865,7 +1909,7 @@ impl SqliteSchedulingContentRepository {
         .bind(item_id)
         .fetch_optional(&self.0)
         .await
-        .map_err(ersatzrs_core::repositories::RepositoryError::from)?
+        .repository()?
         .flatten())
     }
 
@@ -1891,7 +1935,7 @@ impl SqliteSchedulingContentRepository {
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
-            .map_err(Into::into)
+            .repository()
     }
 
     async fn metadata_credit_values(
@@ -1912,7 +1956,7 @@ impl SqliteSchedulingContentRepository {
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
-            .map_err(Into::into)
+            .repository()
     }
 
     async fn metadata_tag_values_by_external_type(
@@ -1934,7 +1978,7 @@ impl SqliteSchedulingContentRepository {
             .bind(external_type_id)
             .fetch_all(&self.0)
             .await
-            .map_err(Into::into)
+            .repository()
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1958,11 +2002,13 @@ impl SqliteSchedulingContentRepository {
         let version_rows = sqlx::query(crate::db::assert_sql_safe(&version_sql))
             .bind(item_id)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
         let version_ids = version_rows
             .iter()
             .map(|row| row.try_get::<EntityId, _>("Id"))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .repository()?;
 
         if let Some(row) = version_rows.first() {
             result.width = row.try_get("Width").ok();
@@ -1985,7 +2031,8 @@ impl SqliteSchedulingContentRepository {
             )
             .bind(version_id)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
             for library_folder_id in library_folder_ids.into_iter().flatten() {
                 push_unique_i64(&mut result.library_folder_ids, library_folder_id);
             }
@@ -1997,7 +2044,8 @@ impl SqliteSchedulingContentRepository {
             )
             .bind(version_id)
             .fetch_one(&self.0)
-            .await?;
+            .await
+            .repository()?;
             result
                 .chapter_counts
                 .push(i32::try_from(chapter_count).unwrap_or(i32::MAX));
@@ -2011,12 +2059,13 @@ impl SqliteSchedulingContentRepository {
             )
             .bind(version_id)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
             for row in rows {
                 let kind = media_stream_kind_from_row(&row);
-                let codec = row.try_get::<Option<String>, _>("Codec")?;
-                let language = row.try_get::<Option<String>, _>("Language")?;
-                let title = row.try_get::<Option<String>, _>("Title")?;
+                let codec = row.try_get::<Option<String>, _>("Codec").repository()?;
+                let language = row.try_get::<Option<String>, _>("Language").repository()?;
+                let title = row.try_get::<Option<String>, _>("Title").repository()?;
                 match kind.as_deref() {
                     Some("video") => {
                         push_unique_optional(&mut result.video_codecs, codec);
@@ -2062,20 +2111,21 @@ impl SqliteSchedulingContentRepository {
             let rows = sqlx::query(crate::db::assert_sql_safe(&subtitle_sql))
                 .bind(metadata_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
             for row in rows {
                 push_unique_optional(
                     &mut result.subtitle_codecs,
-                    row.try_get::<Option<String>, _>("Codec")?,
+                    row.try_get::<Option<String>, _>("Codec").repository()?,
                 );
                 push_unique_optional(
                     &mut result.subtitle_languages,
-                    row.try_get::<Option<String>, _>("Language")?,
+                    row.try_get::<Option<String>, _>("Language").repository()?,
                 );
                 push_stream_title(
                     &mut result.subtitle_titles,
                     &mut result.has_commentary,
-                    row.try_get::<Option<String>, _>("Title")?,
+                    row.try_get::<Option<String>, _>("Title").repository()?,
                 );
             }
         }
@@ -2096,7 +2146,8 @@ impl SqliteSchedulingContentRepository {
             .bind(code)
             .bind(code)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
             for row in rows {
                 push_unique(&mut names, row);
             }
@@ -2119,7 +2170,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(show_id)
         .fetch_optional(&self.0)
-        .await?
+        .await
+        .repository()?
         else {
             return Ok(Vec::new());
         };
@@ -2149,7 +2201,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(show_id)
         .fetch_optional(&self.0)
-        .await?
+        .await
+        .repository()?
         else {
             return Ok(Vec::new());
         };
@@ -2168,7 +2221,7 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(show_id)
         .fetch_optional(&self.0)
-        .await?
+        .await.repository()?
         .flatten();
         Ok(split_content_ratings(rating))
     }
@@ -2191,7 +2244,8 @@ impl SqliteSchedulingContentRepository {
                 )
                 .bind(item_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
                 for artist in linked_artists {
                     push_unique(&mut values, artist);
                 }
@@ -2204,7 +2258,8 @@ impl SqliteSchedulingContentRepository {
                 )
                 .bind(metadata_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
                 for artist in metadata_artists {
                     push_unique(&mut values, artist);
                 }
@@ -2216,7 +2271,8 @@ impl SqliteSchedulingContentRepository {
                 )
                 .bind(metadata_id)
                 .fetch_optional(&self.0)
-                .await?
+                .await
+                .repository()?
                 .flatten();
                 Ok(parse_string_list(raw))
             }
@@ -2247,7 +2303,8 @@ impl SqliteSchedulingContentRepository {
         let guids = sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
 
         // ErsatzTV stores GUIDs as "source://value" or similar format
         Ok(guids
@@ -2316,7 +2373,7 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(id)
         .fetch_optional(&self.0)
-        .await?;
+        .await.repository()?;
 
         let Some(row) = row else {
             return Ok(None);
@@ -2348,14 +2405,15 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let deco = self
             .effective_deco_for_playout(playout_id, media_by_key)
             .await?;
         let mut schedules = Vec::with_capacity(rows.len());
         for row in rows {
-            let template_id = row.try_get::<EntityId, _>("TemplateId")?;
+            let template_id = row.try_get::<EntityId, _>("TemplateId").repository()?;
             let template = self.block_template(template_id).await?;
             let mut blocks = BTreeMap::new();
             for item in &template.items {
@@ -2365,7 +2423,10 @@ impl SqliteSchedulingContentRepository {
                     entry.insert(self.block_definition(item.block_id, media_by_key).await?);
                 }
             }
-            let deco_template_items = match row.try_get::<Option<EntityId>, _>("DecoTemplateId")? {
+            let deco_template_items = match row
+                .try_get::<Option<EntityId>, _>("DecoTemplateId")
+                .repository()?
+            {
                 Some(deco_template_id) => {
                     self.effective_deco_template_items(deco_template_id, media_by_key)
                         .await?
@@ -2385,7 +2446,7 @@ impl SqliteSchedulingContentRepository {
                 updated_ticks,
                 start: None,
                 finish: None,
-                index: row.try_get("Index")?,
+                index: row.try_get("Index").repository()?,
                 days_of_week: decode_integer_list(
                     "playout template DaysOfWeek",
                     &row.try_get::<String, _>("DaysOfWeek").unwrap_or_default(),
@@ -2398,13 +2459,13 @@ impl SqliteSchedulingContentRepository {
                     "playout template MonthsOfYear",
                     &row.try_get::<String, _>("MonthsOfYear").unwrap_or_default(),
                 )?,
-                limit_to_date_range: row.try_get("LimitToDateRange")?,
-                start_month: row.try_get("StartMonth")?,
-                start_day: row.try_get("StartDay")?,
-                start_year: row.try_get("StartYear")?,
-                end_month: row.try_get("EndMonth")?,
-                end_day: row.try_get("EndDay")?,
-                end_year: row.try_get("EndYear")?,
+                limit_to_date_range: row.try_get("LimitToDateRange").repository()?,
+                start_month: row.try_get("StartMonth").repository()?,
+                start_day: row.try_get("StartDay").repository()?,
+                start_year: row.try_get("StartYear").repository()?,
+                end_month: row.try_get("EndMonth").repository()?,
+                end_day: row.try_get("EndDay").repository()?,
+                end_year: row.try_get("EndYear").repository()?,
                 template,
                 blocks,
                 deco: deco.clone(),
@@ -2424,17 +2485,18 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(template_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let items = rows
             .iter()
             .map(|row| {
                 Ok(BlockTemplateItem {
-                    id: row.try_get("Id")?,
-                    block_id: row.try_get("BlockId")?,
+                    id: row.try_get("Id").repository()?,
+                    block_id: row.try_get("BlockId").repository()?,
                     start_time: decode_optional_time_of_day_text(
                         "template item StartTime",
-                        row.try_get::<Option<String>, _>("StartTime")?,
+                        row.try_get::<Option<String>, _>("StartTime").repository()?,
                     )?,
                     sort_order: 0,
                 })
@@ -2447,7 +2509,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(template_id)
         .fetch_optional(&self.0)
-        .await?
+        .await
+        .repository()?
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0);
 
@@ -2470,7 +2533,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(block_id)
         .fetch_one(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         // DateUpdated is TEXT; Minutes is INTEGER (minutes, not ms)
         let updated_ticks: i64 = row
@@ -2478,13 +2542,13 @@ impl SqliteSchedulingContentRepository {
             .ok()
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or(0);
-        let minutes: i64 = row.try_get("Minutes")?;
+        let minutes: i64 = row.try_get("Minutes").repository()?;
         let duration = Duration::minutes(minutes);
 
         Ok(BlockDefinition {
-            id: row.try_get("Id")?,
+            id: row.try_get("Id").repository()?,
             updated_ticks,
-            name: row.try_get("Name")?,
+            name: row.try_get("Name").repository()?,
             duration,
             stop_scheduling: decode_enum_column("block stop_scheduling", &row, "StopScheduling")?,
             items: self.effective_block_items(block_id, media_by_key).await?,
@@ -2504,11 +2568,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(block_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("Id")?;
+            let id = row.try_get::<EntityId, _>("Id").repository()?;
             let content = block_item_content_key(id);
             media_by_key.insert(
                 content.clone(),
@@ -2615,7 +2680,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_optional(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let Some(deco_id) = deco_id else {
             return Ok(None);
@@ -2638,7 +2704,7 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(deco_id)
         .fetch_one(&self.0)
-        .await?;
+        .await.repository()?;
         let mode: DecoMode = decode_enum_column("deco mode", &row, "BreakContentMode")?;
         if mode == DecoMode::Disable {
             return Ok(None);
@@ -2652,11 +2718,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(deco_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut break_content = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("Id")?;
+            let id = row.try_get::<EntityId, _>("Id").repository()?;
             let content = deco_break_content_key(id);
             media_by_key.insert(
                 content.clone(),
@@ -2678,7 +2745,7 @@ impl SqliteSchedulingContentRepository {
             id: deco_id,
             default_filler_content,
             default_filler_collection_key,
-            default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit")?,
+            default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit").repository()?,
             break_content,
         }))
     }
@@ -2697,11 +2764,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(deco_template_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
-            let deco_id = row.try_get::<EntityId, _>("DecoId")?;
+            let deco_id = row.try_get::<EntityId, _>("DecoId").repository()?;
             let mode: DecoMode = decode_enum_column(
                 "deco template item BreakContentMode",
                 &row,
@@ -2717,11 +2785,11 @@ impl SqliteSchedulingContentRepository {
             result.push(EffectiveDecoTemplateItem {
                 start_time: decode_time_of_day_text(
                     "deco template item StartTime",
-                    &row.try_get::<String, _>("StartTime")?,
+                    &row.try_get::<String, _>("StartTime").repository()?,
                 )?,
                 end_time: decode_time_of_day_text(
                     "deco template item EndTime",
-                    &row.try_get::<String, _>("EndTime")?,
+                    &row.try_get::<String, _>("EndTime").repository()?,
                 )?,
                 selection,
             });
@@ -2747,10 +2815,10 @@ impl SqliteSchedulingContentRepository {
 
         let collection_key = SchedulingCollectionKey {
             collection_type,
-            collection_id: row.try_get("DefaultFillerCollectionId")?,
-            media_item_id: row.try_get("DefaultFillerMediaItemId")?,
-            multi_collection_id: row.try_get("DefaultFillerMultiCollectionId")?,
-            smart_collection_id: row.try_get("DefaultFillerSmartCollectionId")?,
+            collection_id: row.try_get("DefaultFillerCollectionId").repository()?,
+            media_item_id: row.try_get("DefaultFillerMediaItemId").repository()?,
+            multi_collection_id: row.try_get("DefaultFillerMultiCollectionId").repository()?,
+            smart_collection_id: row.try_get("DefaultFillerSmartCollectionId").repository()?,
             ..SchedulingCollectionKey::default()
         };
         let items = self.items_for_collection_key(&collection_key, 0).await?;
@@ -2780,11 +2848,12 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("Id")?;
+            let id = row.try_get::<EntityId, _>("Id").repository()?;
             let mut item = map_playout_item(&row)?;
             item.watermark_ids = load_ids(
                 &self.0,
@@ -2819,7 +2888,8 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter().map(map_playout_history).collect()
     }
@@ -2840,36 +2910,40 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter()
             .map(|row| {
                 Ok(PlayoutProgramScheduleAnchor {
-                    id: row.try_get("Id")?,
-                    playout_id: row.try_get("PlayoutId")?,
+                    id: row.try_get("Id").repository()?,
+                    playout_id: row.try_get("PlayoutId").repository()?,
                     anchor_date: decode_optional_datetime(
                         "playout program schedule anchor anchor_date",
-                        row.try_get::<Option<String>, _>("AnchorDate")?,
+                        row.try_get::<Option<String>, _>("AnchorDate")
+                            .repository()?,
                     )?,
                     collection_type: decode_enum_column(
                         "playout program schedule anchor collection_type",
                         row,
                         "CollectionType",
                     )?,
-                    collection_id: row.try_get("CollectionId")?,
-                    multi_collection_id: row.try_get("MultiCollectionId")?,
-                    smart_collection_id: row.try_get("SmartCollectionId")?,
-                    rerun_collection_id: row.try_get("RerunCollectionId")?,
-                    media_item_id: row.try_get("MediaItemId")?,
-                    playlist_id: row.try_get("PlaylistId")?,
-                    search_query: row.try_get("SearchQuery")?,
-                    fake_collection_key: row.try_get("FakeCollectionKey")?,
+                    collection_id: row.try_get("CollectionId").repository()?,
+                    multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+                    smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+                    rerun_collection_id: row.try_get("RerunCollectionId").repository()?,
+                    media_item_id: row.try_get("MediaItemId").repository()?,
+                    playlist_id: row.try_get("PlaylistId").repository()?,
+                    search_query: row.try_get("SearchQuery").repository()?,
+                    fake_collection_key: row.try_get("FakeCollectionKey").repository()?,
                     enumerator_state: CollectionEnumeratorState {
                         seed: row
-                            .try_get::<Option<i32>, _>("EnumeratorSeed")?
+                            .try_get::<Option<i32>, _>("EnumeratorSeed")
+                            .repository()?
                             .unwrap_or_default(),
                         index: row
-                            .try_get::<Option<i32>, _>("EnumeratorIndex")?
+                            .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
                             .unwrap_or_default(),
                     },
                 })
@@ -2893,20 +2967,23 @@ impl SqliteSchedulingContentRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter()
             .map(|row| {
                 Ok(PlayoutScheduleItemFillGroupIndex {
-                    id: row.try_get("Id")?,
-                    playout_id: row.try_get("PlayoutId")?,
-                    program_schedule_item_id: row.try_get("ProgramScheduleItemId")?,
+                    id: row.try_get("Id").repository()?,
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    program_schedule_item_id: row.try_get("ProgramScheduleItemId").repository()?,
                     enumerator_state: CollectionEnumeratorState {
                         seed: row
-                            .try_get::<Option<i32>, _>("EnumeratorSeed")?
+                            .try_get::<Option<i32>, _>("EnumeratorSeed")
+                            .repository()?
                             .unwrap_or_default(),
                         index: row
-                            .try_get::<Option<i32>, _>("EnumeratorIndex")?
+                            .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
                             .unwrap_or_default(),
                     },
                 })
@@ -3238,11 +3315,11 @@ fn collection_key_from_deco_break_content_row(row: &DbRow) -> Result<SchedulingC
     })
 }
 
-fn optional_id(row: &DbRow, column: &str) -> Result<Option<EntityId>> {
+fn optional_id(row: &DbRow, column: &'static str) -> Result<Option<EntityId>> {
     match row.try_get::<Option<EntityId>, _>(column) {
         Ok(value) => Ok(value),
         Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(super::common::map_data_access_error(column, &error)),
     }
 }
 
@@ -3250,16 +3327,17 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
     let duration_text: String = row.try_get("duration_text").unwrap_or_default();
     let duration = decode_duration_text(&duration_text);
     Ok(SchedulingMediaItem {
-        id: row.try_get("Id")?,
+        id: row.try_get("Id").repository()?,
         duration,
-        title: row.try_get("title")?,
-        show_id: row.try_get("show_id")?,
-        season_id: row.try_get("season_id")?,
-        artist_id: row.try_get("artist_id")?,
-        season: row.try_get("season_number")?,
-        episode: row.try_get("episode_number")?,
+        title: row.try_get("title").repository()?,
+        show_id: row.try_get("show_id").repository()?,
+        season_id: row.try_get("season_id").repository()?,
+        artist_id: row.try_get("artist_id").repository()?,
+        season: row.try_get("season_number").repository()?,
+        episode: row.try_get("episode_number").repository()?,
         release_date: row
-            .try_get::<Option<String>, _>("release_date")?
+            .try_get::<Option<String>, _>("release_date")
+            .repository()?
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("media item release_date", &value))
             .transpose()?,
@@ -3272,76 +3350,99 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
 
 fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
     Ok(PlayoutItem {
-        id: row.try_get("Id")?,
-        media_item_id: row.try_get("MediaItemId")?,
-        start: decode_datetime("playout item start", &row.try_get::<String, _>("Start")?)?,
-        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("Finish")?)?,
+        id: row.try_get("Id").repository()?,
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        start: decode_datetime(
+            "playout item start",
+            &row.try_get::<String, _>("Start").repository()?,
+        )?,
+        finish: decode_datetime(
+            "playout item finish",
+            &row.try_get::<String, _>("Finish").repository()?,
+        )?,
         guide_start: decode_optional_datetime(
             "playout item guide_start",
-            row.try_get("GuideStart")?,
+            row.try_get("GuideStart").repository()?,
         )?,
         guide_finish: decode_optional_datetime(
             "playout item guide_finish",
-            row.try_get("GuideFinish")?,
+            row.try_get("GuideFinish").repository()?,
         )?,
-        custom_title: row.try_get("CustomTitle")?,
-        guide_group: row.try_get("GuideGroup")?,
+        custom_title: row.try_get("CustomTitle").repository()?,
+        guide_group: row.try_get("GuideGroup").repository()?,
         filler_kind: decode_enum_column("playout item filler_kind", row, "FillerKind")?,
-        playout_id: row.try_get("PlayoutId")?,
-        in_point: decode_duration_text(&row.try_get::<String, _>("InPoint")?),
-        out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint")?),
-        chapter_title: row.try_get("ChapterTitle")?,
+        playout_id: row.try_get("PlayoutId").repository()?,
+        in_point: decode_duration_text(&row.try_get::<String, _>("InPoint").repository()?),
+        out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint").repository()?),
+        chapter_title: row.try_get("ChapterTitle").repository()?,
         watermark_ids: Vec::new(),
-        disable_watermarks: row.try_get("DisableWatermarks")?,
-        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
-        preferred_audio_title: row.try_get("PreferredAudioTitle")?,
-        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
+        disable_watermarks: row.try_get("DisableWatermarks").repository()?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
+        preferred_subtitle_language_code: row
+            .try_get("PreferredSubtitleLanguageCode")
+            .repository()?,
         subtitle_mode: decode_optional_enum_column(
             "playout item subtitle_mode",
             row,
             "SubtitleMode",
         )?,
-        block_key: row.try_get("BlockKey")?,
-        collection_key: row.try_get("CollectionKey")?,
-        collection_etag: row.try_get("CollectionEtag")?,
+        block_key: row.try_get("BlockKey").repository()?,
+        collection_key: row.try_get("CollectionKey").repository()?,
+        collection_etag: row.try_get("CollectionEtag").repository()?,
         graphics_element_ids: Vec::new(),
         graphics_elements: Vec::new(),
-        scheduling_context: row.try_get("SchedulingContext")?,
+        scheduling_context: row.try_get("SchedulingContext").repository()?,
     })
 }
 
 fn map_playout_history(row: &DbRow) -> Result<PlayoutHistory> {
     Ok(PlayoutHistory {
-        id: row.try_get("Id")?,
-        playout_id: row.try_get("PlayoutId")?,
-        block_id: row.try_get("BlockId")?,
+        id: row.try_get("Id").repository()?,
+        playout_id: row.try_get("PlayoutId").repository()?,
+        block_id: row.try_get("BlockId").repository()?,
         playback_order: decode_enum_column("playout history playback_order", row, "PlaybackOrder")?,
-        key: row.try_get("Key")?,
-        child_key: row.try_get("ChildKey")?,
-        when: decode_datetime("playout history When", &row.try_get::<String, _>("When")?)?,
-        finish: decode_optional_datetime("playout history Finish", row.try_get("Finish")?)?,
-        index: row.try_get("Index")?,
-        details: row.try_get("Details")?,
-        is_current_child: row.try_get("IsCurrentChild")?,
+        key: row.try_get("Key").repository()?,
+        child_key: row.try_get("ChildKey").repository()?,
+        when: decode_datetime(
+            "playout history When",
+            &row.try_get::<String, _>("When").repository()?,
+        )?,
+        finish: decode_optional_datetime(
+            "playout history Finish",
+            row.try_get("Finish").repository()?,
+        )?,
+        index: row.try_get("Index").repository()?,
+        details: row.try_get("Details").repository()?,
+        is_current_child: row.try_get("IsCurrentChild").repository()?,
     })
 }
 
 fn map_program_schedule_alternate(row: &DbRow) -> Result<ProgramScheduleAlternate> {
     Ok(ProgramScheduleAlternate {
-        id: row.try_get("Id")?,
-        program_schedule_id: row.try_get("ProgramScheduleId")?,
-        playout_id: row.try_get("PlayoutId")?,
-        sort_order: row.try_get("Index")?,
-        days_of_week: decode_string_list(row.try_get::<Option<String>, _>("DaysOfWeek")?),
-        days_of_month: decode_int_list(row.try_get::<Option<String>, _>("DaysOfMonth")?),
-        months_of_year: decode_int_list(row.try_get::<Option<String>, _>("MonthsOfYear")?),
+        id: row.try_get("Id").repository()?,
+        program_schedule_id: row.try_get("ProgramScheduleId").repository()?,
+        playout_id: row.try_get("PlayoutId").repository()?,
+        sort_order: row.try_get("Index").repository()?,
+        days_of_week: decode_string_list(
+            row.try_get::<Option<String>, _>("DaysOfWeek")
+                .repository()?,
+        ),
+        days_of_month: decode_int_list(
+            row.try_get::<Option<String>, _>("DaysOfMonth")
+                .repository()?,
+        ),
+        months_of_year: decode_int_list(
+            row.try_get::<Option<String>, _>("MonthsOfYear")
+                .repository()?,
+        ),
         limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
-        start_month: row.try_get("StartMonth")?,
-        start_day: row.try_get("StartDay")?,
-        start_year: row.try_get("StartYear")?,
-        end_month: row.try_get("EndMonth")?,
-        end_day: row.try_get("EndDay")?,
-        end_year: row.try_get("EndYear")?,
+        start_month: row.try_get("StartMonth").repository()?,
+        start_day: row.try_get("StartDay").repository()?,
+        start_year: row.try_get("StartYear").repository()?,
+        end_month: row.try_get("EndMonth").repository()?,
+        end_day: row.try_get("EndDay").repository()?,
+        end_year: row.try_get("EndYear").repository()?,
     })
 }
 
@@ -3482,7 +3583,7 @@ async fn exists_by_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> 
         .bind(id)
         .fetch_one(pool)
         .await
-        .map_err(Into::into)
+        .repository()
 }
 
 /// Dedupe key for expanded scheduling items. ADR 0048 allows the same media
@@ -3548,7 +3649,7 @@ fn optional_string_column(row: &DbRow, column: &'static str) -> Result<Option<St
     match row.try_get::<Option<String>, _>(column) {
         Ok(value) => Ok(value.filter(|value| !value.trim().is_empty())),
         Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(super::common::map_data_access_error(column, &error)),
     }
 }
 
@@ -3565,7 +3666,7 @@ fn optional_subtitle_mode_column(
             "playback override subtitle_mode",
             &format!("unknown enum value {value}"),
         )),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(super::common::map_data_access_error(column, &error)),
     }
 }
 

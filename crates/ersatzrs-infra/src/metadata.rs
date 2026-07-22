@@ -10,6 +10,7 @@
 //! Only the FK-column and table names are interpolated into SQL strings.
 //! Both are `&'static str`, never user input, so this is not an injection
 //! surface. All variable values use bound parameters.
+use crate::repositories::SqlxResultExt as _;
 
 use std::fs;
 use std::path::Path;
@@ -126,7 +127,8 @@ pub async fn replace_strings(
     sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     if values.is_empty() {
         return Ok(());
@@ -138,7 +140,8 @@ pub async fn replace_strings(
             .bind(value)
             .bind(metadata_id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
     Ok(())
 }
@@ -161,7 +164,8 @@ pub async fn replace_people(
     sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     if people.is_empty() {
         return Ok(());
@@ -184,13 +188,15 @@ pub async fn replace_people(
                 .bind(person.order)
                 .bind(metadata_id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
         } else {
             sqlx::query(crate::db::assert_sql_safe(&insert_sql))
                 .bind(&person.name)
                 .bind(metadata_id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
         }
     }
     Ok(())
@@ -224,7 +230,7 @@ pub async fn replace_artwork(
     for kind in scope {
         delete = delete.bind(*kind);
     }
-    delete.execute(&mut **tx).await?;
+    delete.execute(&mut **tx).await.repository()?;
 
     if items.is_empty() {
         return Ok(());
@@ -244,7 +250,8 @@ pub async fn replace_artwork(
             .bind(&now)
             .bind(&item.path)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
     Ok(())
 }
@@ -265,7 +272,8 @@ pub async fn replace_guids(
     sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     if guids.is_empty() {
         return Ok(());
@@ -277,7 +285,8 @@ pub async fn replace_guids(
             .bind(guid)
             .bind(metadata_id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
     Ok(())
 }
@@ -386,21 +395,22 @@ async fn load_existing_subtitles(
     let rows = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(owner.id())
         .fetch_all(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     rows.iter()
         .map(|row| {
             Ok(ExistingSubtitle {
-                id: row.try_get("Id")?,
-                stream_index: row.try_get("StreamIndex")?,
-                codec: row.try_get("Codec")?,
-                default: row.try_get::<i64, _>("Default")? != 0,
-                forced: row.try_get::<i64, _>("Forced")? != 0,
-                sdh: row.try_get::<i64, _>("SDH")? != 0,
-                language: row.try_get("Language")?,
-                is_extracted: row.try_get::<i64, _>("IsExtracted")? != 0,
-                path: row.try_get("Path")?,
-                subtitle_kind: row.try_get("SubtitleKind")?,
+                id: row.try_get("Id").repository()?,
+                stream_index: row.try_get("StreamIndex").repository()?,
+                codec: row.try_get("Codec").repository()?,
+                default: row.try_get::<i64, _>("Default").repository()? != 0,
+                forced: row.try_get::<i64, _>("Forced").repository()? != 0,
+                sdh: row.try_get::<i64, _>("SDH").repository()? != 0,
+                language: row.try_get("Language").repository()?,
+                is_extracted: row.try_get::<i64, _>("IsExtracted").repository()? != 0,
+                path: row.try_get("Path").repository()?,
+                subtitle_kind: row.try_get("SubtitleKind").repository()?,
             })
         })
         .collect()
@@ -434,7 +444,8 @@ async fn insert_subtitle(
         .bind(now)
         .bind(inc.date_updated.as_deref().unwrap_or(now))
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(())
 }
 
@@ -489,7 +500,8 @@ async fn update_subtitle(
     .bind(now)
     .bind(existing.id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -585,7 +597,8 @@ async fn update_subtitle_rows(
             sqlx::query(r#"DELETE FROM "Subtitle" WHERE "Id" = ?"#)
                 .bind(existing_row.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
         }
     }
 

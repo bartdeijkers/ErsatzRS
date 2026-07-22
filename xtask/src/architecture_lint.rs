@@ -14,6 +14,7 @@ use syn::{parse::Parser, visit::Visit};
 const DEFAULT_BASELINE: &str = ".architecture-lint-baseline.toml";
 const APP_MANIFEST: &str = "crates/ersatzrs-app/Cargo.toml";
 const APP_SOURCE: &str = "crates/ersatzrs-app/src/lib.rs";
+const CORE_MANIFEST: &str = "crates/ersatzrs-core/Cargo.toml";
 const ADMIN_ROOTS: &[&str] = &[
     "crates/ersatzrs-web/src/admin",
     "crates/ersatzrs-web/src/api",
@@ -28,6 +29,7 @@ const FORBIDDEN_APP_DEPENDENCIES: &[&str] = &[
     "ersatzrs-scheduler",
     "ersatzrs-web",
 ];
+const FORBIDDEN_CORE_DEPENDENCIES: &[&str] = &["diesel", "reqwest", "sea-orm", "sqlx"];
 
 pub fn run(args: Vec<String>) -> ExitCode {
     let opts = match Opts::parse(args) {
@@ -55,6 +57,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
 fn run_inner(opts: &Opts) -> Result<()> {
     let workspace = Path::new(".");
     check_app_crate(workspace)?;
+    check_core_crate(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
     if opts.print_baseline {
@@ -171,6 +174,37 @@ fn check_app_crate(workspace: &Path) -> Result<()> {
     if !syntax.items.iter().any(is_public_item) {
         anyhow::bail!(
             "{APP_SOURCE} has no public application item; the app crate must not regress to a placeholder"
+        );
+    }
+
+    Ok(())
+}
+
+fn check_core_crate(workspace: &Path) -> Result<()> {
+    let manifest_path = workspace.join(CORE_MANIFEST);
+    let manifest_source = fs::read_to_string(&manifest_path)
+        .with_context(|| format!("read {}", manifest_path.display()))?;
+    let manifest: toml::Value = toml::from_str(&manifest_source)
+        .with_context(|| format!("parse {}", manifest_path.display()))?;
+    let workspace_manifest_path = workspace.join("Cargo.toml");
+    let workspace_manifest_source = fs::read_to_string(&workspace_manifest_path)
+        .with_context(|| format!("read {}", workspace_manifest_path.display()))?;
+    let workspace_manifest: toml::Value = toml::from_str(&workspace_manifest_source)
+        .with_context(|| format!("parse {}", workspace_manifest_path.display()))?;
+
+    let dependencies = resolve_dependencies(&manifest, &workspace_manifest);
+    let forbidden_names: BTreeSet<_> = FORBIDDEN_CORE_DEPENDENCIES
+        .iter()
+        .map(|dependency| (*dependency).to_owned())
+        .collect();
+    let forbidden: Vec<_> = dependencies
+        .intersection(&forbidden_names)
+        .cloned()
+        .collect();
+    if !forbidden.is_empty() {
+        anyhow::bail!(
+            "{CORE_MANIFEST} has forbidden persistence/provider dependencies: {}",
+            forbidden.join(", ")
         );
     }
 
@@ -1108,6 +1142,29 @@ mod tests {
         )
         .expect("fixture should parse");
         assert!(resolve_dependencies(&manifest, &workspace).contains("ersatzrs-infra"));
+    }
+
+    #[test]
+    fn renamed_storage_dependencies_cannot_reenter_core() {
+        let manifest: toml::Value = toml::from_str(
+            r#"
+            [dependencies]
+            database = { package = "sqlx", version = "0.9" }
+            ersatzrs-domain = { path = "../ersatzrs-domain" }
+            "#,
+        )
+        .expect("fixture should parse");
+        let dependencies = collect_dependencies(&manifest);
+        let forbidden: BTreeSet<_> = FORBIDDEN_CORE_DEPENDENCIES
+            .iter()
+            .map(|dependency| (*dependency).to_owned())
+            .collect();
+
+        assert!(dependencies.contains("database"));
+        assert!(dependencies.contains("sqlx"));
+        assert!(dependencies
+            .intersection(&forbidden)
+            .any(|name| name == "sqlx"));
     }
 
     #[test]

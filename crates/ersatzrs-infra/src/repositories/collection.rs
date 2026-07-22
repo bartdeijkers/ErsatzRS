@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{CollectionRepository, Result};
 use ersatzrs_domain::{Collection, EntityId, Playlist, SmartCollection};
@@ -45,7 +46,8 @@ impl CollectionRepository for SqliteCollectionRepository {
         )
         .bind(item_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter()
             .map(|row| {
                 let mut collection = map_collection(row)?;
@@ -63,9 +65,9 @@ impl CollectionRepository for SqliteCollectionRepository {
             .await
             .map_err(|error| not_found("smart collection", id, error))?;
         Ok(SmartCollection {
-            id: row.try_get("Id")?,
-            name: row.try_get("Name")?,
-            query: row.try_get("Query")?,
+            id: row.try_get("Id").repository()?,
+            name: row.try_get("Name").repository()?,
+            query: row.try_get("Query").repository()?,
         })
     }
 
@@ -76,8 +78,8 @@ impl CollectionRepository for SqliteCollectionRepository {
             .await
             .map_err(|error| not_found("playlist", id, error))?;
         let mut playlist = Playlist {
-            id: row.try_get("Id")?,
-            name: row.try_get("Name")?,
+            id: row.try_get("Id").repository()?,
+            name: row.try_get("Name").repository()?,
             item_ids: Vec::new(),
             group_ids: load_ids(
                 &self.0,
@@ -96,7 +98,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn upsert(&self, collection: &Collection) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         // ErsatzTV Collection has no collection_type column; UseCustomPlaybackOrder is always false
         sqlx::query(
             r#"REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
@@ -104,12 +106,13 @@ impl CollectionRepository for SqliteCollectionRepository {
         .bind(collection.id)
         .bind(&collection.name)
         .execute(&mut *tx)
-        .await?;
+        .await.repository()?;
 
         sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
             .bind(collection.id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         // CollectionItem is keyed by a surrogate Id (ADR 0048), so dedupe the
         // media item ids here to keep upsert idempotent for default rows.
         let media_item_ids: std::collections::BTreeSet<_> =
@@ -121,18 +124,19 @@ impl CollectionRepository for SqliteCollectionRepository {
             .bind(collection.id)
             .bind(media_item_id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         }
 
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 }
 
 fn map_collection(row: &DbRow) -> Result<Collection> {
     Ok(Collection {
-        id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        name: row.try_get("Name").repository()?,
         // ErsatzTV Collection has no collection_type; default to Collection
         collection_type: ersatzrs_domain::CollectionType::Collection,
         media_item_ids: Vec::new(),

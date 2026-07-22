@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{MetadataRepository, Result};
 use ersatzrs_domain::{EntityId, EpisodeMetadata, MovieMetadata, MusicVideoMetadata};
@@ -18,7 +19,8 @@ impl MetadataRepository for SqliteMetadataRepository {
         let row = sqlx::query(r#"SELECT * FROM "MovieMetadata" WHERE "MovieId" = ?"#)
             .bind(item_id)
             .fetch_one(&self.0)
-            .await?;
+            .await
+            .repository()?;
         map_movie_metadata(&row)
     }
 
@@ -32,7 +34,8 @@ impl MetadataRepository for SqliteMetadataRepository {
         )
         .bind(item_id)
         .fetch_one(&self.0)
-        .await?;
+        .await
+        .repository()?;
         map_episode_metadata(&row)
     }
 
@@ -40,7 +43,8 @@ impl MetadataRepository for SqliteMetadataRepository {
         let row = sqlx::query(r#"SELECT * FROM "MusicVideoMetadata" WHERE "MusicVideoId" = ?"#)
             .bind(item_id)
             .fetch_one(&self.0)
-            .await?;
+            .await
+            .repository()?;
         map_music_video_metadata(&row)
     }
 
@@ -65,7 +69,8 @@ impl MetadataRepository for SqliteMetadataRepository {
         .bind(&metadata.plot)
         .bind(&metadata.tagline)
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 
@@ -95,7 +100,8 @@ impl MetadataRepository for SqliteMetadataRepository {
         .bind(&metadata.outline)
         .bind(&metadata.plot)
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 }
@@ -103,9 +109,9 @@ impl MetadataRepository for SqliteMetadataRepository {
 fn map_movie_metadata(row: &DbRow) -> Result<MovieMetadata> {
     Ok(MovieMetadata {
         metadata: map_common_metadata(row, "MovieId")?,
-        outline: row.try_get("Outline")?,
-        plot: row.try_get("Plot")?,
-        tagline: row.try_get("Tagline")?,
+        outline: row.try_get("Outline").repository()?,
+        plot: row.try_get("Plot").repository()?,
+        tagline: row.try_get("Tagline").repository()?,
     })
 }
 
@@ -116,39 +122,39 @@ fn map_episode_metadata(row: &DbRow) -> Result<EpisodeMetadata> {
         metadata: map_common_metadata(row, "EpisodeId")?,
         season_number,
         episode_number: row.try_get("EpisodeNumber").unwrap_or(0),
-        outline: row.try_get("Outline")?,
-        plot: row.try_get("Plot")?,
+        outline: row.try_get("Outline").repository()?,
+        plot: row.try_get("Plot").repository()?,
     })
 }
 
 fn map_music_video_metadata(row: &DbRow) -> Result<MusicVideoMetadata> {
     Ok(MusicVideoMetadata {
         metadata: map_common_metadata(row, "MusicVideoId")?,
-        album: row.try_get("Album")?,
-        track: row.try_get("Track")?,
+        album: row.try_get("Album").repository()?,
+        track: row.try_get("Track").repository()?,
         artist_ids: Vec::new(),
     })
 }
 
 fn map_common_metadata(row: &DbRow, _item_id_column: &str) -> Result<ersatzrs_domain::Metadata> {
     Ok(ersatzrs_domain::Metadata {
-        id: row.try_get("Id")?,
+        id: row.try_get("Id").repository()?,
         metadata_kind: decode_enum_column("metadata kind", row, "MetadataKind")?,
-        title: row.try_get("Title")?,
-        original_title: row.try_get("OriginalTitle")?,
-        sort_title: row.try_get("SortTitle")?,
-        year: row.try_get("Year")?,
+        title: row.try_get("Title").repository()?,
+        original_title: row.try_get("OriginalTitle").repository()?,
+        sort_title: row.try_get("SortTitle").repository()?,
+        year: row.try_get("Year").repository()?,
         release_date: decode_optional_datetime(
             "metadata release_date",
-            row.try_get("ReleaseDate")?,
+            row.try_get("ReleaseDate").repository()?,
         )?,
         date_added: decode_datetime(
             "metadata date_added",
-            &row.try_get::<String, _>("DateAdded")?,
+            &row.try_get::<String, _>("DateAdded").repository()?,
         )?,
         date_updated: decode_datetime(
             "metadata date_updated",
-            &row.try_get::<String, _>("DateUpdated")?,
+            &row.try_get::<String, _>("DateUpdated").repository()?,
         )?,
         artwork_ids: Vec::new(),
         genre_ids: Vec::new(),

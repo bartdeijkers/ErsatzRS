@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
@@ -192,24 +193,27 @@ async fn load_music_video_credits_data(
     )
     .bind(media_item_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
     let Some(row) = row else {
         return Ok(None);
     };
-    let metadata_id: i64 = row.try_get("MetadataId")?;
+    let metadata_id: i64 = row.try_get("MetadataId").repository()?;
     let duration = row
-        .try_get::<Option<String>, _>("Duration")?
+        .try_get::<Option<String>, _>("Duration")
+        .repository()?
         .as_deref()
         .map_or_else(Duration::zero, decode_duration_text);
     Ok(Some(MusicVideoCreditsData {
         resolution: resolution.clone(),
         title: row
-            .try_get::<Option<String>, _>("Title")?
+            .try_get::<Option<String>, _>("Title")
+            .repository()?
             .unwrap_or_default(),
-        track: row.try_get("Track")?,
-        album: row.try_get("Album")?,
-        plot: row.try_get("Plot")?,
-        release_date: row.try_get("ReleaseDate")?,
+        track: row.try_get("Track").repository()?,
+        album: row.try_get("Album").repository()?,
+        plot: row.try_get("Plot").repository()?,
+        release_date: row.try_get("ReleaseDate").repository()?,
         all_artists: load_names(
             pool,
             "MusicVideoArtist",
@@ -218,7 +222,8 @@ async fn load_music_video_credits_data(
         )
         .await?,
         artist: row
-            .try_get::<Option<String>, _>("Artist")?
+            .try_get::<Option<String>, _>("Artist")
+            .repository()?
             .unwrap_or_default(),
         studios: load_names(pool, "Studio", "MusicVideoMetadataId", metadata_id).await?,
         directors: load_names(pool, "Director", "MusicVideoMetadataId", metadata_id).await?,
@@ -248,7 +253,8 @@ async fn load_names(
     let rows = sqlx::query_scalar::<_, Option<String>>(crate::db::assert_sql_safe(query))
         .bind(owner_id)
         .fetch_all(pool)
-        .await?;
+        .await
+        .repository()?;
     Ok(rows
         .into_iter()
         .flatten()

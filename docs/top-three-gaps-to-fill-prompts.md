@@ -9,150 +9,193 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Actionable paste-and-run goal prompts selected from the current progress files,
-ADR index, active plans, and phase state. Phase 7A is complete, so p7b-01 leads
-as the new phase focus. The two runnable Phase 7C browser closeouts follow
-because they carry explicit tracked debt and are no longer dependency-blocked.
+ADR index, active plans, and phase state. With the Phase 7B foundation complete,
+the three newly runnable vertical slices lead in milestone order.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: application service foundation (slug `application-use-case-layer`)
+## 1. Build the next ErsatzRS spec chore: playout-build application vertical slice (slug `application-use-case-layer`)
 
-Use the repo workflow from AGENTS.md. This ADR-backed architectural chore is
-governed by [ADR 0051](adr/0051-application-boundary-and-composition-root.md)
-and [`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md),
-closing milestone **p7b-01**. Read ErsatzTV only where its application command
-and query boundary informs the port; this is a deliberate ErsatzRS structural
-extraction, not a UI parity slice. Deliver the complete foundation with no
-stopgaps, and keep every remaining shortfall as structured `ParityDebt`.
+Use the repo workflow from AGENTS.md. Close milestone **p7b-02** under
+[ADR 0051](adr/0051-application-boundary-and-composition-root.md) and
+[`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md).
+This is an orchestration extraction: preserve ErsatzTV Refresh/Reset semantics,
+all public endpoints, and current queued/building feedback while making the
+application layer the single admission boundary. Deliver the complete vertical
+slice with no transport-owned fallback path, and keep any remaining shortfall as
+structured `ParityDebt`.
 
-Current primary debt:
+Current debt:
 
-> `core-leaks-concrete-storage-error` — "ersatzrs-core::repositories::
-> RepositoryError contains sqlx::Error, so the core trait boundary depends on
-> the concrete persistence implementation."
+> `operation-coordination-is-split` — web still owns playout-build sending even
+> though `ApplicationServices` now owns the shared entity locker and activity
+> registry.
 
 Before editing:
-1. Read ADR 0051, the plan's Phase 7B section, `ARCHITECTURE.md`, and
-   `cargo xtask progress milestones --id p7b-01 --full`.
-2. Inspect `crates/ersatzrs-app`, `crates/ersatzrs-core/src/repositories`,
-   `crates/ersatzrs-infra`, and the native web composition root.
-3. Build a Source Map of the core error type, infra mappings, application
-   modules, injected ports, and construction of `AppState`.
+
+1. Read ADR 0051, the plan's P7B-02 section, `ARCHITECTURE.md`, `STYLE.md`, and
+   `cargo xtask progress milestones --id p7b-02 --full`.
+2. Inspect every `PlayoutBuildRequest` producer, the scheduler consumer,
+   `ApplicationServices`, `OperationCoordinator`, AppState construction, and
+   playout admin/API feedback paths.
+3. Read the matching ErsatzTV application handlers and build a Source Map of
+   request admission, Refresh/Reset selection, queue ownership, duplicate
+   detection, worker consumption, activity state, persistence, and transport
+   responses before editing.
 
 Implement the slice:
-- Add documented command, query, and application-error modules to
-  `ersatzrs-app`.
-- Remove `sqlx::Error` from core; map concrete storage failures in infra into
-  the storage-neutral core/application error vocabulary.
-- Construct injected `ApplicationServices` in the native composition root.
-- Advance operation coordination only as needed for this foundation; keep
-  p7b-02/p7b-03 migration debt explicit.
-- Preserve endpoint names, persistence shapes, side effects, and existing
-  ErsatzTV behavior. Add focused error-mapping and composition tests.
-- Update the parity file, milestone evidence, plan, changelog, top-gap prompts,
-  phase state, and session log.
+
+- Add one documented `RequestPlayoutBuild` application command/use case with
+  typed outcomes for accepted, already queued or building, unavailable, and
+  rejected requests.
+- Move sender ownership and all admission decisions behind injected
+  `ApplicationServices`; replace every direct web/API sender without leaving a
+  second queue or lock registry.
+- Keep the scheduler as the durable work consumer and preserve ordering,
+  Refresh/Reset semantics, persisted build outcomes, and current admin/API
+  response shapes.
+- Prove duplicate, queued, building, closed-worker, Refresh, Reset, and failure
+  lifecycles with focused app, scheduler, and transport regressions.
+- Update the application parity file, p7b-02 evidence, ADR implementation note,
+  plan, changelog, phase state, top-gap prompts, and session log.
 
 Verification:
+
+- `cargo fmt --all -- --check`
 - `cargo xtask architecture-lint`
-- `./run.sh check -p ersatzrs-app -p ersatzrs-core -p ersatzrs-infra`
-- focused crate tests for error mapping and the composition root
+- focused checks and tests through `./run.sh`
+- both workspace clippy configurations
+- `./run.sh test-closeout`
+- `cargo xtask parity-check`
 - `cargo xtask progress check`
+- `git diff --check`
 
-Report the Source Map, behavior implemented, closed and remaining debt,
-verification commands and outcomes, and changed files.
+Report the Source Map, exact orchestration boundary, typed outcomes, preserved
+behavior, closed and remaining debt, verification results, changed files, and
+the live next milestone. Do not commit or push unless explicitly requested.
 
 ---
 
-## 2. Fix the next ErsatzTV parity gap in ErsatzRS: truthful watermark preview and navigation (slug `watermark-editor`)
+## 2. Build the next ErsatzRS spec chore: scan-operation application vertical slice (slug `application-use-case-layer`)
 
-Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7c-02** with
-fully functional ErsatzTV parity plus the tracked ErsatzRS preview requirements,
-without stopgaps. Keep any shortfall as visible `ParityDebt`.
+Use the repo workflow from AGENTS.md. Close milestone **p7b-03** under
+[ADR 0051](adr/0051-application-boundary-and-composition-root.md) and
+[`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md).
+Move the complete library/show scan lifecycle behind application services while
+preserving provider-specific ErsatzTV behavior, FIFO ordering, public contracts,
+and observable progress. Do not leave web-owned queue or progress paths, and
+record any genuine remaining gap as structured `ParityDebt`.
 
 Current debt:
-- `actual-size-preview-uses-fixed-placeholder`: Actual Size hard-codes a
-  32-pixel height instead of using selected-asset dimensions.
-- `preview-lacks-aspect-ratio-positioning-guides`: the preview lacks clearly
-  distinguishable 4:3 and 16:9 content guides.
-- `preview-lacks-previous-next-watermark-navigation`: the editor lacks
-  deterministic Previous/Next comparison controls that preserve edit safety.
+
+> `operation-coordination-is-split` — web still owns scan queue and progress
+> lifecycle even though `ApplicationServices` now owns the shared operation
+> locker.
 
 Before editing:
-1. Read `$ERSATZTV_SRC/ErsatzTV/Pages/Watermark*.razor` at the pinned baseline,
-   the watermark parity file, and the p7c-02 acceptance criteria.
-2. Inspect `crates/ersatzrs-web/src/admin/pages/watermarks/`, its server
-   functions, persistence paths, localization files, and existing browser tests.
-3. Build a Source Map and a Visual Source Map covering preview geometry,
-   selected-asset metadata, editor navigation, dirty-state behavior, and the
-   upstream layout.
+
+1. Read ADR 0051, the plan's P7B-03 section, `ARCHITECTURE.md`, `STYLE.md`,
+   `PORTING.md`, and `cargo xtask progress milestones --id p7b-03 --full`.
+2. Read ErsatzTV's queue-library-scan and queue-show-scan handlers plus their
+   consumers, then inspect every ErsatzRS scan producer, queue worker, lock,
+   progress registry, scanner-companion call, and admin/API observer.
+3. Build a Source Map covering admission, FIFO queueing, library/show identity,
+   provider validation, start/progress/completion/failure state, retry or
+   duplicate behavior, and transport mapping.
 
 Implement the slice:
-- Make Actual Size use the selected watermark's real dimensions, or use an
-  explicitly localized schematic mode if real dimensions cannot be known.
-- Render visually distinct 4:3 and 16:9 safe/content boundary guides.
-- Add localized Previous/Next controls with deterministic ordering and an
-  explicit save/discard/cancel path so navigation never drops edits silently.
-- Preserve SSR and hydration DOM shape and all current upload, validation,
-  persistence, and drawvg behavior.
-- Add focused desktop and mobile Playwright coverage for geometry and
-  comparison navigation, then update parity/milestone/progress records.
 
-Visual verification:
-- Rebuild and serve with `./run.sh serve`; capture the editor at matching
-  desktop and mobile viewports and compare geometry with the ErsatzTV source.
+- Add typed library/show scan application commands, outcomes, and queries.
+- Move admission, FIFO queue ownership, operation locking, progress, completion,
+  and failure cleanup into application services shared by all transports and
+  background workers.
+- Remove the parallel web-owned scan coordination path while keeping scanner
+  invocation, provider semantics, endpoint names, DTOs, polling behavior, and
+  localization stable.
+- Add focused regressions for ordering, duplicate requests, both scan kinds,
+  progress visibility, worker failure, and cleanup after success or failure.
+- Update parity debt, p7b-03 evidence, ADR implementation note, plan, changelog,
+  phase state, top-gap prompts, and session log.
 
 Verification:
-- `cargo xtask parity-check web`
-- `npx playwright test` for the focused watermark spec
-- `cargo xtask progress check`
 
-Report both source maps, behavior and visual differences, closed and remaining
-debt, verification outcomes, and changed files.
+- `cargo fmt --all -- --check`
+- `cargo xtask architecture-lint`
+- focused checks and tests through `./run.sh`
+- both workspace clippy configurations
+- `./run.sh test-closeout`
+- `cargo xtask parity-check`
+- `cargo xtask progress check`
+- `git diff --check`
+
+Report the Source Map, lifecycle ownership, typed outcomes and progress model,
+preserved behavior, closed and remaining debt, verification results, changed
+files, and the live next milestone. Do not commit or push unless explicitly
+requested.
 
 ---
 
-## 3. Fix the next ErsatzTV parity gap in ErsatzRS: deferred search and media-browser behavior (slug `media-browsers`)
+## 3. Fix the next ErsatzTV parity gap in ErsatzRS: real block playout preview (slug `block-scheduling-ui`)
 
-Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7c-03** with
-fully functional pinned-baseline parity and no stopgaps. If upstream evidence
-shows a behavior is deliberately out of scope, record that disposition in an
-ADR or the parity contract instead of leaving an ambiguous code comment.
+Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7b-04** with
+the pinned ErsatzTV block-preview behavior and the application boundary from
+[ADR 0051](adr/0051-application-boundary-and-composition-root.md). Replace the
+simplified preview completely; do not keep fabricated rows, collection-type
+shortcuts, or empty-on-error behavior. Keep any shortfall as visible
+`ParityDebt`.
 
 Current debt:
-- `search-thumbnail-size-plumbing-deferred`: Thumbnail cards still build their
-  artwork URLs with the poster-size path.
-- `see-all-detail-and-library-filter-disposition`: per-kind See All routes
-  defer richer detail behavior and the library-filter combobox without a
-  recorded upstream/product disposition.
+
+> `block-preview-bypasses-real-scheduling-engine` — unsaved block preview
+> manually enumerates a subset of collections and durations instead of invoking
+> the real builder with upstream-shaped temporary scheduling state.
 
 Before editing:
-1. Read the feature's recorded `$ERSATZTV_SRC/ErsatzTV/Pages/Movies.razor` and
-   corresponding browser/search pages at the pinned baseline, plus ADR 0048
-   where playback overrides touch these routes.
-2. Inspect `admin/server_fns/search.rs`,
-   `admin/pages/media/see_all_lists.rs`, shared browser primitives, route data,
-   artwork URL construction, and existing Playwright coverage.
-3. Build a Source Map and Visual Source Map for search cards, each See All
-   route kind, detail navigation, filter state, and responsive layout.
+
+1. Read `$ERSATZTV_SRC/ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`
+   and the called block-preview builder/query chain at the pinned baseline,
+   along with the parity file and p7b-04 acceptance criteria.
+2. Inspect the ErsatzRS block editor/server function, scheduler block engine,
+   temporary template/playout/reference-data types, enrichment queries,
+   localization, error mapping, and existing browser coverage.
+3. Build a Source Map and Visual Source Map covering draft input, temporary
+   state, Reset-mode invocation, collection kinds, resulting enriched rows,
+   error states, loading/empty states, and responsive preview presentation.
 
 Implement the slice:
-- Wire Thumbnail search results through the correct artwork-size path and
-  prove the URL dimensions/variant selected for every affected card kind.
-- Implement upstream-backed See All detail and library-filter behavior, or
-  record a deliberate non-goal with focused evidence and an ADR when required.
-- Preserve stay-in-context collection/playlist actions, media-info and
-  troubleshooting links, localization, SSR fallbacks, and hydration shape.
-- Add focused route/search browser coverage and update the parity file,
-  milestone, changelog, top-gap prompts, phase state, and session log.
+
+- Introduce an application query that constructs the upstream-shaped temporary
+  Template, Playout, and reference data from the unsaved draft and invokes the
+  real block preview builder in Reset mode.
+- Return the real enriched playout rows for every supported block item kind;
+  delete collection-specific preview SQL and fabricated duration accumulation.
+- Surface typed failures through a localized, hydration-stable error state
+  rather than turning failures into an empty preview.
+- Preserve draft editing, endpoint/DTO contracts where externally observable,
+  scheduling semantics, and stable SSR/hydration DOM shape.
+- Add focused engine/application regressions and desktop/mobile Playwright
+  coverage, then update parity, milestone, ADR/plan, changelog, phase, prompts,
+  and session records.
 
 Visual verification:
-- Rebuild and serve with `./run.sh serve`; compare the affected search and See
-  All pages against ErsatzTV at matched desktop and mobile viewports.
+
+- Build and serve a matched SSR/WASM bundle with `./run.sh serve`; compare the
+  populated, empty, loading, and failed preview at matching desktop and mobile
+  viewports with the pinned ErsatzTV source.
 
 Verification:
-- `cargo xtask parity-check web`
-- `npx playwright test` for the focused search/browser spec
-- `cargo xtask progress check`
 
-Report both source maps, implemented or intentionally rejected behavior,
-closed and remaining debt, verification outcomes, and changed files.
+- `cargo fmt --all -- --check`
+- `cargo xtask architecture-lint`
+- focused checks and tests through `./run.sh`
+- `cargo xtask parity-check web`
+- focused Chromium and Firefox Playwright specs
+- both workspace clippy configurations
+- `./run.sh test-closeout`
+- `cargo xtask progress check`
+- `git diff --check`
+
+Report both source maps, real-engine invocation and temporary state shape,
+behavior and visual differences, closed and remaining debt, verification
+results, changed files, and the live next milestone. Do not commit or push
+unless explicitly requested.

@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{
@@ -35,19 +36,20 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         )
         .bind(season_id)
         .fetch_optional(&self.0)
-        .await?
+        .await
+        .repository()?
         else {
             return Ok(None);
         };
 
         Ok(Some(SeasonDetail {
-            id: row.try_get("Id")?,
-            show_id: row.try_get("ShowId")?,
-            show_title: row.try_get("ShowTitle")?,
-            show_year: row.try_get("ShowYear")?,
-            season_number: row.try_get("SeasonNumber")?,
-            season_poster_path: row.try_get("SeasonPoster")?,
-            show_fanart_path: row.try_get("ShowFanArt")?,
+            id: row.try_get("Id").repository()?,
+            show_id: row.try_get("ShowId").repository()?,
+            show_title: row.try_get("ShowTitle").repository()?,
+            show_year: row.try_get("ShowYear").repository()?,
+            season_number: row.try_get("SeasonNumber").repository()?,
+            season_poster_path: row.try_get("SeasonPoster").repository()?,
+            show_fanart_path: row.try_get("ShowFanArt").repository()?,
         }))
     }
 
@@ -55,7 +57,8 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         let count = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Episode" WHERE "SeasonId" = ?"#)
             .bind(season_id)
             .fetch_one(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(count)
     }
 
@@ -108,14 +111,15 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut episodes = Vec::with_capacity(rows.len());
         let mut replacements_by_library_path = HashMap::new();
         for row in rows {
-            let metadata_id: EntityId = row.try_get("MetadataId")?;
-            let file_path: Option<String> = row.try_get("FilePath")?;
-            let library_path_id: Option<EntityId> = row.try_get("LibraryPathId")?;
+            let metadata_id: EntityId = row.try_get("MetadataId").repository()?;
+            let file_path: Option<String> = row.try_get("FilePath").repository()?;
+            let library_path_id: Option<EntityId> = row.try_get("LibraryPathId").repository()?;
             let local_path = match (file_path.as_deref(), library_path_id) {
                 (Some(path), Some(library_path_id)) => {
                     let replacements = if let Some(replacements) =
@@ -137,22 +141,22 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                 (None, _) => None,
             };
             episodes.push(EpisodeCard {
-                episode_id: row.try_get("EpisodeId")?,
-                episode_number: row.try_get("EpisodeNumber")?,
-                title: row.try_get("Title")?,
-                sort_title: row.try_get("SortTitle")?,
-                plot: row.try_get("Plot")?,
-                release_date: row.try_get("ReleaseDate")?,
-                thumbnail_path: row.try_get("Thumbnail")?,
-                state: row.try_get("State")?,
+                episode_id: row.try_get("EpisodeId").repository()?,
+                episode_number: row.try_get("EpisodeNumber").repository()?,
+                title: row.try_get("Title").repository()?,
+                sort_title: row.try_get("SortTitle").repository()?,
+                plot: row.try_get("Plot").repository()?,
+                release_date: row.try_get("ReleaseDate").repository()?,
+                thumbnail_path: row.try_get("Thumbnail").repository()?,
+                state: row.try_get("State").repository()?,
                 local_path,
                 file_path,
                 directors: load_people(&self.0, "Director", metadata_id).await?,
                 writers: load_people(&self.0, "Writer", metadata_id).await?,
-                show_title: row.try_get("ShowTitle")?,
-                show_id: row.try_get("ShowId")?,
-                season_id: row.try_get("SeasonId")?,
-                season_number: row.try_get("SeasonNumber")?,
+                show_title: row.try_get("ShowTitle").repository()?,
+                show_id: row.try_get("ShowId").repository()?,
+                season_id: row.try_get("SeasonId").repository()?,
+                season_number: row.try_get("SeasonNumber").repository()?,
             });
         }
 
@@ -212,31 +216,31 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         )
         .bind(episode_id)
         .fetch_optional(&self.0)
-        .await?
+        .await.repository()?
         else {
             return Ok(None);
         };
 
-        let library_kind: String = row.try_get("LibraryKind")?;
+        let library_kind: String = row.try_get("LibraryKind").repository()?;
         Ok(Some(EpisodeMediaItemInfo {
-            id: row.try_get("Id")?,
-            title: row.try_get("Title")?,
-            show_title: row.try_get("ShowTitle")?,
-            season_number: row.try_get("SeasonNumber")?,
-            episode_number: row.try_get("EpisodeNumber")?,
-            metadata_id: row.try_get("MetadataId")?,
-            server_name: row.try_get("ServerName")?,
-            library_name: row.try_get("LibraryName")?,
-            state: row.try_get("State")?,
-            media_version_id: row.try_get("MediaVersionId")?,
-            duration: row.try_get("Duration")?,
-            sample_aspect_ratio: row.try_get("SampleAspectRatio")?,
-            display_aspect_ratio: row.try_get("DisplayAspectRatio")?,
-            r_frame_rate: row.try_get("RFrameRate")?,
-            video_scan_kind: row.try_get("VideoScanKind")?,
-            interlaced_ratio: row.try_get("InterlacedRatio")?,
-            width: row.try_get("Width")?,
-            height: row.try_get("Height")?,
+            id: row.try_get("Id").repository()?,
+            title: row.try_get("Title").repository()?,
+            show_title: row.try_get("ShowTitle").repository()?,
+            season_number: row.try_get("SeasonNumber").repository()?,
+            episode_number: row.try_get("EpisodeNumber").repository()?,
+            metadata_id: row.try_get("MetadataId").repository()?,
+            server_name: row.try_get("ServerName").repository()?,
+            library_name: row.try_get("LibraryName").repository()?,
+            state: row.try_get("State").repository()?,
+            media_version_id: row.try_get("MediaVersionId").repository()?,
+            duration: row.try_get("Duration").repository()?,
+            sample_aspect_ratio: row.try_get("SampleAspectRatio").repository()?,
+            display_aspect_ratio: row.try_get("DisplayAspectRatio").repository()?,
+            r_frame_rate: row.try_get("RFrameRate").repository()?,
+            video_scan_kind: row.try_get("VideoScanKind").repository()?,
+            interlaced_ratio: row.try_get("InterlacedRatio").repository()?,
+            width: row.try_get("Width").repository()?,
+            height: row.try_get("Height").repository()?,
             is_local_library: library_kind == "LocalLibrary",
             library_kind,
         }))
@@ -283,13 +287,14 @@ async fn load_path_replacements_for_library_path(
     .bind(library_path_id)
     .bind(library_path_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let mut replacements = Vec::new();
     for row in rows {
-        let source_path: Option<String> = row.try_get("Source")?;
-        let replacement_path: Option<String> = row.try_get("Local")?;
-        let platform: Option<String> = row.try_get("Platform")?;
+        let source_path: Option<String> = row.try_get("Source").repository()?;
+        let replacement_path: Option<String> = row.try_get("Local").repository()?;
+        let platform: Option<String> = row.try_get("Platform").repository()?;
         if let (Some(source_path), Some(replacement_path)) = (source_path, replacement_path) {
             replacements.push(PathReplacement {
                 source_platform: source_platform(&source_path, platform.as_deref()),
@@ -349,7 +354,8 @@ async fn load_people(
     let rows = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(metadata_id)
         .fetch_all(pool)
-        .await?;
+        .await
+        .repository()?;
     Ok(rows
         .iter()
         .filter_map(|row| row.try_get::<Option<String>, _>("Name").ok().flatten())

@@ -21,6 +21,7 @@
 //!     through a localhost HTTP pipe. ErsatzRS writes the same re-based stream
 //!     to the subtitle cache and burns that temp file, matching the existing
 //!     file-cache model used for extracted subtitles.
+use crate::repositories::SqlxResultExt as _;
 
 use std::path::{Path, PathBuf};
 
@@ -342,12 +343,13 @@ async fn load_path_replacements(pool: &Pool<Db>) -> Result<Vec<PathReplacement>>
            SELECT "EmbyPath" AS "Source", "LocalPath" AS "Local" FROM "EmbyPathReplacement""#,
     )
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let mut replacements = Vec::new();
     for row in rows {
-        let source: Option<String> = row.try_get("Source")?;
-        let local: Option<String> = row.try_get("Local")?;
+        let source: Option<String> = row.try_get("Source").repository()?;
+        let local: Option<String> = row.try_get("Local").repository()?;
         if let (Some(source_path), Some(replacement_path)) = (source, local) {
             let source_platform = if source_path.contains('\\') || source_path.contains(':') {
                 PathPlatform::Windows
@@ -384,12 +386,13 @@ async fn resolve_input_path(
     )
     .bind(media_item_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let Some(row) = row else {
         return Ok(None);
     };
-    let path: String = row.try_get("Path")?;
+    let path: String = row.try_get("Path").repository()?;
     let resolved = if replacements.is_empty() {
         path
     } else {
@@ -412,11 +415,13 @@ async fn episode_ids_with_text_subtitles(pool: &Pool<Db>, show_id: i64) -> Resul
     )
     .bind(show_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
     let episode_ids: Vec<i64> = rows
         .into_iter()
         .map(|row| row.try_get("Id"))
-        .collect::<std::result::Result<_, _>>()?;
+        .collect::<std::result::Result<_, _>>()
+        .repository()?;
     media_item_ids_with_text_subtitles(pool, &episode_ids).await
 }
 
@@ -450,11 +455,13 @@ async fn playout_media_item_ids_with_text_subtitles(
     .bind(encode_datetime(now))
     .bind(encode_datetime(until))
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
     let media_item_ids: Vec<i64> = rows
         .into_iter()
         .map(|row| row.try_get("MediaItemId"))
-        .collect::<std::result::Result<_, _>>()?;
+        .collect::<std::result::Result<_, _>>()
+        .repository()?;
     media_item_ids_with_text_subtitles(pool, &media_item_ids).await
 }
 
@@ -499,9 +506,9 @@ async fn media_item_ids_with_text_subtitles(
         for codec in IMAGE_CODECS {
             query = query.bind(*codec);
         }
-        let rows = query.fetch_all(pool).await?;
+        let rows = query.fetch_all(pool).await.repository()?;
         for row in rows {
-            let id: i64 = row.try_get("Id")?;
+            let id: i64 = row.try_get("Id").repository()?;
             if !result.contains(&id) {
                 result.push(id);
             }
@@ -614,17 +621,18 @@ async fn extract_subtitles(
             sqlx::query(crate::db::assert_sql_safe(&sql))
                 .bind(media_item_id)
                 .fetch_all(pool)
-                .await?,
+                .await
+                .repository()?,
         );
     }
 
     let mut to_extract = Vec::new();
     for row in rows {
-        let codec: String = row.try_get("Codec")?;
-        let is_extracted: i64 = row.try_get("IsExtracted")?;
-        let path: Option<String> = row.try_get("Path")?;
-        let stream_index: i32 = row.try_get("StreamIndex")?;
-        let id: i64 = row.try_get("Id")?;
+        let codec: String = row.try_get("Codec").repository()?;
+        let is_extracted: i64 = row.try_get("IsExtracted").repository()?;
+        let path: Option<String> = row.try_get("Path").repository()?;
+        let stream_index: i32 = row.try_get("StreamIndex").repository()?;
+        let id: i64 = row.try_get("Id").repository()?;
 
         if is_image_codec(&codec) {
             continue;
@@ -681,7 +689,8 @@ async fn extract_subtitles(
                 .bind(sub.relative_output.to_string_lossy().into_owned())
                 .bind(sub.id)
                 .execute(pool)
-                .await?;
+                .await
+                .repository()?;
         }
         tracing::debug!(
             media_item_id,
@@ -722,12 +731,13 @@ async fn extract_fonts(
     )
     .bind(media_item_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let fonts_dir = fonts_cache_folder();
     for (attachment_index, row) in rows.iter().enumerate() {
-        let mime_type: Option<String> = row.try_get("MimeType")?;
-        let file_name: Option<String> = row.try_get("FileName")?;
+        let mime_type: Option<String> = row.try_get("MimeType").repository()?;
+        let file_name: Option<String> = row.try_get("FileName").repository()?;
 
         let mime = mime_type.unwrap_or_default();
         if !mime.contains("font") && !mime.contains("opentype") {

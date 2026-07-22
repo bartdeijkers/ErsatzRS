@@ -31,3 +31,5 @@ pub mod trakt_sync;
 pub mod transcode_capacity;
 pub mod tsduck;
 pub mod xmltv;
+
+pub use repositories::map_repository_error;

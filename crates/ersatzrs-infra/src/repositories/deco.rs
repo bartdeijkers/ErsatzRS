@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{DecoRepository, Result};
 use ersatzrs_domain::{Deco, EntityId};
@@ -37,7 +38,8 @@ impl DecoRepository for SqliteDecoRepository {
             sqlx::query(r#"SELECT * FROM "Deco" WHERE "DecoGroupId" = ? ORDER BY "Name", "Id""#)
                 .bind(group_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
         rows.iter()
             .map(|row| {
                 let mut deco = map_deco(row)?;
@@ -49,7 +51,7 @@ impl DecoRepository for SqliteDecoRepository {
     }
 
     async fn upsert(&self, deco: &Deco) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         sqlx::query(
             r#"REPLACE INTO "Deco" (
                 "Id", "DecoGroupId", "Name", "BreakContentMode", "DefaultFillerMode",
@@ -73,7 +75,8 @@ impl DecoRepository for SqliteDecoRepository {
         .bind(deco.default_filler_smart_collection_id)
         .bind(deco.default_filler_trim_to_fit)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         replace_ids(
             &mut tx,
             r#"DELETE FROM "DecoWatermark" WHERE "DecoId" = ?"#,
@@ -90,16 +93,16 @@ impl DecoRepository for SqliteDecoRepository {
             &deco.graphics_element_ids,
         )
         .await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 }
 
 fn map_deco(row: &DbRow) -> Result<Deco> {
     Ok(Deco {
-        id: row.try_get("Id")?,
-        deco_group_id: row.try_get("DecoGroupId")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        deco_group_id: row.try_get("DecoGroupId").repository()?,
+        name: row.try_get("Name").repository()?,
         mode: decode_enum_column("deco mode", row, "BreakContentMode")?,
         break_content_id: None,
         default_filler_mode: decode_optional_enum_column(
@@ -113,11 +116,15 @@ fn map_deco(row: &DbRow) -> Result<Deco> {
             row,
             "DefaultFillerCollectionType",
         )?,
-        default_filler_collection_id: row.try_get("DefaultFillerCollectionId")?,
-        default_filler_media_item_id: row.try_get("DefaultFillerMediaItemId")?,
-        default_filler_multi_collection_id: row.try_get("DefaultFillerMultiCollectionId")?,
-        default_filler_smart_collection_id: row.try_get("DefaultFillerSmartCollectionId")?,
-        default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit")?,
+        default_filler_collection_id: row.try_get("DefaultFillerCollectionId").repository()?,
+        default_filler_media_item_id: row.try_get("DefaultFillerMediaItemId").repository()?,
+        default_filler_multi_collection_id: row
+            .try_get("DefaultFillerMultiCollectionId")
+            .repository()?,
+        default_filler_smart_collection_id: row
+            .try_get("DefaultFillerSmartCollectionId")
+            .repository()?,
+        default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit").repository()?,
         watermark_ids: Vec::new(),
         graphics_element_ids: Vec::new(),
     })

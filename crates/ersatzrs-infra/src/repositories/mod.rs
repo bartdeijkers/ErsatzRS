@@ -36,6 +36,23 @@ use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;
 
+/// Translate a concrete `SQLx` failure into the storage-neutral repository
+/// vocabulary before it crosses an adapter boundary.
+#[must_use]
+pub fn map_repository_error(error: &sqlx::Error) -> ersatzrs_core::repositories::RepositoryError {
+    common::map_database_error(error)
+}
+
+pub(crate) trait SqlxResultExt<T> {
+    fn repository(self) -> ersatzrs_core::repositories::Result<T>;
+}
+
+impl<T> SqlxResultExt<T> for std::result::Result<T, sqlx::Error> {
+    fn repository(self) -> ersatzrs_core::repositories::Result<T> {
+        self.map_err(|error| map_repository_error(&error))
+    }
+}
+
 #[derive(Clone)]
 pub struct Repositories {
     pub channel: SqliteChannelRepository,

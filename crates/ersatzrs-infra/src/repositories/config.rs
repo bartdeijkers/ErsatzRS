@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{ConfigRepository, Result};
 use sqlx::Pool;
@@ -13,7 +14,8 @@ impl ConfigRepository for SqliteConfigRepository {
         let row = sqlx::query(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
             .bind(key)
             .fetch_optional(&self.0)
-            .await?;
+            .await
+            .repository()?;
 
         row.map(|row| decode_config_value(&row)).transpose()
     }
@@ -26,7 +28,8 @@ impl ConfigRepository for SqliteConfigRepository {
         .bind(key)
         .bind(value)
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 }

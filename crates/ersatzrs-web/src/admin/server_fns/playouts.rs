@@ -591,7 +591,7 @@ pub async fn list_locked_playouts() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.playout_locker.locked_playouts())
+    Ok(state.application.operations().active_playout_builds())
 }
 
 /// Returns queued and currently building manual playout requests. The caller
@@ -603,9 +603,10 @@ pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, Se
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    let activity = state.application.operations().playout_activity();
     Ok(PlayoutBuildActivitySnapshot {
-        queued: state.playout_build_activity.queued_playouts(),
-        building: state.playout_build_activity.building_playouts(),
+        queued: activity.queued_playouts(),
+        building: activity.building_playouts(),
     })
 }
 
@@ -1045,7 +1046,8 @@ fn enqueue_build(
     playout_id: i64,
     mode: ersatzrs_core::scheduling::PlayoutBuildMode,
 ) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
-    if !state.playout_build_activity.queue(playout_id) {
+    let activity = state.application.operations().playout_activity();
+    if !activity.queue(playout_id) {
         return Ok(PlayoutBuildEnqueueResult {
             accepted: 0,
             coalesced: 1,
@@ -1053,7 +1055,7 @@ fn enqueue_build(
     }
     let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
     state.playout_build_tx.send(request).map_err(|error| {
-        state.playout_build_activity.finish(playout_id);
+        activity.finish(playout_id);
         ServerFnError::new(format!("playout build worker is unavailable: {error}"))
     })?;
     Ok(PlayoutBuildEnqueueResult {

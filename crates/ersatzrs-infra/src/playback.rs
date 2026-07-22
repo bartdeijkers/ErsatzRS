@@ -1,5 +1,6 @@
 //! Shared helpers for building `FFmpeg` playback pipelines from persisted media
 //! metadata, used by both the MPEG-TS and HLS transcode paths.
+use crate::repositories::SqlxResultExt as _;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -179,7 +180,8 @@ pub async fn load_source_video_stream(
     )
     .bind(media_version_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -247,7 +249,8 @@ pub async fn load_source_audio_streams(
     )
     .bind(media_version_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     rows.into_iter()
         .map(|row| {
@@ -575,7 +578,8 @@ pub async fn load_channel_playback_profile(
     )
     .bind(channel_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
 
     row.as_ref().map(map_playback_profile).transpose()
 }
@@ -636,7 +640,8 @@ pub async fn load_playback_profile(
     )
     .bind(ffmpeg_profile_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
 
     row.as_ref().map(map_playback_profile).transpose()
 }
@@ -668,12 +673,12 @@ pub async fn load_channel_target_frame_rate(
     .bind(channel_id)
     .fetch_all(pool)
     .await
-    .map_err(|error| map_data_access_error("channel target frame rate", error))?;
+    .map_err(|error| map_data_access_error("channel target frame rate", &error))?;
 
     let mut rates = Vec::with_capacity(rows.len());
     for row in &rows {
         let value = decode_playback_column::<String>(row, "RFrameRate")?;
-        let frame_rate = parse_frame_rate(&value).ok_or_else(|| RepositoryError::Decode {
+        let frame_rate = parse_frame_rate(&value).ok_or(RepositoryError::Decode {
             kind: "channel target frame rate",
             value,
         })?;
@@ -697,9 +702,9 @@ pub async fn load_channel_target_frame_rate(
 fn map_playback_profile(row: &crate::db::DbRow) -> Result<PlaybackProfile> {
     Ok(PlaybackProfile {
         profile: FFmpegProfile {
-            id: row.try_get("ProfileId")?,
+            id: row.try_get("ProfileId").repository()?,
             name: decode_string_column(row, "ProfileName")?,
-            thread_count: row.try_get("ThreadCount")?,
+            thread_count: row.try_get("ThreadCount").repository()?,
             transcode_audio: decode_bool_column(row, "TranscodeAudio")?,
             transcode_video: decode_bool_column(row, "TranscodeVideo")?,
             hardware_acceleration: decode_enum_column(
@@ -710,8 +715,8 @@ fn map_playback_profile(row: &crate::db::DbRow) -> Result<PlaybackProfile> {
             vaapi_display: decode_optional_string_column(row, "VaapiDisplay")?,
             vaapi_driver: decode_enum_column("ffmpeg profile vaapi_driver", row, "VaapiDriver")?,
             vaapi_device: decode_optional_string_column(row, "VaapiDevice")?,
-            qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames")?,
-            resolution_id: row.try_get("ResolutionId")?,
+            qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames").repository()?,
+            resolution_id: row.try_get("ResolutionId").repository()?,
             scaling_behavior: decode_enum_column(
                 "ffmpeg profile scaling_behavior",
                 row,
@@ -723,34 +728,34 @@ fn map_playback_profile(row: &crate::db::DbRow) -> Result<PlaybackProfile> {
             video_preset: decode_optional_string_column(row, "VideoPreset")?,
             allow_b_frames: decode_bool_column(row, "AllowBFrames")?,
             bit_depth: decode_enum_column("ffmpeg profile bit_depth", row, "BitDepth")?,
-            video_bitrate: row.try_get("VideoBitrate")?,
-            video_buffer_size: row.try_get("VideoBufferSize")?,
+            video_bitrate: row.try_get("VideoBitrate").repository()?,
+            video_buffer_size: row.try_get("VideoBufferSize").repository()?,
             tonemap_algorithm: decode_enum_column(
                 "ffmpeg profile tonemap_algorithm",
                 row,
                 "TonemapAlgorithm",
             )?,
             audio_format: decode_enum_column("ffmpeg profile audio_format", row, "AudioFormat")?,
-            audio_bitrate: row.try_get("AudioBitrate")?,
-            audio_buffer_size: row.try_get("AudioBufferSize")?,
+            audio_bitrate: row.try_get("AudioBitrate").repository()?,
+            audio_buffer_size: row.try_get("AudioBufferSize").repository()?,
             normalize_loudness_mode: decode_enum_column(
                 "ffmpeg profile normalize_loudness_mode",
                 row,
                 "NormalizeLoudnessMode",
             )?,
-            target_loudness: row.try_get("TargetLoudness")?,
-            audio_channels: row.try_get("AudioChannels")?,
-            audio_sample_rate: row.try_get("AudioSampleRate")?,
+            target_loudness: row.try_get("TargetLoudness").repository()?,
+            audio_channels: row.try_get("AudioChannels").repository()?,
+            audio_sample_rate: row.try_get("AudioSampleRate").repository()?,
             normalize_framerate: decode_bool_column(row, "NormalizeFramerate")?,
             normalize_colors: decode_bool_column(row, "NormalizeColors")?,
             deinterlace_video: decode_optional_bool_column(row, "DeinterlaceVideo")?,
         },
         resolution: Resolution {
-            id: row.try_get("ResolutionRowId")?,
+            id: row.try_get("ResolutionRowId").repository()?,
             name: decode_optional_string_column(row, "ResolutionName")?.unwrap_or_default(),
             is_custom: decode_bool_column(row, "ResolutionIsCustom")?,
-            width: row.try_get("ResolutionWidth")?,
-            height: row.try_get("ResolutionHeight")?,
+            width: row.try_get("ResolutionWidth").repository()?,
+            height: row.try_get("ResolutionHeight").repository()?,
         },
     })
 }
@@ -798,22 +803,23 @@ pub async fn load_subtitles_for_media_item(
     .bind(media_item_id)
     .bind(media_item_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     rows.into_iter()
         .map(|row| {
             Ok(PlaybackSubtitle {
-                id: row.try_get("Id")?,
-                subtitle_kind: row.try_get("SubtitleKind")?,
-                title: row.try_get("Title")?,
-                stream_index: row.try_get("StreamIndex")?,
-                codec: row.try_get("Codec")?,
-                default: row.try_get::<i64, _>("Default")? != 0,
-                forced: row.try_get::<i64, _>("Forced")? != 0,
-                sdh: row.try_get::<i64, _>("SDH")? != 0,
-                language: row.try_get("Language")?,
-                is_extracted: row.try_get::<i64, _>("IsExtracted")? != 0,
-                path: row.try_get("Path")?,
+                id: row.try_get("Id").repository()?,
+                subtitle_kind: row.try_get("SubtitleKind").repository()?,
+                title: row.try_get("Title").repository()?,
+                stream_index: row.try_get("StreamIndex").repository()?,
+                codec: row.try_get("Codec").repository()?,
+                default: row.try_get::<i64, _>("Default").repository()? != 0,
+                forced: row.try_get::<i64, _>("Forced").repository()? != 0,
+                sdh: row.try_get::<i64, _>("SDH").repository()? != 0,
+                language: row.try_get("Language").repository()?,
+                is_extracted: row.try_get::<i64, _>("IsExtracted").repository()? != 0,
+                path: row.try_get("Path").repository()?,
             })
         })
         .collect()
@@ -839,18 +845,19 @@ pub async fn load_audio_streams_for_media_version(
     )
     .bind(media_version_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     rows.into_iter()
         .map(|row| {
             Ok(PlaybackAudioStream {
-                stream_index: row.try_get("Index")?,
-                title: row.try_get("Title")?,
-                language: row.try_get("Language")?,
-                default: row.try_get::<i64, _>("Default")? != 0,
-                forced: row.try_get::<i64, _>("Forced")? != 0,
-                codec: row.try_get("Codec")?,
-                channels: row.try_get("Channels")?,
+                stream_index: row.try_get("Index").repository()?,
+                title: row.try_get("Title").repository()?,
+                language: row.try_get("Language").repository()?,
+                default: row.try_get::<i64, _>("Default").repository()? != 0,
+                forced: row.try_get::<i64, _>("Forced").repository()? != 0,
+                codec: row.try_get("Codec").repository()?,
+                channels: row.try_get("Channels").repository()?,
             })
         })
         .collect()
@@ -1840,10 +1847,11 @@ async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) ->
     )
     .bind(playout_item_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     rows.into_iter()
-        .map(|row| row.try_get("WatermarkId").map_err(Into::into))
+        .map(|row| row.try_get("WatermarkId").repository())
         .collect()
 }
 
@@ -1859,11 +1867,12 @@ async fn load_playback_watermark_context(
     )
     .bind(playout_item_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     Ok(PlaybackWatermarkContext {
-        playout_id: row.try_get("PlayoutId")?,
+        playout_id: row.try_get("PlayoutId").repository()?,
         filler_kind: decode_enum_column("playout item filler kind", &row, "FillerKind")?,
-        playout_deco_id: row.try_get("DecoId")?,
+        playout_deco_id: row.try_get("DecoId").repository()?,
     })
 }
 
@@ -1875,7 +1884,8 @@ async fn load_playback_deco(pool: &DbPool, deco_id: i64) -> Result<PlaybackDeco>
     )
     .bind(deco_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     Ok(PlaybackDeco {
         mode: decode_enum_column("deco watermark mode", &row, "WatermarkMode")?,
         use_watermark_during_filler: decode_bool_column(&row, "UseWatermarkDuringFiller")?,
@@ -1891,7 +1901,8 @@ async fn load_playback_graphics_deco(pool: &DbPool, deco_id: i64) -> Result<Play
     )
     .bind(deco_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     Ok(PlaybackGraphicsDeco {
         mode: decode_enum_column("deco graphics elements mode", &row, "GraphicsElementsMode")?,
         use_graphics_during_filler: decode_bool_column(&row, "UseGraphicsElementsDuringFiller")?,
@@ -1908,9 +1919,10 @@ async fn load_deco_watermark_ids(pool: &DbPool, deco_id: i64) -> Result<Vec<i64>
     )
     .bind(deco_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
     rows.into_iter()
-        .map(|row| row.try_get("WatermarkId").map_err(Into::into))
+        .map(|row| row.try_get("WatermarkId").repository())
         .collect()
 }
 
@@ -1923,9 +1935,10 @@ async fn load_deco_graphics_element_ids(pool: &DbPool, deco_id: i64) -> Result<V
     )
     .bind(deco_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
     rows.into_iter()
-        .map(|row| row.try_get("GraphicsElementId").map_err(Into::into))
+        .map(|row| row.try_get("GraphicsElementId").repository())
         .collect()
 }
 
@@ -1948,13 +1961,14 @@ async fn load_active_template_deco(
     )
     .bind(deco_template_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     for row in rows {
-        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime")?);
-        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime")?);
+        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime").repository()?);
+        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime").repository()?);
         if start <= time_seconds && (finish == 0 || finish > time_seconds) {
-            let deco_id = row.try_get("DecoId")?;
+            let deco_id = row.try_get("DecoId").repository()?;
             let deco = load_playback_deco(pool, deco_id).await?;
             return Ok(Some(deco));
         }
@@ -1982,13 +1996,14 @@ async fn load_active_template_graphics_deco(
     )
     .bind(deco_template_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     for row in rows {
-        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime")?);
-        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime")?);
+        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime").repository()?);
+        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime").repository()?);
         if start <= time_seconds && (finish == 0 || finish > time_seconds) {
-            let deco_id = row.try_get("DecoId")?;
+            let deco_id = row.try_get("DecoId").repository()?;
             let deco = load_playback_graphics_deco(pool, deco_id).await?;
             return Ok(Some(deco));
         }
@@ -2012,11 +2027,12 @@ async fn active_playout_template_deco_id(
     )
     .bind(playout_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     for row in rows {
         if playout_template_matches(&row, now) {
-            return row.try_get("DecoTemplateId").map_err(Into::into);
+            return row.try_get("DecoTemplateId").repository();
         }
     }
     Ok(None)
@@ -2034,10 +2050,16 @@ async fn load_playout_item_graphics(
     )
     .bind(playout_item_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     rows.into_iter()
-        .map(|row| Ok((row.try_get("GraphicsElementId")?, row.try_get("Variables")?)))
+        .map(|row| {
+            Ok((
+                row.try_get("GraphicsElementId").repository()?,
+                row.try_get("Variables").repository()?,
+            ))
+        })
         .collect()
 }
 
@@ -2208,7 +2230,8 @@ async fn load_global_watermark_id(pool: &DbPool) -> Result<Option<i64>> {
     )
     .bind(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
     Ok(value
         .as_deref()
         .map(str::trim)
@@ -2227,7 +2250,8 @@ async fn load_channel_watermark(pool: &DbPool, id: i64) -> Result<ChannelWaterma
     )
     .bind(id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     map_channel_watermark(&row)
 }
 
@@ -2254,7 +2278,8 @@ async fn resolve_watermark_image_path(
             )
             .bind(channel_id)
             .fetch_optional(pool)
-            .await?;
+            .await
+            .repository()?;
             Ok(path
                 .as_deref()
                 .map(str::trim)
@@ -2297,7 +2322,7 @@ fn resolve_channel_logo_path(path: &str) -> PathBuf {
 
 fn map_channel_watermark(row: &crate::db::DbRow) -> Result<ChannelWatermark> {
     Ok(ChannelWatermark {
-        id: row.try_get("Id")?,
+        id: row.try_get("Id").repository()?,
         name: decode_string_column(row, "Name")?,
         mode: decode_enum_column("channel watermark mode", row, "Mode")?,
         image_source: decode_enum_column("channel watermark image source", row, "ImageSource")?,
@@ -2305,15 +2330,15 @@ fn map_channel_watermark(row: &crate::db::DbRow) -> Result<ChannelWatermark> {
         original_content_type: decode_optional_string_column(row, "OriginalContentType")?,
         location: decode_enum_column("watermark location", row, "Location")?,
         size: decode_enum_column("watermark size", row, "Size")?,
-        width_percent: row.try_get("WidthPercent")?,
-        horizontal_margin_percent: row.try_get("HorizontalMarginPercent")?,
-        vertical_margin_percent: row.try_get("VerticalMarginPercent")?,
-        frequency_minutes: row.try_get("FrequencyMinutes")?,
-        duration_seconds: row.try_get("DurationSeconds")?,
-        opacity: row.try_get("Opacity")?,
+        width_percent: row.try_get("WidthPercent").repository()?,
+        horizontal_margin_percent: row.try_get("HorizontalMarginPercent").repository()?,
+        vertical_margin_percent: row.try_get("VerticalMarginPercent").repository()?,
+        frequency_minutes: row.try_get("FrequencyMinutes").repository()?,
+        duration_seconds: row.try_get("DurationSeconds").repository()?,
+        opacity: row.try_get("Opacity").repository()?,
         place_within_source_content: decode_bool_column(row, "PlaceWithinSourceContent")?,
         opacity_expression: decode_optional_string_column(row, "OpacityExpression")?,
-        z_index: row.try_get("ZIndex")?,
+        z_index: row.try_get("ZIndex").repository()?,
     })
 }
 
@@ -2563,7 +2588,7 @@ mod tests {
         pool.close().await;
         assert!(matches!(
             load_source_video_stream(&pool, 10).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 
@@ -2654,7 +2679,7 @@ mod tests {
         pool.close().await;
         assert!(matches!(
             load_channel_target_frame_rate(&pool, 5).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 

@@ -2,13 +2,16 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::host::state::{
-    EntityLocker, LibraryLockGuard, LibraryScanJob, LibraryScanQueue, ScanProgressMap,
+use crate::host::state::{LibraryScanJob, LibraryScanQueue, ScanProgressMap};
+#[cfg(not(target_arch = "wasm32"))]
+use ersatzrs_app::{
+    commands::BeginOperation,
+    operations::{OperationCoordinator, OperationGuard, OperationKey},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
 struct ScanCleanup {
-    _lock_guard: LibraryLockGuard,
+    _lock_guard: OperationGuard,
     progress_map: ScanProgressMap,
     library_id: i64,
 }
@@ -111,8 +114,8 @@ pub async fn load_libraries_page_with_pool(
 
 /// Fires a background scan for a single library. Returns immediately.
 /// The actual sync work runs in a spawned tokio task. The library is marked
-/// as locked in `AppState::entity_locker` for the duration of the scan so the
-/// UI can render an indeterminate spinner while it runs.
+/// as active in the application operation coordinator for the duration of the
+/// scan so the UI can render an indeterminate spinner while it runs.
 #[server]
 #[allow(clippy::unused_async)]
 pub async fn scan_library(
@@ -124,7 +127,7 @@ pub async fn scan_library(
 
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
-    let locker = state.entity_locker.clone();
+    let operations = state.application.operations().clone();
     let progress_map = state.scan_progress.clone();
     let queue = state.library_scan_queue.clone();
 
@@ -136,7 +139,12 @@ pub async fn scan_library(
         deep_scan,
     });
     if should_spawn {
-        tokio::task::spawn(run_library_scan_queue(pool, locker, progress_map, queue));
+        tokio::task::spawn(run_library_scan_queue(
+            pool,
+            operations,
+            progress_map,
+            queue,
+        ));
     }
 
     Ok(true)
@@ -145,19 +153,19 @@ pub async fn scan_library(
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_library_scan_queue(
     pool: ersatzrs_infra::db::DbPool,
-    locker: EntityLocker,
+    operations: OperationCoordinator,
     progress_map: ScanProgressMap,
     queue: LibraryScanQueue,
 ) {
     while let Some(job) = queue.pop_next_or_stop() {
-        run_library_scan_job(&pool, &locker, &progress_map, job).await;
+        run_library_scan_job(&pool, &operations, &progress_map, job).await;
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_library_scan_job(
     pool: &ersatzrs_infra::db::DbPool,
-    locker: &EntityLocker,
+    operations: &OperationCoordinator,
     progress_map: &ScanProgressMap,
     job: LibraryScanJob,
 ) {
@@ -166,7 +174,10 @@ async fn run_library_scan_job(
         kind,
         deep_scan,
     } = job;
-    let Some(lock_guard) = locker.try_lock_library(library_id) else {
+    let Some(lock_guard) = operations
+        .begin(BeginOperation::new(OperationKey::LibraryScan(library_id)))
+        .into_guard()
+    else {
         tracing::info!(
             library_id,
             "library scan queue: already locked, skipping job"
@@ -263,7 +274,7 @@ pub async fn scan_show(
 
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
-    let locker = state.entity_locker.clone();
+    let operations = state.application.operations().clone();
     let progress_map = state.scan_progress.clone();
 
     tracing::info!(
@@ -274,7 +285,10 @@ pub async fn scan_show(
         "scan_show invoked"
     );
 
-    let Some(lock_guard) = locker.try_lock_library(library_id) else {
+    let Some(lock_guard) = operations
+        .begin(BeginOperation::new(OperationKey::LibraryScan(library_id)))
+        .into_guard()
+    else {
         tracing::info!(library_id, show_id, "scan_show: already locked, no-op");
         return Ok(false);
     };
@@ -370,7 +384,7 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let mut library_ids = state.entity_locker.locked_libraries();
+    let mut library_ids = state.application.operations().active_library_scans();
     library_ids.extend(state.library_scan_queue.queued_libraries());
     library_ids.sort_unstable();
     library_ids.dedup();
@@ -394,10 +408,6 @@ pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
 /// One row of the External Collections table. Mirrors ETV's
 /// `GetExternalCollectionsHandler` — one row per remote `MediaSource` whose
 /// libraries are flagged with `ShouldSyncItems = 1`.
-fn external_collections_lock_key(kind: &str, media_source_id: i64) -> String {
-    format!("collections:{kind}:{media_source_id}")
-}
-
 /// Returns one External Collections row per remote MediaSource whose
 /// libraries are flagged for collection sync. Mirrors ETV's
 /// `GetExternalCollectionsHandler`.
@@ -417,7 +427,7 @@ pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, S
 
 /// Fires a background sync of external collections for a single remote
 /// MediaSource. Returns immediately; the sync runs in a spawned task and is
-/// gated by the `EntityLocker` under `collections:{kind}:{media_source_id}`.
+/// gated by the shared application operation coordinator.
 #[server]
 #[allow(clippy::unused_async)]
 pub async fn scan_external_collections(
@@ -429,17 +439,21 @@ pub async fn scan_external_collections(
 
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
-    let locker = state.entity_locker.clone();
-    let key = external_collections_lock_key(&kind, media_source_id);
+    let operations = state.application.operations().clone();
+    let key = OperationKey::ExternalCollections {
+        provider: kind.clone(),
+        media_source_id,
+    };
 
     tracing::info!(media_source_id, kind = %kind, deep_scan, "scan_external_collections invoked");
 
-    if !locker.lock_key(key.clone()) {
+    let Some(operation_guard) = operations.begin(BeginOperation::new(key)).into_guard() else {
         tracing::info!(media_source_id, kind = %kind, "scan_external_collections: already locked, no-op");
         return Ok(false);
-    }
+    };
 
     tokio::task::spawn(async move {
+        let _operation_guard = operation_guard;
         let started = std::time::Instant::now();
         tracing::info!(media_source_id, kind = %kind, "external collections sync started");
         let res = match kind.as_str() {
@@ -475,7 +489,6 @@ pub async fn scan_external_collections(
         if let Err(e) = res {
             tracing::warn!(media_source_id, kind = %kind, error = %e, "external collections sync failed");
         }
-        locker.unlock_key(&key);
         tracing::info!(
             media_source_id,
             kind = %kind,
@@ -496,16 +509,7 @@ pub async fn list_locked_collections() -> Result<Vec<(String, i64)>, ServerFnErr
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state
-        .entity_locker
-        .locked_keys()
-        .into_iter()
-        .filter_map(|key| {
-            let rest = key.strip_prefix("collections:")?;
-            let (kind, id) = rest.rsplit_once(':')?;
-            id.parse::<i64>().ok().map(|id| (kind.to_owned(), id))
-        })
-        .collect())
+    Ok(state.application.operations().active_external_collections())
 }
 
 #[cfg(test)]

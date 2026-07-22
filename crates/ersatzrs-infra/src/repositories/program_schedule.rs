@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::collections::BTreeSet;
 
 use crate::db::{Db, DbRow};
@@ -57,7 +58,8 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         )
         .bind(playout_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter()
             .map(|row| {
                 let mut schedule = map_program_schedule(row)?;
@@ -70,7 +72,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn upsert(&self, schedule: &ProgramSchedule) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "ProgramSchedule"
                SET "Name" = ?,
@@ -89,7 +91,8 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         .bind(encode_enum(schedule.fixed_start_time_behavior))
         .bind(schedule.id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         if result.rows_affected() == 0 {
             sqlx::query(
                 r#"INSERT INTO "ProgramSchedule" (
@@ -105,10 +108,11 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
             .bind(schedule.random_start_point)
             .bind(encode_enum(schedule.fixed_start_time_behavior))
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         }
         sync_program_schedule_item_ids(&mut tx, schedule.id, &schedule.item_ids).await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -129,7 +133,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         )))
         .bind(schedule_id)
         .fetch_all(&self.0)
-        .await?;
+        .await.repository()?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
@@ -139,9 +143,9 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn upsert_item(&self, item: &ProgramScheduleItem) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         upsert_program_schedule_item(&mut tx, item).await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -149,7 +153,8 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         sqlx::query(r#"DELETE FROM "ProgramScheduleItem" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 
@@ -165,14 +170,15 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         )
         .bind(schedule_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter().map(map_program_schedule_alternate).collect()
     }
 
     async fn upsert_alternate(&self, alternate: &ProgramScheduleAlternate) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         upsert_program_schedule_alternate(&mut tx, alternate).await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -180,7 +186,8 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         sqlx::query(r#"DELETE FROM "ProgramScheduleAlternate" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
@@ -217,7 +224,8 @@ async fn sync_program_schedule_item_ids(
         sqlx::query(r#"DELETE FROM "ProgramScheduleItem" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
 
     let existing = existing.into_iter().collect::<BTreeSet<_>>();
@@ -233,7 +241,8 @@ async fn sync_program_schedule_item_ids(
             .bind(index)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         } else {
             let item = ProgramScheduleItem {
                 id,
@@ -319,7 +328,8 @@ async fn upsert_program_schedule_item(
     .bind(item.fallback_filler_id)
     .bind(item.id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
 
     if result.rows_affected() == 0 {
         sqlx::query(
@@ -365,7 +375,7 @@ async fn upsert_program_schedule_item(
         .bind(item.tail_filler_id)
         .bind(item.fallback_filler_id)
         .execute(&mut **tx)
-        .await?;
+        .await.repository()?;
     }
 
     sync_program_schedule_item_subtype(tx, item).await?;
@@ -396,19 +406,23 @@ async fn sync_program_schedule_item_subtype(
     sqlx::query(r#"DELETE FROM "ProgramScheduleDurationItem" WHERE "Id" = ?"#)
         .bind(item.id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"DELETE FROM "ProgramScheduleMultipleItem" WHERE "Id" = ?"#)
         .bind(item.id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"DELETE FROM "ProgramScheduleOneItem" WHERE "Id" = ?"#)
         .bind(item.id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"DELETE FROM "ProgramScheduleFloodItem" WHERE "Id" = ?"#)
         .bind(item.id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     match item.playout_mode {
         PlayoutMode::Duration => {
@@ -421,7 +435,8 @@ async fn sync_program_schedule_item_subtype(
             .bind(encode_duration(item.duration.unwrap_or_default()))
             .bind(encode_enum(item.tail_mode))
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         }
         PlayoutMode::Multiple => {
             sqlx::query(
@@ -433,19 +448,22 @@ async fn sync_program_schedule_item_subtype(
             .bind(item.multiple_count.as_deref())
             .bind(encode_enum(item.multiple_mode))
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         }
         PlayoutMode::One => {
             sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
                 .bind(item.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
         }
         PlayoutMode::Flood => {
             sqlx::query(r#"INSERT INTO "ProgramScheduleFloodItem" ("Id") VALUES (?)"#)
                 .bind(item.id)
                 .execute(&mut **tx)
-                .await?;
+                .await
+                .repository()?;
         }
     }
 
@@ -460,20 +478,23 @@ async fn load_ids_in_tx(
     let rows = sqlx::query(crate::db::assert_sql_safe(sql))
         .bind(id)
         .fetch_all(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     rows.iter()
-        .map(|row| row.try_get("Id").map_err(Into::into))
+        .map(|row| row.try_get("Id").repository())
         .collect()
 }
 
 fn map_program_schedule(row: &DbRow) -> Result<ProgramSchedule> {
     Ok(ProgramSchedule {
-        id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
-        keep_multi_part_episodes_together: row.try_get("KeepMultiPartEpisodesTogether")?,
-        treat_collections_as_shows: row.try_get("TreatCollectionsAsShows")?,
-        shuffle_schedule_items: row.try_get("ShuffleScheduleItems")?,
-        random_start_point: row.try_get("RandomStartPoint")?,
+        id: row.try_get("Id").repository()?,
+        name: row.try_get("Name").repository()?,
+        keep_multi_part_episodes_together: row
+            .try_get("KeepMultiPartEpisodesTogether")
+            .repository()?,
+        treat_collections_as_shows: row.try_get("TreatCollectionsAsShows").repository()?,
+        shuffle_schedule_items: row.try_get("ShuffleScheduleItems").repository()?,
+        random_start_point: row.try_get("RandomStartPoint").repository()?,
         fixed_start_time_behavior: decode_enum_column(
             "program schedule fixed_start_time_behavior",
             row,
@@ -490,7 +511,7 @@ async fn map_program_schedule_item(
     pool: &Pool<crate::db::Db>,
     row: &DbRow,
 ) -> Result<ProgramScheduleItem> {
-    let id = row.try_get::<EntityId, _>("Id")?;
+    let id = row.try_get::<EntityId, _>("Id").repository()?;
     let duration_text = row
         .try_get::<Option<String>, _>("PlayoutDuration")
         .ok()
@@ -530,32 +551,32 @@ async fn map_program_schedule_item(
 
     Ok(ProgramScheduleItem {
         id,
-        program_schedule_id: row.try_get("ProgramScheduleId")?,
+        program_schedule_id: row.try_get("ProgramScheduleId").repository()?,
         collection_type: decode_enum_column("program schedule item collection_type", row, "CollectionType")?,
-        collection_id: row.try_get("CollectionId")?,
-        media_item_id: row.try_get("MediaItemId")?,
-        multi_collection_id: row.try_get("MultiCollectionId")?,
-        smart_collection_id: row.try_get("SmartCollectionId")?,
-        rerun_collection_id: row.try_get("RerunCollectionId")?,
-        playlist_id: row.try_get("PlaylistId")?,
-        search_query: row.try_get("SearchQuery")?,
-        pre_roll_filler_id: row.try_get("PreRollFillerId")?,
-        mid_roll_filler_id: row.try_get("MidRollFillerId")?,
-        post_roll_filler_id: row.try_get("PostRollFillerId")?,
-        tail_filler_id: row.try_get("TailFillerId")?,
-        fallback_filler_id: row.try_get("FallbackFillerId")?,
+        collection_id: row.try_get("CollectionId").repository()?,
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+        smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+        rerun_collection_id: row.try_get("RerunCollectionId").repository()?,
+        playlist_id: row.try_get("PlaylistId").repository()?,
+        search_query: row.try_get("SearchQuery").repository()?,
+        pre_roll_filler_id: row.try_get("PreRollFillerId").repository()?,
+        mid_roll_filler_id: row.try_get("MidRollFillerId").repository()?,
+        post_roll_filler_id: row.try_get("PostRollFillerId").repository()?,
+        tail_filler_id: row.try_get("TailFillerId").repository()?,
+        fallback_filler_id: row.try_get("FallbackFillerId").repository()?,
         playout_mode,
         playback_order: decode_enum_column("program schedule item playback_order", row, "PlaybackOrder")?,
         multiple_mode: decode_optional_enum_column("program schedule item multiple_mode", row, "MultipleMode")?
             .unwrap_or_default(),
         multiple_count: row.try_get::<Option<String>, _>("Count").ok().flatten(),
         duration,
-        start_type: if row.try_get::<Option<String>, _>("StartTime")?.is_some() {
+        start_type: if row.try_get::<Option<String>, _>("StartTime").repository()?.is_some() {
             ersatzrs_domain::StartType::Fixed
         } else {
             ersatzrs_domain::StartType::Dynamic
         },
-        start_time: decode_optional_duration_text(row.try_get::<Option<String>, _>("StartTime")?.as_deref()),
+        start_time: decode_optional_duration_text(row.try_get::<Option<String>, _>("StartTime").repository()?.as_deref()),
         fixed_start_time_behavior: decode_optional_enum_column::<FixedStartTimeBehavior>(
             "program schedule item fixed_start_time_behavior",
             row,
@@ -571,12 +592,12 @@ async fn map_program_schedule_item(
         )?,
         marathon_group_by: decode_enum_column("program schedule item marathon_group_by", row, "MarathonGroupBy")?,
         marathon_shuffle_items: decode_bool_column(row, "MarathonShuffleItems")?,
-        custom_title: row.try_get("CustomTitle")?,
-        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
-        preferred_audio_title: row.try_get("PreferredAudioTitle")?,
-        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
+        custom_title: row.try_get("CustomTitle").repository()?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
+        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode").repository()?,
         subtitle_mode: decode_optional_enum_column("program schedule item subtitle_mode", row, "SubtitleMode")?,
-        sort_order: row.try_get("Index")?,
+        sort_order: row.try_get("Index").repository()?,
         watermark_ids: load_ids(
             pool,
             r#"SELECT "WatermarkId" FROM "ProgramScheduleItemWatermark" WHERE "ProgramScheduleItemId" = ? ORDER BY "WatermarkId""#,
@@ -594,20 +615,29 @@ async fn map_program_schedule_item(
 
 fn map_program_schedule_alternate(row: &DbRow) -> Result<ProgramScheduleAlternate> {
     Ok(ProgramScheduleAlternate {
-        id: row.try_get("Id")?,
-        program_schedule_id: row.try_get("ProgramScheduleId")?,
-        playout_id: Some(row.try_get("PlayoutId")?),
-        sort_order: row.try_get("Index")?,
-        days_of_week: decode_string_list(row.try_get::<Option<String>, _>("DaysOfWeek")?),
-        days_of_month: decode_int_list(row.try_get::<Option<String>, _>("DaysOfMonth")?),
-        months_of_year: decode_int_list(row.try_get::<Option<String>, _>("MonthsOfYear")?),
+        id: row.try_get("Id").repository()?,
+        program_schedule_id: row.try_get("ProgramScheduleId").repository()?,
+        playout_id: Some(row.try_get("PlayoutId").repository()?),
+        sort_order: row.try_get("Index").repository()?,
+        days_of_week: decode_string_list(
+            row.try_get::<Option<String>, _>("DaysOfWeek")
+                .repository()?,
+        ),
+        days_of_month: decode_int_list(
+            row.try_get::<Option<String>, _>("DaysOfMonth")
+                .repository()?,
+        ),
+        months_of_year: decode_int_list(
+            row.try_get::<Option<String>, _>("MonthsOfYear")
+                .repository()?,
+        ),
         limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
-        start_month: row.try_get("StartMonth")?,
-        start_day: row.try_get("StartDay")?,
-        start_year: row.try_get("StartYear")?,
-        end_month: row.try_get("EndMonth")?,
-        end_day: row.try_get("EndDay")?,
-        end_year: row.try_get("EndYear")?,
+        start_month: row.try_get("StartMonth").repository()?,
+        start_day: row.try_get("StartDay").repository()?,
+        start_year: row.try_get("StartYear").repository()?,
+        end_month: row.try_get("EndMonth").repository()?,
+        end_day: row.try_get("EndDay").repository()?,
+        end_year: row.try_get("EndYear").repository()?,
     })
 }
 
@@ -647,7 +677,8 @@ async fn upsert_program_schedule_alternate(
     .bind(alternate.end_year)
     .bind(alternate.id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
 
     if result.rows_affected() == 0 {
         sqlx::query(
@@ -672,7 +703,8 @@ async fn upsert_program_schedule_alternate(
         .bind(alternate.end_day)
         .bind(alternate.end_year)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
 
     Ok(())

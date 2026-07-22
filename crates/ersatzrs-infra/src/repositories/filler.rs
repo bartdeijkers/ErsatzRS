@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{FillerRepository, Result};
 use ersatzrs_domain::{EntityId, FillerPreset};
@@ -25,7 +26,8 @@ impl FillerRepository for SqliteFillerRepository {
     async fn list(&self) -> Result<Vec<FillerPreset>> {
         let rows = sqlx::query(r#"SELECT * FROM "FillerPreset" ORDER BY "Name", "Id""#)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
         rows.iter().map(map_filler).collect()
     }
 
@@ -55,7 +57,8 @@ impl FillerRepository for SqliteFillerRepository {
         .bind(&preset.expression)
         .bind(preset.use_chapters_as_media_items)
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 
@@ -63,15 +66,16 @@ impl FillerRepository for SqliteFillerRepository {
         sqlx::query(r#"DELETE FROM "FillerPreset" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
 
 fn map_filler(row: &DbRow) -> Result<FillerPreset> {
     Ok(FillerPreset {
-        id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        name: row.try_get("Name").repository()?,
         filler_kind: decode_enum_column("filler preset filler_kind", row, "FillerKind")?,
         filler_mode: decode_enum_column("filler preset filler_mode", row, "FillerMode")?,
         collection_type: decode_enum_column(
@@ -79,19 +83,21 @@ fn map_filler(row: &DbRow) -> Result<FillerPreset> {
             row,
             "CollectionType",
         )?,
-        collection_id: row.try_get("CollectionId")?,
-        media_item_id: row.try_get("MediaItemId")?,
-        multi_collection_id: row.try_get("MultiCollectionId")?,
-        smart_collection_id: row.try_get("SmartCollectionId")?,
-        playlist_id: row.try_get("PlaylistId")?,
+        collection_id: row.try_get("CollectionId").repository()?,
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+        smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+        playlist_id: row.try_get("PlaylistId").repository()?,
         duration: decode_optional_duration_text(
-            row.try_get::<Option<String>, _>("Duration")?.as_deref(),
+            row.try_get::<Option<String>, _>("Duration")
+                .repository()?
+                .as_deref(),
         ),
-        count: row.try_get("Count")?,
-        pad_to_nearest_minute: row.try_get("PadToNearestMinute")?,
-        allow_watermarks: row.try_get("AllowWatermarks")?,
-        expression: row.try_get("Expression")?,
-        use_chapters_as_media_items: row.try_get("UseChaptersAsMediaItems")?,
+        count: row.try_get("Count").repository()?,
+        pad_to_nearest_minute: row.try_get("PadToNearestMinute").repository()?,
+        allow_watermarks: row.try_get("AllowWatermarks").repository()?,
+        expression: row.try_get("Expression").repository()?,
+        use_chapters_as_media_items: row.try_get("UseChaptersAsMediaItems").repository()?,
         // ErsatzTV FillerPreset has no PlaybackOrder column; use default
         playback_order: ersatzrs_domain::PlaybackOrder::default(),
     })

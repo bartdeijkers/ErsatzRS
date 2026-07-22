@@ -1,4 +1,5 @@
 //! Typed persistence operations for the admin settings route family.
+use crate::repositories::SqlxResultExt as _;
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use serde::{Deserialize, Serialize};
@@ -50,7 +51,7 @@ pub async fn load_select_options(
     sqlx::query_as::<_, SettingsSelectOption>(sql)
         .fetch_all(pool)
         .await
-        .map_err(|error| map_data_access_error("admin settings option", error))
+        .map_err(|error| map_data_access_error("admin settings option", &error))
 }
 
 /// Load an optional persisted configuration string.
@@ -63,7 +64,7 @@ pub async fn load_optional_string(pool: &DbPool, key: &str) -> Result<Option<Str
         .bind(key)
         .fetch_optional(pool)
         .await
-        .map_err(|error| map_data_access_error("admin setting", error))
+        .map_err(|error| map_data_access_error("admin setting", &error))
 }
 
 /// Load a string, using `default` only when the key is absent.
@@ -144,13 +145,15 @@ pub async fn save_config_value(pool: &DbPool, key: &str, value: &str) -> Result<
         .bind(value)
         .bind(key)
         .execute(pool)
-        .await?;
+        .await
+        .repository()?;
     if updated.rows_affected() == 0 {
         sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
             .bind(key)
             .bind(value)
             .execute(pool)
-            .await?;
+            .await
+            .repository()?;
     }
     Ok(())
 }
@@ -167,7 +170,8 @@ pub async fn save_optional_i64(pool: &DbPool, key: &str, value: Option<i64>) -> 
         sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
             .bind(key)
             .execute(pool)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
@@ -181,7 +185,7 @@ pub async fn load_playout_ids(pool: &DbPool) -> Result<Vec<i64>> {
     sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" ORDER BY "Id""#)
         .fetch_all(pool)
         .await
-        .map_err(|error| map_data_access_error("playout id", error))
+        .map_err(|error| map_data_access_error("playout id", &error))
 }
 
 /// Create a unique custom resolution.
@@ -197,7 +201,7 @@ pub async fn create_custom_resolution(pool: &DbPool, width: i32, height: i32) ->
             .bind(height)
             .fetch_optional(pool)
             .await
-            .map_err(|error| map_data_access_error("custom resolution id", error))?;
+            .map_err(|error| map_data_access_error("custom resolution id", &error))?;
     if existing.is_some() {
         return Err(RepositoryError::Conflict(
             "Resolution width and height must be unique".to_owned(),
@@ -211,7 +215,8 @@ pub async fn create_custom_resolution(pool: &DbPool, width: i32, height: i32) ->
     .bind(width)
     .bind(height)
     .execute(pool)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -227,7 +232,7 @@ pub async fn delete_custom_resolution(pool: &DbPool, id: i64) -> Result<()> {
             .bind(id)
             .fetch_optional(pool)
             .await
-            .map_err(|error| map_data_access_error("custom resolution id", error))?;
+            .map_err(|error| map_data_access_error("custom resolution id", &error))?;
     if existing.is_none() {
         return Err(RepositoryError::NotFound {
             kind: "resolution",
@@ -240,18 +245,20 @@ pub async fn delete_custom_resolution(pool: &DbPool, id: i64) -> Result<()> {
     )
     .fetch_optional(pool)
     .await
-    .map_err(|error| map_data_access_error("replacement resolution id", error))?;
+    .map_err(|error| map_data_access_error("replacement resolution id", &error))?;
     if let Some(replacement_id) = replacement {
         sqlx::query(r#"UPDATE "FFmpegProfile" SET "ResolutionId" = ? WHERE "ResolutionId" = ?"#)
             .bind(replacement_id)
             .bind(id)
             .execute(pool)
-            .await?;
+            .await
+            .repository()?;
     }
     sqlx::query(r#"DELETE FROM "Resolution" WHERE "Id" = ? AND "IsCustom" = 1"#)
         .bind(id)
         .execute(pool)
-        .await?;
+        .await
+        .repository()?;
     Ok(())
 }
 
@@ -269,7 +276,7 @@ mod tests {
 
         assert!(matches!(
             load_string(&pool, "test", "default").await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 

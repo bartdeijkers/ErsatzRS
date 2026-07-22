@@ -1,33 +1,58 @@
-//! Application commands, queries, and cross-adapter orchestration.
+//! Storage- and transport-neutral application services.
 //!
-//! This crate is storage- and transport-neutral. Concrete use-case services
-//! will be added to this container as complete vertical slices move out of the
-//! web adapter.
+//! Commands and queries enter through this crate, which coordinates core
+//! ports without depending on SQL, HTTP, scheduler implementations, `FFmpeg`,
+//! or platform adapters. The native web host constructs [`ApplicationServices`]
+//! from concrete infrastructure ports.
 
-/// Native application services assembled by the composition root.
+pub mod commands;
+pub mod error;
+pub mod operations;
+pub mod ports;
+pub mod queries;
+
+pub use error::{ApplicationError, Result};
+pub use operations::OperationCoordinator;
+pub use ports::ApplicationPorts;
+
+/// Native application services assembled by a composition root.
 ///
-/// The container is intentionally empty until the first vertical slice lands;
-/// defining it here gives each adapter one stable application entry point
-/// without inventing placeholder use cases.
-#[derive(Debug, Default)]
-#[non_exhaustive]
-pub struct ApplicationServices;
+/// The port set is intentionally limited to the playout and library
+/// repositories required by the immediately following Phase 7B vertical
+/// slices. Additional ports belong beside the use case that first needs them.
+#[derive(Clone)]
+pub struct ApplicationServices {
+    ports: ApplicationPorts,
+    operations: OperationCoordinator,
+}
 
 impl ApplicationServices {
-    /// Creates the application-service container.
+    /// Construct the application container from injected core ports and the
+    /// process-wide operation coordinator.
     #[must_use]
-    pub const fn new() -> Self {
-        Self
+    pub fn new(ports: ApplicationPorts, operations: OperationCoordinator) -> Self {
+        Self { ports, operations }
+    }
+
+    /// Core repository ports used by application use cases.
+    #[must_use]
+    pub const fn ports(&self) -> &ApplicationPorts {
+        &self.ports
+    }
+
+    /// Shared process-local coordination for long-running operations.
+    #[must_use]
+    pub const fn operations(&self) -> &OperationCoordinator {
+        &self.operations
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::ApplicationServices;
-
-    #[test]
-    fn application_services_has_a_stable_empty_starting_point() {
-        let services = ApplicationServices::new();
-        assert_eq!(format!("{services:?}"), "ApplicationServices");
+impl std::fmt::Debug for ApplicationServices {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ApplicationServices")
+            .field("ports", &self.ports)
+            .field("operations", &self.operations)
+            .finish()
     }
 }

@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::collections::BTreeSet;
 
 use crate::db::{Db, DbRow};
@@ -34,7 +35,8 @@ impl BlockRepository for SqliteBlockRepository {
             sqlx::query(r#"SELECT * FROM "Block" WHERE "BlockGroupId" = ? ORDER BY "Name", "Id""#)
                 .bind(group_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
         rows.iter()
             .map(|row| {
                 let mut block = map_block(row)?;
@@ -45,7 +47,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn upsert(&self, block: &Block) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "Block"
                SET "BlockGroupId" = ?,
@@ -62,7 +64,8 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(encode_enum(block.stop_scheduling))
         .bind(block.id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         if result.rows_affected() == 0 {
             sqlx::query(
                 r#"INSERT INTO "Block" (
@@ -76,10 +79,11 @@ impl BlockRepository for SqliteBlockRepository {
             .bind(block.duration.num_minutes().max(0))
             .bind(encode_enum(block.stop_scheduling))
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         }
         sync_block_item_ids(&mut tx, block.id, &block.item_ids).await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -101,7 +105,8 @@ impl BlockRepository for SqliteBlockRepository {
         )
         .bind(block_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
@@ -111,9 +116,9 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn upsert_item(&self, item: &BlockItem) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         upsert_block_item(&mut tx, item).await?;
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -121,7 +126,8 @@ impl BlockRepository for SqliteBlockRepository {
         sqlx::query(r#"DELETE FROM "BlockItem" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
@@ -143,7 +149,8 @@ async fn sync_block_item_ids(
         sqlx::query(r#"DELETE FROM "BlockItem" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
 
     let existing = existing.into_iter().collect::<BTreeSet<_>>();
@@ -159,7 +166,8 @@ async fn sync_block_item_ids(
             .bind(index)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         } else {
             let item = BlockItem {
                 id,
@@ -200,7 +208,8 @@ async fn upsert_block_item(tx: &mut Transaction<'_, Db>, item: &BlockItem) -> Re
     .bind(encode_enum(item.playback_order))
     .bind(item.id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
 
     if result.rows_affected() == 0 {
         sqlx::query(
@@ -221,7 +230,8 @@ async fn upsert_block_item(tx: &mut Transaction<'_, Db>, item: &BlockItem) -> Re
         .bind(item.search_query.as_deref())
         .bind(encode_enum(item.playback_order))
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
 
     replace_ids(
@@ -252,20 +262,21 @@ async fn load_ids_in_tx(
     let rows = sqlx::query(crate::db::assert_sql_safe(sql))
         .bind(id)
         .fetch_all(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     rows.iter()
-        .map(|row| row.try_get("Id").map_err(Into::into))
+        .map(|row| row.try_get("Id").repository())
         .collect()
 }
 
 fn map_block(row: &DbRow) -> Result<Block> {
-    let date_updated: String = row.try_get("DateUpdated")?;
+    let date_updated: String = row.try_get("DateUpdated").repository()?;
     let updated_ticks: i64 = date_updated.parse().unwrap_or(0);
-    let minutes: i64 = row.try_get("Minutes")?;
+    let minutes: i64 = row.try_get("Minutes").repository()?;
     Ok(Block {
-        id: row.try_get("Id")?,
-        block_group_id: row.try_get("BlockGroupId")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        block_group_id: row.try_get("BlockGroupId").repository()?,
+        name: row.try_get("Name").repository()?,
         updated_ticks,
         duration: chrono::Duration::minutes(minutes),
         stop_scheduling: decode_enum_column("block stop_scheduling", row, "StopScheduling")?,
@@ -274,19 +285,19 @@ fn map_block(row: &DbRow) -> Result<Block> {
 }
 
 async fn map_block_item(pool: &Pool<crate::db::Db>, row: &DbRow) -> Result<BlockItem> {
-    let id = row.try_get::<EntityId, _>("Id")?;
+    let id = row.try_get::<EntityId, _>("Id").repository()?;
     Ok(BlockItem {
         id,
-        block_id: row.try_get("BlockId")?,
+        block_id: row.try_get("BlockId").repository()?,
         collection_type: decode_enum_column("block item collection_type", row, "CollectionType")?,
-        collection_id: row.try_get("CollectionId")?,
-        media_item_id: row.try_get("MediaItemId")?,
-        multi_collection_id: row.try_get("MultiCollectionId")?,
-        smart_collection_id: row.try_get("SmartCollectionId")?,
+        collection_id: row.try_get("CollectionId").repository()?,
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+        smart_collection_id: row.try_get("SmartCollectionId").repository()?,
         playlist_id: None,
-        search_query: row.try_get("SearchQuery")?,
+        search_query: row.try_get("SearchQuery").repository()?,
         playback_order: decode_enum_column("block item playback_order", row, "PlaybackOrder")?,
-        sort_order: row.try_get("Index")?,
+        sort_order: row.try_get("Index").repository()?,
         watermark_ids: load_ids(
             pool,
             r#"SELECT "WatermarkId" FROM "BlockItemWatermark" WHERE "BlockItemId" = ? ORDER BY "WatermarkId""#,

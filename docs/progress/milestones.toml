@@ -128,7 +128,7 @@ dialog workflow. Scanner/show notes now describe implemented provider behavior.
 id         = 'p7b-01'
 phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Build the application service foundation'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'application-use-case-layer'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-01']
@@ -137,7 +137,19 @@ ersatzrs-app contains documented command/query/application-error modules,
 core no longer exposes sqlx errors, infra maps concrete failures, and the
 native composition root constructs injected ApplicationServices.
 '''
-evidence = ''
+evidence = '''
+`ersatzrs-app` now owns documented command/query/application-error modules,
+injected core ports, and the shared operation coordinator exposed through
+`ApplicationServices`. `RepositoryError` is storage-neutral, all SQLx failures
+crossing repository boundaries are mapped in infrastructure, and
+architecture-lint rejects direct or renamed storage dependencies in core. The
+native web composition root constructs the services from concrete library and
+playout repositories and shares their operation state with scheduler tasks.
+Focused core locking, app service, infra mapping, web composition, and xtask
+boundary regressions passed. Both workspace clippy configurations,
+`./run.sh test-closeout` (967 nextest tests plus doctests), and
+`cargo xtask parity-check` passed; the 2026-07-22 session records the closeout.
+'''
 
 [[milestone]]
 id         = 'p7b-02'

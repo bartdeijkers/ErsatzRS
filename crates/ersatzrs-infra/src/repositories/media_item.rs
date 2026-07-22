@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{MediaItemRepository, Result};
 use ersatzrs_domain::{EntityId, MediaItem};
@@ -25,7 +26,8 @@ impl MediaItemRepository for SqliteMediaItemRepository {
             sqlx::query(r#"SELECT * FROM "MediaItem" WHERE "LibraryPathId" = ? ORDER BY "Id""#)
                 .bind(path_id)
                 .fetch_all(&self.0)
-                .await?;
+                .await
+                .repository()?;
         rows.iter().map(map_media_item).collect()
     }
 
@@ -47,7 +49,8 @@ impl MediaItemRepository for SqliteMediaItemRepository {
         )
         .bind(path)
         .fetch_one(&self.0)
-        .await?;
+        .await
+        .repository()?;
         map_media_item(&row)
     }
 
@@ -64,20 +67,21 @@ impl MediaItemRepository for SqliteMediaItemRepository {
         .bind(item.sub_kind.as_deref())
         .bind(item.parent_media_item_id)
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 }
 
 fn map_media_item(row: &DbRow) -> Result<MediaItem> {
     Ok(MediaItem {
-        id: row.try_get("Id")?,
-        library_path_id: row.try_get("LibraryPathId")?,
+        id: row.try_get("Id").repository()?,
+        library_path_id: row.try_get("LibraryPathId").repository()?,
         collection_ids: Vec::new(),
         trakt_list_item_ids: Vec::new(),
         state: decode_enum_column("media item state", row, "State")?,
         content_kind: decode_enum_column("content kind", row, "ContentKind")?,
-        sub_kind: row.try_get("SubKind")?,
-        parent_media_item_id: row.try_get("ParentMediaItemId")?,
+        sub_kind: row.try_get("SubKind").repository()?,
+        parent_media_item_id: row.try_get("ParentMediaItemId").repository()?,
     })
 }

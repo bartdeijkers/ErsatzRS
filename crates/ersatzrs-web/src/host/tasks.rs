@@ -1,5 +1,4 @@
 use ersatzrs_core::hls::HlsSessionRegistry;
-use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
@@ -28,8 +27,7 @@ pub fn spawn_background_tasks(
         tokio::spawn(run_trakt_maintenance(maintenance.pool, shutdown.clone())),
         tokio::spawn(run_maintenance_scheduler(
             maintenance.playout_build_rx,
-            maintenance.playout_locker,
-            maintenance.playout_build_activity,
+            maintenance.application,
             maintenance.hls_sessions,
             shutdown,
         )),
@@ -45,24 +43,23 @@ pub struct HdhrTaskInputs {
 pub struct MaintenanceTaskInputs {
     pub pool: DbPool,
     pub playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
-    pub playout_locker: EntityLocker,
-    pub playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
+    pub application: Arc<ersatzrs_app::ApplicationServices>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
 }
 
 async fn run_maintenance_scheduler(
     playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
-    playout_locker: EntityLocker,
-    playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
+    application: Arc<ersatzrs_app::ApplicationServices>,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
     shutdown: CancellationToken,
 ) {
+    let operations = application.operations();
     if let Err(error) = run_scheduler(SchedulerOptions {
         tick: std::time::Duration::from_mins(1),
         build_requests: Some(playout_build_rx),
-        build_activity: Some(playout_build_activity),
+        build_activity: Some(operations.playout_activity()),
         hls_sessions: Some(hls_sessions),
-        locker: Some(playout_locker),
+        locker: Some(operations.entity_locker()),
         shutdown: Some(shutdown),
         ..SchedulerOptions::default()
     })

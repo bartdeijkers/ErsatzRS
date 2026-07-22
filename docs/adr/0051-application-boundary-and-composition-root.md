@@ -6,10 +6,14 @@ Accepted (2026-07-21)
 
 ## Implementation
 
-Partial — `ersatzrs-app` now exposes its application-service container and the
-baseline-aware `cargo xtask architecture-lint` gate enforces the boundary.
-Phase 7B migrates the concrete use cases and constructs their injected services
-in the native web composition root.
+Partial — the Phase 7B foundation in `ersatzrs-app` now exposes documented command, query,
+application-error, port, and operation-coordination modules. Core repository
+errors are storage-neutral, infrastructure maps concrete SQLx failures at its
+boundary, and the native web composition root constructs injected
+`ApplicationServices` with one process-wide operation coordinator. The
+baseline-aware `cargo xtask architecture-lint` gate also prevents concrete
+storage dependencies from re-entering core. Phase 7B still has to migrate the
+playout-build, scan, block-preview, and remaining admin vertical slices.
 
 ## Context
 

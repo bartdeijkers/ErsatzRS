@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::collections::HashSet;
 
 use chrono::{Duration, Utc};
@@ -74,20 +75,24 @@ where
         )
         .bind(list_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         for row in rows {
             let item = TraktMatchItem {
-                id: row.try_get("Id")?,
+                id: row.try_get("Id").repository()?,
                 kind: decode_enum_column("TraktListItemKind", &row, "Kind")?,
                 title: row
-                    .try_get::<Option<String>, _>("Title")?
+                    .try_get::<Option<String>, _>("Title")
+                    .repository()?
                     .unwrap_or_default(),
-                year: row.try_get("Year")?,
-                season: row.try_get("Season")?,
-                episode: row.try_get("Episode")?,
-                rank: row.try_get("Rank")?,
-                guids: self.load_item_guids(row.try_get("Id")?).await?,
+                year: row.try_get("Year").repository()?,
+                season: row.try_get("Season").repository()?,
+                episode: row.try_get("Episode").repository()?,
+                rank: row.try_get("Rank").repository()?,
+                guids: self
+                    .load_item_guids(row.try_get("Id").repository()?)
+                    .await?,
             };
 
             let matched_id = self.identify_item(&item).await?;
@@ -95,7 +100,8 @@ where
                 .bind(matched_id)
                 .bind(item.id)
                 .execute(&self.pool)
-                .await?;
+                .await
+                .repository()?;
 
             if let Some(playlist_id) = playlist_id {
                 if let Some(media_item_id) = matched_id {
@@ -112,7 +118,8 @@ where
             .bind(encode_datetime(Utc::now()))
             .bind(list_id)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
 
         Ok(())
     }
@@ -138,7 +145,8 @@ where
         .bind(generate_playlist)
         .bind(list_id)
         .execute(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         if generate_playlist {
             self.ensure_generated_playlist(&TraktList {
@@ -152,11 +160,13 @@ where
             sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
                 .bind(playlist_id)
                 .execute(&self.pool)
-                .await?;
+                .await
+                .repository()?;
             sqlx::query(r#"UPDATE "TraktList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
                 .bind(list_id)
                 .execute(&self.pool)
-                .await?;
+                .await
+                .repository()?;
         }
 
         Ok(())
@@ -173,19 +183,22 @@ where
         )
         .bind(list_id)
         .fetch_optional(&self.pool)
-        .await?
+        .await
+        .repository()?
         .flatten();
 
         sqlx::query(r#"DELETE FROM "TraktList" WHERE "Id" = ?"#)
             .bind(list_id)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
 
         if let Some(playlist_id) = maybe_playlist_id {
             sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
                 .bind(playlist_id)
                 .execute(&self.pool)
-                .await?;
+                .await
+                .repository()?;
         }
 
         Ok(())
@@ -207,16 +220,19 @@ where
         )
         .bind(encode_datetime(cutoff))
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         let mut count = 0;
         for row in rows {
             let locator = TraktListLocator {
                 user: row
-                    .try_get::<Option<String>, _>("User")?
+                    .try_get::<Option<String>, _>("User")
+                    .repository()?
                     .unwrap_or_default(),
                 list: row
-                    .try_get::<Option<String>, _>("List")?
+                    .try_get::<Option<String>, _>("List")
+                    .repository()?
                     .unwrap_or_default(),
             };
             self.add_or_refresh(&locator).await?;
@@ -241,11 +257,13 @@ where
         )
         .bind(encode_datetime(cutoff))
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         let mut count = 0;
         for row in rows {
-            self.match_list_items(row.try_get("Id")?).await?;
+            self.match_list_items(row.try_get("Id").repository()?)
+                .await?;
             count += 1;
         }
 
@@ -263,10 +281,11 @@ where
         .bind(&list.user)
         .bind(&list.list)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         if let Some(row) = maybe_existing {
-            let id = row.try_get("Id")?;
+            let id = row.try_get("Id").repository()?;
             sqlx::query(
                 r#"UPDATE "TraktList"
                    SET "TraktId" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?
@@ -278,7 +297,8 @@ where
             .bind(list.item_count)
             .bind(id)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
             Ok(id)
         } else {
             let result = sqlx::query(
@@ -295,7 +315,8 @@ where
             .bind(list.trakt_id)
             .bind(&list.user)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
             Ok(last_insert_id(result))
         }
     }
@@ -316,13 +337,14 @@ where
             .map(|item| item.trakt_id)
             .collect::<HashSet<_>>();
 
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin().await.repository()?;
         for item in &existing {
             if !incoming_ids.contains(&item.trakt_id) {
                 sqlx::query(r#"DELETE FROM "TraktListItem" WHERE "Id" = ?"#)
                     .bind(item.id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
             }
         }
 
@@ -346,11 +368,13 @@ where
                 .bind(zero_as_none(item.episode))
                 .bind(existing.id)
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .repository()?;
                 sqlx::query(r#"DELETE FROM "TraktListItemGuid" WHERE "TraktListItemId" = ?"#)
                     .bind(existing.id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
                 insert_item_guids(&mut tx, existing.id, &item.guids).await?;
             } else {
                 let item_id = insert_item(&mut tx, list_id, item).await?;
@@ -362,8 +386,9 @@ where
             .bind(encode_datetime(Utc::now()))
             .bind(list_id)
             .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
+            .await
+            .repository()?;
+        tx.commit().await.repository()?;
 
         self.load_list(list_id).await
     }
@@ -372,34 +397,41 @@ where
         let row = sqlx::query(r#"SELECT * FROM "TraktList" WHERE "Id" = ?"#)
             .bind(list_id)
             .fetch_optional(&self.pool)
-            .await?
+            .await
+            .repository()?
             .ok_or(RepositoryError::NotFound {
                 kind: "trakt list",
                 id: list_id,
             })?;
 
         Ok(TraktList {
-            id: row.try_get("Id")?,
-            trakt_id: row.try_get("TraktId")?,
+            id: row.try_get("Id").repository()?,
+            trakt_id: row.try_get("TraktId").repository()?,
             name: row
-                .try_get::<Option<String>, _>("Name")?
+                .try_get::<Option<String>, _>("Name")
+                .repository()?
                 .unwrap_or_default(),
             user: row
-                .try_get::<Option<String>, _>("User")?
+                .try_get::<Option<String>, _>("User")
+                .repository()?
                 .unwrap_or_default(),
             list: row
-                .try_get::<Option<String>, _>("List")?
+                .try_get::<Option<String>, _>("List")
+                .repository()?
                 .unwrap_or_default(),
-            description: row.try_get("Description")?,
-            item_count: row.try_get("ItemCount")?,
+            description: row.try_get("Description").repository()?,
+            item_count: row.try_get("ItemCount").repository()?,
             auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
             generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
-            playlist_id: row.try_get("PlaylistId")?,
+            playlist_id: row.try_get("PlaylistId").repository()?,
             last_update: decode_optional_datetime(
                 "TraktList.LastUpdate",
-                row.try_get("LastUpdate")?,
+                row.try_get("LastUpdate").repository()?,
             )?,
-            last_match: decode_optional_datetime("TraktList.LastMatch", row.try_get("LastMatch")?)?,
+            last_match: decode_optional_datetime(
+                "TraktList.LastMatch",
+                row.try_get("LastMatch").repository()?,
+            )?,
             item_ids: self.load_item_ids(list_id).await?,
         })
     }
@@ -410,8 +442,11 @@ where
         )
         .bind(list_id)
         .fetch_all(&self.pool)
-        .await?;
-        rows.iter().map(|row| Ok(row.try_get("Id")?)).collect()
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| row.try_get("Id").repository())
+            .collect()
     }
 
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
@@ -423,13 +458,14 @@ where
         )
         .bind(list_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter()
             .map(|row| {
                 Ok(ExistingItem {
-                    id: row.try_get("Id")?,
-                    trakt_id: row.try_get("TraktId")?,
+                    id: row.try_get("Id").repository()?,
+                    trakt_id: row.try_get("TraktId").repository()?,
                 })
             })
             .collect()
@@ -444,12 +480,14 @@ where
         )
         .bind(item_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         rows.iter()
             .map(|row| {
                 Ok(row
-                    .try_get::<Option<String>, _>("Guid")?
+                    .try_get::<Option<String>, _>("Guid")
+                    .repository()?
                     .unwrap_or_default())
             })
             .collect()
@@ -484,7 +522,7 @@ where
         .bind(item.year)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn identify_show(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
@@ -507,7 +545,7 @@ where
         .bind(item.year)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn identify_season(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
@@ -541,7 +579,7 @@ where
         .bind(item.season)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn identify_episode(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
@@ -579,7 +617,7 @@ where
         .bind(item.episode)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Into::into)
+        .repository()
     }
 
     async fn identify_by_guid(
@@ -601,7 +639,8 @@ where
             if let Some(id) = sqlx::query_scalar::<_, EntityId>(crate::db::assert_sql_safe(&sql))
                 .bind(guid)
                 .fetch_optional(&self.pool)
-                .await?
+                .await
+                .repository()?
             {
                 return Ok(Some(id));
             }
@@ -624,14 +663,16 @@ where
         .bind(&name)
         .bind(group_id)
         .execute(&self.pool)
-        .await?;
+        .await
+        .repository()?;
         let playlist_id = last_insert_id(result);
 
         sqlx::query(r#"UPDATE "TraktList" SET "PlaylistId" = ? WHERE "Id" = ?"#)
             .bind(playlist_id)
             .bind(list.id)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
 
         Ok(playlist_id)
     }
@@ -654,7 +695,8 @@ where
         .bind(playlist_id)
         .bind(item.rank)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .repository()?;
 
         if let Some(existing_id) = existing_id {
             sqlx::query(
@@ -670,7 +712,8 @@ where
             .bind(PLAYBACK_ORDER_CHRONOLOGICAL)
             .bind(existing_id)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
         } else {
             sqlx::query(
                 r#"INSERT INTO "PlaylistItem" (
@@ -685,7 +728,8 @@ where
             .bind(media_item_id)
             .bind(PLAYBACK_ORDER_CHRONOLOGICAL)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
         }
 
         Ok(())
@@ -696,7 +740,8 @@ where
             .bind(playlist_id)
             .bind(rank)
             .execute(&self.pool)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
@@ -706,11 +751,13 @@ async fn system_playlist_group_id(pool: &Pool<Db>) -> Result<EntityId> {
         r#"SELECT "Id" FROM "PlaylistGroup" WHERE "IsSystem" = 1 ORDER BY "Id" LIMIT 1"#,
     )
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| {
-        RepositoryError::Database(sqlx::Error::Protocol(
-            "system playlist group is not initialized".into(),
-        ))
+        RepositoryError::unavailable(
+            "load system playlist group",
+            "system playlist group is not initialized",
+        )
     })
 }
 
@@ -734,7 +781,8 @@ async fn insert_item(
     .bind(list_id)
     .bind(item.year)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(last_insert_id(result))
 }
 
@@ -748,7 +796,8 @@ async fn insert_item_guids(
             .bind(guid)
             .bind(item_id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
     Ok(())
 }

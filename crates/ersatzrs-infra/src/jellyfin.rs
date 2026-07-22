@@ -1,5 +1,6 @@
 use crate::db::DbPool;
 use crate::repositories::common::decode_enum_column;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
@@ -448,7 +449,8 @@ where
                     library_id,
                     &item.item_id,
                 )
-                .await?
+                .await
+                .repository()?
             } else {
                 let playback = service.stream_metadata(config, &item.item_id).await?;
                 let item_id = upsert_jellyfin_movie(
@@ -495,7 +497,8 @@ where
         library_id,
         &present_item_ids,
     )
-    .await?;
+    .await
+    .repository()?;
     let replacements = crate::media_server::load_media_server_path_replacements(
         pool,
         "JellyfinPathReplacement",
@@ -503,7 +506,8 @@ where
         "JellyfinMediaSourceId",
         media_source_id,
     )
-    .await?;
+    .await
+    .repository()?;
     crate::media_server::flag_unavailable_media_server_items(
         pool,
         "JellyfinMovie",
@@ -513,8 +517,11 @@ where
         &replacements,
         true,
     )
-    .await?;
-    crate::media_server::apply_provider_content_variants(pool, &variant_candidates).await?;
+    .await
+    .repository()?;
+    crate::media_server::apply_provider_content_variants(pool, &variant_candidates)
+        .await
+        .repository()?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -641,7 +648,8 @@ where
         crate::media_server::flag_missing_media_server_items(
             pool, table, "ItemId", library_id, present,
         )
-        .await?;
+        .await
+        .repository()?;
     }
     // Flag episodes still on the server whose local file is missing
     // (RemoteOnly — Jellyfin supports remote streaming).
@@ -652,7 +660,8 @@ where
         "JellyfinMediaSourceId",
         media_source_id,
     )
-    .await?;
+    .await
+    .repository()?;
     crate::media_server::flag_unavailable_media_server_items(
         pool,
         "JellyfinEpisode",
@@ -662,7 +671,8 @@ where
         &replacements,
         true,
     )
-    .await?;
+    .await
+    .repository()?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -899,7 +909,8 @@ async fn load_target_jellyfin_show_scan(
     .bind(show_id)
     .bind(library_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "jellyfin show",
         value: format!("show {show_id} does not exist in library {library_id}"),
@@ -941,7 +952,8 @@ async fn load_active_jellyfin_connection_config(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .and_then(|v: Option<String>| v)
     .ok_or_else(|| RepositoryError::Decode {
         kind: "jellyfin connection",
@@ -1146,7 +1158,8 @@ pub async fn sync_library_by_id_with_progress(
     )
     .bind(library_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .ok_or_else(|| RepositoryError::Decode {
         kind: "jellyfin library",
         value: format!("library {library_id} not found"),
@@ -1161,7 +1174,8 @@ pub async fn sync_library_by_id_with_progress(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .and_then(|v: Option<String>| v)
     .ok_or_else(|| RepositoryError::Decode {
         kind: "jellyfin connection",
@@ -1179,7 +1193,8 @@ pub async fn sync_library_by_id_with_progress(
         sqlx::query_scalar(r#"SELECT "ItemId" FROM "JellyfinLibrary" WHERE "Id" = ?"#)
             .bind(library_id)
             .fetch_optional(pool)
-            .await?
+            .await
+            .repository()?
             .and_then(|v: Option<String>| v)
             .ok_or_else(|| RepositoryError::Decode {
                 kind: "jellyfin library",
@@ -1241,7 +1256,8 @@ pub async fn sync_collections_for_media_source(
     )
     .bind(media_source_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     if library_ids.is_empty() {
         return Ok(0);
@@ -1253,7 +1269,8 @@ pub async fn sync_collections_for_media_source(
     )
     .bind(media_source_id)
     .fetch_optional(pool)
-    .await?
+    .await
+    .repository()?
     .and_then(|v: Option<String>| v)
     .ok_or_else(|| RepositoryError::Decode {
         kind: "jellyfin connection",
@@ -1274,7 +1291,8 @@ pub async fn sync_collections_for_media_source(
             sqlx::query_scalar(r#"SELECT "ItemId" FROM "JellyfinLibrary" WHERE "Id" = ?"#)
                 .bind(library_id)
                 .fetch_optional(pool)
-                .await?
+                .await
+                .repository()?
                 .and_then(|v: Option<String>| v);
         let Some(parent_id) = parent_id else {
             continue;
@@ -1299,7 +1317,8 @@ async fn load_jellyfin_api_key(pool: &DbPool, address: &str) -> Result<String> {
         )
         .bind(key)
         .fetch_optional(pool)
-        .await?
+        .await
+        .repository()?
         .filter(|v| !v.is_empty())
         {
             return Ok(v);
@@ -1806,7 +1825,7 @@ async fn upsert_jellyfin_movie(
     item: &JellyfinMediaItem,
     playback: &JellyfinPlaybackMetadata,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
@@ -1823,7 +1842,7 @@ async fn upsert_jellyfin_movie(
     )
     .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(item_id)
 }
 
@@ -1834,13 +1853,13 @@ async fn upsert_jellyfin_show(
     library_item_id: &str,
     item: &JellyfinShowItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let id = ensure_jellyfin_show_item(&mut tx, library_path_id, item).await?;
     upsert_show_metadata(&mut tx, id, item).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1852,13 +1871,13 @@ async fn upsert_jellyfin_season(
     show_id: i64,
     item: &JellyfinSeasonItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let id = ensure_jellyfin_season_item(&mut tx, library_path_id, show_id, item).await?;
     upsert_season_metadata(&mut tx, id, item).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1871,7 +1890,7 @@ async fn upsert_jellyfin_episode(
     item: &JellyfinMediaItem,
     playback: &JellyfinPlaybackMetadata,
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     ensure_jellyfin_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
@@ -1887,7 +1906,7 @@ async fn upsert_jellyfin_episode(
     crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &playback.streams)
         .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -1896,21 +1915,24 @@ async fn upsert_jellyfin_collection(
     media_source_id: i64,
     item: &JellyfinCollectionItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "JellyfinMediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
 
     let id = if let Some(row) =
         sqlx::query(r#"SELECT "Id" FROM "JellyfinCollection" WHERE "ItemId" = ?"#)
             .bind(&item.item_id)
             .fetch_optional(&mut *tx)
-            .await?
+            .await
+            .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
@@ -1918,12 +1940,14 @@ async fn upsert_jellyfin_collection(
             .bind(&item.name)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(&item.name)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -1931,7 +1955,8 @@ async fn upsert_jellyfin_collection(
         )
         .bind(&item.name)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         let id = crate::db::last_insert_id(result);
         sqlx::query(
             r#"INSERT INTO "JellyfinCollection" ("Id", "ItemId", "Etag", "Name")
@@ -1942,11 +1967,12 @@ async fn upsert_jellyfin_collection(
         .bind(&item.etag)
         .bind(&item.name)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
         id
     };
 
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(id)
 }
 
@@ -1955,11 +1981,12 @@ async fn replace_collection_items(
     collection_id: i64,
     items: &[JellyfinCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
         .bind(collection_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     for (index, item) in items.iter().enumerate() {
         if let Some(media_item_id) = find_jellyfin_media_item(&mut tx, item).await? {
             sqlx::query(
@@ -1970,10 +1997,11 @@ async fn replace_collection_items(
             .bind(media_item_id)
             .bind(i32::try_from(index).unwrap_or_default())
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         }
     }
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -1991,7 +2019,8 @@ async fn find_jellyfin_media_item(
     Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.item_id)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
         .map(|row| row.get("Id")))
 }
 
@@ -2030,15 +2059,19 @@ async fn item_etag_matches(
         .bind(item_id)
         .bind(library_id)
         .fetch_optional(pool)
-        .await?
+        .await
+        .repository()?
     else {
         return Ok(false);
     };
 
-    let existing_etag: Option<String> = row.try_get("Etag")?;
-    let state: i64 = row.try_get("State")?;
+    let existing_etag: Option<String> = row.try_get("Etag").repository()?;
+    let state: i64 = row.try_get("State").repository()?;
     let has_metadata = !matches!(table, "JellyfinMovie" | "JellyfinEpisode")
-        || row.try_get::<Option<i64>, _>("MetadataId")?.is_some();
+        || row
+            .try_get::<Option<i64>, _>("MetadataId")
+            .repository()?
+            .is_some();
     Ok(
         crate::media_server::provider_item_state_allows_etag_skip(state)
             && has_metadata
@@ -2074,7 +2107,8 @@ pub async fn sync_jellyfin_libraries(
     )
     .bind(media_source_id)
     .fetch_all(pool)
-    .await?;
+    .await
+    .repository()?;
 
     let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
         .into_iter()
@@ -2089,7 +2123,7 @@ pub async fn sync_jellyfin_libraries(
         })
         .collect();
 
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     for incoming_library in incoming {
         let position = existing.iter().position(|(_, item_id, _, _)| {
             item_id.as_deref() == Some(incoming_library.item_id.as_str())
@@ -2103,13 +2137,15 @@ pub async fn sync_jellyfin_libraries(
                     .bind(&incoming_library.name)
                     .bind(id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
             } else {
                 sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
                     .bind(&incoming_library.name)
                     .bind(id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .repository()?;
             }
             replace_jellyfin_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
         } else {
@@ -2121,7 +2157,8 @@ pub async fn sync_jellyfin_libraries(
             .bind(encode_library_media_kind(incoming_library.media_kind))
             .bind(media_source_id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
             let id = crate::db::last_insert_id(result);
             sqlx::query(
                 r#"INSERT INTO "JellyfinLibrary" ("Id", "ItemId", "ShouldSyncItems")
@@ -2130,12 +2167,14 @@ pub async fn sync_jellyfin_libraries(
             .bind(id)
             .bind(&incoming_library.item_id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
             sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
                 .bind(id)
                 .bind(format!("jellyfin://{id}"))
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .repository()?;
             replace_jellyfin_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
         }
     }
@@ -2144,10 +2183,11 @@ pub async fn sync_jellyfin_libraries(
         sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
     }
 
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -2171,7 +2211,8 @@ async fn replace_jellyfin_path_infos_in_tx(
     sqlx::query(r#"DELETE FROM "JellyfinPathInfo" WHERE "JellyfinLibraryId" = ?"#)
         .bind(library_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     for info in path_infos {
         sqlx::query(
             r#"INSERT INTO "JellyfinPathInfo" ("JellyfinLibraryId", "Path", "NetworkPath")
@@ -2181,7 +2222,8 @@ async fn replace_jellyfin_path_infos_in_tx(
         .bind(&info.path)
         .bind(&info.network_path)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
     Ok(())
 }
@@ -2201,11 +2243,12 @@ pub async fn replace_jellyfin_path_infos(
     library_id: i64,
     path_infos: &[JellyfinPathInfo],
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.repository()?;
     sqlx::query(r#"DELETE FROM "JellyfinPathInfo" WHERE "JellyfinLibraryId" = ?"#)
         .bind(library_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     for info in path_infos {
         sqlx::query(
             r#"INSERT INTO "JellyfinPathInfo" ("JellyfinLibraryId", "Path", "NetworkPath")
@@ -2215,9 +2258,10 @@ pub async fn replace_jellyfin_path_infos(
         .bind(&info.path)
         .bind(&info.network_path)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
     }
-    tx.commit().await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 
@@ -2230,11 +2274,13 @@ async fn ensure_jellyfin_library(
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "JellyfinMediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(
         r#"INSERT OR IGNORE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
            VALUES (?, 'Jellyfin', 0, ?)"#,
@@ -2242,7 +2288,8 @@ async fn ensure_jellyfin_library(
     .bind(library_id)
     .bind(media_source_id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     sqlx::query(
         r#"INSERT OR IGNORE INTO "JellyfinLibrary" ("Id", "ItemId", "ShouldSyncItems")
            VALUES (?, ?, 1)"#,
@@ -2250,7 +2297,8 @@ async fn ensure_jellyfin_library(
     .bind(library_id)
     .bind(library_item_id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -2262,7 +2310,8 @@ async fn ensure_library_path(
     if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
         .bind(library_id)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
     {
         return Ok(row.get("Id"));
     }
@@ -2270,7 +2319,8 @@ async fn ensure_library_path(
         .bind(library_id)
         .bind(path)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -2292,37 +2342,43 @@ async fn ensure_jellyfin_movie_item(
     .bind(library_path_id)
     .bind(&item.item_id)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinMovie" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
 
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (?)"#)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "JellyfinMovie" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.item_id)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -2335,7 +2391,8 @@ async fn upsert_movie_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
             .bind(movie_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let now = Utc::now();
 
     let metadata_id = if let Some(id) = existing_id {
@@ -2358,7 +2415,8 @@ async fn upsert_movie_metadata(
         .bind(item.year)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -2379,7 +2437,8 @@ async fn upsert_movie_metadata(
         .bind(&item.name)
         .bind(item.year)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         crate::db::last_insert_id(result)
     };
 
@@ -2444,7 +2503,8 @@ async fn upsert_show_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ? LIMIT 1"#)
             .bind(show_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let now = Utc::now();
 
     let metadata_id = if let Some(id) = existing_id {
@@ -2467,7 +2527,8 @@ async fn upsert_show_metadata(
         .bind(item.year)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -2488,7 +2549,8 @@ async fn upsert_show_metadata(
         .bind(&item.name)
         .bind(item.year)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         crate::db::last_insert_id(result)
     };
 
@@ -2599,7 +2661,8 @@ async fn upsert_season_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "SeasonMetadata" WHERE "SeasonId" = ? LIMIT 1"#)
             .bind(season_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let now = Utc::now();
 
     let metadata_id = if let Some(id) = existing_id {
@@ -2618,7 +2681,8 @@ async fn upsert_season_metadata(
         .bind(item.year)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -2635,7 +2699,8 @@ async fn upsert_season_metadata(
         .bind(&item.name)
         .bind(item.year)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         crate::db::last_insert_id(result)
     };
 
@@ -2687,7 +2752,8 @@ async fn upsert_episode_metadata(
         sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
             .bind(episode_id)
             .fetch_optional(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     let now = Utc::now();
     let episode_number = item.episode_number.unwrap_or_default();
 
@@ -2711,7 +2777,8 @@ async fn upsert_episode_metadata(
         .bind(item.year)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         id
     } else {
         let result = sqlx::query(
@@ -2732,7 +2799,8 @@ async fn upsert_episode_metadata(
         .bind(&item.name)
         .bind(item.year)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
         crate::db::last_insert_id(result)
     };
 
@@ -2819,37 +2887,43 @@ async fn ensure_jellyfin_show_item(
     .bind(library_path_id)
     .bind(&item.item_id)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinShow" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
 
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
         .bind(id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "JellyfinShow" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.item_id)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -2872,45 +2946,52 @@ async fn ensure_jellyfin_season_item(
     .bind(library_path_id)
     .bind(&item.item_id)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinSeason" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Season" SET "ShowId" = ?, "SeasonNumber" = ? WHERE "Id" = ?"#)
             .bind(show_id)
             .bind(item.season_number)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
 
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(show_id)
         .bind(item.season_number)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "JellyfinSeason" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.item_id)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -2933,43 +3014,50 @@ async fn ensure_jellyfin_episode_item(
     .bind(library_path_id)
     .bind(&item.item_id)
     .fetch_optional(&mut **tx)
-    .await?
+    .await
+    .repository()?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
             .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
         return Ok(id);
     }
 
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (?, ?)"#)
         .bind(id)
         .bind(season_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     sqlx::query(r#"INSERT INTO "JellyfinEpisode" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(&item.item_id)
         .bind(&item.etag)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(id)
 }
 
@@ -2993,7 +3081,8 @@ async fn ensure_media_version(
     if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(item_id)
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .repository()?
     {
         let id = row.get("Id");
         update_media_version(tx, id, item, playback).await?;
@@ -3019,7 +3108,8 @@ async fn ensure_media_version(
         .bind(VideoScanKind::Progressive.db_value())
         .bind(playback.width)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     Ok(crate::db::last_insert_id(result))
 }
 
@@ -3046,7 +3136,8 @@ async fn update_media_version(
     .bind(playback.width)
     .bind(id)
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -3063,7 +3154,8 @@ async fn ensure_media_file(
     .bind(path)
     .bind(path_hash(path))
     .execute(&mut **tx)
-    .await?;
+    .await
+    .repository()?;
     Ok(())
 }
 
@@ -3075,7 +3167,8 @@ async fn replace_streams(
     sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId" = ?"#)
         .bind(version_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
@@ -3105,7 +3198,8 @@ async fn replace_streams(
         .bind(&stream.file_name)
         .bind(&stream.mime_type)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
     Ok(())
 }
@@ -3118,7 +3212,8 @@ async fn replace_chapters(
     sqlx::query(r#"DELETE FROM "MediaChapter" WHERE "MediaVersionId" = ?"#)
         .bind(version_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     for chapter in chapters {
         sqlx::query(
             r#"INSERT INTO "MediaChapter" (
@@ -3131,7 +3226,8 @@ async fn replace_chapters(
         .bind(encode_duration(chapter.end_time))
         .bind(&chapter.title)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
     }
     Ok(())
 }

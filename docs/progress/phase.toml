@@ -15,10 +15,12 @@ dependency-gated "The Box" video-jukebox extension.
 '''
 
 next_steps = '''
-Build the Phase 7B application-service foundation in milestone p7b-01, then
-migrate application vertical slices before performing module splits. Phase 8 jukebox
-implementation must wait for the application boundary and an accepted product
-contract. Use `cargo xtask progress milestones --runnable` for runnable work,
+The Phase 7B application-service foundation is complete. Migrate the
+playout-build vertical slice in p7b-02, the scan-operation vertical slice in
+p7b-03, and the real block-preview vertical slice in p7b-04 before the remaining
+admin use cases in p7b-05. Phase 8 jukebox implementation must wait for the
+application boundary and an accepted product contract. Use
+`cargo xtask progress milestones --runnable` for runnable work,
 `cargo xtask progress milestones --id <id> --full` for acceptance criteria,
 and `cargo xtask progress gaps` for feature/debt state. Historical completion
 evidence remains in parity TOMLs, ADRs, sessions, the changelog, and git history

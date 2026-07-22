@@ -22,6 +22,12 @@ release section when tagging a release.
 
 ### Changed
 
+- The Phase 7B application-service foundation now gives `ersatzrs-app`
+  documented command, query, typed-error, port, and operation-coordination
+  boundaries. Core no longer exposes SQLx errors, infrastructure maps concrete
+  storage failures explicitly, and the native web composition root injects
+  concrete repositories into one `ApplicationServices` container shared with
+  scheduler tasks.
 - Development-only component-gallery and sample-stream routes now require a
   non-default build feature plus explicit runtime opt-in. Structured hydration
   data is now the canonical admin route-verification source, with validation

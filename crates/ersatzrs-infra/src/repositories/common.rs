@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
@@ -17,7 +18,7 @@ use ersatzrs_domain::{
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
 
-pub(crate) fn map_data_access_error(kind: &'static str, error: sqlx::Error) -> RepositoryError {
+pub(crate) fn map_data_access_error(kind: &'static str, error: &sqlx::Error) -> RepositoryError {
     if matches!(
         &error,
         sqlx::Error::ColumnIndexOutOfBounds { .. }
@@ -30,8 +31,12 @@ pub(crate) fn map_data_access_error(kind: &'static str, error: sqlx::Error) -> R
             value: error.to_string(),
         }
     } else {
-        RepositoryError::Database(error)
+        RepositoryError::unavailable(kind, error.to_string())
     }
+}
+
+pub(crate) fn map_database_error(error: &sqlx::Error) -> RepositoryError {
+    map_data_access_error("database operation", error)
 }
 
 pub fn decode_enum<T>(kind: &'static str, value: &str) -> Result<T>
@@ -58,7 +63,7 @@ where
         T::from_db_int(value)
             .ok_or_else(|| decode_message(kind, &format!("unknown enum value {value}")))
     } else {
-        let value = row.try_get::<String, _>(column)?;
+        let value = row.try_get::<String, _>(column).repository()?;
         decode_enum(kind, &value)
     }
 }
@@ -77,7 +82,8 @@ where
             .map(Some),
         Ok(None) => Ok(None),
         Err(_) => row
-            .try_get::<Option<String>, _>(column)?
+            .try_get::<Option<String>, _>(column)
+            .repository()?
             .map(|value| decode_enum(kind, &value))
             .transpose(),
     }
@@ -88,7 +94,7 @@ pub fn decode_bool_column(row: &DbRow, column: &'static str) -> Result<bool> {
         return Ok(value);
     }
 
-    Ok(row.try_get::<i64, _>(column)? != 0)
+    Ok(row.try_get::<i64, _>(column).repository()? != 0)
 }
 
 pub fn decode_optional_bool_column(row: &DbRow, column: &'static str) -> Result<Option<bool>> {
@@ -97,7 +103,8 @@ pub fn decode_optional_bool_column(row: &DbRow, column: &'static str) -> Result<
     }
 
     Ok(row
-        .try_get::<Option<i64>, _>(column)?
+        .try_get::<Option<i64>, _>(column)
+        .repository()?
         .map(|value| value != 0))
 }
 
@@ -106,7 +113,7 @@ pub fn decode_string_column(row: &DbRow, column: &'static str) -> Result<String>
         return Ok(value);
     }
 
-    decode_utf8_column(row.try_get(column)?, column)
+    decode_utf8_column(row.try_get(column).repository()?, column)
 }
 
 pub fn decode_optional_string_column(row: &DbRow, column: &'static str) -> Result<Option<String>> {
@@ -114,7 +121,8 @@ pub fn decode_optional_string_column(row: &DbRow, column: &'static str) -> Resul
         return Ok(value);
     }
 
-    row.try_get::<Option<Vec<u8>>, _>(column)?
+    row.try_get::<Option<Vec<u8>>, _>(column)
+        .repository()?
         .map(|bytes| decode_utf8_column(bytes, column))
         .transpose()
 }
@@ -600,15 +608,16 @@ pub fn decode_optional_duration_text(value: Option<&str>) -> Option<Duration> {
 }
 
 pub fn decode_message(kind: &'static str, message: &str) -> RepositoryError {
-    RepositoryError::Database(sqlx::Error::Decode(
-        format!("failed to decode {kind}: {message}").into(),
-    ))
+    RepositoryError::Decode {
+        kind,
+        value: message.to_owned(),
+    }
 }
 
 pub fn not_found(kind: &'static str, id: i64, error: sqlx::Error) -> RepositoryError {
     match error {
         sqlx::Error::RowNotFound => RepositoryError::NotFound { kind, id },
-        other => RepositoryError::Database(other),
+        other => map_data_access_error(kind, &other),
     }
 }
 
@@ -622,14 +631,16 @@ pub async fn replace_ids(
     sqlx::query(crate::db::assert_sql_safe(delete_sql))
         .bind(parent_id)
         .execute(&mut **tx)
-        .await?;
+        .await
+        .repository()?;
 
     for id in ids {
         sqlx::query(crate::db::assert_sql_safe(insert_sql))
             .bind(parent_id)
             .bind(id)
             .execute(&mut **tx)
-            .await?;
+            .await
+            .repository()?;
     }
 
     Ok(())
@@ -640,5 +651,39 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
         .bind(parent_id)
         .fetch_all(pool)
         .await
-        .map_err(RepositoryError::from)
+        .repository()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{map_data_access_error, not_found};
+    use ersatzrs_core::repositories::RepositoryError;
+
+    #[test]
+    fn sqlx_mapping_preserves_decode_unavailable_and_not_found_categories() {
+        assert!(matches!(
+            map_data_access_error(
+                "channel row",
+                &sqlx::Error::Decode("invalid integer".into()),
+            ),
+            RepositoryError::Decode {
+                kind: "channel row",
+                ..
+            }
+        ));
+        assert!(matches!(
+            map_data_access_error("load channels", &sqlx::Error::PoolClosed),
+            RepositoryError::Unavailable {
+                operation: "load channels",
+                ..
+            }
+        ));
+        assert!(matches!(
+            not_found("channel", 12, sqlx::Error::RowNotFound),
+            RepositoryError::NotFound {
+                kind: "channel",
+                id: 12
+            }
+        ));
+    }
 }

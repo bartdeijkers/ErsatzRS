@@ -196,7 +196,7 @@ pub async fn load_active_transcode_limit(pool: &DbPool) -> Result<Option<i32>> {
     .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
     .fetch_optional(pool)
     .await
-    .map_err(|error| map_data_access_error("active transcode limit", error))?;
+    .map_err(|error| map_data_access_error("active transcode limit", &error))?;
     let Some(value) = value else {
         return Ok(None);
     };
@@ -397,7 +397,7 @@ mod tests {
         closed_pool.close().await;
         assert!(matches!(
             load_active_transcode_limit(&closed_pool).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 

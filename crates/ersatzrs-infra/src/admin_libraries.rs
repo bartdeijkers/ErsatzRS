@@ -71,7 +71,7 @@ pub async fn load_libraries(pool: &DbPool) -> Result<Vec<AdminLibraryRow>> {
     )
     .fetch_all(pool)
     .await
-    .map_err(|error| map_data_access_error("admin library row", error))
+    .map_err(|error| map_data_access_error("admin library row", &error))
 }
 
 /// Load external-collection sources without dropping rows whose projection is
@@ -106,7 +106,7 @@ pub async fn load_external_collections(pool: &DbPool) -> Result<Vec<AdminExterna
     )
     .fetch_all(pool)
     .await
-    .map_err(|error| map_data_access_error("admin external collection row", error))
+    .map_err(|error| map_data_access_error("admin external collection row", &error))
 }
 
 #[cfg(all(test, not(feature = "mysql")))]
@@ -124,11 +124,11 @@ mod tests {
 
         assert!(matches!(
             load_libraries(&pool).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
         assert!(matches!(
             load_external_collections(&pool).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 }

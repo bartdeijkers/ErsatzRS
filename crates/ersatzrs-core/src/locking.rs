@@ -161,6 +161,15 @@ impl EntityLocker {
     pub fn is_library_locked(&self, library_id: EntityId) -> bool {
         recover(self.inner.locked_libraries.lock()).contains(&library_id)
     }
+
+    /// Snapshot every library id whose scan lock is currently held.
+    #[must_use]
+    pub fn locked_libraries(&self) -> Vec<EntityId> {
+        recover(self.inner.locked_libraries.lock())
+            .iter()
+            .copied()
+            .collect()
+    }
 }
 
 fn recover<'a, T>(
@@ -203,6 +212,36 @@ impl Drop for PlayoutLockGuard {
     }
 }
 
+/// RAII-style guard that releases a library scan lock on drop. Acquire via
+/// [`LibraryLockGuard::try_acquire`].
+#[must_use = "dropping the guard releases the lock; bind it to a name"]
+pub struct LibraryLockGuard {
+    locker: EntityLocker,
+    library_id: EntityId,
+}
+
+impl LibraryLockGuard {
+    /// Attempt to acquire the lock for `library_id`. Returns `None` while a
+    /// scan already owns the same library lock.
+    #[must_use]
+    pub fn try_acquire(locker: &EntityLocker, library_id: EntityId) -> Option<Self> {
+        if locker.lock_library(library_id) {
+            Some(Self {
+                locker: locker.clone(),
+                library_id,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for LibraryLockGuard {
+    fn drop(&mut self) {
+        let _ = self.locker.unlock_library(self.library_id);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,6 +279,19 @@ mod tests {
         assert!(locker.unlock_library(3));
         assert!(!locker.is_library_locked(3));
         assert!(locker.is_playout_locked(3));
+    }
+
+    #[test]
+    fn library_lock_guard_releases_and_reports_snapshot() {
+        let locker = EntityLocker::new();
+        let guard = LibraryLockGuard::try_acquire(&locker, 5).expect("first acquire");
+
+        assert!(LibraryLockGuard::try_acquire(&locker, 5).is_none());
+        assert_eq!(locker.locked_libraries(), [5]);
+
+        drop(guard);
+
+        assert!(locker.locked_libraries().is_empty());
     }
 
     #[test]

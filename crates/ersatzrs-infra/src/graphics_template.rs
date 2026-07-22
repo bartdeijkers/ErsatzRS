@@ -6,6 +6,7 @@
 //!   rendering YAML with Scriban.
 //! - `$ERSATZTV_SRC/ErsatzTV.Core/Metadata/*TemplateDataKey.cs` defines the persisted key
 //!   names (`MediaItem_Duration`, `Epg`, `Channel_StartTime`, etc.).
+use crate::repositories::SqlxResultExt as _;
 
 use std::collections::BTreeMap;
 
@@ -14,7 +15,7 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use serde_json::{Map, Number, Value};
 use sqlx::Row;
 
-use crate::db::DbPool;
+use crate::db::{DbPool, DbRow};
 use crate::repositories::common::{decode_datetime, encode_datetime};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -210,45 +211,65 @@ async fn load_media_item_template_data(
     )
     .bind(context.media_item_id)
     .fetch_optional(pool)
-    .await?;
+    .await.repository()?;
 
     let Some(row) = row else {
         return Ok(None);
     };
 
+    Ok(Some(media_item_template_data_from_row(&row)?))
+}
+
+fn media_item_template_data_from_row(row: &DbRow) -> Result<Map<String, Value>> {
     let mut result = Map::new();
-    insert_optional_string(&mut result, "MediaItem_Title", row.try_get("Title")?);
-    insert_optional_string(&mut result, "MediaItem_Plot", row.try_get("Plot")?);
+    insert_optional_string(
+        &mut result,
+        "MediaItem_Title",
+        row.try_get("Title").repository()?,
+    );
+    insert_optional_string(
+        &mut result,
+        "MediaItem_Plot",
+        row.try_get("Plot").repository()?,
+    );
     insert_optional_string(
         &mut result,
         "MediaItem_ReleaseDate",
-        row.try_get("ReleaseDate")?,
+        row.try_get("ReleaseDate").repository()?,
     );
     insert_optional_string(
         &mut result,
         "MediaItem_ContentRating",
-        row.try_get("ContentRating")?,
+        row.try_get("ContentRating").repository()?,
     );
     insert_optional_string(
         &mut result,
         "MediaItem_ShowTitle",
-        row.try_get("ShowTitle")?,
+        row.try_get("ShowTitle").repository()?,
     );
-    if let Some(year) = row.try_get::<Option<i32>, _>("ShowYear")? {
+    if let Some(year) = row.try_get::<Option<i32>, _>("ShowYear").repository()? {
         result.insert("MediaItem_ShowYear".to_owned(), Value::Number(year.into()));
     }
     insert_optional_string(
         &mut result,
         "MediaItem_ShowContentRating",
-        row.try_get("ShowContentRating")?,
+        row.try_get("ShowContentRating").repository()?,
     );
-    if let Some(track) = row.try_get::<Option<i32>, _>("Track")? {
+    if let Some(track) = row.try_get::<Option<i32>, _>("Track").repository()? {
         result.insert("MediaItem_Track".to_owned(), Value::Number(track.into()));
     }
-    insert_optional_string(&mut result, "MediaItem_Album", row.try_get("Album")?);
-    insert_optional_string(&mut result, "MediaItem_Artist", row.try_get("Artist")?);
-    let width = row.try_get::<Option<i32>, _>("Width")?;
-    let height = row.try_get::<Option<i32>, _>("Height")?;
+    insert_optional_string(
+        &mut result,
+        "MediaItem_Album",
+        row.try_get("Album").repository()?,
+    );
+    insert_optional_string(
+        &mut result,
+        "MediaItem_Artist",
+        row.try_get("Artist").repository()?,
+    );
+    let width = row.try_get::<Option<i32>, _>("Width").repository()?;
+    let height = row.try_get::<Option<i32>, _>("Height").repository()?;
     if let (Some(width), Some(height)) = (width, height) {
         result.insert(
             "MediaItem_Resolution".to_owned(),
@@ -258,11 +279,11 @@ async fn load_media_item_template_data(
             ),
         );
     }
-    if let Some(duration) = row.try_get::<Option<String>, _>("Duration")? {
+    if let Some(duration) = row.try_get::<Option<String>, _>("Duration").repository()? {
         let seconds = parse_duration_seconds(&duration);
         result.insert("MediaItem_Duration".to_owned(), duration_value(seconds));
     }
-    Ok(Some(result))
+    Ok(result)
 }
 
 async fn load_epg_template_data(
@@ -289,14 +310,23 @@ async fn load_epg_template_data(
     .bind(encode_datetime(context.content_start_time))
     .bind(i64::try_from(count).unwrap_or(i64::MAX))
     .fetch_all(pool)
-    .await?;
+    .await.repository()?;
 
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
-        let start = decode_datetime("playout item start", &row.try_get::<String, _>("Start")?)?;
-        let stop = decode_datetime("playout item finish", &row.try_get::<String, _>("Finish")?)?;
+        let start = decode_datetime(
+            "playout item start",
+            &row.try_get::<String, _>("Start").repository()?,
+        )?;
+        let stop = decode_datetime(
+            "playout item finish",
+            &row.try_get::<String, _>("Finish").repository()?,
+        )?;
         let mut item = Map::new();
-        item.insert("Title".to_owned(), Value::String(row.try_get("Title")?));
+        item.insert(
+            "Title".to_owned(),
+            Value::String(row.try_get("Title").repository()?),
+        );
         item.insert("SubTitle".to_owned(), Value::String(String::new()));
         item.insert("Description".to_owned(), Value::String(String::new()));
         item.insert("Rating".to_owned(), Value::String(String::new()));

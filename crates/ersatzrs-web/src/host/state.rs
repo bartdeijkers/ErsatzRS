@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{
     atomic::{AtomicI32, Ordering},
     Arc, Mutex,
 };
 
+use ersatzrs_app::{ApplicationPorts, ApplicationServices, OperationCoordinator};
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
@@ -13,23 +14,6 @@ use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
-
-/// In-process tracker for entities that have an active scan/sync. Mirrors
-/// `IEntityLocker` in `ErsatzTV`: the admin UI polls this via a server fn to
-/// render an indeterminate spinner while a background task is running.
-///
-/// Keys are arbitrary strings so the same locker can guard libraries
-/// (`library:{id}`), external collection syncs (`collections:{kind}:{id}`),
-/// and any future entity type.
-#[derive(Clone, Default)]
-pub struct EntityLocker {
-    keys: Arc<Mutex<HashSet<String>>>,
-}
-
-pub struct LibraryLockGuard {
-    locker: EntityLocker,
-    library_id: i64,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibraryScanJob {
@@ -106,74 +90,6 @@ impl ersatzrs_domain::ScanProgressSink for LibraryProgressSink {
     }
 }
 
-fn library_key(library_id: i64) -> String {
-    format!("library:{library_id}")
-}
-
-impl EntityLocker {
-    /// Attempts to acquire `key`. Returns true when the lock was acquired
-    /// (caller is responsible for `unlock_key` when done). Returns false when
-    /// the key is already locked.
-    pub fn lock_key(&self, key: impl Into<String>) -> bool {
-        self.keys.lock().is_ok_and(|mut set| set.insert(key.into()))
-    }
-
-    pub fn unlock_key(&self, key: &str) {
-        if let Ok(mut set) = self.keys.lock() {
-            set.remove(key);
-        }
-    }
-
-    pub fn is_locked(&self, key: &str) -> bool {
-        self.keys.lock().is_ok_and(|set| set.contains(key))
-    }
-
-    /// Returns every currently locked key.
-    pub fn locked_keys(&self) -> Vec<String> {
-        self.keys
-            .lock()
-            .map(|set| set.iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
-    pub fn lock_library(&self, library_id: i64) -> bool {
-        self.lock_key(library_key(library_id))
-    }
-
-    pub fn try_lock_library(&self, library_id: i64) -> Option<LibraryLockGuard> {
-        self.lock_library(library_id).then(|| LibraryLockGuard {
-            locker: self.clone(),
-            library_id,
-        })
-    }
-
-    pub fn unlock_library(&self, library_id: i64) {
-        self.unlock_key(&library_key(library_id));
-    }
-
-    /// Returns the ids of currently locked libraries (those locked via
-    /// `lock_library`, identified by the `library:` key prefix).
-    pub fn locked_libraries(&self) -> Vec<i64> {
-        self.keys
-            .lock()
-            .map(|set| {
-                set.iter()
-                    .filter_map(|k| {
-                        k.strip_prefix("library:")
-                            .and_then(|n| n.parse::<i64>().ok())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-}
-
-impl Drop for LibraryLockGuard {
-    fn drop(&mut self) {
-        self.locker.unlock_library(self.library_id);
-    }
-}
-
 impl LibraryScanQueue {
     /// Enqueue `job`. Returns true only when a worker should be spawned.
     pub fn enqueue(&self, job: LibraryScanJob) -> bool {
@@ -229,6 +145,9 @@ impl SystemStartup {
 
 #[derive(Clone)]
 pub struct AppState {
+    /// Storage-neutral application services built from native infrastructure
+    /// ports by this composition root.
+    pub application: Arc<ApplicationServices>,
     pub repositories: Arc<Repositories>,
     pub pool: DbPool,
     pub database_backend: DatabaseBackend,
@@ -239,25 +158,11 @@ pub struct AppState {
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
-    /// String-keyed registry for library/collection scan locks (`library:{id}`,
-    /// `collections:{kind}:{id}`). Polled by the libraries page for the scan
-    /// spinner. This is the web-host half of ErsatzTV's `IEntityLocker`; playout
-    /// locks live in [`Self::playout_locker`] because the scheduler owns and
-    /// shares that registry across the process boundary.
-    pub entity_locker: EntityLocker,
     pub library_scan_queue: LibraryScanQueue,
     pub scan_progress: ScanProgressMap,
     /// Upstream-compatible unbounded single-reader queue for accepted manual
     /// and side-effect-driven playout build requests.
     pub playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
-    /// Tracks accepted manual requests until the scheduler completes them.
-    pub playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity,
-    /// Playout lock registry, the same instance the scheduler builds with, so
-    /// the playouts page can poll which playouts are currently building. Kept
-    /// separate from [`Self::entity_locker`] because that one is a web-host-only
-    /// string-keyed locker; this is the core typed `EntityLocker` the scheduler
-    /// shares. Together they cover ErsatzTV's single `IEntityLocker` surface.
-    pub playout_locker: ersatzrs_core::locking::EntityLocker,
 }
 
 #[derive(Clone)]
@@ -281,9 +186,20 @@ impl AppState {
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
+        let application = Arc::new(ApplicationServices::new(
+            ApplicationPorts::new(
+                Arc::new(repositories.playout.clone()),
+                Arc::new(repositories.library.clone()),
+            ),
+            OperationCoordinator::new(
+                playout_locker,
+                ersatzrs_core::locking::PlayoutBuildActivity::default(),
+            ),
+        ));
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
         Self {
+            application,
             repositories,
             pool,
             database_backend,
@@ -294,12 +210,9 @@ impl AppState {
             hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,
-            entity_locker: EntityLocker::default(),
             library_scan_queue: LibraryScanQueue::default(),
             scan_progress: ScanProgressMap::default(),
             playout_build_tx,
-            playout_build_activity: ersatzrs_core::locking::PlayoutBuildActivity::default(),
-            playout_locker,
         }
     }
 
@@ -349,8 +262,8 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppState, EntityLocker, IptvAccessTokenVerifier, LibraryScanJob, LibraryScanQueue,
-        ScanProgressMap, SystemStartup,
+        AppState, IptvAccessTokenVerifier, LibraryScanJob, LibraryScanQueue, ScanProgressMap,
+        SystemStartup,
     };
     use ersatzrs_domain::ScanProgressSink;
     use ersatzrs_infra::db::DatabaseSchemaStatus;
@@ -397,19 +310,6 @@ mod tests {
     }
 
     #[test]
-    fn library_lock_guard_releases_lock_on_drop() {
-        let locker = EntityLocker::default();
-        let guard = locker.try_lock_library(42).expect("lock should be free");
-
-        assert!(locker.try_lock_library(42).is_none());
-        assert_eq!(locker.locked_libraries(), [42]);
-
-        drop(guard);
-
-        assert!(locker.try_lock_library(42).is_some());
-    }
-
-    #[test]
     fn library_scan_queue_runs_jobs_fifo_and_stops_when_empty() {
         let queue = LibraryScanQueue::default();
 
@@ -445,6 +345,25 @@ mod tests {
         state.set_tuner_count(4);
 
         assert_eq!(state.tuner_count(), 4);
+    }
+
+    #[tokio::test]
+    async fn app_state_constructs_concrete_application_ports_and_shared_operations() {
+        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+
+        assert!(matches!(
+            state
+                .application
+                .ports()
+                .libraries()
+                .get_with_paths(1)
+                .await,
+            Err(ersatzrs_core::repositories::RepositoryError::Unavailable { .. })
+        ));
+
+        let locker = state.application.operations().entity_locker();
+        assert!(locker.lock_playout(12));
+        assert_eq!(state.application.operations().active_playout_builds(), [12]);
     }
 
     #[test]

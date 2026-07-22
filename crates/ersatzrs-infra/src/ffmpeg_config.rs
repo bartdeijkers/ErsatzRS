@@ -7,6 +7,7 @@
 //! `ConfigElement` values via `bool.ToString()` ("True"/"False"); ErsatzRS
 //! reads them the same lenient way as `health.rs` does for `ffmpeg.save_reports`
 //! (`eq_ignore_ascii_case("true") || "1"`).
+use crate::repositories::SqlxResultExt as _;
 
 use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::Result;
@@ -108,9 +109,10 @@ async fn load_optional_string(pool: &Pool<Db>, key: &str) -> Result<Option<Strin
     let row = sqlx::query(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
         .bind(key)
         .fetch_optional(pool)
-        .await?;
+        .await
+        .repository()?;
     let value = match row {
-        Some(row) => row.try_get::<Option<String>, _>("Value")?,
+        Some(row) => row.try_get::<Option<String>, _>("Value").repository()?,
         None => None,
     };
     Ok(value.and_then(|value| {
@@ -148,7 +150,8 @@ async fn load_bool(pool: &Pool<Db>, key: &str, default: bool) -> Result<bool> {
     let row = sqlx::query(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
         .bind(key)
         .fetch_optional(pool)
-        .await?;
+        .await
+        .repository()?;
     Ok(row
         .and_then(|row| row.try_get::<Option<String>, _>("Value").ok().flatten())
         .map_or(default, |raw| parse_bool(&raw)))

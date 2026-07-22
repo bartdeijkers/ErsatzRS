@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{GraphicsRepository, RepositoryError, Result};
 use ersatzrs_domain::{
@@ -43,7 +44,8 @@ impl GraphicsRepository for SqliteGraphicsRepository {
         .bind(channel_id)
         .bind(channel_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter().map(map_element).collect()
     }
 
@@ -78,7 +80,8 @@ impl GraphicsRepository for SqliteGraphicsRepository {
                 .expect("graphics element config should serialize"),
         )
         .execute(&self.0)
-        .await?;
+        .await
+        .repository()?;
         Ok(())
     }
 }
@@ -88,13 +91,14 @@ fn map_element(row: &DbRow) -> Result<GraphicsElement> {
     let config = decode_config(kind, row.try_get("Config").ok().flatten())?;
 
     Ok(GraphicsElement {
-        id: row.try_get("Id")?,
+        id: row.try_get("Id").repository()?,
         name: row
             .try_get::<Option<String>, _>("Name")
             .map(Option::unwrap_or_default)
-            .or_else(|_| row.try_get("Name"))?,
+            .or_else(|_| row.try_get("Name"))
+            .repository()?,
         kind,
-        path: row.try_get("Path")?,
+        path: row.try_get("Path").repository()?,
         z_index: row.try_get("ZIndex").unwrap_or(0),
         opacity_percent: row.try_get("OpacityPercent").unwrap_or(None),
         opacity_expression: row.try_get("OpacityExpression").unwrap_or(None),

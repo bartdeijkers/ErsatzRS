@@ -160,14 +160,15 @@ must not depend on concrete application services or storage.
 
 ### P7B-01 — Application foundation
 
-- Populate `ersatzrs-app` with bounded command/query modules and typed
-  application errors.
-- Keep repository/provider traits in core; remove `sqlx::Error` from core and
-  map concrete errors in infra.
-- Build `ApplicationServices` in the native composition root from injected
-  port implementations.
-- Consolidate operation coordination so web and scheduler do not maintain
-  competing lock/queue abstractions for one logical operation.
+- Complete (2026-07-22). `ersatzrs-app` now provides bounded command/query
+  modules, typed application errors, injected ports, and shared operation
+  coordination.
+- Core repository errors are storage-neutral and infrastructure explicitly
+  maps concrete SQLx failures at the adapter boundary.
+- The native web composition root constructs `ApplicationServices`; web and
+  scheduler share its entity locker and playout activity registry.
+- Playout-build sending and scan queue/progress ownership intentionally remain
+  for the complete p7b-02 and p7b-03 vertical slices.
 
 ### P7B-02 — Playout-build vertical slice
 

@@ -1,3 +1,4 @@
+use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io;
@@ -2577,7 +2578,7 @@ pub(crate) async fn load_hls_work_ahead_limit(pool: &DbPool) -> RepositoryResult
     .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
     .fetch_optional(pool)
     .await
-    .map_err(|error| map_data_access_error("HLS work-ahead limit", error))?;
+    .map_err(|error| map_data_access_error("HLS work-ahead limit", &error))?;
     let Some(value) = value else {
         return Ok(None);
     };
@@ -2611,7 +2612,7 @@ async fn load_channel_slug_seconds(
     .bind(channel_id)
     .fetch_optional(pool)
     .await
-    .map_err(|error| map_data_access_error("channel slug duration", error))?;
+    .map_err(|error| map_data_access_error("channel slug duration", &error))?;
     match value.flatten() {
         None => Ok(None),
         Some(seconds) if seconds.is_finite() && seconds >= 0.0 => Ok(Some(seconds)),
@@ -2628,7 +2629,7 @@ async fn load_channel_name(pool: &DbPool, channel_id: i64) -> RepositoryResult<O
             .bind(channel_id)
             .fetch_optional(pool)
             .await
-            .map_err(|error| map_data_access_error("channel name", error))?;
+            .map_err(|error| map_data_access_error("channel name", &error))?;
     Ok(value.flatten())
 }
 
@@ -3277,7 +3278,8 @@ async fn load_active_hls_item(
     .bind(&now_text)
     .bind(&now_text)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .repository()?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -4878,7 +4880,7 @@ mod tests {
         pool.close().await;
         assert!(matches!(
             load_hls_work_ahead_limit(&pool).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 
@@ -4901,7 +4903,7 @@ mod tests {
         pool.close().await;
         assert!(matches!(
             load_active_hls_item(&pool, 7, &[], now).await,
-            Err(RepositoryError::Database(_))
+            Err(RepositoryError::Unavailable { .. })
         ));
     }
 

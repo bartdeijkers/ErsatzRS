@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{Result, TemplateRepository};
 use ersatzrs_domain::{EntityId, Template};
@@ -33,7 +34,8 @@ impl TemplateRepository for SqliteTemplateRepository {
         )
         .bind(group_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter()
             .map(|row| {
                 let mut template = map_template(row)?;
@@ -44,7 +46,7 @@ impl TemplateRepository for SqliteTemplateRepository {
     }
 
     async fn upsert(&self, template: &Template) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         sqlx::query(
             r#"REPLACE INTO "Template" (
                 "Id", "TemplateGroupId", "Name", "DateUpdated"
@@ -55,17 +57,18 @@ impl TemplateRepository for SqliteTemplateRepository {
         .bind(&template.name)
         .bind(template.updated_ticks.to_string())
         .execute(&mut *tx)
-        .await?;
-        tx.commit().await?;
+        .await
+        .repository()?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 }
 
 fn map_template(row: &DbRow) -> Result<Template> {
     Ok(Template {
-        id: row.try_get("Id")?,
-        template_group_id: row.try_get("TemplateGroupId")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        template_group_id: row.try_get("TemplateGroupId").repository()?,
+        name: row.try_get("Name").repository()?,
         updated_ticks: row
             .try_get::<String, _>("DateUpdated")
             .ok()

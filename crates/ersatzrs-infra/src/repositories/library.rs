@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{LibraryRepository, Result};
 use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
@@ -45,7 +46,8 @@ impl LibraryRepository for SqliteLibraryRepository {
         )
         .bind(source_id)
         .fetch_all(&self.0)
-        .await?;
+        .await
+        .repository()?;
         rows.iter()
             .map(|row| {
                 let mut library = map_library(row)?;
@@ -57,7 +59,7 @@ impl LibraryRepository for SqliteLibraryRepository {
     }
 
     async fn upsert(&self, library: &Library) -> Result<()> {
-        let mut tx = self.0.begin().await?;
+        let mut tx = self.0.begin().await.repository()?;
         sqlx::query(
             r#"REPLACE INTO "Library" (
                 "Id", "Name", "MediaKind", "MediaSourceId"
@@ -68,17 +70,20 @@ impl LibraryRepository for SqliteLibraryRepository {
         .bind(encode_enum(library.media_kind))
         .bind(library.media_source_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .repository()?;
 
         sqlx::query(r#"DELETE FROM "LocalLibrary" WHERE "Id" = ?"#)
             .bind(library.id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .repository()?;
         if matches!(library.media_source_kind, MediaSourceKind::Local) {
             sqlx::query(r#"REPLACE INTO "LocalLibrary" ("Id") VALUES (?)"#)
                 .bind(library.id)
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .repository()?;
         }
 
         replace_ids(
@@ -93,7 +98,7 @@ impl LibraryRepository for SqliteLibraryRepository {
         // LibraryFolder requires a LibraryPathId; we cannot insert folders without a valid path.
         // For upsert purposes we skip folder insertion if we don't have path context.
 
-        tx.commit().await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 }
@@ -107,7 +112,8 @@ async fn resolve_media_source_kind(
     )
     .bind(library_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     if is_local {
         return Ok(MediaSourceKind::Local);
     }
@@ -116,7 +122,8 @@ async fn resolve_media_source_kind(
     )
     .bind(library_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     if is_plex {
         return Ok(MediaSourceKind::Plex);
     }
@@ -125,7 +132,8 @@ async fn resolve_media_source_kind(
     )
     .bind(library_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .repository()?;
     if is_jellyfin {
         return Ok(MediaSourceKind::Jellyfin);
     }
@@ -134,10 +142,10 @@ async fn resolve_media_source_kind(
 
 fn map_library(row: &DbRow) -> Result<Library> {
     Ok(Library {
-        id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
+        id: row.try_get("Id").repository()?,
+        name: row.try_get("Name").repository()?,
         media_kind: decode_enum_column("library media_kind", row, "MediaKind")?,
-        media_source_id: row.try_get("MediaSourceId")?,
+        media_source_id: row.try_get("MediaSourceId").repository()?,
         // Kind is resolved separately via sub-type table lookup
         media_source_kind: MediaSourceKind::Local,
         folder_ids: Vec::new(),

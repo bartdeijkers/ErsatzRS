@@ -4,40 +4,41 @@ rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-in
 status     = 'In progress'
 adr        = ['0051']
 summary    = '''
-In progress: ADR 0051 defines the storage-neutral application boundary and
-native web composition root. `cargo xtask architecture-lint` prevents the app
-crate from returning to a placeholder, forbids dependencies on concrete
-adapter/runtime crates, and ratchets existing production admin SQL and
-server-error-default loaders. Application workflows still live in web server
-functions/APIs through raw SQL, concrete repositories, process-local queues,
-and split lock registries; Phase 7B migrates complete vertical slices while
-keeping endpoint and persisted contracts stable.
+In progress: the Phase 7B foundation now provides documented command, query,
+application-error, port, and operation-coordination modules in `ersatzrs-app`.
+Core repository errors are storage-neutral, infrastructure explicitly maps
+SQLx failures, and the native web composition root injects concrete ports into
+`ApplicationServices` backed by one shared operation coordinator. Remaining
+application workflows still live in web server functions/APIs through raw SQL
+and web-owned playout/scan queues; milestones p7b-02 through p7b-05 migrate
+those complete vertical slices while endpoint and persisted contracts remain
+stable.
 '''
 
 [[debt]]
 id          = 'app-crate-is-unused-placeholder'
 description = 'ersatzrs-app is a one-line placeholder with no dependencies or consumers even though ARCHITECTURE.md assigns it responsibility for coordinating use cases.'
 discovered  = '2026-07-21'
-evidence    = 'ADR 0051 and `ApplicationServices` establish the application entry point; `cargo xtask architecture-lint` rejects an app crate without a public non-test item and has focused negative regression coverage. Concrete service construction remains tracked by p7b-01.'
+evidence    = '`ersatzrs-app` now exposes documented commands, queries, typed application errors, injected ports, and operation coordination through `ApplicationServices`; the native web composition root constructs it from concrete infrastructure ports. Architecture-lint retains focused placeholder and dependency-boundary regressions.'
 resolved    = true
 
 [[debt]]
 id          = 'web-owns-application-orchestration'
 description = 'Admin server functions and APIs combine transport, validation, raw SQL, side effects, queues, and concrete repositories, preventing reuse from non-web adapters such as a future video-jukebox add-on API.'
 discovered  = '2026-07-21'
-evidence    = 'Audit found 264 `#[server]` functions and 726 textual `sqlx::query*` occurrences under admin server functions/APIs. `AppState` exposes the raw pool, concrete repository bundle, scan queue/progress, playout sender, and two lock registries. Close through milestones p7b-02 through p7b-05.'
+evidence    = 'The foundation removed the duplicate web lock registry, but `AppState` still exposes the raw pool, concrete repository bundle, scan queue/progress, and playout sender while admin transport code retains direct orchestration. Close complete vertical slices through milestones p7b-02 through p7b-05.'
 resolved    = false
 
 [[debt]]
 id          = 'core-leaks-concrete-storage-error'
 description = 'ersatzrs-core::repositories::RepositoryError contains sqlx::Error, so the core trait boundary depends on the concrete persistence implementation.'
 discovered  = '2026-07-21'
-evidence    = '`crates/ersatzrs-core/src/repositories/error.rs` exposes `Database(#[from] sqlx::Error)`, contrary to the storage-neutral core rule in ARCHITECTURE.md. Close in milestone p7b-01 with infra-side error mapping.'
-resolved    = false
+evidence    = '`RepositoryError` now contains only storage-neutral not-found, conflict, decode, and unavailable categories. `ersatzrs-core` no longer depends on SQLx; infrastructure maps concrete SQLx failures explicitly, and architecture-lint rejects direct or renamed storage dependencies in core.'
+resolved    = true
 
 [[debt]]
 id          = 'operation-coordination-is-split'
 description = 'Web and scheduler maintain separate lock/queue registries for related long-running operations instead of one application-level operation coordinator.'
 discovered  = '2026-07-21'
-evidence    = '`AppState` documents a web string-keyed EntityLocker plus a separate core playout EntityLocker and also stores process-local scan/build queues. Close through milestones p7b-01 through p7b-03.'
+evidence    = '`ApplicationServices::operations()` now owns the one process-wide entity locker and playout activity registry used by web and scheduler construction. Web still owns playout-build sending plus scan queue/progress lifecycle; p7b-02 and p7b-03 migrate those remaining coordination concerns.'
 resolved    = false

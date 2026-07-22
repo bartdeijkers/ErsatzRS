@@ -1409,7 +1409,8 @@ pub(crate) async fn load_active_media_path(
     .bind(&now_text)
     .bind(&now_text)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(|error| ersatzrs_infra::map_repository_error(&error))?;
     let Some(row) = row else {
         return Ok(None);
     };

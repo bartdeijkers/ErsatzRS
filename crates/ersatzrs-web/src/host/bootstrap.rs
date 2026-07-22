@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository, RepositoryError};
+use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{HardwareAccelerationKind, VaapiDriver};
 use ersatzrs_infra::{
     db::{DatabaseBackend, DbPool},
@@ -189,8 +189,7 @@ pub async fn run() {
         super::tasks::MaintenanceTaskInputs {
             pool: app_state.pool.clone(),
             playout_build_rx,
-            playout_locker,
-            playout_build_activity: app_state.playout_build_activity.clone(),
+            application: app_state.application.clone(),
             hls_sessions: app_state.hls_sessions.clone(),
         },
         shutdown.clone(),
@@ -795,7 +794,7 @@ async fn build_app_state(
         ersatzrs_core::scheduling::PlayoutBuildRequest,
     >,
     playout_locker: ersatzrs_core::locking::EntityLocker,
-) -> Result<AppState, sqlx::Error> {
+) -> ersatzrs_app::Result<AppState> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
         IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());
@@ -813,8 +812,7 @@ async fn build_app_state(
         repositories
             .config
             .set(CONFIG_KEY_HDHR_UUID, &new_uuid.to_string())
-            .await
-            .map_err(|error| sqlx_repo_error(&error))?;
+            .await?;
         tracing::info!(device_uuid = %new_uuid, "seeded HDHomeRun device UUID");
         new_uuid
     };
@@ -855,12 +853,8 @@ async fn load_config_value(
     repository: &dyn ConfigRepository,
     key: &str,
     legacy_key: Option<&str>,
-) -> Result<Option<String>, sqlx::Error> {
-    if let Some(value) = repository
-        .get(key)
-        .await
-        .map_err(|error| sqlx_repo_error(&error))?
-    {
+) -> ersatzrs_app::Result<Option<String>> {
+    if let Some(value) = repository.get(key).await? {
         return Ok(Some(value));
     }
 
@@ -868,24 +862,14 @@ async fn load_config_value(
         return Ok(None);
     };
 
-    let legacy_value = repository
-        .get(legacy_key)
-        .await
-        .map_err(|error| sqlx_repo_error(&error))?;
+    let legacy_value = repository.get(legacy_key).await?;
 
     if let Some(value) = legacy_value {
-        repository
-            .set(key, &value)
-            .await
-            .map_err(|error| sqlx_repo_error(&error))?;
+        repository.set(key, &value).await?;
         return Ok(Some(value));
     }
 
     Ok(None)
-}
-
-fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
-    sqlx::Error::Protocol(error.to_string())
 }
 
 pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>) -> StatusCode {

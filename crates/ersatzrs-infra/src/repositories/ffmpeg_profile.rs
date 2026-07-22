@@ -1,4 +1,5 @@
 use crate::db::DbRow;
+use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{FfmpegProfileRepository, Result};
 use ersatzrs_domain::{EntityId, FFmpegProfile};
@@ -26,7 +27,8 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     async fn list(&self) -> Result<Vec<FFmpegProfile>> {
         let rows = sqlx::query(r#"SELECT * FROM "FFmpegProfile" ORDER BY "Name", "Id""#)
             .fetch_all(&self.0)
-            .await?;
+            .await
+            .repository()?;
         rows.iter().map(map_profile).collect()
     }
 
@@ -75,7 +77,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.normalize_colors)
         .bind(profile.deinterlace_video)
         .execute(&self.0)
-        .await?;
+        .await.repository()?;
         Ok(())
     }
 
@@ -83,16 +85,17 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         sqlx::query(r#"DELETE FROM "FFmpegProfile" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
-            .await?;
+            .await
+            .repository()?;
         Ok(())
     }
 }
 
 fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
     Ok(FFmpegProfile {
-        id: row.try_get("Id")?,
+        id: row.try_get("Id").repository()?,
         name: decode_string_column(row, "Name")?,
-        thread_count: row.try_get("ThreadCount")?,
+        thread_count: row.try_get("ThreadCount").repository()?,
         transcode_audio: decode_bool_column(row, "TranscodeAudio")?,
         transcode_video: decode_bool_column(row, "TranscodeVideo")?,
         hardware_acceleration: decode_enum_column(
@@ -103,8 +106,8 @@ fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
         vaapi_display: decode_optional_string_column(row, "VaapiDisplay")?,
         vaapi_driver: decode_enum_column("ffmpeg profile vaapi_driver", row, "VaapiDriver")?,
         vaapi_device: decode_optional_string_column(row, "VaapiDevice")?,
-        qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames")?,
-        resolution_id: row.try_get("ResolutionId")?,
+        qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames").repository()?,
+        resolution_id: row.try_get("ResolutionId").repository()?,
         scaling_behavior: decode_enum_column(
             "ffmpeg profile scaling_behavior",
             row,
@@ -116,24 +119,24 @@ fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
         video_preset: decode_optional_string_column(row, "VideoPreset")?,
         allow_b_frames: decode_bool_column(row, "AllowBFrames")?,
         bit_depth: decode_enum_column("ffmpeg profile bit_depth", row, "BitDepth")?,
-        video_bitrate: row.try_get("VideoBitrate")?,
-        video_buffer_size: row.try_get("VideoBufferSize")?,
+        video_bitrate: row.try_get("VideoBitrate").repository()?,
+        video_buffer_size: row.try_get("VideoBufferSize").repository()?,
         tonemap_algorithm: decode_enum_column(
             "ffmpeg profile tonemap_algorithm",
             row,
             "TonemapAlgorithm",
         )?,
         audio_format: decode_enum_column("ffmpeg profile audio_format", row, "AudioFormat")?,
-        audio_bitrate: row.try_get("AudioBitrate")?,
-        audio_buffer_size: row.try_get("AudioBufferSize")?,
+        audio_bitrate: row.try_get("AudioBitrate").repository()?,
+        audio_buffer_size: row.try_get("AudioBufferSize").repository()?,
         normalize_loudness_mode: decode_enum_column(
             "ffmpeg profile normalize_loudness_mode",
             row,
             "NormalizeLoudnessMode",
         )?,
-        target_loudness: row.try_get("TargetLoudness")?,
-        audio_channels: row.try_get("AudioChannels")?,
-        audio_sample_rate: row.try_get("AudioSampleRate")?,
+        target_loudness: row.try_get("TargetLoudness").repository()?,
+        audio_channels: row.try_get("AudioChannels").repository()?,
+        audio_sample_rate: row.try_get("AudioSampleRate").repository()?,
         normalize_framerate: decode_bool_column(row, "NormalizeFramerate")?,
         normalize_colors: decode_bool_column(row, "NormalizeColors")?,
         deinterlace_video: decode_optional_bool_column(row, "DeinterlaceVideo")?,
