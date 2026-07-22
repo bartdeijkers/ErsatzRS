@@ -80,6 +80,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- GitHub Actions and release builds now use the repository's supported Rust
+  1.97.1 toolchain again, and Dependabot ignores the invalid `1.100.0` action
+  tag that cannot be installed from the Rust distribution servers.
 - The global preferred audio language now drives built-in MPEG-TS and HLS
   stream selection when an item and channel do not override it. HLS Direct
   retains all source audio streams only when both the explicit audio language

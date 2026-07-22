@@ -38,7 +38,7 @@ jobs:
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@1.97.1
       - run: cargo fmt --all -- --check
 
   clippy:
@@ -49,7 +49,7 @@ jobs:
     needs: fmt
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
@@ -71,7 +71,7 @@ jobs:
     needs: fmt
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
@@ -98,7 +98,7 @@ jobs:
       ERSATZRS_E2E_PORT: "18409"
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
@@ -136,7 +136,7 @@ jobs:
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@1.97.1
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.19.6 --locked
       - name: Cargo deny

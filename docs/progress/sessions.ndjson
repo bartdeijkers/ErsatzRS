@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-07-22","summary":"Restored CI and release jobs to supported Rust 1.97.1 after an invalid Dependabot toolchain action bump, and prevented the same 1.100.0 bump from recurring."}
 {"agent":"Codex","date":"2026-07-22","summary":"Completed p7b-01 with storage-neutral repository errors, injected ApplicationServices, shared operation coordination, and architecture boundary coverage."}
 {"agent":"Codex","date":"2026-07-22","summary":"Completed p7a-04: gated development routes, made hydration data canonical, added bidirectional tracker validation and durable cross-browser playout workflow coverage, and corrected scanner/show notes."}
 {"agent":"Codex","date":"2026-07-22","summary":"Resolved p7a-03 review findings by making library polling errors recoverable and running storage failure injection through the normal Playwright CI database contract."}
