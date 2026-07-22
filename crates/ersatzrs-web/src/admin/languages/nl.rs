@@ -1607,17 +1607,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Dit item heeft geen Smart Shuffle-overschrijving en behoudt eventueel verouderd uitzendbeleid."
         }
         TextKey::SmartShuffleInactive => "Smart Shuffle is niet actief omdat deze afspeelvolgorde niet willekeurig is.",
-        TextKey::SmartShuffleOverviewEmptySource => "De inhoudsbron is leeg.",
-        TextKey::SmartShuffleOverviewNoMatchingRules => {
-            "Geen kandidaten komen overeen met de geconfigureerde gelijkenisregels."
-        }
-        TextKey::SmartShuffleOverviewOff => "Smart Shuffle staat uit.",
-        TextKey::SmartShuffleOverviewRefresh => "Vernieuwen",
-        TextKey::SmartShuffleOverviewStale => "Concept gewijzigd; vernieuw het overzicht.",
         TextKey::SmartShuffleOverrideBlock => "Overschrijven voor dit blokitem",
-        TextKey::SmartShufflePreview => "Smart Shuffle-overzicht",
-        TextKey::SmartShufflePreviewEmpty => "Geen overeenkomende kandidaten.",
-        TextKey::SmartShufflePreviewFailed => "Smart Shuffle-overzicht is mislukt.",
         TextKey::SimilarityRules => "Gelijkenisregels",
         TextKey::AlbumArtist => "Albumartiest",
         TextKey::ContentParent => "Bovenliggend item of variant",

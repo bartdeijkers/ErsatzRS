@@ -13,15 +13,12 @@ use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::schedules::{SmartShuffleForm, SmartShuffleOverview};
-
-#[cfg(feature = "ssr")]
-use super::schedules::ScheduleItemForm;
+use super::schedules::SmartShuffleForm;
 
 #[cfg(feature = "ssr")]
 use super::schedules::{
     persist_smart_shuffle_attachment_tx, smart_shuffle_form_from_policy,
-    smart_shuffle_overview_with_pool, smart_shuffle_policy_from_form, validate_smart_shuffle_form,
+    smart_shuffle_policy_from_form, validate_smart_shuffle_form,
 };
 
 #[cfg(feature = "ssr")]
@@ -149,38 +146,6 @@ pub struct PlayoutPreviewRow {
     pub finish: String,
     pub title: String,
     pub duration: String,
-}
-
-#[server]
-pub async fn preview_block_smart_shuffle_overview(
-    items: Vec<BlockItemForm>,
-    selected_index: usize,
-    query: String,
-    tag: String,
-    page: u32,
-) -> Result<SmartShuffleOverview, ServerFnError> {
-    use crate::host::state::AppState;
-
-    let state = expect_context::<AppState>();
-    let items = items
-        .into_iter()
-        .map(|item| ScheduleItemForm {
-            id: item.id,
-            index: item.index,
-            collection_type: item.collection_type,
-            collection_id: item.collection_id,
-            media_item_id: item.media_item_id,
-            multi_collection_id: item.multi_collection_id,
-            smart_collection_id: item.smart_collection_id,
-            search_title: item.search_title,
-            search_query: item.search_query,
-            collection_name: item.collection_name,
-            playback_order: item.playback_order,
-            smart_shuffle: item.smart_shuffle,
-            ..ScheduleItemForm::default()
-        })
-        .collect();
-    smart_shuffle_overview_with_pool(&state.pool, items, selected_index, &query, &tag, page).await
 }
 
 // ---------------------------------------------------------------------------

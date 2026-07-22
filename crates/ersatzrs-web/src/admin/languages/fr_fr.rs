@@ -961,17 +961,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Cet élément n'a pas de remplacement Smart Shuffle et conserve toute stratégie de diffusion héritée."
         }
         TextKey::SmartShuffleInactive => "La lecture aléatoire intelligente est inactive car cet ordre de lecture n'est pas aléatoire.",
-        TextKey::SmartShuffleOverviewEmptySource => "La source de contenu est vide.",
-        TextKey::SmartShuffleOverviewNoMatchingRules => {
-            "Aucun candidat ne correspond aux règles de similarité configurées."
-        }
-        TextKey::SmartShuffleOverviewOff => "Smart Shuffle est désactivé.",
-        TextKey::SmartShuffleOverviewRefresh => "Actualiser",
-        TextKey::SmartShuffleOverviewStale => "Le brouillon a changé ; actualisez la vue d'ensemble.",
         TextKey::SmartShuffleOverrideBlock => "Remplacer pour cet élément de bloc",
-        TextKey::SmartShufflePreview => "Vue d'ensemble Smart Shuffle",
-        TextKey::SmartShufflePreviewEmpty => "Aucun candidat correspondant.",
-        TextKey::SmartShufflePreviewFailed => "Échec de la vue d'ensemble Smart Shuffle.",
         TextKey::SimilarityRules => "Règles de similarité",
         TextKey::AlbumArtist => "Artiste de l'album",
         TextKey::ContentParent => "Parent ou variante",
@@ -2502,10 +2492,6 @@ mod tests {
         assert_eq!(
             STRINGS.text(TextKey::SmartShuffleAfterItems),
             "Vidéos entre les éléments similaires"
-        );
-        assert_eq!(
-            STRINGS.text(TextKey::SmartShufflePreview),
-            "Vue d'ensemble Smart Shuffle"
         );
     }
 

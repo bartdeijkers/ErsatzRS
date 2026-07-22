@@ -10,15 +10,13 @@ use std::fmt::Write;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use super::smart_shuffle_overview_warning_text;
-use crate::admin::i18n::{range_of, save_failed, scheduling_content_error_message, tr, TextKey};
+use crate::admin::i18n::{save_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
-    preview_block_playout, preview_block_smart_shuffle_overview, save_block_with_items,
-    stop_scheduling, BlockEditorOptions, BlockForm, BlockItemForm, BlockWithItemsForm,
-    PlayoutPreviewRow,
+    preview_block_playout, save_block_with_items, stop_scheduling, BlockEditorOptions, BlockForm,
+    BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
 };
-use crate::admin::server_fns::schedules::{SmartShuffleForm, SmartShuffleOverview};
+use crate::admin::server_fns::schedules::SmartShuffleForm;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/block_editor.module.css");
@@ -458,7 +456,6 @@ fn BlockEditorForm(
                         })
                     }}
                 </div>
-                <BlockSmartShuffleOverview items=items/>
             </div>
 
             // ── Preview modal ───────────────────────────────────────────
@@ -520,87 +517,6 @@ fn BlockEditorForm(
                 </table>
             </div>
         </div>
-    }
-}
-
-#[component]
-fn BlockSmartShuffleOverview(items: RwSignal<Vec<BlockItemForm>>) -> impl IntoView {
-    let overview = RwSignal::new(None::<SmartShuffleOverview>);
-    let selected = RwSignal::new(0_usize);
-    let query = RwSignal::new(String::new());
-    let tag = RwSignal::new(String::new());
-    let page = RwSignal::new(1_u32);
-    let stale = RwSignal::new(true);
-    let refresh = Action::new(
-        |(items, selected, query, tag, page): &(Vec<BlockItemForm>, usize, String, String, u32)| {
-            preview_block_smart_shuffle_overview(
-                items.clone(),
-                *selected,
-                query.clone(),
-                tag.clone(),
-                *page,
-            )
-        },
-    );
-    Effect::new(move |_| {
-        let _ = items.get();
-        stale.set(true);
-    });
-    Effect::new(move |_| {
-        if let Some(Ok(value)) = refresh.value().get() {
-            overview.set(Some(value));
-            stale.set(false);
-        }
-    });
-    let run = move || {
-        refresh.dispatch((
-            items.get_untracked(),
-            selected.get_untracked(),
-            query.get_untracked(),
-            tag.get_untracked(),
-            page.get_untracked(),
-        ));
-    };
-    view! {
-        <section class=style::smart_shuffle_overview>
-            <div class=style::overview_header>
-                <h2>{tr(TextKey::SmartShufflePreview)}</h2>
-                <span class=style::stale_indicator style:display=move || if stale.get() { "" } else { "none" }>{tr(TextKey::SmartShuffleOverviewStale)}</span>
-                <button type="button" class=style::btn_secondary disabled=move || refresh.pending().get() on:click=move |_| run()>{tr(TextKey::SmartShuffleOverviewRefresh)}</button>
-            </div>
-            {move || match overview.get() { Some(data) => {
-                let rows = data.candidates.clone();
-                view! {
-                    <div class=style::overview_groups>
-                        {data.summaries.into_iter().map(|summary| {
-                            let index = summary.index;
-                            view! {
-                                <details class=style::overview_group open=move || selected.get() == index>
-                                    <summary on:click=move |_| { selected.set(index); page.set(1); stale.set(true); }>
-                                        <strong>{summary.source_name}</strong>
-                                        <span>{format!("{} · {} / {} · {}", summary.preset, summary.tagged_candidate_count, summary.candidate_count, summary.distinct_effective_tags)}</span>
-                                    </summary>
-                                    {summary.warnings.into_iter().map(|warning| view! { <p>{smart_shuffle_overview_warning_text(warning)}</p> }).collect_view()}
-                                </details>
-                            }
-                        }).collect_view()}
-                    </div>
-                    <div class=style::overview_filters>
-                        <label>{tr(TextKey::Search)}<input class=style::input prop:value=query on:input=move |event| { query.set(event_target_value(&event)); stale.set(true); }/></label>
-                        <label>{tr(TextKey::Tags)}<input class=style::input prop:value=tag on:input=move |event| { tag.set(event_target_value(&event)); stale.set(true); }/></label>
-                    </div>
-                    <div class=style::items_table_wrap><table class=style::items_table>
-                        <thead><tr><th>{tr(TextKey::Title)}</th><th>{tr(TextKey::Type)}</th><th>{tr(TextKey::Tags)}</th></tr></thead>
-                        <tbody>{if rows.is_empty() { view! { <tr><td colspan="3">{tr(TextKey::SmartShufflePreviewEmpty)}</td></tr> }.into_any() } else { rows.into_iter().map(|candidate| view! { <tr><td>{candidate.title}</td><td>{candidate.media_type}</td><td>{candidate.tags.into_iter().map(|tag| format!("{}: {}", tag.rule, tag.value)).collect::<Vec<_>>().join(", ")}</td></tr> }).collect_view().into_any() }}</tbody>
-                    </table></div>
-                    <div class=style::pagination>
-                        <button type="button" class=style::btn_secondary disabled=data.page <= 1 on:click=move |_| { page.update(|value| *value = value.saturating_sub(1).max(1)); run(); }>{tr(TextKey::PreviousPage)}</button>
-                        <span>{range_of(data.page, data.page_size, data.total_candidates as u64)}</span>
-                        <button type="button" class=style::btn_secondary disabled=data.page as usize * data.page_size as usize >= data.total_candidates on:click=move |_| { page.update(|value| *value += 1); run(); }>{tr(TextKey::NextPage)}</button>
-                    </div>
-                }.into_any()
-            }, None => view! { <p>{tr(TextKey::SmartShufflePreviewEmpty)}</p> }.into_any()}}
-        </section>
     }
 }
 

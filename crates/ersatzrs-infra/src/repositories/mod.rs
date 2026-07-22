@@ -31,7 +31,7 @@ pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;
 pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
-pub use scheduling::{SchedulingSmartShuffleTagPreview, SqliteSchedulingContentRepository};
+pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;

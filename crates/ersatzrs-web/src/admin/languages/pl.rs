@@ -1617,17 +1617,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Ten element nie ma nadpisania Smart Shuffle i zachowuje ewentualną starszą zasadę emisji."
         }
         TextKey::SmartShuffleInactive => "Inteligentne losowanie jest nieaktywne, ponieważ ta kolejność odtwarzania nie jest losowa.",
-        TextKey::SmartShuffleOverviewEmptySource => "Źródło treści jest puste.",
-        TextKey::SmartShuffleOverviewNoMatchingRules => {
-            "Żaden kandydat nie pasuje do skonfigurowanych reguł podobieństwa."
-        }
-        TextKey::SmartShuffleOverviewOff => "Funkcja Smart Shuffle jest wyłączona.",
-        TextKey::SmartShuffleOverviewRefresh => "Odśwież",
-        TextKey::SmartShuffleOverviewStale => "Wersja robocza uległa zmianie; odśwież przegląd.",
         TextKey::SmartShuffleOverrideBlock => "Nadpisz dla tego elementu bloku",
-        TextKey::SmartShufflePreview => "Przegląd Smart Shuffle",
-        TextKey::SmartShufflePreviewEmpty => "Brak pasujących kandydatów.",
-        TextKey::SmartShufflePreviewFailed => "Przegląd Smart Shuffle nie powiódł się.",
         TextKey::SimilarityRules => "Reguły podobieństwa",
         TextKey::AlbumArtist => "Wykonawca albumu",
         TextKey::ContentParent => "Element nadrzędny lub wariant",

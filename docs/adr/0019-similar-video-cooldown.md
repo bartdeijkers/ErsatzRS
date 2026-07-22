@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted 2026-07-17
+Accepted (2026-07-17; revised — see Revision history).
 
 ## Implementation
 
@@ -37,10 +37,12 @@ is selected. Existing enabled Classic policies normalize their underlying
 randomized order to Shuffle when next saved. The Block Item editor exposes
 Off, Light, Balanced, and Custom controls directly after playback order,
 including scope, item-count and duration thresholds, filler participation,
-built-in facets, and operator filter rules. Their draft-aware Smart Shuffle
-Overview reports every selection unit and exposes all candidates through
-search, tag filters, and 50-row pages with localized warning states. Sequential YAML uses
-`content[].smart_shuffle`; Scripted Lua uses
+built-in facets, and operator filter rules. The draft-aware Smart Shuffle
+Overview and its paginated candidate query were intentionally removed on
+2026-07-22: building the overview required eagerly enumerating every candidate
+for every item in the draft, making the surface too expensive to be useful.
+This removal does not affect item policy editing or playout building.
+Sequential YAML uses `content[].smart_shuffle`; Scripted Lua uses
 `set_smart_shuffle_policy(content_key, json)`. Focused core,
 SQL hydration and anchor persistence, admin persistence, schema, hydration,
 and desktop/mobile browser coverage protect the implemented path.
@@ -226,9 +228,9 @@ The admin UI should expose presets before advanced rule editing:
 - Custom: explicit scopes, thresholds, and rule list.
 
 Advanced users should be able to attach filter rules using the same search
-terms used by smart collections. The UI must preview the effective tags for a
-small sample of candidate media so operators can see why a policy is grouping
-items together.
+terms used by smart collections. Item editors do not preview effective tags or
+enumerate draft candidates: the initial overview implementation made that work
+scale with every candidate of every draft item and was intentionally removed.
 
 ## Consequences
 
@@ -282,3 +284,12 @@ to deterministic best-effort diversity with a warning, not an offline channel.
 - [`crates/ersatzrs-core/src/scheduling/yaml.rs`](../../crates/ersatzrs-core/src/scheduling/yaml.rs)
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/ShuffledMediaCollectionEnumerator.cs`
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/BlockPlayoutShuffledMediaCollectionEnumerator.cs`
+
+## Revision history
+
+- 2026-07-17: Accepted and implemented the opt-in shared Smart Shuffle policy.
+- 2026-07-19: Redesigned policy ownership around each engine's native selection
+  unit and added draft-aware overview contracts.
+- 2026-07-22: Removed the draft-aware overview and paginated candidate query.
+  Enumerating every candidate for every draft item made the preview too slow to
+  be useful; item policy editing and playout-building behavior are unchanged.

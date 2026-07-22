@@ -5,27 +5,26 @@ use std::fmt::Write as _;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use super::smart_shuffle_overview_warning_text;
 use crate::admin::i18n::{
     media_item_fallback_label, range_of, schedule_error_message, schedule_item_fallback_label, tr,
     TextKey,
 };
 use crate::admin::server_fns::schedules::{
     copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
-    get_schedules_page_size, list_schedules, preview_smart_shuffle_overview,
-    replace_schedule_items, save_schedule, save_schedules_detail_page_size, FillerOption,
-    PlaylistOption, ScheduleForm, ScheduleItemForm, ScheduleItemListRow, ScheduleItemOption,
-    ScheduleItemsEditorOptions, ScheduleItemsPageData, ScheduleLanguageOption, ScheduleListRow,
-    SmartShuffleForm, SmartShuffleOverview, COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION,
-    COLLECTION_TYPE_MULTI_COLLECTION, COLLECTION_TYPE_PLAYLIST, COLLECTION_TYPE_RERUN_FIRST_RUN,
-    COLLECTION_TYPE_RERUN_RERUN, COLLECTION_TYPE_SEARCH_QUERY, COLLECTION_TYPE_SMART_COLLECTION,
-    COLLECTION_TYPE_TELEVISION_SEASON, COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE,
-    MARATHON_GROUP_BY_NONE, MULTIPLE_MODE_COLLECTION_SIZE, MULTIPLE_MODE_COUNT,
-    MULTIPLE_MODE_MULTI_EPISODE_GROUP_SIZE, MULTIPLE_MODE_PLAYLIST_ITEM_SIZE,
-    PLAYBACK_ORDER_CHRONOLOGICAL, PLAYBACK_ORDER_MARATHON, PLAYBACK_ORDER_NONE,
-    PLAYBACK_ORDER_RANDOM, PLAYBACK_ORDER_SEASON_EPISODE, PLAYBACK_ORDER_SHUFFLE,
-    PLAYBACK_ORDER_SHUFFLE_IN_ORDER, PLAYOUT_MODE_DURATION, PLAYOUT_MODE_FLOOD,
-    PLAYOUT_MODE_MULTIPLE, PLAYOUT_MODE_ONE, START_TYPE_DYNAMIC, START_TYPE_FIXED,
+    get_schedules_page_size, list_schedules, replace_schedule_items, save_schedule,
+    save_schedules_detail_page_size, FillerOption, PlaylistOption, ScheduleForm, ScheduleItemForm,
+    ScheduleItemListRow, ScheduleItemOption, ScheduleItemsEditorOptions, ScheduleItemsPageData,
+    ScheduleLanguageOption, ScheduleListRow, SmartShuffleForm, COLLECTION_TYPE_ARTIST,
+    COLLECTION_TYPE_COLLECTION, COLLECTION_TYPE_MULTI_COLLECTION, COLLECTION_TYPE_PLAYLIST,
+    COLLECTION_TYPE_RERUN_FIRST_RUN, COLLECTION_TYPE_RERUN_RERUN, COLLECTION_TYPE_SEARCH_QUERY,
+    COLLECTION_TYPE_SMART_COLLECTION, COLLECTION_TYPE_TELEVISION_SEASON,
+    COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE, MARATHON_GROUP_BY_NONE,
+    MULTIPLE_MODE_COLLECTION_SIZE, MULTIPLE_MODE_COUNT, MULTIPLE_MODE_MULTI_EPISODE_GROUP_SIZE,
+    MULTIPLE_MODE_PLAYLIST_ITEM_SIZE, PLAYBACK_ORDER_CHRONOLOGICAL, PLAYBACK_ORDER_MARATHON,
+    PLAYBACK_ORDER_NONE, PLAYBACK_ORDER_RANDOM, PLAYBACK_ORDER_SEASON_EPISODE,
+    PLAYBACK_ORDER_SHUFFLE, PLAYBACK_ORDER_SHUFFLE_IN_ORDER, PLAYOUT_MODE_DURATION,
+    PLAYOUT_MODE_FLOOD, PLAYOUT_MODE_MULTIPLE, PLAYOUT_MODE_ONE, START_TYPE_DYNAMIC,
+    START_TYPE_FIXED,
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -1246,7 +1245,6 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                                     let editor_options = options.get();
                                     schedule_item_editor(index, &item, items, &editor_options, shuffle_schedule_items.get())
                                 })).unwrap_or_else(|| view! { <p class=style::empty>{tr(TextKey::SelectScheduleItemPrompt)}</p> }.into_any())}
-                                <SmartShuffleOverviewPanel items=items/>
                             }.into_any()
                     } else {
                         view! { <p class=style::empty>{tr(TextKey::ScheduleNotFound)}</p> }.into_any()
@@ -1254,123 +1252,6 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                 }}
             </section>
         </div>
-    }
-}
-
-#[component]
-fn SmartShuffleOverviewPanel(items: RwSignal<Vec<ScheduleItemForm>>) -> impl IntoView {
-    let overview = RwSignal::new(None::<SmartShuffleOverview>);
-    let selected_index = RwSignal::new(0_usize);
-    let query = RwSignal::new(String::new());
-    let tag = RwSignal::new(String::new());
-    let page = RwSignal::new(1_u32);
-    let stale = RwSignal::new(true);
-    let error = RwSignal::new(String::new());
-    let refresh = Action::new(
-        |(items, selected, query, tag, page): &(
-            Vec<ScheduleItemForm>,
-            usize,
-            String,
-            String,
-            u32,
-        )| {
-            preview_smart_shuffle_overview(
-                items.clone(),
-                *selected,
-                query.clone(),
-                tag.clone(),
-                *page,
-            )
-        },
-    );
-    Effect::new(move |_| {
-        let _ = items.get();
-        stale.set(true);
-    });
-    Effect::new(move |_| {
-        if let Some(result) = refresh.value().get() {
-            match result {
-                Ok(value) => {
-                    overview.set(Some(value));
-                    error.set(String::new());
-                    stale.set(false);
-                }
-                Err(value) => error.set(value.to_string()),
-            }
-        }
-    });
-    let run_refresh = move || {
-        refresh.dispatch((
-            items.get_untracked(),
-            selected_index.get_untracked(),
-            query.get_untracked(),
-            tag.get_untracked(),
-            page.get_untracked(),
-        ));
-    };
-
-    view! {
-        <section class=style::smart_shuffle_overview>
-            <div class=style::overview_header>
-                <h2>{tr(TextKey::SmartShufflePreview)}</h2>
-                <span class=style::stale_indicator style:display=move || if stale.get() { "" } else { "none" }>
-                    {tr(TextKey::SmartShuffleOverviewStale)}
-                </span>
-                <button type="button" class=style::btn_default disabled=move || refresh.pending().get() on:click=move |_| run_refresh()>
-                    {tr(TextKey::SmartShuffleOverviewRefresh)}
-                </button>
-            </div>
-            <p class=style::error style:display=move || if error.get().is_empty() { "none" } else { "" }>
-                {move || format!("{}: {}", tr(TextKey::SmartShufflePreviewFailed), error.get())}
-            </p>
-            {move || match overview.get() { Some(data) => {
-                let summaries = data.summaries.clone();
-                let candidate_rows = data.candidates.clone();
-                view! {
-                    <div class=style::overview_groups>
-                        {summaries.into_iter().map(|summary| {
-                            let index = summary.index;
-                            view! {
-                                <details class=style::overview_group open=move || selected_index.get() == index>
-                                    <summary on:click=move |_| {
-                                        selected_index.set(index);
-                                        page.set(1);
-                                        stale.set(true);
-                                    }>
-                                        <strong>{summary.source_name}</strong>
-                                        <span>{format!("{} · {} / {} · {}", summary.preset, summary.tagged_candidate_count, summary.candidate_count, summary.distinct_effective_tags)}</span>
-                                    </summary>
-                                    {summary.warnings.into_iter().map(|warning| view! { <p class=style::help>{smart_shuffle_overview_warning_text(warning)}</p> }).collect_view()}
-                                </details>
-                            }
-                        }).collect_view()}
-                    </div>
-                    <div class=style::overview_filters>
-                        <label>{tr(TextKey::Search)}<input class=style::input prop:value=query on:input=move |event| { query.set(event_target_value(&event)); stale.set(true); }/></label>
-                        <label>{tr(TextKey::Tags)}<input class=style::input prop:value=tag on:input=move |event| { tag.set(event_target_value(&event)); stale.set(true); }/></label>
-                    </div>
-                    <div class=style::table_wrap>
-                        <table>
-                            <thead><tr><th>{tr(TextKey::Title)}</th><th>{tr(TextKey::Type)}</th><th>{tr(TextKey::Tags)}</th></tr></thead>
-                            <tbody>
-                                {if candidate_rows.is_empty() {
-                                    view! { <tr><td colspan="3" class=style::empty>{tr(TextKey::SmartShufflePreviewEmpty)}</td></tr> }.into_any()
-                                } else {
-                                    candidate_rows.into_iter().map(|candidate| view! {
-                                        <tr><td>{candidate.title}</td><td>{candidate.media_type}</td><td>{candidate.tags.into_iter().map(|tag| format!("{}: {}", tag.rule, tag.value)).collect::<Vec<_>>().join(", ")}</td></tr>
-                                    }).collect_view().into_any()
-                                }}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class=style::pagination>
-                        <button type="button" class=style::btn_default disabled=data.page <= 1 on:click=move |_| { page.update(|value| *value = value.saturating_sub(1).max(1)); run_refresh(); }>{tr(TextKey::PreviousPage)}</button>
-                        <span>{range_of(data.page, data.page_size, data.total_candidates as u64)}</span>
-                        <button type="button" class=style::btn_default disabled=data.page as usize * data.page_size as usize >= data.total_candidates on:click=move |_| { page.update(|value| *value += 1); run_refresh(); }>{tr(TextKey::NextPage)}</button>
-                    </div>
-                }.into_any()
-            }, None => view! { <p class=style::empty>{tr(TextKey::SmartShufflePreviewEmpty)}</p> }.into_any()}}
-        </section>
     }
 }
 

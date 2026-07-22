@@ -268,9 +268,6 @@ test.describe('scheduling route-family parity', () => {
     await page.locator('tbody tr').nth(0).click();
     await expect(scheduleItemControl(page, 'Playback Order', 'select')).toHaveValue('-1');
     await expect(page.getByLabel('Spacing preset')).toHaveValue('balanced');
-    await page.getByRole('heading', { name: 'Smart Shuffle Overview' }).scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: 'Refresh' }).click();
-    await expect(page.locator('details').filter({ hasText: 'Primary Videos' })).toBeVisible();
     await page.screenshot({ path: screenshotPath(testInfo, 'schedule-smart-shuffle-desktop') });
 
     const mobileContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });

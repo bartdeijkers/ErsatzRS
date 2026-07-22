@@ -8,9 +8,11 @@ ADR 0019 is implemented as opt-in Smart Shuffle policies owned by each native
 selection unit: Classic ProgramScheduleItem, reusable BlockItem, Sequential
 YAML content entry, and Scripted content key. Versioned policy and anchor state,
 isolated pre-hydrated tags, deterministic soft relaxation, legacy defaults and
-attachments, localized item editors, and paginated draft-aware overviews
-preserve imported ErsatzTV behavior when the policy is absent or Off. Similar
-Video Cooldown was the feature's former name.
+attachments, and localized item editors preserve imported ErsatzTV behavior
+when the policy is absent or Off. The draft-wide candidate overview was
+intentionally removed because eagerly enumerating every candidate for every
+draft item was too expensive. Similar Video Cooldown was the feature's former
+name.
 '''
 
 [[debt]]
@@ -18,5 +20,5 @@ id          = 'similar-video-cooldown-scheduling'
 adr         = '0019'
 description = 'Scheduling has no shared opt-in cooldown-aware shuffle policy that can keep groupable media, such as the same artist, TV show, movie franchise, parent variant, collection, tag, or operator-defined filter, apart for a configured number of videos or playout duration.'
 discovered  = '2026-07-01'
-evidence    = 'Implemented 2026-07-17 and redesigned 2026-07-19: shared deterministic selector and versioned state; per-selection-unit Classic, Block, YAML, and Scripted policies; isolated SQL facet/filter hydration; legacy attachment/default migration; localized Classic and Block item editors; draft-aware summary and paginated candidate overview contracts.'
+evidence    = 'Implemented 2026-07-17 and redesigned 2026-07-19: shared deterministic selector and versioned state; per-selection-unit Classic, Block, YAML, and Scripted policies; isolated SQL facet/filter hydration; legacy attachment/default migration; localized Classic and Block item editors. The draft-aware summary and paginated candidate overview contracts were intentionally removed 2026-07-22 because they eagerly enumerated all candidates for all draft items; scheduling behavior remains implemented.'
 resolved    = true

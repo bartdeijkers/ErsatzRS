@@ -1219,24 +1219,6 @@ async fn scheduling_repository_hydrates_persisted_smart_shuffle_policy_and_simil
     let finale = reference_data.smart_shuffle_tags_for_media(&unit_key, 13);
     assert!(finale.contains("show:the show"));
     assert!(!finale.contains(&format!("filter:{unit_key}:pilot")));
-
-    let preview = repos
-        .scheduling
-        .smart_shuffle_candidates(
-            &SchedulingCollectionKey {
-                collection_type: CollectionType::Collection,
-                collection_id: Some(1),
-                ..SchedulingCollectionKey::default()
-            },
-            policy,
-        )
-        .await
-        .unwrap();
-    let pilot_preview = preview
-        .iter()
-        .find(|row| row.media_item_id == 12)
-        .expect("pilot should be included in the deterministic preview");
-    assert!(pilot_preview.tags.contains(&"filter:pilot".to_owned()));
 }
 
 #[tokio::test]

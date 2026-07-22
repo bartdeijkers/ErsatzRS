@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "ssr")]
-use std::collections::BTreeSet;
-
-#[cfg(feature = "ssr")]
 use ersatzrs_core::scheduling::{
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
     SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset, SchedulingSmartShuffleRule,
@@ -314,51 +311,6 @@ pub struct ScheduleItemsPageData {
     pub options: ScheduleItemsEditorOptions,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SmartShuffleTagSummary {
-    pub rule: String,
-    pub value: String,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SmartShuffleCandidateDetail {
-    pub media_item_id: i64,
-    pub title: String,
-    pub media_type: String,
-    pub tags: Vec<SmartShuffleTagSummary>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SmartShuffleUnitSummary {
-    pub index: usize,
-    pub source_name: String,
-    pub playback_order: i32,
-    pub preset: String,
-    pub candidate_count: usize,
-    pub tagged_candidate_count: usize,
-    pub distinct_effective_tags: usize,
-    pub warnings: Vec<SmartShuffleOverviewWarning>,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SmartShuffleOverviewWarning {
-    InactivePlaybackOrder,
-    Off,
-    EmptySource,
-    NoMatchingRules,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SmartShuffleOverview {
-    pub summaries: Vec<SmartShuffleUnitSummary>,
-    pub candidates: Vec<SmartShuffleCandidateDetail>,
-    pub selected_index: usize,
-    pub total_candidates: usize,
-    pub page: u32,
-    pub page_size: u32,
-}
-
 #[server]
 pub async fn get_schedules_page_size() -> Result<(u32, u32), ServerFnError> {
     use crate::host::state::AppState;
@@ -402,20 +354,6 @@ pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFn
 
     let state = expect_context::<AppState>();
     get_schedule_form_with_pool(&state.pool, id).await
-}
-
-#[server]
-pub async fn preview_smart_shuffle_overview(
-    items: Vec<ScheduleItemForm>,
-    selected_index: usize,
-    query: String,
-    tag: String,
-    page: u32,
-) -> Result<SmartShuffleOverview, ServerFnError> {
-    use crate::host::state::AppState;
-
-    let state = expect_context::<AppState>();
-    smart_shuffle_overview_with_pool(&state.pool, items, selected_index, &query, &tag, page).await
 }
 
 #[server]
@@ -1713,162 +1651,6 @@ pub(crate) fn validate_smart_shuffle_form(form: &SmartShuffleForm) -> Result<(),
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
-#[allow(clippy::too_many_lines)]
-pub(crate) async fn smart_shuffle_overview_with_pool(
-    pool: &DbPool,
-    items: Vec<ScheduleItemForm>,
-    selected_index: usize,
-    query: &str,
-    tag: &str,
-    page: u32,
-) -> Result<SmartShuffleOverview, ServerFnError> {
-    use ersatzrs_core::scheduling::SchedulingCollectionKey;
-    use ersatzrs_domain::CollectionType;
-    use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
-
-    let repository = SqliteSchedulingContentRepository::new(pool.clone());
-    let mut summaries = Vec::with_capacity(items.len());
-    let mut selected_candidates = Vec::new();
-
-    for (index, item) in items.iter().enumerate() {
-        let collection_type = match item.collection_type {
-            COLLECTION_TYPE_COLLECTION => CollectionType::Collection,
-            COLLECTION_TYPE_TELEVISION_SHOW => CollectionType::TelevisionShow,
-            COLLECTION_TYPE_TELEVISION_SEASON => CollectionType::TelevisionSeason,
-            COLLECTION_TYPE_ARTIST => CollectionType::Artist,
-            COLLECTION_TYPE_MULTI_COLLECTION => CollectionType::MultiCollection,
-            COLLECTION_TYPE_SMART_COLLECTION => CollectionType::SmartCollection,
-            COLLECTION_TYPE_PLAYLIST => CollectionType::Playlist,
-            COLLECTION_TYPE_RERUN_FIRST_RUN => CollectionType::RerunFirstRun,
-            COLLECTION_TYPE_RERUN_RERUN => CollectionType::RerunRerun,
-            COLLECTION_TYPE_SEARCH_QUERY => CollectionType::SearchQuery,
-            _ => {
-                return Err(ServerFnError::new(
-                    "Unsupported Smart Shuffle content source.",
-                ))
-            }
-        };
-        let key = SchedulingCollectionKey {
-            collection_type,
-            collection_id: item.collection_id,
-            multi_collection_id: item.multi_collection_id,
-            smart_collection_id: item.smart_collection_id,
-            media_item_id: item.media_item_id,
-            playlist_id: item.playlist_id,
-            search_query: item.search_query.clone(),
-            fake_collection_key: None,
-        };
-        let policy = smart_shuffle_policy_from_form(&item.smart_shuffle);
-        let candidates = repository
-            .smart_shuffle_candidates(&key, policy.clone())
-            .await
-            .map_err(ServerFnError::new)?;
-        let tagged_candidate_count = candidates
-            .iter()
-            .filter(|candidate| !candidate.tags.is_empty())
-            .count();
-        let distinct_effective_tags = candidates
-            .iter()
-            .flat_map(|candidate| candidate.tags.iter().cloned())
-            .collect::<BTreeSet<_>>()
-            .len();
-        let mut warnings = Vec::new();
-        if !smart_shuffle_playback_order_supported(item.playback_order) {
-            warnings.push(SmartShuffleOverviewWarning::InactivePlaybackOrder);
-        } else if !policy.is_active() {
-            warnings.push(SmartShuffleOverviewWarning::Off);
-        } else if candidates.is_empty() {
-            warnings.push(SmartShuffleOverviewWarning::EmptySource);
-        } else if tagged_candidate_count == 0 {
-            warnings.push(SmartShuffleOverviewWarning::NoMatchingRules);
-        }
-        summaries.push(SmartShuffleUnitSummary {
-            index,
-            source_name: item.collection_name.clone(),
-            playback_order: item.playback_order,
-            preset: item.smart_shuffle.preset.clone(),
-            candidate_count: candidates.len(),
-            tagged_candidate_count,
-            distinct_effective_tags,
-            warnings,
-        });
-        if index == selected_index {
-            selected_candidates = candidates;
-        }
-    }
-
-    let query = query.trim().to_lowercase();
-    let tag = tag.trim().to_lowercase();
-    let mut candidates = selected_candidates
-        .into_iter()
-        .filter(|candidate| {
-            (query.is_empty()
-                || candidate
-                    .title
-                    .as_deref()
-                    .unwrap_or_default()
-                    .to_lowercase()
-                    .contains(&query))
-                && (tag.is_empty()
-                    || candidate
-                        .tags
-                        .iter()
-                        .any(|value| value.to_lowercase().contains(&tag)))
-        })
-        .collect::<Vec<_>>();
-    candidates.sort_by_key(|candidate| candidate.media_item_id);
-    let total_candidates = candidates.len();
-    let page_size = 50_u32;
-    let start = usize::try_from(page.saturating_sub(1).saturating_mul(page_size)).unwrap_or(0);
-    let candidates = candidates
-        .into_iter()
-        .skip(start)
-        .take(page_size as usize)
-        .map(|candidate| SmartShuffleCandidateDetail {
-            media_item_id: candidate.media_item_id,
-            title: candidate
-                .title
-                .unwrap_or_else(|| format!("Media {}", candidate.media_item_id)),
-            media_type: candidate.media_type,
-            tags: candidate
-                .tags
-                .into_iter()
-                .map(|tag| {
-                    let (rule, value) = tag
-                        .split_once(':')
-                        .map_or(("similarity", tag.as_str()), |parts| parts);
-                    SmartShuffleTagSummary {
-                        rule: rule.replace('_', " "),
-                        value: value.replace('_', " "),
-                    }
-                })
-                .collect(),
-        })
-        .collect();
-
-    Ok(SmartShuffleOverview {
-        summaries,
-        candidates,
-        selected_index,
-        total_candidates,
-        page: page.max(1),
-        page_size,
-    })
-}
-
-fn smart_shuffle_playback_order_supported(playback_order: i32) -> bool {
-    matches!(
-        playback_order,
-        PLAYBACK_ORDER_RANDOM
-            | PLAYBACK_ORDER_SHUFFLE
-            | PLAYBACK_ORDER_SHUFFLE_IN_ORDER
-            | PLAYBACK_ORDER_MULTI_EPISODE_SHUFFLE
-            | PLAYBACK_ORDER_RANDOM_ROTATION
-            | PLAYBACK_ORDER_MARATHON
-    )
-}
-
 #[allow(clippy::too_many_lines)]
 fn validate_schedule_item(
     item: &ScheduleItemForm,
@@ -2785,25 +2567,5 @@ mod tests {
 
         assert!(item.watermark_ids.is_empty());
         assert!(item.graphics_element_ids.is_empty());
-    }
-
-    #[test]
-    fn smart_shuffle_overview_warnings_serialize_as_status_identifiers() {
-        let warnings = [
-            SmartShuffleOverviewWarning::InactivePlaybackOrder,
-            SmartShuffleOverviewWarning::Off,
-            SmartShuffleOverviewWarning::EmptySource,
-            SmartShuffleOverviewWarning::NoMatchingRules,
-        ];
-
-        assert_eq!(
-            serde_json::to_value(warnings).unwrap(),
-            serde_json::json!([
-                "inactive_playback_order",
-                "off",
-                "empty_source",
-                "no_matching_rules"
-            ])
-        );
     }
 }

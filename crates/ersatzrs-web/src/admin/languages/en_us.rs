@@ -949,17 +949,7 @@ pub fn text(key: TextKey) -> &'static str {
             "This item has no Smart Shuffle override and keeps any legacy playout policy."
         }
         TextKey::SmartShuffleInactive => "Smart Shuffle is inactive because this playback order is not randomized.",
-        TextKey::SmartShuffleOverviewEmptySource => "The content source is empty.",
-        TextKey::SmartShuffleOverviewNoMatchingRules => {
-            "No candidates match the configured similarity rules."
-        }
-        TextKey::SmartShuffleOverviewOff => "Smart Shuffle is Off.",
-        TextKey::SmartShuffleOverviewRefresh => "Refresh",
-        TextKey::SmartShuffleOverviewStale => "Draft changed; refresh the overview.",
         TextKey::SmartShuffleOverrideBlock => "Override for this Block item",
-        TextKey::SmartShufflePreview => "Smart Shuffle Overview",
-        TextKey::SmartShufflePreviewEmpty => "No matching candidates.",
-        TextKey::SmartShufflePreviewFailed => "Smart Shuffle overview failed.",
         TextKey::SimilarityRules => "Similarity Rules",
         TextKey::AlbumArtist => "Album Artist",
         TextKey::ContentParent => "Parent or Variant",

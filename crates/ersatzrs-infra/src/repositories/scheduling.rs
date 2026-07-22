@@ -43,14 +43,6 @@ pub struct SqliteSchedulingContentRepository(
     tokio::sync::OnceCell<bool>,
 );
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SchedulingSmartShuffleTagPreview {
-    pub media_item_id: EntityId,
-    pub title: Option<String>,
-    pub media_type: String,
-    pub tags: Vec<String>,
-}
-
 impl SqliteSchedulingContentRepository {
     /// Construct the repository over a database pool.
     #[must_use]
@@ -566,51 +558,6 @@ impl SqliteSchedulingContentRepository {
             BTreeMap::new(),
         )
         .await
-    }
-
-    /// Return all candidates and effective tags for one scheduling selection
-    /// unit. Admin callers paginate the result; the scheduling hot loop does
-    /// not use this method.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when search reference data cannot be loaded.
-    pub async fn smart_shuffle_candidates(
-        &self,
-        collection_key: &SchedulingCollectionKey,
-        policy: SchedulingSmartShufflePolicy,
-    ) -> Result<Vec<SchedulingSmartShuffleTagPreview>> {
-        let media_items = self.items_for_collection_key(collection_key, 0).await?;
-        let target_ids = media_items.iter().map(|item| item.id).collect();
-        let tags_by_media_id = self
-            .smart_shuffle_tags_for_policy(&policy, target_ids, None)
-            .await?;
-        let documents = self
-            .search_documents(&SearchHydrationNeeds::default())
-            .await?;
-        let documents = documents
-            .into_iter()
-            .map(|document| (document.media_item_id, document))
-            .collect::<BTreeMap<_, _>>();
-
-        Ok(media_items
-            .into_iter()
-            .map(|item| {
-                let document = documents.get(&item.id);
-                SchedulingSmartShuffleTagPreview {
-                    media_item_id: item.id,
-                    title: document
-                        .and_then(|value| value.title.clone())
-                        .or(item.title),
-                    media_type: document
-                        .map_or_else(|| "media".to_owned(), |value| value.media_kind.clone()),
-                    tags: tags_by_media_id
-                        .get(&item.id)
-                        .map(|tags| tags.iter().cloned().collect())
-                        .unwrap_or_default(),
-                }
-            })
-            .collect())
     }
 
     async fn with_configured_playout_options(

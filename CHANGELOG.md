@@ -43,6 +43,16 @@ release section when tagging a release.
   Smart Shuffle policies attached to other randomized Classic orders normalize
   to Shuffle when next saved.
 
+### Removed
+
+- Removed the Smart Shuffle Overview preview panel from the schedule items page
+  (`/schedules/{id}/items`) and the block editor, along with its server
+  functions, response types, translations, and the underlying
+  `smart_shuffle_candidates` repository query. Building the preview had to
+  enumerate every candidate of every item in the draft, which was too slow to
+  be useful. The Smart Shuffle item settings themselves are unchanged, as is
+  Smart Shuffle behavior during playout building.
+
 ### Fixed
 
 - Local `dev`, `build`, and `serve` wrappers now build the scanner companion

@@ -1633,17 +1633,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Este item não tem substituição de Smart Shuffle e mantém qualquer política de programação legada."
         }
         TextKey::SmartShuffleInactive => "A ordem aleatória inteligente está inativa porque esta ordem de reprodução não é aleatória.",
-        TextKey::SmartShuffleOverviewEmptySource => "A fonte de conteúdo está vazia.",
-        TextKey::SmartShuffleOverviewNoMatchingRules => {
-            "Nenhum candidato corresponde às regras de similaridade configuradas."
-        }
-        TextKey::SmartShuffleOverviewOff => "O Smart Shuffle está desativado.",
-        TextKey::SmartShuffleOverviewRefresh => "Atualizar",
-        TextKey::SmartShuffleOverviewStale => "O rascunho mudou; atualize a visão geral.",
         TextKey::SmartShuffleOverrideBlock => "Substituir para este item do bloco",
-        TextKey::SmartShufflePreview => "Visão geral do Smart Shuffle",
-        TextKey::SmartShufflePreviewEmpty => "Nenhum candidato correspondente.",
-        TextKey::SmartShufflePreviewFailed => "Falha na visão geral do Smart Shuffle.",
         TextKey::SimilarityRules => "Regras de similaridade",
         TextKey::AlbumArtist => "Artista do álbum",
         TextKey::ContentParent => "Item pai ou variante",
