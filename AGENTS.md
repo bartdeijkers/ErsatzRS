@@ -115,7 +115,7 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 # `cargo test` commands: use `./run.sh test-closeout` for the canonical local
 # gate, which runs nextest for unit/integration tests and Cargo only for
 # doctests. CI intentionally retains its direct Cargo test selection.
-#   ./run.sh dev                     # UI work (leptos watch, SSR+WASM in sync)
+#   ./run.sh dev                     # build scanner companion, then Leptos watch
 # Run the full multi-config gate (two clippy passes, ./run.sh test-closeout,
 # cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.
 # sccache (cache on ext4) makes the unavoidable config switches cheap, but it is

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./run.sh           # alias for `dev`
-#   ./run.sh dev       # cargo leptos watch (hot-reload)
+#   ./run.sh dev       # build scanner companion + cargo leptos watch
 #   ./run.sh check     # fast inner-loop type-check (one config; no codegen/link)
 #   ./run.sh test      # focused/local Rust tests through cargo-nextest
 #   ./run.sh test-closeout # workspace nextest run plus Cargo doctests
@@ -92,6 +92,7 @@ case "$cmd" in
     check_target_size
     configure_local_ffmpeg
     cd crates/ersatzrs-web
+    cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
     exec cargo leptos watch
     ;;
   check)
@@ -144,13 +145,18 @@ case "$cmd" in
   build)
     check_target_size
     configure_local_ffmpeg
-    (cd crates/ersatzrs-web && cargo leptos build)
+    (
+      cd crates/ersatzrs-web
+      cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
+      cargo leptos build
+    )
     cargo run --bin ersatzrs-web 2>&1 | tee ersatzrs.log
     ;;
   serve)
     check_target_size
     configure_local_ffmpeg
     cd crates/ersatzrs-web
+    cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
     exec cargo leptos serve
     ;;
   seed)

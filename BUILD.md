@@ -35,12 +35,12 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | Command          | What it does                                                |
 | ---------------- | ----------------------------------------------------------- |
 | `./run.sh`       | Alias for `dev`.                                            |
-| `./run.sh dev`   | `cargo leptos watch` — edit-save-refresh hot loop.          |
+| `./run.sh dev`   | Build the scanner companion, then run the Leptos hot loop.  |
 | `./run.sh check` | Fast inner-loop `cargo check` (no codegen/link); scope with `-p <crate>`. |
 | `./run.sh test`  | Focused/local nextest run; requires explicit crate/filter arguments. |
 | `./run.sh test-closeout` | Workspace nextest run followed by Cargo doctests. |
-| `./run.sh build` | One-shot `cargo leptos build` + `cargo run`. Matches CI.    |
-| `./run.sh serve` | Rebuild once, serve via cargo-leptos (no watch).            |
+| `./run.sh build` | Build the scanner companion, then build and run the web host. |
+| `./run.sh serve` | Build the scanner companion, then rebuild and serve once.   |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
 | `./run.sh log`   | `tail -F ersatzrs.log`.                                     |
 
@@ -69,12 +69,12 @@ Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
 
 ```powershell
 .\run.cmd            # alias for `dev`
-.\run.cmd dev        # cargo leptos watch
+.\run.cmd dev        # build scanner companion + cargo leptos watch
 .\run.cmd check -p ersatzrs-core
 .\run.cmd test -p ersatzrs-core scheduling
 .\run.cmd test-closeout
-.\run.cmd build      # cargo leptos build + cargo run
-.\run.cmd serve      # cargo leptos serve
+.\run.cmd build      # build scanner companion + web bundle, then run
+.\run.cmd serve      # build scanner companion + cargo leptos serve
 .\run.cmd seed       # seed the SQLite db from tests/fixtures/seed_admin.sql
 .\run.cmd log        # Get-Content -Wait equivalent of tail -F
 ```
@@ -95,9 +95,13 @@ prerequisite.
 
 ## Dev loop (`run.sh dev`)
 
-`cargo leptos watch` recompiles the SSR binary and the WASM bundle on every
-save and triggers a browser LiveReload via the `reload-port = 3001` websocket
-configured in `crates/ersatzrs-web/Cargo.toml` `[package.metadata.leptos]`.
+The wrapper first runs an incremental build of the `ersatzrs-scanner` binary in
+the same Cargo target directory as the web host. The maintenance scheduler can
+then launch that sibling binary for automatic library refreshes instead of
+skipping due scans. `cargo leptos watch` subsequently recompiles the SSR binary
+and the WASM bundle on every save and triggers a browser LiveReload via the
+`reload-port = 3001` websocket configured in
+`crates/ersatzrs-web/Cargo.toml` `[package.metadata.leptos]`.
 
 - Edits inside `crates/ersatzrs-web/src/` rebuild in seconds.
 - Edits inside `ersatzrs-infra`, `ersatzrs-core`, `ersatzrs-ffmpeg` trigger a

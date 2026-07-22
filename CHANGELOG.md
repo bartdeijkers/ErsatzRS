@@ -45,6 +45,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Local `dev`, `build`, and `serve` wrappers now build the scanner companion
+  beside the web binary before startup, so scheduled automatic library
+  refreshes no longer get skipped when only the Leptos web target existed.
 - Playback and HLS data access now distinguishes valid missing metadata or
   configuration from database and decode failures. IPTV, HLS, capacity slates,
   and troubleshooting previews refuse to build altered FFmpeg commands or use

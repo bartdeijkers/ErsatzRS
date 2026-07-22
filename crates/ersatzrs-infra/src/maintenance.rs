@@ -80,9 +80,8 @@ pub struct MaintenancePassReport {
 pub struct LibraryDispatchConfig {
     /// Path to the `ersatzrs-scanner` binary. When `None`, the dispatcher tries
     /// to find a sibling binary next to `std::env::current_exe()` (matching
-    /// `ErsatzTV`'s `CallLibraryScannerHandler` resolution) and otherwise falls
-    /// back to spawning `ersatzrs-scanner` from `PATH`. When set, the path is
-    /// used verbatim (useful for tests and operator overrides).
+    /// `ErsatzTV`'s `CallLibraryScannerHandler` resolution). When set, the path
+    /// is used verbatim (useful for tests and operator overrides).
     pub scanner_command: Option<PathBuf>,
     /// Extra arguments appended after `--provider <kind> --library-id <id>`.
     pub extra_args: Vec<OsString>,

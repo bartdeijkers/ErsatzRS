@@ -2,7 +2,7 @@
 #
 # Usage:
 #   .\run.ps1           # alias for `dev`
-#   .\run.ps1 dev       # cargo leptos watch (hot-reload)
+#   .\run.ps1 dev       # build scanner companion + cargo leptos watch
 #   .\run.ps1 check     # fast inner-loop type-check
 #   .\run.ps1 test      # focused/local Rust tests through cargo-nextest
 #   .\run.ps1 test-closeout # workspace nextest run plus Cargo doctests
@@ -84,6 +84,8 @@ switch ($Command) {
         Test-TargetSize
         Set-LocalFfmpegOverrides
         Set-Location -Path 'crates/ersatzrs-web'
+        cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         cargo leptos watch
         exit $LASTEXITCODE
     }
@@ -128,6 +130,8 @@ switch ($Command) {
         Set-LocalFfmpegOverrides
         Push-Location 'crates/ersatzrs-web'
         try {
+            cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             cargo leptos build
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         } finally {
@@ -140,6 +144,8 @@ switch ($Command) {
         Test-TargetSize
         Set-LocalFfmpegOverrides
         Set-Location -Path 'crates/ersatzrs-web'
+        cargo build --package ersatzrs-scanner --bin ersatzrs-scanner
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         cargo leptos serve
         exit $LASTEXITCODE
     }
