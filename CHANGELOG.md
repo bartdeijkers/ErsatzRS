@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Playout rebuild confirmations now use the shared success-toast surface instead
+  of rendering an unstyled message between the `/playouts` action bar and page
+  content. Queued and active rebuilds remain visible through the row spinner.
 - Local `dev`, `build`, and `serve` wrappers now build the scanner companion
   beside the web binary before startup, so scheduled automatic library
   refreshes no longer get skipped when only the Leptos web target existed.

@@ -19,6 +19,7 @@ use crate::admin::server_fns::playouts::{
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::form::TextField;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/playouts.module.css");
 
@@ -99,7 +100,6 @@ fn PlayoutsIsland(
     // -- selection / detail state --
     let selected_id: RwSignal<Option<i64>> = RwSignal::new(None);
     let build_message = RwSignal::new(String::new());
-    let refresh_feedback = RwSignal::new(String::new());
     let show_filler = RwSignal::new(initial_show_filler);
     let detail_page = RwSignal::new(0u32);
 
@@ -201,19 +201,23 @@ fn PlayoutsIsland(
         async move { process_scheduling_context(ctx).await }
     });
     let save_filler_action = Action::new(|value: &bool| set_show_filler_pref(*value));
+    let reset_toast = use_toast();
     Effect::new(move |_| {
         if let Some(Ok(_)) = reset_action.value().get() {
-            refresh_feedback.set(tr(TextKey::PlayoutBuildQueued).to_string());
+            reset_toast.push(
+                tr(TextKey::PlayoutBuildQueued).to_string(),
+                ToastSeverity::Success,
+            );
         }
     });
+    let reset_all_toast = use_toast();
     Effect::new(move |_| {
         if let Some(Ok(result)) = reset_all_action.value().get() {
             if result.accepted > 0 {
-                refresh_feedback.set(format!(
-                    "{} {}",
-                    result.accepted,
-                    tr(TextKey::PlayoutBuildsQueued)
-                ));
+                reset_all_toast.push(
+                    format!("{} {}", result.accepted, tr(TextKey::PlayoutBuildsQueued)),
+                    ToastSeverity::Success,
+                );
             }
         }
     });
@@ -343,7 +347,6 @@ fn PlayoutsIsland(
                     {tr(TextKey::ResetAllPlayouts)}
                 </button>
             </div>
-            <p role="status">{move || refresh_feedback.get()}</p>
 
             <section class=style::content>
                 <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
