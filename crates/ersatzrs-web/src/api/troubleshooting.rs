@@ -9,6 +9,7 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, HardwareAccelerationKind, StreamingMode};
 use ersatzrs_ffmpeg::{FfmpegCommand, FrameSize, InputFile, OutputFormat, WatermarkOpacityClock};
 use ersatzrs_infra::{
+    ffmpeg_config::playback_language_preferences,
     file_system_layout::{
         data_path, transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
     },
@@ -159,6 +160,13 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     ));
     let selector_channel =
         preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter);
+    let language_preferences = playback_language_preferences(&state.pool).await?;
+    let preferred_audio_language = language_preferences.audio_language(
+        None,
+        selector_channel.preferred_audio_language_code.as_deref(),
+        selector_channel.preferred_audio_title.as_deref(),
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
     let (selected_audio_stream_index, subtitle_input) =
         preview_selected_streams(PreviewSelectedStreamsRequest {
             pool: &state.pool,
@@ -175,7 +183,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     let selected_audio_stream_index = selected_audio_stream_index.or_else(|| {
         select_playback_audio_stream_index(
             &source_audio_streams,
-            selector_channel.preferred_audio_language_code.as_deref(),
+            preferred_audio_language.as_deref(),
             selector_channel.preferred_audio_title.as_deref(),
         )
     });
@@ -198,10 +206,10 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     let metadata = stream::playback_output_metadata(
         Some("ErsatzTV"),
         Some(&selector_channel.name),
-        selector_channel.preferred_audio_language_code.as_deref(),
+        preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        None,
+        selected_audio_stream_index,
     );
     let spawn_time = Utc::now();
     let opacity_clock = watermark_opacity_clock_at_spawn(
@@ -299,6 +307,17 @@ async fn start_channel_playback_preview(
         .preferred_subtitle_language_code
         .as_deref()
         .or(channel.preferred_subtitle_language_code.as_deref());
+    let language_preferences = playback_language_preferences(&state.pool).await?;
+    let preferred_audio_title = active
+        .preferred_audio_title
+        .as_deref()
+        .or(channel.preferred_audio_title.as_deref());
+    let preferred_audio_language = language_preferences.audio_language(
+        active.preferred_audio_language_code.as_deref(),
+        channel.preferred_audio_language_code.as_deref(),
+        preferred_audio_title,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
     let mut selector_channel = channel.clone();
     if let Some(selector) = query
         .stream_selector
@@ -386,6 +405,13 @@ async fn start_channel_playback_preview(
             rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
         )
     };
+    let selected_audio_stream_index = selected_audio_stream_index.or_else(|| {
+        select_playback_audio_stream_index(
+            &source_audio_streams,
+            preferred_audio_language.as_deref(),
+            preferred_audio_title,
+        )
+    });
     let watermark_inputs = preview_channel_watermark_inputs(
         &state.pool,
         &channel,
@@ -414,10 +440,10 @@ async fn start_channel_playback_preview(
     let metadata = stream::playback_output_metadata(
         Some("ErsatzTV"),
         Some(&channel.name),
-        channel.preferred_audio_language_code.as_deref(),
+        preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        None,
+        selected_audio_stream_index,
     );
     let opacity_clock = watermark_opacity_clock_at_spawn(
         start_time,
@@ -1033,7 +1059,7 @@ async fn fallback_media_item_selector_subtitle(
     match select_playback_subtitle(
         pool,
         media_item_id,
-        None,
+        &[],
         ChannelSubtitleMode::Any,
         StreamingMode::HttpLiveStreamingSegmenter,
     )
@@ -1087,10 +1113,18 @@ async fn fallback_channel_subtitle_input(
     media_path: &str,
     output_format: OutputFormat,
 ) -> Option<InputFile> {
+    let preferences = match playback_language_preferences(pool).await {
+        Ok(preferences) => preferences,
+        Err(error) => {
+            tracing::warn!(%error, media_item_id, "failed to load troubleshooting playback language preferences");
+            return None;
+        }
+    };
+    let preferred_languages = preferences.subtitle_languages(None, preferred_language);
     match select_playback_subtitle(
         pool,
         media_item_id,
-        preferred_language,
+        &preferred_languages,
         subtitle_mode,
         StreamingMode::HttpLiveStreamingSegmenter,
     )

@@ -9,8 +9,10 @@ use uuid::Uuid;
 
 use ersatzrs_domain::{
     HardwareAccelerationKind, CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
-    CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
+    CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES,
+    CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE, CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
     CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
+    CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
     CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, CONFIG_KEY_FFMPEG_SAVE_REPORTS,
     CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
     CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
@@ -598,6 +600,8 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<bool, sqlx::E
     for (key, value) in [
         (CONFIG_KEY_FFMPEG_SAVE_REPORTS, "False"),
         (CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE, "eng"),
+        (CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE, ""),
+        (CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE, ""),
         (CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES, "True"),
         (CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, "False"),
         (CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, "False"),
@@ -1104,6 +1108,8 @@ mod tests {
                    'log.minimum_level.http',
                    'ffmpeg.save_reports',
                    'ffmpeg.preferred_language_code',
+                   'ffmpeg.preferred_subtitle_language_code',
+                   'ffmpeg.fallback_subtitle_language_code',
                    'ffmpeg.use_embedded_subtitles',
                    'ffmpeg.extract_embedded_subtitles',
                    'ffmpeg.probe_for_interlaced_frames',
@@ -1309,12 +1315,14 @@ mod tests {
         config_rows: &std::collections::HashMap<String, String>,
         default_profile_id: i64,
     ) {
-        assert_eq!(config_rows.len(), 28);
+        assert_eq!(config_rows.len(), 30);
         assert_eq!(
             config_rows["ffmpeg.default_profile_id"],
             default_profile_id.to_string()
         );
         assert_eq!(config_rows["ffmpeg.preferred_language_code"], "eng");
+        assert_eq!(config_rows["ffmpeg.preferred_subtitle_language_code"], "");
+        assert_eq!(config_rows["ffmpeg.fallback_subtitle_language_code"], "");
         assert_eq!(config_rows["ffmpeg.use_embedded_subtitles"], "True");
         assert_eq!(config_rows["ffmpeg.extract_embedded_subtitles"], "False");
         assert_eq!(config_rows["ffmpeg.probe_for_interlaced_frames"], "False");

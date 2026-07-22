@@ -30,6 +30,7 @@ use ersatzrs_ffmpeg::{
 };
 
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
+use crate::ffmpeg_config::playback_language_preferences;
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
@@ -671,11 +672,34 @@ impl HlsSessionWorker {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
+            let language_preferences = match playback_language_preferences(&pool).await {
+                Ok(preferences) => preferences,
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = self.channel_id,
+                        channel_number = %self.channel_number,
+                        "failed to load HLS playback language preferences; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
-            let preferred_subtitle_language = active
-                .preferred_subtitle_language_code
+            let preferred_subtitle_languages = language_preferences.subtitle_languages(
+                active.preferred_subtitle_language_code.as_deref(),
+                active.channel_preferred_subtitle_language_code.as_deref(),
+            );
+            let preferred_audio_title = active
+                .preferred_audio_title
                 .as_deref()
-                .or(active.channel_preferred_subtitle_language_code.as_deref());
+                .or(active.channel_preferred_audio_title.as_deref());
+            let preferred_audio_language = language_preferences.audio_language(
+                active.preferred_audio_language_code.as_deref(),
+                active.channel_preferred_audio_language_code.as_deref(),
+                preferred_audio_title,
+                StreamingMode::HttpLiveStreamingSegmenter,
+            );
             let channel_for_streams =
                 active.channel_for_runtime_streams(self.channel_id, self.channel_number.clone());
             let custom_selection = match select_channel_custom_streams(
@@ -708,14 +732,8 @@ impl HlsSessionWorker {
                 .or_else(|| {
                     select_playback_audio_stream_index(
                         &source_audio_streams,
-                        active
-                            .preferred_audio_language_code
-                            .as_deref()
-                            .or(active.channel_preferred_audio_language_code.as_deref()),
-                        active
-                            .preferred_audio_title
-                            .as_deref()
-                            .or(active.channel_preferred_audio_title.as_deref()),
+                        preferred_audio_language.as_deref(),
+                        preferred_audio_title,
                     )
                 });
             let subtitle = if let Some(selection) = custom_selection {
@@ -724,7 +742,7 @@ impl HlsSessionWorker {
                 match select_channel_playback_subtitle(
                     &pool,
                     active.media_item_id,
-                    preferred_subtitle_language,
+                    &preferred_subtitle_languages,
                     subtitle_mode,
                     StreamingMode::HttpLiveStreamingSegmenter,
                     &channel_for_streams,
@@ -758,10 +776,7 @@ impl HlsSessionWorker {
             let metadata = playback_output_metadata(
                 Some("ErsatzTV"),
                 Some(&active.channel_name),
-                active
-                    .preferred_audio_language_code
-                    .as_deref()
-                    .or(active.channel_preferred_audio_language_code.as_deref()),
+                preferred_audio_language.as_deref(),
                 &source_audio_streams,
                 subtitle.as_ref(),
                 selected_audio_stream_index,

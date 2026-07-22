@@ -17,6 +17,8 @@ pub struct FfmpegSettingsForm {
     pub ffprobe_path: String,
     pub default_ffmpeg_profile_id: i64,
     pub preferred_audio_language_code: String,
+    pub preferred_subtitle_language_code: String,
+    pub fallback_subtitle_language_code: String,
     pub use_embedded_subtitles: bool,
     pub extract_embedded_subtitles: bool,
     pub probe_for_interlaced_frames: bool,
@@ -38,6 +40,8 @@ impl Default for FfmpegSettingsForm {
             ffprobe_path: String::new(),
             default_ffmpeg_profile_id: 0,
             preferred_audio_language_code: "eng".to_owned(),
+            preferred_subtitle_language_code: String::new(),
+            fallback_subtitle_language_code: String::new(),
             use_embedded_subtitles: true,
             extract_embedded_subtitles: false,
             probe_for_interlaced_frames: false,
@@ -395,6 +399,18 @@ async fn load_ffmpeg_settings_with_capabilities(
             "eng",
         )
         .await?,
+        preferred_subtitle_language_code: load_string(
+            pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
+            "",
+        )
+        .await?,
+        fallback_subtitle_language_code: load_string(
+            pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE,
+            "",
+        )
+        .await?,
         use_embedded_subtitles: load_bool(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
@@ -556,6 +572,18 @@ pub async fn save_ffmpeg_settings_with_state(
         &state.pool,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
         &form.preferred_audio_language_code,
+    )
+    .await?;
+    save_config_value(
+        &state.pool,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
+        &form.preferred_subtitle_language_code,
+    )
+    .await?;
+    save_config_value(
+        &state.pool,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE,
+        &form.fallback_subtitle_language_code,
     )
     .await?;
     save_config_value(
@@ -1399,6 +1427,9 @@ mod tests {
         assert!(!data.ffprobe_resolved.is_empty());
         assert_eq!(data.active_transcode_capacity.limit, 2);
         assert!(data.active_transcode_capacity.suggested_limit >= 1);
+        assert_eq!(data.form.preferred_audio_language_code, "eng");
+        assert!(data.form.preferred_subtitle_language_code.is_empty());
+        assert!(data.form.fallback_subtitle_language_code.is_empty());
     }
 
     #[test]

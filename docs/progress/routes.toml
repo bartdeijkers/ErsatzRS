@@ -152,7 +152,7 @@ routed  = true
 
 [[route]]
 nav     = '/settings/ffmpeg'
-backing = 'settings page with FFmpeg path/profile/language/subtitle/report/global fallback/HLS/custom-resolution fields and HTML POST fallback'
+backing = 'settings page with FFmpeg path/profile/default audio/default and fallback subtitle/report/global filler/HLS/custom-resolution fields and HTML POST fallback; playback consumes the language preference chain'
 routed  = true
 
 [[route]]

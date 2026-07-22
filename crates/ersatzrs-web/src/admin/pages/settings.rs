@@ -107,6 +107,9 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let active_transcode_capacity = data.active_transcode_capacity;
     let form = data.form;
     let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
+    let audio_languages = data.languages.clone();
+    let default_subtitle_languages = data.languages.clone();
+    let fallback_subtitle_languages = data.languages;
     // The path inputs are intentionally not `required`: an empty value saves
     // and means auto-detect, matching the FFmpegLocator behavior the startup
     // path and save server fn already implement. The locator-resolved path is
@@ -139,8 +142,24 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 <Select
                     name="preferred_audio_language_code"
                     selected=form.preferred_audio_language_code
-                    options=data.languages
+                    options=audio_languages
                     include_none=false
+                />
+            </Field>
+            <Field label=tr(TextKey::DefaultSubtitleLanguage)>
+                <Select
+                    name="preferred_subtitle_language_code"
+                    selected=form.preferred_subtitle_language_code
+                    options=default_subtitle_languages
+                    include_none=true
+                />
+            </Field>
+            <Field label=tr(TextKey::FallbackSubtitleLanguage)>
+                <Select
+                    name="fallback_subtitle_language_code"
+                    selected=form.fallback_subtitle_language_code
+                    options=fallback_subtitle_languages
+                    include_none=true
                 />
             </Field>
             <CheckboxField
@@ -625,6 +644,32 @@ mod tests {
         assert!(input.contains(r#"type="number""#));
         assert!(input.contains(r#"min="1""#));
         assert!(input.contains(r#"value="2""#));
+    }
+
+    #[test]
+    fn ffmpeg_subtitle_language_preferences_are_rendered() {
+        let mut data = FfmpegSettingsPageData::default();
+        data.form.preferred_subtitle_language_code = "nld".to_owned();
+        data.form.fallback_subtitle_language_code = "eng".to_owned();
+        data.languages = vec![
+            SelectOption {
+                value: "eng".to_owned(),
+                label: "English".to_owned(),
+            },
+            SelectOption {
+                value: "nld".to_owned(),
+                label: "Dutch".to_owned(),
+            },
+        ];
+
+        let html = render_ffmpeg(data).into_view().to_html();
+
+        assert!(html.contains("Default Subtitle Language"));
+        assert!(html.contains("Fallback Subtitle Language"));
+        assert!(html.contains(r#"name="preferred_subtitle_language_code""#));
+        assert!(html.contains(r#"name="fallback_subtitle_language_code""#));
+        assert!(html.contains(r#"value="nld" selected"#));
+        assert!(html.contains(r#"value="eng" selected"#));
     }
 
     fn input_html<'a>(html: &'a str, needle: &str) -> &'a str {

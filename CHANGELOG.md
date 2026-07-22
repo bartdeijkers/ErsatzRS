@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Added optional default and fallback subtitle languages to `/settings/ffmpeg`.
+  Built-in MPEG-TS and HLS playback now applies item and channel preferences
+  first, then the global default, and tries the global fallback before
+  selecting no subtitle.
+
 ### Changed
 
 - Established the storage-neutral application-service boundary and native web
@@ -55,6 +62,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- The global preferred audio language now drives built-in MPEG-TS and HLS
+  stream selection when an item and channel do not override it. HLS Direct
+  retains all source audio streams only when both the explicit audio language
+  and title are blank, matching ErsatzTV.
 - Playout rebuild confirmations now use the shared success-toast surface instead
   of rendering an unstyled message between the `/playouts` action bar and page
   content. Queued and active rebuilds remain visible through the row spinner.

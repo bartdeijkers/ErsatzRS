@@ -6,13 +6,16 @@ use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, ChannelWatermarkImageSource,
     FillerKind, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig,
     MotionEndBehavior, MotionGraphicsConfig, Resolution, StreamingMode, TextGraphicsConfig,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
 };
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, PipelineBuilder,
     PipelineRequest, SoftwarePipelineBuilder, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
 };
-use ersatzrs_infra::ffmpeg_config::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES;
+use ersatzrs_infra::ffmpeg_config::{
+    playback_language_preferences, CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
+};
 use ersatzrs_infra::file_system_layout::data_path;
 use ersatzrs_infra::graphics_import::upsert_graphics_element_from_yaml;
 use ersatzrs_infra::graphics_template::{
@@ -140,7 +143,7 @@ async fn selects_forced_subtitle_by_expanded_language_code() {
     let selected = select_playback_subtitle(
         &pool,
         10,
-        Some("nl"),
+        &["nl".to_owned()],
         ChannelSubtitleMode::Forced,
         StreamingMode::TransportStream,
     )
@@ -160,6 +163,85 @@ async fn selects_forced_subtitle_by_expanded_language_code() {
 }
 
 #[tokio::test]
+async fn subtitle_language_fallback_is_ranked_after_primary_for_requested_mode() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+
+    let selected = select_playback_subtitle(
+        &pool,
+        10,
+        &["eng".to_owned(), "nld".to_owned()],
+        ChannelSubtitleMode::Forced,
+        StreamingMode::TransportStream,
+    )
+    .await
+    .unwrap()
+    .expect("fallback forced subtitle");
+
+    assert_eq!(selected.id, 2);
+}
+
+#[tokio::test]
+async fn configured_subtitle_languages_do_not_fall_back_to_an_unrelated_track() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+
+    let selected = select_playback_subtitle(
+        &pool,
+        10,
+        &["fra".to_owned(), "deu".to_owned()],
+        ChannelSubtitleMode::Any,
+        StreamingMode::HttpLiveStreamingDirect,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(selected, None);
+}
+
+#[tokio::test]
+async fn unset_subtitle_languages_preserve_unfiltered_mode_ranking() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+
+    let selected = select_playback_subtitle(
+        &pool,
+        10,
+        &[],
+        ChannelSubtitleMode::Default,
+        StreamingMode::HttpLiveStreamingDirect,
+    )
+    .await
+    .unwrap()
+    .expect("default subtitle");
+
+    assert_eq!(selected.id, 1);
+}
+
+#[tokio::test]
+async fn persisted_subtitle_language_preferences_load_in_primary_fallback_order() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .config
+        .set(CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE, "nld")
+        .await
+        .unwrap();
+    repos
+        .config
+        .set(CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE, "eng")
+        .await
+        .unwrap();
+
+    let preferences = playback_language_preferences(&pool).await.unwrap();
+
+    assert_eq!(
+        preferences.subtitle_languages(None, None),
+        vec!["nld".to_owned(), "eng".to_owned()]
+    );
+}
+
+#[tokio::test]
 async fn filters_embedded_subtitles_when_config_disables_them() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;
@@ -173,7 +255,7 @@ async fn filters_embedded_subtitles_when_config_disables_them() {
     let selected = select_playback_subtitle(
         &pool,
         10,
-        Some("eng"),
+        &["eng".to_owned()],
         ChannelSubtitleMode::Default,
         StreamingMode::TransportStream,
     )
@@ -191,7 +273,7 @@ async fn hls_direct_can_copy_embedded_image_subtitle_for_mkv_output() {
     let selected = select_playback_subtitle(
         &pool,
         10,
-        Some("jpn"),
+        &["jpn".to_owned()],
         ChannelSubtitleMode::Any,
         StreamingMode::HttpLiveStreamingDirect,
     )
@@ -232,7 +314,7 @@ async fn channel_music_video_credits_generate_template_subtitle() {
     let selected = select_channel_playback_subtitle(
         &pool,
         30,
-        None,
+        &[],
         ChannelSubtitleMode::None,
         StreamingMode::TransportStream,
         &channel,

@@ -4,6 +4,7 @@ use ersatzrs_core::health::{
 use ersatzrs_core::repositories::RepositoryError;
 
 use crate::db::Db;
+use crate::ffmpeg_config::playback_language_preferences;
 use crate::hls_worker::load_hls_work_ahead_limit;
 use crate::transcode_capacity::load_active_transcode_limit;
 use sqlx::Pool;
@@ -55,6 +56,13 @@ impl HealthCheck for PlaybackDataAccessHealthCheck {
                 }
                 error => Err(Self::operational_error("HLS work-ahead limit", &error)),
             };
+        }
+
+        if let Err(error) = playback_language_preferences(&self.pool).await {
+            return Err(Self::operational_error(
+                "playback language preferences",
+                &error,
+            ));
         }
 
         Ok(HealthCheckResult::pass(self.title()))

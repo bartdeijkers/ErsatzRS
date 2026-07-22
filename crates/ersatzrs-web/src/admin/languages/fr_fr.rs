@@ -790,6 +790,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Playlists => "Listes de lecture",
         TextKey::ProbeForInterlacedFrames => "Détecter les images entrelacées",
         TextKey::PreferredAudioLanguage => "Langue audio préférée",
+        TextKey::DefaultSubtitleLanguage => "Langue de sous-titres par défaut",
+        TextKey::FallbackSubtitleLanguage => "Langue de sous-titres de secours",
         TextKey::Previous24Hours => "24 h précédentes",
         TextKey::PreviousPage => "Page précédente",
         TextKey::RerunCollections => "Collections de rediffusions",

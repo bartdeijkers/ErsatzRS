@@ -42,6 +42,8 @@ pub async fn save_ffmpeg_settings_form(State(state): State<AppState>, body: Byte
         ffprobe_path: field(&fields, "ffprobe_path"),
         default_ffmpeg_profile_id: parse_i64(&fields, "default_ffmpeg_profile_id"),
         preferred_audio_language_code: field(&fields, "preferred_audio_language_code"),
+        preferred_subtitle_language_code: field(&fields, "preferred_subtitle_language_code"),
+        fallback_subtitle_language_code: field(&fields, "fallback_subtitle_language_code"),
         use_embedded_subtitles: checked(&fields, "use_embedded_subtitles"),
         extract_embedded_subtitles: checked(&fields, "extract_embedded_subtitles"),
         probe_for_interlaced_frames: checked(&fields, "probe_for_interlaced_frames"),

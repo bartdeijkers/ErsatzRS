@@ -19,6 +19,10 @@ Closed 2026-07-01: the in-app Zero Duration health check ignores static image
 media versions with conventional still-image file extensions while preserving
 warnings for zero-duration videos, audio-backed media, and animated-capable
 image paths that still need duration metadata.
+
+The Playback Data Access health check also verifies that global audio and
+subtitle language preferences remain readable before runtime stream selection
+depends on them.
 '''
 
 [[debt]]

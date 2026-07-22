@@ -52,6 +52,17 @@ device passthrough. The `linux/arm/v7` image is CPU-only for this slice.
 
 ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 
+## Global subtitle language preferences
+
+ErsatzTV has a global default audio language but requires subtitle language
+preferences on each channel or schedule item. ErsatzRS adds optional global
+default and fallback subtitle languages. Built-in playback uses item and
+channel preferences first, then the global default, and tries the global
+fallback before selecting no subtitle. With both settings unset, existing
+unfiltered subtitle selection is unchanged.
+
+ADR: [0052](../adr/0052-global-subtitle-language-preferences.md)
+
 ## Collapsed initial schema
 
 ErsatzRS starts from one initial sqlx schema based on the final ErsatzTV model

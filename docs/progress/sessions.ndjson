@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-07-22","summary":"Fixed title-only HLS Direct audio selection to combine the global language with the explicit title, matching ErsatzTV."}
+{"agent":"Codex","date":"2026-07-22","summary":"Added ADR-backed global default and fallback subtitle languages, repaired default audio playback wiring, and browser/runtime-proved the settings and selection chain."}
 {"agent":"Codex","date":"2026-07-22","summary":"Moved playout rebuild queue confirmations into the shared toast surface and added focused browser coverage"}
 {"agent":"Codex","date":"2026-07-22","summary":"Reconciled ADR 0019 and Smart Shuffle parity metadata with the intentional overview removal"}
 {"agent":"Codex","date":"2026-07-22","summary":"Made local dev/build/serve wrappers prebuild the sibling ersatzrs-scanner binary so automatic library refresh dispatch remains available."}

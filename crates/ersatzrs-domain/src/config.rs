@@ -17,6 +17,10 @@ pub const CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES: &str = "ffmpeg.extract_e
 pub const CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES: &str =
     "ffmpeg.probe_for_interlaced_frames";
 pub const CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE: &str = "ffmpeg.preferred_language_code";
+pub const CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE: &str =
+    "ffmpeg.preferred_subtitle_language_code";
+pub const CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE: &str =
+    "ffmpeg.fallback_subtitle_language_code";
 pub const CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID: &str = "ffmpeg.global_watermark_id";
 pub const CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID: &str = "ffmpeg.global_fallback_filler_id";
 pub const CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT: &str = "ffmpeg.segmenter.timeout_seconds";

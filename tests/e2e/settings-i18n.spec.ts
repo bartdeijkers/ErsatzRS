@@ -10,6 +10,8 @@ type RouteExpectation = {
 type LanguageExpectation = {
   code: string;
   save: string;
+  defaultSubtitleLanguage: string;
+  fallbackSubtitleLanguage: string;
   routes: RouteExpectation[];
 };
 
@@ -17,6 +19,8 @@ const languages: LanguageExpectation[] = [
   {
     code: 'en-us',
     save: 'Save Settings',
+    defaultSubtitleLanguage: 'Default Subtitle Language',
+    fallbackSubtitleLanguage: 'Fallback Subtitle Language',
     routes: [
       { path: '/settings/ffmpeg', heading: 'FFmpeg', marker: 'FFmpeg Path' },
       { path: '/settings/logging', heading: 'Logging', marker: 'Default Minimum Log Level' },
@@ -30,6 +34,8 @@ const languages: LanguageExpectation[] = [
   {
     code: 'pl',
     save: 'Zapisz ustawienia',
+    defaultSubtitleLanguage: 'Domyślny język napisów',
+    fallbackSubtitleLanguage: 'Zapasowy język napisów',
     routes: [
       {
         path: '/settings/ffmpeg',
@@ -73,6 +79,8 @@ const languages: LanguageExpectation[] = [
   {
     code: 'pt-br',
     save: 'Salvar configurações',
+    defaultSubtitleLanguage: 'Idioma de legenda padrão',
+    fallbackSubtitleLanguage: 'Idioma de legenda alternativo',
     routes: [
       {
         path: '/settings/ffmpeg',
@@ -116,6 +124,8 @@ const languages: LanguageExpectation[] = [
   {
     code: 'nl',
     save: 'Instellingen opslaan',
+    defaultSubtitleLanguage: 'Standaardtaal voor ondertitels',
+    fallbackSubtitleLanguage: 'Terugvaltaal voor ondertitels',
     routes: [
       {
         path: '/settings/ffmpeg',
@@ -159,6 +169,8 @@ const languages: LanguageExpectation[] = [
   {
     code: 'fr-fr',
     save: 'Enregistrer les paramètres',
+    defaultSubtitleLanguage: 'Langue de sous-titres par défaut',
+    fallbackSubtitleLanguage: 'Langue de sous-titres de secours',
     routes: [
       {
         path: '/settings/ffmpeg',
@@ -241,6 +253,23 @@ test.describe('settings i18n parity', () => {
         await expect(page.getByRole('button', { name: language.save }).first()).toBeVisible();
         await expect(page.locator('[role="alert"]')).toHaveCount(0);
 
+        if (route.path === '/settings/ffmpeg') {
+          await expect(
+            page.getByText(language.defaultSubtitleLanguage, { exact: true }),
+          ).toBeVisible();
+          await expect(
+            page.getByText(language.fallbackSubtitleLanguage, { exact: true }),
+          ).toBeVisible();
+          if (language.code !== 'en-us') {
+            await expect(page.getByText('Default Subtitle Language', { exact: true })).toHaveCount(
+              0,
+            );
+            await expect(page.getByText('Fallback Subtitle Language', { exact: true })).toHaveCount(
+              0,
+            );
+          }
+        }
+
         if (route.englishMarker) {
           await expect(page.getByText(route.englishMarker, { exact: true })).toHaveCount(0);
         }
@@ -251,5 +280,34 @@ test.describe('settings i18n parity', () => {
     }
 
     expect(runtimeErrors).toEqual([]);
+  });
+
+  test('ffmpeg subtitle language preferences persist through the HTML form', async ({
+    browserName,
+    page,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'FFmpeg settings are global; Chromium coverage avoids repeating the mutation across projects',
+    );
+    await page.goto('/settings/ffmpeg');
+    const form = page.locator('form[action="/api/settings/ffmpeg/save"]');
+    await expect(form).toBeVisible();
+
+    const primary = form.locator('select[name="preferred_subtitle_language_code"]');
+    const fallback = form.locator('select[name="fallback_subtitle_language_code"]');
+    await primary.selectOption('dut');
+    await fallback.selectOption('eng');
+    await form.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/settings\/ffmpeg$/);
+    await expect(primary).toHaveValue('dut');
+    await expect(fallback).toHaveValue('eng');
+
+    await primary.selectOption('');
+    await fallback.selectOption('');
+    await form.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/settings\/ffmpeg$/);
+    await expect(primary).toHaveValue('');
+    await expect(fallback).toHaveValue('');
   });
 });

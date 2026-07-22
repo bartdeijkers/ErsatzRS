@@ -1217,7 +1217,7 @@ fn content_matches_condition(
 pub async fn select_playback_subtitle(
     pool: &DbPool,
     media_item_id: i64,
-    preferred_language: Option<&str>,
+    preferred_languages: &[String],
     subtitle_mode: ChannelSubtitleMode,
     streaming_mode: StreamingMode,
 ) -> Result<Option<PlaybackSubtitle>> {
@@ -1243,31 +1243,44 @@ pub async fn select_playback_subtitle(
         });
     }
 
-    if let Some(language) = preferred_language.filter(|value| !value.trim().is_empty()) {
-        let codes = language_codes::all_language_codes([language]);
-        candidates.retain(|subtitle| {
-            subtitle.language.as_deref().is_some_and(|candidate| {
-                codes
-                    .iter()
-                    .any(|code| candidate.eq_ignore_ascii_case(code.as_str()))
-            })
-        });
+    if preferred_languages.is_empty() {
+        return Ok(select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned());
     }
 
-    let selected = match subtitle_mode {
+    for language in preferred_languages {
+        let codes = language_codes::all_language_codes([language]);
+        let selected = select_subtitle_by_mode(
+            candidates.iter().filter(|subtitle| {
+                subtitle.language.as_deref().is_some_and(|candidate| {
+                    codes
+                        .iter()
+                        .any(|code| candidate.eq_ignore_ascii_case(code.as_str()))
+                })
+            }),
+            subtitle_mode,
+        );
+        if let Some(selected) = selected {
+            return Ok(Some(selected.clone()));
+        }
+    }
+
+    Ok(None)
+}
+
+fn select_subtitle_by_mode<'a>(
+    candidates: impl Iterator<Item = &'a PlaybackSubtitle>,
+    subtitle_mode: ChannelSubtitleMode,
+) -> Option<&'a PlaybackSubtitle> {
+    match subtitle_mode {
         ChannelSubtitleMode::Forced => candidates
-            .into_iter()
             .filter(|subtitle| subtitle.forced)
             .min_by_key(|subtitle| subtitle.stream_index),
-        ChannelSubtitleMode::Default => candidates
-            .into_iter()
-            .min_by_key(|subtitle| (!subtitle.default, subtitle.stream_index)),
-        ChannelSubtitleMode::Any => candidates
-            .into_iter()
-            .min_by_key(|subtitle| subtitle.stream_index),
+        ChannelSubtitleMode::Default => {
+            candidates.min_by_key(|subtitle| (!subtitle.default, subtitle.stream_index))
+        }
+        ChannelSubtitleMode::Any => candidates.min_by_key(|subtitle| subtitle.stream_index),
         ChannelSubtitleMode::None => None,
-    };
-    Ok(selected)
+    }
 }
 
 /// Select the channel playback subtitle, including generated music-video
@@ -1285,7 +1298,7 @@ pub async fn select_playback_subtitle(
 pub async fn select_channel_playback_subtitle(
     pool: &DbPool,
     media_item_id: i64,
-    preferred_language: Option<&str>,
+    preferred_languages: &[String],
     subtitle_mode: ChannelSubtitleMode,
     streaming_mode: StreamingMode,
     channel: &Channel,
@@ -1306,7 +1319,7 @@ pub async fn select_channel_playback_subtitle(
     select_playback_subtitle(
         pool,
         media_item_id,
-        preferred_language,
+        preferred_languages,
         subtitle_mode,
         streaming_mode,
     )
