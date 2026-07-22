@@ -15,7 +15,7 @@ dependency-gated "The Box" video-jukebox extension.
 '''
 
 next_steps = '''
-Complete Phase 7A milestones p7a-03 and p7a-04, then migrate application
+Complete Phase 7A milestone p7a-04, then migrate application
 vertical slices in Phase 7B before performing module splits. Phase 8 jukebox
 implementation must wait for the application boundary and an accepted product
 contract. Use `cargo xtask progress milestones --runnable` for runnable work,

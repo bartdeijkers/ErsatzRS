@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { DatabaseSync } from 'node:sqlite';
 
 /**
  * Whole-app island hydration smoke.
@@ -158,6 +159,14 @@ for (const { route, islands } of ISLAND_ROUTES) {
       `${route} fell through to the 404 catch-all`,
     ).toHaveCount(0);
 
+    // The badges previously inserted count-dependent marker trees into the
+    // shared shell. Keep their wrappers in every route proof so a badge
+    // mismatch cannot hide behind an otherwise healthy page island.
+    await expect(page.locator('[data-playout-warning-badge]')).toHaveCount(1);
+    await expect(page.locator('[data-health-badges]')).toHaveCount(1);
+    await expect(page.locator('[data-health-error-badge]')).toHaveCount(1);
+    await expect(page.locator('[data-health-warning-badge]')).toHaveCount(1);
+
     // Primary signal: island hydration ran to completion without panicking.
     await expect
       .poll(() => page.evaluate(() => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true), {
@@ -177,3 +186,60 @@ for (const { route, islands } of ISLAND_ROUTES) {
     expect(hydrationConsoleErrors, `hydration console error(s) on ${route}`).toEqual([]);
   });
 }
+
+test('settings storage failure renders a stable error state without a submittable form', async ({
+  page,
+}) => {
+  const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+  test.skip(
+    !databasePath,
+    'E2E_DB_PATH or ERSATZRS_DB_PATH is required for storage failure injection.',
+  );
+
+  const database = new DatabaseSync(databasePath!);
+  database.exec('PRAGMA busy_timeout=5000');
+  database.exec('ALTER TABLE "ConfigElement" RENAME TO "ConfigElementFailureInjection"');
+
+  try {
+    const pageErrors: string[] = [];
+    const hydrationErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.stack ?? error.message));
+    page.on('console', (message) => {
+      const text = message.text().toLowerCase();
+      if (
+        message.type() === 'error' &&
+        HYDRATION_ERROR_SIGNATURES.some((signature) => text.includes(signature))
+      ) {
+        hydrationErrors.push(message.text());
+      }
+    });
+
+    const response = await page.goto('/settings/ffmpeg', { waitUntil: 'domcontentloaded' });
+    expect(response?.status()).toBe(200);
+    await expect(page.locator('[data-admin-resource][data-state="error"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-admin-resource][data-state="error"] form'),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-admin-resource][data-state="error"] button[type="submit"], [data-admin-resource][data-state="error"] input[type="submit"]',
+      ),
+    ).toHaveCount(0);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated ===
+              true,
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    expect(pageErrors).toEqual([]);
+    expect(hydrationErrors).toEqual([]);
+  } finally {
+    database.exec('ALTER TABLE "ConfigElementFailureInjection" RENAME TO "ConfigElement"');
+    database.close();
+  }
+});

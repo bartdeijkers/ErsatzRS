@@ -5,5 +5,6 @@ pub mod dialog;
 pub mod form;
 pub mod icon;
 pub mod letter_bar;
+pub mod resource_state;
 pub mod table;
 pub mod toast;

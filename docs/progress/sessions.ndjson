@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-07-22","summary":"Resolved p7a-03 review findings by making library polling errors recoverable and running storage failure injection through the normal Playwright CI database contract."}
+{"agent":"Codex","date":"2026-07-22","summary":"Completed p7a-03 with stable typed admin failure states for settings and libraries, expanded architecture debt ratchets, and injected hydration error coverage."}
 {"agent":"Codex","date":"2026-07-22","summary":"Fixed title-only HLS Direct audio selection to combine the global language with the explicit title, matching ErsatzTV."}
 {"agent":"Codex","date":"2026-07-22","summary":"Added ADR-backed global default and fallback subtitle languages, repaired default audio playback wiring, and browser/runtime-proved the settings and selection chain."}
 {"agent":"Codex","date":"2026-07-22","summary":"Moved playout rebuild queue confirmations into the shared toast surface and added focused browser coverage"}

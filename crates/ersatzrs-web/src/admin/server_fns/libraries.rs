@@ -20,86 +20,93 @@ impl Drop for ScanCleanup {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// Serializable transport row shared by the SSR server function and WASM
+/// island. Native SQL decoding stays in `ersatzrs-infra::admin_libraries`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryRow {
     pub id: i64,
     pub name: String,
-    /// "Local", "Plex", "Jellyfin", or "Emby"
+    /// "Local", "Plex", "Jellyfin", or "Emby".
     pub kind: String,
-    /// Raw DB integer matching `ErsatzTV`'s `LibraryMediaKind`:
-    /// 1=Movies 2=Shows 3=MusicVideos 4=OtherVideos 5=Songs 6=Images 7=RemoteStreams
+    /// Raw database integer matching ErsatzTV's `LibraryMediaKind`.
     pub media_kind: i64,
-    /// Populated for remote providers; None for Local.
     pub source_name: Option<String>,
     pub media_source_id: i64,
 }
 
-impl LibraryRow {
-    pub fn media_kind_label(&self) -> &'static str {
-        match self.media_kind {
-            1 => "Movies",
-            2 => "Shows",
-            3 => "Music Videos",
-            4 => "Other Videos",
-            5 => "Songs",
-            6 => "Images",
-            7 => "Remote Streams",
-            _ => "Unknown",
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_infra::admin_libraries::AdminLibraryRow> for LibraryRow {
+    fn from(row: ersatzrs_infra::admin_libraries::AdminLibraryRow) -> Self {
+        Self {
+            id: row.id,
+            name: row.name,
+            kind: row.kind,
+            media_kind: row.media_kind,
+            source_name: row.source_name,
+            media_source_id: row.media_source_id,
         }
     }
+}
+
+/// Serializable external-collection transport row for the hydrated island.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalCollectionRow {
+    pub media_source_id: i64,
+    /// "Plex", "Jellyfin", or "Emby".
+    pub kind: String,
+    pub server_name: Option<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_infra::admin_libraries::AdminExternalCollectionRow> for ExternalCollectionRow {
+    fn from(row: ersatzrs_infra::admin_libraries::AdminExternalCollectionRow) -> Self {
+        Self {
+            media_source_id: row.media_source_id,
+            kind: row.kind,
+            server_name: row.server_name,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibrariesPageData {
+    pub libraries: Vec<LibraryRow>,
+    pub external_collections: Vec<ExternalCollectionRow>,
 }
 
 /// Returns every configured library with its provider kind and media kind.
 #[server]
 pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let rows = sqlx::query(
-        r#"SELECT
-               l."Id",
-               COALESCE(l."Name", '') AS "Name",
-               l."MediaKind",
-               l."MediaSourceId",
-               CASE
-                   WHEN ll."Id" IS NOT NULL THEN 'Local'
-                   WHEN pl."Id" IS NOT NULL THEN 'Plex'
-                   WHEN jl."Id" IS NOT NULL THEN 'Jellyfin'
-                   WHEN el."Id" IS NOT NULL THEN 'Emby'
-                   ELSE 'Unknown'
-               END AS "Kind",
-               CASE
-                   WHEN pl."Id" IS NOT NULL THEN pms."ServerName"
-                   WHEN jl."Id" IS NOT NULL THEN jms."ServerName"
-                   WHEN el."Id" IS NOT NULL THEN ems."ServerName"
-                   ELSE NULL
-               END AS "SourceName"
-           FROM "Library" l
-           LEFT JOIN "LocalLibrary"    ll  ON ll."Id"  = l."Id"
-           LEFT JOIN "PlexLibrary"     pl  ON pl."Id"  = l."Id"
-           LEFT JOIN "JellyfinLibrary" jl  ON jl."Id"  = l."Id"
-           LEFT JOIN "EmbyLibrary"     el  ON el."Id"  = l."Id"
-           LEFT JOIN "PlexMediaSource"     pms ON pms."Id" = l."MediaSourceId"
-           LEFT JOIN "JellyfinMediaSource" jms ON jms."Id" = l."MediaSourceId"
-           LEFT JOIN "EmbyMediaSource"     ems ON ems."Id" = l."MediaSourceId"
-           ORDER BY "Kind", "SourceName", "Name""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LibraryRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            media_kind: r.try_get("MediaKind").unwrap_or(0),
-            media_source_id: r.try_get("MediaSourceId").unwrap_or(0),
-            kind: r.try_get("Kind").unwrap_or_default(),
-            source_name: r.try_get("SourceName").ok().flatten(),
-        })
+    Ok(ersatzrs_infra::admin_libraries::load_libraries(&state.pool)
+        .await?
+        .into_iter()
+        .map(Into::into)
         .collect())
+}
+
+#[server]
+pub async fn load_libraries_page() -> Result<LibrariesPageData, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(load_libraries_page_with_pool(&state.pool).await?)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn load_libraries_page_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> ersatzrs_core::repositories::Result<LibrariesPageData> {
+    let (libraries, external_collections) = tokio::try_join!(
+        ersatzrs_infra::admin_libraries::load_libraries(pool),
+        ersatzrs_infra::admin_libraries::load_external_collections(pool),
+    )?;
+    Ok(LibrariesPageData {
+        libraries: libraries.into_iter().map(Into::into).collect(),
+        external_collections: external_collections.into_iter().map(Into::into).collect(),
+    })
 }
 
 /// Fires a background scan for a single library. Returns immediately.
@@ -387,23 +394,6 @@ pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
 /// One row of the External Collections table. Mirrors ETV's
 /// `GetExternalCollectionsHandler` — one row per remote `MediaSource` whose
 /// libraries are flagged with `ShouldSyncItems = 1`.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct ExternalCollectionRow {
-    pub media_source_id: i64,
-    /// "Plex", "Jellyfin", or "Emby".
-    pub kind: String,
-    pub server_name: Option<String>,
-}
-
-impl ExternalCollectionRow {
-    /// Key used by the `EntityLocker` to gate a collections sync for one
-    /// media source. Kept in sync with `scan_external_collections`.
-    #[must_use]
-    pub fn lock_key(&self) -> String {
-        external_collections_lock_key(&self.kind, self.media_source_id)
-    }
-}
-
 fn external_collections_lock_key(kind: &str, media_source_id: i64) -> String {
     format!("collections:{kind}:{media_source_id}")
 }
@@ -414,46 +404,15 @@ fn external_collections_lock_key(kind: &str, media_source_id: i64) -> String {
 #[server]
 pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let rows = sqlx::query(
-        r#"SELECT DISTINCT
-               l."MediaSourceId" AS "MediaSourceId",
-               CASE
-                   WHEN pl."Id" IS NOT NULL THEN 'Plex'
-                   WHEN jl."Id" IS NOT NULL THEN 'Jellyfin'
-                   WHEN el."Id" IS NOT NULL THEN 'Emby'
-                   ELSE NULL
-               END AS "Kind",
-               COALESCE(pms."ServerName", jms."ServerName", ems."ServerName") AS "ServerName"
-           FROM "Library" l
-           LEFT JOIN "PlexLibrary"     pl  ON pl."Id"  = l."Id"
-           LEFT JOIN "JellyfinLibrary" jl  ON jl."Id"  = l."Id"
-           LEFT JOIN "EmbyLibrary"     el  ON el."Id"  = l."Id"
-           LEFT JOIN "PlexMediaSource"     pms ON pms."Id" = l."MediaSourceId"
-           LEFT JOIN "JellyfinMediaSource" jms ON jms."Id" = l."MediaSourceId"
-           LEFT JOIN "EmbyMediaSource"     ems ON ems."Id" = l."MediaSourceId"
-           WHERE (pl."ShouldSyncItems" = 1
-               OR jl."ShouldSyncItems" = 1
-               OR el."ShouldSyncItems" = 1)
-           ORDER BY "Kind", "ServerName", "MediaSourceId""#,
+    Ok(
+        ersatzrs_infra::admin_libraries::load_external_collections(&state.pool)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
     )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .filter_map(|r| {
-            let kind: Option<String> = r.try_get("Kind").ok().flatten();
-            kind.map(|kind| ExternalCollectionRow {
-                media_source_id: r.try_get("MediaSourceId").unwrap_or(0),
-                kind,
-                server_name: r.try_get("ServerName").ok().flatten(),
-            })
-        })
-        .collect())
 }
 
 /// Fires a background sync of external collections for a single remote

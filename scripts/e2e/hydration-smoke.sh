@@ -167,6 +167,8 @@ fi
 
 set +e
 ERSATZRS_BASE_URL="$BASE_URL" \
+E2E_DB_PATH="$DB_PATH" \
+ERSATZRS_DB_PATH="$DB_PATH" \
   npx --yes playwright test tests/e2e/island-hydration.spec.ts --project=chromium
 STATUS=$?
 set -e

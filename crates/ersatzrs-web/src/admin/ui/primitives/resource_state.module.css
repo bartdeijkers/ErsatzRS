@@ -1,0 +1,18 @@
+.resource_state {
+    min-width: 0;
+}
+
+.message,
+.error {
+    margin: 1rem;
+    padding: 1rem;
+    border-radius: 0.35rem;
+    background: var(--color-surface, #202124);
+}
+
+.error {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid var(--color-error, #d32f2f);
+    color: var(--color-error, #d32f2f);
+}

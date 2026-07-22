@@ -8,97 +8,118 @@ use crate::admin::server_fns::settings::{
     PlayoutSettingsForm, ScannerSettingsForm, SelectOption, UiSettingsForm, XmltvSettingsForm,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::{
+    AdminErrorState, AdminLoadState, AdminLoadingState, AdminResourceState,
+};
 
 stylance::import_crate_style!(style, "src/admin/pages/settings.module.css");
 
 #[component]
 pub fn FfmpegSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_ffmpeg_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<FfmpegSettingsPageData, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_ffmpeg_settings());
     view! {
-        <Suspense fallback=move || render_ffmpeg(FfmpegSettingsPageData::default())>
-            {move || data.get().map(render_ffmpeg)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_ffmpeg(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn LoggingSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_logging_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<LoggingSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_logging_settings());
     view! {
-        <Suspense fallback=move || render_logging(LoggingSettingsForm::default())>
-            {move || data.get().map(render_logging)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_logging(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn HdhrSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_hdhr_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<HdhrSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_hdhr_settings());
     view! {
-        <Suspense fallback=move || render_hdhr(HdhrSettingsForm::default())>
-            {move || data.get().map(render_hdhr)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_hdhr(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn ScannerSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_scanner_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<ScannerSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_scanner_settings());
     view! {
-        <Suspense fallback=move || render_scanner(ScannerSettingsForm::default())>
-            {move || data.get().map(render_scanner)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_scanner(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn PlayoutSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_playout_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<PlayoutSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_playout_settings());
     view! {
-        <Suspense fallback=move || render_playout(PlayoutSettingsForm::default())>
-            {move || data.get().map(render_playout)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_playout(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn UiSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_ui_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<UiSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_ui_settings());
     view! {
-        <Suspense fallback=move || render_ui(UiSettingsForm::default())>
-            {move || data.get().map(render_ui)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_ui(value).into_any()))}
         </Suspense>
     }
 }
 
 #[component]
 pub fn XmltvSettingsPage() -> impl IntoView {
-    let data = Resource::new_blocking(
-        || (),
-        |()| async { load_xmltv_settings().await.unwrap_or_default() },
-    );
+    let data: Resource<Result<XmltvSettingsForm, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_xmltv_settings());
     view! {
-        <Suspense fallback=move || render_xmltv(XmltvSettingsForm::default())>
-            {move || data.get().map(render_xmltv)}
+        <Suspense fallback=loading_resource_view>
+            {move || data.get().map(|result| settings_result_view(result, |value| render_xmltv(value).into_any()))}
         </Suspense>
+    }
+}
+
+fn loading_resource_view() -> AnyView {
+    view! {
+        <AdminResourceState state=Signal::derive(|| AdminLoadState::Loading)>
+            <AdminLoadingState/>
+        </AdminResourceState>
+    }
+    .into_any()
+}
+
+fn settings_result_view<T>(
+    result: Result<T, ServerFnError>,
+    ready: impl FnOnce(T) -> AnyView,
+) -> AnyView {
+    match result {
+        Ok(value) => {
+            let content = ready(value);
+            view! {
+                <AdminResourceState state=Signal::derive(|| AdminLoadState::Ready)>
+                    {content}
+                </AdminResourceState>
+            }
+            .into_any()
+        }
+        Err(error) => view! {
+            <AdminResourceState state=Signal::derive(|| AdminLoadState::Failed)>
+                <AdminErrorState error=error.to_string()/>
+            </AdminResourceState>
+        }
+        .into_any(),
     }
 }
 
@@ -569,6 +590,7 @@ fn log_level_options() -> Vec<SelectOption> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::admin::server_fns::settings::FfmpegSettingsForm;
 
     #[test]
     fn ui_language_options_match_ersatztv_supported_languages() {
@@ -582,11 +604,9 @@ mod tests {
 
     #[test]
     fn ffmpeg_path_inputs_allow_empty_for_auto_detect() {
-        let data = FfmpegSettingsPageData {
-            ffmpeg_resolved: "/usr/bin/ffmpeg".to_owned(),
-            ffprobe_resolved: "/usr/bin/ffprobe".to_owned(),
-            ..FfmpegSettingsPageData::default()
-        };
+        let mut data = ffmpeg_settings_fixture();
+        data.ffmpeg_resolved = "/usr/bin/ffmpeg".to_owned();
+        data.ffprobe_resolved = "/usr/bin/ffprobe".to_owned();
 
         let html = render_ffmpeg(data).into_view().to_html();
         let ffmpeg_input = input_html(&html, r#"name="ffmpeg_path""#);
@@ -605,7 +625,7 @@ mod tests {
 
     #[test]
     fn ffmpeg_extract_embedded_subtitles_is_disabled_without_embedded_subtitles() {
-        let mut data = FfmpegSettingsPageData::default();
+        let mut data = ffmpeg_settings_fixture();
         data.form.use_embedded_subtitles = false;
         data.form.extract_embedded_subtitles = true;
 
@@ -618,7 +638,7 @@ mod tests {
 
     #[test]
     fn ffmpeg_extract_embedded_subtitles_is_enabled_with_embedded_subtitles() {
-        let mut data = FfmpegSettingsPageData::default();
+        let mut data = ffmpeg_settings_fixture();
         data.form.use_embedded_subtitles = true;
         data.form.extract_embedded_subtitles = true;
 
@@ -631,7 +651,7 @@ mod tests {
 
     #[test]
     fn ffmpeg_active_transcode_limit_is_rendered() {
-        let mut data = FfmpegSettingsPageData::default();
+        let mut data = ffmpeg_settings_fixture();
         data.form.active_transcode_limit = 2;
 
         let html = render_ffmpeg(data).into_view().to_html();
@@ -648,7 +668,7 @@ mod tests {
 
     #[test]
     fn ffmpeg_subtitle_language_preferences_are_rendered() {
-        let mut data = FfmpegSettingsPageData::default();
+        let mut data = ffmpeg_settings_fixture();
         data.form.preferred_subtitle_language_code = "nld".to_owned();
         data.form.fallback_subtitle_language_code = "eng".to_owned();
         data.languages = vec![
@@ -670,6 +690,65 @@ mod tests {
         assert!(html.contains(r#"name="fallback_subtitle_language_code""#));
         assert!(html.contains(r#"value="nld" selected"#));
         assert!(html.contains(r#"value="eng" selected"#));
+    }
+
+    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[tokio::test]
+    async fn closed_pool_renders_error_state_without_a_submittable_form() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("test pool");
+        pool.close().await;
+
+        let error = crate::admin::server_fns::settings::load_ffmpeg_settings_with_pool(&pool)
+            .await
+            .expect_err("closed pool should fail");
+        let owner = Owner::new();
+        let html = owner.with(|| {
+            settings_result_view::<FfmpegSettingsPageData>(Err(error), |_| {
+                unreachable!("error result cannot render the ready form")
+            })
+            .to_html()
+        });
+
+        assert!(html.contains(r#"data-state="error""#));
+        assert!(!html.contains("<form"));
+        assert!(!html.contains(r#"type="submit""#));
+    }
+
+    fn ffmpeg_settings_fixture() -> FfmpegSettingsPageData {
+        FfmpegSettingsPageData {
+            form: FfmpegSettingsForm {
+                ffmpeg_path: String::new(),
+                ffprobe_path: String::new(),
+                default_ffmpeg_profile_id: 0,
+                preferred_audio_language_code: "eng".to_owned(),
+                preferred_subtitle_language_code: String::new(),
+                fallback_subtitle_language_code: String::new(),
+                use_embedded_subtitles: true,
+                extract_embedded_subtitles: false,
+                probe_for_interlaced_frames: false,
+                save_reports: false,
+                global_watermark_id: None,
+                global_fallback_filler_id: None,
+                hls_segmenter_idle_timeout: 60,
+                work_ahead_segmenter_limit: 1,
+                active_transcode_limit: 2,
+                initial_segment_count: 1,
+                hls_direct_output_format: 2,
+                default_mpeg_ts_script: "default".to_owned(),
+            },
+            ffmpeg_resolved: String::new(),
+            ffprobe_resolved: String::new(),
+            active_transcode_capacity: ActiveTranscodeCapacityStatus::default(),
+            ffmpeg_profiles: Vec::new(),
+            languages: Vec::new(),
+            watermarks: Vec::new(),
+            fallback_fillers: Vec::new(),
+            mpeg_ts_scripts: Vec::new(),
+            custom_resolutions: Vec::new(),
+        }
     }
 
     fn input_html<'a>(html: &'a str, needle: &str) -> &'a str {

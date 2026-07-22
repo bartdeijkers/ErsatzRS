@@ -277,6 +277,17 @@ seeded data (list / add / settings / system / source routes); detail and editor
 routes that need a real `:id` belong in their own seeded specs. When you add a
 new island route, add it to the `ISLAND_ROUTES` table in the spec.
 
+The gate also asserts the shared navigation badge wrappers on every route and
+injects a settings storage failure against its throwaway database. That error
+proof requires one stable `[data-admin-resource][data-state="error"]` wrapper,
+no form or submit control inside it, completed hydration, and no marker-mismatch
+or other hydration-signature error. Server-backed resource primitives must keep
+the same outer element across loading, ready, empty, and error states; only the
+`data-state` value and contents may change across a `Suspense` boundary.
+Failure-injection specs read the throwaway database from `E2E_DB_PATH` or
+`ERSATZRS_DB_PATH`; both the focused hydration runner and the normal full-suite
+wrapper export that shared contract so CI cannot silently skip the proof.
+
 Support page parity criteria are captured from the live ErsatzTV Legacy
 Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can
 seed the persisted health snapshot with `E2E_SEED_SUPPORT=1` when

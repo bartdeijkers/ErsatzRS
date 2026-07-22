@@ -130,11 +130,20 @@ must not depend on concrete application services or storage.
 
 ### P7A-03 — Admin failure states and typed query rows
 
-- Introduce a shared localized `Loading / Ready / Empty / Error` presentation
-  model and error boundary for server-backed admin resources.
-- Replace query-level `unwrap_or_default` behavior in coherent route families.
-- Move row decoding into typed infrastructure read models and return typed
-  errors instead of default identifiers or empty titles.
+- Introduce one localized, hydration-stable admin resource wrapper with
+  `data-state="loading|ready|empty|error"`; data-access failures continue to use
+  the Phase 7A `RepositoryError` vocabulary rather than a UI-only error type.
+- Migrate the complete `/settings/*` and `/media/libraries` route families,
+  remove `Default` from their write-back form DTOs, and prove each family with
+  a closed-pool regression that renders an error state without a submittable
+  form.
+- Move those families' row decoding into typed infrastructure read models and
+  ratchet direct SQL, awaited-result fallbacks, silent `if let Ok` branches,
+  form-rendering `Suspense` fallbacks, and `try_get(...).unwrap_or*` debt.
+- Reduce the architecture baseline exactly from 535 to 519 direct admin SQL
+  calls, 204 to 184 server-error default loaders, and 851 to 843 row-decode
+  defaults; cover one injected error page plus the stable navigation-badge
+  markers in the whole-app island hydration gate.
 
 ### P7A-04 — Development and tracking surfaces
 

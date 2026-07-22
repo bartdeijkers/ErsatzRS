@@ -22,6 +22,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Admin settings and library storage failures now render a localized, stable
+  `data-state="error"` resource instead of a plausible default form or empty
+  list. Their reads use typed infrastructure models and the shared repository
+  error vocabulary; architecture lint now also ratchets alternate awaited
+  result fallbacks, form-rendering Suspense fallbacks, and row-decode defaults.
+  Library polling errors clear after the affected load or a complete polling
+  cycle recovers instead of leaving the page permanently in an error state.
 - Established the storage-neutral application-service boundary and native web
   composition root in ADR 0051. A baseline-aware architecture gate now blocks
   an empty app crate, forbidden adapter dependencies, new direct admin SQL, and

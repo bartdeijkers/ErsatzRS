@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use crate::admin::i18n::{normalize_ui_language, UiLanguage};
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectOption {
     pub value: String,
     pub label: String,
@@ -33,32 +33,7 @@ pub struct FfmpegSettingsForm {
     pub default_mpeg_ts_script: String,
 }
 
-impl Default for FfmpegSettingsForm {
-    fn default() -> Self {
-        Self {
-            ffmpeg_path: String::new(),
-            ffprobe_path: String::new(),
-            default_ffmpeg_profile_id: 0,
-            preferred_audio_language_code: "eng".to_owned(),
-            preferred_subtitle_language_code: String::new(),
-            fallback_subtitle_language_code: String::new(),
-            use_embedded_subtitles: true,
-            extract_embedded_subtitles: false,
-            probe_for_interlaced_frames: false,
-            save_reports: false,
-            global_watermark_id: None,
-            global_fallback_filler_id: None,
-            hls_segmenter_idle_timeout: 60,
-            work_ahead_segmenter_limit: 1,
-            active_transcode_limit: 2,
-            initial_segment_count: 1,
-            hls_direct_output_format: 2,
-            default_mpeg_ts_script: "default".to_owned(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FfmpegSettingsPageData {
     pub form: FfmpegSettingsForm,
     /// Effective tool paths the locator resolves to right now; shown in the
@@ -95,10 +70,9 @@ impl Default for ActiveTranscodeCapacityStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ActiveTranscodeSuggestionReason {
     Hardware,
-    #[default]
     Software,
 }
 
@@ -112,35 +86,13 @@ pub struct LoggingSettingsForm {
     pub http_minimum_log_level: String,
 }
 
-impl Default for LoggingSettingsForm {
-    fn default() -> Self {
-        Self {
-            default_minimum_log_level: "Information".to_owned(),
-            scanning_minimum_log_level: "Information".to_owned(),
-            scheduling_minimum_log_level: "Information".to_owned(),
-            searching_minimum_log_level: "Information".to_owned(),
-            streaming_minimum_log_level: "Information".to_owned(),
-            http_minimum_log_level: "Information".to_owned(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HdhrSettingsForm {
     pub uuid: String,
     pub tuner_count: i32,
 }
 
-impl Default for HdhrSettingsForm {
-    fn default() -> Self {
-        Self {
-            uuid: String::new(),
-            tuner_count: 2,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScannerSettingsForm {
     pub library_refresh_interval: i32,
 }
@@ -152,29 +104,10 @@ pub struct PlayoutSettingsForm {
     pub scripted_schedule_timeout_seconds: i32,
 }
 
-impl Default for PlayoutSettingsForm {
-    fn default() -> Self {
-        Self {
-            days_to_build: 2,
-            skip_missing_items: false,
-            scripted_schedule_timeout_seconds: 30,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UiSettingsForm {
     pub is_dark_mode: bool,
     pub language: String,
-}
-
-impl Default for UiSettingsForm {
-    fn default() -> Self {
-        Self {
-            is_dark_mode: true,
-            language: "en-us".to_owned(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -182,16 +115,6 @@ pub struct XmltvSettingsForm {
     pub days_to_build: i32,
     pub time_zone: String,
     pub block_behavior: String,
-}
-
-impl Default for XmltvSettingsForm {
-    fn default() -> Self {
-        Self {
-            days_to_build: 2,
-            time_zone: "Local".to_owned(),
-            block_behavior: "SplitTimeEvenly".to_owned(),
-        }
-    }
 }
 
 #[server]
@@ -491,7 +414,7 @@ async fn load_ffmpeg_settings_with_capabilities(
         active_transcode_capacity,
         ffmpeg_profiles: select_options(
             pool,
-            r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#,
+            ersatzrs_infra::admin_settings::SettingsOptionKind::FfmpegProfile,
         )
         .await?,
         languages: ersatzrs_core::language_codes::language_options()
@@ -500,15 +423,12 @@ async fn load_ffmpeg_settings_with_capabilities(
             .collect(),
         watermarks: select_options(
             pool,
-            // The ErsatzTV schema names this table ChannelWatermark; querying
-            // a non-existent "Watermark" table made this loader error and the
-            // whole FFmpeg settings form silently fall back to defaults.
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "ChannelWatermark" ORDER BY "Name", "Id""#,
+            ersatzrs_infra::admin_settings::SettingsOptionKind::Watermark,
         )
         .await?,
         fallback_fillers: select_options(
             pool,
-            r#"SELECT "Id", "Name" FROM "FillerPreset" WHERE "FillerKind" = 0 ORDER BY "Name", "Id""#,
+            ersatzrs_infra::admin_settings::SettingsOptionKind::FallbackFiller,
         )
         .await?,
         mpeg_ts_scripts: vec![SelectOption {
@@ -517,7 +437,7 @@ async fn load_ffmpeg_settings_with_capabilities(
         }],
         custom_resolutions: select_options(
             pool,
-            r#"SELECT "Id", "Name" FROM "Resolution" WHERE "IsCustom" = 1 ORDER BY "Height", "Width", "Id""#,
+            ersatzrs_infra::admin_settings::SettingsOptionKind::CustomResolution,
         )
         .await?,
     })
@@ -994,9 +914,7 @@ pub async fn save_playout_settings_with_state(
     )
     .await?;
 
-    let playout_ids: Vec<i64> = sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" ORDER BY "Id""#)
-        .fetch_all(&state.pool)
-        .await?;
+    let playout_ids = ersatzrs_infra::admin_settings::load_playout_ids(&state.pool).await?;
     enqueue_playout_builds(
         state,
         playout_ids,
@@ -1080,9 +998,7 @@ pub async fn save_xmltv_settings_with_state(
     )
     .await?;
 
-    let playout_ids: Vec<i64> = sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" ORDER BY "Id""#)
-        .fetch_all(&state.pool)
-        .await?;
+    let playout_ids = ersatzrs_infra::admin_settings::load_playout_ids(&state.pool).await?;
     enqueue_playout_builds(
         state,
         playout_ids,
@@ -1100,27 +1016,9 @@ pub async fn create_custom_resolution(
     if width <= 0 || height <= 0 {
         return Err(ServerFnError::new("Resolution width or height is invalid"));
     }
-    let existing: Option<i64> =
-        sqlx::query_scalar(r#"SELECT "Id" FROM "Resolution" WHERE "Width" = ? AND "Height" = ?"#)
-            .bind(width)
-            .bind(height)
-            .fetch_optional(pool)
-            .await?;
-    if existing.is_some() {
-        return Err(ServerFnError::new(
-            "Resolution width and height must be unique",
-        ));
-    }
-    let name = format!("{width}x{height}");
-    sqlx::query(
-        r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height") VALUES (?, 1, ?, ?)"#,
-    )
-    .bind(name)
-    .bind(width)
-    .bind(height)
-    .execute(pool)
-    .await?;
-    Ok(())
+    ersatzrs_infra::admin_settings::create_custom_resolution(pool, width, height)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1128,33 +1026,9 @@ pub async fn delete_custom_resolution_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     id: i64,
 ) -> Result<(), ServerFnError> {
-    let existing: Option<i64> =
-        sqlx::query_scalar(r#"SELECT "Id" FROM "Resolution" WHERE "Id" = ? AND "IsCustom" = 1"#)
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-    if existing.is_none() {
-        return Err(ServerFnError::new(format!(
-            "Resolution {id} does not exist."
-        )));
-    }
-    let replacement: Option<i64> = sqlx::query_scalar(
-        r#"SELECT "Id" FROM "Resolution" WHERE "IsCustom" = 0 ORDER BY "Height" DESC, "Width" DESC, "Id" LIMIT 1"#,
-    )
-    .fetch_optional(pool)
-    .await?;
-    if let Some(replacement_id) = replacement {
-        sqlx::query(r#"UPDATE "FFmpegProfile" SET "ResolutionId" = ? WHERE "ResolutionId" = ?"#)
-            .bind(replacement_id)
-            .bind(id)
-            .execute(pool)
-            .await?;
-    }
-    sqlx::query(r#"DELETE FROM "Resolution" WHERE "Id" = ? AND "IsCustom" = 1"#)
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    ersatzrs_infra::admin_settings::delete_custom_resolution(pool, id)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1190,10 +1064,10 @@ async fn validate_ffmpeg_settings(form: &FfmpegSettingsForm) -> Result<(), Serve
 }
 
 #[cfg(feature = "ssr")]
-async fn load_playout_ids(pool: &ersatzrs_infra::db::DbPool) -> Result<Vec<i64>, sqlx::Error> {
-    sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" ORDER BY "Id""#)
-        .fetch_all(pool)
-        .await
+async fn load_playout_ids(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> ersatzrs_core::repositories::Result<Vec<i64>> {
+    ersatzrs_infra::admin_settings::load_playout_ids(pool).await
 }
 
 #[cfg(feature = "ssr")]
@@ -1242,23 +1116,18 @@ fn bool_value(value: bool) -> &'static str {
 #[cfg(feature = "ssr")]
 async fn select_options(
     pool: &ersatzrs_infra::db::DbPool,
-    sql: &str,
+    kind: ersatzrs_infra::admin_settings::SettingsOptionKind,
 ) -> Result<Vec<SelectOption>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-        .fetch_all(pool)
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| SelectOption {
-            value: row.try_get::<i64, _>("Id").unwrap_or(0).to_string(),
-            label: row
-                .try_get::<Option<String>, _>("Name")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-        })
-        .collect())
+    Ok(
+        ersatzrs_infra::admin_settings::load_select_options(pool, kind)
+            .await?
+            .into_iter()
+            .map(|row| SelectOption {
+                value: row.id.to_string(),
+                label: row.name,
+            })
+            .collect(),
+    )
 }
 
 #[cfg(feature = "ssr")]
@@ -1266,12 +1135,9 @@ async fn load_optional_string(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
 ) -> Result<Option<String>, ServerFnError> {
-    let value =
-        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(key)
-            .fetch_optional(pool)
-            .await?;
-    Ok(value)
+    ersatzrs_infra::admin_settings::load_optional_string(pool, key)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1280,9 +1146,9 @@ async fn load_string(
     key: &str,
     default: &str,
 ) -> Result<String, ServerFnError> {
-    Ok(load_optional_string(pool, key)
-        .await?
-        .unwrap_or_else(|| default.to_owned()))
+    ersatzrs_infra::admin_settings::load_string(pool, key, default)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1291,10 +1157,9 @@ async fn load_i32(
     key: &str,
     default: i32,
 ) -> Result<i32, ServerFnError> {
-    Ok(load_optional_string(pool, key)
-        .await?
-        .and_then(|value| value.parse::<i32>().ok())
-        .unwrap_or(default))
+    ersatzrs_infra::admin_settings::load_i32(pool, key, default)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1302,9 +1167,9 @@ async fn load_optional_i64(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
 ) -> Result<Option<i64>, ServerFnError> {
-    Ok(load_optional_string(pool, key)
-        .await?
-        .and_then(|value| value.parse::<i64>().ok()))
+    ersatzrs_infra::admin_settings::load_optional_i64(pool, key)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1313,11 +1178,9 @@ async fn load_bool(
     key: &str,
     default: bool,
 ) -> Result<bool, ServerFnError> {
-    Ok(load_optional_string(pool, key)
-        .await?
-        .map_or(default, |value| {
-            matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1")
-        }))
+    ersatzrs_infra::admin_settings::load_bool(pool, key, default)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1344,19 +1207,9 @@ pub async fn save_config_value(
     key: &str,
     value: &str,
 ) -> Result<(), ServerFnError> {
-    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
-        .bind(value)
-        .bind(key)
-        .execute(pool)
-        .await?;
-    if updated.rows_affected() == 0 {
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-            .bind(key)
-            .bind(value)
-            .execute(pool)
-            .await?;
-    }
-    Ok(())
+    ersatzrs_infra::admin_settings::save_config_value(pool, key, value)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]
@@ -1365,15 +1218,9 @@ async fn save_optional_config_value(
     key: &str,
     value: Option<i64>,
 ) -> Result<(), ServerFnError> {
-    if let Some(value) = value {
-        save_config_value(pool, key, &value.to_string()).await
-    } else {
-        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(key)
-            .execute(pool)
-            .await?;
-        Ok(())
-    }
+    ersatzrs_infra::admin_settings::save_optional_i64(pool, key, value)
+        .await
+        .map_err(ServerFnError::from)
 }
 
 #[cfg(feature = "ssr")]

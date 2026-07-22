@@ -84,9 +84,10 @@ fn run_inner(opts: &Opts) -> Result<()> {
     }
 
     println!(
-        "architecture-lint: passed ({} direct admin SQL call(s), {} server-error default loader(s) ratcheted)",
+        "architecture-lint: passed ({} direct admin SQL call(s), {} server-error default loader(s), {} row-decode default(s) ratcheted)",
         counts.direct_admin_sql.values().sum::<usize>(),
-        counts.server_error_to_default.values().sum::<usize>()
+        counts.server_error_to_default.values().sum::<usize>(),
+        counts.row_decode_default.values().sum::<usize>()
     );
     Ok(())
 }
@@ -275,9 +276,11 @@ fn collect_dependency_tables(
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
 struct DebtCounts {
     direct_admin_sql: BTreeMap<String, usize>,
     server_error_to_default: BTreeMap<String, usize>,
+    row_decode_default: BTreeMap<String, usize>,
 }
 
 fn scan_admin_trees(workspace: &Path) -> Result<DebtCounts> {
@@ -320,7 +323,12 @@ fn scan_admin_trees(workspace: &Path) -> Result<DebtCounts> {
         if visitor.server_error_to_default > 0 {
             counts
                 .server_error_to_default
-                .insert(display_path, visitor.server_error_to_default);
+                .insert(display_path.clone(), visitor.server_error_to_default);
+        }
+        if visitor.row_decode_default > 0 {
+            counts
+                .row_decode_default
+                .insert(display_path, visitor.row_decode_default);
         }
     }
     Ok(counts)
@@ -329,6 +337,7 @@ fn scan_admin_trees(workspace: &Path) -> Result<DebtCounts> {
 struct AdminDebtVisitor {
     direct_admin_sql: usize,
     server_error_to_default: usize,
+    row_decode_default: usize,
     imports: SqlxImports,
 }
 
@@ -337,6 +346,7 @@ impl AdminDebtVisitor {
         Self {
             direct_admin_sql: 0,
             server_error_to_default: 0,
+            row_decode_default: 0,
             imports,
         }
     }
@@ -374,6 +384,9 @@ impl<'ast> Visit<'ast> for AdminDebtVisitor {
         if is_sqlx_query_path(&expression.path, &self.imports) {
             self.direct_admin_sql += 1;
         }
+        if suspense_fallback_renders_form(expression) {
+            self.server_error_to_default += 1;
+        }
         syn::visit::visit_macro(self, expression);
     }
 
@@ -381,11 +394,150 @@ impl<'ast> Visit<'ast> for AdminDebtVisitor {
         if is_raw_executor_sql_call(expression, &self.imports) {
             self.direct_admin_sql += 1;
         }
-        if expression.method == "unwrap_or_default" && is_await(&expression.receiver) {
+        if is_result_default_method(&expression.method.to_string())
+            && is_await(&expression.receiver)
+        {
             self.server_error_to_default += 1;
+        }
+        if is_row_decode_default(expression) {
+            self.row_decode_default += 1;
         }
         syn::visit::visit_expr_method_call(self, expression);
     }
+
+    fn visit_expr_if(&mut self, expression: &'ast syn::ExprIf) {
+        if is_silent_awaited_ok_branch(expression) {
+            self.server_error_to_default += 1;
+        }
+        syn::visit::visit_expr_if(self, expression);
+    }
+}
+
+fn is_result_default_method(name: &str) -> bool {
+    matches!(
+        name,
+        "unwrap_or_default" | "unwrap_or" | "unwrap_or_else" | "ok"
+    )
+}
+
+fn is_row_decode_default(expression: &syn::ExprMethodCall) -> bool {
+    matches!(
+        expression.method.to_string().as_str(),
+        "unwrap_or_default" | "unwrap_or" | "unwrap_or_else"
+    ) && is_try_get_call(&expression.receiver)
+}
+
+fn is_try_get_call(expression: &syn::Expr) -> bool {
+    match expression {
+        syn::Expr::MethodCall(call) => call.method == "try_get",
+        syn::Expr::Group(group) => is_try_get_call(&group.expr),
+        syn::Expr::Paren(paren) => is_try_get_call(&paren.expr),
+        syn::Expr::Try(expression) => is_try_get_call(&expression.expr),
+        _ => false,
+    }
+}
+
+fn is_silent_awaited_ok_branch(expression: &syn::ExprIf) -> bool {
+    let syn::Expr::Let(condition) = expression.cond.as_ref() else {
+        return false;
+    };
+    if !pattern_is_ok(&condition.pat) || !contains_await(&condition.expr) {
+        return false;
+    }
+
+    match &expression.else_branch {
+        None => true,
+        Some((_, branch)) => {
+            matches!(branch.as_ref(), syn::Expr::Block(block) if block.block.stmts.is_empty())
+        }
+    }
+}
+
+fn pattern_is_ok(pattern: &syn::Pat) -> bool {
+    match pattern {
+        syn::Pat::TupleStruct(pattern) => pattern
+            .path
+            .segments
+            .last()
+            .is_some_and(|part| part.ident == "Ok"),
+        syn::Pat::Paren(pattern) => pattern_is_ok(&pattern.pat),
+        _ => false,
+    }
+}
+
+fn contains_await(expression: &syn::Expr) -> bool {
+    struct AwaitVisitor(bool);
+
+    impl<'ast> Visit<'ast> for AwaitVisitor {
+        fn visit_expr_await(&mut self, _expression: &'ast syn::ExprAwait) {
+            self.0 = true;
+        }
+    }
+
+    let mut visitor = AwaitVisitor(false);
+    visitor.visit_expr(expression);
+    visitor.0
+}
+
+fn suspense_fallback_renders_form(expression: &syn::Macro) -> bool {
+    if !expression
+        .path
+        .segments
+        .last()
+        .is_some_and(|part| part.ident == "view")
+    {
+        return false;
+    }
+
+    let tokens: Vec<_> = expression.tokens.clone().into_iter().collect();
+    let has_suspense = tokens.windows(2).any(|pair| {
+        matches!(&pair[0], proc_macro2::TokenTree::Punct(punct) if punct.as_char() == '<')
+            && matches!(&pair[1], proc_macro2::TokenTree::Ident(ident) if ident == "Suspense")
+    });
+    if !has_suspense {
+        return false;
+    }
+
+    let Some(fallback_index) = tokens.iter().position(
+        |token| matches!(token, proc_macro2::TokenTree::Ident(ident) if ident == "fallback"),
+    ) else {
+        return false;
+    };
+    let fallback: Vec<_> = tokens
+        .into_iter()
+        .skip(fallback_index + 1)
+        .skip_while(|token| {
+            matches!(token, proc_macro2::TokenTree::Punct(punct) if punct.as_char() == '=')
+        })
+        .take_while(|token| {
+            !matches!(token, proc_macro2::TokenTree::Punct(punct) if punct.as_char() == '>')
+        })
+        .collect();
+
+    token_trees_render_form(&fallback)
+}
+
+fn token_trees_render_form(tokens: &[proc_macro2::TokenTree]) -> bool {
+    if tokens.windows(2).any(|pair| {
+        matches!(&pair[0], proc_macro2::TokenTree::Punct(punct) if punct.as_char() == '<')
+            && matches!(&pair[1], proc_macro2::TokenTree::Ident(ident) if {
+                let name = ident.to_string();
+                name == "form" || name.ends_with("Form")
+            })
+    }) {
+        return true;
+    }
+
+    tokens.iter().any(|token| match token {
+        proc_macro2::TokenTree::Ident(ident) => {
+            let name = ident.to_string();
+            name.starts_with("render_") || name == "form" || name.ends_with("_form")
+        }
+        proc_macro2::TokenTree::Group(group) => {
+            token_trees_render_form(&group.stream().into_iter().collect::<Vec<_>>())
+        }
+        _ => false,
+    })
 }
 
 fn is_test_only(attributes: &[syn::Attribute]) -> bool {
@@ -694,6 +846,12 @@ fn compare_counts(current: &DebtCounts, baseline: &DebtCounts) -> Vec<String> {
         &baseline.server_error_to_default,
         &mut problems,
     );
+    compare_rule(
+        "row-decode-default",
+        &current.row_decode_default,
+        &baseline.row_decode_default,
+        &mut problems,
+    );
     problems
 }
 
@@ -746,6 +904,98 @@ mod tests {
         visitor.visit_file(&syntax);
         assert_eq!(visitor.direct_admin_sql, 1);
         assert_eq!(visitor.server_error_to_default, 1);
+    }
+
+    #[test]
+    fn server_failure_fallback_variants_cannot_bypass_the_guard() {
+        let syntax = syn::parse_file(
+            r#"
+            async fn load() {
+                let _ = first().await.unwrap_or(Vec::new());
+                let _ = second().await.unwrap_or_else(|_| Vec::new());
+                let _ = third().await.ok();
+                if let Ok(rows) = fourth().await {
+                    consume(rows);
+                }
+                if let Ok(rows) = fifth().await {
+                    consume(rows);
+                } else {}
+
+                if let Ok(value) = "1".parse::<u32>() {
+                    consume(value);
+                }
+                if let Ok(rows) = sixth().await {
+                    consume(rows);
+                } else {
+                    report_failure();
+                }
+            }
+            "#,
+        )
+        .expect("fixture should parse");
+        let mut visitor = AdminDebtVisitor::new(SqlxImports::from_file(&syntax));
+        visitor.visit_file(&syntax);
+        assert_eq!(visitor.server_error_to_default, 5);
+    }
+
+    #[test]
+    fn form_rendering_suspense_fallback_cannot_bypass_the_guard() {
+        let syntax = syn::parse_file(
+            r#"
+            fn page() {
+                view! {
+                    <Suspense fallback=move || render_settings(empty_form())>
+                        {move || data.get().map(render_settings)}
+                    </Suspense>
+                };
+                view! {
+                    <Suspense fallback=move || view! { <form method="post"></form> }>
+                        <p>"ready"</p>
+                    </Suspense>
+                };
+                view! {
+                    <Suspense fallback=move || settings_form()>
+                        <p>"ready"</p>
+                    </Suspense>
+                };
+                view! {
+                    <Suspense fallback=move || view! { <SettingsForm/> }>
+                        <p>"ready"</p>
+                    </Suspense>
+                };
+                view! {
+                    <Suspense fallback=move || view! { <p>"loading"</p> }>
+                        <form method="post"></form>
+                    </Suspense>
+                };
+            }
+            "#,
+        )
+        .expect("fixture should parse");
+        let mut visitor = AdminDebtVisitor::new(SqlxImports::from_file(&syntax));
+        visitor.visit_file(&syntax);
+        assert_eq!(visitor.server_error_to_default, 4);
+    }
+
+    #[test]
+    fn row_decode_defaults_cannot_bypass_the_guard() {
+        let syntax = syn::parse_file(
+            r#"
+            fn decode(row: &sqlx::sqlite::SqliteRow) {
+                let _ = row.try_get::<i64, _>("Id").unwrap_or(0);
+                let _ = row.try_get::<String, _>("Name").unwrap_or_default();
+                let _ = row.try_get::<String, _>("Title").unwrap_or_else(|_| String::new());
+                let _ = row.try_get::<Option<String>, _>("Path").ok().flatten();
+
+                let _ = "1".parse::<u32>().unwrap_or(0);
+                let _ = row.try_get::<i64, _>("Required")?;
+            }
+            "#,
+        )
+        .expect("fixture should parse");
+        let mut visitor = AdminDebtVisitor::new(SqlxImports::from_file(&syntax));
+        visitor.visit_file(&syntax);
+        assert_eq!(visitor.row_decode_default, 3);
     }
 
     #[test]

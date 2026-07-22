@@ -6,12 +6,12 @@
 [[page]]
 name   = 'WholeAppIslandHydrationSmokeGate'
 status = '✅'
-notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard. 2026-06-27: CI now runs the full Playwright e2e suite by default (`scripts/e2e/playwright-e2e.sh`), and the admin route-family specs were stabilized so library scan, media-collection editor, scheduling editor, and FFmpeg-profile no-JS fallback routes hold hydrated startup state instead of racing or panicking on marker-node mismatches.'
+notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard. 2026-06-27: CI now runs the full Playwright e2e suite by default (`scripts/e2e/playwright-e2e.sh`), and the admin route-family specs were stabilized so library scan, media-collection editor, scheduling editor, and FFmpeg-profile no-JS fallback routes hold hydrated startup state instead of racing or panicking on marker-node mismatches. 2026-07-22: the gate passed 57/57 after adding stable navigation-badge marker assertions and an injected `/settings/ffmpeg` storage failure proof requiring `data-state="error"`, no form or submit control, completed hydration, and no marker-mismatch error. Review closeout reran the same 57 tests through the normal `scripts/e2e/playwright-e2e.sh` CI wrapper using its standard database variables, proving the injected failure test is executed rather than skipped.'
 
 [[page]]
 name   = 'LibrariesPage'
 status = '✅'
-notes  = '`Scan Library` server fn smoke clean; lock-state polling present.'
+notes  = '`Scan Library` server fn smoke clean; lock-state polling present. 2026-07-22: initial-load errors clear when their own request recovers, and periodic lock/progress/revision errors clear only after a fully successful polling cycle; focused regression passed.'
 
 [[page]]
 name   = 'SearchPage'

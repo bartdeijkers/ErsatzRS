@@ -5,42 +5,58 @@ use crate::admin::i18n::{library_kind_label, media_kind_label, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::libraries::{
-    list_external_collections, list_libraries, scan_external_collections, scan_library,
-    ExternalCollectionRow, LibraryRow,
+    list_external_collections, list_libraries, load_libraries_page, scan_external_collections,
+    scan_library, ExternalCollectionRow, LibrariesPageData, LibraryRow,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::libraries::{
     list_locked_collections, list_locked_libraries, list_scan_progress,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::{
+    AdminErrorState, AdminLoadState, AdminLoadingState, AdminResourceState,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
 
 #[component]
 pub fn LibrariesPage() -> impl IntoView {
-    let initial: Resource<(Vec<LibraryRow>, Vec<ExternalCollectionRow>)> = Resource::new_blocking(
-        || (),
-        |()| async move {
-            let (libraries, externals) =
-                tokio::join!(list_libraries(), list_external_collections());
-            (libraries.unwrap_or_default(), externals.unwrap_or_default())
-        },
-    );
+    let initial: Resource<Result<LibrariesPageData, ServerFnError>> =
+        Resource::new_blocking(|| (), |()| load_libraries_page());
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                initial.get().map(|(initial_libraries, initial_externals)| {
-                    view! {
-                        <LibrariesIsland
-                            initial_libraries=initial_libraries
-                            initial_externals=initial_externals
-                        />
-                    }
-                })
-            }}
+        <Suspense fallback=move || view! {
+            <AdminResourceState state=Signal::derive(|| AdminLoadState::Loading)>
+                <AdminLoadingState/>
+            </AdminResourceState>
+        }>
+            {move || initial.get().map(render_libraries_page_state)}
         </Suspense>
+    }
+}
+
+fn render_libraries_page_state(result: Result<LibrariesPageData, ServerFnError>) -> AnyView {
+    match result {
+        Err(error) => view! {
+            <AdminResourceState state=Signal::derive(|| AdminLoadState::Failed)>
+                <AdminErrorState error=error.to_string()/>
+            </AdminResourceState>
+        }
+        .into_any(),
+        Ok(data) if data.libraries.is_empty() && data.external_collections.is_empty() => view! {
+            <AdminResourceState state=Signal::derive(|| AdminLoadState::Empty)>
+                <p class=style::empty>{tr(TextKey::NoLibrariesConfigured)}</p>
+            </AdminResourceState>
+        }
+        .into_any(),
+        Ok(data) => view! {
+            <LibrariesIsland
+                initial_libraries=data.libraries
+                initial_externals=data.external_collections
+            />
+        }
+        .into_any(),
     }
 }
 
@@ -50,15 +66,22 @@ fn LibrariesIsland(
     initial_externals: Vec<ExternalCollectionRow>,
 ) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
+    let libraries_error = RwSignal::new(String::new());
+    let externals_error = RwSignal::new(String::new());
+    let polling_error = RwSignal::new(String::new());
     let current_libraries = RwSignal::new(initial_libraries);
-    let libs: LocalResource<Vec<LibraryRow>> = LocalResource::new(move || {
-        let _ = media_revision.get();
-        async move { list_libraries().await.unwrap_or_default() }
-    });
-    Effect::new(move |_| {
-        if let Some(rows) = libs.get() {
+    let libs: LocalResource<Result<Vec<LibraryRow>, ServerFnError>> =
+        LocalResource::new(move || {
+            let _ = media_revision.get();
+            list_libraries()
+        });
+    Effect::new(move |_| match libs.get() {
+        Some(Ok(rows)) => {
             current_libraries.set(rows);
+            libraries_error.set(String::new());
         }
+        Some(Err(error)) => libraries_error.set(error.to_string()),
+        None => {}
     });
     let scan_action = Action::new(|(id, kind, deep_scan): &(i64, String, bool)| {
         let id = *id;
@@ -88,14 +111,18 @@ fn LibrariesIsland(
     });
 
     let current_externals = RwSignal::new(initial_externals);
-    let externals: LocalResource<Vec<ExternalCollectionRow>> = LocalResource::new(move || {
-        let _ = media_revision.get();
-        async move { list_external_collections().await.unwrap_or_default() }
-    });
-    Effect::new(move |_| {
-        if let Some(rows) = externals.get() {
+    let externals: LocalResource<Result<Vec<ExternalCollectionRow>, ServerFnError>> =
+        LocalResource::new(move || {
+            let _ = media_revision.get();
+            list_external_collections()
+        });
+    Effect::new(move |_| match externals.get() {
+        Some(Ok(rows)) => {
             current_externals.set(rows);
+            externals_error.set(String::new());
         }
+        Some(Err(error)) => externals_error.set(error.to_string()),
+        None => {}
     });
     let collections_action =
         Action::new(|(media_source_id, kind, deep_scan): &(i64, String, bool)| {
@@ -134,20 +161,28 @@ fn LibrariesIsland(
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(ids) = list_locked_libraries().await {
-                        locked.set(ids);
+                    let mut cycle_error = None;
+                    match list_locked_libraries().await {
+                        Ok(ids) => locked.set(ids),
+                        Err(error) => record_polling_error(&mut cycle_error, &error),
                     }
-                    if let Ok(pairs) = list_locked_collections().await {
-                        locked_collections.set(pairs);
+                    match list_locked_collections().await {
+                        Ok(pairs) => locked_collections.set(pairs),
+                        Err(error) => record_polling_error(&mut cycle_error, &error),
                     }
-                    if let Ok(pairs) = list_scan_progress().await {
-                        scan_progress.set(pairs);
+                    match list_scan_progress().await {
+                        Ok(pairs) => scan_progress.set(pairs),
+                        Err(error) => record_polling_error(&mut cycle_error, &error),
                     }
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
                         }
+                        Err(error) => record_polling_error(&mut cycle_error, &error),
                     }
+                    finish_polling_cycle(polling_error, cycle_error);
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
             });
@@ -172,9 +207,37 @@ fn LibrariesIsland(
     let scanning = move || scan_action.pending().get();
     let scanning_collections = move || collections_action.pending().get();
 
+    let load_error = Signal::derive(move || {
+        [libraries_error, externals_error, polling_error]
+            .into_iter()
+            .map(|error| error.get())
+            .find(|error| !error.is_empty())
+            .unwrap_or_default()
+    });
+
+    let resource_state = Signal::derive(move || {
+        if !load_error.get().is_empty() {
+            AdminLoadState::Failed
+        } else if current_libraries.get().is_empty() && current_externals.get().is_empty() {
+            AdminLoadState::Empty
+        } else {
+            AdminLoadState::Ready
+        }
+    });
+
     view! {
+        <AdminResourceState state=resource_state>
         <div class=style::page>
             <h1 class=style::page_title>{tr(TextKey::Libraries)}</h1>
+            <div
+                role="alert"
+                class=style::empty
+                style:display=move || if load_error.get().is_empty() { "none" } else { "" }
+            >
+                <strong>{tr(TextKey::ErrorOccurred)}</strong>
+                " "
+                {move || load_error.get()}
+            </div>
             <p
                 role="status"
                 class=style::scan_status
@@ -382,7 +445,18 @@ fn LibrariesIsland(
                             .into_any()
             }}
         </div>
+        </AdminResourceState>
     }
+}
+
+fn record_polling_error(cycle_error: &mut Option<String>, error: &ServerFnError) {
+    if cycle_error.is_none() {
+        *cycle_error = Some(error.to_string());
+    }
+}
+
+fn finish_polling_cycle(polling_error: RwSignal<String>, cycle_error: Option<String>) {
+    polling_error.set(cycle_error.unwrap_or_default());
 }
 
 /// Circular scan indicator: when `fraction` is `Some(f)`, draws a determinate
@@ -441,5 +515,41 @@ fn ScanIndicator(visible: Signal<bool>, fraction: Signal<Option<f32>>) -> impl I
             </svg>
             <span class=style::ring_label>{label}</span>
         </span>
+    }
+}
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn closed_pool_renders_error_state_without_a_form() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("test pool");
+        pool.close().await;
+
+        let error = crate::admin::server_fns::libraries::load_libraries_page_with_pool(&pool)
+            .await
+            .expect_err("closed pool should fail");
+        let transport_error: ServerFnError = error.into();
+        let owner = Owner::new();
+        let html = owner.with(|| render_libraries_page_state(Err(transport_error)).to_html());
+
+        assert!(html.contains(r#"data-state="error""#));
+        assert!(!html.contains("<form"));
+    }
+
+    #[test]
+    fn successful_polling_cycle_clears_a_transient_error() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let polling_error = RwSignal::new("temporary failure".to_owned());
+
+            finish_polling_cycle(polling_error, None);
+
+            assert_eq!(polling_error.get_untracked(), "");
+        });
     }
 }

@@ -61,16 +61,40 @@ tests plus doctests, `cargo xtask parity-check p7a-02 playback hls
 id         = 'p7a-03'
 phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Introduce typed admin load and error states'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'admin-ui-failure-semantics'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
 acceptance = '''
-Shared localized Loading, Ready, Empty, and Error states replace silent
-server-error defaults across the first coherent route families, and typed
-query rows preserve decode failures instead of fabricating empty values.
+The complete `/settings/*` and `/media/libraries` route families render through
+one localized, hydration-stable wrapper with
+`data-state="loading|ready|empty|error"`. A closed-pool regression for each
+family proves storage failure renders `data-state="error"` with no submittable
+form. Their query rows and configuration values use typed infrastructure reads
+that preserve the Phase 7A `RepositoryError` vocabulary. The architecture
+baseline falls exactly from 535 to 519 direct admin SQL calls, 204 to 184
+server-error default loaders, and 851 to 843 row-decode defaults. The whole-app
+island hydration gate covers one injected settings error state and the stable
+navigation badge markers.
 '''
-evidence = ''
+evidence = '''
+The seven `/settings/*` pages and `/media/libraries` now keep server-function
+results typed through the render boundary and use one `AdminResourceState`
+wrapper for localized loading, ready, empty, and failed presentation. Settings
+write-back DTOs no longer implement `Default`; native settings and library
+queries decode through infra read models and return the existing
+`RepositoryError` variants. Closed-pool regressions for both families render
+`data-state="error"` without a form or submit control. Architecture lint now
+counts awaited `unwrap_or_default`, `unwrap_or`, `unwrap_or_else`, `.ok()`,
+silent awaited `if let Ok`, form-rendering Suspense fallbacks, and
+`try_get(...).unwrap_or*`; its baselines fell exactly from 535/204/851 to
+519/184/843. The whole-app Chromium hydration gate passed 57/57 routes,
+including an injected settings storage failure and stable navigation-badge
+markers. Review closeout added a polling-recovery regression and passed the
+57-test Chromium island spec through the normal Playwright CI wrapper, proving
+the failure injection is not skipped. Both workspace clippy configurations
+passed, and `./run.sh test-closeout` passed 957 nextest tests plus doctests.
+'''
 
 [[milestone]]
 id         = 'p7a-04'
