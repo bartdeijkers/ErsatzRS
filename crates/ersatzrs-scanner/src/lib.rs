@@ -1839,8 +1839,9 @@ async fn insert_media_subtype(
 ///
 /// Mirrors `ErsatzTV`'s `FallbackMetadataProvider.GetFallbackMetadata*` — the
 /// title defaults to the file stem and `OriginalTitle` is the path relative to
-/// the library root. Tags / artwork / actors are intentionally deferred; the
-/// folder scanner can enrich the row later without disturbing this insert.
+/// the library root. This helper only establishes that baseline identity;
+/// media-kind folder scanners enrich metadata, artwork, and relationships in
+/// their supported scan paths without disturbing this idempotent insert.
 async fn fallback_metadata_exists(
     tx: &mut Transaction<'_, Db>,
     item_id: i64,

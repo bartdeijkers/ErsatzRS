@@ -57,6 +57,26 @@ Leptos provides the native server listen setting:
 For Docker, keep the container address on `0.0.0.0` and change the host-side
 port publication when needed, for example `--publish 8410:8409`.
 
+## Development-only routes
+
+Normal builds do not register the component gallery at `/dev/components` or
+the Big Buck Bunny sample stream at `/dev/stream/bbb.ts`. Local development
+requires both gates:
+
+1. compile `ersatzrs-web` with the non-default `development-routes` feature;
+2. set `ERSATZRS_ENABLE_DEVELOPMENT_ROUTES=true` at runtime.
+
+For example:
+
+```bash
+ERSATZRS_ENABLE_DEVELOPMENT_ROUTES=true \
+  cargo run -p ersatzrs-web --features development-routes --bin ersatzrs-web
+```
+
+The opt-in accepts `1`, `true`, `yes`, or `on`, case-insensitively. Do not
+expose a development-route build to untrusted clients: the sample-stream route
+launches FFmpeg and exists only for local pipeline verification.
+
 ## Browser asset settings
 
 Official archives and images set or normalize these values. Operators normally

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7A — Guardrails and failure semantics'
+current_focus = 'Phase 7B — Application-layer extraction'
 
 summary = '''
 Phases 0–6 are complete: the workspace, FFmpeg pipeline, scheduling engines,
@@ -15,8 +15,8 @@ dependency-gated "The Box" video-jukebox extension.
 '''
 
 next_steps = '''
-Complete Phase 7A milestone p7a-04, then migrate application
-vertical slices in Phase 7B before performing module splits. Phase 8 jukebox
+Build the Phase 7B application-service foundation in milestone p7b-01, then
+migrate application vertical slices before performing module splits. Phase 8 jukebox
 implementation must wait for the application boundary and an accepted product
 contract. Use `cargo xtask progress milestones --runnable` for runnable work,
 `cargo xtask progress milestones --id <id> --full` for acceptance criteria,

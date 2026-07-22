@@ -147,12 +147,14 @@ must not depend on concrete application services or storage.
 
 ### P7A-04 — Development and tracking surfaces
 
-- Remove development-only routes from normal production registration, or gate
-  them behind a non-default feature plus explicit runtime opt-in.
-- Reconcile `TEST.md` with structured hydration data and add detailed playout
-  workflow coverage where it is genuinely missing.
-- Correct misleading scanner/show documentation without converting intentional
-  SSR/WASM no-op counterparts or manual FFmpeg proofs into false debt.
+- Complete. The component gallery and sample stream now require the non-default
+  `development-routes` feature plus explicit runtime opt-in.
+- `docs/progress/hydration.toml` is the canonical browser-verification source;
+  `TEST.md` links to its generated route report, and validation rejects a
+  reintroduced route table or either mismatch direction.
+- Detailed playout browser coverage now proves the list/detail and destructive
+  dialog workflows, and the scanner/show notes describe the implemented
+  provider-specific behavior accurately.
 
 ## Phase 7B — Application-layer extraction
 

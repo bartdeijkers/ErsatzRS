@@ -25,6 +25,8 @@ use walkdir::WalkDir;
 const PROGRESS_DIR: &str = "docs/progress";
 const ADR_DIR: &str = "docs/adr";
 const DB_PATH: &str = "progress.db";
+const TEST_CONTRACT_PATH: &str = "TEST.md";
+const ROUTES_QUERY: &str = "cargo xtask progress routes";
 
 const STATUSES: [&str; 5] = [
     "Not started",
@@ -142,6 +144,8 @@ struct HydrationPage {
     name: String,
     status: String,
     notes: String,
+    #[serde(default)]
+    routes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -415,6 +419,7 @@ fn sync() -> Result<Connection> {
          CREATE TABLE parity_debt(slug TEXT, id TEXT, description TEXT, discovered TEXT, evidence TEXT, resolved INTEGER, adr TEXT);
          CREATE TABLE routes(nav TEXT, backing TEXT, routed INTEGER);
          CREATE TABLE hydration(name TEXT, status TEXT, notes TEXT);
+         CREATE TABLE hydration_route(name TEXT, route TEXT);
          CREATE TABLE sessions(ord INTEGER, date TEXT, agent TEXT, summary TEXT);
          CREATE TABLE adrs(number TEXT, title TEXT, status TEXT, implementation TEXT, path TEXT);
          CREATE TABLE phase(key TEXT, value TEXT);
@@ -471,6 +476,12 @@ fn sync() -> Result<Connection> {
             "INSERT INTO hydration VALUES(?1,?2,?3)",
             params![p.name, p.status, p.notes],
         )?;
+        for route in &p.routes {
+            tx.execute(
+                "INSERT INTO hydration_route VALUES(?1,?2)",
+                params![p.name, route],
+            )?;
+        }
     }
     for (i, s) in sessions.iter().enumerate() {
         tx.execute(
@@ -869,6 +880,28 @@ fn cmd_routes(args: &[String]) -> Result<()> {
         let mark = if routed == 1 { "✓" } else { "404" };
         println!("{mark:<4} {nav}  ->  {}", truncate(&backing, 100));
     }
+    if !only_unrouted {
+        println!();
+        println!("Hydration and browser verification (docs/progress/hydration.toml):");
+        let mut stmt = conn.prepare(
+            "SELECT hr.route, h.status, h.name, h.notes
+             FROM hydration_route hr
+             JOIN hydration h ON h.name = hr.name
+             ORDER BY hr.route, h.name",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        for row in rows {
+            let (route, status, name, notes) = row?;
+            println!("{status:<5} {route:<46} {name}: {}", truncate(&notes, 72));
+        }
+    }
     Ok(())
 }
 
@@ -1239,13 +1272,45 @@ fn cmd_check() -> Result<()> {
     }
     match load_hydration() {
         Ok(pages) => {
-            for p in pages {
+            let mut page_names = std::collections::HashSet::new();
+            let mut route_owners: std::collections::HashMap<&str, &str> =
+                std::collections::HashMap::new();
+            for p in &pages {
+                if !page_names.insert(p.name.as_str()) {
+                    errors.push(format!("hydration.toml: duplicate page name `{}`", p.name));
+                }
                 if !HYDRATION_STATUSES.contains(&p.status.as_str()) {
                     errors.push(format!(
                         "hydration `{}`: invalid status `{}` (expected one of {HYDRATION_STATUSES:?})",
                         p.name, p.status
                     ));
                 }
+                if p.routes.is_empty() && p.name != "WholeAppIslandHydrationSmokeGate" {
+                    errors.push(format!(
+                        "hydration `{}`: route-backed entries require at least one `routes` value",
+                        p.name
+                    ));
+                }
+                for route in &p.routes {
+                    if !route.starts_with('/') || route.chars().any(char::is_whitespace) {
+                        errors.push(format!(
+                            "hydration `{}`: invalid route `{route}` (expected a whitespace-free absolute path)",
+                            p.name
+                        ));
+                    }
+                    if let Some(owner) = route_owners.insert(route, &p.name) {
+                        errors.push(format!(
+                            "hydration.toml: route `{route}` is duplicated by `{owner}` and `{}`",
+                            p.name
+                        ));
+                    }
+                }
+            }
+            match fs::read_to_string(TEST_CONTRACT_PATH) {
+                Ok(test_contract) => {
+                    errors.extend(test_route_contract_errors(&test_contract, &pages))
+                }
+                Err(error) => errors.push(format!("{TEST_CONTRACT_PATH}: {error}")),
             }
         }
         Err(e) => errors.push(format!("hydration.toml: {e:#}")),
@@ -1348,6 +1413,50 @@ fn milestone_ids_are_unique(milestones: &[Milestone]) -> bool {
     ids.len() == milestones.len()
 }
 
+fn test_route_contract_errors(test_contract: &str, hydration: &[HydrationPage]) -> Vec<String> {
+    let test_routes = markdown_route_rows(test_contract);
+    let hydration_routes: std::collections::BTreeSet<&str> = hydration
+        .iter()
+        .flat_map(|page| page.routes.iter().map(String::as_str))
+        .collect();
+    let mut errors = Vec::new();
+
+    if test_routes.is_empty() {
+        if !test_contract.contains(ROUTES_QUERY) {
+            errors.push(format!(
+                "{TEST_CONTRACT_PATH}: route verification must link to `{ROUTES_QUERY}`"
+            ));
+        }
+        return errors;
+    }
+
+    for route in test_routes.difference(&hydration_routes) {
+        errors.push(format!(
+            "{TEST_CONTRACT_PATH}: route row `{route}` is absent from docs/progress/hydration.toml"
+        ));
+    }
+    for route in hydration_routes.difference(&test_routes) {
+        errors.push(format!(
+            "docs/progress/hydration.toml: route `{route}` is absent from the {TEST_CONTRACT_PATH} route table"
+        ));
+    }
+    errors.push(format!(
+        "{TEST_CONTRACT_PATH}: remove the duplicated per-route table and link to `{ROUTES_QUERY}`"
+    ));
+    errors
+}
+
+fn markdown_route_rows(markdown: &str) -> std::collections::BTreeSet<&str> {
+    markdown
+        .lines()
+        .filter_map(|line| {
+            let first_cell = line.strip_prefix('|')?.split('|').next()?.trim();
+            let route = first_cell.strip_prefix('`')?.strip_suffix('`')?;
+            route.starts_with('/').then_some(route)
+        })
+        .collect()
+}
+
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
     args.iter()
         .position(|a| a == flag)
@@ -1415,7 +1524,10 @@ fn print_help() {
 
 #[cfg(test)]
 mod tests {
-    use super::{milestone_dependency_cycle, milestone_ids_are_unique, Milestone};
+    use super::{
+        milestone_dependency_cycle, milestone_ids_are_unique, test_route_contract_errors,
+        HydrationPage, Milestone,
+    };
 
     fn milestone(id: &str, depends_on: &[&str]) -> Milestone {
         Milestone {
@@ -1429,6 +1541,43 @@ mod tests {
             acceptance: "accepted".to_owned(),
             evidence: String::new(),
         }
+    }
+
+    fn hydration(route: &str) -> HydrationPage {
+        HydrationPage {
+            name: format!("{route} page"),
+            status: "✅".to_owned(),
+            notes: "covered".to_owned(),
+            routes: vec![route.to_owned()],
+        }
+    }
+
+    #[test]
+    fn test_route_contract_accepts_canonical_query_without_duplicate_table() {
+        let errors = test_route_contract_errors(
+            "Route evidence: `cargo xtask progress routes`.",
+            &[hydration("/channels")],
+        );
+
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn test_route_contract_reports_mismatches_in_both_directions() {
+        let errors = test_route_contract_errors(
+            "| Route | Status |\n| --- | --- |\n| `/channels` | ok |\n| `/stale` | todo |",
+            &[hydration("/channels"), hydration("/missing-from-test")],
+        );
+
+        assert!(errors.iter().any(|error| error.contains("`/stale`")
+            && error.contains("absent from docs/progress/hydration.toml")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("`/missing-from-test`")
+                && error.contains("absent from the TEST.md route table")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("remove the duplicated per-route table")));
     }
 
     #[test]

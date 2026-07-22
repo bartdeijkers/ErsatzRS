@@ -9,12 +9,14 @@ use tower_http::{
     trace::TraceLayer,
 };
 
+#[cfg(feature = "development-routes")]
+use crate::transport::dev_stream;
 use crate::{
     admin::app::{shell, App},
     api,
     host::assets::{resolve_pkg_dir, resolve_public_dir},
     host::state::AppState,
-    transport::{dev_stream, hdhr, iptv},
+    transport::{hdhr, iptv},
 };
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -23,7 +25,7 @@ use leptos_axum::{generate_route_list, LeptosRoutes};
 pub fn build_app(app_state: AppState) -> Router {
     let conf = super::config::leptos_configuration();
     let leptos_options = conf.leptos_options;
-    let routes = generate_route_list(App);
+    let routes = web_routes(super::config::development_routes_enabled());
     let pkg_dir = resolve_pkg_dir(&leptos_options);
     let public_dir = resolve_public_dir();
     let output_name = leptos_options.output_name.clone();
@@ -346,10 +348,17 @@ pub fn build_app(app_state: AppState) -> Router {
         .with_state(app_state);
 
     let mut root = Router::new()
-        .route("/dev/stream/bbb.ts", get(dev_stream::stream_big_buck_bunny))
         .merge(api_router)
         .merge(leptos_router)
         .layer(TraceLayer::new_for_http());
+
+    #[cfg(feature = "development-routes")]
+    if super::config::development_routes_enabled() {
+        tracing::warn!(
+            "development-only routes are enabled; do not expose this server to untrusted clients"
+        );
+        root = root.route("/dev/stream/bbb.ts", get(dev_stream::stream_big_buck_bunny));
+    }
 
     if let Some(public_dir) = public_dir {
         root = root.route_service(
@@ -359,6 +368,14 @@ pub fn build_app(app_state: AppState) -> Router {
     }
 
     root
+}
+
+fn web_routes(development_routes_enabled: bool) -> Vec<leptos_axum::AxumRouteListing> {
+    let mut routes = generate_route_list(App);
+    if !development_routes_enabled {
+        routes.retain(|route| route.path() != "/dev/components");
+    }
+    routes
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
@@ -399,4 +416,23 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         );
 
     iptv_routes.merge(internal_ffmpeg_routes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::web_routes;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn component_gallery_registration_follows_development_opt_in() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                assert!(!web_routes(false)
+                    .iter()
+                    .any(|route| route.path() == "/dev/components"));
+                assert!(web_routes(true)
+                    .iter()
+                    .any(|route| route.path() == "/dev/components"));
+            })
+            .await;
+    }
 }

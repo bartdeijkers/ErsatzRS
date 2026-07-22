@@ -22,6 +22,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Development-only component-gallery and sample-stream routes now require a
+  non-default build feature plus explicit runtime opt-in. Structured hydration
+  data is now the canonical admin route-verification source, with validation
+  against duplicate or mismatched TEST.md route tables and durable browser
+  coverage for the detailed playout workflow.
 - Admin settings and library storage failures now render a localized, stable
   `data-state="error"` resource instead of a plausible default form or empty
   list. Their reads use typed infrastructure models and the shared repository

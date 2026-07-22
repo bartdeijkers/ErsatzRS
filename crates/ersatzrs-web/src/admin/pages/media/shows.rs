@@ -13,15 +13,14 @@
 //! and loads the initial row on the server, then renders the interactive
 //! [`ShowDetailIsland`] with the stable detail payload.
 //!
-//! Parity notes / deferred from the C# behaviour:
+//! Current scan and navigation behavior:
 //!
-//! * **Provider single-show scan** — Plex now uses the targeted
-//!   `scan_show` path matching `QueueShowScanByLibraryId`; Jellyfin/Emby
-//!   still fall back to the owning library scan until their provider slices
-//!   land. Local single-show scan remains unsupported upstream.
-//! * **Post-add navigation** — `ErsatzTV` navigates to the
-//!   collection/playlist/schedule after adding. `ErsatzRS` keeps the
-//!   established multi-select-browser behaviour (toast + stay on page).
+//! * **Provider single-show scan** — Plex, Jellyfin, and Emby use the targeted
+//!   `scan_show` path matching `QueueShowScanByLibraryId`; Local falls back to
+//!   the owning library scan, matching ErsatzTV's local scanner behavior.
+//! * **Post-add navigation** — collection and playlist adds keep the current
+//!   curation context and expose an explicit destination link in the success
+//!   toast; schedule adds keep the existing modal feedback flow.
 #![allow(clippy::too_many_lines)]
 
 use std::collections::HashSet;

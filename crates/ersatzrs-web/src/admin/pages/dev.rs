@@ -16,6 +16,16 @@ use crate::admin::ui::primitives::{
 #[allow(clippy::too_many_lines)]
 #[component]
 pub fn ComponentsPage() -> impl IntoView {
+    if !development_routes_enabled() {
+        return view! {
+            <div data-not-found="true">
+                <h1>"404"</h1>
+                <a href="/">{tr(TextKey::GoHome)}</a>
+            </div>
+        }
+        .into_any();
+    }
+
     let text_val = RwSignal::new(tr(TextKey::EnterName).to_string());
     let num_val = RwSignal::new(42i64);
     let check_val = RwSignal::new(false);
@@ -255,4 +265,15 @@ pub fn ComponentsPage() -> impl IntoView {
             </section>
         </div>
     }
+    .into_any()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn development_routes_enabled() -> bool {
+    crate::host::config::development_routes_enabled()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn development_routes_enabled() -> bool {
+    cfg!(feature = "development-routes")
 }

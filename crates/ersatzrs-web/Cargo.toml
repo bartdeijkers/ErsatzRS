@@ -98,6 +98,10 @@ serde_urlencoded = "0.7"
 default = ["ssr"]
 hydrate = ["leptos/hydrate"]
 ssr = ["leptos/ssr", "leptos_router/ssr", "leptos_meta/ssr"]
+# Development-only component and sample-stream routes. Compiling this feature
+# is not sufficient to expose them; the runtime opt-in documented in
+# `docs/reference/configuration.md` is required as well.
+development-routes = []
 mysql = [
     "ersatzrs-infra/mysql",
     "ersatzrs-scanner/mysql",

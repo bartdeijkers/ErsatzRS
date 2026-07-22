@@ -1,26 +1,29 @@
 feature    = 'Development-only routes and verification tracker hardening'
 etv_source = 'Spec-backed Phase 7 hardening; no ErsatzTV runtime equivalent'
 rs_target  = '`crates/ersatzrs-web/src/admin/routes.rs`, `crates/ersatzrs-web/src/host/router.rs`, `TEST.md`, `docs/progress/hydration.toml`, `xtask/src/progress.rs`'
-status     = 'Not started'
+status     = 'Ported'
 adr        = []
 summary    = '''
-Not started: component-gallery and sample-stream development routes are
-registered in the normal production router, while the hand-maintained per-page
-E2E table has drifted from the structured hydration and Playwright evidence.
-The hardening slice will require explicit development opt-in and make the
-structured progress sources the canonical verification view.
+Ported: `/dev/components` and `/dev/stream/bbb.ts` now require both the
+non-default `development-routes` Cargo feature and an explicit truthy
+`ERSATZRS_ENABLE_DEVELOPMENT_ROUTES` runtime opt-in. TEST.md links to the
+structured route/hydration report instead of duplicating its state, and the
+progress validator rejects a reintroduced route table plus TEST-only or
+hydration-only route mismatches. The durable playout browser workflow covers
+list/detail actions, filler visibility persistence, troubleshooting context,
+schedule reset, external JSON editing, deletion, and Reset All feedback.
 '''
 
 [[debt]]
 id          = 'development-routes-are-production-visible'
 description = 'The component gallery and Big Buck Bunny FFmpeg stream route are unconditionally registered in the normal application router.'
 discovered  = '2026-07-21'
-evidence    = '`admin/routes.rs` registers `/dev/components`; `host/router.rs` registers `/dev/stream/bbb.ts`, whose handler reads repository test data and launches FFmpeg. Close in milestone p7a-04.'
-resolved    = false
+evidence    = 'Resolved 2026-07-22: both route registrations require the non-default `development-routes` feature and `ERSATZRS_ENABLE_DEVELOPMENT_ROUTES`; focused default and feature-enabled web checks pass.'
+resolved    = true
 
 [[debt]]
 id          = 'per-page-e2e-index-has-stale-todos'
 description = 'TEST.md duplicates route verification state and still marks several routes TODO after structured hydration and Playwright coverage landed; the playout row also mixes browser-smoke evidence with a real missing durable workflow spec.'
 discovered  = '2026-07-21'
-evidence    = 'The audit reconciled playlists/templates/troubleshooting entries against current specs and hydration.toml. Close in milestone p7a-04 by making one structured source canonical and adding the missing detailed playout workflow test.'
-resolved    = false
+evidence    = 'Resolved 2026-07-22: `hydration.toml` owns browser-verification state, TEST.md links to `cargo xtask progress routes`, progress validation detects both mismatch directions, and `playouts-feedback.spec.ts` exercises the detailed workflow.'
+resolved    = true

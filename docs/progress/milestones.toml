@@ -100,7 +100,7 @@ passed, and `./run.sh test-closeout` passed 957 nextest tests plus doctests.
 id         = 'p7a-04'
 phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Close development-route and tracker drift'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'developer-surface-hardening'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
@@ -109,7 +109,20 @@ Development routes require an explicit non-production opt-in, TEST.md agrees
 with structured route/hydration evidence, the real playout workflow gap has a
 durable browser test, and misleading scanner/show notes are corrected.
 '''
-evidence = ''
+evidence = '''
+The non-default `development-routes` feature plus the explicit
+`ERSATZRS_ENABLE_DEVELOPMENT_ROUTES` runtime gate controls both development
+routes. Focused default/feature-enabled web tests and the all-features route
+registration regression passed. `hydration.toml` now owns browser-verification
+state; TEST.md links to `cargo xtask progress routes`, and xtask regressions
+prove the validator rejects a duplicate table and both mismatch directions.
+`tests/e2e/playouts-feedback.spec.ts` passed 4/4 Chromium/Firefox tests against
+a matched SSR/WASM bundle, covering the detailed list, detail, preference, and
+dialog workflow. Scanner/show notes now describe implemented provider behavior.
+`cargo xtask parity-check`, both workspace clippy configurations,
+`./run.sh test-closeout` (961 nextest tests plus doctests), and
+`cargo leptos build` passed.
+'''
 
 [[milestone]]
 id         = 'p7b-01'
