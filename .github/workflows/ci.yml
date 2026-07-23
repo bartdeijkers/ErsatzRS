@@ -35,9 +35,11 @@ on:
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
 # cycles nobody waits for, so cancel superseded runs per ref (PR branches and
-# main). Only the latest commit on a ref is validated.
+# main) within each runner pool. Keeping the pools independent also lets the
+# on-demand hosted fallback proceed if a self-hosted runner is unavailable,
+# and vice versa.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ (inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && 'github-hosted' || 'self-hosted' }}
   cancel-in-progress: true
 
 permissions:
