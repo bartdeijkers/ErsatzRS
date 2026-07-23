@@ -3519,6 +3519,10 @@ mod tests {
             Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
         let reservation = try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("91"))
             .expect("capacity reservation");
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
+            1
+        );
 
         let body = spawn_stream_body(
             &shell_command("printf done", "echo done"),
@@ -3530,10 +3534,6 @@ mod tests {
         )
         .expect("spawn stream body");
 
-        assert_eq!(
-            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
-            1
-        );
         wait_for_capacity_active(1, 0).await;
         drop(body);
     }
