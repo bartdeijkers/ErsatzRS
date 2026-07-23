@@ -66,6 +66,11 @@ async function gotoAddProfile(page: Page): Promise<void> {
   await page.goto('/ffmpeg/add');
   await expect(page.getByRole('heading', { name: /add ffmpeg profile/i })).toBeVisible();
   await expect(page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]')).toBeVisible();
+  await waitForHydration(page);
+  await page.waitForLoadState('networkidle');
+}
+
+async function waitForHydration(page: Page): Promise<void> {
   await expect
     .poll(
       () =>
@@ -77,7 +82,6 @@ async function gotoAddProfile(page: Page): Promise<void> {
       { message: 'FFmpeg profile editor hydration never completed' },
     )
     .toBe(true);
-  await page.waitForLoadState('networkidle');
 }
 
 async function createNvencH264Profile(page: Page, name: string): Promise<string> {
@@ -145,6 +149,7 @@ test.describe('ffmpeg profile editor parity', () => {
     const editHref = await createNvencH264Profile(page, name);
 
     await page.goto(editHref);
+    await waitForHydration(page);
     await page.waitForLoadState('networkidle');
     const editor = page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]');
     await expect(editor.locator('select[name="hardware_acceleration"]')).toHaveValue('2');
@@ -168,6 +173,7 @@ test.describe('ffmpeg profile editor parity', () => {
     ]) {
       await page.setViewportSize(viewport);
       await page.goto(editHref);
+      await waitForHydration(page);
       await page.waitForLoadState('networkidle');
       await expect(
         page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]'),
@@ -212,7 +218,7 @@ test.describe('ffmpeg profile editor parity', () => {
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
     const noJsPage = await context.newPage();
     await noJsPage.goto(editHref);
-    const profileSelect = noJsPage.locator('select[name="video_profile"]');
+    const profileSelect = noJsPage.locator('noscript select[name="video_profile"]');
     await expect(profileSelect).toBeVisible();
     await expect
       .poll(async () => profileSelect.locator('option').allTextContents())
@@ -224,6 +230,7 @@ test.describe('ffmpeg profile editor parity', () => {
     await context.close();
 
     await page.goto(editHref);
+    await waitForHydration(page);
     await page.waitForLoadState('networkidle');
     await expect(
       page
