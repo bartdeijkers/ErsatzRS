@@ -92,7 +92,14 @@ jobs:
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test (all features)
-        run: cargo test --workspace --all-features --lib --bins --tests
+        run: |
+          # Fresh hosted VMs have twice been reclaimed during the uncapped
+          # all-features compile. Reduce compile pressure there while leaving
+          # the local self-hosted runner at Cargo's native parallelism.
+          if [ "$RUNNER_ENVIRONMENT" = "github-hosted" ]; then
+            export CARGO_BUILD_JOBS=2
+          fi
+          cargo test --workspace --all-features --lib --bins --tests
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
