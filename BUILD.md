@@ -83,9 +83,10 @@ The Actions UI exposes the same choice under **CI → Run workflow**. Select the
 target branch and choose `github-hosted`. Label-triggered and manually
 dispatched CI use the same branch-level concurrency as automatic CI, so the
 new run cancels a queued or superseded run for that branch. GitHub-hosted jobs
-start cold and do not share the local runner's Cargo cache. The hosted Test job
-also caps Cargo compilation at two parallel jobs to avoid fresh-VM reclamation
-during the all-features build. This path remains an explicit fallback rather
+start cold and do not share the local runner's Cargo cache. Hosted Test work is
+split into web and non-web shards so both cold all-features builds finish
+within the remote runner's execution limit; self-hosted CI retains the single
+canonical workspace Test job. This path remains an explicit fallback rather
 than the default.
 
 ## Windows development

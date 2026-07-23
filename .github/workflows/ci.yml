@@ -76,6 +76,7 @@ jobs:
 
   test:
     name: Test
+    if: ${{ inputs.runner != 'github-hosted' && !contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
     runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
@@ -92,17 +93,45 @@ jobs:
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test (all features)
-        run: |
-          # Fresh hosted VMs have twice been reclaimed during the uncapped
-          # all-features compile. Reduce compile pressure there while leaving
-          # the local self-hosted runner at Cargo's native parallelism.
-          if [ "$RUNNER_ENVIRONMENT" = "github-hosted" ]; then
-            export CARGO_BUILD_JOBS=2
-          fi
-          cargo test --workspace --all-features --lib --bins --tests
+        run: cargo test --workspace --all-features --lib --bins --tests
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
+        run: cargo xtask architecture-lint
+
+  test_hosted:
+    name: Test (${{ matrix.shard }})
+    if: ${{ inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
+    runs-on: ubuntu-24.04
+    # GitHub-hosted jobs in this repository receive a shutdown signal at 30
+    # minutes. Keep each cold all-features compile below that remote limit
+    # while preserving the canonical single workspace job on self-hosted CI.
+    needs: fmt
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - workspace-minus-web
+          - web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: "false"
+      - name: Install Stylance CLI
+        run: cargo install stylance-cli --version 0.8.2 --locked
+      - name: Test remaining workspace (all features)
+        if: matrix.shard == 'workspace-minus-web'
+        run: cargo test --workspace --exclude ersatzrs-web --all-features --lib --bins --tests
+      - name: Test web (all features)
+        if: matrix.shard == 'web'
+        run: cargo test -p ersatzrs-web --all-features --lib --bins --tests
+      - name: Validate progress index (docs/progress/)
+        if: matrix.shard == 'workspace-minus-web'
+        run: cargo xtask progress check
+      - name: Validate architecture boundaries and debt ratchets
+        if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask architecture-lint
 
   hydration:
