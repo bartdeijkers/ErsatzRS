@@ -3062,9 +3062,19 @@ impl HlsInitSegmentCache {
         let bytes = tokio::fs::read(segment).await?;
         let hash = hex_hash(&bytes);
         self.known_segments.insert(file_name.clone(), hash.clone());
-        self.earliest_segments_by_hash
+        let earliest = self
+            .earliest_segments_by_hash
             .entry(hash)
-            .or_insert(file_name);
+            .or_insert_with(|| file_name.clone());
+        let candidate_generation = generated_at_from_init_file(&file_name);
+        let earliest_generation = generated_at_from_init_file(earliest);
+        let should_replace = match (candidate_generation, earliest_generation) {
+            (Some(candidate), Some(current)) => candidate < current,
+            _ => file_name < *earliest,
+        };
+        if should_replace {
+            *earliest = file_name;
+        }
         Ok(())
     }
 
@@ -7116,6 +7126,36 @@ mod tests {
         assert!(trimmed.playlist.contains("#EXT-X-MAP:URI=\"init.mp4\""));
         assert!(trimmed.referenced_files.contains("init.mp4"));
         assert!(trimmed.referenced_files.contains("seg00003.m4s"));
+    }
+
+    #[tokio::test]
+    async fn init_segment_cache_tracks_earliest_generation_across_reverse_insertion() {
+        let working_dir = tempfile::tempdir().expect("create temp dir");
+        let earlier = working_dir.path().join("1760874038_init.mp4");
+        let later = working_dir.path().join("1760874042_init.mp4");
+        tokio::fs::write(&earlier, b"same-init")
+            .await
+            .expect("write earlier init");
+        tokio::fs::write(&later, b"same-init")
+            .await
+            .expect("write later init");
+
+        let mut init_cache = HlsInitSegmentCache::default();
+        init_cache
+            .add_segment(&later)
+            .await
+            .expect("cache later init first");
+        init_cache
+            .add_segment(&earlier)
+            .await
+            .expect("cache earlier init second");
+
+        assert_eq!(
+            init_cache
+                .earliest_segment_by_generated_at(1_760_874_042)
+                .as_deref(),
+            Some("1760874038_init.mp4")
+        );
     }
 
     #[tokio::test]

@@ -95,6 +95,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- fMP4 HLS init-segment deduplication now selects the earliest generation
+  deterministically instead of depending on filesystem directory order.
 - Pull-request commit lint now runs the repository's pinned npm dependencies
   directly, so it no longer requires Docker on the self-hosted WSL runner.
 - GitHub Actions and release builds now use the repository's supported Rust
