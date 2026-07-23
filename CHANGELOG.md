@@ -15,13 +15,12 @@ release section when tagging a release.
 
 ### Added
 
-- Added on-demand GitHub-hosted CI through the `ci:github-hosted` pull-request
-  label and a manual runner selector. Pull requests and `main` pushes still use
-  self-hosted Linux by default, while hosted Test work is sharded by web target,
-  uses a lower-memory test profile plus LLVM's `lld` linker, and caches pinned
-  build tools to stay within the hosted job lifetime. Hosted and self-hosted
-  runs use independent concurrency groups so either pool remains available as
-  a fallback.
+- Added on-demand GitHub-hosted CI through a manual runner selector. Pull
+  requests and `main` pushes still use self-hosted Linux by default, while
+  hosted Test work is sharded by web target, uses a lower-memory test profile
+  plus LLVM's `lld` linker, and caches pinned build tools to stay within the
+  hosted job lifetime. Hosted and self-hosted runs use independent concurrency
+  groups so either pool remains available as a fallback.
 - Added optional default and fallback subtitle languages to `/settings/ffmpeg`.
   Built-in MPEG-TS and HLS playback now applies item and channel preferences
   first, then the global default, and tries the global fallback before
@@ -98,6 +97,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Pull-request labels no longer trigger full CI runs. Hosted-runner fallback is
+  now manual-only, preventing dependency automation from spawning duplicate
+  workflows while applying routine labels.
 - fMP4 HLS init-segment deduplication now selects the earliest generation
   deterministically instead of depending on filesystem directory order.
 - Pull-request commit lint now runs the repository's pinned npm dependencies

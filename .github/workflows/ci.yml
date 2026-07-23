@@ -2,7 +2,9 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    # Do not add `labeled`: dependency automation applies several routine
+    # labels, and each label event would start another full CI run.
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
     # Skip the Rust CI gate when a push touches only non-code paths (docs,
@@ -39,7 +41,7 @@ on:
 # on-demand hosted fallback proceed if a self-hosted runner is unavailable,
 # and vice versa.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ (inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && 'github-hosted' || 'self-hosted' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}
   cancel-in-progress: true
 
 permissions:
@@ -48,7 +50,7 @@ permissions:
 jobs:
   fmt:
     name: Format
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -56,7 +58,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: fmt
@@ -78,8 +80,8 @@ jobs:
 
   test:
     name: Test
-    if: ${{ inputs.runner != 'github-hosted' && !contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    if: ${{ inputs.runner != 'github-hosted' }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
     needs: fmt
@@ -103,7 +105,7 @@ jobs:
 
   test_hosted:
     name: Test (${{ matrix.shard }})
-    if: ${{ inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
+    if: ${{ inputs.runner == 'github-hosted' }}
     runs-on: ubuntu-24.04
     # Keep cold all-features linking within the hosted job lifetime by splitting
     # the large web crate's library and binary test targets. Preserve native
@@ -149,7 +151,7 @@ jobs:
 
   hydration:
     name: Playwright E2E
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so formatting failures do not burn a browser
     # E2E build on the serial self-hosted runner.
     needs: fmt
@@ -167,7 +169,7 @@ jobs:
           # shell, so don't let rust-cache prune cargo-leptos /
           # stylance-cli / wasm-bindgen between runs. Hosted runners instead
           # restore these pinned tools to avoid repeated cold installs.
-          cache-bin: ${{ (inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && 'true' || 'false' }}
+          cache-bin: ${{ inputs.runner == 'github-hosted' && 'true' || 'false' }}
       - name: Hydration lint
         run: cargo xtask hydration-lint -p ersatzrs-web
       - name: Install web E2E tools
@@ -194,7 +196,7 @@ jobs:
 
   deny:
     name: Cargo deny
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -205,7 +207,7 @@ jobs:
 
   commitlint:
     name: Commit lint
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
@@ -239,7 +241,7 @@ jobs:
 
   docs:
     name: Documentation links
-    runs-on: ${{ fromJSON((inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Check Markdown files exist
@@ -250,3 +252,13 @@ jobs:
           test -f ARCHITECTURE.md
           test -f PORTING.md
           test -f docs/README.md
+      - name: Check CI trigger contract
+        run: |
+          if grep -Eq '^[[:space:]]*types:.*[[:space:],]labeled([][[:space:],]|$)' .github/workflows/ci.yml; then
+            echo "Pull-request labels must not trigger full CI."
+            exit 1
+          fi
+          if grep -Eq 'github\.event\.pull_request\.label[s]' .github/workflows/ci.yml; then
+            echo "Pull-request labels must not select a CI runner."
+            exit 1
+          fi
