@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Added on-demand GitHub-hosted CI through the `ci:github-hosted` pull-request
+  label and a manual runner selector. Pull requests and `main` pushes still use
+  self-hosted Linux by default.
 - Added optional default and fallback subtitle languages to `/settings/ffmpeg`.
   Built-in MPEG-TS and HLS playback now applies item and channel preferences
   first, then the global default, and tries the global fallback before

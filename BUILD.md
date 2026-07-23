@@ -61,6 +61,31 @@ build/test work and warn when it exceeds the 40 GiB `cargo clean` threshold.
 When running broad cargo commands directly, check first with
 `cargo xtask target-size`.
 
+## CI runner selection
+
+Pull requests and pushes to `main` use the repository's self-hosted Linux
+runner by default. Add the `ci:github-hosted` label to a pull request to rerun
+its current head on fresh GitHub-hosted Ubuntu runners:
+
+```bash
+gh pr edit <number> --add-label ci:github-hosted
+```
+
+The label remains in effect for later commits on that pull request; remove it
+to route later commits back to self-hosted Linux. To run any branch manually on
+GitHub-hosted Ubuntu after this workflow is present on `main`, dispatch it with:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=github-hosted
+```
+
+The Actions UI exposes the same choice under **CI → Run workflow**. Select the
+target branch and choose `github-hosted`. Label-triggered and manually
+dispatched CI use the same branch-level concurrency as automatic CI, so the
+new run cancels a queued or superseded run for that branch. GitHub-hosted jobs
+start cold and do not share the local runner's Cargo cache, so this path is an
+explicit fallback rather than the default.
+
 ## Windows development
 
 Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
