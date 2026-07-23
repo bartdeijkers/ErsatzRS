@@ -1586,17 +1586,33 @@ async fn playout_ids_using_schedule(
 
 #[cfg(feature = "ssr")]
 fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: Vec<i64>) {
+    use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
+    use ersatzrs_core::scheduling::PlayoutBuildMode;
+
     for playout_id in playout_ids {
-        let request = ersatzrs_core::scheduling::PlayoutBuildRequest {
-            playout_id,
-            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
-        };
-        if let Err(error) = state.playout_build_tx.send(request) {
-            tracing::warn!(
+        match state
+            .application
+            .request_playout_build(RequestPlayoutBuild::new(
                 playout_id,
-                %error,
-                "unable to enqueue requested playout refresh; worker queue is unavailable"
-            );
+                PlayoutBuildMode::Refresh,
+            )) {
+            RequestPlayoutBuildOutcome::Accepted
+            | RequestPlayoutBuildOutcome::AlreadyQueued
+            | RequestPlayoutBuildOutcome::AlreadyBuilding => {}
+            RequestPlayoutBuildOutcome::Unavailable { message } => {
+                tracing::warn!(
+                    playout_id,
+                    %message,
+                    "unable to enqueue requested playout refresh; worker queue is unavailable"
+                );
+            }
+            RequestPlayoutBuildOutcome::Rejected(reason) => {
+                tracing::warn!(
+                    playout_id,
+                    ?reason,
+                    "unable to enqueue invalid playout refresh request"
+                );
+            }
         }
     }
 }

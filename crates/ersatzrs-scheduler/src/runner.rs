@@ -129,11 +129,14 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     build_requests = None;
                     continue;
                 };
+                let (request, _activity_guard) = if let Some(activity) = &build_activity {
+                    let (request, guard) = activity.start_guard(request);
+                    (request, Some(guard))
+                } else {
+                    (request, None)
+                };
                 let playout_id = request.playout_id;
                 let mode = request.mode;
-                if let Some(activity) = &build_activity {
-                    activity.start(playout_id);
-                }
                 match run_requested_playout_build(
                     &startup.pool,
                     &locker,
@@ -146,9 +149,6 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     Ok(true) => info!(playout_id, ?mode, "requested playout build complete"),
                     Ok(false) => info!(playout_id, ?mode, "requested playout build skipped because playout is locked"),
                     Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),
-                }
-                if let Some(activity) = &build_activity {
-                    activity.finish(playout_id);
                 }
             }
         }

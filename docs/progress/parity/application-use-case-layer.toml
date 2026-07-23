@@ -4,15 +4,18 @@ rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-in
 status     = 'In progress'
 adr        = ['0051']
 summary    = '''
-In progress: the Phase 7B foundation now provides documented command, query,
+In progress: the Phase 7B foundation provides documented command, query,
 application-error, port, and operation-coordination modules in `ersatzrs-app`.
 Core repository errors are storage-neutral, infrastructure explicitly maps
 SQLx failures, and the native web composition root injects concrete ports into
-`ApplicationServices` backed by one shared operation coordinator. Remaining
-application workflows still live in web server functions/APIs through raw SQL
-and web-owned playout/scan queues; milestones p7b-02 through p7b-05 migrate
-those complete vertical slices while endpoint and persisted contracts remain
-stable.
+`ApplicationServices` backed by one shared operation coordinator. Milestone
+p7b-02 is complete: one `RequestPlayoutBuild` use case owns admission and typed
+outcomes for every web/API producer while the scheduler retains sole FIFO
+consumption, mode-aware queued upgrades, one upgradable active-build follow-up,
+Refresh/Reset semantics, and persisted build behavior. Scan coordination and
+remaining application workflows still live in web transport; milestones
+p7b-03 through p7b-05 migrate those complete vertical slices while endpoint
+and persisted contracts remain stable.
 '''
 
 [[debt]]
@@ -26,7 +29,7 @@ resolved    = true
 id          = 'web-owns-application-orchestration'
 description = 'Admin server functions and APIs combine transport, validation, raw SQL, side effects, queues, and concrete repositories, preventing reuse from non-web adapters such as a future video-jukebox add-on API.'
 discovered  = '2026-07-21'
-evidence    = 'The foundation removed the duplicate web lock registry, but `AppState` still exposes the raw pool, concrete repository bundle, scan queue/progress, and playout sender while admin transport code retains direct orchestration. Close complete vertical slices through milestones p7b-02 through p7b-05.'
+evidence    = 'Milestone p7b-02 removed the public playout sender from `AppState` and routed every web/API producer through `ApplicationServices::request_playout_build`. `AppState` still exposes the raw pool, concrete repository bundle, and scan queue/progress while other admin transport code retains direct orchestration. Close the remaining vertical slices through milestones p7b-03 through p7b-05.'
 resolved    = false
 
 [[debt]]
@@ -40,5 +43,5 @@ resolved    = true
 id          = 'operation-coordination-is-split'
 description = 'Web and scheduler maintain separate lock/queue registries for related long-running operations instead of one application-level operation coordinator.'
 discovered  = '2026-07-21'
-evidence    = '`ApplicationServices::operations()` now owns the one process-wide entity locker and playout activity registry used by web and scheduler construction. Web still owns playout-build sending plus scan queue/progress lifecycle; p7b-02 and p7b-03 migrate those remaining coordination concerns.'
+evidence    = '`ApplicationServices::operations()` owns the one process-wide entity locker and playout activity registry used by application admission, scheduler execution, and web polling. Milestone p7b-02 moved playout-build admission and sender access behind the application queue port. Web still owns the scan queue/progress lifecycle; p7b-03 migrates that remaining coordination concern.'
 resolved    = false

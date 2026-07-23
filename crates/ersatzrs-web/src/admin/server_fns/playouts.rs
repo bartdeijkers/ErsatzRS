@@ -1046,22 +1046,31 @@ fn enqueue_build(
     playout_id: i64,
     mode: ersatzrs_core::scheduling::PlayoutBuildMode,
 ) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
-    let activity = state.application.operations().playout_activity();
-    if !activity.queue(playout_id) {
-        return Ok(PlayoutBuildEnqueueResult {
-            accepted: 0,
-            coalesced: 1,
-        });
+    use ersatzrs_app::commands::{
+        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
+    };
+
+    match state
+        .application
+        .request_playout_build(RequestPlayoutBuild::new(playout_id, mode))
+    {
+        RequestPlayoutBuildOutcome::Accepted => Ok(PlayoutBuildEnqueueResult {
+            accepted: 1,
+            coalesced: 0,
+        }),
+        RequestPlayoutBuildOutcome::AlreadyQueued | RequestPlayoutBuildOutcome::AlreadyBuilding => {
+            Ok(PlayoutBuildEnqueueResult {
+                accepted: 0,
+                coalesced: 1,
+            })
+        }
+        RequestPlayoutBuildOutcome::Unavailable { message } => Err(ServerFnError::new(format!(
+            "playout build worker is unavailable: {message}"
+        ))),
+        RequestPlayoutBuildOutcome::Rejected(RequestPlayoutBuildRejection::InvalidPlayoutId) => {
+            Err(ServerFnError::new("playout id must be positive"))
+        }
     }
-    let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
-    state.playout_build_tx.send(request).map_err(|error| {
-        activity.finish(playout_id);
-        ServerFnError::new(format!("playout build worker is unavailable: {error}"))
-    })?;
-    Ok(PlayoutBuildEnqueueResult {
-        accepted: 1,
-        coalesced: 0,
-    })
 }
 
 /// Whether the playout already has any generated items. Mirrors ErsatzTV's
@@ -2640,6 +2649,123 @@ mod tests {
                 .await
                 .expect("pool")
         }
+    }
+
+    fn playout_queue_state() -> (
+        crate::host::state::AppState,
+        tokio::sync::mpsc::UnboundedReceiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    ) {
+        let pool =
+            ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
+        let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
+        let state = crate::host::state::AppState::new(
+            pool,
+            ersatzrs_infra::db::DatabaseBackend::Sqlite,
+            crate::host::state::SystemStartup {
+                database_ready: true,
+                schema_status: ersatzrs_infra::db::DatabaseSchemaStatus::default(),
+            },
+            ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+            uuid::Uuid::nil(),
+            1,
+            crate::host::state::IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+        (state, playout_build_rx)
+    }
+
+    #[tokio::test]
+    async fn enqueue_build_preserves_transport_counts_and_upgrades_queued_mode() {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+        let (state, mut receiver) = playout_queue_state();
+        assert_eq!(
+            enqueue_build(&state, 44, PlayoutBuildMode::Refresh).expect("accepted request"),
+            PlayoutBuildEnqueueResult {
+                accepted: 1,
+                coalesced: 0,
+            }
+        );
+        assert_eq!(
+            enqueue_build(&state, 44, PlayoutBuildMode::Reset).expect("coalesced request"),
+            PlayoutBuildEnqueueResult {
+                accepted: 0,
+                coalesced: 1,
+            }
+        );
+
+        let token = receiver.try_recv().expect("queued request");
+        assert_eq!(token.playout_id, 44);
+        let (request, guard) = state
+            .application
+            .operations()
+            .playout_activity()
+            .start_guard(token);
+        assert_eq!(request.mode, PlayoutBuildMode::Reset);
+        assert!(receiver.try_recv().is_err(), "duplicate must not be queued");
+        drop(guard);
+    }
+
+    #[tokio::test]
+    async fn enqueue_build_retains_one_upgradable_follow_up_during_active_build() {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+        let (state, mut receiver) = playout_queue_state();
+        enqueue_build(&state, 46, PlayoutBuildMode::Continue).expect("initial request");
+        let initial_token = receiver.try_recv().expect("initial token");
+        let (_, active_guard) = state
+            .application
+            .operations()
+            .playout_activity()
+            .start_guard(initial_token);
+
+        assert_eq!(
+            enqueue_build(&state, 46, PlayoutBuildMode::Refresh).expect("follow-up"),
+            PlayoutBuildEnqueueResult {
+                accepted: 0,
+                coalesced: 1,
+            }
+        );
+        assert_eq!(
+            enqueue_build(&state, 46, PlayoutBuildMode::Reset).expect("upgraded follow-up"),
+            PlayoutBuildEnqueueResult {
+                accepted: 0,
+                coalesced: 1,
+            }
+        );
+        let follow_up_token = receiver.try_recv().expect("follow-up token");
+        assert!(
+            receiver.try_recv().is_err(),
+            "active mutations must share one follow-up token"
+        );
+
+        drop(active_guard);
+        let (follow_up, follow_up_guard) = state
+            .application
+            .operations()
+            .playout_activity()
+            .start_guard(follow_up_token);
+        assert_eq!(follow_up.mode, PlayoutBuildMode::Reset);
+        drop(follow_up_guard);
+    }
+
+    #[tokio::test]
+    async fn enqueue_build_maps_closed_worker_and_cleans_activity() {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+        let (state, receiver) = playout_queue_state();
+        drop(receiver);
+
+        let error = enqueue_build(&state, 45, PlayoutBuildMode::Reset)
+            .expect_err("closed worker must fail");
+        assert!(error.to_string().contains("worker is unavailable"));
+        assert!(state
+            .application
+            .operations()
+            .playout_activity()
+            .queued_playouts()
+            .is_empty());
     }
 
     #[test]

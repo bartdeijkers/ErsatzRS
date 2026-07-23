@@ -25,10 +25,12 @@
 //! `UnlockPlayout`, and `IsPlayoutLocked` helpers used by
 //! `BuildPlayoutHandler` and friends.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use ersatzrs_domain::EntityId;
+
+use crate::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 
 /// Process-local mutual-exclusion registry for long-running entity
 /// operations. Cheap to clone; share via `Arc<EntityLocker>` rather than
@@ -50,49 +52,187 @@ pub struct PlayoutBuildActivity {
     inner: Arc<PlayoutBuildActivityInner>,
 }
 
+/// Result of attempting to add one playout to the accepted-build queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayoutBuildAdmission {
+    /// The playout was not active and is now queued.
+    Accepted,
+    /// The playout is building and its first follow-up is now queued.
+    FollowUpAccepted,
+    /// The playout already has accepted work waiting for the worker.
+    AlreadyQueued,
+    /// The worker is building and already has one follow-up waiting.
+    AlreadyBuilding,
+}
+
+/// Worker-lifecycle guard that clears queued/building activity on drop.
+#[must_use = "bind the guard for the complete worker build lifecycle"]
+pub struct PlayoutBuildActivityGuard {
+    activity: PlayoutBuildActivity,
+    playout_id: EntityId,
+}
+
+impl Drop for PlayoutBuildActivityGuard {
+    fn drop(&mut self) {
+        self.activity.finish_build(self.playout_id);
+    }
+}
+
 #[derive(Debug, Default)]
 struct PlayoutBuildActivityInner {
-    queued: Mutex<HashSet<EntityId>>,
-    building: Mutex<HashSet<EntityId>>,
+    states: Mutex<HashMap<EntityId, PlayoutBuildState>>,
+}
+
+#[derive(Debug, Default)]
+struct PlayoutBuildState {
+    building: bool,
+    queued_mode: Option<PlayoutBuildMode>,
 }
 
 impl PlayoutBuildActivity {
+    /// Atomically admits a request and delivers a queue token when needed.
+    ///
+    /// Repeated queued requests upgrade the effective pending mode in place.
+    /// A request received during an active build creates exactly one follow-up
+    /// token; later requests upgrade that follow-up instead of adding more
+    /// tokens. The worker resolves the effective mode through
+    /// [`Self::start_guard`] when it consumes a token.
+    ///
+    /// # Errors
+    ///
+    /// Returns the queue adapter's error when a new token cannot be delivered.
+    /// Registry state is changed only after successful delivery.
+    pub fn admit<E>(
+        &self,
+        request: PlayoutBuildRequest,
+        enqueue: impl FnOnce(PlayoutBuildRequest) -> Result<(), E>,
+    ) -> Result<PlayoutBuildAdmission, E> {
+        let mut states = recover(self.inner.states.lock());
+        if let Some(state) = states.get_mut(&request.playout_id) {
+            if state.building {
+                if let Some(mode) = state.queued_mode {
+                    state.queued_mode = Some(stronger_build_mode(mode, request.mode));
+                    return Ok(PlayoutBuildAdmission::AlreadyBuilding);
+                }
+
+                enqueue(request)?;
+                state.queued_mode = Some(request.mode);
+                return Ok(PlayoutBuildAdmission::FollowUpAccepted);
+            }
+
+            state.queued_mode = Some(stronger_build_mode(
+                state.queued_mode.unwrap_or(request.mode),
+                request.mode,
+            ));
+            return Ok(PlayoutBuildAdmission::AlreadyQueued);
+        }
+
+        enqueue(request)?;
+        states.insert(
+            request.playout_id,
+            PlayoutBuildState {
+                building: false,
+                queued_mode: Some(request.mode),
+            },
+        );
+        Ok(PlayoutBuildAdmission::Accepted)
+    }
+
     /// Marks a playout request as queued.
     ///
-    /// Returns `false` when the playout is already queued or building, letting
-    /// callers coalesce repeated admin clicks without adding duplicate work.
+    /// This compatibility helper retains the original activity-only behavior:
+    /// it returns `false` when the playout is already queued or building. New
+    /// application code should call [`Self::admit`] with the real queue adapter
+    /// so delivery, mode upgrades, and follow-up state remain atomic.
     #[must_use]
     pub fn queue(&self, playout_id: EntityId) -> bool {
-        let mut queued = recover(self.inner.queued.lock());
-        let building = recover(self.inner.building.lock());
-        !building.contains(&playout_id) && queued.insert(playout_id)
+        let mut states = recover(self.inner.states.lock());
+        if states.contains_key(&playout_id) {
+            return false;
+        }
+        states.insert(
+            playout_id,
+            PlayoutBuildState {
+                building: false,
+                queued_mode: Some(PlayoutBuildMode::Continue),
+            },
+        );
+        true
     }
 
-    /// Moves an accepted request from queued to building.
-    pub fn start(&self, playout_id: EntityId) {
-        let _ = recover(self.inner.queued.lock()).remove(&playout_id);
-        recover(self.inner.building.lock()).insert(playout_id);
+    /// Moves an accepted token from queued to building and resolves its
+    /// strongest coalesced mode.
+    #[must_use]
+    pub fn start(&self, request: PlayoutBuildRequest) -> PlayoutBuildRequest {
+        let mut states = recover(self.inner.states.lock());
+        let state = states.entry(request.playout_id).or_default();
+        let mode = state.queued_mode.take().map_or(request.mode, |queued| {
+            stronger_build_mode(request.mode, queued)
+        });
+        state.building = true;
+        PlayoutBuildRequest { mode, ..request }
     }
 
-    /// Removes a request after its worker reaches a terminal outcome.
+    /// Starts worker processing and returns a guard that clears activity after
+    /// success, failure, cancellation, or any other terminal return path. The
+    /// returned request contains the strongest mode coalesced for this token.
+    pub fn start_guard(
+        &self,
+        request: PlayoutBuildRequest,
+    ) -> (PlayoutBuildRequest, PlayoutBuildActivityGuard) {
+        let request = self.start(request);
+        let guard = PlayoutBuildActivityGuard {
+            activity: self.clone(),
+            playout_id: request.playout_id,
+        };
+        (request, guard)
+    }
+
+    /// Removes all tracked work for a playout.
+    ///
+    /// This is intended for explicit cancellation and compatibility cleanup.
+    /// Worker lifecycle uses the guard so a queued follow-up is retained.
     pub fn finish(&self, playout_id: EntityId) {
-        let _ = recover(self.inner.queued.lock()).remove(&playout_id);
-        let _ = recover(self.inner.building.lock()).remove(&playout_id);
+        let _ = recover(self.inner.states.lock()).remove(&playout_id);
     }
 
     /// Snapshot queued playout identifiers for polling UI clients.
     #[must_use]
     pub fn queued_playouts(&self) -> Vec<EntityId> {
-        recover(self.inner.queued.lock()).iter().copied().collect()
+        recover(self.inner.states.lock())
+            .iter()
+            .filter_map(|(&playout_id, state)| state.queued_mode.map(|_| playout_id))
+            .collect()
     }
 
     /// Snapshot building playout identifiers for polling UI clients.
     #[must_use]
     pub fn building_playouts(&self) -> Vec<EntityId> {
-        recover(self.inner.building.lock())
+        recover(self.inner.states.lock())
             .iter()
-            .copied()
+            .filter_map(|(&playout_id, state)| state.building.then_some(playout_id))
             .collect()
+    }
+
+    fn finish_build(&self, playout_id: EntityId) {
+        let mut states = recover(self.inner.states.lock());
+        let remove = states.get_mut(&playout_id).is_some_and(|state| {
+            state.building = false;
+            state.queued_mode.is_none()
+        });
+        if remove {
+            let _ = states.remove(&playout_id);
+        }
+    }
+}
+
+fn stronger_build_mode(left: PlayoutBuildMode, right: PlayoutBuildMode) -> PlayoutBuildMode {
+    use PlayoutBuildMode::{Continue, Refresh, Reset};
+
+    match (left, right) {
+        (Reset, _) | (_, Reset) => Reset,
+        (Refresh, _) | (_, Refresh) => Refresh,
+        (Continue, Continue) => Continue,
     }
 }
 
@@ -244,6 +384,8 @@ impl Drop for LibraryLockGuard {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::*;
 
     #[test]
@@ -295,19 +437,105 @@ mod tests {
     }
 
     #[test]
-    fn playout_build_activity_coalesces_and_tracks_lifecycle() {
+    fn playout_build_activity_upgrades_one_queued_token_to_strongest_mode() {
         let activity = PlayoutBuildActivity::default();
-        assert!(activity.queue(7));
-        assert!(!activity.queue(7));
+        let mut tokens = Vec::new();
+        let mut admit = |mode| {
+            activity
+                .admit(
+                    PlayoutBuildRequest {
+                        playout_id: 7,
+                        mode,
+                    },
+                    |request| {
+                        tokens.push(request);
+                        Ok::<(), Infallible>(())
+                    },
+                )
+                .expect("infallible queue")
+        };
+
+        assert_eq!(
+            admit(PlayoutBuildMode::Continue),
+            PlayoutBuildAdmission::Accepted
+        );
+        assert_eq!(
+            admit(PlayoutBuildMode::Refresh),
+            PlayoutBuildAdmission::AlreadyQueued
+        );
+        assert_eq!(
+            admit(PlayoutBuildMode::Reset),
+            PlayoutBuildAdmission::AlreadyQueued
+        );
+        assert_eq!(tokens.len(), 1, "queued upgrades reuse the existing token");
         assert_eq!(activity.queued_playouts(), [7]);
 
-        activity.start(7);
+        let (request, guard) = activity.start_guard(tokens[0]);
+        assert_eq!(request.mode, PlayoutBuildMode::Reset);
         assert!(activity.queued_playouts().is_empty());
         assert_eq!(activity.building_playouts(), [7]);
-        assert!(!activity.queue(7));
 
-        activity.finish(7);
+        drop(guard);
+        assert!(activity.building_playouts().is_empty());
         assert!(activity.queue(7));
+    }
+
+    #[test]
+    fn playout_build_activity_retains_one_upgradable_follow_up_during_build() {
+        let activity = PlayoutBuildActivity::default();
+        let mut tokens = Vec::new();
+        let request = PlayoutBuildRequest {
+            playout_id: 9,
+            mode: PlayoutBuildMode::Continue,
+        };
+        assert_eq!(
+            activity.admit(request, |token| {
+                tokens.push(token);
+                Ok::<(), Infallible>(())
+            }),
+            Ok(PlayoutBuildAdmission::Accepted)
+        );
+        let (_, active_guard) = activity.start_guard(tokens[0]);
+
+        assert_eq!(
+            activity.admit(
+                PlayoutBuildRequest {
+                    mode: PlayoutBuildMode::Refresh,
+                    ..request
+                },
+                |token| {
+                    tokens.push(token);
+                    Ok::<(), Infallible>(())
+                },
+            ),
+            Ok(PlayoutBuildAdmission::FollowUpAccepted)
+        );
+        assert_eq!(
+            activity.admit(
+                PlayoutBuildRequest {
+                    mode: PlayoutBuildMode::Reset,
+                    ..request
+                },
+                |token| {
+                    tokens.push(token);
+                    Ok::<(), Infallible>(())
+                },
+            ),
+            Ok(PlayoutBuildAdmission::AlreadyBuilding)
+        );
+        assert_eq!(tokens.len(), 2, "active requests share one follow-up token");
+        assert_eq!(activity.queued_playouts(), [9]);
+        assert_eq!(activity.building_playouts(), [9]);
+
+        drop(active_guard);
+        assert_eq!(activity.queued_playouts(), [9]);
+        assert!(activity.building_playouts().is_empty());
+
+        let (follow_up, follow_up_guard) = activity.start_guard(tokens[1]);
+        assert_eq!(follow_up.mode, PlayoutBuildMode::Reset);
+        drop(follow_up_guard);
+        assert!(activity.queued_playouts().is_empty());
+        assert!(activity.building_playouts().is_empty());
     }
 
     #[test]
@@ -317,5 +545,23 @@ mod tests {
             assert!(activity.queue(id));
         }
         assert_eq!(activity.queued_playouts().len(), 512);
+    }
+
+    #[test]
+    fn playout_build_activity_guard_cleans_up_worker_failure_path() {
+        let activity = PlayoutBuildActivity::default();
+        assert!(activity.queue(12));
+
+        {
+            let (_, _guard) = activity.start_guard(PlayoutBuildRequest {
+                playout_id: 12,
+                mode: PlayoutBuildMode::Continue,
+            });
+            assert_eq!(activity.building_playouts(), [12]);
+        }
+
+        assert!(activity.queued_playouts().is_empty());
+        assert!(activity.building_playouts().is_empty());
+        assert!(activity.queue(12), "terminal cleanup must permit a retry");
     }
 }

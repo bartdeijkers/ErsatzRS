@@ -22,6 +22,13 @@ release section when tagging a release.
 
 ### Changed
 
+- All playout-build requests now enter through one application command with
+  typed accepted, queued, building, unavailable, and rejected outcomes. Admin
+  and API side effects share the same FIFO admission, coalescing, and activity
+  state while the scheduler retains Refresh/Reset processing and persisted
+  build behavior. Stronger modes now upgrade queued work, and mutations that
+  arrive during an active build retain one mode-upgradable follow-up instead
+  of being silently discarded.
 - The Phase 7B application-service foundation now gives `ersatzrs-app`
   documented command, query, typed-error, port, and operation-coordination
   boundaries. Core no longer exposes SQLx errors, infrastructure maps concrete

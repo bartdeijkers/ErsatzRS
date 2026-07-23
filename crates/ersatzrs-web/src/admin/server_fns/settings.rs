@@ -1229,14 +1229,30 @@ fn enqueue_playout_builds(
     playout_ids: Vec<i64>,
     mode: ersatzrs_core::scheduling::PlayoutBuildMode,
 ) {
+    use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
+
     for playout_id in playout_ids {
-        let request = ersatzrs_core::scheduling::PlayoutBuildRequest { playout_id, mode };
-        if let Err(error) = state.playout_build_tx.send(request) {
-            tracing::warn!(
-                playout_id,
-                %error,
-                "unable to enqueue settings-triggered playout build; worker queue is unavailable"
-            );
+        match state
+            .application
+            .request_playout_build(RequestPlayoutBuild::new(playout_id, mode))
+        {
+            RequestPlayoutBuildOutcome::Accepted
+            | RequestPlayoutBuildOutcome::AlreadyQueued
+            | RequestPlayoutBuildOutcome::AlreadyBuilding => {}
+            RequestPlayoutBuildOutcome::Unavailable { message } => {
+                tracing::warn!(
+                    playout_id,
+                    %message,
+                    "unable to enqueue settings-triggered playout build; worker queue is unavailable"
+                );
+            }
+            RequestPlayoutBuildOutcome::Rejected(reason) => {
+                tracing::warn!(
+                    playout_id,
+                    ?reason,
+                    "unable to enqueue invalid settings-triggered playout build"
+                );
+            }
         }
     }
 }

@@ -167,16 +167,23 @@ must not depend on concrete application services or storage.
   maps concrete SQLx failures at the adapter boundary.
 - The native web composition root constructs `ApplicationServices`; web and
   scheduler share its entity locker and playout activity registry.
-- Playout-build sending and scan queue/progress ownership intentionally remain
-  for the complete p7b-02 and p7b-03 vertical slices.
+- Scan queue/progress ownership intentionally remains for the complete p7b-03
+  vertical slice.
 
 ### P7B-02 — Playout-build vertical slice
 
-- Add one `RequestPlayoutBuild` use case with typed outcomes such as accepted,
-  already queued/building, unavailable, and rejected.
-- Replace every direct `PlayoutBuildRequest` sender in web/API code while
-  preserving ErsatzTV Refresh/Reset semantics and current admin feedback.
-- Keep the scheduler as the consumer and preserve existing public endpoints.
+- Complete (2026-07-23). One `RequestPlayoutBuild` application command owns
+  validation, coalescing, queue admission, and typed accepted, already queued,
+  already building, unavailable, and rejected outcomes.
+- Every web/API producer now uses injected `ApplicationServices`; the native
+  composition-root adapter retains the existing unbounded FIFO channel without
+  exposing its sender through `AppState`.
+- The scheduler remains the sole consumer. Refresh/Reset requests, persisted
+  build results, public endpoint behavior, and queued/building feedback remain
+  intact. Queued modes coalesce to `Reset` over `Refresh` over `Continue`;
+  requests received during an active build share one upgradable follow-up
+  token, and a lifecycle guard clears only completed activity after success,
+  failure, or cancellation.
 
 ### P7B-03 — Scan-operation vertical slice
 

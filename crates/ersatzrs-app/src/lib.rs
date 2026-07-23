@@ -13,7 +13,7 @@ pub mod queries;
 
 pub use error::{ApplicationError, Result};
 pub use operations::OperationCoordinator;
-pub use ports::ApplicationPorts;
+pub use ports::{ApplicationPorts, PlayoutBuildQueue, PlayoutBuildQueueError};
 
 /// Native application services assembled by a composition root.
 ///
@@ -44,6 +44,16 @@ impl ApplicationServices {
     #[must_use]
     pub const fn operations(&self) -> &OperationCoordinator {
         &self.operations
+    }
+
+    /// Admit one playout build through the single application-owned queue
+    /// boundary.
+    #[must_use]
+    pub fn request_playout_build(
+        &self,
+        command: commands::RequestPlayoutBuild,
+    ) -> commands::RequestPlayoutBuildOutcome {
+        commands::request_playout_build(command, self.ports.playout_builds(), &self.operations)
     }
 }
 

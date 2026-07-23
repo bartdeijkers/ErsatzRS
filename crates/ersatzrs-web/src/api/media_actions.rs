@@ -325,6 +325,9 @@ async fn enqueue_collection_playout_refresh(
     state: &AppState,
     collection_id: i64,
 ) -> Result<(), ApiError> {
+    use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
+    use ersatzrs_core::scheduling::PlayoutBuildMode;
+
     let language = load_error_language(state).await;
     let playout_ids: Vec<i64> = sqlx::query_scalar(
         r#"SELECT DISTINCT "PlayoutId"
@@ -338,16 +341,29 @@ async fn enqueue_collection_playout_refresh(
     .map_err(|error| ApiError::database(language, &error))?;
 
     for playout_id in playout_ids {
-        let request = ersatzrs_core::scheduling::PlayoutBuildRequest {
-            playout_id,
-            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
-        };
-        if let Err(error) = state.playout_build_tx.send(request) {
-            tracing::warn!(
+        match state
+            .application
+            .request_playout_build(RequestPlayoutBuild::new(
                 playout_id,
-                %error,
-                "unable to enqueue requested playout refresh; worker queue is unavailable"
-            );
+                PlayoutBuildMode::Refresh,
+            )) {
+            RequestPlayoutBuildOutcome::Accepted
+            | RequestPlayoutBuildOutcome::AlreadyQueued
+            | RequestPlayoutBuildOutcome::AlreadyBuilding => {}
+            RequestPlayoutBuildOutcome::Unavailable { message } => {
+                tracing::warn!(
+                    playout_id,
+                    %message,
+                    "unable to enqueue requested playout refresh; worker queue is unavailable"
+                );
+            }
+            RequestPlayoutBuildOutcome::Rejected(reason) => {
+                tracing::warn!(
+                    playout_id,
+                    ?reason,
+                    "unable to enqueue invalid playout refresh request"
+                );
+            }
         }
     }
 

@@ -186,8 +186,8 @@ impl OperationCoordinator {
         self.locker.clone()
     }
 
-    /// Accepted/building activity shared with existing playout adapters until
-    /// p7b-02 owns the complete request lifecycle.
+    /// Accepted/building activity shared by application admission, scheduler
+    /// consumption, and polling transport adapters.
     #[must_use]
     pub fn playout_activity(&self) -> PlayoutBuildActivity {
         self.playout_activity.clone()

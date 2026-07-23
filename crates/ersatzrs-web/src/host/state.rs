@@ -4,7 +4,10 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use ersatzrs_app::{ApplicationPorts, ApplicationServices, OperationCoordinator};
+use ersatzrs_app::{
+    ApplicationPorts, ApplicationServices, OperationCoordinator, PlayoutBuildQueue,
+    PlayoutBuildQueueError,
+};
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
@@ -14,6 +17,19 @@ use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
+
+#[derive(Clone)]
+struct TokioPlayoutBuildQueue {
+    sender: mpsc::UnboundedSender<PlayoutBuildRequest>,
+}
+
+impl PlayoutBuildQueue for TokioPlayoutBuildQueue {
+    fn enqueue(&self, request: PlayoutBuildRequest) -> Result<(), PlayoutBuildQueueError> {
+        self.sender
+            .send(request)
+            .map_err(|error| PlayoutBuildQueueError::unavailable(error.to_string()))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibraryScanJob {
@@ -160,9 +176,6 @@ pub struct AppState {
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
     pub library_scan_queue: LibraryScanQueue,
     pub scan_progress: ScanProgressMap,
-    /// Upstream-compatible unbounded single-reader queue for accepted manual
-    /// and side-effect-driven playout build requests.
-    pub playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
 }
 
 #[derive(Clone)]
@@ -190,6 +203,9 @@ impl AppState {
             ApplicationPorts::new(
                 Arc::new(repositories.playout.clone()),
                 Arc::new(repositories.library.clone()),
+                Arc::new(TokioPlayoutBuildQueue {
+                    sender: playout_build_tx,
+                }),
             ),
             OperationCoordinator::new(
                 playout_locker,
@@ -212,7 +228,6 @@ impl AppState {
             iptv_access_token_verifier,
             library_scan_queue: LibraryScanQueue::default(),
             scan_progress: ScanProgressMap::default(),
-            playout_build_tx,
         }
     }
 

@@ -6,14 +6,24 @@ Accepted (2026-07-21)
 
 ## Implementation
 
-Partial — the Phase 7B foundation in `ersatzrs-app` now exposes documented command, query,
-application-error, port, and operation-coordination modules. Core repository
-errors are storage-neutral, infrastructure maps concrete SQLx failures at its
-boundary, and the native web composition root constructs injected
-`ApplicationServices` with one process-wide operation coordinator. The
+Partial — the Phase 7B foundation in `ersatzrs-app` now exposes documented
+command, query, application-error, port, and operation-coordination modules.
+Core repository errors are storage-neutral, infrastructure maps concrete SQLx
+failures at its boundary, and the native web composition root constructs
+injected `ApplicationServices` with one process-wide operation coordinator.
+Milestone p7b-02 adds the first complete vertical slice:
+`RequestPlayoutBuild` owns admission and typed accepted, queued, building,
+unavailable, and rejected outcomes behind an injected unbounded queue port.
+Every web/API producer uses that command, while the scheduler remains the sole
+FIFO consumer and retains Refresh/Reset and persisted-build semantics. The
+shared activity registry upgrades queued work to the strongest requested mode
+(`Reset` over `Refresh` over `Continue`) and retains one upgradable follow-up
+when a mutation arrives during an active build. A lifecycle guard clears the
+completed build while preserving that pending follow-up on every scheduler
+exit path. The
 baseline-aware `cargo xtask architecture-lint` gate also prevents concrete
 storage dependencies from re-entering core. Phase 7B still has to migrate the
-playout-build, scan, block-preview, and remaining admin vertical slices.
+scan, block-preview, and remaining admin vertical slices.
 
 ## Context
 
