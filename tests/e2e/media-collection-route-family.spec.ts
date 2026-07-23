@@ -242,8 +242,11 @@ test.describe('media collection route-family parity', () => {
     await expect(
       noJsPage.getByRole('heading', { name: 'Multi Collection', exact: true }),
     ).toBeVisible();
-    await noJsPage.locator('input[name="name"]').fill(fallbackName);
-    await noJsPage.getByRole('button', { name: /add multi collection/i }).first().click();
+    const fallbackForm = noJsPage.locator(
+      'noscript form[action="/api/multi-collections/save"]',
+    );
+    await fallbackForm.locator('input[name="name"]').fill(fallbackName);
+    await fallbackForm.getByRole('button', { name: /add multi collection/i }).click();
     await expect(noJsPage).toHaveURL(/\/media\/multi-collections$/);
     await noJsContext.close();
     expect(sqlite(`
