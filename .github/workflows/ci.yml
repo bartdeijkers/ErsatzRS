@@ -105,11 +105,10 @@ jobs:
     name: Test (${{ matrix.shard }})
     if: ${{ inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
     runs-on: ubuntu-24.04
-    # Keep cold all-features linking within hosted-VM CPU and memory limits
-    # while preserving the canonical profile and native parallelism on
-    # self-hosted CI. Debug info is not needed to determine test outcomes.
+    # Keep cold all-features linking within the hosted job lifetime by splitting
+    # the large web crate's library and binary test targets. Preserve native
+    # runner parallelism; debug info is not needed to determine test outcomes.
     env:
-      CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
     needs: fmt
@@ -118,13 +117,14 @@ jobs:
       matrix:
         shard:
           - workspace-minus-web
-          - web
+          - web-lib
+          - web-bins
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-bin: "false"
+          cache-bin: "true"
       - name: Install LLVM linker
         run: |
           sudo apt-get update
@@ -134,9 +134,12 @@ jobs:
       - name: Test remaining workspace (all features)
         if: matrix.shard == 'workspace-minus-web'
         run: cargo test --workspace --exclude ersatzrs-web --all-features --lib --bins --tests
-      - name: Test web (all features)
-        if: matrix.shard == 'web'
-        run: cargo test -p ersatzrs-web --all-features --lib --bins --tests
+      - name: Test web library (all features)
+        if: matrix.shard == 'web-lib'
+        run: cargo test -p ersatzrs-web --all-features --lib
+      - name: Test web binaries (all features)
+        if: matrix.shard == 'web-bins'
+        run: cargo test -p ersatzrs-web --all-features --bins
       - name: Validate progress index (docs/progress/)
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask progress check
@@ -162,8 +165,9 @@ jobs:
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
           # shell, so don't let rust-cache prune cargo-leptos /
-          # stylance-cli / wasm-bindgen between runs.
-          cache-bin: "false"
+          # stylance-cli / wasm-bindgen between runs. Hosted runners instead
+          # restore these pinned tools to avoid repeated cold installs.
+          cache-bin: ${{ (inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted')) && 'true' || 'false' }}
       - name: Hydration lint
         run: cargo xtask hydration-lint -p ersatzrs-web
       - name: Install web E2E tools
