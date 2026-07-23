@@ -18,9 +18,9 @@ release section when tagging a release.
 - Added on-demand GitHub-hosted CI through the `ci:github-hosted` pull-request
   label and a manual runner selector. Pull requests and `main` pushes still use
   self-hosted Linux by default, while hosted Test work is sharded and uses a
-  lower-memory test profile to stay within the hosted VM's resources. Hosted
-  and self-hosted runs use independent concurrency groups so either pool
-  remains available as a fallback.
+  lower-memory test profile plus LLVM's `lld` linker to stay within the hosted
+  VM's resources. Hosted and self-hosted runs use independent concurrency
+  groups so either pool remains available as a fallback.
 - Added optional default and fallback subtitle languages to `/settings/ffmpeg`.
   Built-in MPEG-TS and HLS playback now applies item and channel preferences
   first, then the global default, and tries the global fallback before

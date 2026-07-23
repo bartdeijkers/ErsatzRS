@@ -111,6 +111,7 @@ jobs:
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
     needs: fmt
     strategy:
       fail-fast: false
@@ -124,6 +125,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-bin: "false"
+      - name: Install LLVM linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes lld
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test remaining workspace (all features)
