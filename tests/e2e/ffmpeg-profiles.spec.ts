@@ -66,6 +66,17 @@ async function gotoAddProfile(page: Page): Promise<void> {
   await page.goto('/ffmpeg/add');
   await expect(page.getByRole('heading', { name: /add ffmpeg profile/i })).toBeVisible();
   await expect(page.locator('form[data-ffmpeg-profile-editor-hydrated="true"]')).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated ===
+            true,
+        ),
+      { message: 'FFmpeg profile editor hydration never completed' },
+    )
+    .toBe(true);
   await page.waitForLoadState('networkidle');
 }
 
@@ -76,9 +87,7 @@ async function createNvencH264Profile(page: Page, name: string): Promise<string>
   const hardwareSelect = editor.locator('select[name="hardware_acceleration"]');
   const videoFormatSelect = editor.locator('select[name="video_format"]');
   await hardwareSelect.selectOption('2');
-  await hardwareSelect.dispatchEvent('change');
   await videoFormatSelect.selectOption('1');
-  await videoFormatSelect.dispatchEvent('change');
   await expect
     .poll(async () => editor.locator('select[name="video_profile"] option').allTextContents())
     .toContain('high444p');
@@ -144,7 +153,6 @@ test.describe('ffmpeg profile editor parity', () => {
 
     const videoFormatSelect = editor.locator('select[name="video_format"]');
     await videoFormatSelect.selectOption('3');
-    await videoFormatSelect.dispatchEvent('change');
     await expect(page.getByText('NVENC supports formats (h264, hevc, av1).')).toBeVisible();
   });
 
