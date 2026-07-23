@@ -105,9 +105,12 @@ jobs:
     name: Test (${{ matrix.shard }})
     if: ${{ inputs.runner == 'github-hosted' || contains(github.event.pull_request.labels.*.name, 'ci:github-hosted') }}
     runs-on: ubuntu-24.04
-    # GitHub-hosted jobs in this repository receive a shutdown signal at 30
-    # minutes. Keep each cold all-features compile below that remote limit
-    # while preserving the canonical single workspace job on self-hosted CI.
+    # Keep cold all-features linking within hosted-VM CPU and memory limits
+    # while preserving the canonical profile and native parallelism on
+    # self-hosted CI. Debug info is not needed to determine test outcomes.
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     needs: fmt
     strategy:
       fail-fast: false

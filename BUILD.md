@@ -84,10 +84,11 @@ target branch and choose `github-hosted`. Label-triggered and manually
 dispatched CI use the same branch-level concurrency as automatic CI, so the
 new run cancels a queued or superseded run for that branch. GitHub-hosted jobs
 start cold and do not share the local runner's Cargo cache. Hosted Test work is
-split into web and non-web shards so both cold all-features builds finish
-within the remote runner's execution limit; self-hosted CI retains the single
-canonical workspace Test job. This path remains an explicit fallback rather
-than the default.
+split into web and non-web shards, caps Cargo at two parallel jobs, and omits
+test-profile debug info so cold all-features linking stays within the hosted
+VM's resources. The full test selection remains intact, and self-hosted CI
+retains the single canonical workspace Test job. This path remains an explicit
+fallback rather than the default.
 
 ## Windows development
 
