@@ -153,9 +153,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: wagoid/commitlint-github-action@v6
-        with:
-          configFile: ./commitlint.config.cjs
+      - name: Install commit lint dependencies
+        run: npm ci
+      - name: Lint pull request commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./node_modules/.bin/commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
 
   docs:
     name: Documentation links

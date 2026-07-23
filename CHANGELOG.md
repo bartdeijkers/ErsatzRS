@@ -22,6 +22,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Updated futures-util to 0.3.33, Tokio to 1.53.1, leptos_axum to 0.8.10,
+  async-trait to 0.1.91, and clap to 4.6.4. Scheduled Cargo and GitHub Actions
+  updates now arrive in one weekly multi-ecosystem Dependabot rollup instead of
+  separate pull requests.
 - All playout-build requests now enter through one application command with
   typed accepted, queued, building, unavailable, and rejected outcomes. Admin
   and API side effects share the same FIFO admission, coalescing, and activity
@@ -87,6 +91,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Pull-request commit lint now runs the repository's pinned npm dependencies
+  directly, so it no longer requires Docker on the self-hosted WSL runner.
 - GitHub Actions and release builds now use the repository's supported Rust
   1.97.1 toolchain again, and Dependabot no longer proposes updates for the
   toolchain action whose tags can name Rust releases that do not exist.
