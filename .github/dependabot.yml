@@ -10,5 +10,3 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: dtolnay/rust-toolchain
-        versions:
-          - 1.100.0
