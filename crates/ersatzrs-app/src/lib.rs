@@ -982,6 +982,20 @@ impl ApplicationServices {
         .await
     }
 
+    /// Add one media item to an existing collection or atomically create its collection.
+    pub async fn add_media_item_to_collection(
+        &self,
+        command: commands::AddMediaItemToCollection,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::add_media_item_to_collection(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
     /// Append typed media items to a playlist.
     pub async fn add_playlist_items(&self, command: commands::AddPlaylistItems) -> Result<u64> {
         commands::add_playlist_items(command, self.ports.collections()).await
@@ -2142,7 +2156,6 @@ impl ApplicationServices {
 
     /// Admit one playout build through the single application-owned queue
     /// boundary.
-    #[must_use]
     pub fn request_playout_build(
         &self,
         command: commands::RequestPlayoutBuild,

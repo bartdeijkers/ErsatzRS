@@ -82,16 +82,12 @@ pub async fn add_to_collection(
     Json(input): Json<AddToCollectionRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let language = load_error_language(&state).await;
-    let collection_id = match input.collection_id {
-        Some(id) if id > 0 => id,
-        _ => create_collection(&state, input.new_name.unwrap_or_default(), language).await?,
-    };
-
-    state
+    let collection_id = state
         .application
-        .add_default_collection_item(ersatzrs_app::commands::ChangeCollectionItem {
-            collection_id,
+        .add_media_item_to_collection(ersatzrs_app::commands::AddMediaItemToCollection {
             media_item_id: input.media_item_id,
+            collection_id: input.collection_id,
+            new_name: input.new_name,
         })
         .await
         .map_err(|error| ApiError::application(language, &error))?;
@@ -180,18 +176,6 @@ pub async fn media_info(
         .ok_or_else(|| ApiError::bad_request(language, "Unable to locate media item"))?;
     media_item_info_json_from_admin(info)
         .map_err(|error| ApiError::bad_request(language, error.to_string()))
-}
-
-async fn create_collection(
-    state: &AppState,
-    name: String,
-    language: UiLanguage,
-) -> Result<i64, ApiError> {
-    state
-        .application
-        .save_collection(ersatzrs_app::commands::SaveCollection { id: 0, name })
-        .await
-        .map_err(|error| ApiError::application(language, &error))
 }
 
 #[derive(Debug)]

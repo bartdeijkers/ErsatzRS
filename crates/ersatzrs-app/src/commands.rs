@@ -457,6 +457,13 @@ pub struct AddCollectionItems {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddMediaItemToCollection {
+    pub media_item_id: EntityId,
+    pub collection_id: Option<EntityId>,
+    pub new_name: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddPlaylistItems {
     pub playlist_id: EntityId,
     pub items: Vec<PlaylistItemInsert>,
@@ -661,7 +668,12 @@ pub async fn save_ffmpeg_profile(
             ),
         );
     }
-    if command.form.id > 0 && repository.get(command.form.id).await.is_err() {
+    if command.form.id > 0
+        && repository
+            .get_optional_admin(command.form.id)
+            .await?
+            .is_none()
+    {
         return Err(ApplicationError::NotFound {
             kind: "ffmpeg profile",
             id: command.form.id,
@@ -2392,13 +2404,7 @@ pub async fn save_collection(
     if command.id < 0 {
         return validation_error("collection_id", "must be zero or greater");
     }
-    let name = command.name.trim();
-    if name.is_empty() {
-        return validation_error("name", "Collection name is required");
-    }
-    if name.chars().count() > 50 {
-        return validation_error("name", "Collection name must be 50 characters or less");
-    }
+    let name = validate_collection_name(&command.name)?;
     if repository.admin_name_exists(command.id, name).await? {
         return validation_error("name", "Collection name must be unique");
     }
@@ -2406,6 +2412,49 @@ pub async fn save_collection(
         .save_admin(command.id, name)
         .await
         .map_err(Into::into)
+}
+
+pub async fn add_media_item_to_collection(
+    command: AddMediaItemToCollection,
+    repository: &dyn CollectionRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<EntityId> {
+    validate_positive_id(command.media_item_id, "media_item_id")?;
+    if !repository
+        .media_items_exist(&[command.media_item_id])
+        .await?
+    {
+        return validation_error("media_item_id", "media item does not exist");
+    }
+
+    if let Some(collection_id) = command.collection_id.filter(|id| *id > 0) {
+        if repository.get_admin(collection_id).await?.is_none() {
+            return validation_error("collection_id", "collection does not exist");
+        }
+        repository
+            .add_default_item(collection_id, command.media_item_id)
+            .await?;
+        request_collection_playout_builds(collection_id, repository, queue, operations).await?;
+        return Ok(collection_id);
+    }
+
+    let name = validate_collection_name(command.new_name.as_deref().unwrap_or_default())?;
+    if repository.admin_name_exists(0, name).await? {
+        return validation_error("name", "Collection name must be unique");
+    }
+    repository
+        .create_with_default_item_admin(name, command.media_item_id)
+        .await
+        .map_err(|error| match error {
+            RepositoryError::NotFound {
+                kind: "media item", ..
+            } => ApplicationError::Validation {
+                field: "media_item_id",
+                message: "media item does not exist".to_owned(),
+            },
+            other => other.into(),
+        })
 }
 
 pub async fn delete_collection(
@@ -2448,11 +2497,11 @@ pub async fn save_smart_collection(
     let id = repository.save_smart_admin(command.id, name, query).await?;
     if command.id > 0 {
         for playout_id in repository.playout_ids_using_smart(command.id).await? {
-            let _ = request_playout_build(
+            require_playout_build(
                 RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
                 queue,
                 operations,
-            );
+            )?;
         }
     }
     Ok(id)
@@ -2513,11 +2562,11 @@ pub async fn save_multi_collection(
         .await?;
     if command.id > 0 && items_changed {
         for playout_id in repository.playout_ids_using_multi(id).await? {
-            let _ = request_playout_build(
+            require_playout_build(
                 RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
                 queue,
                 operations,
-            );
+            )?;
         }
     }
     Ok(id)
@@ -2574,11 +2623,11 @@ pub async fn save_rerun_collection(
     let id = repository.save_rerun_admin(&form).await?;
     if changed {
         for playout_id in repository.playout_ids_using_rerun(id).await? {
-            let _ = request_playout_build(
+            require_playout_build(
                 RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
                 queue,
                 operations,
-            );
+            )?;
         }
     }
     Ok(id)
@@ -2734,11 +2783,11 @@ pub async fn add_collection_items(
         .await?;
     if added > 0 {
         for playout_id in repository.playout_ids_using(command.collection_id).await? {
-            let _ = request_playout_build(
+            require_playout_build(
                 RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
                 queue,
                 operations,
-            );
+            )?;
         }
     }
     Ok(added)
@@ -2875,6 +2924,17 @@ fn validate_entity_ids(ids: &[EntityId], field: &'static str) -> crate::Result<(
     Ok(())
 }
 
+fn validate_collection_name(value: &str) -> crate::Result<&str> {
+    let name = value.trim();
+    if name.is_empty() {
+        return validation_error("name", "Collection name is required");
+    }
+    if name.chars().count() > 50 {
+        return validation_error("name", "Collection name must be 50 characters or less");
+    }
+    Ok(name)
+}
+
 async fn refresh_collection_playouts(
     collection_id: EntityId,
     repository: &dyn CollectionRepository,
@@ -2882,11 +2942,11 @@ async fn refresh_collection_playouts(
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     for playout_id in repository.playout_ids_using(collection_id).await? {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -3337,11 +3397,11 @@ async fn refresh_schedule_playouts(
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     for playout_id in repository.playout_ids_using_admin(schedule_id).await? {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -3537,12 +3597,18 @@ pub async fn add_default_collection_item(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
-    validate_positive_id(command.collection_id, "collection_id")?;
-    validate_positive_id(command.media_item_id, "media_item_id")?;
-    repository
-        .add_default_item(command.collection_id, command.media_item_id)
-        .await?;
-    request_collection_playout_builds(command.collection_id, repository, queue, operations).await
+    add_media_item_to_collection(
+        AddMediaItemToCollection {
+            media_item_id: command.media_item_id,
+            collection_id: Some(command.collection_id),
+            new_name: None,
+        },
+        repository,
+        queue,
+        operations,
+    )
+    .await
+    .map(|_| ())
 }
 
 pub async fn remove_collection_item(
@@ -3566,11 +3632,11 @@ async fn request_collection_playout_builds(
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     for playout_id in repository.playout_ids_using(collection_id).await? {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -3940,11 +4006,11 @@ async fn request_settings_playout_builds(
     mode: PlayoutBuildMode,
 ) -> crate::Result<()> {
     for playout_id in repository.list_playout_ids().await? {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(playout_id, mode),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -4627,11 +4693,12 @@ pub async fn create_playout(
             seed: next_playout_seed(),
         })
         .await?;
-    let _ = request_playout_build(
+    let outcome = request_playout_build(
         RequestPlayoutBuild::new(id, PlayoutBuildMode::Reset),
         queue,
         operations,
     );
+    finalize_initial_playout_build(id, outcome, repository.delete_admin(id)).await?;
     Ok(id)
 }
 
@@ -4683,11 +4750,11 @@ pub async fn save_playout_schedule_file(
         .save_schedule_file_admin(command.id, command.schedule_kind, &command.schedule_file)
         .await?;
     if let Some(mode) = command.rebuild_mode {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(command.id, mode),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -4741,11 +4808,11 @@ pub async fn save_playout_alternate_schedules(
         .save_alternate_schedules_admin(command.id, &command.items)
         .await?;
     if repository.has_items_admin(command.id).await? {
-        let _ = request_playout_build(
+        require_playout_build(
             RequestPlayoutBuild::new(command.id, PlayoutBuildMode::Refresh),
             queue,
             operations,
-        );
+        )?;
     }
     Ok(())
 }
@@ -4914,6 +4981,7 @@ pub enum RequestPlayoutBuildRejection {
 }
 
 /// Typed application outcome for playout-build admission.
+#[must_use = "playout build admission failures must be handled"]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RequestPlayoutBuildOutcome {
     /// Work was accepted by the FIFO scheduler queue.
@@ -5135,6 +5203,54 @@ pub(crate) fn request_playout_build(
     }
 }
 
+fn require_playout_build(
+    command: RequestPlayoutBuild,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<()> {
+    require_playout_build_outcome(request_playout_build(command, queue, operations))
+}
+
+fn require_playout_build_outcome(outcome: RequestPlayoutBuildOutcome) -> crate::Result<()> {
+    match outcome {
+        RequestPlayoutBuildOutcome::Accepted
+        | RequestPlayoutBuildOutcome::AlreadyQueued
+        | RequestPlayoutBuildOutcome::AlreadyBuilding => Ok(()),
+        RequestPlayoutBuildOutcome::Rejected(RequestPlayoutBuildRejection::InvalidPlayoutId) => {
+            Err(ApplicationError::InvalidData {
+                kind: "playout id",
+                value: "must be greater than zero".to_owned(),
+            })
+        }
+        RequestPlayoutBuildOutcome::Unavailable { message } => Err(ApplicationError::Unavailable {
+            operation: "queue playout build",
+            message,
+        }),
+    }
+}
+
+async fn finalize_initial_playout_build<F>(
+    id: EntityId,
+    outcome: RequestPlayoutBuildOutcome,
+    delete_unbuilt_playout: F,
+) -> crate::Result<()>
+where
+    F: std::future::Future<Output = ersatzrs_core::repositories::Result<()>>,
+{
+    let Err(admission_error) = require_playout_build_outcome(outcome) else {
+        return Ok(());
+    };
+    match delete_unbuilt_playout.await {
+        Ok(()) => Err(admission_error),
+        Err(cleanup_error) => Err(ApplicationError::Unavailable {
+            operation: "create playout",
+            message: format!(
+                "{admission_error}; unable to remove unbuilt playout {id}: {cleanup_error}"
+            ),
+        }),
+    }
+}
+
 pub(crate) async fn request_library_scan(
     command: RequestLibraryScan,
     libraries: &dyn LibraryRepository,
@@ -5319,33 +5435,35 @@ mod tests {
     use ersatzrs_core::repositories::{
         AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow,
         ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
-        CollectionRepository, LibraryRepository, LibraryScanTarget, MediaItemSuggestionAdmin,
-        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
-        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
-        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
-        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        CollectionRepository, FfmpegProfileRepository, LibraryRepository, LibraryScanTarget,
+        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
+        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
+        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{
-        Collection, CollectionType, EntityId, Library, LibraryMediaKind, MediaSourceKind, Playlist,
-        SmartCollection,
+        Collection, CollectionType, EntityId, FFmpegProfile, Library, LibraryMediaKind,
+        MediaSourceKind, Playlist, Resolution, SmartCollection,
     };
 
     use super::{
-        add_default_collection_item, create_playlist_group, delete_playlist,
-        normalize_channel_form, normalize_channel_number_updates, normalize_schedule_item,
-        request_library_scan, request_playout_build, request_scheduled_library_scan,
-        request_show_scan, save_collection, save_ffmpeg_settings, save_logging_settings,
-        save_multi_collection, save_playlist, save_rerun_collection, save_smart_collection,
+        add_default_collection_item, add_media_item_to_collection, create_playlist_group,
+        delete_playlist, finalize_initial_playout_build, normalize_channel_form,
+        normalize_channel_number_updates, normalize_schedule_item, request_library_scan,
+        request_playout_build, request_scheduled_library_scan, request_show_scan, save_collection,
+        save_ffmpeg_profile, save_ffmpeg_settings, save_logging_settings, save_multi_collection,
+        save_playlist, save_playout_settings, save_rerun_collection, save_smart_collection,
         validate_channel_form, validate_channel_number_updates, validate_schedule_items,
         validate_template_group_name, validate_template_name, validate_watermark,
-        BlockItemAdminForm, ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist,
-        RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
-        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
-        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
-        SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection, SavePlaylist,
+        AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem, CreatePlaylistGroup,
+        DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan, RequestPlayoutBuild,
+        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
+        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
+        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
+        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
         SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
@@ -5521,6 +5639,7 @@ mod tests {
         added: Mutex<Vec<(EntityId, EntityId)>>,
         removed: Mutex<Vec<(EntityId, EntityId)>>,
         playout_ids: Vec<EntityId>,
+        missing_media_items: bool,
     }
 
     #[async_trait]
@@ -5609,6 +5728,22 @@ mod tests {
                 .expect("saved collections")
                 .push((id, name.to_owned()));
             Ok(if id == 0 { 11 } else { id })
+        }
+
+        async fn create_with_default_item_admin(
+            &self,
+            name: &str,
+            media_item_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<EntityId> {
+            self.saved
+                .lock()
+                .expect("saved collections")
+                .push((0, name.to_owned()));
+            self.added
+                .lock()
+                .expect("added collection items")
+                .push((11, media_item_id));
+            Ok(11)
         }
 
         async fn delete_admin(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
@@ -5959,7 +6094,7 @@ mod tests {
             &self,
             _ids: &[EntityId],
         ) -> ersatzrs_core::repositories::Result<bool> {
-            Ok(true)
+            Ok(!self.missing_media_items)
         }
 
         async fn add_collection_items_admin(
@@ -6041,6 +6176,82 @@ mod tests {
                 self.requests.lock().expect("request lock").push(request);
                 Ok(())
             }
+        }
+    }
+
+    enum OptionalFfmpegProfile {
+        Missing,
+        DecodeFailure,
+        Unavailable,
+    }
+
+    struct FailingFfmpegRepository {
+        optional: OptionalFfmpegProfile,
+    }
+
+    #[async_trait]
+    impl FfmpegProfileRepository for FailingFfmpegRepository {
+        async fn get(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<FFmpegProfile> {
+            Ok(FFmpegProfile::default())
+        }
+
+        async fn get_optional_admin(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<FFmpegProfile>> {
+            match self.optional {
+                OptionalFfmpegProfile::Missing => Ok(None),
+                OptionalFfmpegProfile::DecodeFailure => Err(RepositoryError::Decode {
+                    kind: "ffmpeg profile",
+                    value: "invalid enum".to_owned(),
+                }),
+                OptionalFfmpegProfile::Unavailable => Err(RepositoryError::unavailable(
+                    "load ffmpeg profile",
+                    "database offline",
+                )),
+            }
+        }
+
+        async fn list(&self) -> ersatzrs_core::repositories::Result<Vec<FFmpegProfile>> {
+            Ok(Vec::new())
+        }
+
+        async fn upsert(
+            &self,
+            _profile: &FFmpegProfile,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn delete(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn list_resolutions(&self) -> ersatzrs_core::repositories::Result<Vec<Resolution>> {
+            Ok(Vec::new())
+        }
+
+        async fn name_exists(
+            &self,
+            _id: EntityId,
+            _name: &str,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            Ok(false)
+        }
+
+        async fn save_admin(
+            &self,
+            _profile: &FFmpegProfile,
+        ) -> ersatzrs_core::repositories::Result<EntityId> {
+            Ok(1)
+        }
+
+        async fn copy_admin(
+            &self,
+            _id: EntityId,
+            _name: &str,
+        ) -> ersatzrs_core::repositories::Result<EntityId> {
+            Ok(2)
         }
     }
 
@@ -6186,6 +6397,42 @@ mod tests {
         }
     }
 
+    fn existing_ffmpeg_profile_form() -> FfmpegProfileAdminForm {
+        FfmpegProfileAdminForm {
+            id: 7,
+            name: "Profile".to_owned(),
+            thread_count: 0,
+            transcode_video: false,
+            transcode_audio: false,
+            hardware_acceleration: 0,
+            vaapi_display: String::new(),
+            vaapi_driver: 0,
+            vaapi_device: String::new(),
+            qsv_extra_hardware_frames: 0,
+            resolution_id: 1,
+            scaling_behavior: 0,
+            pad_mode: 0,
+            video_format: 99,
+            video_profile: String::new(),
+            video_preset: String::new(),
+            allow_b_frames: false,
+            bit_depth: 8,
+            video_bitrate: 0,
+            video_buffer_size: 0,
+            tonemap_algorithm: 0,
+            audio_format: 99,
+            audio_bitrate: 0,
+            audio_buffer_size: 0,
+            normalize_loudness_mode: 0,
+            target_loudness: String::new(),
+            audio_channels: 2,
+            audio_sample_rate: 48_000,
+            normalize_framerate: false,
+            normalize_colors: false,
+            deinterlace_video: false,
+        }
+    }
+
     #[tokio::test]
     async fn invalid_logging_settings_do_not_touch_persistence_or_runtime() {
         let repository = RecordingSettingsRepository::default();
@@ -6225,6 +6472,40 @@ mod tests {
         assert_eq!(
             *runtime.events.lock().expect("settings runtime events"),
             ["reload_logging"]
+        );
+    }
+
+    #[tokio::test]
+    async fn automatic_settings_rebuild_reports_unavailable_playout_worker() {
+        let repository = RecordingSettingsRepository {
+            playout_ids: vec![5],
+            ..RecordingSettingsRepository::default()
+        };
+
+        let error = save_playout_settings(
+            SavePlayoutSettings {
+                days_to_build: 2,
+                skip_missing_items: false,
+                scripted_schedule_timeout_seconds: 30,
+            },
+            &repository,
+            &RecordingQueue::unavailable(),
+            &coordinator(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Unavailable {
+                operation: "queue playout build",
+                ..
+            }
+        ));
+        assert_eq!(
+            repository.batches.lock().expect("settings batches").len(),
+            1,
+            "settings are persisted before their rebuild side effect"
         );
     }
 
@@ -6272,6 +6553,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ffmpeg_profile_lookup_preserves_typed_repository_failures() {
+        for (optional, expected_unavailable) in [
+            (OptionalFfmpegProfile::DecodeFailure, false),
+            (OptionalFfmpegProfile::Unavailable, true),
+        ] {
+            let error = save_ffmpeg_profile(
+                SaveFfmpegProfile {
+                    form: existing_ffmpeg_profile_form(),
+                },
+                &FailingFfmpegRepository { optional },
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                matches!(error, crate::ApplicationError::Unavailable { .. }),
+                expected_unavailable
+            );
+            assert!(matches!(
+                error,
+                crate::ApplicationError::InvalidData { .. }
+                    | crate::ApplicationError::Unavailable { .. }
+            ));
+        }
+
+        let error = save_ffmpeg_profile(
+            SaveFfmpegProfile {
+                form: existing_ffmpeg_profile_form(),
+            },
+            &FailingFfmpegRepository {
+                optional: OptionalFfmpegProfile::Missing,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::ApplicationError::NotFound {
+                kind: "ffmpeg profile",
+                id: 7
+            }
+        ));
+    }
+
+    #[tokio::test]
     async fn collection_save_validation_precedes_persistence() {
         let repository = RecordingCollectionRepository {
             duplicate_name: true,
@@ -6299,8 +6624,95 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn collection_media_action_validates_identities_before_persistence() {
+        let missing_media = RecordingCollectionRepository {
+            missing_media_items: true,
+            ..RecordingCollectionRepository::default()
+        };
+        let error = add_media_item_to_collection(
+            AddMediaItemToCollection {
+                media_item_id: 99,
+                collection_id: None,
+                new_name: Some("Should not persist".to_owned()),
+            },
+            &missing_media,
+            &RecordingQueue::default(),
+            &coordinator(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Validation {
+                field: "media_item_id",
+                ..
+            }
+        ));
+        assert!(missing_media
+            .saved
+            .lock()
+            .expect("saved collections")
+            .is_empty());
+
+        let stale_collection = RecordingCollectionRepository::default();
+        let error = add_media_item_to_collection(
+            AddMediaItemToCollection {
+                media_item_id: 8,
+                collection_id: Some(404),
+                new_name: None,
+            },
+            &stale_collection,
+            &RecordingQueue::default(),
+            &coordinator(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Validation {
+                field: "collection_id",
+                ..
+            }
+        ));
+        assert!(stale_collection
+            .added
+            .lock()
+            .expect("added collection items")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn collection_media_action_creates_collection_with_first_item_as_one_mutation() {
+        let repository = RecordingCollectionRepository::default();
+
+        let id = add_media_item_to_collection(
+            AddMediaItemToCollection {
+                media_item_id: 8,
+                collection_id: None,
+                new_name: Some("  New collection  ".to_owned()),
+            },
+            &repository,
+            &RecordingQueue::default(),
+            &coordinator(),
+        )
+        .await
+        .expect("create collection with item");
+
+        assert_eq!(id, 11);
+        assert_eq!(
+            *repository.saved.lock().expect("saved collections"),
+            [(0, "New collection".to_owned())]
+        );
+        assert_eq!(
+            *repository.added.lock().expect("added collection items"),
+            [(11, 8)]
+        );
+    }
+
+    #[tokio::test]
     async fn collection_item_add_refreshes_each_affected_playout() {
         let repository = RecordingCollectionRepository {
+            collection_ids: std::collections::BTreeSet::from([3]),
             playout_ids: vec![4, 9],
             ..RecordingCollectionRepository::default()
         };
@@ -6336,6 +6748,35 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn collection_refresh_reports_unavailable_playout_worker() {
+        let repository = RecordingCollectionRepository {
+            collection_ids: std::collections::BTreeSet::from([3]),
+            playout_ids: vec![4],
+            ..RecordingCollectionRepository::default()
+        };
+
+        let error = add_default_collection_item(
+            ChangeCollectionItem {
+                collection_id: 3,
+                media_item_id: 8,
+            },
+            &repository,
+            &RecordingQueue::unavailable(),
+            &coordinator(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Unavailable {
+                operation: "queue playout build",
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
@@ -6729,6 +7170,57 @@ mod tests {
         assert!(matches!(
             request_playout_build(command, &queue, &operations),
             RequestPlayoutBuildOutcome::Unavailable { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_initial_playout_admission_removes_unbuilt_playout() {
+        let deleted = std::sync::atomic::AtomicBool::new(false);
+        let result = finalize_initial_playout_build(
+            12,
+            RequestPlayoutBuildOutcome::Unavailable {
+                message: "worker closed".to_owned(),
+            },
+            async {
+                deleted.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .await;
+
+        assert!(deleted.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(matches!(
+            result,
+            Err(crate::ApplicationError::Unavailable {
+                operation: "queue playout build",
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_initial_playout_cleanup_preserves_both_diagnostics() {
+        let error = finalize_initial_playout_build(
+            12,
+            RequestPlayoutBuildOutcome::Unavailable {
+                message: "worker closed".to_owned(),
+            },
+            async {
+                Err(RepositoryError::unavailable(
+                    "delete playout",
+                    "database offline",
+                ))
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Unavailable {
+                operation: "create playout",
+                ref message
+            } if message.contains("worker closed") && message.contains("database offline")
         ));
     }
 

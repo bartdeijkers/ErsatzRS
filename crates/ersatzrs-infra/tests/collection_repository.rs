@@ -262,6 +262,64 @@ async fn collection_admin_repository_preserves_crud_and_default_item_idempotence
 }
 
 #[tokio::test]
+async fn collection_creation_with_first_item_is_atomic() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_media_graph(&pool).await;
+
+    let collection_id = repos
+        .collection
+        .create_with_default_item_admin("Atomic", 1)
+        .await
+        .expect("create collection and first item");
+    let item_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "CollectionItem"
+           WHERE "CollectionId" = ? AND "MediaItemId" = 1"#,
+    )
+    .bind(collection_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count first collection item");
+    assert_eq!(item_count, 1);
+
+    let missing = repos
+        .collection
+        .create_with_default_item_admin("Missing media", 99_999)
+        .await;
+    assert!(matches!(
+        missing,
+        Err(ersatzrs_core::repositories::RepositoryError::NotFound {
+            kind: "media item",
+            id: 99_999
+        })
+    ));
+
+    pool.execute(
+        r#"CREATE TRIGGER "TR_CollectionItem_RejectTestInsert"
+           BEFORE INSERT ON "CollectionItem"
+           BEGIN
+               SELECT RAISE(ABORT, 'reject collection item insert');
+           END"#,
+    )
+    .await
+    .expect("create rollback test trigger");
+    assert!(repos
+        .collection
+        .create_with_default_item_admin("Rollback", 1)
+        .await
+        .is_err());
+
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "Collection"
+           WHERE "Name" IN ('Missing media', 'Rollback')"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count rolled-back collections");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
 async fn collection_admin_repository_reports_closed_pool() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

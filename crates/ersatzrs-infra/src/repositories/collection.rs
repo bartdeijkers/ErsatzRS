@@ -263,6 +263,47 @@ impl CollectionRepository for SqliteCollectionRepository {
         }
     }
 
+    async fn create_with_default_item_admin(
+        &self,
+        name: &str,
+        media_item_id: EntityId,
+    ) -> Result<EntityId> {
+        let mut tx = self.0.begin().await.repository()?;
+        let media_item_exists: Option<EntityId> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "MediaItem" WHERE "Id" = ?"#)
+                .bind(media_item_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+        if media_item_exists.is_none() {
+            return Err(ersatzrs_core::repositories::RepositoryError::NotFound {
+                kind: "media item",
+                id: media_item_id,
+            });
+        }
+
+        let result = sqlx::query(
+            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder")
+               VALUES (?, 0)"#,
+        )
+        .bind(name)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let collection_id = inserted_id(&mut tx, result).await?;
+        sqlx::query(
+            r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
+               VALUES (?, ?)"#,
+        )
+        .bind(collection_id)
+        .bind(media_item_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()?;
+        Ok(collection_id)
+    }
+
     async fn delete_admin(&self, id: EntityId) -> Result<()> {
         sqlx::query(r#"DELETE FROM "Collection" WHERE "Id" = ?"#)
             .bind(id)

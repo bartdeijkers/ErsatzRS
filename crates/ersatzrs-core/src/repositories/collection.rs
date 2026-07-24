@@ -233,6 +233,11 @@ pub trait CollectionRepository: Send + Sync {
     async fn get_admin(&self, id: EntityId) -> Result<Option<CollectionAdminRow>>;
     async fn admin_name_exists(&self, id: EntityId, name: &str) -> Result<bool>;
     async fn save_admin(&self, id: EntityId, name: &str) -> Result<EntityId>;
+    async fn create_with_default_item_admin(
+        &self,
+        name: &str,
+        media_item_id: EntityId,
+    ) -> Result<EntityId>;
     async fn delete_admin(&self, id: EntityId) -> Result<()>;
     async fn add_default_item(
         &self,

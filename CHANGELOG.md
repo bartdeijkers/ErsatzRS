@@ -87,6 +87,7 @@ release section when tagging a release.
   new server-error-to-default loaders while existing debt is migrated by
   vertical slice; raw Executor SQL, SQLx glob imports, and production-capable
   cfg forms cannot bypass its debt accounting.
+
 - Added dependency-aware structural milestone tracking through
   `cargo xtask progress`, with validated acceptance/evidence records for
   restoring the application layer, closing audited stopgaps, and preparing the
@@ -121,6 +122,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserved typed failures and consistency across extracted admin mutations.
+  Collection media actions now validate referenced records and create a new
+  collection with its first item in one transaction. Initial playout creation
+  removes the unbuilt record when scheduler admission fails, automatic
+  collection, schedule, settings, and playout rebuild failures are surfaced,
+  and FFmpeg profile reads no longer mask decode or storage failures as
+  missing profiles.
 - Pull-request labels no longer trigger full CI runs. Hosted-runner fallback is
   now manual-only, preventing dependency automation from spawning duplicate
   workflows while applying routine labels.

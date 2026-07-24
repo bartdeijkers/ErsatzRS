@@ -32,6 +32,13 @@ evidence    = 'Milestones p7b-02 through p7b-05 route playout, scan, block-previ
 resolved    = true
 
 [[debt]]
+id          = 'extracted-mutations-mask-side-effect-failures'
+description = 'Extracted collection and playout mutations can persist partial state or report success after scheduler admission, repository decode, or identity validation failures.'
+discovered  = '2026-07-25'
+evidence    = 'Collection media actions validate both identities and atomically create a new collection with its first item. Initial playout admission failure compensates by deleting the unbuilt playout, automatic collection/schedule/settings/playout rebuild admission is propagated through typed application failures, and FFmpeg optional reads preserve decode and unavailable repository errors. Focused application and infrastructure regressions cover each failure path.'
+resolved    = true
+
+[[debt]]
 id          = 'core-leaks-concrete-storage-error'
 description = 'ersatzrs-core::repositories::RepositoryError contains sqlx::Error, so the core trait boundary depends on the concrete persistence implementation.'
 discovered  = '2026-07-21'

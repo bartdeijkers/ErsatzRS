@@ -280,6 +280,13 @@ SQL statement, row decode, and backend-specific insert/query detail. The
 native web composition root constructs those adapters, and no production
 admin server function or API obtains a raw database pool.
 
+Post-closeout review on 2026-07-25 hardened mutation failure semantics:
+collection media actions validate referenced rows and atomically create a new
+collection with its first item; failed initial playout admission removes the
+unbuilt record; automatic rebuild admission failures remain typed and visible
+across collection, schedule, settings, and playout workflows; and FFmpeg
+profile decode or storage failures are no longer presented as absence.
+
 The architecture baseline fell from 515 direct admin SQL constructors, 173
 server-error-to-default patterns, and 833 row-decode defaults to zero. A new
 `raw_admin_pool` rule also rejects production admin/API pool retrieval.
