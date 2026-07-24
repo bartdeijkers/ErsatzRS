@@ -7,9 +7,8 @@ use serde::Deserialize;
 
 use crate::{
     admin::server_fns::schedules::{
-        copy_schedule_with_pool, delete_schedule_with_pool, replace_schedule_items_with_state,
-        save_schedule_with_state, ScheduleForm, ScheduleItemForm, SmartShuffleForm,
-        COLLECTION_TYPE_COLLECTION, FILL_WITH_GROUP_MODE_NONE, GUIDE_MODE_NORMAL,
+        schedule_form_into_admin, schedule_item_into_admin, ScheduleForm, ScheduleItemForm,
+        SmartShuffleForm, COLLECTION_TYPE_COLLECTION, FILL_WITH_GROUP_MODE_NONE, GUIDE_MODE_NORMAL,
         MARATHON_GROUP_BY_NONE, MULTIPLE_MODE_COUNT, PLAYBACK_ORDER_SHUFFLE, PLAYOUT_MODE_ONE,
         START_TYPE_DYNAMIC, TAIL_MODE_NONE,
     },
@@ -174,7 +173,13 @@ pub async fn save_schedule_form(
         ..ScheduleForm::default()
     };
 
-    match save_schedule_with_state(&state, form).await {
+    match state
+        .application
+        .save_schedule(ersatzrs_app::commands::SaveSchedule {
+            form: schedule_form_into_admin(form),
+        })
+        .await
+    {
         Ok(saved_id) if id == 0 => Redirect::to(&format!("/schedules/{saved_id}/items")),
         Ok(_) => Redirect::to("/schedules"),
         Err(error) => {
@@ -193,7 +198,11 @@ pub async fn delete_schedule_form(
     State(state): State<AppState>,
     Form(input): Form<ScheduleDeleteForm>,
 ) -> Redirect {
-    match delete_schedule_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_schedule(ersatzrs_app::commands::DeleteSchedule { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/schedules"),
         Err(error) => {
             tracing::error!(%error, schedule_id = input.id, "failed to delete schedule from HTML form");
@@ -206,7 +215,14 @@ pub async fn copy_schedule_form(
     State(state): State<AppState>,
     Form(input): Form<ScheduleCopyForm>,
 ) -> Redirect {
-    match copy_schedule_with_pool(&state.pool, input.id, &input.name).await {
+    match state
+        .application
+        .copy_schedule(ersatzrs_app::commands::CopySchedule {
+            id: input.id,
+            name: input.name,
+        })
+        .await
+    {
         Ok(id) => Redirect::to(&format!("/schedules/{id}/items")),
         Err(error) => {
             tracing::error!(%error, schedule_id = input.id, "failed to copy schedule from HTML form");
@@ -252,7 +268,14 @@ pub async fn save_schedule_items_form(State(state): State<AppState>, body: Bytes
     }
 
     normalize_indexes(&mut items);
-    match replace_schedule_items_with_state(&state, schedule_id, items).await {
+    match state
+        .application
+        .replace_schedule_items(ersatzrs_app::commands::ReplaceScheduleItems {
+            schedule_id,
+            items: items.into_iter().map(schedule_item_into_admin).collect(),
+        })
+        .await
+    {
         Ok(()) => Redirect::to(&format!("/schedules/{schedule_id}/items")),
         Err(error) => {
             tracing::error!(%error, schedule_id, "failed to save schedule items from HTML form");

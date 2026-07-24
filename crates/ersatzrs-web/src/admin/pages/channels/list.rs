@@ -10,6 +10,7 @@ use crate::admin::server_fns::channels::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
+    toast::{load_or_notify, use_toast},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/list.module.css");
@@ -25,20 +26,22 @@ pub fn ChannelsListPage() -> impl IntoView {
 fn ChannelsListIsland() -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
+    let load_toast = use_toast();
 
     let rows_resource: LocalResource<Vec<ChannelListRow>> = LocalResource::new(move || {
         let disabled = show_disabled.get();
         let p = params.get();
         async move {
-            list_channel_rows(disabled, p.page, p.page_size)
-                .await
-                .unwrap_or_default()
+            load_or_notify(
+                list_channel_rows(disabled, p.page, p.page_size).await,
+                load_toast,
+            )
         }
     });
 
     let count_resource: LocalResource<u64> = LocalResource::new(move || {
         let disabled = show_disabled.get();
-        async move { count_channels(disabled).await.unwrap_or(0) }
+        async move { load_or_notify(count_channels(disabled).await, load_toast) }
     });
 
     let total = Signal::derive(move || count_resource.get());
@@ -53,13 +56,26 @@ fn ChannelsListIsland() -> impl IntoView {
     // same way the libraries page polls the entity locker (client-side, no
     // SignalR). The set drives the per-row stop-button visibility.
     let active_numbers: RwSignal<Vec<String>> = RwSignal::new(Vec::new());
+    #[cfg(target_arch = "wasm32")]
+    let active_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(numbers) = list_active_channel_numbers().await {
-                        active_numbers.set(numbers);
+                    match list_active_channel_numbers().await {
+                        Ok(numbers) => {
+                            active_numbers.set(numbers);
+                            active_load_failed.set(false);
+                        }
+                        Err(error) if !active_load_failed.get_untracked() => {
+                            active_load_failed.set(true);
+                            load_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                crate::admin::ui::primitives::toast::ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

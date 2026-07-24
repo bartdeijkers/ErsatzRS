@@ -4,19 +4,22 @@
 
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(all(test, feature = "ssr"))]
 use std::collections::{HashMap, HashSet};
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_core::scheduling::{
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
+};
+#[cfg(feature = "ssr")]
+use ersatzrs_core::scheduling::{
     SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset, SchedulingSmartShuffleRule,
     SchedulingSmartShuffleRuleKind, SchedulingSmartShuffleScope,
 };
 
+#[cfg(all(test, feature = "ssr"))]
 const SCHEDULES_PAGE_SIZE_KEY: &str = "pages.schedules.page_size";
-const SCHEDULES_DETAIL_PAGE_SIZE_KEY: &str = "pages.schedules.detail_page_size";
-
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 type DbPool = sqlx::Pool<ersatzrs_infra::db::Db>;
 
 pub const COLLECTION_TYPE_COLLECTION: i32 = 0;
@@ -304,6 +307,197 @@ impl Default for ScheduleForm {
     }
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn schedule_form_from_admin(
+    form: ersatzrs_core::repositories::ScheduleAdminForm,
+) -> ScheduleForm {
+    ScheduleForm {
+        id: form.id,
+        name: form.name,
+        keep_multi_part_episodes_together: form.keep_multi_part_episodes_together,
+        treat_collections_as_shows: form.treat_collections_as_shows,
+        shuffle_schedule_items: form.shuffle_schedule_items,
+        random_start_point: form.random_start_point,
+        fixed_start_time_behavior: form.fixed_start_time_behavior,
+        ..ScheduleForm::default()
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn schedule_form_into_admin(
+    form: ScheduleForm,
+) -> ersatzrs_core::repositories::ScheduleAdminForm {
+    ersatzrs_core::repositories::ScheduleAdminForm {
+        id: form.id,
+        name: form.name,
+        keep_multi_part_episodes_together: form.keep_multi_part_episodes_together,
+        treat_collections_as_shows: form.treat_collections_as_shows,
+        shuffle_schedule_items: form.shuffle_schedule_items,
+        random_start_point: form.random_start_point,
+        fixed_start_time_behavior: form.fixed_start_time_behavior,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn schedule_item_from_admin(
+    item: ersatzrs_core::repositories::ScheduleItemAdmin,
+) -> ScheduleItemForm {
+    ScheduleItemForm {
+        id: item.id,
+        index: item.index,
+        start_type: item.start_type,
+        start_time: item.start_time,
+        fixed_start_time_behavior: item.fixed_start_time_behavior,
+        collection_type: item.collection_type,
+        collection_id: item.collection_id,
+        media_item_id: item.media_item_id,
+        multi_collection_id: item.multi_collection_id,
+        smart_collection_id: item.smart_collection_id,
+        rerun_collection_id: item.rerun_collection_id,
+        playlist_id: item.playlist_id,
+        search_title: item.search_title,
+        search_query: item.search_query,
+        collection_name: item.collection_name,
+        playback_order: item.playback_order,
+        smart_shuffle: {
+            let mut form = smart_shuffle_form_from_policy(&item.smart_shuffle);
+            form.inherited_legacy = item.inherited_legacy_smart_shuffle;
+            form
+        },
+        marathon_group_by: item.marathon_group_by,
+        marathon_shuffle_groups: item.marathon_shuffle_groups,
+        marathon_shuffle_items: item.marathon_shuffle_items,
+        marathon_batch_size: item.marathon_batch_size,
+        fill_with_group_mode: item.fill_with_group_mode,
+        playout_mode: item.playout_mode,
+        multiple_mode: item.multiple_mode,
+        multiple_count: item.multiple_count,
+        duration_hours: item.duration_hours,
+        duration_minutes: item.duration_minutes,
+        tail_mode: item.tail_mode,
+        discard_to_fill_attempts: item.discard_to_fill_attempts,
+        custom_title: item.custom_title,
+        guide_mode: item.guide_mode,
+        pre_roll_filler_id: item.pre_roll_filler_id,
+        mid_roll_filler_id: item.mid_roll_filler_id,
+        post_roll_filler_id: item.post_roll_filler_id,
+        tail_filler_id: item.tail_filler_id,
+        fallback_filler_id: item.fallback_filler_id,
+        watermark_ids: item.watermark_ids,
+        graphics_element_ids: item.graphics_element_ids,
+        preferred_audio_language_code: item.preferred_audio_language_code,
+        preferred_audio_title: item.preferred_audio_title,
+        preferred_subtitle_language_code: item.preferred_subtitle_language_code,
+        subtitle_mode: item.subtitle_mode,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn schedule_item_into_admin(
+    item: ScheduleItemForm,
+) -> ersatzrs_core::repositories::ScheduleItemAdmin {
+    ersatzrs_core::repositories::ScheduleItemAdmin {
+        id: item.id,
+        index: item.index,
+        start_type: item.start_type,
+        start_time: item.start_time,
+        fixed_start_time_behavior: item.fixed_start_time_behavior,
+        collection_type: item.collection_type,
+        collection_id: item.collection_id,
+        media_item_id: item.media_item_id,
+        multi_collection_id: item.multi_collection_id,
+        smart_collection_id: item.smart_collection_id,
+        rerun_collection_id: item.rerun_collection_id,
+        playlist_id: item.playlist_id,
+        search_title: item.search_title,
+        search_query: item.search_query,
+        collection_name: item.collection_name,
+        playback_order: item.playback_order,
+        smart_shuffle: smart_shuffle_policy_from_form(&item.smart_shuffle),
+        inherited_legacy_smart_shuffle: item.smart_shuffle.inherited_legacy,
+        marathon_group_by: item.marathon_group_by,
+        marathon_shuffle_groups: item.marathon_shuffle_groups,
+        marathon_shuffle_items: item.marathon_shuffle_items,
+        marathon_batch_size: item.marathon_batch_size,
+        fill_with_group_mode: item.fill_with_group_mode,
+        playout_mode: item.playout_mode,
+        multiple_mode: item.multiple_mode,
+        multiple_count: item.multiple_count,
+        duration_hours: item.duration_hours,
+        duration_minutes: item.duration_minutes,
+        tail_mode: item.tail_mode,
+        discard_to_fill_attempts: item.discard_to_fill_attempts,
+        custom_title: item.custom_title,
+        guide_mode: item.guide_mode,
+        pre_roll_filler_id: item.pre_roll_filler_id,
+        mid_roll_filler_id: item.mid_roll_filler_id,
+        post_roll_filler_id: item.post_roll_filler_id,
+        tail_filler_id: item.tail_filler_id,
+        fallback_filler_id: item.fallback_filler_id,
+        watermark_ids: item.watermark_ids,
+        graphics_element_ids: item.graphics_element_ids,
+        preferred_audio_language_code: item.preferred_audio_language_code,
+        preferred_audio_title: item.preferred_audio_title,
+        preferred_subtitle_language_code: item.preferred_subtitle_language_code,
+        subtitle_mode: item.subtitle_mode,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn schedule_options_from_admin(
+    options: ersatzrs_core::repositories::ScheduleItemOptions,
+) -> ScheduleItemsEditorOptions {
+    fn simple(
+        rows: Vec<ersatzrs_core::repositories::ScheduleItemOption>,
+    ) -> Vec<ScheduleItemOption> {
+        rows.into_iter()
+            .map(|row| ScheduleItemOption {
+                id: row.id,
+                name: row.name,
+            })
+            .collect()
+    }
+    ScheduleItemsEditorOptions {
+        collections: simple(options.collections),
+        shows: simple(options.shows),
+        seasons: simple(options.seasons),
+        artists: simple(options.artists),
+        multi_collections: simple(options.multi_collections),
+        smart_collections: simple(options.smart_collections),
+        rerun_collections: simple(options.rerun_collections),
+        playlist_groups: simple(options.playlist_groups),
+        playlists: options
+            .playlists
+            .into_iter()
+            .map(|row| PlaylistOption {
+                id: row.id,
+                name: row.name,
+                group_id: row.group_id,
+            })
+            .collect(),
+        fillers: options
+            .fillers
+            .into_iter()
+            .map(|row| FillerOption {
+                id: row.id,
+                name: row.name,
+                filler_kind: row.filler_kind,
+                pad_to_nearest_minute: row.pad_to_nearest_minute,
+            })
+            .collect(),
+        watermarks: simple(options.watermarks),
+        graphics_elements: simple(options.graphics_elements),
+        languages: options
+            .languages
+            .into_iter()
+            .map(|row| ScheduleLanguageOption {
+                code: row.code,
+                name: row.name,
+            })
+            .collect(),
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScheduleItemsPageData {
     pub schedule: ScheduleForm,
@@ -316,10 +510,11 @@ pub async fn get_schedules_page_size() -> Result<(u32, u32), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok((
-        get_page_size_with_pool(&state.pool, SCHEDULES_PAGE_SIZE_KEY).await?,
-        get_page_size_with_pool(&state.pool, SCHEDULES_DETAIL_PAGE_SIZE_KEY).await?,
-    ))
+    state
+        .application
+        .get_schedules_page_sizes()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -327,13 +522,11 @@ pub async fn save_schedules_detail_page_size(page_size: u32) -> Result<(), Serve
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_config_value(
-        &state.pool,
-        SCHEDULES_DETAIL_PAGE_SIZE_KEY,
-        &page_size.max(1).to_string(),
-    )
-    .await?;
-    Ok(())
+    state
+        .application
+        .save_schedules_detail_page_size(page_size)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -345,7 +538,24 @@ pub async fn list_schedules(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_schedules_with_pool(&state.pool, &query, page, page_size).await
+    let (rows, total) = state
+        .application
+        .list_schedules(ersatzrs_app::queries::ListCollections {
+            search: query,
+            page,
+            page_size,
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok((
+        rows.into_iter()
+            .map(|row| ScheduleListRow {
+                id: row.id,
+                name: row.name,
+            })
+            .collect(),
+        total,
+    ))
 }
 
 #[server]
@@ -353,31 +563,53 @@ pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFn
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_schedule_form_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_schedule(id)
+        .await
+        .map(|form| form.map(schedule_form_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn save_schedule(form: ScheduleForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::SaveSchedule;
 
     let state = expect_context::<AppState>();
-    save_schedule_with_state(&state, form).await
+    state
+        .application
+        .save_schedule(SaveSchedule {
+            form: schedule_form_into_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_schedule(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::DeleteSchedule;
 
     let state = expect_context::<AppState>();
-    delete_schedule_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_schedule(DeleteSchedule { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn copy_schedule(id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::CopySchedule;
 
     let state = expect_context::<AppState>();
-    copy_schedule_with_pool(&state.pool, id, &name).await
+    state
+        .application
+        .copy_schedule(CopySchedule { id, name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -387,11 +619,29 @@ pub async fn get_schedule_items_page(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let Some(schedule) = get_schedule_form_with_pool(&state.pool, id).await? else {
+    let Some(schedule) = state
+        .application
+        .get_schedule(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(schedule_form_from_admin)
+    else {
         return Ok(None);
     };
-    let items = list_schedule_items_with_pool(&state.pool, id).await?;
-    let options = load_schedule_item_options_with_pool(&state.pool).await?;
+    let items = state
+        .application
+        .list_schedule_items(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(schedule_item_from_admin)
+        .collect();
+    let options = state
+        .application
+        .get_schedule_item_options()
+        .await
+        .map(schedule_options_from_admin)
+        .map_err(ServerFnError::new)?;
     Ok(Some(ScheduleItemsPageData {
         schedule,
         items,
@@ -405,12 +655,20 @@ pub async fn replace_schedule_items(
     items: Vec<ScheduleItemForm>,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::ReplaceScheduleItems;
 
     let state = expect_context::<AppState>();
-    replace_schedule_items_with_state(&state, schedule_id, items).await
+    state
+        .application
+        .replace_schedule_items(ReplaceScheduleItems {
+            schedule_id,
+            items: items.into_iter().map(schedule_item_into_admin).collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_page_size_with_pool(pool: &DbPool, key: &str) -> Result<u32, ServerFnError> {
     let value: Option<String> =
         sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
@@ -424,7 +682,7 @@ pub async fn get_page_size_with_pool(pool: &DbPool, key: &str) -> Result<u32, Se
         .unwrap_or(10))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_schedules_with_pool(
     pool: &DbPool,
     query: &str,
@@ -487,7 +745,7 @@ pub async fn list_schedules_with_pool(
     Ok((rows, total.max(0) as u64))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_schedule_form_with_pool(
     pool: &DbPool,
     id: i64,
@@ -525,7 +783,7 @@ pub async fn get_schedule_form_with_pool(
     Ok(Some(form))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_schedule_with_state(
     state: &crate::host::state::AppState,
     form: ScheduleForm,
@@ -544,7 +802,7 @@ pub async fn save_schedule_with_state(
     Ok(saved_id)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_schedule_with_pool(
     pool: &DbPool,
     form: ScheduleForm,
@@ -614,7 +872,7 @@ pub async fn save_schedule_with_pool(
     Ok(saved_id)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_legacy_schedule_smart_shuffle_policy(
     pool: &DbPool,
     schedule_id: i64,
@@ -772,7 +1030,7 @@ fn smart_shuffle_rule_name(kind: SchedulingSmartShuffleRuleKind) -> &'static str
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_schedule_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let item_ids: Vec<i64> = sqlx::query_scalar(
         r#"SELECT "Id" FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
@@ -797,7 +1055,7 @@ pub async fn delete_schedule_with_pool(pool: &DbPool, id: i64) -> Result<(), Ser
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn copy_schedule_with_pool(
     pool: &DbPool,
     id: i64,
@@ -899,7 +1157,7 @@ pub async fn copy_schedule_with_pool(
     Ok(new_schedule_id)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn copy_subtype_and_joins(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     old_item_id: i64,
@@ -957,7 +1215,7 @@ async fn copy_subtype_and_joins(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_unique_schedule_name(
     pool: &DbPool,
     schedule_id: i64,
@@ -984,7 +1242,7 @@ async fn validate_unique_schedule_name(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn schedule_update_needs_refresh(
     pool: &DbPool,
     schedule_id: i64,
@@ -1017,7 +1275,7 @@ async fn schedule_update_needs_refresh(
     )
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 pub async fn list_schedule_items_with_pool(
     pool: &DbPool,
@@ -1183,7 +1441,7 @@ pub async fn list_schedule_items_with_pool(
     Ok(items)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn load_schedule_item_options_with_pool(
     pool: &DbPool,
 ) -> Result<ScheduleItemsEditorOptions, ServerFnError> {
@@ -1204,7 +1462,7 @@ pub async fn load_schedule_item_options_with_pool(
     })
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_simple_options(
     pool: &DbPool,
     sql: &str,
@@ -1223,7 +1481,7 @@ async fn load_simple_options(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_playlist_options(pool: &DbPool) -> Result<Vec<PlaylistOption>, ServerFnError> {
     use sqlx::Row;
 
@@ -1244,7 +1502,7 @@ async fn load_playlist_options(pool: &DbPool) -> Result<Vec<PlaylistOption>, Ser
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_filler_options(pool: &DbPool) -> Result<Vec<FillerOption>, ServerFnError> {
     use sqlx::Row;
 
@@ -1267,7 +1525,7 @@ async fn load_filler_options(pool: &DbPool) -> Result<Vec<FillerOption>, ServerF
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_language_options(
     pool: &DbPool,
 ) -> Result<Vec<ScheduleLanguageOption>, ServerFnError> {
@@ -1317,7 +1575,7 @@ async fn load_language_options(
     Ok(options)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn replace_schedule_items_with_state(
     state: &crate::host::state::AppState,
     schedule_id: i64,
@@ -1329,7 +1587,7 @@ pub async fn replace_schedule_items_with_state(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 pub async fn replace_schedule_items_with_pool(
     pool: &DbPool,
@@ -1514,7 +1772,7 @@ pub async fn replace_schedule_items_with_pool(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub(crate) async fn persist_smart_shuffle_policy_tx(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     key: &str,
@@ -1530,7 +1788,7 @@ pub(crate) async fn persist_smart_shuffle_policy_tx(
     upsert_smart_shuffle_policy_tx(tx, key, policy).await
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub(crate) async fn persist_smart_shuffle_attachment_tx(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     key: &str,
@@ -1539,7 +1797,7 @@ pub(crate) async fn persist_smart_shuffle_attachment_tx(
     upsert_smart_shuffle_policy_tx(tx, key, policy).await
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn upsert_smart_shuffle_policy_tx(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     key: &str,
@@ -1561,7 +1819,7 @@ async fn upsert_smart_shuffle_policy_tx(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn padded_filler_ids(pool: &DbPool) -> Result<HashSet<i64>, ServerFnError> {
     let rows: Vec<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "FillerPreset" WHERE "PadToNearestMinute" = ?"#)
@@ -1571,7 +1829,7 @@ async fn padded_filler_ids(pool: &DbPool) -> Result<HashSet<i64>, ServerFnError>
     Ok(rows.into_iter().collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn playout_ids_using_schedule(
     pool: &DbPool,
     schedule_id: i64,
@@ -1584,7 +1842,7 @@ async fn playout_ids_using_schedule(
     .await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: Vec<i64>) {
     use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
     use ersatzrs_core::scheduling::PlayoutBuildMode;
@@ -1617,6 +1875,7 @@ fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: 
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn validate_schedule_items(
     items: &[ScheduleItemForm],
     padded_filler_ids: &HashSet<i64>,
@@ -1647,6 +1906,7 @@ fn validate_schedule_items(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn validate_smart_shuffle_form(form: &SmartShuffleForm) -> Result<(), ServerFnError> {
     if form.preset == "off" {
         return Ok(());
@@ -1667,6 +1927,7 @@ pub(crate) fn validate_smart_shuffle_form(form: &SmartShuffleForm) -> Result<(),
     Ok(())
 }
 
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 fn validate_schedule_item(
     item: &ScheduleItemForm,
@@ -1786,6 +2047,7 @@ fn validate_schedule_item(
     Ok(())
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn collection_key(item: &ScheduleItemForm) -> Option<String> {
     match item.collection_type {
         COLLECTION_TYPE_COLLECTION => item.collection_id.map(|id| format!("collection:{id}")),
@@ -1812,6 +2074,7 @@ fn collection_key(item: &ScheduleItemForm) -> Option<String> {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn normalize_schedule_item_dependencies(item: &mut ScheduleItemForm) {
     if item.collection_type != COLLECTION_TYPE_PLAYLIST
         && item.multiple_mode == MULTIPLE_MODE_PLAYLIST_ITEM_SIZE
@@ -1863,6 +2126,7 @@ fn normalize_schedule_item_dependencies(item: &mut ScheduleItemForm) {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn can_fill_with_groups(item: &ScheduleItemForm) -> bool {
     matches!(
         item.playout_mode,
@@ -1876,6 +2140,7 @@ fn can_fill_with_groups(item: &ScheduleItemForm) -> bool {
         )
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn fill_with_group_mode_for(item: &ScheduleItemForm) -> i32 {
     if matches!(item.playout_mode, PLAYOUT_MODE_FLOOD | PLAYOUT_MODE_ONE) {
         FILL_WITH_GROUP_MODE_NONE
@@ -1884,6 +2149,7 @@ fn fill_with_group_mode_for(item: &ScheduleItemForm) -> i32 {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn discard_to_fill_attempts_for(item: &ScheduleItemForm) -> i32 {
     if matches!(
         item.playback_order,
@@ -1895,6 +2161,7 @@ fn discard_to_fill_attempts_for(item: &ScheduleItemForm) -> i32 {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn trimmed_optional(value: &str) -> Option<&str> {
     let value = value.trim();
     if value.is_empty() {
@@ -1904,6 +2171,7 @@ fn trimmed_optional(value: &str) -> Option<&str> {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn parse_id_list(s: Option<String>) -> Vec<i64> {
     s.unwrap_or_default()
         .split(',')
@@ -1912,6 +2180,7 @@ fn parse_id_list(s: Option<String>) -> Vec<i64> {
         .collect()
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn parse_duration_parts(duration: Option<String>) -> (i32, i32) {
     let Some(duration) = duration else {
         return (1, 0);
@@ -1925,11 +2194,12 @@ fn parse_duration_parts(duration: Option<String>) -> (i32, i32) {
     (hours, minutes)
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn format_duration(hours: i32, minutes: i32) -> String {
     format!("{:02}:{:02}:00", hours.max(0), minutes.clamp(0, 59))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn read_bool(row: &ersatzrs_infra::db::DbRow, column: &'static str) -> bool {
     use sqlx::Row;
     row.try_get::<bool, _>(column)
@@ -1937,7 +2207,7 @@ fn read_bool(row: &ersatzrs_infra::db::DbRow, column: &'static str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn playout_mode_from_row(row: &ersatzrs_infra::db::DbRow) -> i32 {
     use sqlx::Row;
     if row
@@ -1966,7 +2236,7 @@ fn playout_mode_from_row(row: &ersatzrs_infra::db::DbRow) -> i32 {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn item_collection_name(row: &ersatzrs_infra::db::DbRow, id: i64) -> String {
     use sqlx::Row;
     for column in [
@@ -2010,7 +2280,7 @@ fn item_collection_name(row: &ersatzrs_infra::db::DbRow, id: i64) -> String {
     format!("Schedule Item #{id}")
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn save_config_value(pool: &DbPool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     let result = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
         .bind(value)

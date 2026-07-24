@@ -7,11 +7,8 @@ use serde::{de, Deserialize, Deserializer};
 
 use crate::{
     admin::server_fns::decos::{
-        create_deco_group_with_pool, create_deco_template_group_with_pool,
-        create_deco_template_with_pool, create_deco_with_pool, delete_deco_group_with_pool,
-        delete_deco_template_group_with_pool, delete_deco_template_with_pool,
-        delete_deco_with_pool, save_deco_template_with_pool, save_deco_with_pool,
-        DecoBreakContentForm, DecoForm, DecoTemplateItemForm, DecoTemplateWithItemsForm,
+        deco_form_into_admin, deco_template_form_into_command, DecoBreakContentForm, DecoForm,
+        DecoTemplateItemForm, DecoTemplateWithItemsForm,
     },
     host::state::AppState,
 };
@@ -26,7 +23,11 @@ pub async fn create_deco_group_form(
     State(state): State<AppState>,
     Form(input): Form<CreateNameForm>,
 ) -> Redirect {
-    match create_deco_group_with_pool(&state.pool, &input.name).await {
+    match state
+        .application
+        .create_deco_group(ersatzrs_app::commands::CreateDecoGroup { name: input.name })
+        .await
+    {
         Ok(_) => Redirect::to("/decos"),
         Err(error) => {
             tracing::error!(%error, "failed to create deco group from HTML form");
@@ -46,7 +47,14 @@ pub async fn create_deco_form(
     State(state): State<AppState>,
     Form(input): Form<CreateGroupedNameForm>,
 ) -> Redirect {
-    match create_deco_with_pool(&state.pool, input.group_id, &input.name).await {
+    match state
+        .application
+        .create_deco(ersatzrs_app::commands::CreateDeco {
+            group_id: input.group_id,
+            name: input.name,
+        })
+        .await
+    {
         Ok(id) => Redirect::to(&format!("/decos/{id}")),
         Err(error) => {
             tracing::error!(%error, "failed to create deco from HTML form");
@@ -64,7 +72,11 @@ pub async fn delete_deco_group_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_deco_group_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_deco_group(ersatzrs_app::commands::DeleteDecoGroup { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/decos"),
         Err(error) => {
             tracing::error!(%error, group_id = input.id, "failed to delete deco group from HTML form");
@@ -77,7 +89,11 @@ pub async fn delete_deco_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_deco_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_deco(ersatzrs_app::commands::DeleteDeco { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/decos"),
         Err(error) => {
             tracing::error!(%error, deco_id = input.id, "failed to delete deco from HTML form");
@@ -153,7 +169,13 @@ pub struct DecoSaveForm {
 pub async fn save_deco_form(State(state): State<AppState>, body: Bytes) -> Redirect {
     let input = DecoSaveForm::from_urlencoded_bytes(&body);
     let deco_id = input.id;
-    match save_deco_with_pool(&state.pool, input.into_deco_form()).await {
+    match state
+        .application
+        .save_deco(ersatzrs_app::commands::SaveDeco {
+            form: deco_form_into_admin(input.into_deco_form()),
+        })
+        .await
+    {
         Ok(()) => Redirect::to("/decos"),
         Err(error) => {
             tracing::error!(%error, deco_id, "failed to save deco from HTML form");
@@ -294,7 +316,13 @@ pub async fn create_deco_template_group_form(
     State(state): State<AppState>,
     Form(input): Form<CreateNameForm>,
 ) -> Redirect {
-    match create_deco_template_group_with_pool(&state.pool, &input.name).await {
+    match state
+        .application
+        .create_deco_template_group(ersatzrs_app::commands::CreateDecoTemplateGroup {
+            name: input.name,
+        })
+        .await
+    {
         Ok(_) => Redirect::to("/deco-templates"),
         Err(error) => {
             tracing::error!(%error, "failed to create deco template group from HTML form");
@@ -307,7 +335,14 @@ pub async fn create_deco_template_form(
     State(state): State<AppState>,
     Form(input): Form<CreateGroupedNameForm>,
 ) -> Redirect {
-    match create_deco_template_with_pool(&state.pool, input.group_id, &input.name).await {
+    match state
+        .application
+        .create_deco_template(ersatzrs_app::commands::CreateDecoTemplate {
+            group_id: input.group_id,
+            name: input.name,
+        })
+        .await
+    {
         Ok(id) => Redirect::to(&format!("/deco-templates/{id}")),
         Err(error) => {
             tracing::error!(%error, "failed to create deco template from HTML form");
@@ -320,7 +355,13 @@ pub async fn delete_deco_template_group_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_deco_template_group_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_deco_template_group(ersatzrs_app::commands::DeleteDecoTemplateGroup {
+            id: input.id,
+        })
+        .await
+    {
         Ok(()) => Redirect::to("/deco-templates"),
         Err(error) => {
             tracing::error!(%error, group_id = input.id, "failed to delete deco template group from HTML form");
@@ -333,7 +374,11 @@ pub async fn delete_deco_template_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_deco_template_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_deco_template(ersatzrs_app::commands::DeleteDecoTemplate { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/deco-templates"),
         Err(error) => {
             tracing::error!(%error, template_id = input.id, "failed to delete deco template from HTML form");
@@ -363,7 +408,11 @@ pub async fn save_deco_template_items_form(
     Form(input): Form<DecoTemplateItemsSaveForm>,
 ) -> Redirect {
     let template_id = input.template_id;
-    match save_deco_template_with_pool(&state.pool, input.into_template_form()).await {
+    match state
+        .application
+        .save_deco_template(deco_template_form_into_command(input.into_template_form()))
+        .await
+    {
         Ok(()) => Redirect::to("/deco-templates"),
         Err(error) => {
             tracing::error!(%error, template_id, "failed to save deco template items from HTML form");

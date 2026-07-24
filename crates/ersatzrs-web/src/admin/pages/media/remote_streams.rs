@@ -25,6 +25,12 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::ui::primitives::toast::ToastSeverity;
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/remote_streams.module.css");
 mod card_style {
@@ -49,27 +55,24 @@ pub fn RemoteStreamsPage() -> impl IntoView {
             .saturating_sub(1)
     });
     let initial_query = query.clone();
-    let initial: Resource<(
-        (Vec<MediaCardRow>, u64),
-        crate::admin::server_fns::media_browser::LetterPageMap,
-    )> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         move || (initial_query.clone(), page),
         move |(query, page)| async move {
-            let (rows, page_map) = tokio::join!(
+            tokio::try_join!(
                 list_remote_streams(query.clone(), page, PAGE_SIZE),
                 remote_stream_page_map(query, PAGE_SIZE),
-            );
-            (rows.unwrap_or_default(), page_map.unwrap_or_default())
+            )
         },
     );
 
     view! {
         <RemoteStreamsNoScriptFallback query=query.clone() page=page/>
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let query = query.clone();
-                initial.get().map(move |((initial_rows, initial_total), initial_page_map)| {
-                    view! {
+                initial.get().map(move |result| admin_result_view(
+                    result,
+                    |((initial_rows, initial_total), initial_page_map)| view! {
                         <RemoteStreamsIsland
                             query=query.clone()
                             page=page
@@ -77,8 +80,8 @@ pub fn RemoteStreamsPage() -> impl IntoView {
                             initial_total=initial_total
                             initial_page_map=initial_page_map
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }
@@ -86,70 +89,78 @@ pub fn RemoteStreamsPage() -> impl IntoView {
 
 #[component]
 fn RemoteStreamsNoScriptFallback(query: String, page: u32) -> impl IntoView {
-    let (items, total) = remote_stream_rows_for_noscript(query.clone(), page);
+    let rows = remote_stream_rows_for_noscript(query.clone(), page);
 
     view! {
         <noscript>
             <style>"leptos-island { display: none !important; }"</style>
-            <div class=style::page>
-                <div class=style::action_bar>
-                    <div class=style::action_row>
-                        <span class=style::query_label>
-                            {format_remote_stream_count(&query, total)}
-                        </span>
-                        <Pager query=query.clone() page=page total=total/>
-                        <div class=style::actions></div>
+            {admin_result_view(rows, move |(items, total)| view! {
+                <div class=style::page>
+                    <div class=style::action_bar>
+                        <div class=style::action_row>
+                            <span class=style::query_label>
+                                {format_remote_stream_count(&query, total)}
+                            </span>
+                            <Pager query=query.clone() page=page total=total/>
+                            <div class=style::actions></div>
+                        </div>
+                    </div>
+                    <div class=style::scroll>
+                        <section class=style::content>
+                            <h1 class=style::title>{tr(TextKey::RemoteStreams)}</h1>
+                            <div class=style::divider></div>
+                            {if items.is_empty() {
+                                view! { <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p> }.into_any()
+                            } else {
+                                view! {
+                                    <div class=style::grid>
+                                        {items.into_iter().map(|row| {
+                                            let title = row.title;
+                                            let subtitle = row.subtitle;
+                                            let placeholder = first_letter_placeholder(&row.sort_title);
+                                            view! {
+                                                <div class=card_style::card>
+                                                    <div class=card_style::poster>
+                                                        <div class=card_style::poster_placeholder>{placeholder}</div>
+                                                    </div>
+                                                    <div class=card_style::caption>
+                                                        <p class=card_style::caption_title title=title.clone()>{title.clone()}</p>
+                                                        {subtitle.map(|value| view! {
+                                                            <p class=card_style::caption_sub title=value.clone()>{value.clone()}</p>
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                }.into_any()
+                            }}
+                        </section>
                     </div>
                 </div>
-                <div class=style::scroll>
-                    <section class=style::content>
-                        <h1 class=style::title>{tr(TextKey::RemoteStreams)}</h1>
-                        <div class=style::divider></div>
-                        {if items.is_empty() {
-                            view! { <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p> }.into_any()
-                        } else {
-                            view! {
-                                <div class=style::grid>
-                                    {items.into_iter().map(|row| {
-                                        let title = row.title;
-                                        let subtitle = row.subtitle;
-                                        let placeholder = first_letter_placeholder(&row.sort_title);
-                                        view! {
-                                            <div class=card_style::card>
-                                                <div class=card_style::poster>
-                                                    <div class=card_style::poster_placeholder>{placeholder}</div>
-                                                </div>
-                                                <div class=card_style::caption>
-                                                    <p class=card_style::caption_title title=title.clone()>{title.clone()}</p>
-                                                    {subtitle.map(|value| view! {
-                                                        <p class=card_style::caption_sub title=value.clone()>{value.clone()}</p>
-                                                    })}
-                                                </div>
-                                            </div>
-                                        }
-                                    }).collect_view()}
-                                </div>
-                            }.into_any()
-                        }}
-                    </section>
-                </div>
-            </div>
+            }.into_any())}
         </noscript>
     }
 }
 
 #[cfg(feature = "ssr")]
-fn remote_stream_rows_for_noscript(query: String, page: u32) -> (Vec<MediaCardRow>, u64) {
+fn remote_stream_rows_for_noscript(
+    query: String,
+    page: u32,
+) -> Result<(Vec<MediaCardRow>, u64), String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current()
             .block_on(list_remote_streams(query, page, PAGE_SIZE))
-            .unwrap_or_default()
+            .map_err(|error| error.to_string())
     })
 }
 
 #[cfg(not(feature = "ssr"))]
-fn remote_stream_rows_for_noscript(_query: String, _page: u32) -> (Vec<MediaCardRow>, u64) {
-    (Vec::new(), 0)
+fn remote_stream_rows_for_noscript(
+    _query: String,
+    _page: u32,
+) -> Result<(Vec<MediaCardRow>, u64), String> {
+    Ok((Vec::new(), 0))
 }
 
 #[island]
@@ -163,16 +174,13 @@ fn RemoteStreamsIsland(
     let media_revision = RwSignal::new(String::new());
     let current_rows = RwSignal::new((initial_rows, initial_total));
     let current_page_map = RwSignal::new(initial_page_map);
+    let load_toast = use_toast();
     let q_for_rows = query.clone();
     let rows: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
         let q = q_for_rows.clone();
         let p = page;
         let _ = media_revision.get();
-        async move {
-            list_remote_streams(q, p, PAGE_SIZE)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_remote_streams(q, p, PAGE_SIZE).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
@@ -191,12 +199,10 @@ fn RemoteStreamsIsland(
     let page_map = LocalResource::new(move || {
         let q = q_for_map.clone();
         let _ = media_revision.get();
-        async move {
-            remote_stream_page_map(q, PAGE_SIZE)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(remote_stream_page_map(q, PAGE_SIZE).await, load_toast) }
     });
+    #[cfg(target_arch = "wasm32")]
+    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
             current_page_map.maybe_update(|current| {
@@ -215,10 +221,21 @@ fn RemoteStreamsIsland(
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
+                            revision_load_failed.set(false);
                         }
+                        Err(error) if !revision_load_failed.get_untracked() => {
+                            revision_load_failed.set(true);
+                            load_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

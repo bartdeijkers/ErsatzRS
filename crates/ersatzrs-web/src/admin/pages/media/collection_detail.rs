@@ -34,7 +34,8 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::{
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::AdminErrorState,
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 // Card grid styles (poster, caption) come from the shared primitive.
@@ -70,29 +71,31 @@ pub fn CollectionDetailPage() -> impl IntoView {
     let detail = load_collection_detail_initial(id);
 
     match detail {
-        Some(detail) => view! { <CollectionDetailIsland initial_detail=detail/> }.into_any(),
-        None => view! {
+        Ok(Some(detail)) => view! { <CollectionDetailIsland initial_detail=detail/> }.into_any(),
+        Ok(None) => view! {
             <div class=style::not_found>
                 <h1>{tr(TextKey::CollectionNotFound)}</h1>
                 <a href="/media/collections">{tr(TextKey::BackToCollections)}</a>
             </div>
         }
         .into_any(),
+        Err(error) => view! { <AdminErrorState error/> }.into_any(),
     }
 }
 
-fn load_collection_detail_initial(id: i64) -> Option<CollectionDetail> {
+fn load_collection_detail_initial(id: i64) -> Result<Option<CollectionDetail>, String> {
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async move { get_collection_detail(id).await.ok().flatten() })
+                .block_on(async move { get_collection_detail(id).await })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 
@@ -109,9 +112,10 @@ fn CollectionDetailIsland(initial_detail: CollectionDetail) -> impl IntoView {
     // re-runs and the grid reflects the new state.
     let refresh: RwSignal<u32> = RwSignal::new(0);
     let current_detail = RwSignal::new(initial_detail);
+    let load_toast = use_toast();
     let data: LocalResource<Option<CollectionDetail>> = LocalResource::new(move || {
         let _ = refresh.get();
-        async move { get_collection_detail(id).await.ok().flatten() }
+        async move { load_or_notify(get_collection_detail(id).await, load_toast) }
     });
 
     Effect::new(move |_| {

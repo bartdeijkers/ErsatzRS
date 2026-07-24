@@ -4,24 +4,37 @@ use super::style;
 
 #[component]
 pub(super) fn PlayoutWarningBadge() -> impl IntoView {
-    let warnings = load_playout_warning_count_initial();
+    let (warnings, load_error) = match load_playout_warning_count_initial() {
+        Ok(warnings) => (warnings, None),
+        Err(error) => (0, Some(error)),
+    };
     let display = if warnings > 0 { "inline-flex" } else { "none" };
     let text = warnings.to_string();
+    let state = if load_error.is_some() {
+        "error"
+    } else {
+        "ready"
+    };
 
     view! {
-        <span
-            class=style::nav_badge_warning
-            data-playout-warning-badge
-            style:display=display
-        >
-            {text}
+        <span style="display:contents" data-state=state title=load_error>
+            <span
+                class=style::nav_badge_warning
+                data-playout-warning-badge
+                style:display=display
+            >
+                {text}
+            </span>
         </span>
     }
 }
 
 #[component]
 pub(super) fn HealthBadge() -> impl IntoView {
-    let (errors, warnings) = load_health_counts_initial();
+    let (errors, warnings, load_error) = match load_health_counts_initial() {
+        Ok((errors, warnings)) => (errors, warnings, None),
+        Err(error) => (0, 0, Some(error)),
+    };
     let error_display = if errors > 0 { "inline-flex" } else { "none" };
     let warning_display = if errors == 0 && warnings > 0 {
         "inline-flex"
@@ -30,9 +43,14 @@ pub(super) fn HealthBadge() -> impl IntoView {
     };
     let error_text = errors.to_string();
     let warning_text = warnings.to_string();
+    let state = if load_error.is_some() {
+        "error"
+    } else {
+        "ready"
+    };
 
     view! {
-        <span style="display:contents" data-health-badges>
+        <span style="display:contents" data-health-badges data-state=state title=load_error>
             <span
                 class=style::nav_badge_error
                 data-health-error-badge
@@ -51,69 +69,47 @@ pub(super) fn HealthBadge() -> impl IntoView {
     }
 }
 
-fn load_playout_warning_count_initial() -> u32 {
+fn load_playout_warning_count_initial() -> Result<u32, String> {
     #[cfg(feature = "ssr")]
     {
         use crate::host::state::AppState;
 
-        let Some(state) = use_context::<AppState>() else {
-            return 0;
-        };
-        let pool = state.pool.clone();
-        let count = async move {
-            sqlx::query_scalar::<_, i64>(
-                r#"SELECT COUNT(*) FROM "PlayoutBuildStatus" WHERE "Success" = 0"#,
-            )
-            .fetch_one(&pool)
-            .await
-            .ok()
-            .and_then(|count| u32::try_from(count).ok())
-            .unwrap_or(0)
-        };
+        let state = use_context::<AppState>()
+            .ok_or_else(|| "admin application context is unavailable".to_owned())?;
+        let application = state.application.clone();
+        let count = async move { application.count_playout_warnings().await };
 
         match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(count)),
-            Err(_) => 0,
+            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(count))
+                .map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
     }
 
     #[cfg(not(feature = "ssr"))]
     {
-        0
+        Ok(0)
     }
 }
 
-fn load_health_counts_initial() -> (u32, u32) {
+fn load_health_counts_initial() -> Result<(u32, u32), String> {
     #[cfg(feature = "ssr")]
     {
         use crate::host::state::AppState;
-        use ersatzrs_infra::health::SqlHealthCheckStore;
-
-        let Some(state) = use_context::<AppState>() else {
-            return (0, 0);
-        };
-        let state_for_counts = state.clone();
-        let state_for_store = state.clone();
-        let counts = async move {
-            let (mut errors, mut warnings) = state_for_counts.health_issue_counts().await;
-
-            let store = SqlHealthCheckStore::new(state_for_store.pool.clone());
-            if let Ok(summary) = store.load_summary().await {
-                errors = errors.saturating_add(summary.errors);
-                warnings = warnings.saturating_add(summary.warnings);
-            }
-
-            (errors, warnings)
-        };
+        let state = use_context::<AppState>()
+            .ok_or_else(|| "admin application context is unavailable".to_owned())?;
+        let application = state.application.clone();
+        let counts = async move { application.admin_health_issue_counts().await };
 
         match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(counts)),
-            Err(_) => (0, 0),
+            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(counts))
+                .map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
     }
 
     #[cfg(not(feature = "ssr"))]
     {
-        (0, 0)
+        Ok((0, 0))
     }
 }

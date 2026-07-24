@@ -1,13 +1,13 @@
 //! Typed admin read models for the library route family.
 
 use ersatzrs_core::repositories::Result;
-use serde::{Deserialize, Serialize};
+use ersatzrs_core::repositories::{AdminExternalCollectionRow, AdminLibraryRow};
 
 use crate::db::DbPool;
 use crate::repositories::common::map_data_access_error;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
-pub struct AdminLibraryRow {
+#[derive(sqlx::FromRow)]
+struct AdminLibraryDbRow {
     #[sqlx(rename = "Id")]
     pub id: i64,
     #[sqlx(rename = "Name")]
@@ -22,8 +22,8 @@ pub struct AdminLibraryRow {
     pub media_source_id: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
-pub struct AdminExternalCollectionRow {
+#[derive(sqlx::FromRow)]
+struct AdminExternalCollectionDbRow {
     #[sqlx(rename = "MediaSourceId")]
     pub media_source_id: i64,
     #[sqlx(rename = "Kind")]
@@ -40,7 +40,7 @@ pub struct AdminExternalCollectionRow {
 /// Returns a repository database or decode error when the query or typed row
 /// projection fails.
 pub async fn load_libraries(pool: &DbPool) -> Result<Vec<AdminLibraryRow>> {
-    sqlx::query_as::<_, AdminLibraryRow>(
+    sqlx::query_as::<_, AdminLibraryDbRow>(
         r#"SELECT
                l."Id" AS "Id",
                COALESCE(l."Name", '') AS "Name",
@@ -72,6 +72,18 @@ pub async fn load_libraries(pool: &DbPool) -> Result<Vec<AdminLibraryRow>> {
     .fetch_all(pool)
     .await
     .map_err(|error| map_data_access_error("admin library row", &error))
+    .map(|rows| {
+        rows.into_iter()
+            .map(|row| AdminLibraryRow {
+                id: row.id,
+                name: row.name,
+                kind: row.kind,
+                media_kind: row.media_kind,
+                source_name: row.source_name,
+                media_source_id: row.media_source_id,
+            })
+            .collect()
+    })
 }
 
 /// Load external-collection sources without dropping rows whose projection is
@@ -82,7 +94,7 @@ pub async fn load_libraries(pool: &DbPool) -> Result<Vec<AdminLibraryRow>> {
 /// Returns a repository database or decode error when the query or typed row
 /// projection fails.
 pub async fn load_external_collections(pool: &DbPool) -> Result<Vec<AdminExternalCollectionRow>> {
-    sqlx::query_as::<_, AdminExternalCollectionRow>(
+    sqlx::query_as::<_, AdminExternalCollectionDbRow>(
         r#"SELECT DISTINCT
                l."MediaSourceId" AS "MediaSourceId",
                CASE
@@ -107,6 +119,15 @@ pub async fn load_external_collections(pool: &DbPool) -> Result<Vec<AdminExterna
     .fetch_all(pool)
     .await
     .map_err(|error| map_data_access_error("admin external collection row", &error))
+    .map(|rows| {
+        rows.into_iter()
+            .map(|row| AdminExternalCollectionRow {
+                media_source_id: row.media_source_id,
+                kind: row.kind,
+                server_name: row.server_name,
+            })
+            .collect()
+    })
 }
 
 #[cfg(all(test, not(feature = "mysql")))]

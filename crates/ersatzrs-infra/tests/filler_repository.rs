@@ -38,3 +38,49 @@ async fn filler_repository_round_trips_lists_and_deletes() {
     repos.filler.delete(1).await.unwrap();
     assert!(repos.filler.list().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn filler_admin_create_update_absence_and_checked_delete_are_typed() {
+    let repos = make_repositories(common::test_db().await);
+    let mut preset = FillerPreset {
+        name: "bumper".to_owned(),
+        filler_kind: FillerKind::PreRoll,
+        filler_mode: FillerMode::Duration,
+        duration: Some(chrono::Duration::seconds(15)),
+        ..FillerPreset::default()
+    };
+    let id = repos.filler.save_admin(&preset).await.unwrap();
+    assert!(id > 0);
+    assert!(repos.filler.name_exists(0, "bumper").await.unwrap());
+    assert_eq!(
+        repos
+            .filler
+            .get_optional_admin(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .duration,
+        Some(chrono::Duration::seconds(15))
+    );
+
+    preset.id = id;
+    preset.name = "bumper updated".to_owned();
+    assert_eq!(repos.filler.save_admin(&preset).await.unwrap(), id);
+    assert!(repos
+        .filler
+        .get_optional_admin(99_999)
+        .await
+        .unwrap()
+        .is_none());
+    repos.filler.delete_admin(id).await.unwrap();
+    assert!(repos.filler.delete_admin(id).await.is_err());
+}
+
+#[tokio::test]
+async fn filler_admin_reads_report_closed_pool_errors() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    pool.close().await;
+    assert!(repos.filler.get_optional_admin(1).await.is_err());
+    assert!(repos.filler.name_exists(0, "name").await.is_err());
+}

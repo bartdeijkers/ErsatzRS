@@ -24,7 +24,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use sqlx::Row;
 use std::collections::HashMap;
 
 use ersatzrs_infra::file_system_layout::data_path;
@@ -211,25 +210,32 @@ async fn serve_local_artwork(kind: &str, file_name: &str) -> Response {
         if candidate.as_os_str().is_empty() {
             continue;
         }
-        if let Ok(bytes) = tokio::fs::read(&candidate).await {
-            let ext = candidate
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("jpg");
-            let mime = match ext {
-                "png" => "image/png",
-                "gif" => "image/gif",
-                "webp" => "image/webp",
-                _ => "image/jpeg",
-            };
-            return (
-                [
-                    (header::CONTENT_TYPE, mime.to_string()),
-                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-                ],
-                Body::from(bytes),
-            )
-                .into_response();
+        match tokio::fs::read(&candidate).await {
+            Ok(bytes) => {
+                let ext = candidate
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("jpg");
+                let mime = match ext {
+                    "png" => "image/png",
+                    "gif" => "image/gif",
+                    "webp" => "image/webp",
+                    _ => "image/jpeg",
+                };
+                return (
+                    [
+                        (header::CONTENT_TYPE, mime.to_string()),
+                        (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
+                    ],
+                    Body::from(bytes),
+                )
+                    .into_response();
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(%error, path = %candidate.display(), "failed to read local artwork");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         }
     }
 
@@ -243,13 +249,15 @@ async fn serve_jellyfin_artwork(
 ) -> Response {
     // Need (address, api_key). Pick the first Jellyfin connection — `ErsatzTV`
     // allows only one active source at a time, so this matches its behaviour.
-    let address = match query_first_jellyfin_address(&state.pool).await {
+    let address = match state.application.first_jellyfin_address().await {
         Ok(Some(addr)) => addr,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    let Ok(Some(api_key)) =
-        query_config_value(&state.pool, "jellyfin.current_server_api_key").await
+    let Ok(Some(api_key)) = state
+        .application
+        .get_optional_setting("jellyfin.current_server_api_key")
+        .await
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -264,50 +272,21 @@ async fn serve_emby_artwork(
     rest: &str,
     params: &HashMap<String, String>,
 ) -> Response {
-    let address = match query_first_emby_address(&state.pool).await {
+    let address = match state.application.first_emby_address().await {
         Ok(Some(addr)) => addr,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    let Ok(Some(api_key)) = query_config_value(&state.pool, "emby.current_server_api_key").await
+    let Ok(Some(api_key)) = state
+        .application
+        .get_optional_setting("emby.current_server_api_key")
+        .await
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
     let url = format!("{}/{rest}", address.trim_end_matches('/'));
     proxy_request(&url, &[("X-Emby-Token", api_key.as_str())], params).await
-}
-
-async fn query_config_value(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-) -> Result<Option<String>, sqlx::Error> {
-    let value: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(key)
-            .fetch_optional(pool)
-            .await?
-            .and_then(|v: Option<String>| v)
-            .filter(|v| !v.is_empty());
-    Ok(value)
-}
-
-async fn query_first_jellyfin_address(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<Option<String>, sqlx::Error> {
-    let row = sqlx::query(r#"SELECT "Address" FROM "JellyfinConnection" ORDER BY "Id" LIMIT 1"#)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.and_then(|r| r.try_get::<Option<String>, _>("Address").ok().flatten()))
-}
-
-async fn query_first_emby_address(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<Option<String>, sqlx::Error> {
-    let row = sqlx::query(r#"SELECT "Address" FROM "EmbyConnection" ORDER BY "Id" LIMIT 1"#)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.and_then(|r| r.try_get::<Option<String>, _>("Address").ok().flatten()))
 }
 
 async fn proxy_request(

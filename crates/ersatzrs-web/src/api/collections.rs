@@ -7,9 +7,9 @@ use serde::Deserialize;
 
 use crate::{
     admin::server_fns::media_browser::{
-        delete_multi_collection_with_pool, save_collection_with_state,
-        save_multi_collection_with_state, save_smart_collection_with_state, CollectionForm,
-        MultiCollectionForm, MultiCollectionItemForm,
+        save_collection_with_state, save_multi_collection_with_state,
+        save_smart_collection_with_state, CollectionForm, MultiCollectionForm,
+        MultiCollectionItemForm,
     },
     host::state::AppState,
 };
@@ -122,7 +122,11 @@ pub async fn delete_multi_collection_form(
     State(state): State<AppState>,
     Form(input): Form<MultiCollectionDeleteForm>,
 ) -> Redirect {
-    match delete_multi_collection_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_multi_collection(ersatzrs_app::commands::DeleteMultiCollection { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/media/multi-collections"),
         Err(error) => {
             tracing::error!(%error, multi_collection_id = input.id, "failed to delete multi collection from HTML form");

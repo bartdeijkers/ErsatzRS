@@ -5,26 +5,41 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(all(test, feature = "ssr"))]
 const FILLER_PRESETS_PAGE_SIZE_KEY: &str = "pages.filler_presets.page_size";
 const FILLER_KIND_PRE_ROLL: i32 = 1;
+#[cfg(test)]
 const FILLER_KIND_MID_ROLL: i32 = 2;
+#[cfg(test)]
 const FILLER_KIND_POST_ROLL: i32 = 3;
+#[cfg(test)]
 const FILLER_KIND_TAIL: i32 = 4;
+#[cfg(test)]
 const FILLER_KIND_FALLBACK: i32 = 5;
+#[cfg(test)]
 const FILLER_MODE_NONE: i32 = 0;
 const FILLER_MODE_DURATION: i32 = 1;
+#[cfg(test)]
 const FILLER_MODE_COUNT: i32 = 2;
+#[cfg(test)]
 const FILLER_MODE_PAD: i32 = 3;
+#[cfg(test)]
 const FILLER_MODE_RANDOM_COUNT: i32 = 4;
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
+#[cfg(test)]
 const COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+#[cfg(test)]
 const COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+#[cfg(test)]
 const COLLECTION_TYPE_ARTIST: i32 = 3;
+#[cfg(test)]
 const COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+#[cfg(test)]
 const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+#[cfg(test)]
 const COLLECTION_TYPE_PLAYLIST: i32 = 6;
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 type DbPool = sqlx::Pool<ersatzrs_infra::db::Db>;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -106,12 +121,66 @@ impl Default for FillerPresetForm {
     }
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn filler_form_into_admin(
+    form: FillerPresetForm,
+) -> ersatzrs_app::commands::FillerPresetAdminForm {
+    ersatzrs_app::commands::FillerPresetAdminForm {
+        id: form.id,
+        name: form.name,
+        filler_kind: form.filler_kind,
+        filler_mode: form.filler_mode,
+        duration_hours: form.duration_hours,
+        duration_minutes: form.duration_minutes,
+        duration_seconds: form.duration_seconds,
+        count: form.count,
+        pad_to_nearest_minute: form.pad_to_nearest_minute,
+        allow_watermarks: form.allow_watermarks,
+        collection_type: form.collection_type,
+        collection_id: form.collection_id,
+        media_item_id: form.media_item_id,
+        multi_collection_id: form.multi_collection_id,
+        smart_collection_id: form.smart_collection_id,
+        playlist_id: form.playlist_id,
+        expression: form.expression,
+        use_chapters_as_media_items: form.use_chapters_as_media_items,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn filler_form_from_admin(form: ersatzrs_app::commands::FillerPresetAdminForm) -> FillerPresetForm {
+    FillerPresetForm {
+        id: form.id,
+        name: form.name,
+        filler_kind: form.filler_kind,
+        filler_mode: form.filler_mode,
+        duration_hours: form.duration_hours,
+        duration_minutes: form.duration_minutes,
+        duration_seconds: form.duration_seconds,
+        count: form.count,
+        pad_to_nearest_minute: form.pad_to_nearest_minute,
+        allow_watermarks: form.allow_watermarks,
+        collection_type: form.collection_type,
+        collection_id: form.collection_id,
+        media_item_id: form.media_item_id,
+        multi_collection_id: form.multi_collection_id,
+        smart_collection_id: form.smart_collection_id,
+        playlist_id: form.playlist_id,
+        expression: form.expression,
+        use_chapters_as_media_items: form.use_chapters_as_media_items,
+    }
+}
+
 #[server]
 pub async fn get_filler_presets_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_page_size_with_pool(&state.pool).await
+    state
+        .application
+        .get_filler_presets_page_size()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -122,7 +191,23 @@ pub async fn list_filler_presets(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_filler_presets_with_pool(&state.pool, page, page_size).await
+    state
+        .application
+        .list_filler_presets(page, page_size)
+        .await
+        .map(|(rows, total)| {
+            (
+                rows.into_iter()
+                    .map(|row| FillerPresetListRow {
+                        id: row.id,
+                        name: row.name,
+                        filler_kind: row.filler_kind,
+                    })
+                    .collect(),
+                total,
+            )
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -130,7 +215,12 @@ pub async fn get_filler_preset_form(id: i64) -> Result<Option<FillerPresetForm>,
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_filler_preset_form_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_filler_preset(id)
+        .await
+        .map(|form| form.map(filler_form_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -139,7 +229,53 @@ pub async fn get_filler_preset_editor_options() -> Result<FillerPresetEditorOpti
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_filler_preset_editor_options_with_pool(&state.pool).await
+    state
+        .application
+        .get_filler_editor_options()
+        .await
+        .map(|options| FillerPresetEditorOptions {
+            collections: options
+                .collections
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            multi_collections: options
+                .multi_collections
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            smart_collections: options
+                .smart_collections
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            television_shows: options
+                .television_shows
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            television_seasons: options
+                .television_seasons
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            artists: options.artists.into_iter().map(select_from_read).collect(),
+            playlist_groups: options
+                .playlist_groups
+                .into_iter()
+                .map(select_from_read)
+                .collect(),
+            playlists: options
+                .playlists
+                .into_iter()
+                .map(|row| FillerPresetPlaylistOption {
+                    id: row.id,
+                    name: row.name,
+                    playlist_group_id: row.playlist_group_id,
+                })
+                .collect(),
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -147,7 +283,13 @@ pub async fn save_filler_preset(form: FillerPresetForm) -> Result<i64, ServerFnE
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_filler_preset_with_pool(&state.pool, form).await
+    state
+        .application
+        .save_filler_preset(ersatzrs_app::commands::SaveFillerPreset {
+            form: filler_form_into_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -155,10 +297,22 @@ pub async fn delete_filler_preset(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    delete_filler_preset_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_filler_preset(ersatzrs_app::commands::DeleteFillerPreset { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
+fn select_from_read(row: ersatzrs_app::queries::FillerSelectRead) -> FillerPresetSelectOption {
+    FillerPresetSelectOption {
+        id: row.id,
+        name: row.name,
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_page_size_with_pool(pool: &DbPool) -> Result<u32, ServerFnError> {
     let value: Option<String> =
         sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
@@ -172,7 +326,7 @@ pub async fn get_page_size_with_pool(pool: &DbPool) -> Result<u32, ServerFnError
         .unwrap_or(10))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_filler_presets_with_pool(
     pool: &DbPool,
     page: u32,
@@ -210,7 +364,7 @@ pub async fn list_filler_presets_with_pool(
     Ok((rows, total.max(0) as u64))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_filler_preset_form_with_pool(
     pool: &DbPool,
     id: i64,
@@ -250,7 +404,7 @@ pub async fn get_filler_preset_form_with_pool(
     }))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_filler_preset_editor_options_with_pool(
     pool: &DbPool,
 ) -> Result<FillerPresetEditorOptions, ServerFnError> {
@@ -266,7 +420,7 @@ pub async fn get_filler_preset_editor_options_with_pool(
     })
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_filler_preset_with_pool(
     pool: &DbPool,
     mut form: FillerPresetForm,
@@ -348,7 +502,7 @@ pub async fn save_filler_preset_with_pool(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_filler_preset_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "FillerPreset" WHERE "Id" = ?"#)
         .bind(id)
@@ -362,7 +516,7 @@ pub async fn delete_filler_preset_with_pool(pool: &DbPool, id: i64) -> Result<()
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn select_options(
     pool: &DbPool,
     sql: &str,
@@ -381,7 +535,7 @@ async fn select_options(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn playlist_options(pool: &DbPool) -> Result<Vec<FillerPresetPlaylistOption>, ServerFnError> {
     use sqlx::Row;
 
@@ -402,7 +556,7 @@ async fn playlist_options(pool: &DbPool) -> Result<Vec<FillerPresetPlaylistOptio
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn save_config_value(pool: &DbPool, key: &str, value: &str) -> Result<(), ServerFnError> {
     let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
         .bind(value)
@@ -419,6 +573,7 @@ async fn save_config_value(pool: &DbPool, key: &str, value: &str) -> Result<(), 
     Ok(())
 }
 
+#[cfg(test)]
 fn normalize_filler_preset_form(form: &mut FillerPresetForm) {
     form.name = form.name.trim().to_string();
     if matches!(form.filler_kind, FILLER_KIND_FALLBACK | FILLER_KIND_TAIL) {
@@ -471,7 +626,7 @@ fn normalize_filler_preset_form(form: &mut FillerPresetForm) {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_filler_preset(
     pool: &DbPool,
     form: &FillerPresetForm,
@@ -491,6 +646,7 @@ async fn validate_filler_preset(
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_filler_preset_shape(form: &FillerPresetForm) -> Result<(), ServerFnError> {
     if form.name.is_empty() {
         return Err(ServerFnError::new("Name must not be empty"));
@@ -552,6 +708,7 @@ fn validate_filler_preset_shape(form: &FillerPresetForm) -> Result<(), ServerFnE
     }
 }
 
+#[cfg(test)]
 fn duration_seconds(form: &FillerPresetForm) -> Option<i32> {
     if form.filler_mode != FILLER_MODE_DURATION {
         return None;
@@ -564,6 +721,7 @@ fn duration_seconds(form: &FillerPresetForm) -> Option<i32> {
     )
 }
 
+#[cfg(test)]
 fn format_duration(total_seconds: i32) -> String {
     let hours = total_seconds / 3600;
     let minutes = (total_seconds % 3600) / 60;
@@ -571,6 +729,7 @@ fn format_duration(total_seconds: i32) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn parse_duration(value: &str) -> Option<i32> {
     let (_, time_text) = value.rsplit_once('.').unwrap_or(("", value));
     let mut parts = time_text.split(':');

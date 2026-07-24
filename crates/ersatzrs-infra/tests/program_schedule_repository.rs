@@ -3,8 +3,10 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, ProgramScheduleRepository,
+    ChannelRepository, FfmpegProfileRepository, ProgramScheduleRepository, ScheduleAdminForm,
+    ScheduleItemAdmin,
 };
+use ersatzrs_core::scheduling::{SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset};
 use ersatzrs_domain::{
     CollectionType, FillWithGroupMode, GuideMode, MarathonGroupBy, MultipleMode, PlaybackOrder,
     PlayoutMode, ProgramScheduleAlternate, ProgramScheduleItem, TailMode,
@@ -252,6 +254,116 @@ async fn program_schedule_repository_preserves_existing_item_target_fields() {
         row.get::<Option<String>, _>("CustomTitle"),
         Some("Comedy block".to_owned())
     );
+}
+
+#[tokio::test]
+async fn program_schedule_repository_replaces_and_copies_complete_admin_items() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    let schedule_id = repos
+        .program_schedule
+        .save_admin(&ScheduleAdminForm {
+            name: "Prime Time".to_owned(),
+            ..ScheduleAdminForm::default()
+        })
+        .await
+        .unwrap();
+    let policy = SchedulingSmartShufflePolicy::for_preset(SchedulingSmartShufflePreset::Balanced);
+    let item = admin_search_item(policy.clone());
+
+    repos
+        .program_schedule
+        .replace_items_admin(schedule_id, &[item])
+        .await
+        .unwrap();
+    let loaded = repos
+        .program_schedule
+        .list_items_admin(schedule_id)
+        .await
+        .unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].search_query.as_deref(), Some("genre:comedy"));
+    assert_eq!(loaded[0].duration_hours, 1);
+    assert_eq!(loaded[0].duration_minutes, 15);
+    assert_eq!(loaded[0].watermark_ids, Vec::<i64>::new());
+    assert_eq!(loaded[0].smart_shuffle, policy);
+
+    let copy_id = repos
+        .program_schedule
+        .copy_admin(schedule_id, "Prime Time Copy")
+        .await
+        .unwrap();
+    let copied = repos
+        .program_schedule
+        .list_items_admin(copy_id)
+        .await
+        .unwrap();
+    assert_eq!(copied.len(), 1);
+    assert_eq!(copied[0].search_query, loaded[0].search_query);
+    assert_eq!(copied[0].smart_shuffle, loaded[0].smart_shuffle);
+}
+
+#[tokio::test]
+async fn program_schedule_admin_reads_report_closed_pool_errors() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    pool.close().await;
+
+    assert!(repos.program_schedule.list_admin("", 0, 10).await.is_err());
+    assert!(repos.program_schedule.list_items_admin(1).await.is_err());
+    assert!(repos
+        .program_schedule
+        .get_item_options_admin()
+        .await
+        .is_err());
+}
+
+fn admin_search_item(smart_shuffle: SchedulingSmartShufflePolicy) -> ScheduleItemAdmin {
+    ScheduleItemAdmin {
+        id: 0,
+        index: 0,
+        start_type: 1,
+        start_time: None,
+        fixed_start_time_behavior: None,
+        collection_type: 9,
+        collection_id: None,
+        media_item_id: None,
+        multi_collection_id: None,
+        smart_collection_id: None,
+        rerun_collection_id: None,
+        playlist_id: None,
+        search_title: Some("Comedy".to_owned()),
+        search_query: Some("genre:comedy".to_owned()),
+        collection_name: "Comedy".to_owned(),
+        playback_order: 3,
+        smart_shuffle,
+        inherited_legacy_smart_shuffle: false,
+        marathon_group_by: 0,
+        marathon_shuffle_groups: false,
+        marathon_shuffle_items: false,
+        marathon_batch_size: None,
+        fill_with_group_mode: 0,
+        playout_mode: 4,
+        multiple_mode: 0,
+        multiple_count: "1".to_owned(),
+        duration_hours: 1,
+        duration_minutes: 15,
+        tail_mode: 0,
+        discard_to_fill_attempts: Some(3),
+        custom_title: "Comedy Hour".to_owned(),
+        guide_mode: 0,
+        pre_roll_filler_id: None,
+        mid_roll_filler_id: None,
+        post_roll_filler_id: None,
+        tail_filler_id: None,
+        fallback_filler_id: None,
+        watermark_ids: Vec::new(),
+        graphics_element_ids: Vec::new(),
+        preferred_audio_language_code: Some("eng".to_owned()),
+        preferred_audio_title: String::new(),
+        preferred_subtitle_language_code: None,
+        subtitle_mode: None,
+    }
 }
 
 async fn seed_overlay_targets(pool: &sqlx::SqlitePool) {

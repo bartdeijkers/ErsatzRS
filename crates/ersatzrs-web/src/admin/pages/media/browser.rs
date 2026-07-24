@@ -14,6 +14,9 @@ use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::MediaCardRow;
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::ui::primitives::toast::ToastSeverity;
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
 
@@ -51,6 +54,7 @@ where
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let media_revision = RwSignal::new(String::new());
+    let load_toast = use_toast();
 
     Effect::new(move |_| {
         let _ = search.get();
@@ -61,19 +65,32 @@ where
         move || (search.get(), page.get(), media_revision.get()),
         move |(q, p, _)| {
             let loader = loader.clone();
-            async move { loader(q, p, PAGE_SIZE, true).await.unwrap_or_default() }
+            async move { load_or_notify(loader(q, p, PAGE_SIZE, true).await, load_toast) }
         },
     );
 
+    #[cfg(target_arch = "wasm32")]
+    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
+                            revision_load_failed.set(false);
                         }
+                        Err(error) if !revision_load_failed.get_untracked() => {
+                            revision_load_failed.set(true);
+                            load_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

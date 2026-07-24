@@ -163,7 +163,9 @@ async function expectMultiCollectionEditorGeometry(page: Page): Promise<void> {
     );
     const editor = heading?.parentElement;
     const itemsSection = Array.from(main.querySelectorAll('section')).find((element) =>
-      text(element).includes('E2E Multi Collection Items'),
+      Array.from(element.children).some(
+        (child) => child.tagName === 'H2' && text(child) === 'E2E Multi Collection Items',
+      ),
     );
     const table = itemsSection?.querySelector('table');
     const collectionSelect = Array.from(main.querySelectorAll('select')).find((element) =>

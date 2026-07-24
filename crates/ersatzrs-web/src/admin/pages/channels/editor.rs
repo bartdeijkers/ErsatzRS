@@ -6,6 +6,9 @@ use crate::admin::i18n::{channel_streaming_mode_label, tr, TextKey};
 use crate::admin::server_fns::channels::{
     get_channel_editor_data, ChannelEditorData, ChannelMirrorOption, ChannelSelectOption,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/editor.module.css");
 
@@ -28,18 +31,18 @@ pub fn ChannelEditorPage() -> impl IntoView {
         }
     });
 
-    let data: Resource<ChannelEditorData> = Resource::new_blocking(channel_id, |id| async move {
-        get_channel_editor_data(id).await.unwrap_or_default()
-    });
+    let data = Resource::new_blocking(channel_id, get_channel_editor_data);
 
     view! {
-        <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let form_error = form_error.clone();
-                data.get()
-                    .map(|initial_data| view! {
+                data.get().map(|result| admin_result_view(result, |initial_data| {
+                    view! {
                         <ChannelEditorForm initial_data=initial_data form_error=form_error/>
-                    })
+                    }
+                    .into_any()
+                }))
             }}
         </Suspense>
     }

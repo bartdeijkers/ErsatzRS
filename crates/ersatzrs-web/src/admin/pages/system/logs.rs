@@ -4,13 +4,17 @@ use crate::admin::i18n::{log_level_label, range_of, tr, TextKey};
 use crate::admin::server_fns::logs::{
     get_logs_page_size, load_recent_log_entries, AdminLogEntry, AdminLogSnapshot, AdminLogSortField,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 #[component]
 pub fn LogsPage() -> impl IntoView {
-    let initial: Resource<(u32, AdminLogSnapshot)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async move {
-            let page_size = get_logs_page_size().await.unwrap_or(10).max(1);
+            let page_size = get_logs_page_size().await?.max(1);
             let snapshot = load_recent_log_entries(
                 String::new(),
                 0,
@@ -18,31 +22,23 @@ pub fn LogsPage() -> impl IntoView {
                 AdminLogSortField::Timestamp,
                 None,
             )
-            .await
-            .unwrap_or_default();
-            (page_size, snapshot)
+            .await?;
+            Ok::<_, ServerFnError>((page_size, snapshot))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! {
-            {render_snapshot(
-                AdminLogSnapshot::default(),
-                RwSignal::new(0),
-                RwSignal::new(10),
-                RwSignal::new(AdminLogSortField::Timestamp),
-                RwSignal::new(None::<bool>),
-            )}
-        }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_page_size, initial_snapshot)| {
+                initial.get().map(|result| admin_result_view(result, |(initial_page_size, initial_snapshot)| {
                     view! {
                         <LogsIsland
                             initial_page_size=initial_page_size
                             initial_snapshot=initial_snapshot
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -56,9 +52,11 @@ fn LogsIsland(initial_page_size: u32, initial_snapshot: AdminLogSnapshot) -> imp
     let sort_field = RwSignal::new(AdminLogSortField::Timestamp);
     let sort_descending = RwSignal::new(None::<bool>);
     let current_snapshot = RwSignal::new(initial_snapshot);
+    let load_toast = use_toast();
 
-    let saved_page_size: LocalResource<u32> =
-        LocalResource::new(|| async { get_logs_page_size().await.unwrap_or(10) });
+    let saved_page_size: LocalResource<u32> = LocalResource::new(move || async move {
+        load_or_notify(get_logs_page_size().await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some(saved) = saved_page_size.get() {
             let saved = saved.max(1);
@@ -75,9 +73,10 @@ fn LogsIsland(initial_page_size: u32, initial_snapshot: AdminLogSnapshot) -> imp
         let sort_field = sort_field.get();
         let sort_descending = sort_descending.get();
         async move {
-            load_recent_log_entries(filter, page, page_size, sort_field, sort_descending)
-                .await
-                .unwrap_or_default()
+            load_or_notify(
+                load_recent_log_entries(filter, page, page_size, sort_field, sort_descending).await,
+                load_toast,
+            )
         }
     });
 

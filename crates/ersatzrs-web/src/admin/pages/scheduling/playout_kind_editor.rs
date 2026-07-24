@@ -17,6 +17,9 @@ use crate::admin::server_fns::playouts::{
     list_locked_playouts, save_playout_default_deco, save_scripted_playout, PlayoutDecoOption,
     PlayoutKindEditorForm, KIND_BLOCK, KIND_CLASSIC, KIND_SCRIPTED,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(
@@ -52,29 +55,28 @@ fn PlayoutKindEditorPage(schedule_kind: i32) -> impl IntoView {
 
 #[island]
 fn PlayoutKindEditorIsland(playout_id: i64, schedule_kind: i32) -> impl IntoView {
-    let form: Resource<Option<PlayoutKindEditorForm>> = Resource::new_blocking(
+    let data = Resource::new_blocking(
         move || (playout_id, schedule_kind),
-        |(id, kind)| async move { get_playout_kind_editor(id, kind).await.unwrap_or(None) },
-    );
-    let locked_ids: Resource<Vec<i64>> = Resource::new(
-        move || (),
-        |()| async move { list_locked_playouts().await.unwrap_or_default() },
+        |(id, kind)| async move {
+            tokio::try_join!(get_playout_kind_editor(id, kind), list_locked_playouts())
+        },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                let locked_ids = locked_ids.get().unwrap_or_default();
-                form.get().map(|maybe| match maybe {
-                    Some(form) => view! {
-                        <PlayoutKindEditorForm form=form locked_ids=locked_ids.clone()/>
+                data.get().map(|result| admin_result_view(result, |(maybe, locked_ids)| {
+                    match maybe {
+                        Some(form) => view! {
+                            <PlayoutKindEditorForm form=form locked_ids/>
+                        }
+                            .into_any(),
+                        None => view! {
+                            <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
+                        }
+                            .into_any(),
                     }
-                        .into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
-                    }
-                        .into_any(),
-                })
+                }))
             }}
         </Suspense>
     }

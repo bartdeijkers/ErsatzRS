@@ -9,11 +9,12 @@ use serde::Serialize;
 
 use crate::admin::i18n::{settings_error_text, text, TextKey, UiLanguage};
 use crate::admin::server_fns::settings::{
-    create_custom_resolution, delete_custom_resolution_with_pool, save_ffmpeg_settings_with_state,
-    save_hdhr_settings_with_state, save_logging_settings_with_state,
-    save_playout_settings_with_state, save_scanner_settings_with_pool, save_ui_settings_with_pool,
-    save_xmltv_settings_with_state, FfmpegSettingsForm, HdhrSettingsForm, LoggingSettingsForm,
-    PlayoutSettingsForm, ScannerSettingsForm, UiSettingsForm, XmltvSettingsForm,
+    create_custom_resolution_with_state, delete_custom_resolution_with_state,
+    save_ffmpeg_settings_with_state, save_hdhr_settings_with_state,
+    save_logging_settings_with_state, save_playout_settings_with_state,
+    save_scanner_settings_with_state, save_ui_settings_with_state, save_xmltv_settings_with_state,
+    FfmpegSettingsForm, HdhrSettingsForm, LoggingSettingsForm, PlayoutSettingsForm,
+    ScannerSettingsForm, UiSettingsForm, XmltvSettingsForm,
 };
 use crate::host::state::AppState;
 
@@ -22,17 +23,24 @@ pub struct UiThemeResponse {
     theme: &'static str,
 }
 
-pub async fn ui_theme(State(state): State<AppState>) -> Json<UiThemeResponse> {
-    let is_dark_mode = crate::admin::server_fns::settings::load_bool_for_api(
-        &state.pool,
+pub async fn ui_theme(State(state): State<AppState>) -> Response {
+    let is_dark_mode = match crate::admin::server_fns::settings::load_bool_for_api(
+        state.application.ports().admin_settings(),
         ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
         true,
     )
     .await
-    .unwrap_or(true);
+    {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load admin UI theme");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     Json(UiThemeResponse {
         theme: if is_dark_mode { "dark" } else { "light" },
     })
+    .into_response()
 }
 
 pub async fn save_ffmpeg_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -103,7 +111,7 @@ pub async fn save_scanner_settings_form(State(state): State<AppState>, body: Byt
         library_refresh_interval: parse_i32(&fields, "library_refresh_interval"),
     };
     redirect_or_error(
-        save_scanner_settings_with_pool(&state.pool, form).await,
+        save_scanner_settings_with_state(&state, form).await,
         "/settings/scanner",
         &state,
     )
@@ -132,7 +140,7 @@ pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -
         language: field(&fields, "language"),
     };
     redirect_or_error(
-        save_ui_settings_with_pool(&state.pool, form).await,
+        save_ui_settings_with_state(&state, form).await,
         "/settings/ui",
         &state,
     )
@@ -157,8 +165,8 @@ pub async fn save_xmltv_settings_form(State(state): State<AppState>, body: Bytes
 pub async fn add_custom_resolution_form(State(state): State<AppState>, body: Bytes) -> Response {
     let fields = parse_form(&body);
     redirect_or_error(
-        create_custom_resolution(
-            &state.pool,
+        create_custom_resolution_with_state(
+            &state,
             parse_i32(&fields, "width"),
             parse_i32(&fields, "height"),
         )
@@ -172,7 +180,7 @@ pub async fn add_custom_resolution_form(State(state): State<AppState>, body: Byt
 pub async fn delete_custom_resolution_form(State(state): State<AppState>, body: Bytes) -> Response {
     let fields = parse_form(&body);
     redirect_or_error(
-        delete_custom_resolution_with_pool(&state.pool, parse_i64(&fields, "id")).await,
+        delete_custom_resolution_with_state(&state, parse_i64(&fields, "id")).await,
         "/settings/ffmpeg",
         &state,
     )
@@ -194,9 +202,17 @@ async fn redirect_or_error(
 }
 
 async fn load_error_language(state: &AppState) -> UiLanguage {
-    crate::admin::server_fns::settings::load_ui_language_for_api(&state.pool)
-        .await
-        .unwrap_or(UiLanguage::English)
+    match crate::admin::server_fns::settings::load_ui_language_for_api(
+        state.application.ports().admin_settings(),
+    )
+    .await
+    {
+        Ok(language) => language,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load UI language for settings API error");
+            UiLanguage::English
+        }
+    }
 }
 
 fn settings_error_response(back_path: &str, message: &str, language: UiLanguage) -> Response {

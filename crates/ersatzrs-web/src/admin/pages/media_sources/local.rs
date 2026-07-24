@@ -9,7 +9,9 @@ use crate::admin::server_fns::media_sources::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    resource_state::{admin_loading_resource_view, admin_result_view},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
+    toast::{load_or_notify, use_toast},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
@@ -23,8 +25,10 @@ pub fn LocalLibrariesPage() -> impl IntoView {
 
 #[island]
 fn LocalLibrariesIsland() -> impl IntoView {
-    let rows: LocalResource<Vec<LocalLibraryRow>> =
-        LocalResource::new(|| async { list_local_libraries().await.unwrap_or_default() });
+    let load_toast = use_toast();
+    let rows: LocalResource<Vec<LocalLibraryRow>> = LocalResource::new(move || async move {
+        load_or_notify(list_local_libraries().await, load_toast)
+    });
 
     let total = Signal::derive(move || rows.get().map(|r| r.len() as u64));
     let params = RwSignal::new(PageParams::new(50));
@@ -118,18 +122,18 @@ pub fn LocalLibraryEditorPage() -> impl IntoView {
     let params = use_params_map();
     let lib_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
-    let initial: Resource<LocalLibraryForm> = Resource::new(lib_id, |id| async move {
+    let initial = Resource::new(lib_id, |id| async move {
         match id {
-            Some(id) => get_local_library_form(id).await.unwrap_or_default(),
-            None => LocalLibraryForm::new_defaults(),
+            Some(id) => get_local_library_form(id).await,
+            None => Ok(LocalLibraryForm::new_defaults()),
         }
     });
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
-            {move || initial.get().map(|initial_form| view! {
-                <LocalLibraryEditorForm initial_form=initial_form/>
-            })}
+        <Suspense fallback=admin_loading_resource_view>
+            {move || initial.get().map(|result| admin_result_view(result, |initial_form| {
+                view! { <LocalLibraryEditorForm initial_form=initial_form/> }.into_any()
+            }))}
         </Suspense>
     }
 }

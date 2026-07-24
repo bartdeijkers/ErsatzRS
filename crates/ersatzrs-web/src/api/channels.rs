@@ -18,7 +18,7 @@ use crate::{
         i18n::{upload_error_text, UiLanguage},
         server_fns::{
             channels::{
-                save_channel_numbers_with_pool, save_channel_with_state, ChannelForm,
+                save_channel_numbers_with_state, save_channel_with_state, ChannelForm,
                 ChannelNumberFormUpdate,
             },
             settings::load_ui_language_for_api,
@@ -197,7 +197,7 @@ pub async fn save_channel_numbers_form(
     Form(fields): Form<HashMap<String, String>>,
 ) -> Redirect {
     let updates = channel_number_updates_from_fields(&fields);
-    match save_channel_numbers_with_pool(&state.pool, updates).await {
+    match save_channel_numbers_with_state(&state, updates).await {
         Ok(_) => Redirect::to("/channels"),
         Err(error) => {
             tracing::error!(%error, "failed to save channel numbers from HTML form");
@@ -234,23 +234,41 @@ pub async fn upload_channel_logo(
             .into_response();
     }
 
-    if let Ok(Some(field)) = multipart.next_field().await {
-        let content_type = field
-            .content_type()
-            .unwrap_or("application/octet-stream")
-            .to_string();
+    let field = match multipart.next_field().await {
+        Ok(Some(field)) => field,
+        Ok(None) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": upload_error_text(language, "No file field")})),
+            )
+                .into_response();
+        }
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    json!({"error": upload_error_text(language, &format!("Read field: {error}"))}),
+                ),
+            )
+                .into_response();
+        }
+    };
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
 
-        match field.bytes().await {
-            Ok(bytes) => {
-                if bytes.len() > super::watermarks::max_upload_bytes() {
-                    return (
+    match field.bytes().await {
+        Ok(bytes) => {
+            if bytes.len() > super::watermarks::max_upload_bytes() {
+                return (
                         StatusCode::PAYLOAD_TOO_LARGE,
                         Json(json!({"error": upload_error_text(language, "Upload exceeds maximum allowed size")})),
                     )
                         .into_response();
-                }
+            }
 
-                match persist_channel_logo(&content_type, &bytes).await {
+            match persist_channel_logo(&content_type, &bytes).await {
                     Ok(path) => Json(json!({
                         "path": path,
                         "content_type": content_type,
@@ -262,28 +280,23 @@ pub async fn upload_channel_logo(
                     )
                         .into_response(),
                 }
-            }
-            Err(error) => (
-                StatusCode::BAD_REQUEST,
-                Json(
-                    json!({"error": upload_error_text(language, &format!("Read field: {error}"))}),
-                ),
-            )
-                .into_response(),
         }
-    } else {
-        (
+        Err(error) => (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": upload_error_text(language, "No file field")})),
+            Json(json!({"error": upload_error_text(language, &format!("Read field: {error}"))})),
         )
-            .into_response()
+            .into_response(),
     }
 }
 
 async fn load_error_language(state: &AppState) -> UiLanguage {
-    load_ui_language_for_api(&state.pool)
-        .await
-        .unwrap_or(UiLanguage::English)
+    match load_ui_language_for_api(state.application.ports().admin_settings()).await {
+        Ok(language) => language,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load UI language for channel API error");
+            UiLanguage::English
+        }
+    }
 }
 
 async fn persist_channel_logo(content_type: &str, bytes: &[u8]) -> std::io::Result<String> {

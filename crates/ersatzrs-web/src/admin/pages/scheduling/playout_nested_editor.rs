@@ -12,6 +12,9 @@ use crate::admin::server_fns::playouts::{
     PlayoutTemplatesForm,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(
@@ -39,34 +42,32 @@ pub fn PlayoutTemplatesEditorPage() -> impl IntoView {
 
 #[island]
 fn AlternateSchedulesIsland(playout_id: i64) -> impl IntoView {
-    let form: Resource<Option<PlayoutAlternateSchedulesForm>> = Resource::new_blocking(
-        move || playout_id,
-        |id| async move { get_playout_alternate_schedules(id).await.unwrap_or(None) },
-    );
+    let form = Resource::new_blocking(move || playout_id, get_playout_alternate_schedules);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || form.get().map(|maybe| match maybe {
-                Some(form) => view! { <AlternateSchedulesFormView form=form/> }.into_any(),
-                None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
-            })}
+        <Suspense fallback=admin_loading_resource_view>
+            {move || form.get().map(|result| admin_result_view(result, |maybe| {
+                match maybe {
+                    Some(form) => view! { <AlternateSchedulesFormView form=form/> }.into_any(),
+                    None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
+                }
+            }))}
         </Suspense>
     }
 }
 
 #[island]
 fn TemplatesIsland(playout_id: i64) -> impl IntoView {
-    let form: Resource<Option<PlayoutTemplatesForm>> = Resource::new_blocking(
-        move || playout_id,
-        |id| async move { get_playout_templates(id).await.unwrap_or(None) },
-    );
+    let form = Resource::new_blocking(move || playout_id, get_playout_templates);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || form.get().map(|maybe| match maybe {
-                Some(form) => view! { <TemplatesFormView form=form/> }.into_any(),
-                None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
-            })}
+        <Suspense fallback=admin_loading_resource_view>
+            {move || form.get().map(|result| admin_result_view(result, |maybe| {
+                match maybe {
+                    Some(form) => view! { <TemplatesFormView form=form/> }.into_any(),
+                    None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
+                }
+            }))}
         </Suspense>
     }
 }

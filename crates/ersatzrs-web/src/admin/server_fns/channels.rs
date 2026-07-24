@@ -251,17 +251,6 @@ fn select_options_from_core(
         .collect()
 }
 
-#[cfg(feature = "ssr")]
-#[derive(Debug, thiserror::Error)]
-pub enum ChannelSaveError {
-    #[error("{0}")]
-    Validation(String),
-    #[error(transparent)]
-    Repository(#[from] ersatzrs_core::repositories::RepositoryError),
-    #[error(transparent)]
-    Database(#[from] sqlx::Error),
-}
-
 /// Returns paginated channel rows (excludes disabled when `show_disabled = false`).
 #[server]
 pub async fn list_channel_rows(
@@ -270,62 +259,43 @@ pub async fn list_channel_rows(
     page_size: u32,
 ) -> Result<Vec<ChannelListRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
+    use ersatzrs_app::queries::ListChannels;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-
-    let rows = sqlx::query(
-        r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
-                  c."IsEnabled", c."ShowInEpg",
-                  c."StreamingMode", COALESCE(p."Name", '') AS "ProfileName",
-                  (SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") AS "PlayoutCount",
-                  (SELECT a."Path" FROM "Artwork" a
-                   WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
-                   ORDER BY a."Id" LIMIT 1) AS "LogoPath"
-           FROM "Channel" c
-           LEFT JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
-           WHERE (? OR c."IsEnabled" = 1)
-           ORDER BY c."SortNumber", c."Number"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(show_disabled)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let list = rows
-        .iter()
-        .map(|row| {
-            let mode: i32 = row.try_get("StreamingMode").unwrap_or(1);
-            let preferred_audio_language_code = row
-                .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
-                .unwrap_or_default()
-                .unwrap_or_default();
-            ChannelListRow {
-                id: row.try_get("Id").unwrap_or(0),
-                number: row.try_get("Number").unwrap_or_default(),
-                name: row.try_get("Name").unwrap_or_default(),
-                preferred_audio_language: language_label(Some(&preferred_audio_language_code)),
-                preferred_audio_language_code,
-                is_enabled: row.try_get("IsEnabled").unwrap_or(true),
-                show_in_epg: row.try_get("ShowInEpg").unwrap_or(true),
-                streaming_mode: mode,
-                streaming_mode_label: streaming_mode_label(mode),
-                ffmpeg_profile_name: row.try_get("ProfileName").unwrap_or_default(),
-                playout_count: row.try_get("PlayoutCount").unwrap_or_default(),
-                logo_url: channel_logo_url(
-                    &row.try_get::<String, _>("Name").unwrap_or_default(),
-                    row.try_get::<Option<String>, _>("LogoPath")
-                        .unwrap_or_default()
-                        .as_deref(),
-                ),
-            }
+    state
+        .application
+        .list_channels(ListChannels {
+            show_disabled,
+            page,
+            page_size,
         })
-        .collect();
-
-    Ok(list)
+        .await
+        .map_err(ServerFnError::new)
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| {
+                    let mode = row.streaming_mode;
+                    let preferred_audio_language_code =
+                        row.preferred_audio_language_code.unwrap_or_default();
+                    ChannelListRow {
+                        id: row.id,
+                        number: row.number,
+                        name: row.name.clone(),
+                        preferred_audio_language: language_label(Some(
+                            &preferred_audio_language_code,
+                        )),
+                        preferred_audio_language_code,
+                        is_enabled: row.is_enabled,
+                        show_in_epg: row.show_in_epg,
+                        streaming_mode: mode,
+                        streaming_mode_label: streaming_mode_label(mode),
+                        ffmpeg_profile_name: row.ffmpeg_profile_name,
+                        playout_count: row.playout_count,
+                        logo_url: channel_logo_url(&row.name, row.logo_path.as_deref()),
+                    }
+                })
+                .collect()
+        })
 }
 
 /// Returns the total channel count (optionally including disabled).
@@ -334,24 +304,23 @@ pub async fn count_channels(show_disabled: bool) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let count: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel" WHERE (? OR "IsEnabled" = 1)"#)
-            .bind(show_disabled)
-            .fetch_one(&state.pool)
-            .await?;
-
-    Ok(u64::try_from(count).unwrap_or(0))
+    state
+        .application
+        .count_channels(show_disabled)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Loads all channels for the channel-number editor.
 #[server]
 pub async fn list_channel_number_rows() -> Result<Vec<ChannelNumberEditorRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ChannelRepository;
-
     let state = expect_context::<AppState>();
-    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(state.pool.clone());
-    let rows = repo.list_number_rows().await?;
+    let rows = state
+        .application
+        .list_channel_numbers()
+        .await
+        .map_err(ServerFnError::new)?;
     Ok(rows
         .into_iter()
         .map(|row| ChannelNumberEditorRow {
@@ -373,13 +342,14 @@ pub async fn get_channel_form(id: i64) -> Result<ChannelForm, ServerFnError> {
 #[server]
 pub async fn get_channel_editor_data(id: i64) -> Result<ChannelEditorData, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ChannelRepository;
+    use ersatzrs_app::queries::GetChannelEditor;
 
     let state = expect_context::<AppState>();
-    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(state.pool.clone());
-    let state = repo
-        .get_editor_state(if id > 0 { Some(id) } else { None })
-        .await?
+    let state = state
+        .application
+        .get_channel_editor(GetChannelEditor { channel_id: id })
+        .await
+        .map_err(ServerFnError::new)?
         .ok_or_else(|| ServerFnError::new("Channel not found"))?;
     Ok(ChannelEditorData::from(state))
 }
@@ -399,147 +369,30 @@ pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
 pub async fn save_channel_with_state(
     state: &crate::host::state::AppState,
     form: ChannelForm,
-) -> Result<i64, ChannelSaveError> {
-    let id = save_channel_with_pool(&state.pool, form).await?;
-
-    if let Some(after) = load_channel_save_side_effect_state(&state.pool, id).await? {
-        dispatch_channel_save_side_effects(state, &after);
-    }
-
-    Ok(id)
+) -> ersatzrs_app::Result<i64> {
+    state
+        .application
+        .save_channel(ersatzrs_app::commands::SaveChannel::new(form.into_core()))
+        .await
 }
 
 #[cfg(feature = "ssr")]
-pub async fn save_channel_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: ChannelForm,
-) -> Result<i64, ChannelSaveError> {
-    use ersatzrs_core::repositories::ChannelRepository;
-
-    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(pool.clone());
-    let result = repo.save_editor_form(form.into_core()).await?;
-    if result.is_success() {
-        Ok(result.id)
-    } else {
-        Err(ChannelSaveError::Validation(
-            result
-                .validation_errors
-                .into_iter()
-                .map(|error| format!("{}: {}", error.field, error.message))
-                .collect::<Vec<_>>()
-                .join("; "),
-        ))
-    }
-}
-
-#[cfg(feature = "ssr")]
-pub async fn save_channel_numbers_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn save_channel_numbers_with_state(
+    state: &crate::host::state::AppState,
     updates: Vec<ChannelNumberFormUpdate>,
-) -> Result<Vec<i64>, ChannelSaveError> {
-    use ersatzrs_core::repositories::{ChannelNumberUpdate, ChannelRepository};
-
-    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(pool.clone());
-    let result = repo
-        .save_number_updates(
+) -> ersatzrs_app::Result<Vec<i64>> {
+    state
+        .application
+        .save_channel_numbers(ersatzrs_app::commands::SaveChannelNumbers::new(
             updates
                 .into_iter()
-                .map(|update| ChannelNumberUpdate {
+                .map(|update| ersatzrs_core::repositories::ChannelNumberUpdate {
                     id: update.id,
                     number: update.number,
                 })
                 .collect(),
-        )
-        .await?;
-
-    if result.is_success() {
-        Ok(result.changed_ids)
-    } else {
-        Err(ChannelSaveError::Validation(
-            result
-                .validation_errors
-                .into_iter()
-                .map(|error| format!("{}: {}", error.field, error.message))
-                .collect::<Vec<_>>()
-                .join("; "),
         ))
-    }
-}
-
-#[cfg(feature = "ssr")]
-#[derive(Clone, Debug, Default)]
-struct ChannelSaveSideEffectState {
-    subtitle_mode: i32,
-    playout_ids: Vec<i64>,
-}
-
-#[cfg(feature = "ssr")]
-async fn load_channel_save_side_effect_state(
-    pool: &ersatzrs_infra::db::DbPool,
-    channel_id: i64,
-) -> Result<Option<ChannelSaveSideEffectState>, sqlx::Error> {
-    use sqlx::Row;
-
-    let row = sqlx::query(
-        r#"SELECT c."SubtitleMode"
-           FROM "Channel" c
-           WHERE c."Id" = ?"#,
-    )
-    .bind(channel_id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let playout_ids =
-        sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" WHERE "ChannelId" = ? ORDER BY "Id""#)
-            .bind(channel_id)
-            .fetch_all(pool)
-            .await?;
-
-    Ok(Some(ChannelSaveSideEffectState {
-        subtitle_mode: row.try_get("SubtitleMode").unwrap_or_default(),
-        playout_ids,
-    }))
-}
-
-#[cfg(feature = "ssr")]
-fn dispatch_channel_save_side_effects(
-    state: &crate::host::state::AppState,
-    after: &ChannelSaveSideEffectState,
-) {
-    if after.subtitle_mode == 0 {
-        return;
-    }
-
-    for playout_id in unique_playout_ids(&after.playout_ids) {
-        let pool = state.pool.clone();
-        tokio::spawn(async move {
-            if let Err(error) =
-                ersatzrs_infra::subtitles::extract_embedded_playout_subtitles(&pool, playout_id)
-                    .await
-            {
-                tracing::warn!(
-                    playout_id,
-                    %error,
-                    "embedded subtitle extraction failed after channel save"
-                );
-            }
-        });
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn unique_playout_ids(playout_ids: &[i64]) -> Vec<i64> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut unique = Vec::new();
-    for &playout_id in playout_ids {
-        if seen.insert(playout_id) {
-            unique.push(playout_id);
-        }
-    }
-    unique
+        .await
 }
 
 /// Returns the channel numbers that currently have a live transcode session.
@@ -551,7 +404,11 @@ pub async fn list_active_channel_numbers() -> Result<Vec<String>, ServerFnError>
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.hls_sessions.active_channels().await)
+    state
+        .application
+        .list_active_channel_numbers()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Stops the active transcode session for `number`, returning whether one was
@@ -561,7 +418,11 @@ pub async fn stop_channel_session(number: String) -> Result<bool, ServerFnError>
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.hls_sessions.stop_channel(&number).await)
+    state
+        .application
+        .stop_channel_session(&number)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Deletes a channel by id.
@@ -570,32 +431,26 @@ pub async fn delete_channel(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "Channel" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_channel(ersatzrs_app::commands::DeleteChannel::new(id))
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Returns `(id, name)` pairs for FFmpeg profiles — used to populate selects.
 #[server]
 pub async fn list_ffmpeg_profiles_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#)
-        .fetch_all(&state.pool)
-        .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Name").unwrap_or_default(),
-            )
-        })
+    Ok(state
+        .application
+        .list_channel_ffmpeg_profiles()
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|option| (option.id, option.label))
         .collect())
 }
 
@@ -603,21 +458,15 @@ pub async fn list_ffmpeg_profiles_for_select() -> Result<Vec<(i64, String)>, Ser
 #[server]
 pub async fn list_filler_presets_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(r#"SELECT "Id", "Name" FROM "FillerPreset" ORDER BY "Name", "Id""#)
-        .fetch_all(&state.pool)
-        .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Name").unwrap_or_default(),
-            )
-        })
+    Ok(state
+        .application
+        .list_channel_filler_presets()
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|option| (option.id, option.label))
         .collect())
 }
 
@@ -674,15 +523,6 @@ mod tests {
 
     use super::*;
 
-    fn channel_state_with_playout_rx() -> (
-        crate::host::state::AppState,
-        mpsc::UnboundedReceiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
-    ) {
-        let pool =
-            ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
-        channel_state_with_pool_and_playout_rx(pool)
-    }
-
     fn channel_state_with_pool_and_playout_rx(
         pool: ersatzrs_infra::db::DbPool,
     ) -> (
@@ -733,19 +573,6 @@ mod tests {
         .expect("seed resolution");
 
         channel_state_with_pool_and_playout_rx(pool)
-    }
-
-    #[tokio::test]
-    async fn channel_save_side_effects_never_enqueue_playout_builds() {
-        let (state, mut playout_build_rx) = channel_state_with_playout_rx();
-        let after = ChannelSaveSideEffectState {
-            subtitle_mode: 0,
-            playout_ids: vec![10, 10, 11],
-        };
-
-        dispatch_channel_save_side_effects(&state, &after);
-
-        assert!(playout_build_rx.try_recv().is_err());
     }
 
     #[tokio::test]

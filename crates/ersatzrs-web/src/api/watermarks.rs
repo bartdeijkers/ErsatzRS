@@ -16,7 +16,7 @@ use crate::{
         i18n::{upload_error_text, UiLanguage},
         server_fns::{
             settings::load_ui_language_for_api,
-            watermarks::{save_watermark_with_pool, WatermarkForm},
+            watermarks::{watermark_form_into_admin, WatermarkForm},
         },
     },
     host::state::AppState,
@@ -46,60 +46,71 @@ pub async fn upload_watermark_image(
             .into_response();
     }
 
-    if let Ok(Some(field)) = multipart.next_field().await {
-        let content_type = field
-            .content_type()
-            .unwrap_or("application/octet-stream")
-            .to_string();
+    let field = match multipart.next_field().await {
+        Ok(Some(field)) => field,
+        Ok(None) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": upload_error_text(language, "No file field")})),
+            )
+                .into_response();
+        }
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    json!({"error": upload_error_text(language, &format!("Read field: {error}"))}),
+                ),
+            )
+                .into_response();
+        }
+    };
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
 
-        match field.bytes().await {
-            Ok(bytes) => {
-                if bytes.len() > max_upload_bytes() {
-                    return (
+    match field.bytes().await {
+        Ok(bytes) => {
+            if bytes.len() > max_upload_bytes() {
+                return (
                         StatusCode::PAYLOAD_TOO_LARGE,
                         Json(json!({"error": upload_error_text(language, "Upload exceeds maximum allowed size")})),
                     )
                         .into_response();
-                }
-                let filename = match persist_watermark_image(&content_type, &bytes).await {
-                    Ok(filename) => filename,
-                    Err(e) => {
-                        return (
+            }
+            let filename = match persist_watermark_image(&content_type, &bytes).await {
+                Ok(filename) => filename,
+                Err(e) => {
+                    return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(json!({"error": upload_error_text(language, &format!("Write failed: {e}"))})),
                         )
                             .into_response();
-                    }
-                };
-                return Json(json!({
-                    "path": filename,
-                    "content_type": content_type,
-                }))
-                .into_response();
-            }
-            Err(e) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(
-                        json!({"error": upload_error_text(language, &format!("Read field: {e}"))}),
-                    ),
-                )
-                    .into_response();
-            }
+                }
+            };
+            Json(json!({
+                "path": filename,
+                "content_type": content_type,
+            }))
+            .into_response()
         }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": upload_error_text(language, &format!("Read field: {e}"))})),
+        )
+            .into_response(),
     }
-
-    (
-        StatusCode::BAD_REQUEST,
-        Json(json!({"error": upload_error_text(language, "No file field")})),
-    )
-        .into_response()
 }
 
 async fn load_error_language(state: &AppState) -> UiLanguage {
-    load_ui_language_for_api(&state.pool)
-        .await
-        .unwrap_or(UiLanguage::English)
+    match load_ui_language_for_api(state.application.ports().admin_settings()).await {
+        Ok(language) => language,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load UI language for watermark API error");
+            UiLanguage::English
+        }
+    }
 }
 
 pub async fn save_watermark_form(
@@ -168,7 +179,13 @@ pub async fn save_watermark_form(
     }
 
     let form_id = form.id;
-    match save_watermark_with_pool(&state.pool, form).await {
+    match state
+        .application
+        .save_watermark(ersatzrs_app::commands::SaveWatermark {
+            form: watermark_form_into_admin(form),
+        })
+        .await
+    {
         Ok(_) => Redirect::to("/watermarks"),
         Err(error) => {
             tracing::warn!(%error, watermark_id = form_id, "failed to save watermark from HTML form");

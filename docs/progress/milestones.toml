@@ -259,7 +259,7 @@ workspace closeout gates passed.
 id         = 'p7b-05'
 phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Migrate remaining admin use cases and queries'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'application-use-case-layer'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-02', 'p7b-03', 'p7b-04']
@@ -269,7 +269,32 @@ are thin transport adapters over app use cases/read models; admin code no
 longer requires a raw database pool and public server-function contracts stay
 stable.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-24. Collection, playlist, channel, schedule, settings,
+Trakt, media-source, media-browser, playout, template, deco, filler,
+watermark, troubleshooting, artwork, and layout handlers now adapt stable
+transport DTOs to injected application commands and queries. `ersatzrs-app`
+owns validation, transaction/side-effect ordering, and storage-neutral
+outcomes; core owns the ports and typed records; infrastructure owns every
+SQL statement, row decode, and backend-specific insert/query detail. The
+native web composition root constructs those adapters, and no production
+admin server function or API obtains a raw database pool.
+
+The architecture baseline fell from 515 direct admin SQL constructors, 173
+server-error-to-default patterns, and 833 row-decode defaults to zero. A new
+`raw_admin_pool` rule also rejects production admin/API pool retrieval.
+Shared localized resource wrappers preserve stable loading, ready, empty, and
+error DOM states without rendering failed forms or plausible empty data.
+
+Application (42), infrastructure (354), web (385), and architecture-lint (16)
+regressions passed, including SQLite/MySQL query selection, transactional
+rollback, storage and row-decode failures, collection variants, and schedule
+hydration. Both workspace clippy configurations, 1,016 nextest tests plus
+doctests, matched SSR/WASM build, web parity/hydration gates, representative
+Chromium/Firefox route-family coverage, and the MPEG-TS/HLS smoke gate passed.
+Public server-function names, serialized DTOs, endpoint behavior, validation,
+and persisted side effects remain intact.
+'''
 
 [[milestone]]
 id         = 'p7c-01'

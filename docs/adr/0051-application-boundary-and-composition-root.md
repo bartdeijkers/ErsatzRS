@@ -6,7 +6,7 @@ Accepted (2026-07-21)
 
 ## Implementation
 
-Partial — the Phase 7B foundation in `ersatzrs-app` now exposes documented
+Implemented (2026-07-24) — the Phase 7B foundation in `ersatzrs-app` exposes documented
 command, query, application-error, port, and operation-coordination modules.
 Core repository errors are storage-neutral, infrastructure maps concrete SQLx
 failures at its boundary, and the native web composition root constructs
@@ -29,8 +29,15 @@ local scanner, and subtitle execution. External-collection synchronization
 remains a distinct keyed operation in the same coordinator, matching its
 separate upstream media-source lifecycle. The baseline-aware
 `cargo xtask architecture-lint` gate also prevents concrete
-storage dependencies from re-entering core. Phase 7B still has to migrate the
-block-preview and remaining admin vertical slices.
+storage dependencies from re-entering core. The real block-preview query and
+the remaining collection, playlist, channel, schedule, settings, Trakt, media,
+and supporting admin/API workflows now use injected application commands and
+queries. Core ports and records remain storage-neutral; infrastructure owns
+all SQL and typed row decoding; and the native composition root is the sole web
+owner of concrete adapter construction. Production admin/API handlers have no
+raw pool dependency. The completed architecture baseline reports zero direct
+admin SQL constructors, raw admin-pool consumers, error-to-default loaders,
+and row-decode defaults.
 
 ## Context
 
@@ -92,10 +99,14 @@ and as part of `cargo xtask parity-check`. The gate:
   glob-imported `query*`, `raw_sql`, and `QueryBuilder` forms, plus raw-SQL
   calls through `sqlx::Executor`, under the Leptos and plain Axum admin
   adapters; and
-- counts production `.await.unwrap_or_default()` loaders that turn server
-  failure into apparently valid data.
+- rejects production admin/API access to a raw database pool;
+- counts awaited result fallbacks, silent awaited `if let Ok` branches, and
+  form-rendering Suspense fallbacks that turn server failure into apparently
+  valid data; and
+- counts `try_get(...).unwrap_or*` row decoding that invents values after
+  persisted-data failures.
 
-The two source-pattern rules use exact per-file counts in
+The baseline-aware source-pattern rules use exact per-file counts in
 `.architecture-lint-baseline.toml`. A new file, an increase, or a stale count
 fails. When a vertical slice removes debt, its change must lower or delete the
 matching baseline entry. Only modules and functions whose `cfg` expression

@@ -37,11 +37,14 @@ pub fn SaveAsSmartCollectionDialog(
         }
         let _ = refresh.get();
         leptos::task::spawn_local(async move {
-            let loaded =
-                crate::admin::server_fns::media_browser::list_smart_collections_for_select()
-                    .await
-                    .unwrap_or_default();
-            options.set(loaded);
+            match crate::admin::server_fns::media_browser::list_smart_collections_for_select().await
+            {
+                Ok(loaded) => options.set(loaded),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 

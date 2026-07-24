@@ -1,6 +1,10 @@
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{MediaSourceRepository, Result};
+use ersatzrs_core::repositories::{
+    LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
+    MediaSourceRepository, PathReplacementAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind,
+    RemoteSourceAdminRow, RepositoryError, Result,
+};
 use ersatzrs_domain::{
     EmbyConnection, EmbyMediaSource, EmbyPathReplacement, EntityId, JellyfinConnection,
     JellyfinMediaSource, JellyfinPathReplacement, MediaSource, MediaSourceKind, PlexConnection,
@@ -14,6 +18,7 @@ use super::common::{decode_optional_datetime, encode_optional_datetime, not_foun
 pub struct SqliteMediaSourceRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_plex(&self, id: EntityId) -> Result<PlexMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Plex).await?;
@@ -282,6 +287,535 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()> {
         upsert_source(&self.0, &source.media_source, source).await
+    }
+
+    async fn first_jellyfin_address_admin(&self) -> Result<Option<String>> {
+        sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "Address" FROM "JellyfinConnection" ORDER BY "Id" LIMIT 1"#,
+        )
+        .fetch_optional(&self.0)
+        .await
+        .repository()
+        .map(Option::flatten)
+    }
+
+    async fn first_emby_address_admin(&self) -> Result<Option<String>> {
+        sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "Address" FROM "EmbyConnection" ORDER BY "Id" LIMIT 1"#,
+        )
+        .fetch_optional(&self.0)
+        .await
+        .repository()
+        .map(Option::flatten)
+    }
+
+    async fn list_local_libraries_admin(&self) -> Result<Vec<LocalLibraryAdminRow>> {
+        let rows = sqlx::query(
+            r#"SELECT l."Id", l."Name", l."MediaKind", COUNT(lp."Id") AS "PathCount"
+               FROM "Library" l
+               JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
+               LEFT JOIN "LibraryPath" lp ON lp."LibraryId" = l."Id"
+               GROUP BY l."Id", l."Name", l."MediaKind"
+               ORDER BY l."Name""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                let path_count: i64 = row.try_get("PathCount").repository()?;
+                Ok(LocalLibraryAdminRow {
+                    id: row.try_get("Id").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    media_kind: row.try_get("MediaKind").repository()?,
+                    path_count: u64::try_from(path_count).map_err(|error| {
+                        RepositoryError::Decode {
+                            kind: "local library path count",
+                            value: error.to_string(),
+                        }
+                    })?,
+                })
+            })
+            .collect()
+    }
+
+    async fn get_local_library_admin(&self, id: EntityId) -> Result<Option<LocalLibraryAdmin>> {
+        let row = sqlx::query(
+            r#"SELECT l."Id", l."Name", l."MediaKind"
+               FROM "Library" l
+               JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
+               WHERE l."Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let paths = sqlx::query(
+            r#"SELECT "Id", COALESCE("Path", '') AS "Path"
+               FROM "LibraryPath" WHERE "LibraryId" = ? ORDER BY "Id""#,
+        )
+        .bind(id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?
+        .iter()
+        .map(|path| {
+            Ok(LocalLibraryPathAdmin {
+                id: path.try_get("Id").repository()?,
+                path: path.try_get("Path").repository()?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+        Ok(Some(LocalLibraryAdmin {
+            id: row.try_get("Id").repository()?,
+            name: row.try_get("Name").repository()?,
+            media_kind: row.try_get("MediaKind").repository()?,
+            paths,
+        }))
+    }
+
+    async fn save_local_library_admin(&self, library: &LocalLibraryAdmin) -> Result<EntityId> {
+        let mut tx = self.0.begin().await.repository()?;
+        let id = if library.id == 0 {
+            let source = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            let source_id = crate::db::last_insert_id(source);
+            sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (?)"#)
+                .bind(source_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            let inserted = sqlx::query(
+                r#"INSERT INTO "Library" ("MediaSourceId", "MediaKind", "Name")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(source_id)
+            .bind(library.media_kind)
+            .bind(&library.name)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            let id = crate::db::last_insert_id(inserted);
+            sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            id
+        } else {
+            sqlx::query(r#"UPDATE "Library" SET "Name" = ?, "MediaKind" = ? WHERE "Id" = ?"#)
+                .bind(&library.name)
+                .bind(library.media_kind)
+                .bind(library.id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            library.id
+        };
+        sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        for path in &library.paths {
+            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                .bind(id)
+                .bind(&path.path)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
+        tx.commit().await.repository()?;
+        Ok(id)
+    }
+
+    async fn delete_local_library_admin(&self, id: EntityId) -> Result<()> {
+        sqlx::query(
+            r#"DELETE FROM "MediaSource"
+               WHERE "Id" = (SELECT "MediaSourceId" FROM "Library" WHERE "Id" = ?)"#,
+        )
+        .bind(id)
+        .execute(&self.0)
+        .await
+        .repository()?;
+        Ok(())
+    }
+
+    async fn list_remote_sources_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+    ) -> Result<Vec<RemoteSourceAdminRow>> {
+        let sql = match kind {
+            RemoteMediaSourceKind::Jellyfin => {
+                r#"SELECT source."Id",
+                          COALESCE(source."ServerName", 'Jellyfin') AS "Name",
+                          COALESCE((SELECT "Address" FROM "JellyfinConnection"
+                            WHERE "JellyfinMediaSourceId" = source."Id"
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "JellyfinMediaSource" source ORDER BY source."Id""#
+            }
+            RemoteMediaSourceKind::Emby => {
+                r#"SELECT source."Id",
+                          COALESCE(source."ServerName", 'Emby') AS "Name",
+                          COALESCE((SELECT "Address" FROM "EmbyConnection"
+                            WHERE "EmbyMediaSourceId" = source."Id"
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "EmbyMediaSource" source ORDER BY source."Id""#
+            }
+            RemoteMediaSourceKind::Plex => {
+                r#"SELECT source."Id",
+                          COALESCE(source."ServerName", 'Plex') AS "Name",
+                          COALESCE((SELECT "Uri" FROM "PlexConnection"
+                            WHERE "PlexMediaSourceId" = source."Id" AND "IsActive" = 1
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "PlexMediaSource" source ORDER BY source."Id""#
+            }
+        };
+        let rows = sqlx::query(sql).fetch_all(&self.0).await.repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(RemoteSourceAdminRow {
+                    id: row.try_get("Id").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    address: row.try_get("Address").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn get_remote_connection_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+    ) -> Result<Option<RemoteConnectionAdmin>> {
+        let sql = match kind {
+            RemoteMediaSourceKind::Jellyfin => {
+                r#"SELECT source."Id",
+                          COALESCE((SELECT "Address" FROM "JellyfinConnection"
+                            WHERE "JellyfinMediaSourceId" = source."Id"
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "JellyfinMediaSource" source ORDER BY source."Id" LIMIT 1"#
+            }
+            RemoteMediaSourceKind::Emby => {
+                r#"SELECT source."Id",
+                          COALESCE((SELECT "Address" FROM "EmbyConnection"
+                            WHERE "EmbyMediaSourceId" = source."Id"
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "EmbyMediaSource" source ORDER BY source."Id" LIMIT 1"#
+            }
+            RemoteMediaSourceKind::Plex => {
+                r#"SELECT source."Id",
+                          COALESCE((SELECT "Uri" FROM "PlexConnection"
+                            WHERE "PlexMediaSourceId" = source."Id" AND "IsActive" = 1
+                            ORDER BY "Id" LIMIT 1), '') AS "Address"
+                   FROM "PlexMediaSource" source ORDER BY source."Id" LIMIT 1"#
+            }
+        };
+        sqlx::query(sql)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .map(|row| {
+                Ok(RemoteConnectionAdmin {
+                    source_id: row.try_get("Id").repository()?,
+                    address: row.try_get("Address").repository()?,
+                })
+            })
+            .transpose()
+    }
+
+    async fn save_remote_connection_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        connection: &RemoteConnectionAdmin,
+        server_name: &str,
+        operating_system: &str,
+    ) -> Result<EntityId> {
+        let mut tx = self.0.begin().await.repository()?;
+        let id = if connection.source_id == 0 {
+            let inserted = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            let id = crate::db::last_insert_id(inserted);
+            match kind {
+                RemoteMediaSourceKind::Jellyfin => {
+                    sqlx::query(
+                        r#"INSERT INTO "JellyfinMediaSource"
+                           ("Id", "ServerName", "OperatingSystem") VALUES (?, ?, ?)"#,
+                    )
+                    .bind(id)
+                    .bind(server_name)
+                    .bind(operating_system)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    sqlx::query(
+                        r#"INSERT INTO "JellyfinConnection"
+                           ("Address", "JellyfinMediaSourceId") VALUES (?, ?)"#,
+                    )
+                    .bind(&connection.address)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                }
+                RemoteMediaSourceKind::Emby => {
+                    sqlx::query(
+                        r#"INSERT INTO "EmbyMediaSource" ("Id", "ServerName") VALUES (?, ?)"#,
+                    )
+                    .bind(id)
+                    .bind(server_name)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    sqlx::query(
+                        r#"INSERT INTO "EmbyConnection"
+                           ("Address", "EmbyMediaSourceId") VALUES (?, ?)"#,
+                    )
+                    .bind(&connection.address)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                }
+                RemoteMediaSourceKind::Plex => {
+                    return Err(RepositoryError::Conflict(
+                        "Plex connections are discovered through PIN authentication".to_owned(),
+                    ));
+                }
+            }
+            id
+        } else {
+            match kind {
+                RemoteMediaSourceKind::Jellyfin => {
+                    sqlx::query(
+                        r#"UPDATE "JellyfinMediaSource"
+                           SET "ServerName" = ?, "OperatingSystem" = ? WHERE "Id" = ?"#,
+                    )
+                    .bind(server_name)
+                    .bind(operating_system)
+                    .bind(connection.source_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    sqlx::query(
+                        r#"UPDATE "JellyfinConnection" SET "Address" = ?
+                           WHERE "JellyfinMediaSourceId" = ?
+                           AND "Id" = (SELECT MIN("Id") FROM "JellyfinConnection"
+                             WHERE "JellyfinMediaSourceId" = ?)"#,
+                    )
+                    .bind(&connection.address)
+                    .bind(connection.source_id)
+                    .bind(connection.source_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                }
+                RemoteMediaSourceKind::Emby => {
+                    sqlx::query(
+                        r#"UPDATE "EmbyConnection" SET "Address" = ?
+                           WHERE "EmbyMediaSourceId" = ?
+                           AND "Id" = (SELECT MIN("Id") FROM "EmbyConnection"
+                             WHERE "EmbyMediaSourceId" = ?)"#,
+                    )
+                    .bind(&connection.address)
+                    .bind(connection.source_id)
+                    .bind(connection.source_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                }
+                RemoteMediaSourceKind::Plex => {
+                    return Err(RepositoryError::Conflict(
+                        "Plex connections are discovered through PIN authentication".to_owned(),
+                    ));
+                }
+            }
+            connection.source_id
+        };
+        tx.commit().await.repository()?;
+        Ok(id)
+    }
+
+    async fn delete_remote_source_admin(&self, id: EntityId) -> Result<()> {
+        sqlx::query(r#"DELETE FROM "MediaSource" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&self.0)
+            .await
+            .repository()?;
+        Ok(())
+    }
+
+    async fn list_library_preferences_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+    ) -> Result<Vec<LibraryPreferenceAdmin>> {
+        let sql = match kind {
+            RemoteMediaSourceKind::Jellyfin => {
+                r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind",
+                          provider."ShouldSyncItems"
+                   FROM "Library" l JOIN "JellyfinLibrary" provider ON provider."Id" = l."Id"
+                   WHERE l."MediaSourceId" = ? ORDER BY l."MediaKind", l."Name""#
+            }
+            RemoteMediaSourceKind::Emby => {
+                r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind",
+                          provider."ShouldSyncItems"
+                   FROM "Library" l JOIN "EmbyLibrary" provider ON provider."Id" = l."Id"
+                   WHERE l."MediaSourceId" = ? ORDER BY l."MediaKind", l."Name""#
+            }
+            RemoteMediaSourceKind::Plex => {
+                r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind",
+                          provider."ShouldSyncItems"
+                   FROM "Library" l JOIN "PlexLibrary" provider ON provider."Id" = l."Id"
+                   WHERE l."MediaSourceId" = ? ORDER BY l."MediaKind", l."Name""#
+            }
+        };
+        let rows = sqlx::query(sql)
+            .bind(source_id)
+            .fetch_all(&self.0)
+            .await
+            .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(LibraryPreferenceAdmin {
+                    id: row.try_get("Id").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    media_kind: row.try_get("MediaKind").repository()?,
+                    should_sync: row.try_get("ShouldSyncItems").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn save_library_preferences_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        preferences: &[LibraryPreferenceAdmin],
+    ) -> Result<()> {
+        let sql = match kind {
+            RemoteMediaSourceKind::Jellyfin => {
+                r#"UPDATE "JellyfinLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#
+            }
+            RemoteMediaSourceKind::Emby => {
+                r#"UPDATE "EmbyLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#
+            }
+            RemoteMediaSourceKind::Plex => {
+                r#"UPDATE "PlexLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#
+            }
+        };
+        let mut tx = self.0.begin().await.repository()?;
+        for preference in preferences {
+            sqlx::query(sql)
+                .bind(preference.should_sync)
+                .bind(preference.id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
+        tx.commit().await.repository()
+    }
+
+    async fn list_path_replacements_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+    ) -> Result<Vec<PathReplacementAdmin>> {
+        let sql = match kind {
+            RemoteMediaSourceKind::Jellyfin => {
+                r#"SELECT "Id", COALESCE("JellyfinPath", '') AS "RemotePath",
+                          COALESCE("LocalPath", '') AS "LocalPath"
+                   FROM "JellyfinPathReplacement"
+                   WHERE "JellyfinMediaSourceId" = ? ORDER BY "Id""#
+            }
+            RemoteMediaSourceKind::Emby => {
+                r#"SELECT "Id", COALESCE("EmbyPath", '') AS "RemotePath",
+                          COALESCE("LocalPath", '') AS "LocalPath"
+                   FROM "EmbyPathReplacement"
+                   WHERE "EmbyMediaSourceId" = ? ORDER BY "Id""#
+            }
+            RemoteMediaSourceKind::Plex => {
+                r#"SELECT "Id", COALESCE("PlexPath", '') AS "RemotePath",
+                          COALESCE("LocalPath", '') AS "LocalPath"
+                   FROM "PlexPathReplacement"
+                   WHERE "PlexMediaSourceId" = ? ORDER BY "Id""#
+            }
+        };
+        let rows = sqlx::query(sql)
+            .bind(source_id)
+            .fetch_all(&self.0)
+            .await
+            .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(PathReplacementAdmin {
+                    id: row.try_get("Id").repository()?,
+                    remote_path: row.try_get("RemotePath").repository()?,
+                    local_path: row.try_get("LocalPath").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn save_path_replacements_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+        paths: &[PathReplacementAdmin],
+    ) -> Result<()> {
+        let (delete_sql, insert_sql) = match kind {
+            RemoteMediaSourceKind::Jellyfin => (
+                r#"DELETE FROM "JellyfinPathReplacement" WHERE "JellyfinMediaSourceId" = ?"#,
+                r#"INSERT INTO "JellyfinPathReplacement"
+                   ("JellyfinPath", "LocalPath", "JellyfinMediaSourceId") VALUES (?, ?, ?)"#,
+            ),
+            RemoteMediaSourceKind::Emby => (
+                r#"DELETE FROM "EmbyPathReplacement" WHERE "EmbyMediaSourceId" = ?"#,
+                r#"INSERT INTO "EmbyPathReplacement"
+                   ("EmbyPath", "LocalPath", "EmbyMediaSourceId") VALUES (?, ?, ?)"#,
+            ),
+            RemoteMediaSourceKind::Plex => (
+                r#"DELETE FROM "PlexPathReplacement" WHERE "PlexMediaSourceId" = ?"#,
+                r#"INSERT INTO "PlexPathReplacement"
+                   ("PlexPath", "LocalPath", "PlexMediaSourceId") VALUES (?, ?, ?)"#,
+            ),
+        };
+        let mut tx = self.0.begin().await.repository()?;
+        sqlx::query(delete_sql)
+            .bind(source_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        for path in paths {
+            sqlx::query(insert_sql)
+                .bind(&path.remote_path)
+                .bind(&path.local_path)
+                .bind(source_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
+        tx.commit().await.repository()
+    }
+
+    async fn delete_all_plex_sources_admin(&self) -> Result<()> {
+        let mut tx = self.0.begin().await.repository()?;
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" LIKE 'plex.%auth_token%'"#)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"DELETE FROM "MediaSource" WHERE "Id" IN (SELECT "Id" FROM "PlexMediaSource")"#,
+        )
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()
     }
 }
 

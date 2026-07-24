@@ -18,7 +18,8 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
@@ -38,21 +39,19 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn MultiCollectionsPage() -> impl IntoView {
-    let initial: Resource<(u32, (Vec<MultiCollectionListRow>, u64))> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async {
-            let page_size = get_multi_collections_page_size().await.unwrap_or(10);
-            let rows = list_multi_collections(String::new(), 0, page_size)
-                .await
-                .unwrap_or_default();
-            (page_size, rows)
+            let page_size = get_multi_collections_page_size().await?;
+            let rows = list_multi_collections(String::new(), 0, page_size).await?;
+            Ok::<_, ServerFnError>((page_size, rows))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_page_size, (initial_rows, initial_total))| {
+                initial.get().map(|result| admin_result_view(result, |(initial_page_size, (initial_rows, initial_total))| {
                     view! {
                         <MultiCollectionsIsland
                             initial_page_size=initial_page_size
@@ -60,7 +59,8 @@ pub fn MultiCollectionsPage() -> impl IntoView {
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -76,12 +76,13 @@ fn MultiCollectionsIsland(
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
     let current_data = RwSignal::new((initial_rows, initial_total));
+    let toast = use_toast();
 
     let data: LocalResource<(Vec<MultiCollectionListRow>, u64)> = LocalResource::new(move || {
         let q = search.get();
         let p = page.get();
         let size = page_size.get();
-        async move { list_multi_collections(q, p, size).await.unwrap_or_default() }
+        async move { load_or_notify(list_multi_collections(q, p, size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -93,7 +94,6 @@ fn MultiCollectionsIsland(
     let delete_open = RwSignal::new(false);
     let delete_action = Action::new(|id: &i64| delete_multi_collection(*id));
 
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(res) = delete_action.value().get() {
             match res {
@@ -265,27 +265,21 @@ pub fn MultiCollectionEditorPage() -> impl IntoView {
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let default_name = tr(TextKey::NewMultiCollection).to_string();
     let fallback_form = load_multi_collection_no_script_form(id, &default_name);
-    let initial: Resource<(MultiCollectionForm, MultiCollectionEditorOptions)> =
-        Resource::new_blocking(
-            move || (id, default_name.clone()),
-            move |(id, default_name)| async move {
-                let form = if id == 0 {
-                    MultiCollectionForm {
-                        name: default_name,
-                        ..MultiCollectionForm::default()
-                    }
-                } else {
-                    get_multi_collection(id)
-                        .await
-                        .unwrap_or_default()
-                        .unwrap_or_default()
-                };
-                let options = get_multi_collection_editor_options()
-                    .await
-                    .unwrap_or_default();
-                (form, options)
-            },
-        );
+    let initial = Resource::new_blocking(
+        move || (id, default_name.clone()),
+        move |(id, default_name)| async move {
+            let form = if id == 0 {
+                MultiCollectionForm {
+                    name: default_name,
+                    ..MultiCollectionForm::default()
+                }
+            } else {
+                get_multi_collection(id).await?.unwrap_or_default()
+            };
+            let options = get_multi_collection_editor_options().await?;
+            Ok::<_, ServerFnError>((form, options))
+        },
+    );
 
     view! {
         <style>".multi-collection-noscript { display: none; }"</style>
@@ -293,54 +287,66 @@ pub fn MultiCollectionEditorPage() -> impl IntoView {
             <style>".multi-collection-noscript { display: block; } .multi-collection-js { display: none; }"</style>
             <div
                 class="multi-collection-noscript"
-                inner_html=multi_collection_editor_fallback_html(&fallback_form)
+                inner_html=multi_collection_editor_fallback_html(fallback_form.as_ref())
             ></div>
         </noscript>
         <div class="multi-collection-js">
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
-                    initial.get().map(|(initial_form, editor_options)| {
+                    initial.get().map(|result| admin_result_view(result, |(initial_form, editor_options)| {
                         view! {
                             <MultiCollectionEditorIsland
                                 initial_form=initial_form
                                 editor_options=editor_options
                             />
                         }
-                    })
+                        .into_any()
+                    }))
                 }}
             </Suspense>
         </div>
     }
 }
 
-fn load_multi_collection_no_script_form(id: i64, default_name: &str) -> MultiCollectionForm {
+fn load_multi_collection_no_script_form(
+    id: i64,
+    default_name: &str,
+) -> Result<MultiCollectionForm, String> {
     if id == 0 {
-        return MultiCollectionForm {
+        return Ok(MultiCollectionForm {
             name: default_name.to_string(),
             ..MultiCollectionForm::default()
-        };
+        });
     }
 
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                get_multi_collection(id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default()
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move { get_multi_collection(id).await })
+                .map(Option::unwrap_or_default)
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        MultiCollectionForm::default()
+        Ok(MultiCollectionForm::default())
     }
 }
 
-fn multi_collection_editor_fallback_html(form: &MultiCollectionForm) -> String {
+fn multi_collection_editor_fallback_html(form: Result<&MultiCollectionForm, &String>) -> String {
+    let form = match form {
+        Ok(form) => form,
+        Err(error) => {
+            return format!(
+                r#"<p class="{}" role="alert">{}: {}</p>"#,
+                style::empty,
+                tr(TextKey::ErrorOccurred),
+                escape_html(error),
+            );
+        }
+    };
     let (button, icon) = if form.id == 0 {
         (tr(TextKey::AddMultiCollection), IconName::Add)
     } else {

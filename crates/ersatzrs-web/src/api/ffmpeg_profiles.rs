@@ -29,24 +29,17 @@ pub async fn save_ffmpeg_profile_form(
         return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id.max(0)));
     }
 
-    let duplicate = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM "FFmpegProfile" WHERE "Name" = ? AND "Id" != ?"#,
-    )
-    .bind(name)
-    .bind(input.id)
-    .fetch_one(&state.pool)
-    .await;
-
-    match duplicate {
-        Ok(0) => {}
-        Ok(_) => return Redirect::to(&format!("/ffmpeg/{}?error=duplicate", input.id)),
+    let mut form = match state.application.get_ffmpeg_profile(input.id).await {
+        Ok(Some(form)) => form,
+        Ok(None) => return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id)),
         Err(error) => {
-            tracing::error!(%error, "failed to check duplicate FFmpeg profile name");
+            tracing::error!(%error, profile_id = input.id, "failed to load FFmpeg profile for HTML form");
             return Redirect::to(&format!("/ffmpeg/{}?error=save", input.id));
         }
-    }
+    };
+    name.clone_into(&mut form.name);
 
-    let result = if let (Some(hw), Some(vf), Some(bit_depth)) = (
+    if let (Some(hw), Some(vf), Some(bit_depth)) = (
         input.hardware_acceleration,
         input.video_format,
         input.bit_depth,
@@ -56,33 +49,22 @@ pub async fn save_ffmpeg_profile_form(
         }
 
         let requested_profile = input.video_profile.unwrap_or_default();
-        let video_profile = fallback_video_profile(hw, vf, bit_depth, &requested_profile);
-        let bit_depth = if vf == 3 { 0 } else { bit_depth };
+        form.hardware_acceleration = hw;
+        form.video_format = vf;
+        form.video_profile =
+            fallback_video_profile(hw, vf, bit_depth, &requested_profile).unwrap_or_default();
+        form.bit_depth = if vf == 3 { 0 } else { bit_depth };
+    }
 
-        sqlx::query(
-            r#"UPDATE "FFmpegProfile"
-               SET "Name" = ?, "HardwareAcceleration" = ?, "VideoFormat" = ?,
-                   "VideoProfile" = ?, "BitDepth" = ?
-               WHERE "Id" = ?"#,
-        )
-        .bind(name)
-        .bind(hw)
-        .bind(vf)
-        .bind(video_profile)
-        .bind(bit_depth)
-        .bind(input.id)
-        .execute(&state.pool)
+    match state
+        .application
+        .save_ffmpeg_profile(ersatzrs_app::commands::SaveFfmpegProfile { form })
         .await
-    } else {
-        sqlx::query(r#"UPDATE "FFmpegProfile" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(name)
-            .bind(input.id)
-            .execute(&state.pool)
-            .await
-    };
-
-    match result {
+    {
         Ok(_) => Redirect::to("/ffmpeg"),
+        Err(ersatzrs_app::ApplicationError::Validation { field: "name", .. }) => {
+            Redirect::to(&format!("/ffmpeg/{}?error=duplicate", input.id))
+        }
         Err(error) => {
             tracing::error!(%error, profile_id = input.id, "failed to save FFmpeg profile from HTML form");
             Redirect::to(&format!("/ffmpeg/{}?error=save", input.id))

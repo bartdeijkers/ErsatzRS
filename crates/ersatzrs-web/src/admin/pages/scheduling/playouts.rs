@@ -19,7 +19,10 @@ use crate::admin::server_fns::playouts::{
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::form::TextField;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/playouts.module.css");
 
@@ -28,34 +31,30 @@ const DETAIL_PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn PlayoutsPage() -> impl IntoView {
-    let initial: Resource<(Vec<PlayoutListRow>, u64, bool)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async move {
-            let (rows, count, show_filler) = tokio::join!(
+            tokio::try_join!(
                 list_playouts(String::new(), 0, LIST_PAGE_SIZE),
                 count_playouts(),
                 get_show_filler_pref(),
-            );
-            (
-                rows.unwrap_or_default(),
-                count.unwrap_or(0),
-                show_filler.unwrap_or(false),
             )
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_rows, initial_count, initial_show_filler)| {
-                    view! {
+                initial.get().map(|result| admin_result_view(
+                    result,
+                    |(initial_rows, initial_count, initial_show_filler)| view! {
                         <PlayoutsIsland
                             initial_rows=initial_rows
                             initial_count=initial_count
                             initial_show_filler=initial_show_filler
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }
@@ -74,17 +73,16 @@ fn PlayoutsIsland(
 
     let current_list_rows = RwSignal::new(initial_rows);
     let current_list_count = RwSignal::new(initial_count);
+    let load_toast = use_toast();
     let list_rows: LocalResource<Vec<PlayoutListRow>> = LocalResource::new(move || {
         let query = search.get();
         let page = page.get();
-        async move {
-            list_playouts(query, page, LIST_PAGE_SIZE)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_playouts(query, page, LIST_PAGE_SIZE).await, load_toast) }
     });
     let list_count: LocalResource<u64> =
-        LocalResource::new(|| async move { count_playouts().await.unwrap_or(0) });
+        LocalResource::new(
+            move || async move { load_or_notify(count_playouts().await, load_toast) },
+        );
     Effect::new(move |_| {
         if let Some(rows) = list_rows.get() {
             current_list_rows.set(rows);
@@ -104,8 +102,9 @@ fn PlayoutsIsland(
     let detail_page = RwSignal::new(0u32);
 
     // Refresh the persisted Show Filler preference after hydration.
-    let filler_pref: LocalResource<bool> =
-        LocalResource::new(|| async move { get_show_filler_pref().await.unwrap_or(false) });
+    let filler_pref: LocalResource<bool> = LocalResource::new(move || async move {
+        load_or_notify(get_show_filler_pref().await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some(value) = filler_pref.get() {
             show_filler.set(value);
@@ -120,9 +119,10 @@ fn PlayoutsIsland(
         let page = detail_page.get();
         async move {
             match id {
-                Some(id) => list_playout_detail_items(id, filler, page, DETAIL_PAGE_SIZE)
-                    .await
-                    .unwrap_or_default(),
+                Some(id) => load_or_notify(
+                    list_playout_detail_items(id, filler, page, DETAIL_PAGE_SIZE).await,
+                    load_toast,
+                ),
                 None => Vec::new(),
             }
         }
@@ -132,7 +132,9 @@ fn PlayoutsIsland(
         let filler = show_filler.get();
         async move {
             match id {
-                Some(id) => count_playout_detail_items(id, filler).await.unwrap_or(0),
+                Some(id) => {
+                    load_or_notify(count_playout_detail_items(id, filler).await, load_toast)
+                }
                 None => 0,
             }
         }
@@ -155,25 +157,38 @@ fn PlayoutsIsland(
         #[cfg(target_arch = "wasm32")]
         {
             use crate::admin::server_fns::playouts::playout_build_activity;
+            let activity_toast = use_toast();
             leptos::task::spawn_local(async move {
                 let mut previous: Vec<i64> = Vec::new();
+                let mut reported_failure = false;
                 loop {
-                    if let Ok(activity) = playout_build_activity().await {
-                        let mut ids = activity.queued;
-                        ids.extend(activity.building);
-                        ids.sort_unstable();
-                        ids.dedup();
-                        // When accepted work reaches a terminal state, refetch
-                        // the persisted result and failure status.
-                        let just_unlocked = previous.iter().any(|id| !ids.contains(id));
-                        if just_unlocked {
-                            list_rows.refetch();
-                            list_count.refetch();
-                            detail_rows.refetch();
-                            detail_count.refetch();
+                    match playout_build_activity().await {
+                        Ok(activity) => {
+                            reported_failure = false;
+                            let mut ids = activity.queued;
+                            ids.extend(activity.building);
+                            ids.sort_unstable();
+                            ids.dedup();
+                            // When accepted work reaches a terminal state, refetch
+                            // the persisted result and failure status.
+                            let just_unlocked = previous.iter().any(|id| !ids.contains(id));
+                            if just_unlocked {
+                                list_rows.refetch();
+                                list_count.refetch();
+                                detail_rows.refetch();
+                                detail_count.refetch();
+                            }
+                            previous = ids.clone();
+                            locked.set(ids);
                         }
-                        previous = ids.clone();
-                        locked.set(ids);
+                        Err(error) if !reported_failure => {
+                            activity_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                            reported_failure = true;
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

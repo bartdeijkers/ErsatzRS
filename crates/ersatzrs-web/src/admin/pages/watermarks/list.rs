@@ -9,7 +9,7 @@ use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     form::TextField,
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
-    toast::{use_toast, ToastSeverity},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/watermarks/list.module.css");
@@ -34,18 +34,15 @@ pub fn WatermarksListPage() -> impl IntoView {
 #[island]
 fn WatermarksListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
+    let toast = use_toast();
 
     let rows_resource: LocalResource<Vec<WatermarkListRow>> = LocalResource::new(move || {
         let p = params.get();
-        async move {
-            list_watermark_rows(p.page, p.page_size)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_watermark_rows(p.page, p.page_size).await, toast) }
     });
 
     let count_resource: LocalResource<u64> =
-        LocalResource::new(|| async { count_watermarks().await.unwrap_or(0) });
+        LocalResource::new(move || async move { load_or_notify(count_watermarks().await, toast) });
 
     let total = Signal::derive(move || count_resource.get());
 
@@ -70,8 +67,6 @@ fn WatermarksListIsland() -> impl IntoView {
     let copy_source: RwSignal<Option<WatermarkListRow>> = RwSignal::new(None);
     let copy_open = RwSignal::new(false);
     let copy_name = RwSignal::new(String::new());
-    let toast = use_toast();
-
     Effect::new(move |_| {
         if let Some(res) = copy_action.value().get() {
             match res {

@@ -6,7 +6,7 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_infra::db::DbPool;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,14 +63,47 @@ pub struct TemplateBlockOption {
     pub minutes: i32,
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn template_form_into_command(
+    form: TemplateWithItemsForm,
+) -> ersatzrs_app::commands::SaveTemplate {
+    ersatzrs_app::commands::SaveTemplate {
+        id: form.id,
+        group_id: form.group_id,
+        name: form.name,
+        items: form
+            .items
+            .into_iter()
+            .map(|item| ersatzrs_app::commands::TemplateItemForm {
+                block_id: item.block_id,
+                start_minutes: item.start_minutes,
+            })
+            .collect(),
+    }
+}
+
 #[server]
 pub async fn list_template_groups() -> Result<Vec<TemplateGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_template_groups_with_pool(&state.pool).await
+    state
+        .application
+        .list_template_groups()
+        .await
+        .map(|groups| {
+            groups
+                .into_iter()
+                .map(|group| TemplateGroupRow {
+                    id: group.id,
+                    name: group.name,
+                    template_count: group.template_count,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_template_groups_with_pool(
     pool: &DbPool,
 ) -> Result<Vec<TemplateGroupRow>, ServerFnError> {
@@ -102,10 +135,25 @@ pub async fn list_template_groups_with_pool(
 pub async fn list_templates(search: String) -> Result<Vec<TemplateRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_templates_with_pool(&state.pool, &search).await
+    state
+        .application
+        .list_templates(&search)
+        .await
+        .map(|templates| {
+            templates
+                .into_iter()
+                .map(|template| TemplateRow {
+                    id: template.id,
+                    group_id: template.group_id,
+                    group_name: template.group_name,
+                    name: template.name,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_templates_with_pool(
     pool: &DbPool,
     search: &str,
@@ -153,10 +201,14 @@ pub async fn list_templates_with_pool(
 pub async fn create_template_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_template_group_with_pool(&state.pool, &name).await
+    state
+        .application
+        .create_template_group(ersatzrs_app::commands::CreateTemplateGroup { name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_template_group_with_pool(
     pool: &DbPool,
     name: &str,
@@ -173,10 +225,14 @@ pub async fn create_template_group_with_pool(
 pub async fn create_template(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_template_with_pool(&state.pool, group_id, &name).await
+    state
+        .application
+        .create_template(ersatzrs_app::commands::CreateTemplate { group_id, name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_template_with_pool(
     pool: &DbPool,
     group_id: i64,
@@ -203,10 +259,18 @@ pub async fn copy_template(
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    copy_template_with_pool(&state.pool, template_id, new_group_id, &new_name).await
+    state
+        .application
+        .copy_template(ersatzrs_app::commands::CopyTemplate {
+            template_id,
+            new_group_id,
+            name: new_name,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn copy_template_with_pool(
     pool: &DbPool,
     template_id: i64,
@@ -265,10 +329,14 @@ pub async fn copy_template_with_pool(
 pub async fn delete_template_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_template_group_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_template_group(ersatzrs_app::commands::DeleteTemplateGroup { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_template_group_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "TemplateGroup" WHERE "Id" = ?"#)
         .bind(id)
@@ -286,10 +354,14 @@ pub async fn delete_template_group_with_pool(pool: &DbPool, id: i64) -> Result<(
 pub async fn delete_template(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_template_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_template(ersatzrs_app::commands::DeleteTemplate { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_template_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "Template" WHERE "Id" = ?"#)
         .bind(id)
@@ -304,38 +376,46 @@ pub async fn delete_template_with_pool(pool: &DbPool, id: i64) -> Result<(), Ser
 #[server]
 pub async fn get_template(id: i64) -> Result<Option<TemplateForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT t."Id",
-                  t."TemplateGroupId",
-                  COALESCE(tg."Name", '') AS "GroupName",
-                  COALESCE(t."Name", '') AS "Name"
-           FROM "Template" t
-           JOIN "TemplateGroup" tg ON tg."Id" = t."TemplateGroupId"
-           WHERE t."Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    Ok(row.map(|row| TemplateForm {
-        id: row.try_get("Id").unwrap_or_default(),
-        group_id: row.try_get("TemplateGroupId").unwrap_or_default(),
-        group_name: row.try_get("GroupName").unwrap_or_default(),
-        name: row.try_get("Name").unwrap_or_default(),
-    }))
+    state
+        .application
+        .get_template(id)
+        .await
+        .map(|template| {
+            template.map(|template| TemplateForm {
+                id: template.id,
+                group_id: template.group_id,
+                group_name: template.group_name,
+                name: template.name,
+            })
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn get_template_items(template_id: i64) -> Result<Vec<TemplateItemForm>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    get_template_items_with_pool(&state.pool, template_id).await
+    state
+        .application
+        .get_template_items(template_id)
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| TemplateItemForm {
+                    block_id: item.block_id,
+                    block_name: item.block_name,
+                    start_minutes: item.start_minutes,
+                    duration_minutes: item.duration_minutes,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_template_items_with_pool(
     pool: &DbPool,
     template_id: i64,
@@ -378,24 +458,22 @@ pub async fn get_template_items_with_pool(
 #[server]
 pub async fn list_template_block_groups() -> Result<Vec<TemplateBlockGroupOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "BlockGroup"
-           ORDER BY "Name", "Id""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|row| TemplateBlockGroupOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
+    state
+        .application
+        .list_template_block_groups()
+        .await
+        .map(|groups| {
+            groups
+                .into_iter()
+                .map(|group| TemplateBlockGroupOption {
+                    id: group.id,
+                    name: group.name,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -403,38 +481,38 @@ pub async fn list_template_blocks_for_group(
     group_id: i64,
 ) -> Result<Vec<TemplateBlockOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", "BlockGroupId", COALESCE("Name", '') AS "Name", "Minutes"
-           FROM "Block"
-           WHERE "BlockGroupId" = ?
-           ORDER BY "Name", "Id""#,
-    )
-    .bind(group_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|row| TemplateBlockOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            group_id: row.try_get("BlockGroupId").unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
-            minutes: row.try_get("Minutes").unwrap_or_default(),
+    state
+        .application
+        .list_template_blocks(group_id)
+        .await
+        .map(|blocks| {
+            blocks
+                .into_iter()
+                .map(|block| TemplateBlockOption {
+                    id: block.id,
+                    group_id: block.group_id,
+                    name: block.name,
+                    minutes: block.minutes,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn save_template_with_items(form: TemplateWithItemsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    save_template_with_pool(&state.pool, form).await
+    state
+        .application
+        .save_template(template_form_into_command(form))
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_template_with_pool(
     pool: &DbPool,
     form: TemplateWithItemsForm,
@@ -476,7 +554,7 @@ pub async fn save_template_with_pool(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_template_group_name(pool: &DbPool, name: &str) -> Result<String, ServerFnError> {
     let name = name.trim();
     if name.is_empty() {
@@ -498,7 +576,7 @@ async fn validate_template_group_name(pool: &DbPool, name: &str) -> Result<Strin
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_template_group_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TemplateGroup" WHERE "Id" = ?"#)
         .bind(id)
@@ -510,7 +588,7 @@ async fn validate_template_group_exists(pool: &DbPool, id: i64) -> Result<(), Se
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_template_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Template" WHERE "Id" = ?"#)
         .bind(id)
@@ -522,7 +600,7 @@ async fn validate_template_exists(pool: &DbPool, id: i64) -> Result<(), ServerFn
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_template_name(
     pool: &DbPool,
     group_id: i64,
@@ -569,7 +647,7 @@ async fn validate_template_name(
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_template_items(
     pool: &DbPool,
     items: &[TemplateItemForm],

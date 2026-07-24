@@ -5,9 +5,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    admin::server_fns::filler::{
-        delete_filler_preset_with_pool, save_filler_preset_with_pool, FillerPresetForm,
-    },
+    admin::server_fns::filler::{filler_form_into_admin, FillerPresetForm},
     host::state::AppState,
 };
 
@@ -70,7 +68,13 @@ pub async fn save_filler_preset_form(
         use_chapters_as_media_items: input.use_chapters_as_media_items,
     };
 
-    match save_filler_preset_with_pool(&state.pool, form).await {
+    match state
+        .application
+        .save_filler_preset(ersatzrs_app::commands::SaveFillerPreset {
+            form: filler_form_into_admin(form),
+        })
+        .await
+    {
         Ok(_) => Redirect::to("/media/filler/presets"),
         Err(error) => {
             tracing::error!(%error, filler_preset_id = id, "failed to save filler preset from HTML form");
@@ -88,7 +92,11 @@ pub async fn delete_filler_preset_form(
     State(state): State<AppState>,
     Form(input): Form<FillerPresetDeleteForm>,
 ) -> Redirect {
-    match delete_filler_preset_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_filler_preset(ersatzrs_app::commands::DeleteFillerPreset { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/media/filler/presets"),
         Err(error) => {
             tracing::error!(%error, filler_preset_id = input.id, "failed to delete filler preset from HTML form");

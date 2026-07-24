@@ -1,3 +1,6 @@
+mod admin_media;
+mod admin_search;
+mod admin_settings;
 mod block;
 mod channel;
 mod collection;
@@ -17,16 +20,47 @@ mod playout;
 mod program_schedule;
 mod television;
 mod template;
+mod trakt;
+mod troubleshooting;
+mod watermark;
 
-pub use block::BlockRepository;
-pub use channel::{
-    ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
-    ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult, ChannelNumberUpdate,
-    ChannelRepository, ChannelSaveResult, ChannelSelectOption, ChannelValidationError,
+pub use admin_media::{
+    AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,
+    AdminCommentarySubtitle, AdminMediaCard, AdminMediaInfoChapter, AdminMediaInfoKind,
+    AdminMediaInfoStream, AdminMediaItemInfo, AdminMediaRepository, AdminMovieDetail,
+    AdminOtherVideoDetail, AdminSeasonCard, AdminShowDetail,
 };
-pub use collection::CollectionRepository;
+pub use admin_search::{
+    AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,
+};
+pub use admin_settings::{
+    AdminSettingsRepository, SettingsMutation, SettingsOptionKind, SettingsSelectOption,
+};
+pub use block::{
+    BlockAdminRow, BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow,
+    BlockItemAdmin, BlockRepository,
+};
+pub use channel::{
+    ChannelAdminListRow, ChannelEditorForm, ChannelEditorOptions, ChannelEditorState,
+    ChannelLogoForm, ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult,
+    ChannelNumberUpdate, ChannelRepository, ChannelSaveResult, ChannelSaveSideEffects,
+    ChannelSelectOption, ChannelValidationError, ChannelValidationRow, ChannelValidationState,
+};
+pub use collection::{
+    CollectionAdminRow, CollectionDetailAdmin, CollectionItemCardAdmin, CollectionMemberAdmin,
+    CollectionRepository, MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+    MultiCollectionEditorOptions, MultiCollectionItem, MultiCollectionSelectOption,
+    PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin, PlaylistEditorOptions,
+    PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert, PlaylistItemOption,
+    RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions,
+    RerunCollectionReferenceKind, RerunCollectionSelectOption, SmartCollectionAdminRow,
+};
 pub use config::ConfigRepository;
-pub use deco::DecoRepository;
+pub use deco::{
+    DecoAdminRecord, DecoAdminRow, DecoBreakContentAdmin, DecoEditorOptionsAdmin,
+    DecoGroupAdminRow, DecoOptionAdmin, DecoPlaylistOptionAdmin, DecoRepository,
+    DecoTemplateAdminRow, DecoTemplateGroupAdminRow, DecoTemplateItemAdmin,
+};
 pub use emby::{
     EmbyActor, EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind,
     EmbyCollectionMediaPage, EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage,
@@ -44,11 +78,40 @@ pub use jellyfin::{
     JellyfinPathInfo, JellyfinPlaybackMetadata, JellyfinSeasonItem, JellyfinSeasonPage,
     JellyfinService, JellyfinShowItem, JellyfinShowPage,
 };
-pub use library::{LibraryRepository, LibraryScanTarget};
+pub use library::{
+    AdminExternalCollectionRow, AdminLibraryRow, LibraryRepository, LibraryScanTarget,
+    MediaStateRevision,
+};
 pub use media_item::MediaItemRepository;
-pub use media_source::MediaSourceRepository;
+pub use media_source::{
+    LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
+    MediaSourceRepository, PathReplacementAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind,
+    RemoteSourceAdminRow,
+};
 pub use metadata::MetadataRepository;
-pub use playout::PlayoutRepository;
-pub use program_schedule::ProgramScheduleRepository;
+pub use playout::{
+    PlayoutAlternateScheduleItemAdmin, PlayoutAlternateSchedulesAdmin, PlayoutCreateAdmin,
+    PlayoutCreateChannelAdmin, PlayoutCreateScheduleAdmin, PlayoutDateFilterAdmin,
+    PlayoutDecoAdmin, PlayoutDecoGroupAdmin, PlayoutDetailAdminItem, PlayoutKindEditorAdmin,
+    PlayoutListAdminRow, PlayoutNestedChildOptionAdmin, PlayoutNestedOptionAdmin,
+    PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin, SequentialPlayoutAdmin,
+};
+pub use program_schedule::{
+    ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleFillerOption,
+    ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions, ScheduleLanguageOption,
+    SchedulePlaylistOption,
+};
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};
-pub use template::TemplateRepository;
+pub use template::{
+    TemplateAdminRow, TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow,
+    TemplateItemAdmin, TemplateRepository,
+};
+pub use trakt::{TraktListAdminForm, TraktListAdminRow, TraktRepository};
+pub use troubleshooting::{
+    BlockPlayoutHistoryAdmin, BlockPlayoutOptionAdmin, MpegTroubleshootingChannelAdmin,
+    PlaybackChannelSummaryAdmin, PlaybackMediaSummaryAdmin, PlaybackSubtitleAdmin,
+    PlaybackTroubleshootingAdmin, TroubleshootingBlockAdmin, TroubleshootingChannelSummaryAdmin,
+    TroubleshootingFfmpegProfileSummaryAdmin, TroubleshootingOptionAdmin,
+    TroubleshootingPreviewMediaAdmin, TroubleshootingRepository,
+};
+pub use watermark::WatermarkRepository;

@@ -6,6 +6,7 @@ use crate::admin::server_fns::layout::{
     load_ffmpeg_runtime_notification, AdminFfmpegRuntimeNotification,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::toast::{use_toast, ToastContainer, ToastSeverity};
 
 mod badges;
@@ -18,7 +19,10 @@ const FFMPEG_RUNTIME_NOTIFICATION_SESSION_KEY: &str = "ersatzrs.ffmpeg-runtime-n
 
 #[component]
 pub fn AppShell(children: Children) -> impl IntoView {
-    let theme = load_shell_theme_initial();
+    let (theme, theme_error) = match load_shell_theme_initial() {
+        Ok(theme) => (theme, None),
+        Err(error) => ("dark".to_owned(), Some(error)),
+    };
 
     view! {
         <div
@@ -37,6 +41,7 @@ pub fn AppShell(children: Children) -> impl IntoView {
                 <NavGroupsStateScript/>
                 <div class=style::content_col>
                     <main class=style::main>
+                        {theme_error.map(|error| view! { <AdminErrorState error/> })}
                         {children()}
                     </main>
                 </div>
@@ -54,7 +59,7 @@ fn StartupNotifications() -> impl IntoView {
     let shown = RwSignal::new(false);
     let notification = Resource::new(
         || (),
-        |()| async move { load_ffmpeg_runtime_notification().await.ok().flatten() },
+        |()| async move { load_ffmpeg_runtime_notification().await },
     );
 
     Effect::new(move |_| {
@@ -62,8 +67,20 @@ fn StartupNotifications() -> impl IntoView {
             return;
         }
 
-        let Some(Some(notification)) = notification.get() else {
+        let Some(result) = notification.get() else {
             return;
+        };
+        let notification = match result {
+            Ok(Some(notification)) => notification,
+            Ok(None) => return,
+            Err(error) => {
+                shown.set(true);
+                toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                );
+                return;
+            }
         };
 
         let event_key = ffmpeg_runtime_notification_event_key(&notification);
@@ -152,41 +169,39 @@ fn remember_ffmpeg_runtime_notification(event_key: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 fn remember_ffmpeg_runtime_notification(_event_key: &str) {}
 
-fn load_shell_theme_initial() -> String {
+fn load_shell_theme_initial() -> Result<String, String> {
     #[cfg(feature = "ssr")]
     {
         use crate::host::state::AppState;
 
-        let Some(state) = use_context::<AppState>() else {
-            return "dark".to_owned();
-        };
-        let is_dark_mode = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(|| {
-                handle.block_on(crate::admin::server_fns::settings::load_bool_for_api(
-                    &state.pool,
-                    ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
-                    true,
-                ))
-            })
-            .unwrap_or(true),
-            Err(_) => true,
-        };
-        if is_dark_mode { "dark" } else { "light" }.to_owned()
+        let state = use_context::<AppState>()
+            .ok_or_else(|| "application state is unavailable".to_owned())?;
+        let handle = tokio::runtime::Handle::try_current()
+            .map_err(|error| format!("async runtime is unavailable: {error}"))?;
+        let is_dark_mode = tokio::task::block_in_place(|| {
+            handle.block_on(crate::admin::server_fns::settings::load_bool_for_api(
+                state.application.ports().admin_settings(),
+                ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
+                true,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+        Ok(if is_dark_mode { "dark" } else { "light" }.to_owned())
     }
 
     #[cfg(all(not(feature = "ssr"), target_arch = "wasm32"))]
     {
-        web_sys::window()
+        Ok(web_sys::window()
             .and_then(|window| window.document())
             .and_then(|document| document.query_selector("[data-theme]").ok().flatten())
             .and_then(|element| element.get_attribute("data-theme"))
             .filter(|theme| theme == "light")
-            .unwrap_or_else(|| "dark".to_owned())
+            .unwrap_or_else(|| "dark".to_owned()))
     }
 
     #[cfg(all(not(feature = "ssr"), not(target_arch = "wasm32")))]
     {
-        "dark".to_owned()
+        Ok("dark".to_owned())
     }
 }
 

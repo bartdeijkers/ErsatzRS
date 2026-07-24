@@ -3,7 +3,8 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
+    ChannelRepository, FfmpegProfileRepository, PlayoutCreateAdmin, PlayoutRepository,
+    ProgramScheduleRepository,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
@@ -128,6 +129,84 @@ async fn playout_repository_replaces_runtime_state_tables() {
     assert_eq!(loaded.on_demand_checkpoint, playout.on_demand_checkpoint);
 
     assert_runtime_state_rows(&pool).await;
+}
+
+#[tokio::test]
+async fn playout_admin_repository_lists_creates_edits_and_erases_playouts() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+    repos
+        .channel
+        .upsert(&common::channel(1, "1", true))
+        .await
+        .unwrap();
+
+    let channels = repos.playout.list_create_channels_admin().await.unwrap();
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].playout_count, 0);
+
+    let id = repos
+        .playout
+        .create_admin(&PlayoutCreateAdmin {
+            channel_id: 1,
+            schedule_kind: 3,
+            program_schedule_id: None,
+            schedule_file: "one: two".to_owned(),
+            seed: 42,
+        })
+        .await
+        .unwrap();
+    let sequential = repos
+        .playout
+        .get_sequential_admin(id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sequential.yaml_content, "one: two");
+
+    repos
+        .playout
+        .save_schedule_file_admin(id, 3, "three: four")
+        .await
+        .unwrap();
+    assert_eq!(
+        repos
+            .playout
+            .get_sequential_admin(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .yaml_content,
+        "three: four"
+    );
+
+    let rows = repos.playout.list_admin("", 0, 10).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].schedule_kind, 3);
+
+    repos
+        .playout
+        .erase_items_and_history_admin(id)
+        .await
+        .unwrap();
+    repos.playout.delete_admin(id).await.unwrap();
+    assert!(repos.playout.delete_admin(id).await.is_err());
+}
+
+#[tokio::test]
+async fn playout_admin_repository_propagates_closed_pool_failures() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    pool.close().await;
+
+    assert!(repos.playout.list_admin("", 0, 10).await.is_err());
+    assert!(repos.playout.count_admin().await.is_err());
+    assert!(repos.playout.list_create_channels_admin().await.is_err());
 }
 
 async fn seed_runtime_state_fixture(

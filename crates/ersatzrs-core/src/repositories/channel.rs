@@ -5,6 +5,43 @@ use serde::{Deserialize, Serialize};
 
 use super::Result;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChannelAdminListRow {
+    pub id: EntityId,
+    pub number: String,
+    pub name: String,
+    pub preferred_audio_language_code: Option<String>,
+    pub is_enabled: bool,
+    pub show_in_epg: bool,
+    pub streaming_mode: i32,
+    pub ffmpeg_profile_name: String,
+    pub playout_count: i64,
+    pub logo_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelSaveSideEffects {
+    pub subtitle_mode: i32,
+    pub playout_ids: Vec<EntityId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelValidationRow {
+    pub id: EntityId,
+    pub number: String,
+    pub name: String,
+    pub playout_source: i32,
+    pub playout_count: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelValidationState {
+    pub channels: Vec<ChannelValidationRow>,
+    pub ffmpeg_profile_ids: Vec<EntityId>,
+    pub watermark_ids: Vec<EntityId>,
+    pub fallback_filler_ids: Vec<EntityId>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ChannelLogoForm {
     pub path: Option<String>,
@@ -196,4 +233,15 @@ pub trait ChannelRepository: Send + Sync {
         &self,
         updates: Vec<ChannelNumberUpdate>,
     ) -> Result<ChannelNumberSaveResult>;
+    async fn list_admin_rows(
+        &self,
+        show_disabled: bool,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<ChannelAdminListRow>>;
+    async fn count_admin_rows(&self, show_disabled: bool) -> Result<u64>;
+    async fn list_ffmpeg_profile_options(&self) -> Result<Vec<ChannelSelectOption>>;
+    async fn list_filler_preset_options(&self) -> Result<Vec<ChannelSelectOption>>;
+    async fn validation_state(&self) -> Result<ChannelValidationState>;
+    async fn save_side_effects(&self, id: EntityId) -> Result<Option<ChannelSaveSideEffects>>;
 }

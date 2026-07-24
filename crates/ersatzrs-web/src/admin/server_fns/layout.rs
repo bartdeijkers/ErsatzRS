@@ -7,12 +7,7 @@ pub async fn count_playout_warnings() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let count: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutBuildStatus" WHERE "Success" = 0"#)
-            .fetch_one(&state.pool)
-            .await?;
-
-    Ok(u32::try_from(count).unwrap_or(0))
+    Ok(state.application.count_playout_warnings().await?)
 }
 
 /// Returns (error_count, warning_count) by combining the persisted parity
@@ -20,18 +15,9 @@ pub async fn count_playout_warnings() -> Result<u32, ServerFnError> {
 #[server]
 pub async fn count_health_issues() -> Result<(u32, u32), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::health::SqlHealthCheckStore;
 
     let state = expect_context::<AppState>();
-    let (mut errors, mut warnings) = state.health_issue_counts().await;
-
-    let store = SqlHealthCheckStore::new(state.pool.clone());
-    if let Ok(summary) = store.load_summary().await {
-        errors = errors.saturating_add(summary.errors);
-        warnings = warnings.saturating_add(summary.warnings);
-    }
-
-    Ok((errors, warnings))
+    Ok(state.application.admin_health_issue_counts().await?)
 }
 
 /// Persisted health row projected to a JSON-friendly shape for the admin page.
@@ -82,16 +68,10 @@ pub struct AdminFfmpegRuntimeNotification {
 pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_core::health::HealthCheckStatus as S;
-    use ersatzrs_infra::health::run_and_persist_health_checks;
 
     let state = expect_context::<AppState>();
-    let runtime = state.ffmpeg_runtime.read().await.clone();
-    let run = run_and_persist_health_checks(
-        state.pool.clone(),
-        runtime.clone(),
-        state.system_startup.schema_status.clone(),
-    )
-    .await?;
+    let run = state.application.run_admin_health_checks().await?;
+    let runtime = run.ffmpeg_runtime;
 
     let rows = run
         .results
@@ -119,15 +99,15 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
         errors: run.summary.errors,
         warnings: run.summary.warnings,
         ffmpeg_runtime: Some(AdminFfmpegRuntimeStatus {
-            source: runtime.acquisition.source.to_string(),
-            ffmpeg_version: runtime.ffmpeg.version.to_string(),
-            ffprobe_version: runtime.ffprobe.version.to_string(),
-            installed_tag: runtime.acquisition.installed_tag,
-            latest_tag: runtime.acquisition.latest_tag,
-            previous_tag: runtime.acquisition.previous_tag,
-            downloaded_update: runtime.acquisition.downloaded_update,
-            update_available: runtime.acquisition.update_available,
-            update_check_error: runtime.acquisition.update_check_error,
+            source: runtime.source,
+            ffmpeg_version: runtime.ffmpeg_version,
+            ffprobe_version: runtime.ffprobe_version,
+            installed_tag: runtime.installed_tag,
+            latest_tag: runtime.latest_tag,
+            previous_tag: runtime.previous_tag,
+            downloaded_update: runtime.downloaded_update,
+            update_available: runtime.update_available,
+            update_check_error: runtime.update_check_error,
         }),
         rows,
     })
@@ -138,32 +118,31 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
 pub async fn load_ffmpeg_runtime_notification(
 ) -> Result<Option<AdminFfmpegRuntimeNotification>, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_ffmpeg::FfmpegRuntimeSource;
 
     if let Some(notification) = e2e_ffmpeg_runtime_notification_override() {
         return Ok(Some(notification));
     }
 
     let state = expect_context::<AppState>();
-    let runtime = state.ffmpeg_runtime.read().await;
-    if let Some(error) = runtime.acquisition.update_check_error.clone() {
+    let runtime = state.application.admin_ffmpeg_runtime().await;
+    if let Some(error) = runtime.update_check_error.clone() {
         return Ok(Some(AdminFfmpegRuntimeNotification {
-            previous_tag: runtime.acquisition.previous_tag.clone(),
-            installed_tag: runtime.acquisition.installed_tag.clone(),
-            asset_name: runtime.acquisition.asset_name.clone(),
+            previous_tag: runtime.previous_tag.clone(),
+            installed_tag: runtime.installed_tag.clone(),
+            asset_name: runtime.asset_name.clone(),
             update_failed: true,
             error: Some(error),
         }));
     }
 
-    if runtime.acquisition.source != FfmpegRuntimeSource::Downloaded {
+    if runtime.source != "downloaded" {
         return Ok(None);
     }
 
     Ok(Some(AdminFfmpegRuntimeNotification {
-        previous_tag: runtime.acquisition.previous_tag.clone(),
-        installed_tag: runtime.acquisition.installed_tag.clone(),
-        asset_name: runtime.acquisition.asset_name.clone(),
+        previous_tag: runtime.previous_tag,
+        installed_tag: runtime.installed_tag,
+        asset_name: runtime.asset_name,
         update_failed: false,
         error: None,
     }))
@@ -201,26 +180,7 @@ pub async fn media_state_revision() -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-
-    let library_scan: Option<String> =
-        sqlx::query_scalar(r#"SELECT MAX("LastScan") FROM "Library""#)
-            .fetch_one(&state.pool)
-            .await?;
-    let path_scan: Option<String> =
-        sqlx::query_scalar(r#"SELECT MAX("LastScan") FROM "LibraryPath""#)
-            .fetch_one(&state.pool)
-            .await?;
-    let unavailable_count: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "State" IN (1, 2, 3)"#)
-            .fetch_one(&state.pool)
-            .await?;
-
-    Ok(format!(
-        "{}|{}|{}",
-        library_scan.unwrap_or_default(),
-        path_scan.unwrap_or_default(),
-        unavailable_count
-    ))
+    Ok(state.application.media_state_revision().await?)
 }
 
 #[cfg(test)]

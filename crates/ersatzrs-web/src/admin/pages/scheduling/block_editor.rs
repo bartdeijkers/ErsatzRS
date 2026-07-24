@@ -652,14 +652,14 @@ fn load_block_editor_no_script_data(
     #[cfg(feature = "ssr")]
     {
         use crate::admin::server_fns::blocks::{
-            get_block_items_with_pool, get_block_with_pool, load_block_editor_options_with_pool,
+            block_editor_options_from_admin, block_form_from_admin, block_item_form_from_admin,
         };
 
         let state = expect_context::<crate::host::state::AppState>();
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
-                let block = match get_block_with_pool(&state.pool, block_id).await {
-                    Ok(Some(block)) => block,
+                let block = match state.application.get_block(block_id).await {
+                    Ok(Some(block)) => block_form_from_admin(block),
                     Ok(None) => {
                         tracing::warn!(block_id, "block editor initial block was not found");
                         return None;
@@ -669,15 +669,15 @@ fn load_block_editor_no_script_data(
                         return None;
                     }
                 };
-                let items = match get_block_items_with_pool(&state.pool, block_id).await {
-                    Ok(items) => items,
+                let items = match state.application.get_block_items(block_id).await {
+                    Ok(items) => items.into_iter().map(block_item_form_from_admin).collect(),
                     Err(error) => {
                         tracing::error!(block_id, %error, "failed to load block editor items");
                         return None;
                     }
                 };
-                let options = match load_block_editor_options_with_pool(&state.pool).await {
-                    Ok(options) => options,
+                let options = match state.application.load_block_editor_options().await {
+                    Ok(options) => block_editor_options_from_admin(options),
                     Err(error) => {
                         tracing::error!(block_id, %error, "failed to load block editor options");
                         return None;
@@ -948,6 +948,7 @@ fn ItemEditor(
     let col_query = RwSignal::new(item.collection_name.clone());
     let suggestions: RwSignal<Vec<(i64, String)>> = RwSignal::new(Vec::new());
     let show_suggest = RwSignal::new(false);
+    let load_toast = use_toast();
     let pb_order = RwSignal::new(item.playback_order);
     let search_title = RwSignal::new(item.search_title.clone().unwrap_or_default());
     let search_query_val = RwSignal::new(item.search_query.clone().unwrap_or_default());
@@ -1020,29 +1021,29 @@ fn ItemEditor(
         }
         show_suggest.set(true);
         leptos::task::spawn_local(async move {
-            let results: Vec<(i64, String)> = match ct {
-                t if t == collection_type::COLLECTION => search_collections_for_block(trimmed)
-                    .await
-                    .unwrap_or_default(),
+            let result = match ct {
+                t if t == collection_type::COLLECTION => {
+                    search_collections_for_block(trimmed).await
+                }
                 t if t == collection_type::SMART_COLLECTION => {
-                    search_smart_collections_for_block(trimmed)
-                        .await
-                        .unwrap_or_default()
+                    search_smart_collections_for_block(trimmed).await
                 }
                 t if t == collection_type::MULTI_COLLECTION => {
-                    search_multi_collections_for_block(trimmed)
-                        .await
-                        .unwrap_or_default()
+                    search_multi_collections_for_block(trimmed).await
                 }
-                t if t == collection_type::TELEVISION_SHOW => {
-                    search_shows_for_block(trimmed).await.unwrap_or_default()
-                }
+                t if t == collection_type::TELEVISION_SHOW => search_shows_for_block(trimmed).await,
                 t if t == collection_type::TELEVISION_SEASON => {
-                    search_seasons_for_block(trimmed).await.unwrap_or_default()
+                    search_seasons_for_block(trimmed).await
                 }
-                _ => vec![],
+                _ => Ok(vec![]),
             };
-            suggestions.set(results);
+            match result {
+                Ok(results) => suggestions.set(results),
+                Err(error) => load_toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 

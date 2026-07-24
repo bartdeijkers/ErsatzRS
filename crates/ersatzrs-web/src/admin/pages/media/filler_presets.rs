@@ -13,7 +13,8 @@ use crate::admin::server_fns::filler::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/filler_presets.module.css");
@@ -40,20 +41,20 @@ const COLLECTION_TYPE_PLAYLIST: i32 = 6;
 pub fn FillerPresetsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<(u32, (Vec<FillerPresetListRow>, u64))> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async {
-            let page_size = get_filler_presets_page_size().await.unwrap_or(10);
-            let rows = list_filler_presets(0, page_size).await.unwrap_or_default();
-            (page_size, rows)
+            let page_size = get_filler_presets_page_size().await?;
+            let rows = list_filler_presets(0, page_size).await?;
+            Ok::<_, ServerFnError>((page_size, rows))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_page_size, (initial_rows, initial_total))| {
                     view! {
                         <FillerPresetsIsland
                             initial_error=error.clone()
@@ -62,7 +63,8 @@ pub fn FillerPresetsPage() -> impl IntoView {
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -95,15 +97,12 @@ fn FillerPresetsList(
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
     let current_data = RwSignal::new((initial_rows, initial_total));
+    let toast = use_toast();
 
     let data: LocalResource<(Vec<FillerPresetListRow>, u64)> = LocalResource::new(move || {
         let page = page.get();
         let page_size = page_size.get();
-        async move {
-            list_filler_presets(page, page_size)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_filler_presets(page, page_size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -113,7 +112,6 @@ fn FillerPresetsList(
     let delete_action = Action::new(|id: &i64| delete_filler_preset(*id));
     let delete_target: RwSignal<Option<FillerPresetListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(result) = delete_action.value().get() {
             match result {
@@ -304,7 +302,7 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
     let new_filler_preset_name = tr(TextKey::NewFillerPreset).to_owned();
-    let initial: Resource<(FillerPresetForm, FillerPresetEditorOptions)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         move || (id, new_filler_preset_name.clone()),
         move |(id, new_filler_preset_name)| async move {
             let form = if id == 0 {
@@ -313,21 +311,18 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
                     ..FillerPresetForm::default()
                 }
             } else {
-                get_filler_preset_form(id)
-                    .await
-                    .unwrap_or_default()
-                    .unwrap_or_default()
+                get_filler_preset_form(id).await?.unwrap_or_default()
             };
-            let options = get_filler_preset_editor_options().await.unwrap_or_default();
-            (form, options)
+            let options = get_filler_preset_editor_options().await?;
+            Ok::<_, ServerFnError>((form, options))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |(initial_form, editor_options)| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, editor_options)| {
                     view! {
                         <FillerPresetEditorIsland
                             id=id
@@ -336,7 +331,8 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
                             editor_options=editor_options
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }

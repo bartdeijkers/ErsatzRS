@@ -7,9 +7,7 @@ use serde::Deserialize;
 
 use crate::{
     admin::server_fns::media_browser::{
-        create_playlist_group_with_pool, create_playlist_with_pool,
-        delete_playlist_group_with_pool, delete_playlist_with_pool, save_playlist_with_pool,
-        PlaylistEditorForm, PlaylistItemForm,
+        playlist_editor_into_admin, PlaylistEditorForm, PlaylistItemForm,
     },
     host::state::AppState,
 };
@@ -71,7 +69,11 @@ pub async fn create_playlist_group_form(
     State(state): State<AppState>,
     Form(input): Form<PlaylistGroupCreateForm>,
 ) -> Redirect {
-    match create_playlist_group_with_pool(&state.pool, state.database_backend, input.name).await {
+    match state
+        .application
+        .create_playlist_group(ersatzrs_app::commands::CreatePlaylistGroup { name: input.name })
+        .await
+    {
         Ok(_) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, "failed to create playlist group from HTML form");
@@ -85,13 +87,13 @@ pub async fn create_playlist_form(
     Form(input): Form<PlaylistCreateForm>,
 ) -> Redirect {
     let playlist_group_id = parse_i64(Some(input.playlist_group_id)).unwrap_or_default();
-    match create_playlist_with_pool(
-        &state.pool,
-        state.database_backend,
-        playlist_group_id,
-        input.name,
-    )
-    .await
+    match state
+        .application
+        .create_playlist(ersatzrs_app::commands::CreatePlaylist {
+            playlist_group_id,
+            name: input.name,
+        })
+        .await
     {
         Ok(_) => Redirect::to("/media/playlists"),
         Err(error) => {
@@ -105,7 +107,11 @@ pub async fn delete_playlist_group_form(
     State(state): State<AppState>,
     Form(input): Form<PlaylistDeleteForm>,
 ) -> Redirect {
-    match delete_playlist_group_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_playlist_group(ersatzrs_app::commands::DeletePlaylistGroup { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, playlist_group_id = input.id, "failed to delete playlist group from HTML form");
@@ -118,7 +124,11 @@ pub async fn delete_playlist_form(
     State(state): State<AppState>,
     Form(input): Form<PlaylistDeleteForm>,
 ) -> Redirect {
-    match delete_playlist_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_playlist(ersatzrs_app::commands::DeletePlaylist { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, playlist_id = input.id, "failed to delete playlist from HTML form");
@@ -131,7 +141,13 @@ pub async fn save_playlist_form(State(state): State<AppState>, body: Bytes) -> R
     let input = PlaylistSaveForm::from_urlencoded_bytes(&body);
     let id = input.id;
     let form = input.into_editor_form();
-    match save_playlist_with_pool(&state.pool, form).await {
+    match state
+        .application
+        .save_playlist(ersatzrs_app::commands::SavePlaylist {
+            form: playlist_editor_into_admin(form),
+        })
+        .await
+    {
         Ok(()) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, playlist_id = id, "failed to save playlist from HTML form");

@@ -18,6 +18,7 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 
 #[allow(dead_code)]
 mod detail_style {
@@ -39,23 +40,26 @@ pub fn OtherVideoPage() -> impl IntoView {
             .unwrap_or_default()
     });
 
-    let data: Resource<Option<OtherVideoDetailRow>> = Resource::new_blocking(
+    let data = Resource::new_blocking(
         move || id,
-        |id| async move { get_other_video_details(id).await.ok().flatten() },
+        |id| async move { get_other_video_details(id).await },
     );
 
     view! {
         <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
             {move || {
                 match data.get() {
-                    Some(Some(other_video)) => view! { <OtherVideoDetailView other_video/> }.into_any(),
-                    Some(None) => view! {
+                    Some(Ok(Some(other_video))) => view! { <OtherVideoDetailView other_video/> }.into_any(),
+                    Some(Ok(None)) => view! {
                         <div class=detail_style::not_found>
                             <h1>{tr(TextKey::OtherVideoNotFound)}</h1>
                             <a href="/media/other/videos">{tr(TextKey::BackToOtherVideos)}</a>
                         </div>
                     }
                     .into_any(),
+                    Some(Err(error)) => {
+                        view! { <AdminErrorState error=error.to_string()/> }.into_any()
+                    }
                     None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
                 }
             }}

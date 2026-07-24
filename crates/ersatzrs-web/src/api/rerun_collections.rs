@@ -5,9 +5,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    admin::server_fns::media_browser::{
-        delete_rerun_collection_with_pool, save_rerun_collection_with_state, RerunCollectionForm,
-    },
+    admin::server_fns::media_browser::{save_rerun_collection_with_state, RerunCollectionForm},
     host::state::AppState,
 };
 
@@ -64,7 +62,11 @@ pub async fn delete_rerun_collection_form(
     State(state): State<AppState>,
     Form(input): Form<RerunCollectionDeleteForm>,
 ) -> Redirect {
-    match delete_rerun_collection_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_rerun_collection(ersatzrs_app::commands::DeleteRerunCollection { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/media/rerun-collections"),
         Err(error) => {
             tracing::error!(%error, rerun_collection_id = input.id, "failed to delete rerun collection from HTML form");

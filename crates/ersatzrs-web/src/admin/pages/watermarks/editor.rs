@@ -13,7 +13,10 @@ use crate::admin::server_fns::watermarks::{
     get_watermark_form, preview_watermark_placement, save_watermark, WatermarkForm,
     WatermarkPreviewParams,
 };
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/watermarks/editor.module.css");
 
@@ -38,30 +41,32 @@ pub fn WatermarkEditorPage() -> impl IntoView {
         .with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()))
         .unwrap_or(0);
 
-    let data: Resource<Option<WatermarkForm>> = Resource::new_blocking(
+    let data = Resource::new_blocking(
         move || watermark_id,
         |id| async move {
             if id == 0 {
-                Some(WatermarkForm::default())
+                Ok(Some(WatermarkForm::default()))
             } else {
-                get_watermark_form(id).await.ok()
+                get_watermark_form(id).await.map(Some)
             }
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                data.get().map(|maybe| match maybe {
-                    Some(form) => view! {
-                        <WatermarkEditorIsland initial_form=form/>
+                data.get().map(|result| admin_result_view(result, |maybe| {
+                    match maybe {
+                        Some(form) => view! {
+                            <WatermarkEditorIsland initial_form=form/>
+                        }
+                        .into_any(),
+                        None => view! {
+                            <p class=style::empty>{tr(TextKey::WatermarkNotFound)}</p>
+                        }
+                        .into_any(),
                     }
-                    .into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::WatermarkNotFound)}</p>
-                    }
-                    .into_any(),
-                })
+                }))
             }}
         </Suspense>
     }
@@ -142,11 +147,15 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         preview_key.set(Some(params));
     });
 
+    let toast = use_toast();
     let preview_resource: Resource<Option<String>> = Resource::new(
         move || preview_key.get(),
-        |maybe_params| async move {
+        move |maybe_params| async move {
             let params = maybe_params?;
-            preview_watermark_placement(params).await.ok()
+            Some(load_or_notify(
+                preview_watermark_placement(params).await,
+                toast,
+            ))
         },
     );
 
@@ -155,8 +164,6 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         let form = form.clone();
         async move { save_watermark(form).await }
     });
-
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
@@ -404,13 +411,13 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                                     is_uploading.set(true);
                                     spawn_local(async move {
                                         match upload_file(input).await {
-                                            Some((path, ct)) => {
+                                            Ok((path, ct)) => {
                                                 image_path.set(Some(path));
                                                 image_content_type.set(Some(ct));
                                             }
-                                            None => {
+                                            Err(error) => {
                                                 toast.push(
-                                                    tr(TextKey::UploadFailed).to_string(),
+                                                    format!("{}: {error}", tr(TextKey::UploadFailed)),
                                                     ToastSeverity::Error,
                                                 );
                                             }
@@ -703,34 +710,41 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
 }
 
 /// Uploads a file from an HTML input element to `/api/watermarks/image`.
-/// Returns `(path, content_type)` on success, `None` on failure.
+/// Returns `(path, content_type)` on success.
 #[cfg(target_arch = "wasm32")]
-async fn upload_file(input: web_sys::HtmlInputElement) -> Option<(String, String)> {
+async fn upload_file(input: web_sys::HtmlInputElement) -> Result<(String, String), String> {
     use gloo_net::http::Request;
     use web_sys::FormData;
 
-    let files = input.files()?;
-    let file = files.get(0)?;
+    let files = input
+        .files()
+        .ok_or_else(|| "file input is unavailable".to_owned())?;
+    let file = files
+        .get(0)
+        .ok_or_else(|| "no file was selected".to_owned())?;
     let content_type = file.type_();
 
-    let form_data = FormData::new().ok()?;
+    let form_data = FormData::new().map_err(|error| format!("{error:?}"))?;
     let blob: &web_sys::Blob = file.as_ref();
     form_data
         .append_with_blob_and_filename("file", blob, &file.name())
-        .ok()?;
+        .map_err(|error| format!("{error:?}"))?;
 
     let resp = Request::post("/api/watermarks/image")
         .body(form_data)
-        .ok()?
+        .map_err(|error| error.to_string())?
         .send()
         .await
-        .ok()?;
+        .map_err(|error| error.to_string())?;
 
-    let json: serde_json::Value = resp.json().await.ok()?;
-    let path = json["path"].as_str()?.to_string();
+    let json: serde_json::Value = resp.json().await.map_err(|error| error.to_string())?;
+    let path = json["path"]
+        .as_str()
+        .ok_or_else(|| "upload response has no path".to_owned())?
+        .to_string();
     let ct = json["content_type"]
         .as_str()
         .unwrap_or(&content_type)
         .to_string();
-    Some((path, ct))
+    Ok((path, ct))
 }

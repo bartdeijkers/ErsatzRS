@@ -9,6 +9,7 @@ use crate::admin::server_fns::ffmpeg_profiles::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
+    toast::{load_or_notify, use_toast},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/ffmpeg_profiles/list.module.css");
@@ -23,18 +24,21 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
 #[island]
 fn FfmpegProfilesListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
+    let load_toast = use_toast();
 
     let rows_resource: LocalResource<Vec<FfmpegProfileListRow>> = LocalResource::new(move || {
         let p = params.get();
         async move {
-            list_ffmpeg_profile_rows(p.page, p.page_size)
-                .await
-                .unwrap_or_default()
+            load_or_notify(
+                list_ffmpeg_profile_rows(p.page, p.page_size).await,
+                load_toast,
+            )
         }
     });
 
-    let count_resource: LocalResource<u64> =
-        LocalResource::new(|| async { count_ffmpeg_profiles().await.unwrap_or(0) });
+    let count_resource: LocalResource<u64> = LocalResource::new(move || async move {
+        load_or_notify(count_ffmpeg_profiles().await, load_toast)
+    });
 
     let total = Signal::derive(move || count_resource.get());
 

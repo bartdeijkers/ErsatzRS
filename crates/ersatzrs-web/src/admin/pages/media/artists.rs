@@ -28,6 +28,7 @@ use crate::admin::server_fns::media_browser::get_artist_details;
 use crate::admin::server_fns::media_browser::{
     ArtistDetailRow, ArtistMusicVideoRow, MediaBrowserKind,
 };
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 
 #[allow(dead_code)]
 mod detail_style {
@@ -52,14 +53,15 @@ pub fn ArtistPage() -> impl IntoView {
     let artist = load_artist_detail_initial(id);
 
     match artist {
-        Some(artist) => view! { <ArtistDetailIsland artist/> }.into_any(),
-        None => view! {
+        Ok(Some(artist)) => view! { <ArtistDetailIsland artist/> }.into_any(),
+        Ok(None) => view! {
             <div class=detail_style::not_found>
                 <h1>{tr(TextKey::ArtistNotFound)}</h1>
                 <a href="/media/music/artists">{tr(TextKey::BackToArtists)}</a>
             </div>
         }
         .into_any(),
+        Err(error) => view! { <AdminErrorState error/> }.into_any(),
     }
 }
 
@@ -68,18 +70,19 @@ fn ArtistDetailIsland(artist: ArtistDetailRow) -> impl IntoView {
     view! { <ArtistDetailView artist/> }
 }
 
-fn load_artist_detail_initial(id: i64) -> Option<ArtistDetailRow> {
+fn load_artist_detail_initial(id: i64) -> Result<Option<ArtistDetailRow>, String> {
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async move { get_artist_details(id).await.ok().flatten() })
+                .block_on(async move { get_artist_details(id).await })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 

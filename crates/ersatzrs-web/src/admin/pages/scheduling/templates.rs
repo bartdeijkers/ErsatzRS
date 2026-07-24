@@ -15,7 +15,8 @@ use crate::admin::server_fns::templates::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 mod style {
@@ -26,26 +27,23 @@ mod style {
 
 #[component]
 pub fn TemplatesPage() -> impl IntoView {
-    let initial: Resource<(Vec<TemplateGroupRow>, Vec<TemplateRow>)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
-        |()| async move {
-            let (groups, templates) =
-                tokio::join!(list_template_groups(), list_templates(String::new()));
-            (groups.unwrap_or_default(), templates.unwrap_or_default())
-        },
+        |()| async move { tokio::try_join!(list_template_groups(), list_templates(String::new())) },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_groups, initial_templates)| {
+                initial.get().map(|result| admin_result_view(result, |(initial_groups, initial_templates)| {
                     view! {
                         <TemplatesIsland
                             initial_groups=initial_groups
                             initial_templates=initial_templates
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -56,9 +54,12 @@ fn TemplatesIsland(
     initial_groups: Vec<TemplateGroupRow>,
     initial_templates: Vec<TemplateRow>,
 ) -> impl IntoView {
+    let toast = use_toast();
     let current_groups = RwSignal::new(initial_groups);
     let groups: LocalResource<Vec<TemplateGroupRow>> =
-        LocalResource::new(|| async { list_template_groups().await.unwrap_or_default() });
+        LocalResource::new(
+            move || async move { load_or_notify(list_template_groups().await, toast) },
+        );
     Effect::new(move |_| {
         if let Some(rows) = groups.get() {
             current_groups.set(rows);
@@ -68,7 +69,7 @@ fn TemplatesIsland(
     let current_templates = RwSignal::new(initial_templates);
     let templates: LocalResource<Vec<TemplateRow>> = LocalResource::new(move || {
         let query = search.get();
-        async move { list_templates(query).await.unwrap_or_default() }
+        async move { load_or_notify(list_templates(query).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(rows) = templates.get() {
@@ -97,8 +98,6 @@ fn TemplatesIsland(
     let delete_template_target = RwSignal::new(None::<(i64, String)>);
     let delete_group_action = Action::new(|id: &i64| delete_template_group(*id));
     let delete_template_action = Action::new(|id: &i64| delete_template(*id));
-
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(result) = create_group_action.value().get() {
@@ -595,20 +594,17 @@ pub fn TemplateEditorPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
-    let data: Resource<(
-        Option<TemplateForm>,
-        Vec<TemplateItemForm>,
-        Vec<TemplateBlockGroupOption>,
-    )> = Resource::new_blocking(template_id, |id| async move {
-        let template = get_template(id).await.unwrap_or(None);
-        let items = get_template_items(id).await.unwrap_or_default();
-        let groups = list_template_block_groups().await.unwrap_or_default();
-        (template, items, groups)
+    let data = Resource::new_blocking(template_id, |id| async move {
+        tokio::try_join!(
+            get_template(id),
+            get_template_items(id),
+            list_template_block_groups(),
+        )
     });
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || data.get().map(|(template, items, groups)| {
+        <Suspense fallback=admin_loading_resource_view>
+            {move || data.get().map(|result| admin_result_view(result, |(template, items, groups)| {
                 match template {
                     Some(template) => view! {
                         <TemplateEditorIsland template=template initial_items=items block_groups=groups/>
@@ -617,7 +613,7 @@ pub fn TemplateEditorPage() -> impl IntoView {
                         <TemplateNotFoundRedirect/>
                     }.into_any(),
                 }
-            })}
+            }))}
         </Suspense>
     }
 }
@@ -668,6 +664,7 @@ fn TemplateEditorForm(
     let items = RwSignal::new(initial_items);
     let selected_block_group = RwSignal::new(0i64);
     let blocks = RwSignal::new(Vec::<TemplateBlockOption>::new());
+    let toast = use_toast();
     Effect::new(move |_| {
         let group_id = selected_block_group.get();
         #[cfg(target_arch = "wasm32")]
@@ -675,9 +672,11 @@ fn TemplateEditorForm(
             let rows = if group_id <= 0 {
                 Vec::new()
             } else {
-                crate::admin::server_fns::templates::list_template_blocks_for_group(group_id)
-                    .await
-                    .unwrap_or_default()
+                load_or_notify(
+                    crate::admin::server_fns::templates::list_template_blocks_for_group(group_id)
+                        .await,
+                    toast,
+                )
             };
             blocks.set(rows);
         });
@@ -690,7 +689,6 @@ fn TemplateEditorForm(
     let selected_start = RwSignal::new(0i32);
     let block_to_remove = RwSignal::new(None::<usize>);
     let drag_index = RwSignal::new(None::<usize>);
-    let toast = use_toast();
 
     let add_block = move || {
         if let Some(block) = selected_block.get_untracked() {

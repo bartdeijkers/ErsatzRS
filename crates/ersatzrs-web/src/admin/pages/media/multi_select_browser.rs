@@ -46,7 +46,10 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
 };
-use crate::admin::ui::primitives::toast::{use_toast, ToastAction, ToastSeverity};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastAction, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
 mod card_style {
@@ -225,14 +228,13 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     let title = config.title;
     let base_path = config.base_path;
     let initial_query_for_resource = initial_query.clone();
-    let initial: Resource<((Vec<MediaCardRow>, u64), LetterPageMap)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         move || (initial_query_for_resource.clone(), initial_page),
         move |(q, p)| async move {
-            let (rows, page_map) = tokio::join!(
+            tokio::try_join!(
                 load_browser_rows(config.kind, q.clone(), p),
                 load_browser_page_map(config.kind, q),
-            );
-            (rows, page_map)
+            )
         },
     );
 
@@ -249,10 +251,10 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                 />
             </form>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
                     let query = initial_query.clone();
-                    initial.get().map(move |((initial_rows, initial_total), initial_page_map)| {
+                    initial.get().map(move |result| admin_result_view(result, |((initial_rows, initial_total), initial_page_map)| {
                         view! {
                             <MultiSelectIsland
                                 query=query.clone()
@@ -263,7 +265,8 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                                 initial_page_map=initial_page_map
                             />
                         }
-                    })
+                        .into_any()
+                    }))
                 }}
             </Suspense>
         </div>
@@ -284,12 +287,13 @@ fn MultiSelectIsland(
     let media_revision = RwSignal::new(String::new());
     let current_data = RwSignal::new((initial_rows, initial_total));
     let current_page_map = RwSignal::new(initial_page_map);
+    let load_toast = use_toast();
 
     let q_for_resource = query.clone();
     let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
         let q = q_for_resource.clone();
         let _ = media_revision.get();
-        async move { load_browser_rows(kind, q, page).await }
+        async move { load_or_notify(load_browser_rows(kind, q, page).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
@@ -308,8 +312,10 @@ fn MultiSelectIsland(
     let page_map: LocalResource<LetterPageMap> = LocalResource::new(move || {
         let q = q_for_map.clone();
         let _ = media_revision.get();
-        async move { load_browser_page_map(kind, q).await }
+        async move { load_or_notify(load_browser_page_map(kind, q).await, load_toast) }
     });
+    #[cfg(target_arch = "wasm32")]
+    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
             current_page_map.maybe_update(|current| {
@@ -328,10 +334,21 @@ fn MultiSelectIsland(
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
+                            revision_load_failed.set(false);
                         }
+                        Err(error) if !revision_load_failed.get_untracked() => {
+                            revision_load_failed.set(true);
+                            load_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
@@ -371,7 +388,7 @@ async fn load_browser_rows(
     kind: MediaBrowserKind,
     query: String,
     page: u32,
-) -> (Vec<MediaCardRow>, u64) {
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     match kind {
         MediaBrowserKind::Movie => list_movies(query, page, PAGE_SIZE, true).await,
         MediaBrowserKind::Show => list_shows(query, page, PAGE_SIZE, true).await,
@@ -384,13 +401,13 @@ async fn load_browser_rows(
         MediaBrowserKind::Song => list_songs(query, page, PAGE_SIZE, true).await,
         MediaBrowserKind::Image => list_images(query, page, PAGE_SIZE, true).await,
     }
-    .unwrap_or_default()
 }
 
-async fn load_browser_page_map(kind: MediaBrowserKind, query: String) -> LetterPageMap {
-    media_page_map(kind, query, PAGE_SIZE, true)
-        .await
-        .unwrap_or_default()
+async fn load_browser_page_map(
+    kind: MediaBrowserKind,
+    query: String,
+) -> Result<LetterPageMap, ServerFnError> {
+    media_page_map(kind, query, PAGE_SIZE, true).await
 }
 
 #[component]
@@ -852,7 +869,16 @@ pub(crate) fn AddToCollectionModal(
         }
         let _ = refresh.get();
         leptos::task::spawn_local(async move {
-            let loaded = list_all_collections().await.unwrap_or_default();
+            let loaded = match list_all_collections().await {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    toast.push(
+                        format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                        ToastSeverity::Error,
+                    );
+                    return;
+                }
+            };
             let first_id = loaded.first().map(|c| c.id);
             options.set(loaded);
             if let Some(id) = first_id {
@@ -1006,6 +1032,7 @@ pub(crate) fn AddToPlaylistModal(
     let playlist_id: RwSignal<i64> = RwSignal::new(0);
     let groups: RwSignal<Vec<PlaylistGroupOption>> = RwSignal::new(Vec::new());
     let playlists: RwSignal<Vec<PlaylistOption>> = RwSignal::new(Vec::new());
+    let toast = use_toast();
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -1013,7 +1040,13 @@ pub(crate) fn AddToPlaylistModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            groups.set(list_all_playlist_groups().await.unwrap_or_default());
+            match list_all_playlist_groups().await {
+                Ok(loaded) => groups.set(loaded),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 
@@ -1028,7 +1061,16 @@ pub(crate) fn AddToPlaylistModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            let loaded = list_playlists_by_group(gid).await.unwrap_or_default();
+            let loaded = match list_playlists_by_group(gid).await {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    toast.push(
+                        format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                        ToastSeverity::Error,
+                    );
+                    return;
+                }
+            };
             if gid == 0 {
                 return;
             }
@@ -1037,8 +1079,6 @@ pub(crate) fn AddToPlaylistModal(
             }
         });
     });
-
-    let toast = use_toast();
 
     let submit_action = Action::new(move |(): &()| {
         let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());

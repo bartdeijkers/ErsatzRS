@@ -26,6 +26,9 @@ use crate::admin::server_fns::ffmpeg_profiles::{
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/ffmpeg_profiles/editor.module.css");
@@ -54,36 +57,33 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     let profile_id = params
         .with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()))
         .unwrap_or(0);
-    let none_label = tr(TextKey::NoneOption).to_string();
     let language = use_i18n();
     let no_script_html =
         ffmpeg_profile_no_script_html(load_ffmpeg_profile_no_script_data(profile_id));
 
-    #[allow(clippy::type_complexity)]
-    let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
-        Resource::new_blocking(
-            move || profile_id,
-            move |id| {
-                let none_label = none_label.clone();
+    let data = Resource::new_blocking(
+        move || profile_id,
+        move |id| async move {
+            let (resolutions, form, hw_accels) = tokio::try_join!(
+                list_resolutions_for_select(),
                 async move {
-                    let (resolutions, form) =
-                        tokio::join!(list_resolutions_for_select(), async move {
-                            if id == 0 {
-                                Some(FfmpegProfileForm::new_defaults())
-                            } else {
-                                get_ffmpeg_profile_form(id).await.unwrap_or(None)
-                            }
-                        });
-                    let resolutions = resolutions.unwrap_or_default();
-                    let hw_accels = list_supported_hw_accelerations().await;
-                    let hw_accels = hw_accels.map_or_else(
-                        |_| vec![(0, none_label)],
-                        |options| localized_hw_accel_items(language, options),
-                    );
-                    form.map(|f| (f, resolutions, hw_accels))
-                }
-            },
-        );
+                    if id == 0 {
+                        Ok(Some(FfmpegProfileForm::new_defaults()))
+                    } else {
+                        get_ffmpeg_profile_form(id).await
+                    }
+                },
+                list_supported_hw_accelerations(),
+            )?;
+            Ok::<_, ServerFnError>(form.map(|form| {
+                (
+                    form,
+                    resolutions,
+                    localized_hw_accel_items(language, hw_accels),
+                )
+            }))
+        },
+    );
 
     view! {
         <style>".ffmpeg-profile-noscript { display: none; } .ffmpeg-profile-js { display: block; }"</style>
@@ -92,37 +92,50 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
             <div class="ffmpeg-profile-noscript" inner_html=no_script_html></div>
         </noscript>
         <div class="ffmpeg-profile-js">
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
-                    data.get().map(|maybe| match maybe {
-                        Some((form, resolutions, hw_accels)) => {
-                            view! {
-                                <FfmpegProfileEditorIsland
-                                    initial_form=form
-                                    initial_resolutions=resolutions
-                                    initial_hw_accels=hw_accels
-                                />
+                    data.get().map(|result| admin_result_view(result, |maybe| {
+                        match maybe {
+                            Some((form, resolutions, hw_accels)) => {
+                                view! {
+                                    <FfmpegProfileEditorIsland
+                                        initial_form=form
+                                        initial_resolutions=resolutions
+                                        initial_hw_accels=hw_accels
+                                    />
+                                }
+                                .into_any()
                             }
-                            .into_any()
+                            None => view! {
+                                <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
+                            }
+                            .into_any(),
                         }
-                        None => view! {
-                            <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
-                        }
-                        .into_any(),
-                    })
+                    }))
                 }}
             </Suspense>
         </div>
     }
 }
 
-fn ffmpeg_profile_no_script_html(data: Option<FfmpegProfileForm>) -> String {
-    let Some(form) = data else {
-        return format!(
-            r#"<p class="{}">{}</p>"#,
-            style::empty,
-            escape_html(tr(TextKey::ProfileNotFound)),
-        );
+fn ffmpeg_profile_no_script_html(data: Result<Option<FfmpegProfileForm>, String>) -> String {
+    let form = match data {
+        Ok(Some(form)) => form,
+        Ok(None) => {
+            return format!(
+                r#"<p class="{}">{}</p>"#,
+                style::empty,
+                escape_html(tr(TextKey::ProfileNotFound)),
+            );
+        }
+        Err(error) => {
+            return format!(
+                r#"<p class="{}" role="alert">{}: {}</p>"#,
+                style::empty,
+                escape_html(tr(TextKey::ErrorOccurred)),
+                escape_html(&error),
+            );
+        }
     };
     let profile_items = video_profile_options(form.hardware_acceleration, form.video_format);
     let save_label = if form.id == 0 {
@@ -177,22 +190,25 @@ fn ffmpeg_profile_no_script_html(data: Option<FfmpegProfileForm>) -> String {
     )
 }
 
-fn load_ffmpeg_profile_no_script_data(profile_id: i64) -> Option<FfmpegProfileForm> {
+fn load_ffmpeg_profile_no_script_data(
+    profile_id: i64,
+) -> Result<Option<FfmpegProfileForm>, String> {
     if profile_id == 0 {
-        return Some(FfmpegProfileForm::new_defaults());
+        return Ok(Some(FfmpegProfileForm::new_defaults()));
     }
 
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async move { get_ffmpeg_profile_form(profile_id).await.ok().flatten() })
+                .block_on(async move { get_ffmpeg_profile_form(profile_id).await })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = profile_id;
-        None
+        Ok(None)
     }
 }
 

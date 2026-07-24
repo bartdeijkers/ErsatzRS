@@ -1,25 +1,20 @@
 feature    = 'Application use-case layer and orchestration boundary'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Application/`, including Channels, Libraries, MediaCollections, Playouts, Scheduling, Streaming, and Troubleshooting handlers'
 rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-scheduler`, `crates/ersatzrs-web`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0051']
 summary    = '''
-In progress: the Phase 7B foundation provides documented command, query,
-application-error, port, and operation-coordination modules in `ersatzrs-app`.
-Core repository errors are storage-neutral, infrastructure explicitly maps
-SQLx failures, and the native web composition root injects concrete ports into
-`ApplicationServices` backed by one shared operation coordinator. Milestone
-p7b-02 and p7b-03 are complete. One `RequestPlayoutBuild` use case owns
-playout-build admission, while `RequestLibraryScan` and `RequestShowScan` own
-persisted scan validation and distinct FIFO admission. Application registries
-provide the shared playout and scan queued/running/progress/terminal state used
-by native workers and web polling; scheduled scans coalesce against active
-library work while manual requests retain FIFO repeats, and transport rejection
-uses the existing failure path. Concrete provider, scanner, subtitle, and
-scheduler execution remains in adapters. Block preview and the remaining
-application workflows still live in web transport; milestones p7b-04 and
-p7b-05 migrate those vertical slices while endpoint and persisted contracts
-remain stable.
+Ported: Phase 7B provides documented command, query, application-error, port,
+and operation-coordination modules in `ersatzrs-app`. Core repository errors
+and ports are storage-neutral; infrastructure owns SQL, backend-specific
+query behavior, row decoding, and concrete providers; and the native web
+composition root injects those adapters into one `ApplicationServices`
+container. Playout-build and scan admission, operation state, real block
+preview, and every production admin/API query and mutation now enter through
+application commands or queries. Web retains only transport mapping and
+native adapter construction. Stable server-function names, serialized DTOs,
+endpoint behavior, validation, transaction/side-effect order, scheduler and
+scanner semantics, and persisted contracts are preserved.
 '''
 
 [[debt]]
@@ -33,8 +28,8 @@ resolved    = true
 id          = 'web-owns-application-orchestration'
 description = 'Admin server functions and APIs combine transport, validation, raw SQL, side effects, queues, and concrete repositories, preventing reuse from non-web adapters such as a future video-jukebox add-on API.'
 discovered  = '2026-07-21'
-evidence    = 'Milestones p7b-02 and p7b-03 removed public playout and scan senders plus scan progress ownership from `AppState`, routing web and periodic producers through typed `ApplicationServices` commands and queries. `AppState` still exposes the raw pool and concrete repository bundle while block preview and other admin transport code retain direct orchestration. Close those remaining vertical slices through milestones p7b-04 and p7b-05.'
-resolved    = false
+evidence    = 'Milestones p7b-02 through p7b-05 route playout, scan, block-preview, collection, playlist, channel, schedule, settings, Trakt, media, and supporting admin/API workflows through typed `ApplicationServices`. `AppState` no longer exposes a raw pool or concrete repository bundle to production handlers. Architecture lint reports zero direct admin SQL, zero raw admin pool consumers, zero server-error defaults, and zero row-decode defaults while enforcing the app/core/infra dependency boundary.'
+resolved    = true
 
 [[debt]]
 id          = 'core-leaks-concrete-storage-error'

@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use crate::{
     admin::server_fns::trakt::{
-        add_trakt_list_with_pool, delete_trakt_list_with_pool, match_trakt_list_with_pool,
-        update_trakt_list_with_pool, TraktListForm,
+        add_trakt_list_with_state, delete_trakt_list_with_state, match_trakt_list_with_state,
+        update_trakt_list_with_state, TraktListForm,
     },
     host::state::AppState,
 };
@@ -36,7 +36,7 @@ pub async fn add_trakt_list_form(
     State(state): State<AppState>,
     Form(input): Form<TraktListAddForm>,
 ) -> Redirect {
-    match add_trakt_list_with_pool(&state.pool, input.url).await {
+    match add_trakt_list_with_state(&state, input.url).await {
         Ok(_) => Redirect::to("/media/trakt/lists"),
         Err(error) => {
             tracing::error!(%error, "failed to add trakt list from HTML form");
@@ -49,7 +49,7 @@ pub async fn match_trakt_list_form(
     State(state): State<AppState>,
     Form(input): Form<TraktListIdForm>,
 ) -> Redirect {
-    match match_trakt_list_with_pool(&state.pool, input.id).await {
+    match match_trakt_list_with_state(&state, input.id).await {
         Ok(()) => Redirect::to("/media/trakt/lists"),
         Err(error) => {
             tracing::error!(%error, trakt_list_id = input.id, "failed to match trakt list from HTML form");
@@ -70,7 +70,7 @@ pub async fn save_trakt_list_form(
         generate_playlist: input.generate_playlist,
     };
 
-    match update_trakt_list_with_pool(&state.pool, form).await {
+    match update_trakt_list_with_state(&state, form).await {
         Ok(()) => Redirect::to("/media/trakt/lists"),
         Err(error) => {
             tracing::error!(%error, trakt_list_id = id, "failed to save trakt list from HTML form");
@@ -83,7 +83,7 @@ pub async fn delete_trakt_list_form(
     State(state): State<AppState>,
     Form(input): Form<TraktListIdForm>,
 ) -> Redirect {
-    match delete_trakt_list_with_pool(&state.pool, input.id).await {
+    match delete_trakt_list_with_state(&state, input.id).await {
         Ok(()) => Redirect::to("/media/trakt/lists"),
         Err(error) => {
             tracing::error!(%error, trakt_list_id = input.id, "failed to delete trakt list from HTML form");

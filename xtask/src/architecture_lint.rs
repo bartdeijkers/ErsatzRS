@@ -91,8 +91,9 @@ fn run_inner(opts: &Opts) -> Result<()> {
     }
 
     println!(
-        "architecture-lint: passed ({} direct admin SQL call(s), {} server-error default loader(s), {} row-decode default(s) ratcheted)",
+        "architecture-lint: passed ({} direct admin SQL call(s), {} raw admin pool access(es), {} server-error default loader(s), {} row-decode default(s) ratcheted)",
         counts.direct_admin_sql.values().sum::<usize>(),
+        counts.raw_admin_pool.values().sum::<usize>(),
         counts.server_error_to_default.values().sum::<usize>(),
         counts.row_decode_default.values().sum::<usize>()
     );
@@ -400,6 +401,7 @@ fn collect_dependency_tables(
 #[serde(default)]
 struct DebtCounts {
     direct_admin_sql: BTreeMap<String, usize>,
+    raw_admin_pool: BTreeMap<String, usize>,
     server_error_to_default: BTreeMap<String, usize>,
     row_decode_default: BTreeMap<String, usize>,
 }
@@ -441,6 +443,11 @@ fn scan_admin_trees(workspace: &Path) -> Result<DebtCounts> {
                 .direct_admin_sql
                 .insert(display_path.clone(), visitor.direct_admin_sql);
         }
+        if visitor.raw_admin_pool > 0 {
+            counts
+                .raw_admin_pool
+                .insert(display_path.clone(), visitor.raw_admin_pool);
+        }
         if visitor.server_error_to_default > 0 {
             counts
                 .server_error_to_default
@@ -457,6 +464,7 @@ fn scan_admin_trees(workspace: &Path) -> Result<DebtCounts> {
 
 struct AdminDebtVisitor {
     direct_admin_sql: usize,
+    raw_admin_pool: usize,
     server_error_to_default: usize,
     row_decode_default: usize,
     imports: SqlxImports,
@@ -466,6 +474,7 @@ impl AdminDebtVisitor {
     fn new(imports: SqlxImports) -> Self {
         Self {
             direct_admin_sql: 0,
+            raw_admin_pool: 0,
             server_error_to_default: 0,
             row_decode_default: 0,
             imports,
@@ -486,6 +495,18 @@ impl<'ast> Visit<'ast> for AdminDebtVisitor {
         }
     }
 
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_impl(self, item);
+        }
+    }
+
+    fn visit_item_type(&mut self, _item: &'ast syn::ItemType) {
+        // A module may retain an unconditionally imported alias solely for
+        // cfg(test) compatibility helpers. Count concrete production uses,
+        // not the alias declaration itself.
+    }
+
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
         if !is_test_only(&item.attrs) {
             syn::visit::visit_impl_item_fn(self, item);
@@ -499,6 +520,20 @@ impl<'ast> Visit<'ast> for AdminDebtVisitor {
             self.direct_admin_sql += 1;
         }
         syn::visit::visit_expr_call(self, expression);
+    }
+
+    fn visit_expr_field(&mut self, expression: &'ast syn::ExprField) {
+        if matches!(&expression.member, syn::Member::Named(member) if member == "pool") {
+            self.raw_admin_pool += 1;
+        }
+        syn::visit::visit_expr_field(self, expression);
+    }
+
+    fn visit_type_path(&mut self, ty: &'ast syn::TypePath) {
+        if is_raw_pool_type_path(&ty.path) {
+            self.raw_admin_pool += 1;
+        }
+        syn::visit::visit_type_path(self, ty);
     }
 
     fn visit_macro(&mut self, expression: &'ast syn::Macro) {
@@ -532,6 +567,24 @@ impl<'ast> Visit<'ast> for AdminDebtVisitor {
         }
         syn::visit::visit_expr_if(self, expression);
     }
+}
+
+fn is_raw_pool_type_path(path: &syn::Path) -> bool {
+    let Some(last) = path.segments.last() else {
+        return false;
+    };
+    let name = last.ident.to_string();
+    if matches!(
+        name.as_str(),
+        "DbPool" | "SqlitePool" | "MySqlPool" | "PgPool"
+    ) {
+        return true;
+    }
+    name == "Pool"
+        && path
+            .segments
+            .first()
+            .is_some_and(|segment| segment.ident == "sqlx")
 }
 
 fn is_result_default_method(name: &str) -> bool {
@@ -962,6 +1015,12 @@ fn compare_counts(current: &DebtCounts, baseline: &DebtCounts) -> Vec<String> {
         &mut problems,
     );
     compare_rule(
+        "raw-admin-pool",
+        &current.raw_admin_pool,
+        &baseline.raw_admin_pool,
+        &mut problems,
+    );
+    compare_rule(
         "server-error-to-default",
         &current.server_error_to_default,
         &baseline.server_error_to_default,
@@ -1060,7 +1119,32 @@ mod tests {
         let mut visitor = AdminDebtVisitor::new(SqlxImports::from_file(&syntax));
         visitor.visit_file(&syntax);
         assert_eq!(visitor.direct_admin_sql, 1);
+        assert_eq!(visitor.raw_admin_pool, 1);
         assert_eq!(visitor.server_error_to_default, 1);
+    }
+
+    #[test]
+    fn raw_admin_pool_access_cannot_bypass_the_guard() {
+        let syntax = syn::parse_file(
+            r#"
+            type DbPool = sqlx::Pool<sqlx::Sqlite>;
+
+            async fn production(pool: &DbPool, state: &AppState) {
+                consume(pool);
+                consume(&state.pool);
+            }
+
+            #[cfg(test)]
+            async fn test_helper(pool: &DbPool, state: &AppState) {
+                consume(pool);
+                consume(&state.pool);
+            }
+            "#,
+        )
+        .expect("fixture should parse");
+        let mut visitor = AdminDebtVisitor::new(SqlxImports::from_file(&syntax));
+        visitor.visit_file(&syntax);
+        assert_eq!(visitor.raw_admin_pool, 2);
     }
 
     #[test]

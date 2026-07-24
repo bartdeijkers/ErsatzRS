@@ -3,9 +3,11 @@ use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
-    ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
-    ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult, ChannelNumberUpdate,
-    ChannelRepository, ChannelSaveResult, ChannelSelectOption, ChannelValidationError, Result,
+    ChannelAdminListRow, ChannelEditorForm, ChannelEditorOptions, ChannelEditorState,
+    ChannelLogoForm, ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult,
+    ChannelNumberUpdate, ChannelRepository, ChannelSaveResult, ChannelSaveSideEffects,
+    ChannelSelectOption, ChannelValidationError, ChannelValidationRow, ChannelValidationState,
+    Result,
 };
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
@@ -144,11 +146,17 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        sqlx::query(r#"DELETE FROM "Channel" WHERE "Id" = ?"#)
+        let result = sqlx::query(r#"DELETE FROM "Channel" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&self.0)
             .await
             .repository()?;
+        if result.rows_affected() == 0 {
+            return Err(ersatzrs_core::repositories::RepositoryError::NotFound {
+                kind: "channel",
+                id,
+            });
+        }
         Ok(())
     }
 
@@ -313,6 +321,147 @@ impl ChannelRepository for SqliteChannelRepository {
         updates: Vec<ChannelNumberUpdate>,
     ) -> Result<ChannelNumberSaveResult> {
         save_number_updates(&self.0, updates).await
+    }
+
+    async fn list_admin_rows(
+        &self,
+        show_disabled: bool,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<ChannelAdminListRow>> {
+        let offset = i64::from(page) * i64::from(page_size);
+        let rows = sqlx::query(
+            r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
+                      c."IsEnabled", c."ShowInEpg", c."StreamingMode",
+                      COALESCE(p."Name", '') AS "ProfileName",
+                      (SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") AS "PlayoutCount",
+                      (SELECT a."Path" FROM "Artwork" a
+                       WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+                       ORDER BY a."Id" LIMIT 1) AS "LogoPath"
+               FROM "Channel" c
+               LEFT JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
+               WHERE (? OR c."IsEnabled" = 1)
+               ORDER BY c."SortNumber", c."Number"
+               LIMIT ? OFFSET ?"#,
+        )
+        .bind(show_disabled)
+        .bind(i64::from(page_size))
+        .bind(offset)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(ChannelAdminListRow {
+                    id: row.try_get("Id").repository()?,
+                    number: row.try_get("Number").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    preferred_audio_language_code: row
+                        .try_get("PreferredAudioLanguageCode")
+                        .repository()?,
+                    is_enabled: decode_bool_column(row, "IsEnabled")?,
+                    show_in_epg: decode_bool_column(row, "ShowInEpg")?,
+                    streaming_mode: row.try_get("StreamingMode").repository()?,
+                    ffmpeg_profile_name: row.try_get("ProfileName").repository()?,
+                    playout_count: row.try_get("PlayoutCount").repository()?,
+                    logo_path: row.try_get("LogoPath").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn count_admin_rows(&self, show_disabled: bool) -> Result<u64> {
+        let count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel" WHERE (? OR "IsEnabled" = 1)"#)
+                .bind(show_disabled)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+        u64::try_from(count).map_err(|_| ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "channel count",
+            value: count.to_string(),
+        })
+    }
+
+    async fn list_ffmpeg_profile_options(&self) -> Result<Vec<ChannelSelectOption>> {
+        select_options(
+            &self.0,
+            r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#,
+        )
+        .await
+    }
+
+    async fn list_filler_preset_options(&self) -> Result<Vec<ChannelSelectOption>> {
+        select_options(
+            &self.0,
+            r#"SELECT "Id", "Name" FROM "FillerPreset" ORDER BY "Name", "Id""#,
+        )
+        .await
+    }
+
+    async fn validation_state(&self) -> Result<ChannelValidationState> {
+        let channel_rows = sqlx::query(
+            r#"SELECT c."Id", c."Number", c."Name", c."PlayoutSource",
+                      (SELECT COUNT(*) FROM "Playout" p WHERE p."ChannelId" = c."Id") AS "PlayoutCount"
+               FROM "Channel" c
+               ORDER BY c."Id""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        let channels = channel_rows
+            .iter()
+            .map(|row| {
+                Ok(ChannelValidationRow {
+                    id: row.try_get("Id").repository()?,
+                    number: row.try_get("Number").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    playout_source: row.try_get("PlayoutSource").repository()?,
+                    playout_count: row.try_get("PlayoutCount").repository()?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(ChannelValidationState {
+            channels,
+            ffmpeg_profile_ids: load_reference_ids(
+                &self.0,
+                r#"SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id""#,
+            )
+            .await?,
+            watermark_ids: load_reference_ids(
+                &self.0,
+                r#"SELECT "Id" FROM "ChannelWatermark" ORDER BY "Id""#,
+            )
+            .await?,
+            fallback_filler_ids: load_reference_ids(
+                &self.0,
+                r#"SELECT "Id" FROM "FillerPreset" WHERE "FillerKind" = 5 ORDER BY "Id""#,
+            )
+            .await?,
+        })
+    }
+
+    async fn save_side_effects(&self, id: EntityId) -> Result<Option<ChannelSaveSideEffects>> {
+        let Some(row) = sqlx::query(r#"SELECT "SubtitleMode" FROM "Channel" WHERE "Id" = ?"#)
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+        else {
+            return Ok(None);
+        };
+        let playout_ids =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" WHERE "ChannelId" = ? ORDER BY "Id""#)
+                .bind(id)
+                .fetch_all(&self.0)
+                .await
+                .repository()?;
+        Ok(Some(ChannelSaveSideEffects {
+            subtitle_mode: row.try_get("SubtitleMode").repository()?,
+            playout_ids,
+        }))
     }
 }
 
@@ -570,6 +719,16 @@ async fn select_options(
             })
         })
         .collect()
+}
+
+async fn load_reference_ids(
+    pool: &Pool<crate::db::Db>,
+    query: &'static str,
+) -> Result<Vec<EntityId>> {
+    sqlx::query_scalar(crate::db::assert_sql_safe(query))
+        .fetch_all(pool)
+        .await
+        .repository()
 }
 
 async fn load_mirror_channels(pool: &Pool<crate::db::Db>) -> Result<Vec<ChannelMirrorOption>> {

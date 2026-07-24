@@ -65,6 +65,54 @@ impl Default for WatermarkForm {
     }
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn watermark_form_into_admin(
+    form: WatermarkForm,
+) -> ersatzrs_app::commands::WatermarkAdminForm {
+    ersatzrs_app::commands::WatermarkAdminForm {
+        id: form.id,
+        name: form.name,
+        mode: form.mode,
+        image_source: form.image_source,
+        image: form.image,
+        original_content_type: form.original_content_type,
+        location: form.location,
+        size: form.size,
+        width_percent: form.width_percent,
+        horizontal_margin_percent: form.horizontal_margin_percent,
+        vertical_margin_percent: form.vertical_margin_percent,
+        frequency_minutes: form.frequency_minutes,
+        duration_seconds: form.duration_seconds,
+        opacity: form.opacity,
+        place_within_source_content: form.place_within_source_content,
+        opacity_expression: form.opacity_expression,
+        z_index: form.z_index,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn watermark_form_from_admin(form: ersatzrs_app::commands::WatermarkAdminForm) -> WatermarkForm {
+    WatermarkForm {
+        id: form.id,
+        name: form.name,
+        mode: form.mode,
+        image_source: form.image_source,
+        image: form.image,
+        original_content_type: form.original_content_type,
+        location: form.location,
+        size: form.size,
+        width_percent: form.width_percent,
+        horizontal_margin_percent: form.horizontal_margin_percent,
+        vertical_margin_percent: form.vertical_margin_percent,
+        frequency_minutes: form.frequency_minutes,
+        duration_seconds: form.duration_seconds,
+        opacity: form.opacity,
+        place_within_source_content: form.place_within_source_content,
+        opacity_expression: form.opacity_expression,
+        z_index: form.z_index,
+    }
+}
+
 /// Parameters for the `drawvg`-based placement preview.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WatermarkPreviewParams {
@@ -83,37 +131,25 @@ pub async fn list_watermark_rows(
     page_size: u32,
 ) -> Result<Vec<WatermarkListRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page.saturating_sub(1)) * i64::from(page_size);
-
-    let rows = sqlx::query(
-        r#"SELECT "Id","Name","Mode","Location","Image","ImageSource"
-           FROM "ChannelWatermark"
-           ORDER BY "Name" LIMIT ? OFFSET ?"#,
-    )
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            let mode_id = r.try_get::<i64, _>("Mode").unwrap_or(0);
-            let location_id = r.try_get::<i64, _>("Location").unwrap_or(0);
-            WatermarkListRow {
-                id: r.try_get("Id").unwrap_or(0),
-                name: r.try_get("Name").unwrap_or_default(),
-                mode_id: i32::try_from(mode_id).unwrap_or(0),
-                location_id: i32::try_from(location_id).unwrap_or(0),
-                image_path: r.try_get("Image").ok(),
-                image_source: i32::try_from(r.try_get::<i64, _>("ImageSource").unwrap_or(0))
-                    .unwrap_or(0),
-            }
+    state
+        .application
+        .list_watermarks(page, page_size)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| WatermarkListRow {
+                    id: row.id,
+                    name: row.name,
+                    mode_id: row.mode,
+                    location_id: row.location,
+                    image_path: row.image,
+                    image_source: row.image_source,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -121,58 +157,25 @@ pub async fn count_watermarks() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ChannelWatermark""#)
-        .fetch_one(&state.pool)
-        .await?;
-    Ok(u64::try_from(count).unwrap_or(0))
+    state
+        .application
+        .count_watermarks()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn get_watermark_form(id: i64) -> Result<WatermarkForm, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let maybe = sqlx::query(
-        r#"SELECT "Id","Name","Mode","ImageSource","Image","OriginalContentType",
-                  "Location","Size","WidthPercent","HorizontalMarginPercent",
-                  "VerticalMarginPercent","FrequencyMinutes","DurationSeconds",
-                  "Opacity","PlaceWithinSourceContent","OpacityExpression","ZIndex"
-           FROM "ChannelWatermark" WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    match maybe {
-        None => Err(ServerFnError::new("Watermark not found")),
-        Some(r) => Ok(WatermarkForm {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            mode: i32::try_from(r.try_get::<i64, _>("Mode").unwrap_or(0)).unwrap_or(0),
-            image_source: i32::try_from(r.try_get::<i64, _>("ImageSource").unwrap_or(0))
-                .unwrap_or(0),
-            image: r.try_get("Image").ok(),
-            original_content_type: r.try_get("OriginalContentType").ok(),
-            location: i32::try_from(r.try_get::<i64, _>("Location").unwrap_or(0)).unwrap_or(0),
-            size: i32::try_from(r.try_get::<i64, _>("Size").unwrap_or(0)).unwrap_or(0),
-            width_percent: r.try_get("WidthPercent").unwrap_or(15.0),
-            horizontal_margin_percent: r.try_get("HorizontalMarginPercent").unwrap_or(5.0),
-            vertical_margin_percent: r.try_get("VerticalMarginPercent").unwrap_or(5.0),
-            frequency_minutes: i32::try_from(r.try_get::<i64, _>("FrequencyMinutes").unwrap_or(15))
-                .unwrap_or(15),
-            duration_seconds: i32::try_from(r.try_get::<i64, _>("DurationSeconds").unwrap_or(15))
-                .unwrap_or(15),
-            opacity: i32::try_from(r.try_get::<i64, _>("Opacity").unwrap_or(100)).unwrap_or(100),
-            place_within_source_content: r
-                .try_get::<i64, _>("PlaceWithinSourceContent")
-                .unwrap_or(0)
-                != 0,
-            opacity_expression: r.try_get("OpacityExpression").unwrap_or_default(),
-            z_index: i32::try_from(r.try_get::<i64, _>("ZIndex").unwrap_or(0)).unwrap_or(0),
-        }),
-    }
+    state
+        .application
+        .get_watermark(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(watermark_form_from_admin)
+        .ok_or_else(|| ServerFnError::new("Watermark not found"))
 }
 
 #[server]
@@ -180,12 +183,16 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_watermark_with_pool(&state.pool, form)
+    state
+        .application
+        .save_watermark(ersatzrs_app::commands::SaveWatermark {
+            form: watermark_form_into_admin(form),
+        })
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[derive(Debug, thiserror::Error)]
 pub enum WatermarkSaveError {
     #[error("{0}")]
@@ -194,7 +201,7 @@ pub enum WatermarkSaveError {
     Sqlx(#[from] sqlx::Error),
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 pub async fn save_watermark_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
@@ -361,99 +368,23 @@ pub async fn delete_watermark(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "ChannelWatermark" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_watermark(ersatzrs_app::commands::DeleteWatermark { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let new_name = new_name.trim().to_string();
-    if new_name.is_empty() {
-        return Err(ServerFnError::new("Name is required"));
-    }
-    if new_name.len() > 50 {
-        return Err(ServerFnError::new("Name must be 50 characters or fewer"));
-    }
-
-    let exists: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ?"#)
-            .bind(&new_name)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap_or(0);
-    if exists > 0 {
-        return Err(ServerFnError::new("Watermark name must be unique"));
-    }
-
-    let src = sqlx::query(
-        r#"SELECT "Mode","ImageSource","Image","OriginalContentType","Location","Size",
-                  "WidthPercent","HorizontalMarginPercent","VerticalMarginPercent",
-                  "FrequencyMinutes","DurationSeconds","Opacity","PlaceWithinSourceContent",
-                  "OpacityExpression","ZIndex"
-           FROM "ChannelWatermark" WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let Some(src) = src else {
-        return Err(ServerFnError::new("Source watermark not found"));
-    };
-
-    let result = sqlx::query(
-        r#"INSERT INTO "ChannelWatermark"
-           ("Name","Mode","ImageSource","Image","OriginalContentType","Location","Size",
-            "WidthPercent","HorizontalMarginPercent","VerticalMarginPercent",
-            "FrequencyMinutes","DurationSeconds","Opacity","PlaceWithinSourceContent",
-            "OpacityExpression","ZIndex")
-           SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"#,
-    )
-    .bind(&new_name)
-    .bind(src.try_get::<i64, _>("Mode").unwrap_or(1))
-    .bind(src.try_get::<i64, _>("ImageSource").unwrap_or(0))
-    .bind(src.try_get::<Option<String>, _>("Image").ok().flatten())
-    .bind(
-        src.try_get::<Option<String>, _>("OriginalContentType")
-            .ok()
-            .flatten(),
-    )
-    .bind(src.try_get::<i64, _>("Location").unwrap_or(0))
-    .bind(src.try_get::<i64, _>("Size").unwrap_or(0))
-    .bind(src.try_get::<f64, _>("WidthPercent").unwrap_or(15.0))
-    .bind(
-        src.try_get::<f64, _>("HorizontalMarginPercent")
-            .unwrap_or(5.0),
-    )
-    .bind(
-        src.try_get::<f64, _>("VerticalMarginPercent")
-            .unwrap_or(5.0),
-    )
-    .bind(src.try_get::<i64, _>("FrequencyMinutes").unwrap_or(15))
-    .bind(src.try_get::<i64, _>("DurationSeconds").unwrap_or(15))
-    .bind(src.try_get::<i64, _>("Opacity").unwrap_or(100))
-    .bind(
-        src.try_get::<i64, _>("PlaceWithinSourceContent")
-            .unwrap_or(0),
-    )
-    .bind(
-        src.try_get::<Option<String>, _>("OpacityExpression")
-            .ok()
-            .flatten(),
-    )
-    .bind(src.try_get::<i64, _>("ZIndex").unwrap_or(0))
-    .execute(&state.pool)
-    .await?;
-    let new_id = ersatzrs_infra::db::last_insert_id(result);
-
-    Ok(new_id)
+    state
+        .application
+        .copy_watermark(ersatzrs_app::commands::CopyWatermark { id, name: new_name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Generates a 320×180 drawvg-based preview PNG of the watermark placement.

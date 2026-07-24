@@ -17,7 +17,8 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
@@ -38,26 +39,20 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn CollectionsPage() -> impl IntoView {
-    let initial: Resource<(Vec<CollectionListRow>, u64)> = Resource::new_blocking(
-        || (),
-        |()| async {
-            list_collections(String::new(), 0, 10)
-                .await
-                .unwrap_or_default()
-        },
-    );
+    let initial = Resource::new_blocking(|| (), |()| list_collections(String::new(), 0, 10));
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_rows, initial_total)| {
+                initial.get().map(|result| admin_result_view(result, |(initial_rows, initial_total)| {
                     view! {
                         <CollectionsIsland
                             initial_rows=initial_rows
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -68,13 +63,14 @@ fn CollectionsIsland(initial_rows: Vec<CollectionListRow>, initial_total: u64) -
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(10u32);
+    let toast = use_toast();
 
     let current_data = RwSignal::new((initial_rows, initial_total));
     let data: LocalResource<(Vec<CollectionListRow>, u64)> = LocalResource::new(move || {
         let q = search.get();
         let p = page.get();
         let size = page_size.get();
-        async move { list_collections(q, p, size).await.unwrap_or_default() }
+        async move { load_or_notify(list_collections(q, p, size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -86,7 +82,6 @@ fn CollectionsIsland(initial_rows: Vec<CollectionListRow>, initial_total: u64) -
     let delete_open = RwSignal::new(false);
     let delete_action = Action::new(|id: &i64| delete_collection(*id));
 
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(res) = delete_action.value().get() {
             match res {
@@ -284,16 +279,14 @@ pub fn CollectionEditorPage() -> impl IntoView {
 #[island]
 fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
     let default_name = tr(TextKey::NewCollectionTitle).to_string();
+    let toast = use_toast();
     let initial: Resource<CollectionForm> = Resource::new_blocking(
         move || collection_id,
         move |id| {
             let default_name = default_name.clone();
             async move {
                 match (id != 0).then_some(id) {
-                    Some(id) => get_collection(id)
-                        .await
-                        .unwrap_or_default()
-                        .unwrap_or_default(),
+                    Some(id) => load_or_notify(get_collection(id).await, toast).unwrap_or_default(),
                     None => CollectionForm {
                         name: default_name,
                         ..CollectionForm::default()
@@ -324,8 +317,6 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
         let form = form.clone();
         async move { save_collection(form).await }
     });
-
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
@@ -417,9 +408,10 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
 fn MembersSection(collection_id: i64) -> impl IntoView {
     use crate::admin::server_fns::media_browser::{suggest_media_items, MediaItemSuggestion};
 
+    let load_toast = use_toast();
     let members: Resource<Vec<CollectionMember>> = Resource::new(
         move || collection_id,
-        move |id| async move { list_collection_members(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_collection_members(id).await, load_toast) },
     );
 
     let query = RwSignal::new(String::new());
@@ -437,8 +429,13 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
         }
         show_suggest.set(true);
         leptos::task::spawn_local(async move {
-            let results = suggest_media_items(trimmed).await.unwrap_or_default();
-            suggestions.set(results);
+            match suggest_media_items(trimmed).await {
+                Ok(results) => suggestions.set(results),
+                Err(error) => load_toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 

@@ -5,6 +5,63 @@ use ersatzrs_domain::{
 
 use super::Result;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RemoteMediaSourceKind {
+    Jellyfin,
+    Emby,
+    Plex,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalLibraryAdminRow {
+    pub id: EntityId,
+    pub name: String,
+    pub media_kind: i32,
+    pub path_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalLibraryPathAdmin {
+    pub id: EntityId,
+    pub path: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalLibraryAdmin {
+    pub id: EntityId,
+    pub name: String,
+    pub media_kind: i32,
+    pub paths: Vec<LocalLibraryPathAdmin>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteSourceAdminRow {
+    pub id: EntityId,
+    pub name: String,
+    pub address: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteConnectionAdmin {
+    pub source_id: EntityId,
+    pub address: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibraryPreferenceAdmin {
+    pub id: EntityId,
+    pub name: String,
+    pub media_kind: i32,
+    pub should_sync: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PathReplacementAdmin {
+    pub id: EntityId,
+    pub remote_path: String,
+    pub local_path: String,
+}
+
 #[async_trait]
 pub trait MediaSourceRepository: Send + Sync {
     async fn get_plex(&self, id: EntityId) -> Result<PlexMediaSource>;
@@ -14,4 +71,48 @@ pub trait MediaSourceRepository: Send + Sync {
     async fn upsert_plex(&self, source: &PlexMediaSource) -> Result<()>;
     async fn upsert_jellyfin(&self, source: &JellyfinMediaSource) -> Result<()>;
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()>;
+    async fn first_jellyfin_address_admin(&self) -> Result<Option<String>>;
+    async fn first_emby_address_admin(&self) -> Result<Option<String>>;
+    async fn list_local_libraries_admin(&self) -> Result<Vec<LocalLibraryAdminRow>>;
+    async fn get_local_library_admin(&self, id: EntityId) -> Result<Option<LocalLibraryAdmin>>;
+    async fn save_local_library_admin(&self, library: &LocalLibraryAdmin) -> Result<EntityId>;
+    async fn delete_local_library_admin(&self, id: EntityId) -> Result<()>;
+    async fn list_remote_sources_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+    ) -> Result<Vec<RemoteSourceAdminRow>>;
+    async fn get_remote_connection_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+    ) -> Result<Option<RemoteConnectionAdmin>>;
+    async fn save_remote_connection_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        connection: &RemoteConnectionAdmin,
+        server_name: &str,
+        operating_system: &str,
+    ) -> Result<EntityId>;
+    async fn delete_remote_source_admin(&self, id: EntityId) -> Result<()>;
+    async fn list_library_preferences_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+    ) -> Result<Vec<LibraryPreferenceAdmin>>;
+    async fn save_library_preferences_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        preferences: &[LibraryPreferenceAdmin],
+    ) -> Result<()>;
+    async fn list_path_replacements_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+    ) -> Result<Vec<PathReplacementAdmin>>;
+    async fn save_path_replacements_admin(
+        &self,
+        kind: RemoteMediaSourceKind,
+        source_id: EntityId,
+        paths: &[PathReplacementAdmin],
+    ) -> Result<()>;
+    async fn delete_all_plex_sources_admin(&self) -> Result<()>;
 }

@@ -13,6 +13,10 @@ use crate::admin::server_fns::media_sources::{
     ConnectionForm, LibraryPrefRow, PathReplacementRow, RemoteSourceRow,
 };
 use crate::admin::ui::primitives::dialog::DeleteDialog;
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 use super::jellyfin::PathsEditor;
 
@@ -32,17 +36,14 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn EmbySourcesPage() -> impl IntoView {
-    let initial: Resource<Vec<RemoteSourceRow>> = Resource::new_blocking(
-        || (),
-        |()| async { list_emby_sources().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| list_emby_sources());
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_rows| {
-                    view! { <EmbySourcesIsland initial_rows=initial_rows/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_rows| {
+                    view! { <EmbySourcesIsland initial_rows=initial_rows/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -51,8 +52,11 @@ pub fn EmbySourcesPage() -> impl IntoView {
 #[island]
 fn EmbySourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
     let current_rows = RwSignal::new(initial_rows);
+    let load_toast = use_toast();
     let rows: LocalResource<Vec<RemoteSourceRow>> =
-        LocalResource::new(|| async { list_emby_sources().await.unwrap_or_default() });
+        LocalResource::new(
+            move || async move { load_or_notify(list_emby_sources().await, load_toast) },
+        );
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
             current_rows.set(next_rows);
@@ -156,17 +160,14 @@ fn EmbySourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
 
 #[component]
 pub fn EmbyConnectionPage() -> impl IntoView {
-    let initial: Resource<ConnectionForm> = Resource::new_blocking(
-        || (),
-        |()| async { get_emby_connection().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| get_emby_connection());
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_form| {
-                    view! { <EmbyConnectionEditorIsland initial_form=initial_form/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_form| {
+                    view! { <EmbyConnectionEditorIsland initial_form=initial_form/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -277,9 +278,10 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
 
 #[island]
 fn EmbyLibrariesIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_emby_libraries(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_emby_libraries(id).await, load_toast) },
     );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
@@ -390,9 +392,10 @@ pub fn EmbyPathsPage() -> impl IntoView {
 
 #[island]
 fn EmbyPathsIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_emby_paths(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_emby_paths(id).await, load_toast) },
     );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);

@@ -14,6 +14,9 @@ use crate::admin::server_fns::playouts::{
     PlayoutCreateChannel, PlayoutCreateForm, PlayoutCreateSchedule,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 
 stylance::import_crate_style!(
     style,
@@ -24,30 +27,29 @@ stylance::import_crate_style!(
 pub fn PlayoutEditorPage() -> impl IntoView {
     let params = use_params_map();
     let kind = params.with(|p| p.get("kind").unwrap_or_default());
-    let initial: Resource<(Vec<PlayoutCreateChannel>, Vec<PlayoutCreateSchedule>)> =
-        Resource::new_blocking(
-            || (),
-            |()| async move {
-                let (channels, schedules) = tokio::join!(
-                    list_playout_create_channels(),
-                    list_playout_create_schedules(),
-                );
-                (channels.unwrap_or_default(), schedules.unwrap_or_default())
-            },
-        );
+    let initial = Resource::new_blocking(
+        || (),
+        |()| async move {
+            tokio::try_join!(
+                list_playout_create_channels(),
+                list_playout_create_schedules(),
+            )
+        },
+    );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::caption>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_channels, initial_schedules)| {
-                    view! {
+                initial.get().map(|result| admin_result_view(
+                    result,
+                    |(initial_channels, initial_schedules)| view! {
                         <PlayoutEditorIsland
                             initial_kind=kind.clone()
                             initial_channels=initial_channels
                             initial_schedules=initial_schedules
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }

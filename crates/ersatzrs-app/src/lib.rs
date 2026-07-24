@@ -4,6 +4,7 @@
 //! ports without depending on SQL, HTTP, scheduler implementations, `FFmpeg`,
 //! or platform adapters. The native web host constructs [`ApplicationServices`]
 //! from concrete infrastructure ports.
+#![allow(clippy::missing_errors_doc)]
 
 pub mod commands;
 pub mod error;
@@ -14,8 +15,12 @@ pub mod queries;
 pub use error::{ApplicationError, Result};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    ApplicationPorts, BlockPreviewBuilder, PlayoutBuildQueue, PlayoutBuildQueueError, ScanRuntime,
-    ScanRuntimeError, ScanWorkQueue, ScanWorkQueueError,
+    AdminFfmpegRuntimeRead, AdminHealthRead, AdminHealthRuntime, AdminHealthRuntimeError,
+    AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
+    BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError, MediaSourceRuntime,
+    MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
+    PlexPinFlow, RemoteServerInfo, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
+    ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
 };
 
 /// Native application services assembled by a composition root.
@@ -49,6 +54,2092 @@ impl ApplicationServices {
         &self.operations
     }
 
+    /// Load the complete admin season-detail projection.
+    pub async fn get_season_detail(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<queries::SeasonDetailReadModel>> {
+        queries::get_season_detail(id, self.ports.television(), self.ports.admin_media()).await
+    }
+
+    /// Page through channel admin rows.
+    pub async fn list_channels(
+        &self,
+        query: queries::ListChannels,
+    ) -> Result<Vec<ersatzrs_core::repositories::ChannelAdminListRow>> {
+        queries::list_channels(query, self.ports.channels()).await
+    }
+
+    /// Count channel admin rows.
+    pub async fn count_channels(&self, show_disabled: bool) -> Result<u64> {
+        queries::count_channels(show_disabled, self.ports.channels()).await
+    }
+
+    /// Load channel-number editor rows.
+    pub async fn list_channel_numbers(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::ChannelNumberRow>> {
+        queries::list_channel_numbers(self.ports.channels()).await
+    }
+
+    /// Load a complete channel create/edit state.
+    pub async fn get_channel_editor(
+        &self,
+        query: queries::GetChannelEditor,
+    ) -> Result<Option<ersatzrs_core::repositories::ChannelEditorState>> {
+        queries::get_channel_editor(query, self.ports.channels()).await
+    }
+
+    /// Save a channel and preserve its asynchronous subtitle side effect.
+    pub async fn save_channel(&self, command: commands::SaveChannel) -> Result<i64> {
+        commands::save_channel(command, self.ports.channels(), self.ports.channel_runtime()).await
+    }
+
+    /// Atomically update submitted channel numbers.
+    pub async fn save_channel_numbers(
+        &self,
+        command: commands::SaveChannelNumbers,
+    ) -> Result<Vec<i64>> {
+        commands::save_channel_numbers(command, self.ports.channels()).await
+    }
+
+    /// Delete one channel.
+    pub async fn delete_channel(&self, command: commands::DeleteChannel) -> Result<()> {
+        commands::delete_channel(command, self.ports.channels()).await
+    }
+
+    /// Load `FFmpeg` profile options used by channel transports.
+    pub async fn list_channel_ffmpeg_profiles(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::ChannelSelectOption>> {
+        queries::list_channel_ffmpeg_profiles(self.ports.channels()).await
+    }
+
+    /// Load filler preset options used by channel transports.
+    pub async fn list_channel_filler_presets(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::ChannelSelectOption>> {
+        queries::list_channel_filler_presets(self.ports.channels()).await
+    }
+
+    /// List active channel streaming sessions.
+    pub async fn list_active_channel_numbers(&self) -> Result<Vec<String>> {
+        queries::list_active_channel_numbers(self.ports.channel_runtime()).await
+    }
+
+    /// Stop one active channel streaming session.
+    pub async fn stop_channel_session(&self, number: &str) -> Result<bool> {
+        queries::stop_channel_session(number, self.ports.channel_runtime()).await
+    }
+
+    /// List Trakt admin rows and persist the chosen page size.
+    pub async fn list_trakt_lists(
+        &self,
+        query: queries::ListTraktLists,
+    ) -> Result<(Vec<ersatzrs_core::repositories::TraktListAdminRow>, u64)> {
+        queries::list_trakt_lists(query, self.ports.trakt()).await
+    }
+
+    /// Load one Trakt list editor state.
+    pub async fn get_trakt_list(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::TraktListAdminForm>> {
+        queries::get_trakt_list(id, self.ports.trakt()).await
+    }
+
+    /// Load the configured Trakt page size.
+    pub async fn get_trakt_page_size(&self) -> Result<u32> {
+        queries::get_trakt_page_size(self.ports.trakt()).await
+    }
+
+    /// Import or refresh one Trakt list.
+    pub async fn add_trakt_list(&self, command: commands::AddTraktList) -> Result<i64> {
+        commands::add_trakt_list(command, self.ports.trakt()).await
+    }
+
+    /// Re-run local matching for one Trakt list.
+    pub async fn match_trakt_list(&self, command: commands::MatchTraktList) -> Result<()> {
+        commands::match_trakt_list(command, self.ports.trakt()).await
+    }
+
+    /// Save user-editable Trakt list settings.
+    pub async fn update_trakt_list(&self, command: commands::UpdateTraktList) -> Result<()> {
+        commands::update_trakt_list(command, self.ports.trakt()).await
+    }
+
+    /// Delete one Trakt list.
+    pub async fn delete_trakt_list(&self, command: commands::DeleteTraktList) -> Result<()> {
+        commands::delete_trakt_list(command, self.ports.trakt()).await
+    }
+
+    /// Load one optional admin setting.
+    pub async fn get_optional_setting(&self, key: &str) -> Result<Option<String>> {
+        queries::get_optional_setting(key, self.ports.admin_settings()).await
+    }
+
+    /// Load a string admin setting.
+    pub async fn get_string_setting(&self, key: &str, default: &str) -> Result<String> {
+        queries::get_string_setting(key, default, self.ports.admin_settings()).await
+    }
+
+    /// Load a strictly decoded integer admin setting.
+    pub async fn get_i32_setting(&self, key: &str, default: i32) -> Result<i32> {
+        queries::get_i32_setting(key, default, self.ports.admin_settings()).await
+    }
+
+    /// Load a strictly decoded optional identity setting.
+    pub async fn get_optional_id_setting(&self, key: &str) -> Result<Option<i64>> {
+        queries::get_optional_id_setting(key, self.ports.admin_settings()).await
+    }
+
+    /// Load a strictly decoded boolean admin setting.
+    pub async fn get_bool_setting(&self, key: &str, default: bool) -> Result<bool> {
+        queries::get_bool_setting(key, default, self.ports.admin_settings()).await
+    }
+
+    /// Load typed settings select options.
+    pub async fn list_settings_options(
+        &self,
+        kind: ersatzrs_core::repositories::SettingsOptionKind,
+    ) -> Result<Vec<ersatzrs_core::repositories::SettingsSelectOption>> {
+        queries::list_settings_options(kind, self.ports.admin_settings()).await
+    }
+
+    /// Load playout ids used by settings side effects.
+    pub async fn list_settings_playout_ids(&self) -> Result<Vec<i64>> {
+        queries::list_settings_playout_ids(self.ports.admin_settings()).await
+    }
+
+    /// Page through `FFmpeg` profile admin rows.
+    pub async fn list_ffmpeg_profiles(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<queries::FfmpegProfileListRead>> {
+        queries::list_ffmpeg_profiles(page, page_size, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Count `FFmpeg` profiles.
+    pub async fn count_ffmpeg_profiles(&self) -> Result<u64> {
+        queries::count_ffmpeg_profiles(self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Load resolution options for `FFmpeg` profile editors.
+    pub async fn list_ffmpeg_resolutions(&self) -> Result<Vec<(i64, String)>> {
+        queries::list_ffmpeg_resolutions(self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Load one `FFmpeg` profile editor model with valid absence.
+    pub async fn get_ffmpeg_profile(
+        &self,
+        id: i64,
+    ) -> Result<Option<commands::FfmpegProfileAdminForm>> {
+        queries::get_ffmpeg_profile(id, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Validate and persist one `FFmpeg` profile.
+    pub async fn save_ffmpeg_profile(&self, command: commands::SaveFfmpegProfile) -> Result<i64> {
+        commands::save_ffmpeg_profile(command, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Delete one `FFmpeg` profile.
+    pub async fn delete_ffmpeg_profile(
+        &self,
+        command: commands::DeleteFfmpegProfile,
+    ) -> Result<()> {
+        commands::delete_ffmpeg_profile(command, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Copy one `FFmpeg` profile.
+    pub async fn copy_ffmpeg_profile(&self, command: commands::CopyFfmpegProfile) -> Result<i64> {
+        commands::copy_ffmpeg_profile(command, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Load the configured filler-preset page size.
+    pub async fn get_filler_presets_page_size(&self) -> Result<u32> {
+        queries::get_filler_presets_page_size(self.ports.admin_settings()).await
+    }
+
+    /// Page through filler-preset rows.
+    pub async fn list_filler_presets(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<(Vec<queries::FillerPresetListRead>, u64)> {
+        queries::list_filler_presets(
+            page,
+            page_size,
+            self.ports.fillers(),
+            self.ports.admin_settings(),
+        )
+        .await
+    }
+
+    /// Load one filler-preset editor model with valid absence.
+    pub async fn get_filler_preset(
+        &self,
+        id: i64,
+    ) -> Result<Option<commands::FillerPresetAdminForm>> {
+        queries::get_filler_preset(id, self.ports.fillers()).await
+    }
+
+    /// Load filler-preset reference options.
+    pub async fn get_filler_editor_options(&self) -> Result<queries::FillerEditorOptionsRead> {
+        queries::get_filler_editor_options(self.ports.collections()).await
+    }
+
+    /// Validate and persist one filler preset.
+    pub async fn save_filler_preset(&self, command: commands::SaveFillerPreset) -> Result<i64> {
+        commands::save_filler_preset(command, self.ports.fillers()).await
+    }
+
+    /// Delete one filler preset.
+    pub async fn delete_filler_preset(&self, command: commands::DeleteFillerPreset) -> Result<()> {
+        commands::delete_filler_preset(command, self.ports.fillers()).await
+    }
+
+    /// Page through watermark admin rows.
+    pub async fn list_watermarks(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<queries::WatermarkListRead>> {
+        queries::list_watermarks(page, page_size, self.ports.watermarks()).await
+    }
+
+    /// Count watermark admin rows.
+    pub async fn count_watermarks(&self) -> Result<u64> {
+        queries::count_watermarks(self.ports.watermarks()).await
+    }
+
+    /// Load one watermark editor model with valid absence.
+    pub async fn get_watermark(&self, id: i64) -> Result<Option<commands::WatermarkAdminForm>> {
+        queries::get_watermark(id, self.ports.watermarks()).await
+    }
+
+    /// Validate and persist one watermark.
+    pub async fn save_watermark(&self, command: commands::SaveWatermark) -> Result<i64> {
+        commands::save_watermark(command, self.ports.watermarks()).await
+    }
+
+    /// Delete one watermark.
+    pub async fn delete_watermark(&self, command: commands::DeleteWatermark) -> Result<()> {
+        commands::delete_watermark(command, self.ports.watermarks()).await
+    }
+
+    /// Copy one watermark.
+    pub async fn copy_watermark(&self, command: commands::CopyWatermark) -> Result<i64> {
+        commands::copy_watermark(command, self.ports.watermarks()).await
+    }
+
+    /// List template groups with their template counts.
+    pub async fn list_template_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::TemplateGroupAdminRow>> {
+        queries::list_template_groups(self.ports.templates()).await
+    }
+
+    /// Search template list rows.
+    pub async fn list_templates(
+        &self,
+        search: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::TemplateAdminRow>> {
+        queries::list_templates(search, self.ports.templates()).await
+    }
+
+    /// Create one template group.
+    pub async fn create_template_group(
+        &self,
+        command: commands::CreateTemplateGroup,
+    ) -> Result<i64> {
+        commands::create_template_group(command, self.ports.templates()).await
+    }
+
+    /// Create one empty template.
+    pub async fn create_template(&self, command: commands::CreateTemplate) -> Result<i64> {
+        commands::create_template(command, self.ports.templates()).await
+    }
+
+    /// Copy one template and its item graph.
+    pub async fn copy_template(&self, command: commands::CopyTemplate) -> Result<i64> {
+        commands::copy_template(command, self.ports.templates()).await
+    }
+
+    /// Delete one template group.
+    pub async fn delete_template_group(
+        &self,
+        command: commands::DeleteTemplateGroup,
+    ) -> Result<()> {
+        commands::delete_template_group(command, self.ports.templates()).await
+    }
+
+    /// Delete one template.
+    pub async fn delete_template(&self, command: commands::DeleteTemplate) -> Result<()> {
+        commands::delete_template(command, self.ports.templates()).await
+    }
+
+    /// Load one template row with valid absence.
+    pub async fn get_template(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::TemplateAdminRow>> {
+        queries::get_template(id, self.ports.templates()).await
+    }
+
+    /// Load template editor items.
+    pub async fn get_template_items(
+        &self,
+        template_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::TemplateItemAdmin>> {
+        queries::get_template_items(template_id, self.ports.templates()).await
+    }
+
+    /// Load block-group choices for the template editor.
+    pub async fn list_template_block_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::TemplateBlockGroupAdmin>> {
+        queries::list_template_block_groups(self.ports.templates()).await
+    }
+
+    /// Load blocks for one template-editor group.
+    pub async fn list_template_blocks(
+        &self,
+        group_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::TemplateBlockAdmin>> {
+        queries::list_template_blocks(group_id, self.ports.templates()).await
+    }
+
+    /// Validate and atomically replace one template item graph.
+    pub async fn save_template(&self, command: commands::SaveTemplate) -> Result<()> {
+        commands::save_template(command, self.ports.templates()).await
+    }
+
+    /// List block groups.
+    pub async fn list_block_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::BlockGroupAdminRow>> {
+        queries::list_block_groups(self.ports.blocks()).await
+    }
+
+    /// Search block list rows.
+    pub async fn list_blocks(
+        &self,
+        search: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::BlockAdminRow>> {
+        queries::list_blocks(search, self.ports.blocks()).await
+    }
+
+    /// Create one block group.
+    pub async fn create_block_group(&self, command: commands::CreateBlockGroup) -> Result<i64> {
+        commands::create_block_group(command, self.ports.blocks()).await
+    }
+
+    /// Delete one block group.
+    pub async fn delete_block_group(&self, command: commands::DeleteBlockGroup) -> Result<()> {
+        commands::delete_block_group(command, self.ports.blocks()).await
+    }
+
+    /// Create one empty block.
+    pub async fn create_block(&self, command: commands::CreateBlock) -> Result<i64> {
+        commands::create_block(command, self.ports.blocks()).await
+    }
+
+    /// Copy one block and its item graph.
+    pub async fn copy_block(&self, command: commands::CopyBlock) -> Result<i64> {
+        commands::copy_block(command, self.ports.blocks()).await
+    }
+
+    /// Delete one block and its attached Smart Shuffle state.
+    pub async fn delete_block(&self, command: commands::DeleteBlock) -> Result<()> {
+        commands::delete_block(command, self.ports.blocks()).await
+    }
+
+    /// Load one block row with valid absence.
+    pub async fn get_block(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::BlockAdminRow>> {
+        queries::get_block(id, self.ports.blocks()).await
+    }
+
+    /// Load block editor items.
+    pub async fn get_block_items(
+        &self,
+        block_id: i64,
+    ) -> Result<Vec<commands::BlockItemAdminForm>> {
+        queries::get_block_items(block_id, self.ports.blocks()).await
+    }
+
+    /// Search one family of block editor reference options.
+    pub async fn search_block_options(
+        &self,
+        kind: queries::BlockOptionKind,
+        prefix: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::BlockEditorOptionAdmin>> {
+        queries::search_block_options(kind, prefix, self.ports.blocks()).await
+    }
+
+    /// Load all block editor reference options.
+    pub async fn load_block_editor_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::BlockEditorOptionsAdmin> {
+        queries::load_block_editor_options(self.ports.blocks()).await
+    }
+
+    /// Validate and atomically replace one block item graph.
+    pub async fn save_block(&self, command: commands::SaveBlock) -> Result<()> {
+        commands::save_block(command, self.ports.blocks()).await
+    }
+
+    /// List deco groups.
+    pub async fn list_deco_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::DecoGroupAdminRow>> {
+        queries::list_deco_groups(self.ports.decos()).await
+    }
+
+    /// Search deco list rows.
+    pub async fn list_decos(
+        &self,
+        search: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::DecoAdminRow>> {
+        queries::list_decos(search, self.ports.decos()).await
+    }
+
+    /// Create one deco group.
+    pub async fn create_deco_group(&self, command: commands::CreateDecoGroup) -> Result<i64> {
+        commands::create_deco_group(command, self.ports.decos()).await
+    }
+
+    /// Create one deco.
+    pub async fn create_deco(&self, command: commands::CreateDeco) -> Result<i64> {
+        commands::create_deco(command, self.ports.decos()).await
+    }
+
+    /// Delete one deco group.
+    pub async fn delete_deco_group(&self, command: commands::DeleteDecoGroup) -> Result<()> {
+        commands::delete_deco_group(command, self.ports.decos()).await
+    }
+
+    /// Delete one deco.
+    pub async fn delete_deco(&self, command: commands::DeleteDeco) -> Result<()> {
+        commands::delete_deco(command, self.ports.decos()).await
+    }
+
+    /// Load one complete deco editor form with valid absence.
+    pub async fn get_deco(&self, id: i64) -> Result<Option<commands::DecoAdminForm>> {
+        queries::get_deco(id, self.ports.decos()).await
+    }
+
+    /// Load deco editor reference options.
+    pub async fn load_deco_editor_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::DecoEditorOptionsAdmin> {
+        queries::load_deco_editor_options(self.ports.decos()).await
+    }
+
+    /// Validate and atomically replace one deco graph.
+    pub async fn save_deco(&self, command: commands::SaveDeco) -> Result<()> {
+        commands::save_deco(command, self.ports.decos()).await
+    }
+
+    /// List deco-template groups.
+    pub async fn list_deco_template_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::DecoTemplateGroupAdminRow>> {
+        queries::list_deco_template_groups(self.ports.decos()).await
+    }
+
+    /// Search deco-template list rows.
+    pub async fn list_deco_templates(
+        &self,
+        search: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::DecoTemplateAdminRow>> {
+        queries::list_deco_templates(search, self.ports.decos()).await
+    }
+
+    /// Create one deco-template group.
+    pub async fn create_deco_template_group(
+        &self,
+        command: commands::CreateDecoTemplateGroup,
+    ) -> Result<i64> {
+        commands::create_deco_template_group(command, self.ports.decos()).await
+    }
+
+    /// Create one empty deco template.
+    pub async fn create_deco_template(&self, command: commands::CreateDecoTemplate) -> Result<i64> {
+        commands::create_deco_template(command, self.ports.decos()).await
+    }
+
+    /// Delete one deco-template group.
+    pub async fn delete_deco_template_group(
+        &self,
+        command: commands::DeleteDecoTemplateGroup,
+    ) -> Result<()> {
+        commands::delete_deco_template_group(command, self.ports.decos()).await
+    }
+
+    /// Delete one deco template.
+    pub async fn delete_deco_template(&self, command: commands::DeleteDecoTemplate) -> Result<()> {
+        commands::delete_deco_template(command, self.ports.decos()).await
+    }
+
+    /// Load one deco-template row with valid absence.
+    pub async fn get_deco_template(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::DecoTemplateAdminRow>> {
+        queries::get_deco_template(id, self.ports.decos()).await
+    }
+
+    /// Load one deco template's item graph.
+    pub async fn get_deco_template_items(
+        &self,
+        id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::DecoTemplateItemAdmin>> {
+        queries::get_deco_template_items(id, self.ports.decos()).await
+    }
+
+    /// Validate and atomically replace one deco-template item graph.
+    pub async fn save_deco_template(&self, command: commands::SaveDecoTemplate) -> Result<()> {
+        commands::save_deco_template(command, self.ports.decos()).await
+    }
+
+    /// Load the complete `FFmpeg` settings read model.
+    pub async fn load_ffmpeg_settings(&self) -> Result<queries::FfmpegSettingsReadModel> {
+        queries::load_ffmpeg_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load logging settings.
+    pub async fn load_logging_settings(&self) -> Result<queries::LoggingSettings> {
+        queries::load_logging_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load HDHR settings and ensure a stable device UUID.
+    pub async fn load_hdhr_settings(&self) -> Result<queries::HdhrSettings> {
+        queries::load_hdhr_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load scanner settings.
+    pub async fn load_scanner_settings(&self) -> Result<queries::ScannerSettings> {
+        queries::load_scanner_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load playout settings.
+    pub async fn load_playout_settings(&self) -> Result<queries::PlayoutSettings> {
+        queries::load_playout_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load UI settings.
+    pub async fn load_ui_settings(&self) -> Result<queries::UiSettings> {
+        queries::load_ui_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load XMLTV settings.
+    pub async fn load_xmltv_settings(&self) -> Result<queries::XmltvSettings> {
+        queries::load_xmltv_settings(self.ports.admin_settings()).await
+    }
+
+    /// Page through manual collection admin rows.
+    pub async fn list_collections(
+        &self,
+        query: queries::ListCollections,
+    ) -> Result<(Vec<ersatzrs_core::repositories::CollectionAdminRow>, u64)> {
+        queries::list_collections(query, self.ports.collections()).await
+    }
+
+    /// Load one manual collection editor.
+    pub async fn get_collection(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::CollectionAdminRow>> {
+        queries::get_collection(id, self.ports.collections()).await
+    }
+
+    /// List all manual collections for selectors.
+    pub async fn list_all_collections(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::CollectionAdminRow>> {
+        queries::list_all_collections(self.ports.collections()).await
+    }
+
+    /// Page through smart collection admin rows.
+    pub async fn list_smart_collections(
+        &self,
+        query: queries::ListCollections,
+    ) -> Result<(
+        Vec<ersatzrs_core::repositories::SmartCollectionAdminRow>,
+        u64,
+    )> {
+        queries::list_smart_collections(query, self.ports.collections()).await
+    }
+
+    /// Load one smart collection editor.
+    pub async fn get_smart_collection(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::SmartCollectionAdminRow>> {
+        queries::get_smart_collection(id, self.ports.collections()).await
+    }
+
+    /// Load the persisted multi-collection page size.
+    pub async fn get_multi_collections_page_size(&self) -> Result<u32> {
+        queries::get_multi_collections_page_size(self.ports.admin_settings()).await
+    }
+
+    /// Persist the page size and page through multi-collection admin rows.
+    pub async fn list_multi_collections(
+        &self,
+        query: queries::ListCollections,
+    ) -> Result<(
+        Vec<ersatzrs_core::repositories::MultiCollectionAdminRow>,
+        u64,
+    )> {
+        queries::list_multi_collections(
+            query,
+            self.ports.collections(),
+            self.ports.admin_settings(),
+        )
+        .await
+    }
+
+    /// Load one multi-collection editor.
+    pub async fn get_multi_collection(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::MultiCollectionAdmin>> {
+        queries::get_multi_collection(id, self.ports.collections()).await
+    }
+
+    /// Load multi-collection selector reference data.
+    pub async fn get_multi_collection_editor_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::MultiCollectionEditorOptions> {
+        queries::get_multi_collection_editor_options(self.ports.collections()).await
+    }
+
+    /// Load the persisted rerun-collection page size.
+    pub async fn get_rerun_collections_page_size(&self) -> Result<u32> {
+        queries::get_rerun_collections_page_size(self.ports.admin_settings()).await
+    }
+
+    /// Persist the page size and page through rerun-collection admin rows.
+    pub async fn list_rerun_collections(
+        &self,
+        query: queries::ListCollections,
+    ) -> Result<(
+        Vec<ersatzrs_core::repositories::RerunCollectionAdminRow>,
+        u64,
+    )> {
+        queries::list_rerun_collections(
+            query,
+            self.ports.collections(),
+            self.ports.admin_settings(),
+        )
+        .await
+    }
+
+    /// Load one rerun-collection editor.
+    pub async fn get_rerun_collection(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::RerunCollectionAdmin>> {
+        queries::get_rerun_collection(id, self.ports.collections()).await
+    }
+
+    /// Load rerun-collection selector reference data.
+    pub async fn get_rerun_collection_editor_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::RerunCollectionEditorOptions> {
+        queries::get_rerun_collection_editor_options(self.ports.collections()).await
+    }
+
+    /// List playlist groups and their child playlists.
+    pub async fn list_playlist_groups(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::PlaylistGroupAdminRow>> {
+        queries::list_playlist_groups(self.ports.collections()).await
+    }
+
+    /// Load one playlist editor.
+    pub async fn get_playlist_editor(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::PlaylistEditorAdmin>> {
+        queries::get_playlist_editor(id, self.ports.collections()).await
+    }
+
+    /// Load playlist editor selector reference data.
+    pub async fn get_playlist_editor_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::PlaylistEditorOptions> {
+        queries::get_playlist_editor_options(self.ports.collections()).await
+    }
+
+    /// Suggest movie and show targets for a manual collection.
+    pub async fn suggest_media_items(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::MediaItemSuggestionAdmin>> {
+        queries::suggest_media_items(prefix, self.ports.collections()).await
+    }
+
+    /// Load one manual collection detail projection.
+    pub async fn get_collection_detail(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::CollectionDetailAdmin>> {
+        queries::get_collection_detail(id, self.ports.collections()).await
+    }
+
+    /// List movie and show members used by collection dialogs.
+    pub async fn list_collection_members(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::CollectionMemberAdmin>> {
+        queries::list_collection_members(id, self.ports.collections()).await
+    }
+
+    /// Load persisted list and detail page sizes for schedule admin pages.
+    pub async fn get_schedules_page_sizes(&self) -> Result<(u32, u32)> {
+        queries::get_schedules_page_sizes(self.ports.admin_settings()).await
+    }
+
+    /// Persist the schedule-detail page size.
+    pub async fn save_schedules_detail_page_size(&self, page_size: u32) -> Result<()> {
+        queries::save_schedules_detail_page_size(page_size, self.ports.admin_settings()).await
+    }
+
+    /// Page through program schedule admin rows.
+    pub async fn list_schedules(
+        &self,
+        query: queries::ListCollections,
+    ) -> Result<(Vec<ersatzrs_core::repositories::ScheduleAdminRow>, u64)> {
+        queries::list_schedules(
+            query,
+            self.ports.program_schedules(),
+            self.ports.admin_settings(),
+        )
+        .await
+    }
+
+    pub async fn list_all_schedules(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleAdminRow>> {
+        let (rows, _) = self
+            .ports
+            .program_schedules()
+            .list_admin("", 0, u32::MAX)
+            .await?;
+        Ok(rows)
+    }
+
+    /// Load one program schedule editor, including the create default.
+    pub async fn get_schedule(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::ScheduleAdminForm>> {
+        queries::get_schedule(id, self.ports.program_schedules()).await
+    }
+
+    /// Load the editable items for one program schedule.
+    pub async fn list_schedule_items(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleItemAdmin>> {
+        queries::list_schedule_items(id, self.ports.program_schedules()).await
+    }
+
+    /// Load select options used by the schedule-item editor.
+    pub async fn get_schedule_item_options(
+        &self,
+    ) -> Result<ersatzrs_core::repositories::ScheduleItemOptions> {
+        queries::get_schedule_item_options(self.ports.program_schedules()).await
+    }
+
+    /// Validate and save one manual collection.
+    pub async fn save_collection(
+        &self,
+        command: commands::SaveCollection,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_collection(command, self.ports.collections()).await
+    }
+
+    /// Delete one manual collection.
+    pub async fn delete_collection(&self, command: commands::DeleteCollection) -> Result<()> {
+        commands::delete_collection(command, self.ports.collections()).await
+    }
+
+    /// Validate, save, and refresh one smart collection.
+    pub async fn save_smart_collection(
+        &self,
+        command: commands::SaveSmartCollection,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_smart_collection(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Delete one smart collection.
+    pub async fn delete_smart_collection(
+        &self,
+        command: commands::DeleteSmartCollection,
+    ) -> Result<()> {
+        commands::delete_smart_collection(command, self.ports.collections()).await
+    }
+
+    /// Validate, transactionally save, and refresh one multi-collection.
+    pub async fn save_multi_collection(
+        &self,
+        command: commands::SaveMultiCollection,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_multi_collection(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Delete one multi-collection.
+    pub async fn delete_multi_collection(
+        &self,
+        command: commands::DeleteMultiCollection,
+    ) -> Result<()> {
+        commands::delete_multi_collection(command, self.ports.collections()).await
+    }
+
+    /// Validate, save, and refresh one rerun collection.
+    pub async fn save_rerun_collection(
+        &self,
+        command: commands::SaveRerunCollection,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_rerun_collection(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Delete one rerun collection.
+    pub async fn delete_rerun_collection(
+        &self,
+        command: commands::DeleteRerunCollection,
+    ) -> Result<()> {
+        commands::delete_rerun_collection(command, self.ports.collections()).await
+    }
+
+    /// Validate and create one playlist group.
+    pub async fn create_playlist_group(
+        &self,
+        command: commands::CreatePlaylistGroup,
+    ) -> Result<ersatzrs_core::repositories::PlaylistGroupAdminRow> {
+        commands::create_playlist_group(command, self.ports.collections()).await
+    }
+
+    /// Validate and create one playlist.
+    pub async fn create_playlist(
+        &self,
+        command: commands::CreatePlaylist,
+    ) -> Result<ersatzrs_core::repositories::PlaylistAdminRow> {
+        commands::create_playlist(command, self.ports.collections()).await
+    }
+
+    /// Delete one non-system playlist group.
+    pub async fn delete_playlist_group(
+        &self,
+        command: commands::DeletePlaylistGroup,
+    ) -> Result<()> {
+        commands::delete_playlist_group(command, self.ports.collections()).await
+    }
+
+    /// Delete one non-system playlist.
+    pub async fn delete_playlist(&self, command: commands::DeletePlaylist) -> Result<()> {
+        commands::delete_playlist(command, self.ports.collections()).await
+    }
+
+    /// Validate and transactionally replace one playlist definition.
+    pub async fn save_playlist(&self, command: commands::SavePlaylist) -> Result<()> {
+        commands::save_playlist(command, self.ports.collections()).await
+    }
+
+    /// Add media items to a manual collection and refresh affected playouts.
+    pub async fn add_collection_items(&self, command: commands::AddCollectionItems) -> Result<u64> {
+        commands::add_collection_items(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Append typed media items to a playlist.
+    pub async fn add_playlist_items(&self, command: commands::AddPlaylistItems) -> Result<u64> {
+        commands::add_playlist_items(command, self.ports.collections()).await
+    }
+
+    /// Toggle custom manual-collection ordering and refresh affected playouts.
+    pub async fn set_collection_custom_order(
+        &self,
+        command: commands::SetCollectionCustomOrder,
+    ) -> Result<()> {
+        commands::set_collection_custom_order(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Remove selected manual-collection rows and refresh affected playouts.
+    pub async fn remove_collection_rows(
+        &self,
+        command: commands::RemoveCollectionRows,
+    ) -> Result<()> {
+        commands::remove_collection_rows(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Persist custom manual-collection order and refresh affected playouts.
+    pub async fn update_collection_custom_order(
+        &self,
+        command: commands::UpdateCollectionCustomOrder,
+    ) -> Result<()> {
+        commands::update_collection_custom_order(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Validate and save a program schedule, refreshing affected playouts on runtime changes.
+    pub async fn save_schedule(
+        &self,
+        command: commands::SaveSchedule,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_schedule(
+            command,
+            self.ports.program_schedules(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Delete a program schedule and its item policy configuration.
+    pub async fn delete_schedule(&self, command: commands::DeleteSchedule) -> Result<()> {
+        commands::delete_schedule(command, self.ports.program_schedules()).await
+    }
+
+    /// Copy a complete program schedule graph.
+    pub async fn copy_schedule(
+        &self,
+        command: commands::CopySchedule,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::copy_schedule(command, self.ports.program_schedules()).await
+    }
+
+    /// Validate and atomically replace schedule items, then refresh affected playouts.
+    pub async fn replace_schedule_items(
+        &self,
+        command: commands::ReplaceScheduleItems,
+    ) -> Result<()> {
+        commands::replace_schedule_items(
+            command,
+            self.ports.program_schedules(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    pub async fn append_schedule_media_item(
+        &self,
+        command: commands::AppendScheduleMediaItem,
+    ) -> Result<()> {
+        commands::append_schedule_media_item(
+            command,
+            self.ports.program_schedules(),
+            self.ports.media_items(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Add one default playback row and refresh affected playouts.
+    pub async fn add_default_collection_item(
+        &self,
+        command: commands::ChangeCollectionItem,
+    ) -> Result<()> {
+        commands::add_default_collection_item(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Remove collection rows and refresh affected playouts.
+    pub async fn remove_collection_item(
+        &self,
+        command: commands::ChangeCollectionItem,
+    ) -> Result<()> {
+        commands::remove_collection_item(
+            command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Persist one admin settings value.
+    pub async fn set_admin_setting(&self, command: commands::SetAdminSetting) -> Result<()> {
+        commands::set_admin_setting(command, self.ports.admin_settings()).await
+    }
+
+    /// Persist or clear one optional admin setting.
+    pub async fn set_optional_admin_setting(
+        &self,
+        command: commands::SetOptionalAdminSetting,
+    ) -> Result<()> {
+        commands::set_optional_admin_setting(command, self.ports.admin_settings()).await
+    }
+
+    /// Create one custom `FFmpeg` resolution.
+    pub async fn create_custom_resolution(
+        &self,
+        command: commands::CreateCustomResolution,
+    ) -> Result<()> {
+        commands::create_custom_resolution(command, self.ports.admin_settings()).await
+    }
+
+    /// Delete one custom `FFmpeg` resolution.
+    pub async fn delete_custom_resolution(
+        &self,
+        command: commands::DeleteCustomResolution,
+    ) -> Result<()> {
+        commands::delete_custom_resolution(command, self.ports.admin_settings()).await
+    }
+
+    /// Validate, atomically save, and apply logging settings.
+    pub async fn save_logging_settings(
+        &self,
+        command: commands::SaveLoggingSettings,
+    ) -> Result<()> {
+        commands::save_logging_settings(
+            command,
+            self.ports.admin_settings(),
+            self.ports.settings_runtime(),
+        )
+        .await
+    }
+
+    /// Validate, atomically save, and apply HDHR settings.
+    pub async fn save_hdhr_settings(&self, command: commands::SaveHdhrSettings) -> Result<()> {
+        commands::save_hdhr_settings(
+            command,
+            self.ports.admin_settings(),
+            self.ports.settings_runtime(),
+        )
+        .await
+    }
+
+    /// Validate and atomically save scanner settings.
+    pub async fn save_scanner_settings(
+        &self,
+        command: commands::SaveScannerSettings,
+    ) -> Result<()> {
+        commands::save_scanner_settings(command, self.ports.admin_settings()).await
+    }
+
+    /// Validate, atomically save, and apply playout settings.
+    pub async fn save_playout_settings(
+        &self,
+        command: commands::SavePlayoutSettings,
+    ) -> Result<()> {
+        commands::save_playout_settings(
+            command,
+            self.ports.admin_settings(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Atomically save transport-normalized UI settings.
+    pub async fn save_ui_settings(&self, command: commands::SaveUiSettings) -> Result<()> {
+        commands::save_ui_settings(command, self.ports.admin_settings()).await
+    }
+
+    /// Validate, atomically save, and apply XMLTV settings.
+    pub async fn save_xmltv_settings(&self, command: commands::SaveXmltvSettings) -> Result<()> {
+        commands::save_xmltv_settings(
+            command,
+            self.ports.admin_settings(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Validate, atomically save, and apply `FFmpeg` settings.
+    pub async fn save_ffmpeg_settings(&self, command: commands::SaveFfmpegSettings) -> Result<()> {
+        commands::save_ffmpeg_settings(
+            command,
+            self.ports.admin_settings(),
+            self.ports.settings_runtime(),
+        )
+        .await
+    }
+
+    pub async fn list_playouts(
+        &self,
+        query: &str,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<ersatzrs_core::repositories::PlayoutListAdminRow>> {
+        queries::list_playouts(query, page, page_size, self.ports.playouts()).await
+    }
+
+    pub async fn count_playouts(&self) -> Result<u64> {
+        queries::count_playouts(self.ports.playouts()).await
+    }
+
+    pub async fn count_playout_warnings(&self) -> Result<u32> {
+        queries::count_playout_warnings(self.ports.playouts()).await
+    }
+
+    pub async fn list_admin_libraries(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::AdminLibraryRow>> {
+        self.ports
+            .libraries()
+            .list_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_external_collections(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::AdminExternalCollectionRow>> {
+        self.ports
+            .libraries()
+            .list_external_collections_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub fn request_external_collections_sync(
+        &self,
+        media_source_id: i64,
+        kind: &str,
+        deep_scan: bool,
+    ) -> Result<bool> {
+        use ersatzrs_core::repositories::RemoteMediaSourceKind;
+
+        if media_source_id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "media_source_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        let kind = match kind {
+            "Plex" => RemoteMediaSourceKind::Plex,
+            "Jellyfin" => RemoteMediaSourceKind::Jellyfin,
+            "Emby" => RemoteMediaSourceKind::Emby,
+            value => {
+                return Err(ApplicationError::Validation {
+                    field: "media_source_kind",
+                    message: format!("unsupported value {value}"),
+                });
+            }
+        };
+        let key = operations::OperationKey::ExternalCollections {
+            provider: match kind {
+                RemoteMediaSourceKind::Plex => "Plex",
+                RemoteMediaSourceKind::Jellyfin => "Jellyfin",
+                RemoteMediaSourceKind::Emby => "Emby",
+            }
+            .to_owned(),
+            media_source_id,
+        };
+        let Some(guard) = self
+            .operations
+            .begin(commands::BeginOperation::new(key))
+            .into_guard()
+        else {
+            return Ok(false);
+        };
+        self.ports
+            .media_source_runtime()
+            .request_external_collections_sync(kind, media_source_id, deep_scan, guard);
+        Ok(true)
+    }
+
+    pub async fn admin_health_issue_counts(&self) -> Result<(u32, u32)> {
+        self.ports
+            .admin_health_runtime()
+            .issue_counts()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "load admin health issue counts",
+                message: error.to_string(),
+            })
+    }
+
+    pub async fn run_admin_health_checks(&self) -> Result<AdminHealthRead> {
+        self.ports
+            .admin_health_runtime()
+            .run_health_checks()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "run admin health checks",
+                message: error.to_string(),
+            })
+    }
+
+    pub async fn admin_ffmpeg_runtime(&self) -> AdminFfmpegRuntimeRead {
+        self.ports.admin_health_runtime().ffmpeg_runtime().await
+    }
+
+    pub async fn list_block_playout_options(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::BlockPlayoutOptionAdmin>> {
+        self.ports
+            .troubleshooting()
+            .list_block_playout_options_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_blocks_for_playout(
+        &self,
+        playout_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::TroubleshootingBlockAdmin>> {
+        self.ports
+            .troubleshooting()
+            .list_blocks_for_playout_admin(playout_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_block_playout_history(
+        &self,
+        playout_id: i64,
+        block_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::BlockPlayoutHistoryAdmin>> {
+        self.ports
+            .troubleshooting()
+            .list_block_playout_history_admin(playout_id, block_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn load_playback_troubleshooting(
+        &self,
+        media_item_id: i64,
+        channel_id: i64,
+    ) -> Result<queries::PlaybackTroubleshootingReadModel> {
+        let data = self
+            .ports
+            .troubleshooting()
+            .load_playback_context_admin(media_item_id, channel_id)
+            .await?;
+        let stream_selectors = self
+            .ports
+            .troubleshooting_runtime()
+            .list_stream_selectors()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "load playback stream selectors",
+                message: error.to_string(),
+            })?;
+        Ok(queries::PlaybackTroubleshootingReadModel {
+            data,
+            stream_selectors,
+        })
+    }
+
+    pub async fn list_mpeg_troubleshooting_channels(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::MpegTroubleshootingChannelAdmin>> {
+        self.ports
+            .troubleshooting()
+            .list_mpeg_channels_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn load_troubleshooting_report_data(
+        &self,
+    ) -> Result<queries::TroubleshootingReportReadModel> {
+        let ffmpeg_settings = self.load_ffmpeg_settings().await?.form;
+        let channels = self
+            .ports
+            .troubleshooting()
+            .list_report_channels_admin()
+            .await?;
+        let ffmpeg_profiles = self
+            .ports
+            .troubleshooting()
+            .list_report_ffmpeg_profiles_admin()
+            .await?;
+        Ok(queries::TroubleshootingReportReadModel {
+            ffmpeg_settings,
+            channels,
+            ffmpeg_profiles,
+        })
+    }
+
+    pub async fn start_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> std::result::Result<(), AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .start_playback_preview(request)
+            .await
+    }
+
+    pub async fn build_troubleshooting_archive(
+        &self,
+    ) -> std::result::Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .build_troubleshooting_archive()
+            .await
+    }
+
+    pub async fn build_media_sample_archive(
+        &self,
+        media_item_id: i64,
+    ) -> std::result::Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        if media_item_id <= 0 {
+            return Err(AdminTroubleshootingRuntimeError::NotFound(
+                "media item does not exist".to_owned(),
+            ));
+        }
+        self.ports
+            .troubleshooting_runtime()
+            .build_media_sample_archive(media_item_id)
+            .await
+    }
+
+    pub async fn media_state_revision(&self) -> Result<String> {
+        queries::media_state_revision(self.ports.libraries()).await
+    }
+
+    pub async fn admin_search_snapshot(
+        &self,
+        query: &str,
+    ) -> Result<ersatzrs_core::repositories::AdminSearchSnapshot> {
+        queries::admin_search_snapshot(query, self.ports.admin_search()).await
+    }
+
+    pub async fn admin_search_documents(
+        &self,
+        query: &str,
+    ) -> Result<Vec<ersatzrs_core::search::SearchDocument>> {
+        queries::admin_search_documents(query, self.ports.admin_search()).await
+    }
+
+    pub async fn first_jellyfin_address(&self) -> Result<Option<String>> {
+        self.ports
+            .media_sources()
+            .first_jellyfin_address_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn first_emby_address(&self) -> Result<Option<String>> {
+        self.ports
+            .media_sources()
+            .first_emby_address_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_local_libraries(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::LocalLibraryAdminRow>> {
+        self.ports
+            .media_sources()
+            .list_local_libraries_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_local_library(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::LocalLibraryAdmin>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "library_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .get_local_library_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn save_local_library(
+        &self,
+        mut library: ersatzrs_core::repositories::LocalLibraryAdmin,
+    ) -> Result<i64> {
+        library.name = library.name.trim().to_owned();
+        if library.name.is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "name",
+                message: "is required".to_owned(),
+            });
+        }
+        if !matches!(library.media_kind, 1..=7) {
+            return Err(ApplicationError::Validation {
+                field: "media_kind",
+                message: "is invalid".to_owned(),
+            });
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut paths = Vec::new();
+        for path in library.paths {
+            let trimmed = path.path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let uri_path = trimmed
+                .strip_prefix("file://localhost")
+                .or_else(|| trimmed.strip_prefix("file://"))
+                .unwrap_or(trimmed);
+            let decoded = urlencoding::decode(uri_path)
+                .map_or_else(|_| uri_path.to_owned(), std::borrow::Cow::into_owned);
+            let path_buf = std::path::Path::new(&decoded);
+            let normalized =
+                dunce::canonicalize(path_buf).unwrap_or_else(|_| path_buf.to_path_buf());
+            let normalized = normalized
+                .to_string_lossy()
+                .trim_end_matches(['/', '\\'])
+                .to_owned();
+            if !std::path::Path::new(&normalized).is_dir() {
+                return Err(ApplicationError::Validation {
+                    field: "path",
+                    message: format!("does not exist: {normalized}"),
+                });
+            }
+            if !normalized.is_empty() && seen.insert(normalized.clone()) {
+                paths.push(ersatzrs_core::repositories::LocalLibraryPathAdmin {
+                    id: path.id,
+                    path: normalized,
+                });
+            }
+        }
+        library.paths = paths;
+        self.ports
+            .media_sources()
+            .save_local_library_admin(&library)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_local_library(&self, id: i64) -> Result<()> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "library_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .delete_local_library_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_remote_sources(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    ) -> Result<Vec<ersatzrs_core::repositories::RemoteSourceAdminRow>> {
+        self.ports
+            .media_sources()
+            .list_remote_sources_admin(kind)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_remote_connection(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    ) -> Result<Option<ersatzrs_core::repositories::RemoteConnectionAdmin>> {
+        self.ports
+            .media_sources()
+            .get_remote_connection_admin(kind)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn save_remote_connection(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        mut connection: ersatzrs_core::repositories::RemoteConnectionAdmin,
+        server_name: &str,
+        operating_system: &str,
+        api_key: &str,
+    ) -> Result<i64> {
+        connection.address = connection.address.trim().trim_end_matches('/').to_owned();
+        if connection.address.is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "address",
+                message: "is required".to_owned(),
+            });
+        }
+        if api_key.trim().is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "api_key",
+                message: "is required".to_owned(),
+            });
+        }
+        let id = self
+            .ports
+            .media_sources()
+            .save_remote_connection_admin(kind, &connection, server_name, operating_system)
+            .await?;
+        let key = match kind {
+            ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin => {
+                "jellyfin.current_server_api_key"
+            }
+            ersatzrs_core::repositories::RemoteMediaSourceKind::Emby => {
+                "emby.current_server_api_key"
+            }
+            ersatzrs_core::repositories::RemoteMediaSourceKind::Plex => {
+                return Err(ApplicationError::Validation {
+                    field: "kind",
+                    message: "Plex uses PIN authentication".to_owned(),
+                });
+            }
+        };
+        self.ports
+            .admin_settings()
+            .set_string(key, api_key.trim())
+            .await?;
+        Ok(id)
+    }
+
+    pub async fn delete_remote_source(&self, id: i64) -> Result<()> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "source_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .delete_remote_source_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_library_preferences(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        source_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::LibraryPreferenceAdmin>> {
+        self.ports
+            .media_sources()
+            .list_library_preferences_admin(kind, source_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn save_library_preferences(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        preferences: &[ersatzrs_core::repositories::LibraryPreferenceAdmin],
+    ) -> Result<()> {
+        if preferences.iter().any(|preference| preference.id <= 0) {
+            return Err(ApplicationError::Validation {
+                field: "library_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .save_library_preferences_admin(kind, preferences)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_path_replacements(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        source_id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::PathReplacementAdmin>> {
+        self.ports
+            .media_sources()
+            .list_path_replacements_admin(kind, source_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn save_path_replacements(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        source_id: i64,
+        paths: &[ersatzrs_core::repositories::PathReplacementAdmin],
+    ) -> Result<()> {
+        if source_id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "source_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .save_path_replacements_admin(kind, source_id, paths)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn sign_out_plex(&self) -> Result<()> {
+        self.ports
+            .media_sources()
+            .delete_all_plex_sources_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn save_jellyfin_connection(
+        &self,
+        connection: ersatzrs_core::repositories::RemoteConnectionAdmin,
+        api_key: &str,
+    ) -> Result<i64> {
+        let address = connection.address.trim().trim_end_matches('/').to_owned();
+        if address.is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "address",
+                message: "is required".to_owned(),
+            });
+        }
+        if api_key.trim().is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "api_key",
+                message: "is required".to_owned(),
+            });
+        }
+        let info = self
+            .ports
+            .media_source_runtime()
+            .validate_jellyfin(&address, api_key.trim())
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "validate jellyfin connection",
+                message: error.to_string(),
+            })?;
+        let id = self
+            .save_remote_connection(
+                ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+                ersatzrs_core::repositories::RemoteConnectionAdmin {
+                    source_id: connection.source_id,
+                    address: address.clone(),
+                },
+                &info.server_name,
+                &info.operating_system,
+                api_key,
+            )
+            .await?;
+        let _ = self
+            .ports
+            .media_source_runtime()
+            .refresh_jellyfin_libraries(id, &address, api_key.trim())
+            .await;
+        Ok(id)
+    }
+
+    pub async fn save_emby_connection(
+        &self,
+        connection: ersatzrs_core::repositories::RemoteConnectionAdmin,
+        api_key: &str,
+    ) -> Result<i64> {
+        self.save_remote_connection(
+            ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+            connection,
+            "Emby",
+            "",
+            api_key,
+        )
+        .await
+    }
+
+    pub async fn save_library_preferences_and_sync(
+        &self,
+        kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+        preferences: &[ersatzrs_core::repositories::LibraryPreferenceAdmin],
+    ) -> Result<()> {
+        self.save_library_preferences(kind, preferences).await?;
+        self.ports.media_source_runtime().request_library_sync(
+            kind,
+            preferences
+                .iter()
+                .filter(|preference| preference.should_sync)
+                .map(|preference| preference.id)
+                .collect(),
+        );
+        Ok(())
+    }
+
+    pub async fn has_plex_token(&self) -> Result<bool> {
+        Ok(self
+            .get_optional_setting("plex.current_server_auth_token")
+            .await?
+            .is_some_and(|value| !value.is_empty()))
+    }
+
+    pub async fn start_plex_pin_flow(&self) -> Result<(String, String)> {
+        let pin = self
+            .ports
+            .media_source_runtime()
+            .start_plex_pin()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "start plex pin flow",
+                message: error.to_string(),
+            })?;
+        self.ports
+            .admin_settings()
+            .set_string("plex.pending_pin_code", &pin.code)
+            .await?;
+        Ok((pin.id, pin.auth_url))
+    }
+
+    pub async fn check_plex_pin(&self, pin_id: &str) -> Result<Option<String>> {
+        let pin_code = self.get_string_setting("plex.pending_pin_code", "").await?;
+        let token = self
+            .ports
+            .media_source_runtime()
+            .complete_plex_pin(pin_id, &pin_code)
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "complete plex pin flow",
+                message: error.to_string(),
+            })?;
+        if let Some(token) = &token {
+            self.ports
+                .admin_settings()
+                .set_string("plex.user_auth_token", token)
+                .await?;
+        }
+        Ok(token)
+    }
+
+    pub async fn delete_media_items(&self, ids: &[i64]) -> Result<u64> {
+        if ids.iter().any(|id| *id <= 0) {
+            return Err(ApplicationError::Validation {
+                field: "media_item_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_items()
+            .delete_admin(ids)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn empty_media_trash(&self) -> Result<u64> {
+        self.ports
+            .media_items()
+            .empty_trash_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_movie_detail(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminMovieDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "movie_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_movie_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_show_detail(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminShowDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "show_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_show_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_artist_detail(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminArtistDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "artist_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_artist_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_other_video_detail(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminOtherVideoDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "other_video_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_other_video_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_media_item_info(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminMediaItemInfo>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "media_item_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_media_item_info_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_media_extras(
+        &self,
+        id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::AdminMediaCard>> {
+        self.ports
+            .admin_media()
+            .list_extras_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_playout_detail_items(
+        &self,
+        id: i64,
+        show_filler: bool,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Vec<queries::PlayoutDetailReadModel>> {
+        queries::list_playout_detail_items(id, show_filler, page, page_size, self.ports.playouts())
+            .await
+    }
+
+    pub async fn count_playout_detail_items(&self, id: i64, show_filler: bool) -> Result<u64> {
+        queries::count_playout_detail_items(id, show_filler, self.ports.playouts()).await
+    }
+
+    pub async fn list_playout_create_channels(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::PlayoutCreateChannelAdmin>> {
+        self.ports
+            .playouts()
+            .list_create_channels_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_playout_create_schedules(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::PlayoutCreateScheduleAdmin>> {
+        self.ports
+            .playouts()
+            .list_create_schedules_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn create_playout(&self, command: commands::CreatePlayout) -> Result<i64> {
+        commands::create_playout(
+            command,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    pub async fn delete_playout(&self, command: commands::DeletePlayout) -> Result<()> {
+        commands::delete_playout(command, self.ports.playouts()).await
+    }
+
+    pub async fn reset_all_playouts(&self) -> Result<commands::PlayoutBuildBatchOutcome> {
+        commands::reset_all_playouts(
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    pub async fn save_playout_daily_reset(
+        &self,
+        command: commands::SavePlayoutDailyReset,
+    ) -> Result<()> {
+        commands::save_playout_daily_reset(command, self.ports.playouts()).await
+    }
+
+    pub async fn save_playout_schedule_file(
+        &self,
+        command: commands::SavePlayoutScheduleFile,
+    ) -> Result<()> {
+        commands::save_playout_schedule_file(
+            command,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    pub async fn get_playout_kind_editor(
+        &self,
+        id: i64,
+        kind: i32,
+    ) -> Result<Option<ersatzrs_core::repositories::PlayoutKindEditorAdmin>> {
+        queries::get_playout_kind_editor(id, kind, self.ports.playouts()).await
+    }
+
+    pub async fn save_playout_default_deco(
+        &self,
+        command: commands::SavePlayoutDefaultDeco,
+    ) -> Result<()> {
+        commands::save_playout_default_deco(command, self.ports.playouts()).await
+    }
+
+    pub async fn get_playout_alternate_schedules(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::PlayoutAlternateSchedulesAdmin>> {
+        queries::get_playout_alternate_schedules(id, self.ports.playouts()).await
+    }
+
+    pub async fn save_playout_alternate_schedules(
+        &self,
+        command: commands::SavePlayoutAlternateSchedules,
+    ) -> Result<()> {
+        commands::save_playout_alternate_schedules(
+            command,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    pub async fn get_playout_templates(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::PlayoutTemplatesAdmin>> {
+        queries::get_playout_templates(id, self.ports.playouts()).await
+    }
+
+    pub async fn save_playout_templates(
+        &self,
+        command: commands::SavePlayoutTemplates,
+    ) -> Result<()> {
+        commands::save_playout_templates(command, self.ports.playouts()).await
+    }
+
+    pub async fn erase_playout_items(&self, command: commands::DeletePlayout) -> Result<()> {
+        commands::erase_playout_items(command, self.ports.playouts()).await
+    }
+
+    pub async fn get_sequential_playout(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::SequentialPlayoutAdmin>> {
+        queries::get_sequential_playout(id, self.ports.playouts()).await
+    }
+
+    pub async fn erase_playout_items_and_history(
+        &self,
+        command: commands::DeletePlayout,
+    ) -> Result<()> {
+        commands::erase_playout_items_and_history(command, self.ports.playouts()).await
+    }
+
+    pub async fn process_scheduling_context(&self, serialized: &str) -> Result<String> {
+        queries::process_scheduling_context(serialized, self.ports.playouts()).await
+    }
+
+    pub async fn get_playout_show_filler(&self) -> Result<bool> {
+        self.ports
+            .admin_settings()
+            .get_optional_string("pages.playouts.detail_show_filler")
+            .await
+            .map(|value| value.is_some_and(|value| value.trim().eq_ignore_ascii_case("true")))
+            .map_err(Into::into)
+    }
+
+    pub async fn set_playout_show_filler(&self, show_filler: bool) -> Result<()> {
+        self.ports
+            .admin_settings()
+            .set_string(
+                "pages.playouts.detail_show_filler",
+                if show_filler { "true" } else { "false" },
+            )
+            .await
+            .map_err(Into::into)
+    }
+
     /// Admit one playout build through the single application-owned queue
     /// boundary.
     #[must_use]
@@ -70,6 +2161,19 @@ impl ApplicationServices {
         query: queries::PreviewBlockPlayout,
     ) -> Result<Vec<queries::PreviewBlockPlayoutRow>> {
         queries::preview_block_playout(
+            query,
+            self.ports.block_previews(),
+            self.ports.block_preview_builder(),
+        )
+        .await
+    }
+
+    /// Preview an unsaved playlist through the real classic scheduler.
+    pub async fn preview_playlist_playout(
+        &self,
+        query: queries::PreviewPlaylistPlayout,
+    ) -> Result<Vec<queries::PreviewPlaylistPlayoutRow>> {
+        queries::preview_playlist_playout(
             query,
             self.ports.block_previews(),
             self.ports.block_preview_builder(),

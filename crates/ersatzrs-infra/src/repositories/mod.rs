@@ -1,3 +1,5 @@
+mod admin_media;
+mod admin_settings;
 mod block;
 mod channel;
 mod collection;
@@ -16,7 +18,11 @@ mod program_schedule;
 mod scheduling;
 mod television;
 mod template;
+mod trakt;
+mod troubleshooting;
+mod watermark;
 
+pub use admin_settings::SqliteAdminSettingsRepository;
 pub use block::SqliteBlockRepository;
 pub use channel::SqliteChannelRepository;
 pub use collection::SqliteCollectionRepository;
@@ -35,6 +41,9 @@ pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;
+pub use trakt::SqliteTraktRepository;
+pub use troubleshooting::SqliteTroubleshootingRepository;
+pub use watermark::SqliteWatermarkRepository;
 
 /// Translate a concrete `SQLx` failure into the storage-neutral repository
 /// vocabulary before it crosses an adapter boundary.
@@ -55,6 +64,8 @@ impl<T> SqlxResultExt<T> for std::result::Result<T, sqlx::Error> {
 
 #[derive(Clone)]
 pub struct Repositories {
+    pub admin_media: SqliteAdminMediaRepository,
+    pub admin_settings: SqliteAdminSettingsRepository,
     pub channel: SqliteChannelRepository,
     pub playout: SqlitePlayoutRepository,
     pub program_schedule: SqliteProgramScheduleRepository,
@@ -72,11 +83,16 @@ pub struct Repositories {
     pub config: SqliteConfigRepository,
     pub scheduling: SqliteSchedulingContentRepository,
     pub television: SqliteTelevisionRepository,
+    pub trakt: SqliteTraktRepository,
+    pub troubleshooting: SqliteTroubleshootingRepository,
+    pub watermark: SqliteWatermarkRepository,
 }
 
 #[must_use]
 pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
     Repositories {
+        admin_media: SqliteAdminMediaRepository(pool.clone()),
+        admin_settings: SqliteAdminSettingsRepository(pool.clone()),
         channel: SqliteChannelRepository(pool.clone()),
         playout: SqlitePlayoutRepository(pool.clone()),
         program_schedule: SqliteProgramScheduleRepository(pool.clone()),
@@ -93,6 +109,10 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         metadata: SqliteMetadataRepository(pool.clone()),
         config: SqliteConfigRepository(pool.clone()),
         scheduling: SqliteSchedulingContentRepository::new(pool.clone()),
-        television: SqliteTelevisionRepository(pool),
+        television: SqliteTelevisionRepository(pool.clone()),
+        trakt: SqliteTraktRepository(pool.clone()),
+        troubleshooting: SqliteTroubleshootingRepository(pool.clone()),
+        watermark: SqliteWatermarkRepository(pool),
     }
 }
+pub use admin_media::SqliteAdminMediaRepository;

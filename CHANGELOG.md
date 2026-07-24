@@ -28,6 +28,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Completed the admin application-layer extraction. Collection, playlist,
+  channel, schedule, settings, Trakt, media, playout, template, deco, filler,
+  watermark, troubleshooting, artwork, and layout transports now call
+  storage-neutral application commands and queries while infrastructure owns
+  SQL, typed row decoding, transaction boundaries, and SQLite/MySQL details.
+  Shared localized resource states no longer turn storage or decode failures
+  into submittable forms or plausible empty/default data, and architecture
+  lint now forbids raw admin pool access alongside direct SQL and silent
+  fallback patterns.
 - Unsaved block previews now use the production block scheduling engine in
   Reset mode with temporary template, playout, and reference state instead of a
   simplified duration projection. The editor shows the actual enriched rows

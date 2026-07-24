@@ -6,19 +6,22 @@ use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::layout::{
     load_health_snapshot, AdminFfmpegRuntimeStatus, AdminHealthRow, AdminHealthSnapshot,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::ui::primitives::toast::ToastSeverity;
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
-    let snapshot: Resource<AdminHealthSnapshot> = Resource::new_blocking(
-        || (),
-        |()| async move { load_health_snapshot().await.unwrap_or_default() },
-    );
+    let snapshot = Resource::new_blocking(|| (), |()| load_health_snapshot());
 
     view! {
-        <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-            {move || snapshot.get().map(|initial_snapshot| {
-                view! { <HealthIsland initial_snapshot=initial_snapshot/> }
-            })}
+        <Suspense fallback=admin_loading_resource_view>
+            {move || snapshot.get().map(|result| admin_result_view(result, |initial_snapshot| {
+                view! { <HealthIsland initial_snapshot=initial_snapshot/> }.into_any()
+            }))}
         </Suspense>
     }
 }
@@ -27,11 +30,14 @@ pub fn HealthPage() -> impl IntoView {
 fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
     let snapshot = RwSignal::new(initial_snapshot);
+    let load_toast = use_toast();
     let refreshed_snapshot: LocalResource<AdminHealthSnapshot> = LocalResource::new(move || {
         let _ = media_revision.get();
-        async move { load_health_snapshot().await.unwrap_or_default() }
+        async move { load_or_notify(load_health_snapshot().await, load_toast) }
     });
 
+    #[cfg(target_arch = "wasm32")]
+    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(next) = refreshed_snapshot.get() {
             snapshot.set(next);
@@ -43,10 +49,21 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
+                            revision_load_failed.set(false);
                         }
+                        Err(error) if !revision_load_failed.get_untracked() => {
+                            revision_load_failed.set(true);
+                            load_toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

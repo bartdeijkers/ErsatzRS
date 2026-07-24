@@ -16,7 +16,8 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
@@ -37,26 +38,20 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn SmartCollectionsPage() -> impl IntoView {
-    let initial: Resource<(Vec<CollectionListRow>, u64)> = Resource::new_blocking(
-        || (),
-        |()| async {
-            list_smart_collections(String::new(), 0, 10)
-                .await
-                .unwrap_or_default()
-        },
-    );
+    let initial = Resource::new_blocking(|| (), |()| list_smart_collections(String::new(), 0, 10));
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_rows, initial_total)| {
+                initial.get().map(|result| admin_result_view(result, |(initial_rows, initial_total)| {
                     view! {
                         <SmartCollectionsIsland
                             initial_rows=initial_rows
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -70,13 +65,14 @@ fn SmartCollectionsIsland(
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(10u32);
+    let toast = use_toast();
 
     let current_data = RwSignal::new((initial_rows, initial_total));
     let data: LocalResource<(Vec<CollectionListRow>, u64)> = LocalResource::new(move || {
         let q = search.get();
         let p = page.get();
         let size = page_size.get();
-        async move { list_smart_collections(q, p, size).await.unwrap_or_default() }
+        async move { load_or_notify(list_smart_collections(q, p, size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -88,7 +84,6 @@ fn SmartCollectionsIsland(
     let delete_open = RwSignal::new(false);
     let delete_action = Action::new(|id: &i64| delete_smart_collection(*id));
 
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(res) = delete_action.value().get() {
             match res {
@@ -284,13 +279,11 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
 
 #[island]
 fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
+    let toast = use_toast();
     let initial: Resource<CollectionForm> = Resource::new_blocking(
         move || collection_id,
-        |id| async move {
-            get_smart_collection(id)
-                .await
-                .unwrap_or_default()
-                .unwrap_or_default()
+        move |id| async move {
+            load_or_notify(get_smart_collection(id).await, toast).unwrap_or_default()
         },
     );
 
@@ -317,8 +310,6 @@ fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl Int
         let form = form.clone();
         async move { save_smart_collection(form).await }
     });
-
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {

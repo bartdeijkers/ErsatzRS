@@ -4,10 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{
-    admin::server_fns::playouts::{create_playout_with_state, PlayoutCreateForm},
-    host::state::AppState,
-};
+use crate::host::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct PlayoutCreatePostForm {
@@ -25,14 +22,16 @@ pub async fn create_playout_form(
     Form(input): Form<PlayoutCreatePostForm>,
 ) -> Redirect {
     let kind = input.kind.clone();
-    let form = PlayoutCreateForm {
-        kind: input.kind,
-        channel_id: input.channel_id,
-        program_schedule_id: input.program_schedule_id,
-        schedule_file: input.schedule_file,
-    };
-
-    match create_playout_with_state(&state, form).await {
+    match state
+        .application
+        .create_playout(ersatzrs_app::commands::CreatePlayout {
+            kind: input.kind,
+            channel_id: input.channel_id,
+            program_schedule_id: input.program_schedule_id,
+            schedule_file: input.schedule_file,
+        })
+        .await
+    {
         Ok(_) => Redirect::to("/playouts"),
         Err(error) => {
             tracing::error!(%error, "failed to create playout from HTML form");

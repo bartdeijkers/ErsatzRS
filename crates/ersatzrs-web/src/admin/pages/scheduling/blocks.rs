@@ -9,32 +9,31 @@ use crate::admin::server_fns::blocks::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/blocks.module.css");
 
 #[component]
 pub fn BlocksPage() -> impl IntoView {
-    let initial: Resource<(Vec<BlockGroupRow>, Vec<BlockRow>)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
-        |()| async move {
-            let (groups, blocks) = tokio::join!(list_block_groups(), list_blocks(String::new()));
-            (groups.unwrap_or_default(), blocks.unwrap_or_default())
-        },
+        |()| async move { tokio::try_join!(list_block_groups(), list_blocks(String::new())) },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_groups, initial_blocks)| {
+                initial.get().map(|result| admin_result_view(result, |(initial_groups, initial_blocks)| {
                     view! {
                         <BlocksIsland
                             initial_groups=initial_groups
                             initial_blocks=initial_blocks
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -45,10 +44,11 @@ fn BlocksIsland(
     initial_groups: Vec<BlockGroupRow>,
     initial_blocks: Vec<BlockRow>,
 ) -> impl IntoView {
+    let toast = use_toast();
     // ── Groups ─────────────────────────────────────────────────────────────
     let current_groups = RwSignal::new(initial_groups);
     let groups: LocalResource<Vec<BlockGroupRow>> =
-        LocalResource::new(|| async { list_block_groups().await.unwrap_or_default() });
+        LocalResource::new(move || async move { load_or_notify(list_block_groups().await, toast) });
     Effect::new(move |_| {
         if let Some(rows) = groups.get() {
             current_groups.set(rows);
@@ -63,7 +63,7 @@ fn BlocksIsland(
     let current_blocks = RwSignal::new(initial_blocks);
     let blocks: LocalResource<Vec<BlockRow>> = LocalResource::new(move || {
         let q = search.get();
-        async move { list_blocks(q).await.unwrap_or_default() }
+        async move { load_or_notify(list_blocks(q).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(rows) = blocks.get() {
@@ -93,8 +93,6 @@ fn BlocksIsland(
     let del_block_target: RwSignal<Option<BlockRow>> = RwSignal::new(None);
     let del_block_open = RwSignal::new(false);
     let del_block_action = Action::new(|id: &i64| delete_block(*id));
-
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = create_group_action.value().get() {

@@ -1,6 +1,6 @@
 //! Rerun collection list and editor. Ports `Pages/RerunCollections.razor`
 //! and `Pages/RerunCollectionEditor.razor`.
-#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_lines, dead_code)]
 
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -17,7 +17,8 @@ use crate::admin::server_fns::media_browser::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/rerun_collections.module.css");
@@ -48,22 +49,20 @@ fn set_browser_location(_path: &str) {}
 pub fn RerunCollectionsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<(u32, (Vec<RerunCollectionListRow>, u64))> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async {
-            let page_size = get_rerun_collections_page_size().await.unwrap_or(10);
-            let rows = list_rerun_collections(String::new(), 0, page_size)
-                .await
-                .unwrap_or_default();
-            (page_size, rows)
+            let page_size = get_rerun_collections_page_size().await?;
+            let rows = list_rerun_collections(String::new(), 0, page_size).await?;
+            Ok::<_, ServerFnError>((page_size, rows))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_page_size, (initial_rows, initial_total))| {
                     view! {
                         <RerunCollectionsIsland
                             initial_error=error.clone()
@@ -72,7 +71,8 @@ pub fn RerunCollectionsPage() -> impl IntoView {
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -106,16 +106,13 @@ fn RerunCollectionsList(
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
     let current_data = RwSignal::new((initial_rows, initial_total));
+    let toast = use_toast();
 
     let data: LocalResource<(Vec<RerunCollectionListRow>, u64)> = LocalResource::new(move || {
         let search = search.get();
         let page = page.get();
         let page_size = page_size.get();
-        async move {
-            list_rerun_collections(search, page, page_size)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_rerun_collections(search, page, page_size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -125,7 +122,6 @@ fn RerunCollectionsList(
     let delete_action = Action::new(|id: &i64| delete_rerun_collection(*id));
     let delete_target: RwSignal<Option<RerunCollectionListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(result) = delete_action.value().get() {
             match result {
@@ -311,36 +307,30 @@ pub fn RerunCollectionEditorPage() -> impl IntoView {
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
     let new_collection_name = tr(TextKey::NewCollection).to_owned();
-    let initial: Resource<(RerunCollectionForm, RerunCollectionEditorOptions)> =
-        Resource::new_blocking(
-            move || (id, new_collection_name.clone()),
-            move |(id, new_collection_name)| async move {
-                let form = if id == 0 {
-                    RerunCollectionForm {
-                        name: new_collection_name,
-                        collection_type: COLLECTION_TYPE_COLLECTION,
-                        first_run_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
-                        rerun_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
-                        ..RerunCollectionForm::default()
-                    }
-                } else {
-                    get_rerun_collection_form(id)
-                        .await
-                        .unwrap_or_default()
-                        .unwrap_or_default()
-                };
-                let options = get_rerun_collection_editor_options()
-                    .await
-                    .unwrap_or_default();
-                (form, options)
-            },
-        );
+    let initial = Resource::new_blocking(
+        move || (id, new_collection_name.clone()),
+        move |(id, new_collection_name)| async move {
+            let form = if id == 0 {
+                RerunCollectionForm {
+                    name: new_collection_name,
+                    collection_type: COLLECTION_TYPE_COLLECTION,
+                    first_run_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                    rerun_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                    ..RerunCollectionForm::default()
+                }
+            } else {
+                get_rerun_collection_form(id).await?.unwrap_or_default()
+            };
+            let options = get_rerun_collection_editor_options().await?;
+            Ok::<_, ServerFnError>((form, options))
+        },
+    );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |(initial_form, editor_options)| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, editor_options)| {
                     view! {
                         <RerunCollectionEditorIsland
                             initial_error=error.clone()
@@ -348,7 +338,8 @@ pub fn RerunCollectionEditorPage() -> impl IntoView {
                             editor_options=editor_options
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }

@@ -13,6 +13,10 @@ use crate::admin::server_fns::media_sources::{
     save_jellyfin_paths, ConnectionForm, LibraryPrefRow, PathReplacementRow, RemoteSourceRow,
 };
 use crate::admin::ui::primitives::dialog::DeleteDialog;
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
 
@@ -30,17 +34,14 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn JellyfinSourcesPage() -> impl IntoView {
-    let initial: Resource<Vec<RemoteSourceRow>> = Resource::new_blocking(
-        || (),
-        |()| async { list_jellyfin_sources().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| list_jellyfin_sources());
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_rows| {
-                    view! { <JellyfinSourcesIsland initial_rows=initial_rows/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_rows| {
+                    view! { <JellyfinSourcesIsland initial_rows=initial_rows/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -49,8 +50,10 @@ pub fn JellyfinSourcesPage() -> impl IntoView {
 #[island]
 fn JellyfinSourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
     let current_rows = RwSignal::new(initial_rows);
-    let rows: LocalResource<Vec<RemoteSourceRow>> =
-        LocalResource::new(|| async { list_jellyfin_sources().await.unwrap_or_default() });
+    let load_toast = use_toast();
+    let rows: LocalResource<Vec<RemoteSourceRow>> = LocalResource::new(move || async move {
+        load_or_notify(list_jellyfin_sources().await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
             current_rows.set(next_rows);
@@ -154,17 +157,14 @@ fn JellyfinSourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
 
 #[component]
 pub fn JellyfinConnectionPage() -> impl IntoView {
-    let initial: Resource<ConnectionForm> = Resource::new_blocking(
-        || (),
-        |()| async { get_jellyfin_connection().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| get_jellyfin_connection());
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_form| {
-                    view! { <JellyfinConnectionEditorIsland initial_form=initial_form/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_form| {
+                    view! { <JellyfinConnectionEditorIsland initial_form=initial_form/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -280,9 +280,10 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
 
 #[island]
 fn JellyfinLibrariesIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_jellyfin_libraries(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_jellyfin_libraries(id).await, load_toast) },
     );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
@@ -383,9 +384,10 @@ pub fn JellyfinPathsPage() -> impl IntoView {
 
 #[island]
 fn JellyfinPathsIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_jellyfin_paths(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_jellyfin_paths(id).await, load_toast) },
     );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);

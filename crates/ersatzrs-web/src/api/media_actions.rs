@@ -6,20 +6,18 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::Row;
 
 use crate::{
     admin::{
         i18n::{media_action_error_text, UiLanguage},
         server_fns::{
-            media_browser::get_media_item_info_json_with_pool, settings::load_ui_language_for_api,
+            media_browser::media_item_info_json_from_admin, settings::load_ui_language_for_api,
         },
     },
     host::state::AppState,
 };
 
 const MOVIE_COLLECTION_TYPE: i32 = 10;
-const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
 
 #[derive(Debug, Serialize)]
 pub struct CollectionOptionDto {
@@ -63,20 +61,17 @@ pub async fn list_collections(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CollectionOptionDto>>, ApiError> {
     let language = load_error_language(&state).await;
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "Collection"
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
+    let rows = state
+        .application
+        .list_all_collections()
+        .await
+        .map_err(|error| ApiError::application(language, &error))?;
 
     Ok(Json(
-        rows.iter()
+        rows.into_iter()
             .map(|row| CollectionOptionDto {
-                id: row.try_get("Id").unwrap_or(0),
-                name: row.try_get("Name").unwrap_or_default(),
+                id: row.id,
+                name: row.name,
             })
             .collect(),
     ))
@@ -87,39 +82,19 @@ pub async fn add_to_collection(
     Json(input): Json<AddToCollectionRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let language = load_error_language(&state).await;
-    ensure_media_item_exists(&state, input.media_item_id, language).await?;
     let collection_id = match input.collection_id {
-        Some(id) if id > 0 => {
-            ensure_collection_exists(&state, id, language).await?;
-            id
-        }
+        Some(id) if id > 0 => id,
         _ => create_collection(&state, input.new_name.unwrap_or_default(), language).await?,
     };
 
-    // Default add: idempotent per (collection, media item, no-override) row;
-    // ADR 0048 duplicate rows are created only via the override add flow.
-    let result = sqlx::query(
-        r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
-           SELECT ?, ?
-           WHERE NOT EXISTS (
-               SELECT 1 FROM "CollectionItem"
-               WHERE "CollectionId" = ? AND "MediaItemId" = ?
-                 AND "PreferredAudioLanguageCode" IS NULL
-                 AND "PreferredAudioTitle" IS NULL
-                 AND "PreferredSubtitleLanguageCode" IS NULL
-                 AND "SubtitleMode" IS NULL
-           )"#,
-    )
-    .bind(collection_id)
-    .bind(input.media_item_id)
-    .bind(collection_id)
-    .bind(input.media_item_id)
-    .execute(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
-    if result.rows_affected() > 0 {
-        enqueue_collection_playout_refresh(&state, collection_id).await?;
-    }
+    state
+        .application
+        .add_default_collection_item(ersatzrs_app::commands::ChangeCollectionItem {
+            collection_id,
+            media_item_id: input.media_item_id,
+        })
+        .await
+        .map_err(|error| ApiError::application(language, &error))?;
 
     Ok(Json(json!({ "id": collection_id })))
 }
@@ -128,20 +103,18 @@ pub async fn list_playlist_groups(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<PlaylistGroupOptionDto>>, ApiError> {
     let language = load_error_language(&state).await;
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "PlaylistGroup"
-           ORDER BY COALESCE("IsSystem", 0) DESC, "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
+    let groups = state
+        .application
+        .list_playlist_groups()
+        .await
+        .map_err(|error| ApiError::application(language, &error))?;
 
     Ok(Json(
-        rows.iter()
+        groups
+            .into_iter()
             .map(|row| PlaylistGroupOptionDto {
-                id: row.try_get("Id").unwrap_or(0),
-                name: row.try_get("Name").unwrap_or_default(),
+                id: row.id,
+                name: row.name,
             })
             .collect(),
     ))
@@ -152,22 +125,22 @@ pub async fn list_playlists(
     Query(query): Query<PlaylistQuery>,
 ) -> Result<Json<Vec<PlaylistOptionDto>>, ApiError> {
     let language = load_error_language(&state).await;
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "Playlist"
-           WHERE "PlaylistGroupId" = ?
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .bind(query.group_id)
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
+    let groups = state
+        .application
+        .list_playlist_groups()
+        .await
+        .map_err(|error| ApiError::application(language, &error))?;
+    let rows = groups
+        .into_iter()
+        .find(|group| group.id == query.group_id)
+        .map(|group| group.playlists)
+        .unwrap_or_default();
 
     Ok(Json(
-        rows.iter()
+        rows.into_iter()
             .map(|row| PlaylistOptionDto {
-                id: row.try_get("Id").unwrap_or(0),
-                name: row.try_get("Name").unwrap_or_default(),
+                id: row.id,
+                name: row.name,
             })
             .collect(),
     ))
@@ -178,31 +151,18 @@ pub async fn add_to_playlist(
     Json(input): Json<AddToPlaylistRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let language = load_error_language(&state).await;
-    ensure_media_item_exists(&state, input.media_item_id, language).await?;
-    ensure_playlist_exists(&state, input.playlist_id, language).await?;
-
-    let max_index: Option<i64> =
-        sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
-            .bind(input.playlist_id)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|error| ApiError::database(language, &error))?;
-    let next_index = max_index.map_or(0, |index| index + 1);
-
-    sqlx::query(
-        r#"INSERT INTO "PlaylistItem"
-               ("Index", "PlaylistId", "CollectionType", "MediaItemId",
-                "IncludeInProgramGuide", "PlaybackOrder", "PlayAll")
-           VALUES (?, ?, ?, ?, 1, ?, 0)"#,
-    )
-    .bind(next_index)
-    .bind(input.playlist_id)
-    .bind(MOVIE_COLLECTION_TYPE)
-    .bind(input.media_item_id)
-    .bind(PLAYBACK_ORDER_SHUFFLE)
-    .execute(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
+    state
+        .application
+        .add_playlist_items(ersatzrs_app::commands::AddPlaylistItems {
+            playlist_id: input.playlist_id,
+            items: vec![ersatzrs_core::repositories::PlaylistItemInsert {
+                collection_type: MOVIE_COLLECTION_TYPE,
+                media_item_id: input.media_item_id,
+                playback: ersatzrs_core::repositories::PlaybackOverrides::default(),
+            }],
+        })
+        .await
+        .map_err(|error| ApiError::application(language, &error))?;
 
     Ok(Json(json!({ "id": input.playlist_id })))
 }
@@ -212,8 +172,13 @@ pub async fn media_info(
     Path(id): Path<i64>,
 ) -> Result<String, ApiError> {
     let language = load_error_language(&state).await;
-    get_media_item_info_json_with_pool(&state.pool, id)
+    let info = state
+        .application
+        .get_media_item_info(id)
         .await
+        .map_err(|error| ApiError::application(language, &error))?
+        .ok_or_else(|| ApiError::bad_request(language, "Unable to locate media item"))?;
+    media_item_info_json_from_admin(info)
         .map_err(|error| ApiError::bad_request(language, error.to_string()))
 }
 
@@ -222,152 +187,11 @@ async fn create_collection(
     name: String,
     language: UiLanguage,
 ) -> Result<i64, ApiError> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err(ApiError::bad_request(
-            language,
-            "Collection name is required",
-        ));
-    }
-    if trimmed.chars().count() > 50 {
-        return Err(ApiError::bad_request(
-            language,
-            "Collection name must be 50 characters or less",
-        ));
-    }
-
-    let duplicate: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Name" = ? COLLATE NOCASE"#)
-            .bind(trimmed)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|error| ApiError::database(language, &error))?;
-    if duplicate > 0 {
-        return Err(ApiError::bad_request(
-            language,
-            "Collection name must be unique",
-        ));
-    }
-
-    let result =
-        sqlx::query(r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#)
-            .bind(trimmed)
-            .execute(&state.pool)
-            .await
-            .map_err(|error| ApiError::database(language, &error))?;
-    Ok(ersatzrs_infra::db::last_insert_id(result))
-}
-
-async fn ensure_media_item_exists(
-    state: &AppState,
-    id: i64,
-    language: UiLanguage,
-) -> Result<(), ApiError> {
-    ensure_exists(
-        state,
-        r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#,
-        id,
-        "Media item does not exist",
-        language,
-    )
-    .await
-}
-
-async fn ensure_collection_exists(
-    state: &AppState,
-    id: i64,
-    language: UiLanguage,
-) -> Result<(), ApiError> {
-    ensure_exists(
-        state,
-        r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#,
-        id,
-        "Collection does not exist",
-        language,
-    )
-    .await
-}
-
-async fn ensure_playlist_exists(
-    state: &AppState,
-    id: i64,
-    language: UiLanguage,
-) -> Result<(), ApiError> {
-    ensure_exists(
-        state,
-        r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#,
-        id,
-        "Playlist does not exist",
-        language,
-    )
-    .await
-}
-
-async fn ensure_exists(
-    state: &AppState,
-    sql: &str,
-    id: i64,
-    missing_message: &'static str,
-    language: UiLanguage,
-) -> Result<(), ApiError> {
-    let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(sql))
-        .bind(id)
-        .fetch_one(&state.pool)
+    state
+        .application
+        .save_collection(ersatzrs_app::commands::SaveCollection { id: 0, name })
         .await
-        .map_err(|error| ApiError::database(language, &error))?;
-    if count == 0 {
-        return Err(ApiError::bad_request(language, missing_message));
-    }
-    Ok(())
-}
-
-async fn enqueue_collection_playout_refresh(
-    state: &AppState,
-    collection_id: i64,
-) -> Result<(), ApiError> {
-    use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
-
-    let language = load_error_language(state).await;
-    let playout_ids: Vec<i64> = sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           WHERE "CollectionId" = ?
-           ORDER BY "PlayoutId""#,
-    )
-    .bind(collection_id)
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|error| ApiError::database(language, &error))?;
-
-    for playout_id in playout_ids {
-        match state
-            .application
-            .request_playout_build(RequestPlayoutBuild::new(
-                playout_id,
-                PlayoutBuildMode::Refresh,
-            )) {
-            RequestPlayoutBuildOutcome::Accepted
-            | RequestPlayoutBuildOutcome::AlreadyQueued
-            | RequestPlayoutBuildOutcome::AlreadyBuilding => {}
-            RequestPlayoutBuildOutcome::Unavailable { message } => {
-                tracing::warn!(
-                    playout_id,
-                    %message,
-                    "unable to enqueue requested playout refresh; worker queue is unavailable"
-                );
-            }
-            RequestPlayoutBuildOutcome::Rejected(reason) => {
-                tracing::warn!(
-                    playout_id,
-                    ?reason,
-                    "unable to enqueue invalid playout refresh request"
-                );
-            }
-        }
-    }
-
-    Ok(())
+        .map_err(|error| ApiError::application(language, &error))
 }
 
 #[derive(Debug)]
@@ -385,19 +209,34 @@ impl ApiError {
         }
     }
 
-    fn database(language: UiLanguage, error: &sqlx::Error) -> Self {
-        tracing::error!(%error, "media action API failed");
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: media_action_error_text(language, "Media action failed"),
+    fn application(language: UiLanguage, error: &ersatzrs_app::ApplicationError) -> Self {
+        match error {
+            ersatzrs_app::ApplicationError::Validation { message, .. }
+            | ersatzrs_app::ApplicationError::Conflict(message) => {
+                Self::bad_request(language, message)
+            }
+            ersatzrs_app::ApplicationError::NotFound { kind, .. } => {
+                Self::bad_request(language, format!("{kind} does not exist"))
+            }
+            _ => {
+                tracing::error!(%error, "media action API failed");
+                Self {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: media_action_error_text(language, "Media action failed"),
+                }
+            }
         }
     }
 }
 
 async fn load_error_language(state: &AppState) -> UiLanguage {
-    load_ui_language_for_api(&state.pool)
-        .await
-        .unwrap_or(UiLanguage::English)
+    match load_ui_language_for_api(state.application.ports().admin_settings()).await {
+        Ok(language) => language,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load UI language for media actions API error");
+            UiLanguage::English
+        }
+    }
 }
 
 impl IntoResponse for ApiError {

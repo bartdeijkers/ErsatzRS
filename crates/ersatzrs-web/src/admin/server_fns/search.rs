@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(dead_code))]
+
 //! Server functions for the global `/search` page.
 //!
 //! Ports the per-kind search-card projection performed by
@@ -322,24 +324,24 @@ pub async fn search_results(query: String) -> Result<SearchResults, ServerFnErro
     }
 
     let state = expect_context::<AppState>();
-
-    let (hits, _, _) = state
-        .repositories
-        .scheduling
-        .search_documents_page(&query, 0, 0)
-        .await?;
+    let snapshot = state.application.admin_search_snapshot(&query).await?;
+    let hits = snapshot.documents;
 
     let sections = futures_util::future::try_join_all(SEARCH_CARD_KINDS.into_iter().map(|kind| {
-        let pool = &state.pool;
         let section_hits = hits
             .iter()
             .filter(|hit| hit.media_kind == kind.media_kind())
             .cloned()
             .collect::<Vec<_>>();
+        let enrichment = snapshot
+            .enrichment
+            .get(&admin_search_kind(kind))
+            .cloned()
+            .unwrap_or_default();
         async move {
             let total = section_hits.len();
-            let cards =
-                project_section(pool, kind, section_hits.into_iter().take(50).collect()).await?;
+            let section_hits = section_hits.into_iter().take(50).collect::<Vec<_>>();
+            let cards = project_section_from_enrichment(kind, &section_hits, &enrichment);
             #[allow(clippy::cast_possible_truncation)]
             let section = SearchSection {
                 cards,
@@ -368,11 +370,7 @@ pub async fn search_all_ids(query: String) -> Result<SearchAllIds, ServerFnError
 
     let state = expect_context::<AppState>();
 
-    let (hits, _, _) = state
-        .repositories
-        .scheduling
-        .search_documents_page(&query, 0, 0)
-        .await?;
+    let hits = state.application.admin_search_documents(&query).await?;
 
     Ok(bucket_search_all_ids(hits))
 }
@@ -412,6 +410,23 @@ const SEARCH_CARD_KINDS: [SearchCardKind; 10] = [
     SearchCardKind::RemoteStream,
 ];
 
+#[cfg(feature = "ssr")]
+const fn admin_search_kind(kind: SearchCardKind) -> ersatzrs_core::repositories::AdminSearchKind {
+    use ersatzrs_core::repositories::AdminSearchKind as A;
+    match kind {
+        SearchCardKind::Movie => A::Movie,
+        SearchCardKind::Show => A::Show,
+        SearchCardKind::Season => A::Season,
+        SearchCardKind::Episode => A::Episode,
+        SearchCardKind::Artist => A::Artist,
+        SearchCardKind::MusicVideo => A::MusicVideo,
+        SearchCardKind::OtherVideo => A::OtherVideo,
+        SearchCardKind::Song => A::Song,
+        SearchCardKind::Image => A::Image,
+        SearchCardKind::RemoteStream => A::RemoteStream,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Server-only helpers: per-section enrichment + projection.
 // ---------------------------------------------------------------------------
@@ -433,31 +448,20 @@ fn section_slot_mut(results: &mut SearchResults, kind: SearchCardKind) -> &mut S
 }
 
 #[cfg(feature = "ssr")]
-#[derive(Default)]
-struct SectionEnrichment {
-    /// Per `media_item_id`: own poster path (kind 0).
-    poster: std::collections::HashMap<i64, String>,
-    /// Per `media_item_id`: own thumbnail path (kind 1).
-    thumbnail: std::collections::HashMap<i64, String>,
-    /// For seasons/episodes: the season-level poster keyed by season `media_item_id`.
-    season_poster: std::collections::HashMap<i64, String>,
-    /// For shows/seasons/episodes: the show-level poster keyed by show id.
-    show_poster: std::collections::HashMap<i64, String>,
-    /// For episodes: the resolved season id keyed by episode `media_item_id`.
-    episode_season_id: std::collections::HashMap<i64, i64>,
-    /// For music videos: the artist title keyed by music-video `media_item_id`.
-    music_video_artist: std::collections::HashMap<i64, String>,
-    /// For music videos: the artist id keyed by music-video `media_item_id`.
-    music_video_artist_id: std::collections::HashMap<i64, i64>,
-    /// For songs: `(artists, album)` keyed by song `media_item_id`.
-    song_meta: std::collections::HashMap<i64, (Option<String>, Option<String>)>,
-    /// For artists: `ArtistMetadata.Disambiguation` keyed by artist `media_item_id`.
-    artist_disambiguation: std::collections::HashMap<i64, String>,
-    /// Per `media_item_id`: the `MediaItem.State` enum value.
-    state: std::collections::HashMap<i64, ersatzrs_domain::MediaItemState>,
-}
+type SectionEnrichment = ersatzrs_core::repositories::AdminSearchEnrichment;
 
 #[cfg(feature = "ssr")]
+fn project_section_from_enrichment(
+    kind: SearchCardKind,
+    hits: &[ersatzrs_core::search::SearchDocument],
+    enrichment: &SectionEnrichment,
+) -> Vec<SearchCard> {
+    hits.iter()
+        .map(|hit| build_card(kind, hit, enrichment))
+        .collect()
+}
+
+#[cfg(all(test, feature = "ssr"))]
 async fn project_section(
     pool: &ersatzrs_infra::db::DbPool,
     kind: SearchCardKind,
@@ -608,7 +612,7 @@ fn resolve_artwork_path(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn fetch_with_ids(
     pool: &ersatzrs_infra::db::DbPool,
     sql: &str,
@@ -621,7 +625,7 @@ async fn fetch_with_ids(
     Ok(q.fetch_all(pool).await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 async fn load_enrichment(
     pool: &ersatzrs_infra::db::DbPool,

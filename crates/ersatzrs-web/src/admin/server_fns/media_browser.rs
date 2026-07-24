@@ -26,33 +26,10 @@
 //!   [`get_playlist_page`], [`create_playlist_group`],
 //!   [`create_playlist`], [`delete_playlist_group`], [`delete_playlist`],
 //!   [`get_playlist_editor`], [`save_playlist`]
+#![cfg_attr(test, allow(dead_code))]
+
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
-
-#[cfg(feature = "ssr")]
-async fn inserted_id<'e, E>(
-    executor: E,
-    database_backend: ersatzrs_infra::db::DatabaseBackend,
-    result: ersatzrs_infra::db::DbQueryResult,
-) -> Result<i64, sqlx::Error>
-where
-    E: sqlx::Executor<'e, Database = ersatzrs_infra::db::Db>,
-{
-    #[cfg(not(feature = "mysql"))]
-    let _ = &result;
-
-    match database_backend {
-        #[cfg(feature = "mysql")]
-        ersatzrs_infra::db::DatabaseBackend::MySql => {
-            Ok(result.last_insert_id().unwrap_or_default())
-        }
-        ersatzrs_infra::db::DatabaseBackend::Sqlite => {
-            sqlx::query_scalar("SELECT last_insert_rowid()")
-                .fetch_one(executor)
-                .await
-        }
-    }
-}
 
 /// Row for a media-card grid (movies/shows/images share this shape).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -85,6 +62,173 @@ impl ContentVariantInfo {
     pub const fn is_primary(&self) -> bool {
         matches!(self.content_kind, ersatzrs_domain::ContentKind::Primary)
     }
+}
+
+fn media_card_search_query(media_kind: &str, search: &str, show_variants: bool) -> String {
+    let search = search.trim();
+    let variants = if show_variants {
+        " AND (content_kind:primary OR content_kind:extra OR content_kind:alternate_version)"
+    } else {
+        ""
+    };
+    if search.is_empty() {
+        format!("type:{media_kind}{variants}")
+    } else {
+        format!("type:{media_kind} AND ({search}){variants}")
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn list_media_cards_from_application(
+    state: &crate::host::state::AppState,
+    media_kind: &str,
+    kind: ersatzrs_core::repositories::AdminSearchKind,
+    search: &str,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    list_media_cards_from_application_filtered(
+        state,
+        media_kind,
+        kind,
+        search,
+        page,
+        page_size,
+        show_variants,
+        None,
+    )
+    .await
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+async fn list_media_cards_from_application_filtered(
+    state: &crate::host::state::AppState,
+    media_kind: &str,
+    kind: ersatzrs_core::repositories::AdminSearchKind,
+    search: &str,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+    required_state: Option<ersatzrs_domain::MediaItemState>,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use ersatzrs_domain::ContentKind;
+
+    let query = media_card_search_query(media_kind, search, show_variants);
+    let snapshot = state.application.admin_search_snapshot(&query).await?;
+    let enrichment = snapshot.enrichment.get(&kind).cloned().unwrap_or_default();
+    let mut documents = snapshot
+        .documents
+        .into_iter()
+        .filter(|document| {
+            document.media_kind == media_kind
+                && (show_variants || document.content_kind == ContentKind::Primary)
+                && required_state.is_none_or(|state| {
+                    enrichment.state.get(&document.media_item_id) == Some(&state)
+                })
+        })
+        .collect::<Vec<_>>();
+    documents.sort_by(|left, right| {
+        left.sort_title
+            .as_deref()
+            .or(left.title.as_deref())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .cmp(
+                &right
+                    .sort_title
+                    .as_deref()
+                    .or(right.title.as_deref())
+                    .unwrap_or_default()
+                    .to_ascii_lowercase(),
+            )
+            .then_with(|| left.media_item_id.cmp(&right.media_item_id))
+    });
+    let total = u64::try_from(documents.len()).unwrap_or(u64::MAX);
+    let skip = usize::try_from(page)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
+    let cards = documents
+        .into_iter()
+        .skip(skip)
+        .take(usize::try_from(page_size).unwrap_or(usize::MAX))
+        .map(|document| {
+            let id = document.media_item_id;
+            let title = document.title.unwrap_or_default();
+            let mut sort_title = document.sort_title.unwrap_or_else(|| title.clone());
+            let (title, subtitle, season_number) = match kind {
+                ersatzrs_core::repositories::AdminSearchKind::Season => {
+                    let number = i64::from(document.season_number.unwrap_or_default());
+                    sort_title = format!("{sort_title} {number:04}");
+                    (season_name(number), document.show_title, Some(number))
+                }
+                ersatzrs_core::repositories::AdminSearchKind::Episode => {
+                    let subtitle = match (
+                        document.show_title.as_deref(),
+                        document.season_number,
+                        document.episode_number,
+                    ) {
+                        (Some(show), Some(season), Some(episode)) if !show.trim().is_empty() => {
+                            Some(format!("{show} - S{season} E{episode}"))
+                        }
+                        _ => document.show_title,
+                    };
+                    (title, subtitle, None)
+                }
+                ersatzrs_core::repositories::AdminSearchKind::Artist => (
+                    title,
+                    enrichment.artist_disambiguation.get(&id).cloned(),
+                    None,
+                ),
+                ersatzrs_core::repositories::AdminSearchKind::MusicVideo => {
+                    (title, enrichment.music_video_artist.get(&id).cloned(), None)
+                }
+                ersatzrs_core::repositories::AdminSearchKind::Song => (
+                    title,
+                    enrichment
+                        .song_meta
+                        .get(&id)
+                        .and_then(|(artists, album)| song_subtitle(artists.clone(), album.clone())),
+                    None,
+                ),
+                ersatzrs_core::repositories::AdminSearchKind::Image => (
+                    title,
+                    document
+                        .release_date
+                        .map(|date| date.format("%Y-%m-%d").to_string()),
+                    None,
+                ),
+                ersatzrs_core::repositories::AdminSearchKind::RemoteStream
+                | ersatzrs_core::repositories::AdminSearchKind::OtherVideo => {
+                    (title, document.original_title, None)
+                }
+                _ => (title, document.year.map(|year| year.to_string()), None),
+            };
+            let raw_artwork = enrichment
+                .poster
+                .get(&id)
+                .or_else(|| enrichment.thumbnail.get(&id))
+                .or_else(|| enrichment.season_poster.get(&id))
+                .or_else(|| enrichment.show_poster.get(&id));
+            MediaCardRow {
+                id,
+                title,
+                sort_title,
+                subtitle,
+                artwork_path: raw_artwork
+                    .and_then(|path| artwork_url(path, ArtworkUrlKind::Poster)),
+                season_number,
+                variant: ContentVariantInfo {
+                    content_kind: document.content_kind,
+                    sub_kind: document.sub_kind,
+                    parent_title: document.parent_title,
+                },
+            }
+        })
+        .collect();
+    Ok((cards, total))
 }
 
 /// Audio stream option surfaced on movie detail pages for commentary preview.
@@ -409,7 +553,7 @@ struct MediaItemInfoChapterJson {
     end_time: String,
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 struct SubtitleInfoRow {
     stream_index: i64,
     subtitle_kind: i64,
@@ -592,6 +736,158 @@ pub struct PlaylistPreviewRow {
     pub duration: String,
 }
 
+#[cfg(feature = "ssr")]
+fn playlist_row_from_admin(row: ersatzrs_core::repositories::PlaylistAdminRow) -> PlaylistRow {
+    PlaylistRow {
+        id: row.id,
+        playlist_group_id: row.playlist_group_id,
+        name: row.name,
+        is_system: row.is_system,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn media_card_from_admin(row: ersatzrs_core::repositories::AdminMediaCard) -> MediaCardRow {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+
+    MediaCardRow {
+        id: row.id,
+        title: row.title,
+        sort_title: row.sort_title,
+        subtitle: row.subtitle,
+        artwork_path: row
+            .artwork_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+        season_number: row.season_number,
+        variant: ContentVariantInfo {
+            content_kind: row.content_kind,
+            sub_kind: row.sub_kind,
+            parent_title: row.parent_title,
+        },
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn playlist_group_from_admin(
+    row: ersatzrs_core::repositories::PlaylistGroupAdminRow,
+) -> PlaylistGroupRow {
+    PlaylistGroupRow {
+        id: row.id,
+        name: row.name,
+        is_system: row.is_system,
+        playlists: row
+            .playlists
+            .into_iter()
+            .map(playlist_row_from_admin)
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn playlist_item_from_admin(
+    item: ersatzrs_core::repositories::PlaylistItemAdmin,
+) -> PlaylistItemForm {
+    PlaylistItemForm {
+        id: item.id,
+        index: item.index,
+        collection_type: item.collection_type,
+        collection_id: item.collection_id,
+        multi_collection_id: item.multi_collection_id,
+        smart_collection_id: item.smart_collection_id,
+        media_item_id: item.media_item_id,
+        item_name: item.item_name,
+        playback_order: item.playback_order,
+        count: item.count,
+        play_all: item.play_all,
+        include_in_program_guide: item.include_in_program_guide,
+        preferred_audio_language_code: item.preferred_audio_language_code,
+        preferred_audio_title: item.preferred_audio_title,
+        preferred_subtitle_language_code: item.preferred_subtitle_language_code,
+        subtitle_mode: item.subtitle_mode,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn playlist_editor_from_admin(
+    form: ersatzrs_core::repositories::PlaylistEditorAdmin,
+) -> PlaylistEditorForm {
+    PlaylistEditorForm {
+        id: form.id,
+        playlist_group_id: form.playlist_group_id,
+        name: form.name,
+        is_system: form.is_system,
+        items: form
+            .items
+            .into_iter()
+            .map(playlist_item_from_admin)
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn playlist_editor_into_admin(
+    form: PlaylistEditorForm,
+) -> ersatzrs_core::repositories::PlaylistEditorAdmin {
+    ersatzrs_core::repositories::PlaylistEditorAdmin {
+        id: form.id,
+        playlist_group_id: form.playlist_group_id,
+        name: form.name,
+        is_system: form.is_system,
+        items: form
+            .items
+            .into_iter()
+            .map(|item| ersatzrs_core::repositories::PlaylistItemAdmin {
+                id: item.id,
+                index: item.index,
+                collection_type: item.collection_type,
+                collection_id: item.collection_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                media_item_id: item.media_item_id,
+                item_name: item.item_name,
+                playback_order: item.playback_order,
+                count: item.count,
+                play_all: item.play_all,
+                include_in_program_guide: item.include_in_program_guide,
+                preferred_audio_language_code: item.preferred_audio_language_code,
+                preferred_audio_title: item.preferred_audio_title,
+                preferred_subtitle_language_code: item.preferred_subtitle_language_code,
+                subtitle_mode: item.subtitle_mode,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn playlist_options_from_admin(
+    options: ersatzrs_core::repositories::PlaylistEditorOptions,
+) -> PlaylistEditorOptions {
+    fn map(rows: Vec<ersatzrs_core::repositories::PlaylistItemOption>) -> Vec<PlaylistItemOption> {
+        rows.into_iter()
+            .map(|row| PlaylistItemOption {
+                id: row.id,
+                name: row.name,
+            })
+            .collect()
+    }
+
+    PlaylistEditorOptions {
+        collections: map(options.collections),
+        multi_collections: map(options.multi_collections),
+        smart_collections: map(options.smart_collections),
+        shows: map(options.shows),
+        seasons: map(options.seasons),
+        artists: map(options.artists),
+        movies: map(options.movies),
+        episodes: map(options.episodes),
+        music_videos: map(options.music_videos),
+        other_videos: map(options.other_videos),
+        songs: map(options.songs),
+        images: map(options.images),
+        remote_streams: map(options.remote_streams),
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TrashPageData {
     pub movies: Vec<MediaCardRow>,
@@ -647,7 +943,7 @@ fn short_date(value: Option<&str>) -> String {
     value.to_string()
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn content_kind_from_db(value: i32) -> ersatzrs_domain::ContentKind {
     match value {
         1 => ersatzrs_domain::ContentKind::Extra,
@@ -656,7 +952,7 @@ fn content_kind_from_db(value: i32) -> ersatzrs_domain::ContentKind {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn content_variant_from_row(row: &ersatzrs_infra::db::DbRow) -> ContentVariantInfo {
     use sqlx::Row;
 
@@ -669,7 +965,7 @@ fn content_variant_from_row(row: &ersatzrs_infra::db::DbRow) -> ContentVariantIn
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_extra_cards(
     pool: &ersatzrs_infra::db::DbPool,
     parent_media_item_id: i64,
@@ -721,7 +1017,7 @@ async fn load_extra_cards(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_movie_alternate_version_cards(
     pool: &ersatzrs_infra::db::DbPool,
     parent_movie_id: i64,
@@ -772,7 +1068,7 @@ async fn load_movie_alternate_version_cards(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_movie_audio_tracks(
     pool: &ersatzrs_infra::db::DbPool,
     movie_id: i64,
@@ -815,7 +1111,7 @@ async fn load_movie_audio_tracks(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_movie_commentary_subtitles(
     pool: &ersatzrs_infra::db::DbPool,
     movie_id: i64,
@@ -880,73 +1176,19 @@ pub async fn list_movies(
     page_size: u32,
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-    let like = format!("%{}%", search.trim());
-
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "MovieMetadata" mm
-           JOIN "MediaItem" mi ON mi."Id" = mm."MovieId"
-           WHERE (? = '' OR mm."Title" LIKE ?)
-             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
+    list_media_cards_from_application(
+        &state,
+        "movie",
+        ersatzrs_core::repositories::AdminSearchKind::Movie,
+        &search,
+        page,
+        page_size,
+        show_variants,
     )
-    .bind(search.trim())
-    .bind(&like)
-    .bind(i64::from(show_variants))
-    .fetch_one(&state.pool)
-    .await?;
-
-    let rows = sqlx::query(
-        r#"SELECT m."Id" AS "Id",
-                  COALESCE(mm."Title", '') AS "Title",
-                  COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
-                  mm."Year" AS "Year",
-                  a."Path" AS "Poster",
-                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
-                  mi."SubKind" AS "SubKind"
-           FROM "Movie" m
-           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-           JOIN "MediaItem" mi ON mi."Id" = m."Id"
-           LEFT JOIN "Artwork" a
-               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
-           WHERE (? = '' OR mm."Title" LIKE ?)
-             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
-           ORDER BY mm."SortTitle", mm."Title"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .bind(i64::from(show_variants))
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let cards = rows
-        .iter()
-        .map(|r| MediaCardRow {
-            id: r.try_get("Id").unwrap_or(0),
-            title: r.try_get("Title").unwrap_or_default(),
-            sort_title: r.try_get("SortTitle").unwrap_or_default(),
-            subtitle: r
-                .try_get::<Option<i64>, _>("Year")
-                .unwrap_or(None)
-                .map(|y| y.to_string()),
-            artwork_path: r
-                .try_get::<Option<String>, _>("Poster")
-                .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
-            season_number: None,
-            variant: content_variant_from_row(r),
-        })
-        .collect();
-
-    #[allow(clippy::cast_sign_loss)]
-    Ok((cards, total.max(0) as u64))
+    .await
 }
 
 /// Movie details for the `/media/movies/:id` page. Ports
@@ -954,13 +1196,88 @@ pub async fn list_movies(
 #[server]
 #[allow(clippy::too_many_lines)]
 pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_movie_details_with_pool(&state.pool, id).await
+    Ok(state
+        .application
+        .get_movie_detail(id)
+        .await?
+        .map(|movie| MovieDetailRow {
+            id: movie.id,
+            title: movie.title,
+            year: movie.year,
+            plot: movie.plot,
+            tagline: movie.tagline,
+            content_ratings: movie.content_ratings,
+            release_date: movie.release_date,
+            poster_url: movie
+                .poster_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+            fanart_url: movie
+                .fanart_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+            file_path: movie.file_path,
+            local_path: movie.local_path,
+            media_item_state: movie.media_item_state,
+            genres: movie.genres,
+            tags: movie.tags,
+            languages: movie.languages,
+            studios: movie.studios,
+            directors: movie.directors,
+            writers: movie.writers,
+            actors: movie
+                .actors
+                .into_iter()
+                .map(|actor| ActorCardRow {
+                    id: actor.id,
+                    name: actor.name,
+                    role: actor.role,
+                    thumb_url: actor
+                        .artwork_path
+                        .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+                })
+                .collect(),
+            extras: movie
+                .extras
+                .into_iter()
+                .map(media_card_from_admin)
+                .collect(),
+            alternate_versions: movie
+                .alternate_versions
+                .into_iter()
+                .map(media_card_from_admin)
+                .collect(),
+            audio_tracks: movie
+                .audio_tracks
+                .into_iter()
+                .map(|track| AudioTrackRow {
+                    media_version_id: track.media_version_id,
+                    stream_index: track.stream_index,
+                    title: track.title,
+                    language: track.language,
+                    codec: track.codec,
+                    channels: track.channels,
+                    is_default: track.is_default,
+                    is_commentary: track.is_commentary,
+                })
+                .collect(),
+            commentary_subtitles: movie
+                .commentary_subtitles
+                .into_iter()
+                .map(|subtitle| CommentarySubtitleRow {
+                    id: subtitle.id,
+                    stream_index: subtitle.stream_index,
+                    title: subtitle.title,
+                    language: subtitle.language,
+                    codec: subtitle.codec,
+                })
+                .collect(),
+        }))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 pub async fn get_movie_details_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
@@ -1121,6 +1438,65 @@ pub async fn get_movie_details_with_pool(
 #[server]
 #[allow(clippy::too_many_lines)]
 pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state
+        .application
+        .get_show_detail(id)
+        .await?
+        .map(|show| ShowDetailRow {
+            id: show.id,
+            library_id: show.library_id,
+            media_source_kind: show.media_source_kind,
+            title: show.title,
+            year: show.year,
+            plot: show.plot,
+            content_ratings: show.content_ratings,
+            poster_url: show
+                .poster_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+            fanart_url: show
+                .fanart_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+            media_item_state: show.media_item_state,
+            genres: show.genres,
+            tags: show.tags,
+            languages: show.languages,
+            studios: show.studios,
+            networks: show.networks,
+            actors: show
+                .actors
+                .into_iter()
+                .map(|actor| ActorCardRow {
+                    id: actor.id,
+                    name: actor.name,
+                    role: actor.role,
+                    thumb_url: actor
+                        .artwork_path
+                        .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+                })
+                .collect(),
+            seasons: show
+                .seasons
+                .into_iter()
+                .map(|season| SeasonCardRow {
+                    id: season.id,
+                    season_number: season.season_number,
+                    title: season_name(season.season_number),
+                    poster_url: season
+                        .poster_path
+                        .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+                })
+                .collect(),
+            extras: show.extras.into_iter().map(media_card_from_admin).collect(),
+        }))
+}
+
+#[cfg(all(test, feature = "ssr"))]
+#[allow(clippy::too_many_lines)]
+async fn get_show_details_legacy_sql(id: i64) -> Result<Option<ShowDetailRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -1316,21 +1692,12 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
 pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::TelevisionRepository;
-    use ersatzrs_infra::repositories::SqliteTelevisionRepository;
-
-    const PAGE_NUMBER: i64 = 1;
-    const PAGE_SIZE: i64 = 100;
 
     let state = expect_context::<AppState>();
-    let repo = SqliteTelevisionRepository(state.pool.clone());
-
-    let Some(season) = repo.get_season(id).await? else {
+    let Some(detail) = state.application.get_season_detail(id).await? else {
         return Ok(None);
     };
-    let episode_count = repo.get_episode_count(id).await?;
-    let episodes = repo.get_paged_episodes(id, PAGE_NUMBER, PAGE_SIZE).await?;
-    let extras = load_extra_cards(&state.pool, id).await?;
+    let season = detail.season;
 
     let season_number = i64::from(season.season_number);
     Ok(Some(SeasonDetailRow {
@@ -1346,8 +1713,9 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
         fanart_url: season
             .show_fanart_path
             .and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
-        episode_count,
-        episodes: episodes
+        episode_count: detail.episode_count,
+        episodes: detail
+            .episodes
             .into_iter()
             .map(|episode| EpisodeCardRow {
                 episode_id: episode.episode_id,
@@ -1370,7 +1738,11 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
                 local_path: episode.local_path,
             })
             .collect(),
-        extras,
+        extras: detail
+            .extras
+            .into_iter()
+            .map(media_card_from_admin)
+            .collect(),
     }))
 }
 
@@ -1382,11 +1754,84 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
 #[allow(clippy::too_many_lines)]
 pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
+
     let state = expect_context::<AppState>();
-    get_media_item_info_json_with_pool(&state.pool, id).await
+    let Some(info) = state.application.get_media_item_info(id).await? else {
+        return Err(ServerFnError::new("Unable to locate media item"));
+    };
+    media_item_info_json_from_admin(info)
 }
 
 #[cfg(feature = "ssr")]
+pub fn media_item_info_json_from_admin(
+    info: ersatzrs_core::repositories::AdminMediaItemInfo,
+) -> Result<String, ServerFnError> {
+    use ersatzrs_core::repositories::AdminMediaInfoKind;
+
+    let kind = match info.kind {
+        AdminMediaInfoKind::Movie => "Movie",
+        AdminMediaInfoKind::OtherVideo => "OtherVideo",
+        AdminMediaInfoKind::Episode => "Episode",
+    };
+    let json = MediaItemInfoJson {
+        id: info.id,
+        title: info.title,
+        kind: kind.to_owned(),
+        library_kind: info.library_kind,
+        server_name: info.server_name,
+        library_name: info.library_name,
+        state: media_item_state_name(i64::from(info.state)).to_owned(),
+        duration: info.duration,
+        sample_aspect_ratio: info.sample_aspect_ratio,
+        display_aspect_ratio: info.display_aspect_ratio,
+        r_frame_rate: info.r_frame_rate,
+        video_scan_kind: video_scan_kind_name(i64::from(info.video_scan_kind)).to_owned(),
+        interlaced_ratio: info.interlaced_ratio,
+        width: info.width,
+        height: info.height,
+        streams: info
+            .streams
+            .into_iter()
+            .map(|stream| MediaItemInfoStreamJson {
+                index: stream.index,
+                kind: if stream.external_subtitle {
+                    "ExternalSubtitle".to_owned()
+                } else {
+                    media_stream_kind_name(i64::from(stream.kind)).to_owned()
+                },
+                title: stream.title,
+                codec: stream.codec,
+                profile: stream.profile,
+                language: stream.language,
+                channels: stream.channels,
+                default: stream.is_default,
+                forced: stream.is_forced,
+                attached_pic: stream.attached_pic,
+                pixel_format: stream.pixel_format,
+                color_range: stream.color_range,
+                color_space: stream.color_space,
+                color_transfer: stream.color_transfer,
+                color_primaries: stream.color_primaries,
+                bits_per_raw_sample: stream.bits_per_raw_sample,
+                mime_type: stream.mime_type,
+                file_name: stream.file_name,
+                is_extracted: stream.is_extracted,
+            })
+            .collect(),
+        chapters: info
+            .chapters
+            .into_iter()
+            .map(|chapter| MediaItemInfoChapterJson {
+                title: chapter.title,
+                start_time: chapter.start_time,
+                end_time: chapter.end_time,
+            })
+            .collect(),
+    };
+    serde_json::to_string_pretty(&json).map_err(ServerFnError::new)
+}
+
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 pub async fn get_media_item_info_json_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
@@ -1639,7 +2084,7 @@ pub async fn get_media_item_info_json_with_pool(
     Err(ServerFnError::new("Unable to locate media item"))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_show_languages(
     pool: &ersatzrs_infra::db::DbPool,
     show_id: i64,
@@ -1674,7 +2119,7 @@ async fn load_show_languages(
     Ok(languages)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_movie_languages(
     pool: &ersatzrs_infra::db::DbPool,
     movie_id: i64,
@@ -1716,7 +2161,7 @@ async fn load_movie_languages(
     Ok(languages)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_other_video_languages(
     pool: &ersatzrs_infra::db::DbPool,
     other_video_id: i64,
@@ -1756,7 +2201,7 @@ async fn load_other_video_languages(
     Ok(languages)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_artist_languages(
     pool: &ersatzrs_infra::db::DbPool,
     artist_id: i64,
@@ -1790,7 +2235,7 @@ async fn load_artist_languages(
     Ok(languages)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_path_replacements_for_library_path(
     pool: &ersatzrs_infra::db::DbPool,
     library_path_id: i64,
@@ -1853,7 +2298,7 @@ async fn load_path_replacements_for_library_path(
     Ok(replacements)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn resolve_local_path(
     path: &str,
     replacements: &[ersatzrs_core::path_replacement::PathReplacement],
@@ -1865,7 +2310,7 @@ fn resolve_local_path(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn source_platform(
     source_path: &str,
     platform: Option<&str>,
@@ -1886,17 +2331,17 @@ fn source_platform(
     }
 }
 
-#[cfg(all(feature = "ssr", target_os = "windows"))]
+#[cfg(all(test, feature = "ssr", target_os = "windows"))]
 fn target_platform() -> ersatzrs_core::path_replacement::PathPlatform {
     ersatzrs_core::path_replacement::PathPlatform::Windows
 }
 
-#[cfg(all(feature = "ssr", not(target_os = "windows")))]
+#[cfg(all(test, feature = "ssr", not(target_os = "windows")))]
 fn target_platform() -> ersatzrs_core::path_replacement::PathPlatform {
     ersatzrs_core::path_replacement::PathPlatform::Unix
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn enqueue_schedule_playout_refresh(
     state: &crate::host::state::AppState,
     schedule_id: i64,
@@ -1906,47 +2351,7 @@ async fn enqueue_schedule_playout_refresh(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
-async fn enqueue_collection_playout_refresh(
-    state: &crate::host::state::AppState,
-    collection_id: i64,
-) -> Result<(), ServerFnError> {
-    let playout_ids = playout_ids_using_collection(&state.pool, collection_id).await?;
-    enqueue_playout_refreshes(state, playout_ids);
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn enqueue_multi_collection_playout_refresh(
-    state: &crate::host::state::AppState,
-    multi_collection_id: i64,
-) -> Result<(), ServerFnError> {
-    let playout_ids = playout_ids_using_multi_collection(&state.pool, multi_collection_id).await?;
-    enqueue_playout_refreshes(state, playout_ids);
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn enqueue_smart_collection_playout_refresh(
-    state: &crate::host::state::AppState,
-    smart_collection_id: i64,
-) -> Result<(), ServerFnError> {
-    let playout_ids = playout_ids_using_smart_collection(&state.pool, smart_collection_id).await?;
-    enqueue_playout_refreshes(state, playout_ids);
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn enqueue_rerun_collection_playout_refresh(
-    state: &crate::host::state::AppState,
-    rerun_collection_id: i64,
-) -> Result<(), ServerFnError> {
-    let playout_ids = playout_ids_using_rerun_collection(&state.pool, rerun_collection_id).await?;
-    enqueue_playout_refreshes(state, playout_ids);
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn playout_ids_using_schedule(
     pool: &ersatzrs_infra::db::DbPool,
     schedule_id: i64,
@@ -1962,7 +2367,7 @@ async fn playout_ids_using_schedule(
     .await
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn playout_ids_using_collection(
     pool: &ersatzrs_infra::db::DbPool,
     collection_id: i64,
@@ -1980,61 +2385,7 @@ async fn playout_ids_using_collection(
     .await
 }
 
-#[cfg(feature = "ssr")]
-async fn playout_ids_using_multi_collection(
-    pool: &ersatzrs_infra::db::DbPool,
-    multi_collection_id: i64,
-) -> Result<Vec<i64>, sqlx::Error> {
-    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
-    // MediaCollectionRepository.cs` `PlayoutIdsUsingMultiCollection`.
-    sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           WHERE "MultiCollectionId" = ?
-           ORDER BY "PlayoutId""#,
-    )
-    .bind(multi_collection_id)
-    .fetch_all(pool)
-    .await
-}
-
-#[cfg(feature = "ssr")]
-async fn playout_ids_using_smart_collection(
-    pool: &ersatzrs_infra::db::DbPool,
-    smart_collection_id: i64,
-) -> Result<Vec<i64>, sqlx::Error> {
-    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
-    // MediaCollectionRepository.cs` `PlayoutIdsUsingSmartCollection`.
-    sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           WHERE "SmartCollectionId" = ?
-           ORDER BY "PlayoutId""#,
-    )
-    .bind(smart_collection_id)
-    .fetch_all(pool)
-    .await
-}
-
-#[cfg(feature = "ssr")]
-async fn playout_ids_using_rerun_collection(
-    pool: &ersatzrs_infra::db::DbPool,
-    rerun_collection_id: i64,
-) -> Result<Vec<i64>, sqlx::Error> {
-    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
-    // MediaCollectionRepository.cs` `PlayoutIdsUsingRerunCollection`.
-    sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           WHERE "RerunCollectionId" = ?
-           ORDER BY "PlayoutId""#,
-    )
-    .bind(rerun_collection_id)
-    .fetch_all(pool)
-    .await
-}
-
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: Vec<i64>) {
     use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
     use ersatzrs_core::scheduling::PlayoutBuildMode;
@@ -2067,7 +2418,7 @@ fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: 
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_strings(
     pool: &ersatzrs_infra::db::DbPool,
     table: &str,
@@ -2091,7 +2442,7 @@ async fn load_strings(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_movie_subtitle_info(
     pool: &ersatzrs_infra::db::DbPool,
     metadata_id: i64,
@@ -2132,7 +2483,7 @@ async fn load_movie_subtitle_info(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_other_video_subtitle_info(
     pool: &ersatzrs_infra::db::DbPool,
     metadata_id: i64,
@@ -2173,7 +2524,7 @@ async fn load_other_video_subtitle_info(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_episode_subtitle_info(
     pool: &ersatzrs_infra::db::DbPool,
     metadata_id: i64,
@@ -2214,7 +2565,7 @@ async fn load_episode_subtitle_info(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 async fn load_media_info_streams(
     pool: &ersatzrs_infra::db::DbPool,
@@ -2330,7 +2681,7 @@ async fn load_media_info_streams(
     Ok(streams)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_media_info_chapters(
     pool: &ersatzrs_infra::db::DbPool,
     media_version_id: i64,
@@ -2357,17 +2708,17 @@ async fn load_media_info_chapters(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn clean_string(value: Option<String>) -> Option<String> {
     value.filter(|s| !s.trim().is_empty())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn true_or_none(value: i64) -> Option<bool> {
     (value != 0).then_some(true)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn positive_i64(value: i64) -> Option<i64> {
     (value > 0).then_some(value)
 }
@@ -2405,7 +2756,7 @@ fn video_scan_kind_name(value: i64) -> &'static str {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn is_image_subtitle(codec: Option<&str>) -> bool {
     matches!(
         codec,
@@ -2419,6 +2770,28 @@ fn is_image_subtitle(codec: Option<&str>) -> bool {
 
 #[server]
 pub async fn list_shows(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "show",
+        ersatzrs_core::repositories::AdminSearchKind::Show,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_shows_legacy_sql(
     search: String,
     page: u32,
     page_size: u32,
@@ -2504,6 +2877,28 @@ pub async fn list_images(
     page_size: u32,
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "image",
+        ersatzrs_core::repositories::AdminSearchKind::Image,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_images_legacy_sql(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -2578,6 +2973,28 @@ pub async fn list_images(
 
 #[server]
 pub async fn list_artists(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "artist",
+        ersatzrs_core::repositories::AdminSearchKind::Artist,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_artists_legacy_sql(
     search: String,
     page: u32,
     page_size: u32,
@@ -2658,78 +3075,51 @@ pub async fn list_artists(
 pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let Some(row) = sqlx::query(
-        r#"SELECT a."Id" AS "Id",
-                  am."Id" AS "MetadataId",
-                  COALESCE(am."Title", '') AS "Title",
-                  am."Disambiguation" AS "Disambiguation",
-                  am."Biography" AS "Biography",
-                  thumb."Path" AS "Thumbnail",
-                  fanart."Path" AS "FanArt"
-           FROM "Artist" a
-           JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
-           LEFT JOIN "Artwork" thumb
-               ON thumb."ArtistMetadataId" = am."Id" AND thumb."ArtworkKind" = 1
-           LEFT JOIN "Artwork" fanart
-               ON fanart."ArtistMetadataId" = am."Id" AND fanart."ArtworkKind" = 3
-           WHERE a."Id" = ?
-           ORDER BY am."Id"
-           LIMIT 1"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?
-    else {
+    let Some(detail) = state.application.get_artist_detail(id).await? else {
         return Ok(None);
     };
-
-    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
-    let mut genres =
-        load_strings(&state.pool, r#""Genre""#, "ArtistMetadataId", metadata_id).await?;
-    let mut styles =
-        load_strings(&state.pool, r#""Style""#, "ArtistMetadataId", metadata_id).await?;
-    let mut moods = load_strings(&state.pool, r#""Mood""#, "ArtistMetadataId", metadata_id).await?;
-    genres.sort();
-    styles.sort();
-    moods.sort();
-
-    let languages = load_artist_languages(&state.pool, id).await?;
-    let music_videos = load_artist_music_videos(&state.pool, id, false).await?;
-    let versions = load_artist_music_videos(&state.pool, id, true).await?;
+    let map_music_video =
+        |video: ersatzrs_core::repositories::AdminArtistMusicVideo| ArtistMusicVideoRow {
+            id: video.id,
+            title: video.title,
+            sort_title: video.sort_title,
+            plot: video.plot,
+            album: video.album,
+            thumbnail_url: video
+                .thumbnail_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+            media_item_state: video.media_item_state,
+            file_path: video.file_path,
+            local_path: video.local_path,
+        };
 
     Ok(Some(ArtistDetailRow {
-        id,
-        title: row.try_get("Title").unwrap_or_default(),
-        disambiguation: row
-            .try_get::<Option<String>, _>("Disambiguation")
-            .unwrap_or(None)
-            .filter(|s| !s.trim().is_empty()),
-        biography: row
-            .try_get::<Option<String>, _>("Biography")
-            .unwrap_or(None)
-            .filter(|s| !s.trim().is_empty()),
-        thumbnail_url: row
-            .try_get::<Option<String>, _>("Thumbnail")
-            .unwrap_or(None)
-            .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
-        fanart_url: row
-            .try_get::<Option<String>, _>("FanArt")
-            .unwrap_or(None)
-            .and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
-        genres,
-        styles,
-        moods,
-        languages,
-        music_videos,
-        versions,
+        id: detail.id,
+        title: detail.title,
+        disambiguation: detail.disambiguation,
+        biography: detail.biography,
+        thumbnail_url: detail
+            .thumbnail_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+        fanart_url: detail
+            .fanart_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+        genres: detail.genres,
+        styles: detail.styles,
+        moods: detail.moods,
+        languages: detail.languages,
+        music_videos: detail
+            .music_videos
+            .into_iter()
+            .map(map_music_video)
+            .collect(),
+        versions: detail.versions.into_iter().map(map_music_video).collect(),
     }))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_artist_music_videos(
     pool: &ersatzrs_infra::db::DbPool,
     artist_id: i64,
@@ -2823,6 +3213,28 @@ pub async fn list_other_videos(
     page_size: u32,
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "other_video",
+        ersatzrs_core::repositories::AdminSearchKind::OtherVideo,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_other_videos_legacy_sql(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -2902,179 +3314,53 @@ pub async fn get_other_video_details(
 ) -> Result<Option<OtherVideoDetailRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let Some(row) = sqlx::query(
-        r#"SELECT ov."Id" AS "Id",
-                  COALESCE(ovm."Title", '') AS "Title",
-                  ovm."OriginalTitle" AS "OriginalTitle",
-                  ovm."Year" AS "Year",
-                  ovm."Plot" AS "Plot",
-                  ovm."Tagline" AS "Tagline",
-                  ovm."ContentRating" AS "ContentRating",
-                  ovm."ReleaseDate" AS "ReleaseDate",
-                  COALESCE(mi."State", 0) AS "State",
-                  mi."LibraryPathId" AS "LibraryPathId",
-                  ovm."Id" AS "MetadataId"
-           FROM "OtherVideo" ov
-           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
-           LEFT JOIN "MediaItem" mi ON mi."Id" = ov."Id"
-           WHERE ov."Id" = ?
-           LIMIT 1"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?
-    else {
+    let Some(detail) = state.application.get_other_video_detail(id).await? else {
         return Ok(None);
     };
 
-    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
-
-    let thumbnail_path: Option<String> = sqlx::query_scalar(
-        r#"SELECT "Path" FROM "Artwork"
-           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 1 LIMIT 1"#,
-    )
-    .bind(metadata_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .and_then(|v: Option<String>| v);
-    let poster_path: Option<String> = sqlx::query_scalar(
-        r#"SELECT "Path" FROM "Artwork"
-           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 0 LIMIT 1"#,
-    )
-    .bind(metadata_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .and_then(|v: Option<String>| v);
-    let fanart_path: Option<String> = sqlx::query_scalar(
-        r#"SELECT "Path" FROM "Artwork"
-           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 3 LIMIT 1"#,
-    )
-    .bind(metadata_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .and_then(|v: Option<String>| v);
-
-    let file_path: Option<String> = sqlx::query_scalar(
-        r#"SELECT mf."Path"
-           FROM "MediaFile" mf
-           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
-           WHERE mv."OtherVideoId" = ?
-           ORDER BY mv."Id" LIMIT 1"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?
-    .and_then(|v: Option<String>| v);
-    let library_path_id: Option<i64> = row.try_get("LibraryPathId").unwrap_or(None);
-    let local_path = match (file_path.as_deref(), library_path_id) {
-        (Some(path), Some(library_path_id)) => {
-            let replacements =
-                load_path_replacements_for_library_path(&state.pool, library_path_id).await?;
-            Some(resolve_local_path(path, &replacements))
-        }
-        (Some(path), None) => Some(path.to_owned()),
-        (None, _) => None,
-    };
-
-    let content_ratings: Vec<String> = row
-        .try_get::<Option<String>, _>("ContentRating")
-        .unwrap_or(None)
-        .map(|cr| {
-            cr.split('/')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let genres = load_strings(
-        &state.pool,
-        r#""Genre""#,
-        "OtherVideoMetadataId",
-        metadata_id,
-    )
-    .await?;
-    let tags = load_strings(&state.pool, r#""Tag""#, "OtherVideoMetadataId", metadata_id).await?;
-    let studios = load_strings(
-        &state.pool,
-        r#""Studio""#,
-        "OtherVideoMetadataId",
-        metadata_id,
-    )
-    .await?;
-    let directors = load_strings(
-        &state.pool,
-        r#""Director""#,
-        "OtherVideoMetadataId",
-        metadata_id,
-    )
-    .await?;
-    let writers = load_strings(
-        &state.pool,
-        r#""Writer""#,
-        "OtherVideoMetadataId",
-        metadata_id,
-    )
-    .await?;
-    let languages = load_other_video_languages(&state.pool, id).await?;
-
-    let actor_rows = sqlx::query(
-        r#"SELECT a."Id" AS "Id",
-                  COALESCE(a."Name", '') AS "Name",
-                  a."Role" AS "Role",
-                  art."Path" AS "Thumb"
-           FROM "Actor" a
-           LEFT JOIN "Artwork" art ON art."Id" = a."ArtworkId"
-           WHERE a."OtherVideoMetadataId" = ?
-           ORDER BY a."Order", a."Id""#,
-    )
-    .bind(metadata_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let actors = actor_rows
-        .iter()
-        .map(|r| ActorCardRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            role: r.try_get::<Option<String>, _>("Role").unwrap_or(None),
-            thumb_url: r
-                .try_get::<Option<String>, _>("Thumb")
-                .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
-        })
-        .collect();
-
     Ok(Some(OtherVideoDetailRow {
-        id: row.try_get("Id").unwrap_or(0),
-        title: row.try_get("Title").unwrap_or_default(),
-        original_title: row
-            .try_get::<Option<String>, _>("OriginalTitle")
-            .unwrap_or(None),
-        year: row.try_get::<Option<i64>, _>("Year").unwrap_or(None),
-        plot: row.try_get::<Option<String>, _>("Plot").unwrap_or(None),
-        tagline: row.try_get::<Option<String>, _>("Tagline").unwrap_or(None),
-        content_ratings,
-        release_date: row
-            .try_get::<Option<String>, _>("ReleaseDate")
-            .unwrap_or(None),
-        artwork_url: thumbnail_path
-            .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail))
-            .or_else(|| poster_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster))),
-        fanart_url: fanart_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
-        file_path,
-        local_path,
-        media_item_state: row.try_get("State").unwrap_or(0),
-        genres,
-        tags,
-        languages,
-        studios,
-        directors,
-        writers,
-        actors,
+        id: detail.id,
+        title: detail.title,
+        original_title: detail.original_title,
+        year: detail.year,
+        plot: detail.plot,
+        tagline: detail.tagline,
+        content_ratings: detail.content_ratings,
+        release_date: detail.release_date,
+        artwork_url: detail
+            .thumbnail_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail))
+            .or_else(|| {
+                detail
+                    .poster_path
+                    .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster))
+            }),
+        fanart_url: detail
+            .fanart_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+        file_path: detail.file_path,
+        local_path: detail.local_path,
+        media_item_state: detail.media_item_state,
+        genres: detail.genres,
+        tags: detail.tags,
+        languages: detail.languages,
+        studios: detail.studios,
+        directors: detail.directors,
+        writers: detail.writers,
+        actors: detail
+            .actors
+            .into_iter()
+            .map(|actor| ActorCardRow {
+                id: actor.id,
+                name: actor.name,
+                role: actor.role,
+                thumb_url: actor
+                    .artwork_path
+                    .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+            })
+            .collect(),
     }))
 }
 
@@ -3088,6 +3374,28 @@ pub async fn get_other_video_details(
 
 #[server]
 pub async fn list_seasons(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "season",
+        ersatzrs_core::repositories::AdminSearchKind::Season,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_seasons_legacy_sql(
     search: String,
     page: u32,
     page_size: u32,
@@ -3193,6 +3501,28 @@ pub async fn list_episodes(
     page_size: u32,
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "episode",
+        ersatzrs_core::repositories::AdminSearchKind::Episode,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_episodes_legacy_sql(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -3284,6 +3614,28 @@ pub async fn list_episodes(
 
 #[server]
 pub async fn list_music_videos(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "music_video",
+        ersatzrs_core::repositories::AdminSearchKind::MusicVideo,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_music_videos_legacy_sql(
     search: String,
     page: u32,
     page_size: u32,
@@ -3390,17 +3742,30 @@ pub async fn remote_stream_page_map(
     }
 
     let state = expect_context::<AppState>();
-    let (_, _, page_map) = state
-        .repositories
-        .scheduling
-        .search_documents_page(&remote_stream_search_query(&search), 0, page_size as usize)
-        .await?;
-
     let mut pages = vec![0_u32; 27];
-    if let Some(page_map) = page_map {
-        for (letter, page) in page_map.page_map {
-            let idx = bucket_index(letter);
-            pages[idx] = u32::try_from(page).unwrap_or(u32::MAX);
+    let mut documents = state
+        .application
+        .admin_search_documents(&remote_stream_search_query(&search))
+        .await?;
+    documents.sort_by_key(|document| {
+        document
+            .sort_title
+            .as_deref()
+            .or(document.title.as_deref())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    });
+    for (index, document) in documents.iter().enumerate() {
+        let first = document
+            .sort_title
+            .as_deref()
+            .or(document.title.as_deref())
+            .and_then(|title| title.chars().next())
+            .unwrap_or('#');
+        let bucket = bucket_index(first);
+        if pages[bucket] == 0 {
+            let page = index / usize::try_from(page_size).unwrap_or(usize::MAX) + 1;
+            pages[bucket] = u32::try_from(page).unwrap_or(u32::MAX);
         }
     }
 
@@ -3409,6 +3774,27 @@ pub async fn remote_stream_page_map(
 
 #[server]
 pub async fn list_remote_streams(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "remote_stream",
+        ersatzrs_core::repositories::AdminSearchKind::RemoteStream,
+        &search,
+        page,
+        page_size,
+        true,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_remote_streams_legacy_sql(
     search: String,
     page: u32,
     page_size: u32,
@@ -3491,6 +3877,28 @@ pub async fn list_songs(
     page_size: u32,
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_media_cards_from_application(
+        &state,
+        "song",
+        ersatzrs_core::repositories::AdminSearchKind::Song,
+        &search,
+        page,
+        page_size,
+        show_variants,
+    )
+    .await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+async fn list_songs_legacy_sql(
+    search: String,
+    page: u32,
+    page_size: u32,
+    show_variants: bool,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -3568,66 +3976,56 @@ pub async fn list_songs(
 #[server]
 pub async fn list_trash_items() -> Result<TrashPageData, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_core::repositories::AdminSearchKind as K;
+    use ersatzrs_domain::MediaItemState;
 
     let state = expect_context::<AppState>();
-    let (
-        movies,
-        shows,
-        seasons,
-        episodes,
-        artists,
-        music_videos,
-        other_videos,
-        songs,
-        images,
-        remote_streams,
-    ) = tokio::join!(
-        load_trash_movies(&state.pool),
-        load_trash_shows(&state.pool),
-        load_trash_seasons(&state.pool),
-        load_trash_episodes(&state.pool),
-        load_trash_artists(&state.pool),
-        load_trash_music_videos(&state.pool),
-        load_trash_other_videos(&state.pool),
-        load_trash_songs(&state.pool),
-        load_trash_images(&state.pool),
-        load_trash_remote_streams(&state.pool),
-    );
+    let load = |media_kind, kind| {
+        list_media_cards_from_application_filtered(
+            &state,
+            media_kind,
+            kind,
+            "",
+            0,
+            u32::MAX,
+            true,
+            Some(MediaItemState::FileNotFound),
+        )
+    };
+    let (movies, shows, seasons, episodes, artists) = tokio::try_join!(
+        load("movie", K::Movie),
+        load("show", K::Show),
+        load("season", K::Season),
+        load("episode", K::Episode),
+        load("artist", K::Artist),
+    )?;
+    let (music_videos, other_videos, songs, images, remote_streams) = tokio::try_join!(
+        load("music_video", K::MusicVideo),
+        load("other_video", K::OtherVideo),
+        load("song", K::Song),
+        load("image", K::Image),
+        load("remote_stream", K::RemoteStream),
+    )?;
 
     Ok(TrashPageData {
-        movies: movies?,
-        shows: shows?,
-        seasons: seasons?,
-        episodes: episodes?,
-        artists: artists?,
-        music_videos: music_videos?,
-        other_videos: other_videos?,
-        songs: songs?,
-        images: images?,
-        remote_streams: remote_streams?,
+        movies: movies.0,
+        shows: shows.0,
+        seasons: seasons.0,
+        episodes: episodes.0,
+        artists: artists.0,
+        music_videos: music_videos.0,
+        other_videos: other_videos.0,
+        songs: songs.0,
+        images: images.0,
+        remote_streams: remote_streams.0,
     })
 }
 
 #[server]
 pub async fn delete_media_items(ids: Vec<i64>) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::QueryBuilder;
-
     let state = expect_context::<AppState>();
-    if ids.is_empty() {
-        return Ok(0);
-    }
-
-    let mut builder =
-        QueryBuilder::<ersatzrs_infra::db::Db>::new(r#"DELETE FROM "MediaItem" WHERE "Id" IN ("#);
-    let mut separated = builder.separated(", ");
-    for id in ids {
-        separated.push_bind(id);
-    }
-    separated.push_unseparated(")");
-
-    let result = builder.build().execute(&state.pool).await?;
-    Ok(result.rows_affected())
+    Ok(state.application.delete_media_items(&ids).await?)
 }
 
 #[server]
@@ -3635,13 +4033,10 @@ pub async fn empty_trash() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let result = sqlx::query(r#"DELETE FROM "MediaItem" WHERE "State" = 1"#)
-        .execute(&state.pool)
-        .await?;
-    Ok(result.rows_affected())
+    Ok(state.application.empty_media_trash().await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_movies(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3684,7 +4079,7 @@ async fn load_trash_movies(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_shows(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3727,7 +4122,7 @@ async fn load_trash_shows(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_seasons(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3776,7 +4171,7 @@ async fn load_trash_seasons(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_episodes(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3833,7 +4228,7 @@ async fn load_trash_episodes(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_artists(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3873,7 +4268,7 @@ async fn load_trash_artists(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_music_videos(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3918,7 +4313,7 @@ async fn load_trash_music_videos(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_other_videos(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3960,7 +4355,7 @@ async fn load_trash_other_videos(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_songs(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -4004,7 +4399,7 @@ async fn load_trash_songs(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_images(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -4045,7 +4440,7 @@ async fn load_trash_images(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_trash_remote_streams(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -4096,66 +4491,44 @@ pub async fn list_collections(
     page_size: u32,
 ) -> Result<(Vec<CollectionListRow>, u64), ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-    let like = format!("%{}%", search.trim());
-
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Collection" c
-           WHERE (? = '' OR c."Name" LIKE ?)"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .fetch_one(&state.pool)
-    .await?;
-
-    let rows = sqlx::query(
-        r#"SELECT c."Id", COALESCE(c."Name", '') AS "Name"
-           FROM "Collection" c
-           WHERE (? = '' OR c."Name" LIKE ?)
-           ORDER BY c."Name"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let list = rows
-        .iter()
-        .map(|r| CollectionListRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            query: None,
+    let (rows, total) = state
+        .application
+        .list_collections(ersatzrs_app::queries::ListCollections {
+            search,
+            page,
+            page_size,
         })
-        .collect();
-
-    #[allow(clippy::cast_sign_loss)]
-    Ok((list, total.max(0) as u64))
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok((
+        rows.into_iter()
+            .map(|row| CollectionListRow {
+                id: row.id,
+                name: row.name,
+                query: None,
+            })
+            .collect(),
+        total,
+    ))
 }
 
 #[server]
 pub async fn get_collection(id: i64) -> Result<Option<CollectionForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    Ok(row.map(|r| CollectionForm {
-        id: r.try_get("Id").unwrap_or(0),
-        name: r.try_get("Name").unwrap_or_default(),
-        query: String::new(),
-    }))
+    Ok(state
+        .application
+        .get_collection(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(|row| CollectionForm {
+            id: row.id,
+            name: row.name,
+            query: String::new(),
+        }))
 }
 
 #[server]
@@ -4171,71 +4544,25 @@ pub async fn save_collection_with_state(
     state: &crate::host::state::AppState,
     form: CollectionForm,
 ) -> Result<i64, ServerFnError> {
-    let name = form.name.trim();
-    validate_collection_name(&state.pool, form.id, name).await?;
-
-    if form.id == 0 {
-        let mut tx = state.pool.begin().await?;
-        let result = sqlx::query(
-            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
-        )
-        .bind(name)
-        .execute(&mut *tx)
-        .await?;
-        let id = inserted_id(&mut *tx, state.database_backend, result).await?;
-        tx.commit().await?;
-        Ok(id)
-    } else {
-        let result = sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(name)
-            .bind(form.id)
-            .execute(&state.pool)
-            .await?;
-        if result.rows_affected() == 0 {
-            return Err(ServerFnError::new("Collection does not exist."));
-        }
-        Ok(form.id)
-    }
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_collection_name(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-    name: &str,
-) -> Result<(), ServerFnError> {
-    if name.is_empty() {
-        return Err(ServerFnError::new("Collection name is required"));
-    }
-    if name.chars().count() > 50 {
-        return Err(ServerFnError::new(
-            "Collection name must be 50 characters or less",
-        ));
-    }
-
-    let duplicate: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Collection" WHERE "Name" = ? COLLATE NOCASE AND "Id" != ?"#,
-    )
-    .bind(name)
-    .bind(id)
-    .fetch_one(pool)
-    .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new("Collection name must be unique"));
-    }
-
-    Ok(())
+    state
+        .application
+        .save_collection(ersatzrs_app::commands::SaveCollection {
+            id: form.id,
+            name: form.name,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_collection(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "Collection" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_collection(ersatzrs_app::commands::DeleteCollection { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -4251,76 +4578,67 @@ pub async fn list_smart_collections(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_smart_collections_with_pool(&state.pool, search, page, page_size).await
+    let (rows, total) = state
+        .application
+        .list_smart_collections(ersatzrs_app::queries::ListCollections {
+            search,
+            page,
+            page_size,
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok((smart_collection_list_rows(rows), total))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_smart_collections_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     search: String,
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<CollectionListRow>, u64), ServerFnError> {
-    use sqlx::Row;
-
-    let offset = i64::from(page) * i64::from(page_size);
-    let search = search.trim().to_string();
-    let like = format!("%{search}%");
-
-    // ErsatzTV's `GetPagedSmartCollectionsHandler` counts all rows before
-    // applying the search query; keep that MudTable pager behavior.
-    let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SmartCollection""#)
-        .fetch_one(pool)
-        .await?;
-
-    let rows = sqlx::query(
-        r#"SELECT sc."Id",
-                  COALESCE(sc."Name", '') AS "Name",
-                  COALESCE(sc."Query", '') AS "Query"
-           FROM "SmartCollection" sc
-           WHERE (? = '' OR sc."Name" LIKE ?)
-           ORDER BY sc."Name"
-           LIMIT ? OFFSET ?"#,
+    let repository = ersatzrs_infra::repositories::SqliteCollectionRepository(pool.clone());
+    let (rows, total) = ersatzrs_app::queries::list_smart_collections(
+        ersatzrs_app::queries::ListCollections {
+            search,
+            page,
+            page_size,
+        },
+        &repository,
     )
-    .bind(&search)
-    .bind(&like)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(pool)
-    .await?;
+    .await
+    .map_err(ServerFnError::new)?;
+    Ok((smart_collection_list_rows(rows), total))
+}
 
-    let list = rows
-        .iter()
-        .map(|r| CollectionListRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            query: Some(r.try_get("Query").unwrap_or_default()),
+#[cfg(feature = "ssr")]
+fn smart_collection_list_rows(
+    rows: Vec<ersatzrs_core::repositories::SmartCollectionAdminRow>,
+) -> Vec<CollectionListRow> {
+    rows.into_iter()
+        .map(|row| CollectionListRow {
+            id: row.id,
+            name: row.name,
+            query: Some(row.query),
         })
-        .collect();
-
-    #[allow(clippy::cast_sign_loss)]
-    Ok((list, total.max(0) as u64))
+        .collect()
 }
 
 #[server]
 pub async fn get_smart_collection(id: i64) -> Result<Option<CollectionForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name", COALESCE("Query", '') AS "Query"
-           FROM "SmartCollection" WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    Ok(row.map(|r| CollectionForm {
-        id: r.try_get("Id").unwrap_or(0),
-        name: r.try_get("Name").unwrap_or_default(),
-        query: r.try_get("Query").unwrap_or_default(),
-    }))
+    Ok(state
+        .application
+        .get_smart_collection(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(|row| CollectionForm {
+            id: row.id,
+            name: row.name,
+            query: row.query,
+        }))
 }
 
 #[server]
@@ -4336,105 +4654,42 @@ pub async fn save_smart_collection_with_state(
     state: &crate::host::state::AppState,
     form: CollectionForm,
 ) -> Result<i64, ServerFnError> {
-    let name = form.name.trim();
-    validate_smart_collection_name(&state.pool, form.id, name).await?;
-
-    let query = form.query.trim();
-    if query.is_empty() {
-        return Err(ServerFnError::new("Smart collection query is required"));
-    }
-
-    if form.id == 0 {
-        let mut tx = state.pool.begin().await?;
-        let result =
-            sqlx::query(r#"INSERT INTO "SmartCollection" ("Name", "Query") VALUES (?, ?)"#)
-                .bind(name)
-                .bind(query)
-                .execute(&mut *tx)
-                .await?;
-        let id = inserted_id(&mut *tx, state.database_backend, result).await?;
-        tx.commit().await?;
-        Ok(id)
-    } else {
-        let result =
-            sqlx::query(r#"UPDATE "SmartCollection" SET "Name" = ?, "Query" = ? WHERE "Id" = ?"#)
-                .bind(name)
-                .bind(query)
-                .bind(form.id)
-                .execute(&state.pool)
-                .await?;
-        if result.rows_affected() == 0 {
-            return Err(ServerFnError::new("SmartCollection does not exist."));
-        }
-        enqueue_smart_collection_playout_refresh(state, form.id).await?;
-        Ok(form.id)
-    }
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_smart_collection_name(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-    name: &str,
-) -> Result<(), ServerFnError> {
-    if name.is_empty() {
-        return Err(ServerFnError::new("Smart collection name is required"));
-    }
-    if name.chars().count() > 50 {
-        return Err(ServerFnError::new(
-            "Smart collection name must be 50 characters or less",
-        ));
-    }
-
-    let duplicate: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "SmartCollection" WHERE "Name" = ? COLLATE NOCASE AND "Id" != ?"#,
-    )
-    .bind(name)
-    .bind(id)
-    .fetch_one(pool)
-    .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new("SmartCollection name must be unique"));
-    }
-
-    Ok(())
+    state
+        .application
+        .save_smart_collection(ersatzrs_app::commands::SaveSmartCollection {
+            id: form.id,
+            name: form.name,
+            query: form.query,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_smart_collection(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "SmartCollection" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_smart_collection(ersatzrs_app::commands::DeleteSmartCollection { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
 // Multi-collections
 // ---------------------------------------------------------------------------
 
-const MULTI_COLLECTIONS_PAGE_SIZE_KEY: &str = "pages.multi_collections.page_size";
-const PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
-const COLLECTION_TYPE_COLLECTION: i32 = 0;
-const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
-
 #[server]
 pub async fn get_multi_collections_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let value: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(MULTI_COLLECTIONS_PAGE_SIZE_KEY)
-            .fetch_optional(&state.pool)
-            .await?;
-
-    Ok(value
-        .and_then(|value| value.parse::<u32>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    state
+        .application
+        .get_multi_collections_page_size()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -4444,134 +4699,121 @@ pub async fn list_multi_collections(
     page_size: u32,
 ) -> Result<(Vec<MultiCollectionListRow>, u64), ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    save_config_value(
-        &state.pool,
-        MULTI_COLLECTIONS_PAGE_SIZE_KEY,
-        &page_size.to_string(),
-    )
-    .await?;
-
-    let offset = i64::from(page) * i64::from(page_size);
-    let search = search.trim().to_string();
-    let like = format!("%{search}%");
-
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
-           FROM "MultiCollection" mc
-           WHERE (? = '' OR mc."Name" LIKE ?)"#,
-    )
-    .bind(&search)
-    .bind(&like)
-    .fetch_one(&state.pool)
-    .await?;
-
-    let rows = sqlx::query(
-        r#"SELECT mc."Id", COALESCE(mc."Name", '') AS "Name"
-           FROM "MultiCollection" mc
-           WHERE (? = '' OR mc."Name" LIKE ?)
-           ORDER BY mc."Name"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(&search)
-    .bind(&like)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let list = rows
-        .iter()
-        .map(|row| MultiCollectionListRow {
-            id: row.try_get("Id").unwrap_or(0),
-            name: row.try_get("Name").unwrap_or_default(),
+    let (rows, total) = state
+        .application
+        .list_multi_collections(ersatzrs_app::queries::ListCollections {
+            search,
+            page,
+            page_size,
         })
-        .collect();
-
-    #[allow(clippy::cast_sign_loss)]
-    Ok((list, total.max(0) as u64))
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok((
+        rows.into_iter()
+            .map(|row| MultiCollectionListRow {
+                id: row.id,
+                name: row.name,
+            })
+            .collect(),
+        total,
+    ))
 }
 
 #[server]
 pub async fn get_multi_collection(id: i64) -> Result<Option<MultiCollectionForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "MultiCollection"
-           WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let Some(row) = row else {
-        return Ok(None);
-    };
-
-    let mut items = multi_collection_items(&state.pool, id).await?;
-    let mut smart_items = multi_collection_smart_items(&state.pool, id).await?;
-    items.append(&mut smart_items);
-    items.sort_by_key(|item| item.name.to_lowercase());
-
-    Ok(Some(MultiCollectionForm {
-        id: row.try_get("Id").unwrap_or(0),
-        name: row.try_get("Name").unwrap_or_default(),
-        items,
-    }))
+    Ok(state
+        .application
+        .get_multi_collection(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(multi_collection_form))
 }
 
 #[server]
 pub async fn get_multi_collection_editor_options(
 ) -> Result<MultiCollectionEditorOptions, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let collection_rows = sqlx::query(
-        r#"SELECT "Id",
-                  COALESCE("Name", '') AS "Name",
-                  COALESCE("UseCustomPlaybackOrder", 0) AS "UseCustomPlaybackOrder"
-           FROM "Collection"
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-    let smart_rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "SmartCollection"
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
+    let options = state
+        .application
+        .get_multi_collection_editor_options()
+        .await
+        .map_err(ServerFnError::new)?;
     Ok(MultiCollectionEditorOptions {
-        collections: collection_rows
-            .iter()
-            .map(|row| MultiCollectionSelectOption {
-                id: row.try_get("Id").unwrap_or(0),
-                name: row.try_get("Name").unwrap_or_default(),
-                collection_type: COLLECTION_TYPE_COLLECTION,
-                use_custom_playback_order: row
-                    .try_get::<i64, _>("UseCustomPlaybackOrder")
-                    .unwrap_or(0)
-                    != 0,
-            })
+        collections: options
+            .collections
+            .into_iter()
+            .map(multi_collection_select_option)
             .collect(),
-        smart_collections: smart_rows
-            .iter()
-            .map(|row| MultiCollectionSelectOption {
-                id: row.try_get("Id").unwrap_or(0),
-                name: row.try_get("Name").unwrap_or_default(),
-                collection_type: COLLECTION_TYPE_SMART_COLLECTION,
-                use_custom_playback_order: false,
-            })
+        smart_collections: options
+            .smart_collections
+            .into_iter()
+            .map(multi_collection_select_option)
             .collect(),
     })
+}
+
+#[cfg(feature = "ssr")]
+fn multi_collection_form(
+    form: ersatzrs_core::repositories::MultiCollectionAdmin,
+) -> MultiCollectionForm {
+    MultiCollectionForm {
+        id: form.id,
+        name: form.name,
+        items: form
+            .items
+            .into_iter()
+            .map(multi_collection_item_form)
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn multi_collection_item_form(
+    item: ersatzrs_core::repositories::MultiCollectionItem,
+) -> MultiCollectionItemForm {
+    MultiCollectionItemForm {
+        collection_id: item.collection_id,
+        smart_collection_id: item.smart_collection_id,
+        name: item.name,
+        collection_type: item.collection_type,
+        use_custom_playback_order: item.use_custom_playback_order,
+        schedule_as_group: item.schedule_as_group,
+        playback_order: item.playback_order,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn multi_collection_item(
+    item: MultiCollectionItemForm,
+) -> ersatzrs_core::repositories::MultiCollectionItem {
+    ersatzrs_core::repositories::MultiCollectionItem {
+        collection_id: item.collection_id,
+        smart_collection_id: item.smart_collection_id,
+        name: item.name,
+        collection_type: item.collection_type,
+        use_custom_playback_order: item.use_custom_playback_order,
+        schedule_as_group: item.schedule_as_group,
+        playback_order: item.playback_order,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn multi_collection_select_option(
+    option: ersatzrs_core::repositories::MultiCollectionSelectOption,
+) -> MultiCollectionSelectOption {
+    MultiCollectionSelectOption {
+        id: option.id,
+        name: option.name,
+        collection_type: option.collection_type,
+        use_custom_playback_order: option.use_custom_playback_order,
+    }
 }
 
 #[server]
@@ -4587,92 +4829,15 @@ pub async fn save_multi_collection_with_state(
     state: &crate::host::state::AppState,
     form: MultiCollectionForm,
 ) -> Result<i64, ServerFnError> {
-    let name = form.name.trim().to_string();
-    validate_multi_collection_name(&state.pool, form.id, &name).await?;
-    validate_multi_collection_items(&state.pool, &form.items).await?;
-
-    let existing_items = if form.id == 0 {
-        Vec::new()
-    } else {
-        let exists: i64 =
-            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MultiCollection" WHERE "Id" = ?"#)
-                .bind(form.id)
-                .fetch_one(&state.pool)
-                .await?;
-        if exists == 0 {
-            return Err(ServerFnError::new("MultiCollection does not exist."));
-        }
-        let mut items = multi_collection_items(&state.pool, form.id).await?;
-        let mut smart_items = multi_collection_smart_items(&state.pool, form.id).await?;
-        items.append(&mut smart_items);
-        normalize_multi_collection_items(&mut items);
-        items
-    };
-
-    let mut incoming_items = form.items.clone();
-    normalize_multi_collection_items(&mut incoming_items);
-
-    let mut tx = state.pool.begin().await?;
-    let id = if form.id == 0 {
-        let result = sqlx::query(r#"INSERT INTO "MultiCollection" ("Name") VALUES (?)"#)
-            .bind(&name)
-            .execute(&mut *tx)
-            .await?;
-        inserted_id(&mut *tx, state.database_backend, result).await?
-    } else {
-        sqlx::query(r#"UPDATE "MultiCollection" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(&name)
-            .bind(form.id)
-            .execute(&mut *tx)
-            .await?;
-        form.id
-    };
-
-    if form.id == 0 || existing_items != incoming_items {
-        sqlx::query(r#"DELETE FROM "MultiCollectionItem" WHERE "MultiCollectionId" = ?"#)
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query(r#"DELETE FROM "MultiCollectionSmartItem" WHERE "MultiCollectionId" = ?"#)
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-
-        for item in &incoming_items {
-            if let Some(collection_id) = item.collection_id {
-                sqlx::query(
-                    r#"INSERT INTO "MultiCollectionItem" (
-                           "MultiCollectionId", "CollectionId", "ScheduleAsGroup", "PlaybackOrder"
-                       ) VALUES (?, ?, ?, ?)"#,
-                )
-                .bind(id)
-                .bind(collection_id)
-                .bind(item.schedule_as_group)
-                .bind(item.playback_order)
-                .execute(&mut *tx)
-                .await?;
-            } else if let Some(smart_collection_id) = item.smart_collection_id {
-                sqlx::query(
-                    r#"INSERT INTO "MultiCollectionSmartItem" (
-                           "MultiCollectionId", "SmartCollectionId", "ScheduleAsGroup", "PlaybackOrder"
-                       ) VALUES (?, ?, ?, ?)"#,
-                )
-                .bind(id)
-                .bind(smart_collection_id)
-                .bind(item.schedule_as_group)
-                .bind(item.playback_order)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
-    }
-    tx.commit().await?;
-
-    if form.id != 0 && existing_items != incoming_items {
-        enqueue_multi_collection_playout_refresh(state, id).await?;
-    }
-
-    Ok(id)
+    state
+        .application
+        .save_multi_collection(ersatzrs_app::commands::SaveMultiCollection {
+            id: form.id,
+            name: form.name,
+            items: form.items.into_iter().map(multi_collection_item).collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -4680,254 +4845,27 @@ pub async fn delete_multi_collection(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    delete_multi_collection_with_pool(&state.pool, id).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn delete_multi_collection_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-) -> Result<(), ServerFnError> {
-    let result = sqlx::query(r#"DELETE FROM "MultiCollection" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(pool)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new(format!(
-            "MultiCollection {id} does not exist."
-        )));
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn save_config_value(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-    value: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-        .bind(key)
-        .bind(value)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_multi_collection_name(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-    name: &str,
-) -> Result<(), ServerFnError> {
-    if name.is_empty() {
-        return Err(ServerFnError::new("Multi-collection name is required!"));
-    }
-    if name.chars().count() > 50 {
-        return Err(ServerFnError::new(
-            "Multi-collection name cannot be longer than 50 characters.",
-        ));
-    }
-
-    let duplicate: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
-           FROM "MultiCollection"
-           WHERE "Name" = ? AND "Id" <> ?"#,
-    )
-    .bind(name)
-    .bind(id)
-    .fetch_one(pool)
-    .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new("MultiCollection name must be unique"));
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_multi_collection_items(
-    pool: &ersatzrs_infra::db::DbPool,
-    items: &[MultiCollectionItemForm],
-) -> Result<(), ServerFnError> {
-    let mut collection_ids = std::collections::BTreeSet::new();
-    let mut smart_collection_ids = std::collections::BTreeSet::new();
-
-    for item in items {
-        match (item.collection_id, item.smart_collection_id) {
-            (Some(collection_id), None) => {
-                if !collection_ids.insert(collection_id) {
-                    return Err(ServerFnError::new(format!(
-                        "Collection {collection_id} is already present."
-                    )));
-                }
-                let exists: i64 =
-                    sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
-                        .bind(collection_id)
-                        .fetch_one(pool)
-                        .await?;
-                if exists == 0 {
-                    return Err(ServerFnError::new(format!(
-                        "Collection {collection_id} does not exist."
-                    )));
-                }
-            }
-            (None, Some(smart_collection_id)) => {
-                if !smart_collection_ids.insert(smart_collection_id) {
-                    return Err(ServerFnError::new(format!(
-                        "Smart collection {smart_collection_id} is already present."
-                    )));
-                }
-                let exists: i64 =
-                    sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SmartCollection" WHERE "Id" = ?"#)
-                        .bind(smart_collection_id)
-                        .fetch_one(pool)
-                        .await?;
-                if exists == 0 {
-                    return Err(ServerFnError::new(format!(
-                        "Smart collection {smart_collection_id} does not exist."
-                    )));
-                }
-            }
-            _ => {
-                return Err(ServerFnError::new(
-                    "Each multi-collection item must reference exactly one collection.",
-                ));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn multi_collection_items(
-    pool: &ersatzrs_infra::db::DbPool,
-    multi_collection_id: i64,
-) -> Result<Vec<MultiCollectionItemForm>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(
-        r#"SELECT mci."CollectionId",
-                  mci."ScheduleAsGroup",
-                  mci."PlaybackOrder",
-                  COALESCE(c."Name", '') AS "Name",
-                  COALESCE(c."UseCustomPlaybackOrder", 0) AS "UseCustomPlaybackOrder"
-           FROM "MultiCollectionItem" mci
-           JOIN "Collection" c ON c."Id" = mci."CollectionId"
-           WHERE mci."MultiCollectionId" = ?"#,
-    )
-    .bind(multi_collection_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|row| MultiCollectionItemForm {
-            collection_id: Some(row.try_get("CollectionId").unwrap_or(0)),
-            smart_collection_id: None,
-            name: row.try_get("Name").unwrap_or_default(),
-            collection_type: COLLECTION_TYPE_COLLECTION,
-            use_custom_playback_order: row.try_get::<i64, _>("UseCustomPlaybackOrder").unwrap_or(0)
-                != 0,
-            schedule_as_group: row.try_get::<i64, _>("ScheduleAsGroup").unwrap_or(0) != 0,
-            playback_order: row
-                .try_get::<i64, _>("PlaybackOrder")
-                .unwrap_or(i64::from(PLAYBACK_ORDER_CHRONOLOGICAL))
-                .try_into()
-                .unwrap_or(PLAYBACK_ORDER_CHRONOLOGICAL),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-async fn multi_collection_smart_items(
-    pool: &ersatzrs_infra::db::DbPool,
-    multi_collection_id: i64,
-) -> Result<Vec<MultiCollectionItemForm>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(
-        r#"SELECT mcsi."SmartCollectionId",
-                  mcsi."ScheduleAsGroup",
-                  mcsi."PlaybackOrder",
-                  COALESCE(sc."Name", '') AS "Name"
-           FROM "MultiCollectionSmartItem" mcsi
-           JOIN "SmartCollection" sc ON sc."Id" = mcsi."SmartCollectionId"
-           WHERE mcsi."MultiCollectionId" = ?"#,
-    )
-    .bind(multi_collection_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|row| MultiCollectionItemForm {
-            collection_id: None,
-            smart_collection_id: Some(row.try_get("SmartCollectionId").unwrap_or(0)),
-            name: row.try_get("Name").unwrap_or_default(),
-            collection_type: COLLECTION_TYPE_SMART_COLLECTION,
-            use_custom_playback_order: false,
-            schedule_as_group: row.try_get::<i64, _>("ScheduleAsGroup").unwrap_or(0) != 0,
-            playback_order: row
-                .try_get::<i64, _>("PlaybackOrder")
-                .unwrap_or(i64::from(PLAYBACK_ORDER_CHRONOLOGICAL))
-                .try_into()
-                .unwrap_or(PLAYBACK_ORDER_CHRONOLOGICAL),
-        })
-        .collect())
-}
-
-fn normalize_multi_collection_items(items: &mut [MultiCollectionItemForm]) {
-    for item in items.iter_mut() {
-        item.name.clear();
-        item.use_custom_playback_order = false;
-        item.collection_type = if item.smart_collection_id.is_some() {
-            COLLECTION_TYPE_SMART_COLLECTION
-        } else {
-            COLLECTION_TYPE_COLLECTION
-        };
-        if item.playback_order == 0 {
-            item.playback_order = PLAYBACK_ORDER_CHRONOLOGICAL;
-        }
-    }
-    items.sort_by_key(|item| {
-        (
-            item.collection_id.unwrap_or_default(),
-            item.smart_collection_id.unwrap_or_default(),
-            item.schedule_as_group,
-            item.playback_order,
-        )
-    });
+    state
+        .application
+        .delete_multi_collection(ersatzrs_app::commands::DeleteMultiCollection { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
 // Rerun collections
 // ---------------------------------------------------------------------------
 
-const RERUN_COLLECTIONS_PAGE_SIZE_KEY: &str = "pages.rerun_collections.page_size";
-const RERUN_COLLECTION_TYPE_COLLECTION: i32 = 0;
-const RERUN_COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
-const RERUN_COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
-const RERUN_COLLECTION_TYPE_ARTIST: i32 = 3;
-const RERUN_COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
-const RERUN_COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
-const RERUN_COLLECTION_TYPE_PLAYLIST: i32 = 6;
-
 #[server]
 pub async fn get_rerun_collections_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let value: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(RERUN_COLLECTIONS_PAGE_SIZE_KEY)
-            .fetch_optional(&state.pool)
-            .await?;
-
-    Ok(value
-        .and_then(|value| value.parse::<u32>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(10))
+    state
+        .application
+        .get_rerun_collections_page_size()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -4939,59 +4877,24 @@ pub async fn list_rerun_collections(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_rerun_collections_with_pool(&state.pool, search, page, page_size).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn list_rerun_collections_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    search: String,
-    page: u32,
-    page_size: u32,
-) -> Result<(Vec<RerunCollectionListRow>, u64), ServerFnError> {
-    use sqlx::Row;
-
-    save_config_value(
-        pool,
-        RERUN_COLLECTIONS_PAGE_SIZE_KEY,
-        &page_size.to_string(),
-    )
-    .await?;
-
-    let offset = i64::from(page) * i64::from(page_size);
-    let search = search.trim().to_string();
-    let like = format!("%{search}%");
-
-    // ErsatzTV's `GetPagedRerunCollectionsHandler` counts all rows before
-    // applying the search query; keep that table-pager behavior.
-    let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "RerunCollection""#)
-        .fetch_one(pool)
-        .await?;
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "RerunCollection"
-           WHERE (? = '' OR "Name" LIKE ?)
-           ORDER BY "Name"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(&search)
-    .bind(&like)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(pool)
-    .await?;
-
-    let list = rows
-        .iter()
-        .map(|row| RerunCollectionListRow {
-            id: row.try_get("Id").unwrap_or(0),
-            name: row.try_get("Name").unwrap_or_default(),
+    let (rows, total) = state
+        .application
+        .list_rerun_collections(ersatzrs_app::queries::ListCollections {
+            search,
+            page,
+            page_size,
         })
-        .collect();
-
-    #[allow(clippy::cast_sign_loss)]
-    Ok((list, total.max(0) as u64))
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok((
+        rows.into_iter()
+            .map(|row| RerunCollectionListRow {
+                id: row.id,
+                name: row.name,
+            })
+            .collect(),
+        total,
+    ))
 }
 
 #[server]
@@ -5001,48 +4904,12 @@ pub async fn get_rerun_collection_form(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_rerun_collection_form_with_pool(&state.pool, id).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn get_rerun_collection_form_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-) -> Result<Option<RerunCollectionForm>, ServerFnError> {
-    use sqlx::Row;
-
-    let row = sqlx::query(
-        r#"SELECT "Id",
-                  COALESCE("Name", '') AS "Name",
-                  "CollectionType",
-                  "CollectionId",
-                  "MediaItemId",
-                  "MultiCollectionId",
-                  "SmartCollectionId",
-                  "FirstRunPlaybackOrder",
-                  "RerunPlaybackOrder"
-           FROM "RerunCollection"
-           WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|row| RerunCollectionForm {
-        id: row.try_get("Id").unwrap_or(0),
-        name: row.try_get("Name").unwrap_or_default(),
-        collection_type: row_i32(&row, "CollectionType", RERUN_COLLECTION_TYPE_COLLECTION),
-        collection_id: row.try_get("CollectionId").unwrap_or_default(),
-        media_item_id: row.try_get("MediaItemId").unwrap_or_default(),
-        multi_collection_id: row.try_get("MultiCollectionId").unwrap_or_default(),
-        smart_collection_id: row.try_get("SmartCollectionId").unwrap_or_default(),
-        first_run_playback_order: row_i32(
-            &row,
-            "FirstRunPlaybackOrder",
-            PLAYBACK_ORDER_CHRONOLOGICAL,
-        ),
-        rerun_playback_order: row_i32(&row, "RerunPlaybackOrder", PLAYBACK_ORDER_CHRONOLOGICAL),
-    }))
+    Ok(state
+        .application
+        .get_rerun_collection(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(rerun_collection_form))
 }
 
 #[server]
@@ -5051,58 +4918,71 @@ pub async fn get_rerun_collection_editor_options(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_rerun_collection_editor_options_with_pool(&state.pool).await
+    let options = state
+        .application
+        .get_rerun_collection_editor_options()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(rerun_collection_editor_options(options))
 }
 
 #[cfg(feature = "ssr")]
-pub async fn get_rerun_collection_editor_options_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<RerunCollectionEditorOptions, ServerFnError> {
-    Ok(RerunCollectionEditorOptions {
-        collections: load_rerun_options(
-            pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-        multi_collections: load_rerun_options(
-            pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "MultiCollection" ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-        smart_collections: load_rerun_options(
-            pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "SmartCollection" ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-        shows: load_rerun_options(
-            pool,
-            r#"SELECT s."Id" AS "Id",
-                      COALESCE(sm."Title", '???') || ' (' || COALESCE(CAST(sm."Year" AS TEXT), '???') || ')' AS "Name"
-               FROM "Show" s
-               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-               ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-        seasons: load_rerun_options(
-            pool,
-            r#"SELECT se."Id" AS "Id",
-                      COALESCE(sm."Title", '???') || ' (' || COALESCE(CAST(sm."Year" AS TEXT), '???') || ') - ' ||
-                      CASE WHEN se."SeasonNumber" = 0 THEN 'Specials' ELSE 'Season ' || CAST(se."SeasonNumber" AS TEXT) END AS "Name"
-               FROM "Season" se
-               LEFT JOIN "Show" s ON s."Id" = se."ShowId"
-               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-               ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-        artists: load_rerun_options(
-            pool,
-            r#"SELECT a."Id" AS "Id", COALESCE(am."Title", '???') AS "Name"
-               FROM "Artist" a
-               LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
-               ORDER BY "Name" COLLATE NOCASE"#,
-        )
-        .await?,
-    })
+fn rerun_collection_form(
+    form: ersatzrs_core::repositories::RerunCollectionAdmin,
+) -> RerunCollectionForm {
+    RerunCollectionForm {
+        id: form.id,
+        name: form.name,
+        collection_type: form.collection_type,
+        collection_id: form.collection_id,
+        media_item_id: form.media_item_id,
+        multi_collection_id: form.multi_collection_id,
+        smart_collection_id: form.smart_collection_id,
+        first_run_playback_order: form.first_run_playback_order,
+        rerun_playback_order: form.rerun_playback_order,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn rerun_collection_admin(
+    form: RerunCollectionForm,
+) -> ersatzrs_core::repositories::RerunCollectionAdmin {
+    ersatzrs_core::repositories::RerunCollectionAdmin {
+        id: form.id,
+        name: form.name,
+        collection_type: form.collection_type,
+        collection_id: form.collection_id,
+        media_item_id: form.media_item_id,
+        multi_collection_id: form.multi_collection_id,
+        smart_collection_id: form.smart_collection_id,
+        first_run_playback_order: form.first_run_playback_order,
+        rerun_playback_order: form.rerun_playback_order,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn rerun_collection_editor_options(
+    options: ersatzrs_core::repositories::RerunCollectionEditorOptions,
+) -> RerunCollectionEditorOptions {
+    fn map(
+        rows: Vec<ersatzrs_core::repositories::RerunCollectionSelectOption>,
+    ) -> Vec<RerunCollectionSelectOption> {
+        rows.into_iter()
+            .map(|row| RerunCollectionSelectOption {
+                id: row.id,
+                name: row.name,
+            })
+            .collect()
+    }
+
+    RerunCollectionEditorOptions {
+        collections: map(options.collections),
+        multi_collections: map(options.multi_collections),
+        smart_collections: map(options.smart_collections),
+        shows: map(options.shows),
+        seasons: map(options.seasons),
+        artists: map(options.artists),
+    }
 }
 
 #[server]
@@ -5118,76 +4998,13 @@ pub async fn save_rerun_collection_with_state(
     state: &crate::host::state::AppState,
     form: RerunCollectionForm,
 ) -> Result<i64, ServerFnError> {
-    let existing = if form.id == 0 {
-        None
-    } else {
-        let existing = get_rerun_collection_form_with_pool(&state.pool, form.id).await?;
-        if existing.is_none() {
-            return Err(ServerFnError::new("Rerun collection does not exist."));
-        }
-        existing
-    };
-
-    validate_rerun_collection_form(&state.pool, &form).await?;
-
-    let mut tx = state.pool.begin().await?;
-    let id = if form.id == 0 {
-        let result = sqlx::query(
-            r#"INSERT INTO "RerunCollection" (
-                   "Name",
-                   "CollectionType",
-                   "CollectionId",
-                   "MediaItemId",
-                   "MultiCollectionId",
-                   "SmartCollectionId",
-                   "FirstRunPlaybackOrder",
-                   "RerunPlaybackOrder"
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(&form.name)
-        .bind(form.collection_type)
-        .bind(form.collection_id)
-        .bind(form.media_item_id)
-        .bind(form.multi_collection_id)
-        .bind(form.smart_collection_id)
-        .bind(form.first_run_playback_order)
-        .bind(form.rerun_playback_order)
-        .execute(&mut *tx)
-        .await?;
-        inserted_id(&mut *tx, state.database_backend, result).await?
-    } else {
-        sqlx::query(
-            r#"UPDATE "RerunCollection"
-                  SET "Name" = ?,
-                      "CollectionType" = ?,
-                      "CollectionId" = ?,
-                      "MediaItemId" = ?,
-                      "MultiCollectionId" = ?,
-                      "SmartCollectionId" = ?,
-                      "FirstRunPlaybackOrder" = ?,
-                      "RerunPlaybackOrder" = ?
-                WHERE "Id" = ?"#,
-        )
-        .bind(&form.name)
-        .bind(form.collection_type)
-        .bind(form.collection_id)
-        .bind(form.media_item_id)
-        .bind(form.multi_collection_id)
-        .bind(form.smart_collection_id)
-        .bind(form.first_run_playback_order)
-        .bind(form.rerun_playback_order)
-        .bind(form.id)
-        .execute(&mut *tx)
-        .await?;
-        form.id
-    };
-    tx.commit().await?;
-
-    if existing.as_ref().is_some_and(|existing| existing != &form) {
-        enqueue_rerun_collection_playout_refresh(state, id).await?;
-    }
-
-    Ok(id)
+    state
+        .application
+        .save_rerun_collection(ersatzrs_app::commands::SaveRerunCollection {
+            form: rerun_collection_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -5195,136 +5012,11 @@ pub async fn delete_rerun_collection(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    delete_rerun_collection_with_pool(&state.pool, id).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn delete_rerun_collection_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    id: i64,
-) -> Result<(), ServerFnError> {
-    let result = sqlx::query(r#"DELETE FROM "RerunCollection" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(pool)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new(format!(
-            "Rerun collection {id} does not exist."
-        )));
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_rerun_collection_form(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: &RerunCollectionForm,
-) -> Result<(), ServerFnError> {
-    if form.name.trim().is_empty() {
-        return Err(ServerFnError::new("[Name] is an empty string"));
-    }
-    if form.name.chars().count() > 50 {
-        return Err(ServerFnError::new("[Name] must not be longer than 50"));
-    }
-
-    let duplicate: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
-           FROM "RerunCollection"
-           WHERE "Name" = ? AND "Id" <> ?"#,
-    )
-    .bind(&form.name)
-    .bind(form.id)
-    .fetch_one(pool)
-    .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new("Rerun collection name must be unique"));
-    }
-
-    validate_rerun_collection_target(pool, form).await?;
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_rerun_collection_target(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: &RerunCollectionForm,
-) -> Result<(), ServerFnError> {
-    match form.collection_type {
-        RERUN_COLLECTION_TYPE_COLLECTION => {
-            validate_optional_reference(pool, r#""Collection""#, form.collection_id).await?;
-        }
-        RERUN_COLLECTION_TYPE_TELEVISION_SHOW => {
-            validate_optional_reference(pool, r#""Show""#, form.media_item_id).await?;
-        }
-        RERUN_COLLECTION_TYPE_TELEVISION_SEASON => {
-            validate_optional_reference(pool, r#""Season""#, form.media_item_id).await?;
-        }
-        RERUN_COLLECTION_TYPE_ARTIST => {
-            validate_optional_reference(pool, r#""Artist""#, form.media_item_id).await?;
-        }
-        RERUN_COLLECTION_TYPE_MULTI_COLLECTION => {
-            validate_optional_reference(pool, r#""MultiCollection""#, form.multi_collection_id)
-                .await?;
-        }
-        RERUN_COLLECTION_TYPE_SMART_COLLECTION => {
-            validate_optional_reference(pool, r#""SmartCollection""#, form.smart_collection_id)
-                .await?;
-        }
-        RERUN_COLLECTION_TYPE_PLAYLIST => {}
-        _ => return Err(ServerFnError::new("Unsupported collection type.")),
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_optional_reference(
-    pool: &ersatzrs_infra::db::DbPool,
-    table_name: &str,
-    id: Option<i64>,
-) -> Result<(), ServerFnError> {
-    let Some(id) = id else {
-        return Ok(());
-    };
-    let sql = format!("SELECT COUNT(*) FROM {table_name} WHERE \"Id\" = ?");
-    let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
-        .bind(id)
-        .fetch_one(pool)
-        .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new(format!(
-            "Referenced item {id} does not exist."
-        )));
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn load_rerun_options(
-    pool: &ersatzrs_infra::db::DbPool,
-    sql: &str,
-) -> Result<Vec<RerunCollectionSelectOption>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-        .fetch_all(pool)
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| RerunCollectionSelectOption {
-            id: row.try_get("Id").unwrap_or(0),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-fn row_i32(row: &ersatzrs_infra::db::DbRow, column: &str, fallback: i32) -> i32 {
-    use sqlx::Row;
-
-    row.try_get::<i64, _>(column)
-        .ok()
-        .and_then(|value| i32::try_from(value).ok())
-        .unwrap_or(fallback)
+    state
+        .application
+        .delete_rerun_collection(ersatzrs_app::commands::DeleteRerunCollection { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -5345,47 +5037,18 @@ pub async fn suggest_media_items(
     prefix: String,
 ) -> Result<Vec<MediaItemSuggestion>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", "Title", "Kind" FROM (
-               SELECT m."Id" AS "Id",
-                      COALESCE(mm."Title", '') AS "Title",
-                      'movie' AS "Kind",
-                      mm."SortTitle" AS "SortTitle"
-               FROM "Movie" m
-               JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-               WHERE mm."Title" LIKE ?
-               UNION ALL
-               SELECT s."Id" AS "Id",
-                      COALESCE(sm."Title", '') AS "Title",
-                      'show' AS "Kind",
-                      sm."SortTitle" AS "SortTitle"
-               FROM "Show" s
-               JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-               WHERE sm."Title" LIKE ?
-           )
-           ORDER BY "SortTitle", "Title"
-           LIMIT 20"#,
-    )
-    .bind(&like)
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| MediaItemSuggestion {
-            id: r.try_get("Id").unwrap_or(0),
-            title: r.try_get("Title").unwrap_or_default(),
-            kind: r.try_get("Kind").unwrap_or_default(),
+    Ok(state
+        .application
+        .suggest_media_items(&prefix)
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|row| MediaItemSuggestion {
+            id: row.id,
+            title: row.title,
+            kind: row.kind,
         })
         .collect())
 }
@@ -5397,29 +5060,14 @@ pub async fn add_item_to_collection(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    // Default add: idempotent per (collection, media item, no-override) row.
-    // ADR 0048 duplicate rows are only created through the playback-override
-    // add flow, so this guards on an existing default row.
-    sqlx::query(
-        r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
-           SELECT ?, ?
-           WHERE NOT EXISTS (
-               SELECT 1 FROM "CollectionItem"
-               WHERE "CollectionId" = ? AND "MediaItemId" = ?
-                 AND "PreferredAudioLanguageCode" IS NULL
-                 AND "PreferredAudioTitle" IS NULL
-                 AND "PreferredSubtitleLanguageCode" IS NULL
-                 AND "SubtitleMode" IS NULL
-           )"#,
-    )
-    .bind(collection_id)
-    .bind(media_item_id)
-    .bind(collection_id)
-    .bind(media_item_id)
-    .execute(&state.pool)
-    .await?;
-    enqueue_collection_playout_refresh(&state, collection_id).await?;
-    Ok(())
+    state
+        .application
+        .add_default_collection_item(ersatzrs_app::commands::ChangeCollectionItem {
+            collection_id,
+            media_item_id,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -5429,13 +5077,14 @@ pub async fn remove_item_from_collection(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ? AND "MediaItemId" = ?"#)
-        .bind(collection_id)
-        .bind(media_item_id)
-        .execute(&state.pool)
-        .await?;
-    enqueue_collection_playout_refresh(&state, collection_id).await?;
-    Ok(())
+    state
+        .application
+        .remove_collection_item(ersatzrs_app::commands::ChangeCollectionItem {
+            collection_id,
+            media_item_id,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -5469,20 +5118,16 @@ pub struct ScheduleOption {
 #[server]
 pub async fn list_program_schedules() -> Result<Vec<ScheduleOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id" AS "Id", COALESCE("Name", '') AS "Name"
-           FROM "ProgramSchedule" ORDER BY "Name""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-    Ok(rows
-        .iter()
-        .map(|r| ScheduleOption {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_all_schedules()
+        .await?
+        .into_iter()
+        .map(|row| ScheduleOption {
+            id: row.id,
+            name: row.name,
         })
         .collect())
 }
@@ -5516,74 +5161,18 @@ async fn add_media_item_to_schedule_impl(
     collection_type: i64,
     media_item_id: i64,
 ) -> Result<(), ServerFnError> {
-    // Enum values from `ErsatzTV.Core.Domain`:
-    // PlaybackOrder.Shuffle = 3, FillWithGroupMode.None = 0,
-    // GuideMode.Normal = 0, MarathonGroupBy.None = 0.
-    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i64 = 3;
-    const FILL_WITH_GROUP_MODE_NONE: i64 = 0;
-    const GUIDE_MODE_NORMAL: i64 = 0;
-    const MARATHON_GROUP_BY_NONE: i64 = 0;
-
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-
-    let schedule_exists: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ProgramSchedule" WHERE "Id" = ?"#)
-            .bind(schedule_id)
-            .fetch_one(&state.pool)
-            .await?;
-    if schedule_exists == 0 {
-        return Err(ServerFnError::new("[ProgramScheduleId] does not exist."));
-    }
-    let item_exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
-        .bind(media_item_id)
-        .fetch_one(&state.pool)
-        .await?;
-    if item_exists == 0 {
-        return Err(ServerFnError::new("[MediaItem] does not exist."));
-    }
-
-    let mut tx = state.pool.begin().await?;
-
-    // nextIndex = max(Index) + 1 over the schedule's existing items.
-    let next_index: i64 = sqlx::query_scalar(
-        r#"SELECT COALESCE(MAX("Index"), -1) + 1
-           FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
-    )
-    .bind(schedule_id)
-    .fetch_one(&mut *tx)
-    .await?;
-
-    let result = sqlx::query(
-        r#"INSERT INTO "ProgramScheduleItem" (
-               "ProgramScheduleId", "CollectionType", "MediaItemId",
-               "PlaybackOrder", "FillWithGroupMode", "GuideMode",
-               "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
-               "Index"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)"#,
-    )
-    .bind(schedule_id)
-    .bind(collection_type)
-    .bind(media_item_id)
-    .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
-    .bind(FILL_WITH_GROUP_MODE_NONE)
-    .bind(GUIDE_MODE_NORMAL)
-    .bind(MARATHON_GROUP_BY_NONE)
-    .bind(next_index)
-    .execute(&mut *tx)
-    .await?;
-
-    // PlayoutMode.One → a `ProgramScheduleOneItem` subtype row (TPT).
-    let item_id = inserted_id(&mut *tx, state.database_backend, result).await?;
-    sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-    enqueue_schedule_playout_refresh(&state, schedule_id).await?;
-    Ok(())
+    Ok(state
+        .application
+        .append_schedule_media_item(ersatzrs_app::commands::AppendScheduleMediaItem {
+            schedule_id,
+            collection_type: i32::try_from(collection_type)
+                .map_err(|error| ServerFnError::new(error.to_string()))?,
+            media_item_id,
+        })
+        .await?)
 }
 
 /// Row for the "(New Collection)" / existing-collection dropdown in
@@ -5614,22 +5203,17 @@ pub struct PlaylistOption {
 #[server]
 pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "Collection"
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| CollectionOption {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_all_collections()
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|row| CollectionOption {
+            id: row.id,
+            name: row.name,
         })
         .collect())
 }
@@ -5639,22 +5223,22 @@ pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnErr
 #[server]
 pub async fn list_smart_collections_for_select() -> Result<Vec<CollectionOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "SmartCollection"
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
+    let (rows, _) = state
+        .application
+        .list_smart_collections(ersatzrs_app::queries::ListCollections {
+            search: String::new(),
+            page: 0,
+            page_size: u32::MAX,
+        })
+        .await
+        .map_err(ServerFnError::new)?;
     Ok(rows
-        .iter()
-        .map(|r| CollectionOption {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
+        .into_iter()
+        .map(|row| CollectionOption {
+            id: row.id,
+            name: row.name,
         })
         .collect())
 }
@@ -5666,38 +5250,46 @@ pub async fn create_collection(name: String) -> Result<CollectionOption, ServerF
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let trimmed = name.trim();
-    validate_collection_name(&state.pool, 0, trimmed).await?;
-
-    let mut tx = state.pool.begin().await?;
-    let result =
-        sqlx::query(r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#)
-            .bind(trimmed)
-            .execute(&mut *tx)
-            .await?;
-    let id = inserted_id(&mut *tx, state.database_backend, result).await?;
-    tx.commit().await?;
-    Ok(CollectionOption {
-        id,
-        name: trimmed.to_string(),
-    })
+    let trimmed = name.trim().to_owned();
+    let id = state
+        .application
+        .save_collection(ersatzrs_app::commands::SaveCollection {
+            id: 0,
+            name: trimmed.clone(),
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(CollectionOption { id, name: trimmed })
 }
 
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_COLLECTION: i32 = 0;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_ARTIST: i32 = 3;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_MOVIE: i32 = 10;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_EPISODE: i32 = 20;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO: i32 = 30;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO: i32 = 40;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_SONG: i32 = 50;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_IMAGE: i32 = 60;
+#[cfg(test)]
 const PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM: i32 = 70;
-const PLAYLIST_PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
 
+#[cfg(test)]
 fn playlist_collection_type(value: i32) -> ersatzrs_domain::CollectionType {
     match value {
         PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => ersatzrs_domain::CollectionType::TelevisionShow,
@@ -5748,78 +5340,31 @@ fn channel_subtitle_mode_from_i32(value: i32) -> Option<ersatzrs_domain::Channel
 #[server]
 pub async fn get_playlist_page() -> Result<PlaylistPageData, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let group_rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name", COALESCE("IsSystem", 0) AS "IsSystem"
-           FROM "PlaylistGroup"
-           ORDER BY COALESCE("IsSystem", 0) DESC, "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    let mut groups = Vec::with_capacity(group_rows.len());
-    for row in group_rows {
-        let group_id: i64 = row.try_get("Id").unwrap_or(0);
-        let playlists = sqlx::query(
-            r#"SELECT "Id", "PlaylistGroupId", COALESCE("Name", '') AS "Name",
-                      COALESCE("IsSystem", 0) AS "IsSystem"
-               FROM "Playlist"
-               WHERE "PlaylistGroupId" = ?
-               ORDER BY COALESCE("Name", '') COLLATE NOCASE"#,
-        )
-        .bind(group_id)
-        .fetch_all(&state.pool)
-        .await?
+    let groups = state
+        .application
+        .list_playlist_groups()
+        .await
+        .map_err(ServerFnError::new)?
         .into_iter()
-        .map(|playlist| PlaylistRow {
-            id: playlist.try_get("Id").unwrap_or(0),
-            playlist_group_id: playlist.try_get("PlaylistGroupId").unwrap_or(0),
-            name: playlist.try_get("Name").unwrap_or_default(),
-            is_system: playlist.try_get::<bool, _>("IsSystem").unwrap_or(false),
-        })
+        .map(playlist_group_from_admin)
         .collect();
-
-        groups.push(PlaylistGroupRow {
-            id: group_id,
-            name: row.try_get("Name").unwrap_or_default(),
-            is_system: row.try_get::<bool, _>("IsSystem").unwrap_or(false),
-            playlists,
-        });
-    }
-
     Ok(PlaylistPageData { groups })
 }
 
 #[server]
 pub async fn create_playlist_group(name: String) -> Result<PlaylistGroupRow, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::CreatePlaylistGroup;
 
     let state = expect_context::<AppState>();
-    create_playlist_group_with_pool(&state.pool, state.database_backend, name).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn create_playlist_group_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    database_backend: ersatzrs_infra::db::DatabaseBackend,
-    name: String,
-) -> Result<PlaylistGroupRow, ServerFnError> {
-    let name = validate_playlist_group_name(&name)?;
-    let mut tx = pool.begin().await?;
-    let result = sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 0)"#)
-        .bind(&name)
-        .execute(&mut *tx)
-        .await?;
-    let id = inserted_id(&mut *tx, database_backend, result).await?;
-    tx.commit().await?;
-    Ok(PlaylistGroupRow {
-        id,
-        name,
-        is_system: false,
-        playlists: Vec::new(),
-    })
+    state
+        .application
+        .create_playlist_group(CreatePlaylistGroup { name })
+        .await
+        .map(playlist_group_from_admin)
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -5828,136 +5373,46 @@ pub async fn create_playlist(
     name: String,
 ) -> Result<PlaylistRow, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::CreatePlaylist;
 
     let state = expect_context::<AppState>();
-    create_playlist_with_pool(&state.pool, state.database_backend, playlist_group_id, name).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn create_playlist_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    database_backend: ersatzrs_infra::db::DatabaseBackend,
-    playlist_group_id: i64,
-    name: String,
-) -> Result<PlaylistRow, ServerFnError> {
-    let name = validate_playlist_name(&name)?;
-    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistGroup" WHERE "Id" = ?"#)
-        .bind(playlist_group_id)
-        .fetch_one(pool)
-        .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("[PlaylistGroupId] does not exist."));
-    }
-    let duplicate: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
-           FROM "Playlist"
-           WHERE "PlaylistGroupId" = ? AND "Name" = ? COLLATE NOCASE"#,
-    )
-    .bind(playlist_group_id)
-    .bind(&name)
-    .fetch_one(pool)
-    .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new(format!(
-            "A playlist named \"{name}\" already exists in that playlist group"
-        )));
-    }
-
-    let mut tx = pool.begin().await?;
-    let result = sqlx::query(
-        r#"INSERT INTO "Playlist" ("Name", "PlaylistGroupId", "IsSystem") VALUES (?, ?, 0)"#,
-    )
-    .bind(&name)
-    .bind(playlist_group_id)
-    .execute(&mut *tx)
-    .await?;
-    let id = inserted_id(&mut *tx, database_backend, result).await?;
-    tx.commit().await?;
-
-    Ok(PlaylistRow {
-        id,
-        playlist_group_id,
-        name,
-        is_system: false,
-    })
+    state
+        .application
+        .create_playlist(CreatePlaylist {
+            playlist_group_id,
+            name,
+        })
+        .await
+        .map(playlist_row_from_admin)
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_playlist_group(playlist_group_id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::DeletePlaylistGroup;
 
     let state = expect_context::<AppState>();
-    delete_playlist_group_with_pool(&state.pool, playlist_group_id).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn delete_playlist_group_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playlist_group_id: i64,
-) -> Result<(), ServerFnError> {
-    use sqlx::Row;
-
-    let Some(row) = sqlx::query(
-        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem"
-           FROM "PlaylistGroup"
-           WHERE "Id" = ?"#,
-    )
-    .bind(playlist_group_id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Err(ServerFnError::new(format!(
-            "PlaylistGroup {playlist_group_id} does not exist."
-        )));
-    };
-    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
-        return Err(ServerFnError::new("Cannot delete system playlist group"));
-    }
-    sqlx::query(r#"DELETE FROM "PlaylistGroup" WHERE "Id" = ?"#)
-        .bind(playlist_group_id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_playlist_group(DeletePlaylistGroup {
+            id: playlist_group_id,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_playlist(playlist_id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::DeletePlaylist;
 
     let state = expect_context::<AppState>();
-    delete_playlist_with_pool(&state.pool, playlist_id).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn delete_playlist_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playlist_id: i64,
-) -> Result<(), ServerFnError> {
-    use sqlx::Row;
-
-    let Some(row) = sqlx::query(
-        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem"
-           FROM "Playlist"
-           WHERE "Id" = ?"#,
-    )
-    .bind(playlist_id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Err(ServerFnError::new(format!(
-            "Playlist {playlist_id} does not exist."
-        )));
-    };
-    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
-        return Err(ServerFnError::new(
-            "Cannot delete system (generated) playlist",
-        ));
-    }
-    sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
-        .bind(playlist_id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_playlist(DeletePlaylist { id: playlist_id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -5965,211 +5420,42 @@ pub async fn get_playlist_editor(
     playlist_id: i64,
 ) -> Result<Option<PlaylistEditorForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let Some(row) = sqlx::query(
-        r#"SELECT "Id", "PlaylistGroupId", COALESCE("Name", '') AS "Name",
-                  COALESCE("IsSystem", 0) AS "IsSystem"
-           FROM "Playlist"
-           WHERE "Id" = ?"#,
-    )
-    .bind(playlist_id)
-    .fetch_optional(&state.pool)
-    .await?
-    else {
-        return Ok(None);
-    };
-
-    let items = load_playlist_items(&state.pool, playlist_id).await?;
-    Ok(Some(PlaylistEditorForm {
-        id: row.try_get("Id").unwrap_or(0),
-        playlist_group_id: row.try_get("PlaylistGroupId").unwrap_or(0),
-        name: row.try_get("Name").unwrap_or_default(),
-        is_system: row.try_get::<bool, _>("IsSystem").unwrap_or(false),
-        items,
-    }))
+    state
+        .application
+        .get_playlist_editor(playlist_id)
+        .await
+        .map(|form| form.map(playlist_editor_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 #[server]
-#[allow(clippy::too_many_lines)]
 pub async fn get_playlist_editor_options() -> Result<PlaylistEditorOptions, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(PlaylistEditorOptions {
-        collections: load_named_options(
-            &state.pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        multi_collections: load_named_options(
-            &state.pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "MultiCollection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        smart_collections: load_named_options(
-            &state.pool,
-            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "SmartCollection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        shows: load_named_options(
-            &state.pool,
-            r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Name"
-               FROM "Show" s JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-               ORDER BY COALESCE(sm."SortTitle", sm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        seasons: load_named_options(
-            &state.pool,
-            r#"SELECT se."Id",
-                      COALESCE(shm."Title", '') || ' - ' ||
-                      COALESCE(sem."Title", 'Season ' || CAST(se."SeasonNumber" AS TEXT)) AS "Name"
-               FROM "Season" se
-               JOIN "Show" sh ON sh."Id" = se."ShowId"
-               JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
-               LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = se."Id"
-               ORDER BY COALESCE(shm."SortTitle", shm."Title", '') COLLATE NOCASE, se."SeasonNumber" LIMIT 500"#,
-        )
-        .await?,
-        artists: load_named_options(
-            &state.pool,
-            r#"SELECT a."Id", COALESCE(am."Title", '') AS "Name"
-               FROM "Artist" a JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
-               ORDER BY COALESCE(am."SortTitle", am."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        movies: load_named_options(
-            &state.pool,
-            r#"SELECT m."Id", COALESCE(mm."Title", '') AS "Name"
-               FROM "Movie" m JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-               ORDER BY COALESCE(mm."SortTitle", mm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        episodes: load_named_options(
-            &state.pool,
-            r#"SELECT ep."Id",
-                      COALESCE(shm."Title", '') || ' - S' || CAST(COALESCE(se."SeasonNumber", 0) AS TEXT)
-                      || ' E' || CAST(COALESCE(em."EpisodeNumber", 0) AS TEXT)
-                      || ' - ' || COALESCE(em."Title", '') AS "Name"
-               FROM "Episode" ep
-               JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
-               JOIN "Season" se ON se."Id" = ep."SeasonId"
-               JOIN "Show" sh ON sh."Id" = se."ShowId"
-               JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
-               ORDER BY COALESCE(shm."SortTitle", shm."Title", '') COLLATE NOCASE,
-                        se."SeasonNumber", em."EpisodeNumber" LIMIT 500"#,
-        )
-        .await?,
-        music_videos: load_named_options(
-            &state.pool,
-            r#"SELECT mv."Id", COALESCE(mvm."Title", '') AS "Name"
-               FROM "MusicVideo" mv JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
-               ORDER BY COALESCE(mvm."SortTitle", mvm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        other_videos: load_named_options(
-            &state.pool,
-            r#"SELECT ov."Id", COALESCE(ovm."Title", '') AS "Name"
-               FROM "OtherVideo" ov JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
-               ORDER BY COALESCE(ovm."SortTitle", ovm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        songs: load_named_options(
-            &state.pool,
-            r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Name"
-               FROM "Song" s JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
-               ORDER BY COALESCE(sm."SortTitle", sm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        images: load_named_options(
-            &state.pool,
-            r#"SELECT i."Id", COALESCE(im."Title", '') AS "Name"
-               FROM "Image" i JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
-               ORDER BY COALESCE(im."SortTitle", im."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-        remote_streams: load_named_options(
-            &state.pool,
-            r#"SELECT rs."Id", COALESCE(rsm."Title", '') AS "Name"
-               FROM "RemoteStream" rs JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
-               ORDER BY COALESCE(rsm."SortTitle", rsm."Title", '') COLLATE NOCASE LIMIT 500"#,
-        )
-        .await?,
-    })
+    state
+        .application
+        .get_playlist_editor_options()
+        .await
+        .map(playlist_options_from_admin)
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn save_playlist(form: PlaylistEditorForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::SavePlaylist;
 
     let state = expect_context::<AppState>();
-    save_playlist_with_pool(&state.pool, form).await
-}
-
-#[cfg(feature = "ssr")]
-pub async fn save_playlist_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: PlaylistEditorForm,
-) -> Result<(), ServerFnError> {
-    use sqlx::Row;
-
-    let Some(row) = sqlx::query(
-        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem" FROM "Playlist" WHERE "Id" = ?"#,
-    )
-    .bind(form.id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Err(ServerFnError::new("[PlaylistId] does not exist."));
-    };
-    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
-        return Err(ServerFnError::new(
-            "Cannot save system (generated) playlist",
-        ));
-    }
-
-    validate_playlist_items(&form.items)?;
-    let mut tx = pool.begin().await?;
-    sqlx::query(r#"UPDATE "Playlist" SET "Name" = ? WHERE "Id" = ?"#)
-        .bind(form.name.trim())
-        .bind(form.id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
-        .bind(form.id)
-        .execute(&mut *tx)
-        .await?;
-    for item in form.items {
-        sqlx::query(
-            r#"INSERT INTO "PlaylistItem"
-                   ("Index", "PlaylistId", "CollectionType", "CollectionId",
-                    "MediaItemId", "MultiCollectionId", "SmartCollectionId",
-                    "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide",
-                    "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                    "PreferredSubtitleLanguageCode", "SubtitleMode")
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(item.index)
-        .bind(form.id)
-        .bind(item.collection_type)
-        .bind(item.collection_id)
-        .bind(item.media_item_id)
-        .bind(item.multi_collection_id)
-        .bind(item.smart_collection_id)
-        .bind(item.playback_order)
-        .bind(item.count)
-        .bind(item.play_all)
-        .bind(item.include_in_program_guide)
-        .bind(item.preferred_audio_language_code)
-        .bind(item.preferred_audio_title)
-        .bind(item.preferred_subtitle_language_code)
-        .bind(item.subtitle_mode)
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
-    Ok(())
+    state
+        .application
+        .save_playlist(SavePlaylist {
+            form: playlist_editor_into_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -6177,64 +5463,50 @@ pub async fn preview_playlist_playout(
     form: PlaylistEditorForm,
 ) -> Result<Vec<PlaylistPreviewRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use chrono::{Duration, Utc};
-    use ersatzrs_core::playout_builder::PlayoutBuilder;
-    use ersatzrs_core::scheduling::SchedulingRequest;
-    use ersatzrs_domain::{Playout, PlayoutScheduleKind};
+    use ersatzrs_app::queries::{PreviewPlaylistItem, PreviewPlaylistPlayout};
 
     let state = expect_context::<AppState>();
-    validate_playlist_items(&form.items)?;
-    let (reference_data, one_pass_duration, max_items) =
-        playlist_preview_reference_data(&state.pool, &form).await?;
-    let now = Utc::now();
-    let result = PlayoutBuilder::default()
-        .build(SchedulingRequest {
-            playout: Playout {
-                schedule_kind: PlayoutScheduleKind::Classic,
-                seed: 1,
-                ..Playout::default()
-            },
-            start: now,
-            finish: now + one_pass_duration + Duration::seconds(1),
-            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Reset,
-            reference_data,
+    state
+        .application
+        .preview_playlist_playout(PreviewPlaylistPlayout {
+            playlist_id: form.id,
+            items: form
+                .items
+                .into_iter()
+                .map(|item| PreviewPlaylistItem {
+                    collection_type: item.collection_type,
+                    collection_id: item.collection_id,
+                    multi_collection_id: item.multi_collection_id,
+                    smart_collection_id: item.smart_collection_id,
+                    media_item_id: item.media_item_id,
+                    playback_order: playlist_playback_order(item.playback_order),
+                    play_all: item.play_all,
+                    count: item
+                        .count
+                        .and_then(|count| usize::try_from(count.max(1)).ok()),
+                    include_in_program_guide: item.include_in_program_guide,
+                    preferred_audio_language_code: item.preferred_audio_language_code,
+                    preferred_audio_title: item.preferred_audio_title,
+                    preferred_subtitle_language_code: item.preferred_subtitle_language_code,
+                    subtitle_mode: item.subtitle_mode.and_then(channel_subtitle_mode_from_i32),
+                })
+                .collect(),
         })
-        .map_err(|error| ServerFnError::new(format!("Playlist preview failed: {error}")))?;
-
-    let preview_media = load_preview_media_items(
-        &state.pool,
-        result
-            .added_items
-            .iter()
-            .take(max_items)
-            .map(|item| item.media_item_id)
-            .collect(),
-    )
-    .await?;
-    let rows = result
-        .added_items
-        .into_iter()
-        .take(max_items)
-        .zip(preview_media)
-        .map(|(item, media)| {
-            let start = item.start - now;
-            let finish = item.finish - now;
-            PlaylistPreviewRow {
-                start: format_duration(start),
-                finish: format_duration(finish),
-                media_item: media.title,
-                duration: format_duration(finish - start),
-            }
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PlaylistPreviewRow {
+                    start: format_duration(row.start),
+                    finish: format_duration(row.finish),
+                    media_item: row.title,
+                    duration: format_duration(row.duration),
+                })
+                .collect()
         })
-        .collect::<Vec<_>>();
-
-    if rows.is_empty() {
-        return Err(ServerFnError::new("Playlist playout preview has no items"));
-    }
-    Ok(rows)
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn playlist_preview_reference_data(
     pool: &ersatzrs_infra::db::DbPool,
     form: &PlaylistEditorForm,
@@ -6347,30 +5619,7 @@ async fn playlist_preview_reference_data(
     ))
 }
 
-fn validate_playlist_group_name(name: &str) -> Result<String, ServerFnError> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("[Name] must not be empty."));
-    }
-    if name.chars().count() > 50 {
-        return Err(ServerFnError::new("[Name] must not be longer than 50."));
-    }
-    Ok(name.to_string())
-}
-
-fn validate_playlist_name(name: &str) -> Result<String, ServerFnError> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Playlist name is required"));
-    }
-    if name.chars().count() > 50 {
-        return Err(ServerFnError::new(format!(
-            "Playlist name \"{name}\" is invalid"
-        )));
-    }
-    Ok(name.to_string())
-}
-
+#[cfg(test)]
 fn validate_playlist_items(items: &[PlaylistItemForm]) -> Result<(), ServerFnError> {
     for item in items {
         match item.collection_type {
@@ -6425,6 +5674,7 @@ fn validate_playlist_items(items: &[PlaylistItemForm]) -> Result<(), ServerFnErr
     Ok(())
 }
 
+#[cfg(test)]
 fn collection_type_name(collection_type: i32) -> &'static str {
     match collection_type {
         PLAYLIST_COLLECTION_TYPE_COLLECTION => "Collection",
@@ -6444,164 +5694,15 @@ fn collection_type_name(collection_type: i32) -> &'static str {
     }
 }
 
-#[cfg(feature = "ssr")]
-async fn load_named_options(
-    pool: &ersatzrs_infra::db::DbPool,
-    sql: &str,
-) -> Result<Vec<PlaylistItemOption>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-        .fetch_all(pool)
-        .await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| PlaylistItemOption {
-            id: row.try_get("Id").unwrap_or(0),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-async fn load_playlist_items(
-    pool: &ersatzrs_infra::db::DbPool,
-    playlist_id: i64,
-) -> Result<Vec<PlaylistItemForm>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(
-        r#"SELECT pi."Id", pi."Index", pi."CollectionType", pi."CollectionId",
-                  pi."MediaItemId", pi."MultiCollectionId", pi."SmartCollectionId",
-                  pi."PlaybackOrder", pi."Count", pi."PlayAll", pi."IncludeInProgramGuide",
-                  pi."PreferredAudioLanguageCode", pi."PreferredAudioTitle",
-                  pi."PreferredSubtitleLanguageCode", pi."SubtitleMode",
-                  c."Name" AS "CollectionName",
-                  mc."Name" AS "MultiCollectionName",
-                  sc."Name" AS "SmartCollectionName",
-                  sm."Title" AS "ShowTitle",
-                  sem."Title" AS "SeasonTitle",
-                  mm."Title" AS "MovieTitle",
-                  am."Title" AS "ArtistTitle",
-                  em."Title" AS "EpisodeTitle",
-                  mvm."Title" AS "MusicVideoTitle",
-                  ovm."Title" AS "OtherVideoTitle",
-                  songm."Title" AS "SongTitle",
-                  im."Title" AS "ImageTitle",
-                  rsm."Title" AS "RemoteStreamTitle"
-           FROM "PlaylistItem" pi
-           LEFT JOIN "Collection" c ON c."Id" = pi."CollectionId"
-           LEFT JOIN "MultiCollection" mc ON mc."Id" = pi."MultiCollectionId"
-           LEFT JOIN "SmartCollection" sc ON sc."Id" = pi."SmartCollectionId"
-           LEFT JOIN "Show" show_item ON show_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 1
-           LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = show_item."Id"
-           LEFT JOIN "Season" season_item ON season_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 2
-           LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = season_item."Id"
-           LEFT JOIN "Movie" movie_item ON movie_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 10
-           LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = movie_item."Id"
-           LEFT JOIN "Artist" artist_item ON artist_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 3
-           LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = artist_item."Id"
-           LEFT JOIN "Episode" episode_item ON episode_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 20
-           LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = episode_item."Id"
-           LEFT JOIN "MusicVideo" music_video_item ON music_video_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 30
-           LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = music_video_item."Id"
-           LEFT JOIN "OtherVideo" other_video_item ON other_video_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 40
-           LEFT JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = other_video_item."Id"
-           LEFT JOIN "Song" song_item ON song_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 50
-           LEFT JOIN "SongMetadata" songm ON songm."SongId" = song_item."Id"
-           LEFT JOIN "Image" image_item ON image_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 60
-           LEFT JOIN "ImageMetadata" im ON im."ImageId" = image_item."Id"
-           LEFT JOIN "RemoteStream" remote_stream_item ON remote_stream_item."Id" = pi."MediaItemId"
-                AND pi."CollectionType" = 70
-           LEFT JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = remote_stream_item."Id"
-           WHERE pi."PlaylistId" = ?
-           ORDER BY pi."Index", pi."Id""#,
-    )
-    .bind(playlist_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| {
-            let collection_type = row
-                .try_get("CollectionType")
-                .unwrap_or(PLAYLIST_COLLECTION_TYPE_COLLECTION);
-            PlaylistItemForm {
-                id: row.try_get("Id").unwrap_or(0),
-                index: row.try_get("Index").unwrap_or(0),
-                collection_type,
-                collection_id: row.try_get("CollectionId").unwrap_or_default(),
-                multi_collection_id: row.try_get("MultiCollectionId").unwrap_or_default(),
-                smart_collection_id: row.try_get("SmartCollectionId").unwrap_or_default(),
-                media_item_id: row.try_get("MediaItemId").unwrap_or_default(),
-                item_name: playlist_item_name(&row, collection_type),
-                playback_order: row
-                    .try_get("PlaybackOrder")
-                    .unwrap_or(PLAYLIST_PLAYBACK_ORDER_CHRONOLOGICAL),
-                count: row.try_get("Count").unwrap_or_default(),
-                play_all: row.try_get("PlayAll").unwrap_or(false),
-                include_in_program_guide: row.try_get("IncludeInProgramGuide").unwrap_or(false),
-                preferred_audio_language_code: row
-                    .try_get("PreferredAudioLanguageCode")
-                    .unwrap_or_default(),
-                preferred_audio_title: row.try_get("PreferredAudioTitle").unwrap_or_default(),
-                preferred_subtitle_language_code: row
-                    .try_get("PreferredSubtitleLanguageCode")
-                    .unwrap_or_default(),
-                subtitle_mode: row.try_get("SubtitleMode").unwrap_or_default(),
-            }
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-fn playlist_item_name(row: &ersatzrs_infra::db::DbRow, collection_type: i32) -> String {
-    use sqlx::Row;
-
-    let column = match collection_type {
-        PLAYLIST_COLLECTION_TYPE_COLLECTION => "CollectionName",
-        PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION => "MultiCollectionName",
-        PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION => "SmartCollectionName",
-        PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => "ShowTitle",
-        PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON => "SeasonTitle",
-        PLAYLIST_COLLECTION_TYPE_ARTIST => "ArtistTitle",
-        PLAYLIST_COLLECTION_TYPE_MOVIE => "MovieTitle",
-        PLAYLIST_COLLECTION_TYPE_EPISODE => "EpisodeTitle",
-        PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO => "MusicVideoTitle",
-        PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO => "OtherVideoTitle",
-        PLAYLIST_COLLECTION_TYPE_SONG => "SongTitle",
-        PLAYLIST_COLLECTION_TYPE_IMAGE => "ImageTitle",
-        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => "RemoteStreamTitle",
-        _ => "",
-    };
-    if column.is_empty() {
-        String::new()
-    } else {
-        row.try_get::<Option<String>, _>(column)
-            .unwrap_or_default()
-            .unwrap_or_default()
-    }
-}
-
 #[derive(Debug)]
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 struct PreviewMediaItem {
     id: i64,
     title: String,
     duration: chrono::Duration,
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn preview_media_items_for_playlist_item(
     pool: &ersatzrs_infra::db::DbPool,
     item: &PlaylistItemForm,
@@ -6635,7 +5736,7 @@ async fn preview_media_items_for_playlist_item(
     load_preview_media_items(pool, media_item_ids).await
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_smart_collection(
     pool: &ersatzrs_infra::db::DbPool,
     smart_collection_id: Option<i64>,
@@ -6677,7 +5778,7 @@ async fn media_ids_for_smart_collection(
     Ok(ids)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_collection(
     pool: &ersatzrs_infra::db::DbPool,
     collection_id: Option<i64>,
@@ -6693,7 +5794,7 @@ async fn media_ids_for_collection(
     .await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_multi_collection(
     pool: &ersatzrs_infra::db::DbPool,
     multi_collection_id: Option<i64>,
@@ -6713,7 +5814,7 @@ async fn media_ids_for_multi_collection(
     .await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_artist(
     pool: &ersatzrs_infra::db::DbPool,
     artist_id: Option<i64>,
@@ -6729,7 +5830,7 @@ async fn media_ids_for_artist(
     )
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_show(
     pool: &ersatzrs_infra::db::DbPool,
     show_id: Option<i64>,
@@ -6749,7 +5850,7 @@ async fn media_ids_for_show(
     .await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_ids_for_season(
     pool: &ersatzrs_infra::db::DbPool,
     season_id: Option<i64>,
@@ -6765,7 +5866,7 @@ async fn media_ids_for_season(
     )
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_preview_media_items(
     pool: &ersatzrs_infra::db::DbPool,
     ids: Vec<i64>,
@@ -6831,6 +5932,7 @@ async fn load_preview_media_items(
     Ok(result)
 }
 
+#[cfg(test)]
 fn parse_hhmmss_duration(value: &str) -> Option<chrono::Duration> {
     let mut parts = value.split(':');
     let hours = parts.next()?.parse::<i64>().ok()?;
@@ -6860,22 +5962,17 @@ fn format_duration(duration: chrono::Duration) -> String {
 #[server]
 pub async fn list_all_playlist_groups() -> Result<Vec<PlaylistGroupOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "PlaylistGroup"
-           ORDER BY COALESCE("IsSystem", 0) DESC, "Name" COLLATE NOCASE"#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PlaylistGroupOption {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_playlist_groups()
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|row| PlaylistGroupOption {
+            id: row.id,
+            name: row.name,
         })
         .collect())
 }
@@ -6887,27 +5984,28 @@ pub async fn list_playlists_by_group(
     playlist_group_id: i64,
 ) -> Result<Vec<PlaylistOption>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name", "PlaylistGroupId"
-           FROM "Playlist"
-           WHERE "PlaylistGroupId" = ?
-           ORDER BY "Name" COLLATE NOCASE"#,
-    )
-    .bind(playlist_group_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PlaylistOption {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            playlist_group_id: r.try_get("PlaylistGroupId").unwrap_or(0),
+    let groups = state
+        .application
+        .list_playlist_groups()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(groups
+        .into_iter()
+        .find(|group| group.id == playlist_group_id)
+        .map(|group| {
+            group
+                .playlists
+                .into_iter()
+                .map(|row| PlaylistOption {
+                    id: row.id,
+                    name: row.name,
+                    playlist_group_id: row.playlist_group_id,
+                })
+                .collect()
         })
-        .collect())
+        .unwrap_or_default())
 }
 
 // ---------------------------------------------------------------------------
@@ -6937,20 +6035,18 @@ pub enum MediaBrowserKind {
 
 #[cfg(feature = "ssr")]
 impl MediaBrowserKind {
-    /// SQL table + metadata table + foreign-key column for the page-map query.
-    /// Returns `(item_table, metadata_table, fk_column)`.
-    const fn tables(self) -> (&'static str, &'static str, &'static str) {
+    const fn media_kind(self) -> &'static str {
         match self {
-            Self::Movie => ("Movie", "MovieMetadata", "MovieId"),
-            Self::Show => ("Show", "ShowMetadata", "ShowId"),
-            Self::Artist => ("Artist", "ArtistMetadata", "ArtistId"),
-            Self::OtherVideo => ("OtherVideo", "OtherVideoMetadata", "OtherVideoId"),
-            Self::Season => ("Season", "SeasonMetadata", "SeasonId"),
-            Self::Episode => ("Episode", "EpisodeMetadata", "EpisodeId"),
-            Self::MusicVideo => ("MusicVideo", "MusicVideoMetadata", "MusicVideoId"),
-            Self::RemoteStream => ("RemoteStream", "RemoteStreamMetadata", "RemoteStreamId"),
-            Self::Song => ("Song", "SongMetadata", "SongId"),
-            Self::Image => ("Image", "ImageMetadata", "ImageId"),
+            Self::Movie => "movie",
+            Self::Show => "show",
+            Self::Artist => "artist",
+            Self::OtherVideo => "other_video",
+            Self::Season => "season",
+            Self::Episode => "episode",
+            Self::MusicVideo => "music_video",
+            Self::RemoteStream => "remote_stream",
+            Self::Song => "song",
+            Self::Image => "image",
         }
     }
 
@@ -6988,39 +6084,32 @@ pub async fn media_page_map(
     show_variants: bool,
 ) -> Result<LetterPageMap, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
+    use ersatzrs_domain::ContentKind;
 
     if page_size == 0 {
         return Ok(LetterPageMap { pages: vec![0; 27] });
     }
 
     let state = expect_context::<AppState>();
-    let like = format!("%{}%", search.trim());
-
-    let (item_table, metadata_table, fk_column) = kind.tables();
-    // `item_table`, `metadata_table`, and `fk_column` are private constants
-    // returned by `MediaBrowserKind::tables` — not user input.
-    let sql = format!(
-        r#"SELECT COALESCE(m."SortTitle", m."Title", '') AS "SortTitle"
-           FROM "{item_table}" i
-           JOIN "{metadata_table}" m ON m."{fk_column}" = i."Id"
-           JOIN "MediaItem" mi ON mi."Id" = i."Id"
-           WHERE (? = '' OR m."Title" LIKE ?)
-             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
-           ORDER BY m."SortTitle", m."Title""#
-    );
-
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
-        .bind(search.trim())
-        .bind(&like)
-        .bind(i64::from(show_variants))
-        .fetch_all(&state.pool)
-        .await?;
-
-    let buckets: Vec<usize> = rows
+    let query = media_card_search_query(kind.media_kind(), &search, show_variants);
+    let mut documents = state.application.admin_search_documents(&query).await?;
+    documents.retain(|document| show_variants || document.content_kind == ContentKind::Primary);
+    documents.sort_by_key(|document| {
+        document
+            .sort_title
+            .as_deref()
+            .or(document.title.as_deref())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    });
+    let buckets: Vec<usize> = documents
         .iter()
-        .map(|r| {
-            let sort_title: String = r.try_get("SortTitle").unwrap_or_default();
+        .map(|document| {
+            let sort_title = document
+                .sort_title
+                .as_deref()
+                .or(document.title.as_deref())
+                .unwrap_or_default();
             let letter = sort_title
                 .trim()
                 .chars()
@@ -7095,89 +6184,15 @@ pub async fn add_media_items_to_collection_with_playback(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    if media_item_ids.is_empty() {
-        return Ok(0);
-    }
-    let playback = normalize_playback_override(playback);
-
-    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
-        .bind(collection_id)
-        .fetch_one(&state.pool)
-        .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Collection does not exist."));
-    }
-
-    let mut added: u64 = 0;
-    for id in media_item_ids {
-        let item_exists: i64 =
-            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
-                .bind(id)
-                .fetch_one(&state.pool)
-                .await?;
-        if item_exists == 0 {
-            return Err(ServerFnError::new(format!(
-                "Media item {id} does not exist."
-            )));
-        }
-
-        // One guarded insert covers both the default and the override case:
-        // the new row is only inserted when no row with the same media item
-        // and an identical (NULL-safe) override tuple already exists.
-        let sql = match state.database_backend {
-            ersatzrs_infra::db::DatabaseBackend::Sqlite => {
-                r#"INSERT INTO "CollectionItem" (
-                       "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
-                       "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode"
-                   )
-                   SELECT ?, ?, ?, ?, ?, ?
-                   WHERE NOT EXISTS (
-                       SELECT 1 FROM "CollectionItem"
-                       WHERE "CollectionId" = ? AND "MediaItemId" = ?
-                         AND "PreferredAudioLanguageCode" IS ?
-                         AND "PreferredAudioTitle" IS ?
-                         AND "PreferredSubtitleLanguageCode" IS ?
-                         AND "SubtitleMode" IS ?
-                   )"#
-            }
-            #[cfg(feature = "mysql")]
-            ersatzrs_infra::db::DatabaseBackend::MySql => {
-                r"INSERT INTO `CollectionItem` (
-                       `CollectionId`, `MediaItemId`, `PreferredAudioLanguageCode`,
-                       `PreferredAudioTitle`, `PreferredSubtitleLanguageCode`, `SubtitleMode`
-                   )
-                   SELECT ?, ?, ?, ?, ?, ? FROM DUAL
-                   WHERE NOT EXISTS (
-                       SELECT 1 FROM `CollectionItem`
-                       WHERE `CollectionId` = ? AND `MediaItemId` = ?
-                         AND `PreferredAudioLanguageCode` <=> ?
-                         AND `PreferredAudioTitle` <=> ?
-                         AND `PreferredSubtitleLanguageCode` <=> ?
-                         AND `SubtitleMode` <=> ?
-                   )"
-            }
-        };
-        let result = sqlx::query(sql)
-            .bind(collection_id)
-            .bind(id)
-            .bind(&playback.preferred_audio_language_code)
-            .bind(&playback.preferred_audio_title)
-            .bind(&playback.preferred_subtitle_language_code)
-            .bind(playback.subtitle_mode)
-            .bind(collection_id)
-            .bind(id)
-            .bind(&playback.preferred_audio_language_code)
-            .bind(&playback.preferred_audio_title)
-            .bind(&playback.preferred_subtitle_language_code)
-            .bind(playback.subtitle_mode)
-            .execute(&state.pool)
-            .await?;
-        added += result.rows_affected();
-    }
-    if added > 0 {
-        enqueue_collection_playout_refresh(&state, collection_id).await?;
-    }
-    Ok(added)
+    state
+        .application
+        .add_collection_items(ersatzrs_app::commands::AddCollectionItems {
+            collection_id,
+            media_item_ids,
+            playback: playback_overrides(playback),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Add media items to a playlist as individual `PlaylistItem` rows. The
@@ -7204,78 +6219,41 @@ pub async fn add_media_items_to_playlist_with_playback(
     media_item_ids: Vec<i64>,
     playback: Option<PlaybackOverrideForm>,
 ) -> Result<u64, ServerFnError> {
-    // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
-    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i32 = 1;
-
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    if media_item_ids.is_empty() {
-        return Ok(0);
-    }
-    let playback = normalize_playback_override(playback);
-
-    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
-        .bind(playlist_id)
-        .fetch_one(&state.pool)
-        .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Playlist does not exist."));
-    }
-
-    let max_index: Option<i64> =
-        sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
-            .bind(playlist_id)
-            .fetch_one(&state.pool)
-            .await?;
-    let start_index = max_index.map_or(0, |i| i + 1);
-
     let collection_type = kind.collection_type();
-    let mut added: u64 = 0;
-    for (next_index, id) in (start_index..).zip(media_item_ids) {
-        let result = sqlx::query(
-            r#"INSERT INTO "PlaylistItem"
-                   ("Index", "PlaylistId", "CollectionType", "MediaItemId",
-                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll",
-                    "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                    "PreferredSubtitleLanguageCode", "SubtitleMode")
-               VALUES (?, ?, ?, ?, 1, ?, 0, ?, ?, ?, ?)"#,
-        )
-        .bind(next_index)
-        .bind(playlist_id)
-        .bind(collection_type)
-        .bind(id)
-        .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
-        .bind(&playback.preferred_audio_language_code)
-        .bind(&playback.preferred_audio_title)
-        .bind(&playback.preferred_subtitle_language_code)
-        .bind(playback.subtitle_mode)
-        .execute(&state.pool)
-        .await?;
-        added += result.rows_affected();
+    let playback = playback_overrides(playback);
+    state
+        .application
+        .add_playlist_items(ersatzrs_app::commands::AddPlaylistItems {
+            playlist_id,
+            items: media_item_ids
+                .into_iter()
+                .map(
+                    |media_item_id| ersatzrs_core::repositories::PlaylistItemInsert {
+                        collection_type,
+                        media_item_id,
+                        playback: playback.clone(),
+                    },
+                )
+                .collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+fn playback_overrides(
+    playback: Option<PlaybackOverrideForm>,
+) -> ersatzrs_core::repositories::PlaybackOverrides {
+    let playback = playback.unwrap_or_default();
+    ersatzrs_core::repositories::PlaybackOverrides {
+        preferred_audio_language_code: playback.preferred_audio_language_code,
+        preferred_audio_title: playback.preferred_audio_title,
+        preferred_subtitle_language_code: playback.preferred_subtitle_language_code,
+        subtitle_mode: playback.subtitle_mode,
     }
-    Ok(added)
-}
-
-fn normalize_playback_override(playback: Option<PlaybackOverrideForm>) -> PlaybackOverrideForm {
-    let Some(mut playback) = playback else {
-        return PlaybackOverrideForm::default();
-    };
-    playback.preferred_audio_language_code =
-        normalize_optional_text(playback.preferred_audio_language_code);
-    playback.preferred_audio_title = normalize_optional_text(playback.preferred_audio_title);
-    playback.preferred_subtitle_language_code =
-        normalize_optional_text(playback.preferred_subtitle_language_code);
-    playback.subtitle_mode = playback
-        .subtitle_mode
-        .filter(|mode| channel_subtitle_mode_from_i32(*mode).is_some());
-    playback
-}
-
-fn normalize_optional_text(value: Option<String>) -> Option<String> {
-    value
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
 
 /// One row to be inserted into `PlaylistItem` by
@@ -7357,51 +6335,24 @@ pub async fn add_media_items_to_playlist_mixed(
     playlist_id: i64,
     ids: crate::admin::server_fns::search::SearchAllIds,
 ) -> Result<u64, ServerFnError> {
-    // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
-    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i32 = 1;
-
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-
-    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
-        .bind(playlist_id)
-        .fetch_one(&state.pool)
-        .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Playlist does not exist."));
-    }
-
-    let max_index: Option<i64> =
-        sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
-            .bind(playlist_id)
-            .fetch_one(&state.pool)
-            .await?;
-    let start_index = max_index.map_or(0, |i| i + 1);
-
-    let plan = plan_mixed_playlist_inserts(start_index, &ids);
-    if plan.is_empty() {
-        return Ok(0);
-    }
-
-    let mut added: u64 = 0;
-    for row in plan {
-        let result = sqlx::query(
-            r#"INSERT INTO "PlaylistItem"
-                   ("Index", "PlaylistId", "CollectionType", "MediaItemId",
-                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll")
-               VALUES (?, ?, ?, ?, 1, ?, 0)"#,
-        )
-        .bind(row.index)
-        .bind(playlist_id)
-        .bind(row.collection_type)
-        .bind(row.media_item_id)
-        .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
-        .execute(&state.pool)
-        .await?;
-        added += result.rows_affected();
-    }
-    Ok(added)
+    state
+        .application
+        .add_playlist_items(ersatzrs_app::commands::AddPlaylistItems {
+            playlist_id,
+            items: plan_mixed_playlist_inserts(0, &ids)
+                .into_iter()
+                .map(|row| ersatzrs_core::repositories::PlaylistItemInsert {
+                    collection_type: row.collection_type,
+                    media_item_id: row.media_item_id,
+                    playback: ersatzrs_core::repositories::PlaybackOverrides::default(),
+                })
+                .collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -7567,20 +6518,9 @@ mod remote_stream_tests {
 #[cfg(test)]
 mod playlist_tests {
     use super::{
-        validate_playlist_group_name, validate_playlist_items, PlaylistItemForm,
-        PLAYLIST_COLLECTION_TYPE_COLLECTION, PLAYLIST_COLLECTION_TYPE_MOVIE,
-        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM,
+        validate_playlist_items, PlaylistItemForm, PLAYLIST_COLLECTION_TYPE_COLLECTION,
+        PLAYLIST_COLLECTION_TYPE_MOVIE, PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM,
     };
-
-    #[test]
-    fn playlist_group_name_validation_matches_ersatztv_limits() {
-        assert_eq!(
-            validate_playlist_group_name("  Favorites  ").unwrap(),
-            "Favorites"
-        );
-        assert!(validate_playlist_group_name("").is_err());
-        assert!(validate_playlist_group_name(&"x".repeat(51)).is_err());
-    }
 
     #[test]
     fn playlist_item_validation_requires_matching_target_id() {
@@ -8044,9 +6984,68 @@ pub struct CollectionDetail {
 ///
 /// Artwork URLs are resolved server-side via `artwork_url(...)` so the
 /// returned `artwork_path` is ready to drop into `<img src=...>`.
-#[allow(clippy::too_many_lines)]
 #[server]
 pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .get_collection_detail(id)
+        .await
+        .map(|detail| detail.map(collection_detail_from_admin))
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+fn collection_detail_from_admin(
+    detail: ersatzrs_core::repositories::CollectionDetailAdmin,
+) -> CollectionDetail {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+
+    CollectionDetail {
+        id: detail.id,
+        name: detail.name,
+        use_custom_playback_order: detail.use_custom_playback_order,
+        items: detail
+            .items
+            .into_iter()
+            .map(|item| {
+                let href = match item.kind.as_str() {
+                    "movie" => Some(format!("/media/movies/{}", item.media_item_id)),
+                    "show" => Some(format!("/media/tv/shows/{}", item.media_item_id)),
+                    "other_video" => Some(format!("/media/other/videos/{}", item.media_item_id)),
+                    _ => None,
+                };
+                CollectionItemCard {
+                    collection_item_id: item.collection_item_id,
+                    media_item_id: item.media_item_id,
+                    kind: item.kind,
+                    title: item.title,
+                    sort_title: item.sort_title,
+                    subtitle: item.subtitle,
+                    artwork_path: item
+                        .artwork_path
+                        .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+                    href,
+                    custom_index: item.custom_index,
+                    preferred_audio_language_code: item.playback.preferred_audio_language_code,
+                    preferred_audio_title: item.playback.preferred_audio_title,
+                    preferred_subtitle_language_code: item
+                        .playback
+                        .preferred_subtitle_language_code,
+                    subtitle_mode: item.playback.subtitle_mode,
+                }
+            })
+            .collect(),
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+#[allow(dead_code, clippy::too_many_lines)]
+async fn get_collection_detail_legacy_sql(
+    id: i64,
+) -> Result<Option<CollectionDetail>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -8368,16 +7367,14 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 pub async fn set_collection_use_custom_order(id: i64, on: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    let result =
-        sqlx::query(r#"UPDATE "Collection" SET "UseCustomPlaybackOrder" = ? WHERE "Id" = ?"#)
-            .bind(i64::from(on))
-            .bind(id)
-            .execute(&state.pool)
-            .await?;
-    if result.rows_affected() > 0 {
-        enqueue_collection_playout_refresh(&state, id).await?;
-    }
-    Ok(())
+    state
+        .application
+        .set_collection_custom_order(ersatzrs_app::commands::SetCollectionCustomOrder {
+            collection_id: id,
+            enabled: on,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Removes one or many rows from a collection. Mirrors
@@ -8392,27 +7389,14 @@ pub async fn remove_items_from_collection(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    if collection_item_ids.is_empty() {
-        return Ok(());
-    }
-    let mut tx = state.pool.begin().await?;
-    let mut removed = 0_u64;
-    for row_id in &collection_item_ids {
-        let result = sqlx::query(
-            r#"DELETE FROM "CollectionItem"
-               WHERE "CollectionId" = ? AND "Id" = ?"#,
-        )
-        .bind(collection_id)
-        .bind(row_id)
-        .execute(&mut *tx)
-        .await?;
-        removed += result.rows_affected();
-    }
-    tx.commit().await?;
-    if removed > 0 {
-        enqueue_collection_playout_refresh(&state, collection_id).await?;
-    }
-    Ok(())
+    state
+        .application
+        .remove_collection_rows(ersatzrs_app::commands::RemoveCollectionRows {
+            collection_id,
+            row_ids: collection_item_ids,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Persists the manual playback order. Mirrors
@@ -8427,29 +7411,14 @@ pub async fn update_collection_custom_order(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    if ordered_collection_item_ids.is_empty() {
-        return Ok(());
-    }
-    let mut tx = state.pool.begin().await?;
-    let mut updated = 0_u64;
-    for (idx, row_id) in ordered_collection_item_ids.iter().enumerate() {
-        let result = sqlx::query(
-            r#"UPDATE "CollectionItem"
-                  SET "CustomIndex" = ?
-                WHERE "CollectionId" = ? AND "Id" = ?"#,
-        )
-        .bind(i64::try_from(idx).unwrap_or(0))
-        .bind(collection_id)
-        .bind(row_id)
-        .execute(&mut *tx)
-        .await?;
-        updated += result.rows_affected();
-    }
-    tx.commit().await?;
-    if updated > 0 {
-        enqueue_collection_playout_refresh(&state, collection_id).await?;
-    }
-    Ok(())
+    state
+        .application
+        .update_collection_custom_order(ersatzrs_app::commands::UpdateCollectionCustomOrder {
+            collection_id,
+            ordered_row_ids: ordered_collection_item_ids,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -8457,31 +7426,18 @@ pub async fn list_collection_members(
     collection_id: i64,
 ) -> Result<Vec<CollectionMember>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT DISTINCT ci."MediaItemId" AS "MediaItemId", "Title", "Kind" FROM "CollectionItem" ci
-           JOIN (
-               SELECT m."Id" AS "Id", COALESCE(mm."Title", '') AS "Title", 'movie' AS "Kind"
-               FROM "Movie" m JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-               UNION ALL
-               SELECT s."Id" AS "Id", COALESCE(sm."Title", '') AS "Title", 'show' AS "Kind"
-               FROM "Show" s JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-           ) items ON items."Id" = ci."MediaItemId"
-           WHERE ci."CollectionId" = ?
-           ORDER BY "Title""#,
-    )
-    .bind(collection_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| CollectionMember {
-            media_item_id: r.try_get("MediaItemId").unwrap_or(0),
-            title: r.try_get("Title").unwrap_or_default(),
-            kind: r.try_get("Kind").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_collection_members(collection_id)
+        .await
+        .map_err(ServerFnError::new)?
+        .into_iter()
+        .map(|row| CollectionMember {
+            media_item_id: row.media_item_id,
+            title: row.title,
+            kind: row.kind,
         })
         .collect())
 }
@@ -8490,6 +7446,66 @@ pub async fn list_collection_members(
 mod tests {
     use super::*;
     use crate::admin::server_fns::search::SearchAllIds;
+    use ersatzrs_core::repositories::CollectionRepository;
+
+    #[test]
+    fn variant_browser_query_disables_the_search_contract_primary_only_default() {
+        use ersatzrs_core::search::{SearchDocument, SearchExpression};
+
+        let extra = SearchDocument {
+            media_item_id: 40,
+            media_kind: "other_video".to_owned(),
+            content_kind: ersatzrs_domain::ContentKind::Extra,
+            ..SearchDocument::default()
+        };
+
+        assert!(
+            !SearchExpression::parse(&media_card_search_query("other_video", "", false,))
+                .matches(&extra)
+        );
+        assert!(
+            SearchExpression::parse(&media_card_search_query("other_video", "", true,))
+                .matches(&extra)
+        );
+    }
+
+    #[test]
+    fn multi_collection_transport_mapping_preserves_item_fields() {
+        let item = MultiCollectionItemForm {
+            collection_id: Some(3),
+            smart_collection_id: None,
+            name: "Collection".to_owned(),
+            collection_type: 0,
+            use_custom_playback_order: true,
+            schedule_as_group: true,
+            playback_order: 2,
+        };
+
+        assert_eq!(
+            multi_collection_item_form(multi_collection_item(item.clone())),
+            item
+        );
+    }
+
+    #[test]
+    fn rerun_collection_transport_mapping_preserves_form_fields() {
+        let form = RerunCollectionForm {
+            id: 4,
+            name: "Reruns".to_owned(),
+            collection_type: 5,
+            collection_id: None,
+            media_item_id: None,
+            multi_collection_id: None,
+            smart_collection_id: Some(9),
+            first_run_playback_order: 2,
+            rerun_playback_order: 3,
+        };
+
+        assert_eq!(
+            rerun_collection_form(rerun_collection_admin(form.clone())),
+            form
+        );
+    }
 
     #[tokio::test]
     async fn save_collection_with_state_creates_manual_collection() {
@@ -9103,11 +8119,17 @@ mod tests {
             vec![101, 102]
         );
         assert_eq!(
-            playout_ids_using_smart_collection(&pool, 40).await.unwrap(),
+            ersatzrs_infra::repositories::SqliteCollectionRepository(pool.clone())
+                .playout_ids_using_smart(40)
+                .await
+                .unwrap(),
             vec![100, 101]
         );
         assert_eq!(
-            playout_ids_using_rerun_collection(&pool, 30).await.unwrap(),
+            ersatzrs_infra::repositories::SqliteCollectionRepository(pool.clone())
+                .playout_ids_using_rerun(30)
+                .await
+                .unwrap(),
             vec![100, 102]
         );
     }

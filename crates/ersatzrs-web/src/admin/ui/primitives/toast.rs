@@ -1,5 +1,7 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
+
 stylance::import_crate_style!(style, "src/admin/ui/primitives/toast.module.css");
 
 /// Severity level for a toast notification.
@@ -117,6 +119,25 @@ pub fn use_toast() -> ToastStore {
     #[cfg(not(target_arch = "wasm32"))]
     {
         use_context::<ToastStore>().unwrap_or_else(provide_toast_store)
+    }
+}
+
+/// Keep an interactive list usable after a refresh failure while surfacing
+/// the operational error through the shared, localized toast channel.
+pub fn load_or_notify<T, E>(result: Result<T, E>, toast: ToastStore) -> T
+where
+    T: Default,
+    E: std::fmt::Display,
+{
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            toast.push(
+                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                ToastSeverity::Error,
+            );
+            T::default()
+        }
     }
 }
 

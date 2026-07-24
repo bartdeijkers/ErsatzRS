@@ -16,6 +16,31 @@ pub struct LibraryScanTarget {
     pub should_sync_items: bool,
 }
 
+/// Cheap persisted revision used to invalidate admin media views.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MediaStateRevision {
+    pub latest_library_scan: Option<String>,
+    pub latest_path_scan: Option<String>,
+    pub unavailable_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminLibraryRow {
+    pub id: EntityId,
+    pub name: String,
+    pub kind: String,
+    pub media_kind: i64,
+    pub source_name: Option<String>,
+    pub media_source_id: EntityId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminExternalCollectionRow {
+    pub media_source_id: EntityId,
+    pub kind: String,
+    pub server_name: Option<String>,
+}
+
 #[async_trait]
 pub trait LibraryRepository: Send + Sync {
     async fn get_with_paths(&self, id: EntityId) -> Result<Library>;
@@ -31,4 +56,21 @@ pub trait LibraryRepository: Send + Sync {
         library_id: EntityId,
         show_id: EntityId,
     ) -> Result<bool>;
+
+    /// Load the persisted media-state revision without exposing storage details.
+    async fn media_state_revision_admin(&self) -> Result<MediaStateRevision>;
+
+    async fn list_admin(&self) -> Result<Vec<AdminLibraryRow>> {
+        Err(super::RepositoryError::unavailable(
+            "list admin libraries",
+            "repository adapter does not implement admin library reads",
+        ))
+    }
+
+    async fn list_external_collections_admin(&self) -> Result<Vec<AdminExternalCollectionRow>> {
+        Err(super::RepositoryError::unavailable(
+            "list external collections",
+            "repository adapter does not implement external collection reads",
+        ))
+    }
 }

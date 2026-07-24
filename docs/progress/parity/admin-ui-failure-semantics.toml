@@ -1,26 +1,28 @@
 feature    = 'Admin UI load, empty, and error-state semantics'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Pages/`, `$ERSATZTV_SRC/ErsatzTV.Application/` handler result and validation flows'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages`, `crates/ersatzrs-web/src/admin/server_fns`, `crates/ersatzrs-infra` typed read models'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
-In progress: the complete `/settings/*` and `/media/libraries` families now
-preserve operational and decode failures through typed infrastructure reads
-and render them through one localized, hydration-stable resource wrapper.
-Other admin families still contain ratcheted silent-result and row-decode
-defaults and remain visible debt for later Phase 7 slices.
+Ported: every production admin route preserves operational and decode failures
+through typed application/infrastructure reads and renders them through shared,
+localized, hydration-stable resource wrappers. Loading, ready, empty, and error
+states retain stable DOM placement; failed resources do not expose submittable
+forms or plausible empty/default data. Architecture lint prevents direct admin
+SQL, raw admin pool access, awaited error-to-default loaders, and row-decode
+defaults from returning.
 '''
 
 [[debt]]
 id          = 'server-errors-render-as-empty-or-default-state'
 description = 'Admin pages still default or discard awaited server-function failures through `unwrap_or*`, `.ok()`, silent `if let Ok`, or form-rendering `Suspense` fallbacks, so source, scheduling, troubleshooting, and other failures can render as plausible data.'
 discovered  = '2026-07-21'
-evidence    = 'The syntax-aware architecture ratchet began at 204 production occurrences and now reports 184 after migrating all seven settings pages plus `/media/libraries`. It counts awaited `unwrap_or_default`, `unwrap_or`, `unwrap_or_else`, and `.ok()`, silent awaited `if let Ok`, and form-rendering `Suspense` fallbacks.'
-resolved    = false
+evidence    = 'The syntax-aware architecture ratchet was tightened from 204 initial production occurrences (173 at p7b-05 start) to zero. It rejects awaited `unwrap_or_default`, `unwrap_or`, `unwrap_or_else`, and `.ok()`, silent awaited `if let Ok`, and form-rendering `Suspense` fallbacks. Closed-pool and decode-failure regressions plus representative Chromium/Firefox route coverage prove stable localized error states.'
+resolved    = true
 
 [[debt]]
 id          = 'admin-row-decode-defaults-hide-invalid-data'
 description = 'Direct SQL handlers frequently default failed `try_get` row decoding to zero identifiers, empty strings, or false values instead of returning the shared typed decode/storage error.'
 discovered  = '2026-07-21'
-evidence    = 'The new `row_decode_default` architecture ratchet began at 851 production `try_get(...).unwrap_or*` occurrences and now reports 843 after moving settings and library reads to typed infra models. Close the remaining debt through later typed read-model slices, including p7b-05.'
-resolved    = false
+evidence    = 'The row-decode architecture ratchet was tightened from 851 initial production `try_get(...).unwrap_or*` occurrences (833 at p7b-05 start) to zero. Infrastructure typed records now return decode/storage errors instead of inventing identifiers, strings, booleans, or collection entries, with focused invalid-row coverage.'
+resolved    = true

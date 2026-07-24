@@ -62,6 +62,44 @@ pub fn AdminErrorState(error: String) -> impl IntoView {
     }
 }
 
+/// Stable loading view for a server-backed resource.
+pub fn admin_loading_resource_view() -> AnyView {
+    view! {
+        <AdminResourceState state=Signal::derive(|| AdminLoadState::Loading)>
+            <AdminLoadingState/>
+        </AdminResourceState>
+    }
+    .into_any()
+}
+
+/// Render a successful server resource or a typed failure without replacing
+/// operational failure with an empty/default value.
+pub fn admin_result_view<T, E>(result: Result<T, E>, ready: impl FnOnce(T) -> AnyView) -> AnyView
+where
+    E: std::fmt::Display,
+{
+    match result {
+        Ok(value) => {
+            let content = ready(value);
+            view! {
+                <AdminResourceState state=Signal::derive(|| AdminLoadState::Ready)>
+                    {content}
+                </AdminResourceState>
+            }
+            .into_any()
+        }
+        Err(error) => {
+            let error = error.to_string();
+            view! {
+                <AdminResourceState state=Signal::derive(|| AdminLoadState::Failed)>
+                    <AdminErrorState error/>
+                </AdminResourceState>
+            }
+            .into_any()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

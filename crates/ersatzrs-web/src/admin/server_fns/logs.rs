@@ -30,14 +30,13 @@ pub async fn get_logs_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let saved =
-        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(LOGS_PAGE_SIZE_KEY)
-            .fetch_optional(&state.pool)
-            .await?;
-
-    Ok(saved
-        .and_then(|value| value.parse::<u32>().ok())
+    let saved = state
+        .application
+        .get_i32_setting(LOGS_PAGE_SIZE_KEY, 10)
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(u32::try_from(saved)
+        .ok()
         .filter(|value| *value > 0)
         .unwrap_or(10))
 }
@@ -117,7 +116,7 @@ pub async fn load_recent_log_entries(
     let page_size = page_size.max(1);
     let state = expect_context::<AppState>();
     crate::admin::server_fns::settings::save_config_value(
-        &state.pool,
+        state.application.ports().admin_settings(),
         LOGS_PAGE_SIZE_KEY,
         &page_size.to_string(),
     )

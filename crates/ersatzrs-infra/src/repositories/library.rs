@@ -1,7 +1,10 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{LibraryRepository, LibraryScanTarget, RepositoryError, Result};
+use ersatzrs_core::repositories::{
+    AdminExternalCollectionRow, AdminLibraryRow, LibraryRepository, LibraryScanTarget,
+    MediaStateRevision, RepositoryError, Result,
+};
 use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
 use sqlx::{Pool, Row};
 
@@ -179,6 +182,43 @@ impl LibraryRepository for SqliteLibraryRepository {
         .fetch_one(&self.0)
         .await
         .repository()
+    }
+
+    async fn media_state_revision_admin(&self) -> Result<MediaStateRevision> {
+        let latest_library_scan =
+            sqlx::query_scalar::<_, Option<String>>(r#"SELECT MAX("LastScan") FROM "Library""#)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+        let latest_path_scan =
+            sqlx::query_scalar::<_, Option<String>>(r#"SELECT MAX("LastScan") FROM "LibraryPath""#)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+        let unavailable_count = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "MediaItem" WHERE "State" IN (1, 2, 3)"#,
+        )
+        .fetch_one(&self.0)
+        .await
+        .repository()?;
+        Ok(MediaStateRevision {
+            latest_library_scan,
+            latest_path_scan,
+            unavailable_count: u64::try_from(unavailable_count).map_err(|error| {
+                RepositoryError::Decode {
+                    kind: "unavailable media count",
+                    value: error.to_string(),
+                }
+            })?,
+        })
+    }
+
+    async fn list_admin(&self) -> Result<Vec<AdminLibraryRow>> {
+        crate::admin_libraries::load_libraries(&self.0).await
+    }
+
+    async fn list_external_collections_admin(&self) -> Result<Vec<AdminExternalCollectionRow>> {
+        crate::admin_libraries::load_external_collections(&self.0).await
     }
 }
 

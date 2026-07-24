@@ -71,6 +71,27 @@ impl MediaItemRepository for SqliteMediaItemRepository {
         .repository()?;
         Ok(())
     }
+
+    async fn delete_admin(&self, ids: &[EntityId]) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(r#"DELETE FROM "MediaItem" WHERE "Id" IN ({placeholders})"#);
+        let mut query = sqlx::query(crate::db::assert_sql_safe(&sql));
+        for id in ids {
+            query = query.bind(*id);
+        }
+        Ok(query.execute(&self.0).await.repository()?.rows_affected())
+    }
+
+    async fn empty_trash_admin(&self) -> Result<u64> {
+        Ok(sqlx::query(r#"DELETE FROM "MediaItem" WHERE "State" = 1"#)
+            .execute(&self.0)
+            .await
+            .repository()?
+            .rows_affected())
+    }
 }
 
 fn map_media_item(row: &DbRow) -> Result<MediaItem> {

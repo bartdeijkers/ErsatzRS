@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(dead_code))]
+
 #[cfg(feature = "ssr")]
 use std::collections::BTreeMap;
 
@@ -228,7 +230,17 @@ pub async fn list_block_playout_options() -> Result<Vec<BlockPlayoutOption>, Ser
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_block_playout_options_with_pool(&state.pool).await
+    Ok(state
+        .application
+        .list_block_playout_options()
+        .await?
+        .into_iter()
+        .map(|row| BlockPlayoutOption {
+            playout_id: row.playout_id,
+            channel_number: row.channel_number,
+            channel_name: row.channel_name,
+        })
+        .collect())
 }
 
 #[server]
@@ -238,7 +250,20 @@ pub async fn list_blocks_for_playout(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_blocks_for_playout_with_pool(&state.pool, playout_id).await
+    Ok(state
+        .application
+        .list_blocks_for_playout(playout_id)
+        .await?
+        .into_iter()
+        .map(|row| TroubleshootingBlockRow {
+            id: row.id,
+            group_id: row.group_id,
+            group_name: row.group_name,
+            name: row.name,
+            minutes: row.minutes,
+            stop_scheduling: row.stop_scheduling,
+        })
+        .collect())
 }
 
 #[server]
@@ -249,7 +274,31 @@ pub async fn list_block_playout_history(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_block_playout_history_with_pool(&state.pool, playout_id, block_id).await
+    state
+        .application
+        .list_block_playout_history(playout_id, block_id)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let key_json =
+                serde_json::from_str::<serde_json::Value>(&row.key).map_err(ServerFnError::new)?;
+            Ok(BlockPlayoutHistoryRow {
+                id: row.id,
+                start: format_datetime(row.start),
+                finish: row.finish.map(format_datetime).unwrap_or_default(),
+                key: row.key,
+                details: row.details,
+                playback_order: playback_order_name(row.playback_order),
+                collection_type: key_json
+                    .get("CollectionType")
+                    .map(collection_type_name)
+                    .unwrap_or_default(),
+                collection_name: row.collection_name,
+                media_item_type: row.media_item_type,
+                media_item_title: row.media_item_title,
+            })
+        })
+        .collect()
 }
 
 #[server]
@@ -262,14 +311,27 @@ pub async fn load_playback_troubleshooting_context(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_playback_troubleshooting_context_with_pool(
-        &state.pool,
+    let read = state
+        .application
+        .load_playback_troubleshooting(media_item_id, channel_id)
+        .await?;
+    let mut context = playback_context_from_admin(
+        read,
         media_item_id,
         channel_id,
-        preferred_audio_title,
+        &preferred_audio_title,
         selected_subtitle_id,
-    )
-    .await
+    )?;
+    if media_item_id > 0 {
+        let info = state
+            .application
+            .get_media_item_info(media_item_id)
+            .await?
+            .ok_or_else(|| ServerFnError::new("Media item does not exist"))?;
+        context.media_info_json =
+            crate::admin::server_fns::media_browser::media_item_info_json_from_admin(info)?;
+    }
+    Ok(context)
 }
 
 #[server]
@@ -293,22 +355,23 @@ pub async fn load_mpeg_troubleshooting_context(
 }
 
 #[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
 pub async fn load_troubleshooting_report_with_state(
     state: &crate::host::state::AppState,
 ) -> Result<TroubleshootingReport, ServerFnError> {
     use ersatzrs_core::health::HealthCheckStatus;
-    use ersatzrs_infra::health::make_health_check_service;
 
     let runtime = state.ffmpeg_runtime.read().await.clone();
-    let ffmpeg_settings = load_ffmpeg_settings(&state.pool, &runtime.capabilities).await?;
-    let health_service = make_health_check_service(
-        state.pool.clone(),
-        state.ffmpeg_runtime.read().await.clone(),
-        state.system_startup.schema_status.clone(),
-    );
-    let health = health_service
-        .perform_health_checks()
-        .await
+    let report_data = state.application.load_troubleshooting_report_data().await?;
+    let ffmpeg_settings = ffmpeg_settings_summary_from_application(
+        report_data.ffmpeg_settings,
+        &runtime.capabilities,
+    )?;
+    let health = state
+        .application
+        .run_admin_health_checks()
+        .await?
+        .results
         .into_iter()
         .filter(|result| {
             matches!(
@@ -331,8 +394,32 @@ pub async fn load_troubleshooting_report_with_state(
         cpus: cpu_summary(),
         health,
         ffmpeg_settings,
-        ffmpeg_profiles: load_ffmpeg_profiles(&state.pool).await?,
-        channels: load_channels(&state.pool).await?,
+        ffmpeg_profiles: report_data
+            .ffmpeg_profiles
+            .into_iter()
+            .map(|profile| FfmpegProfileSummary {
+                id: profile.id,
+                name: profile.name,
+                hardware_acceleration: profile.hardware_acceleration,
+                video_format: profile.video_format,
+                audio_format: profile.audio_format,
+                resolution_id: profile.resolution_id,
+            })
+            .collect(),
+        channels: report_data
+            .channels
+            .into_iter()
+            .map(|channel| ChannelSummary {
+                id: channel.id,
+                number: channel.number,
+                name: channel.name,
+                ffmpeg_profile_id: channel.ffmpeg_profile_id,
+                streaming_mode: channel.streaming_mode,
+                stream_selector_mode: channel.stream_selector_mode,
+                stream_selector: channel.stream_selector,
+                is_enabled: channel.is_enabled,
+            })
+            .collect(),
     };
 
     Ok(TroubleshootingReport {
@@ -391,7 +478,16 @@ pub async fn load_mpeg_troubleshooting_context_with_state(
     duration_seconds: u64,
     retain_raw_sample: bool,
 ) -> Result<MpegTroubleshootingContext, ServerFnError> {
-    let channels = load_mpeg_troubleshooting_channels(&state.pool).await?;
+    let channels = state
+        .application
+        .list_mpeg_troubleshooting_channels()
+        .await?
+        .into_iter()
+        .map(|channel| MpegTroubleshootingChannel {
+            number: channel.number,
+            name: channel.name,
+        })
+        .collect();
     let selected_channel_number = channel_number.trim().to_owned();
     let selected_mode = normalize_mpeg_mode(&mode);
     let duration_seconds =
@@ -456,7 +552,7 @@ pub async fn load_mpeg_troubleshooting_context_with_state(
     Ok(MpegTroubleshootingContext::default())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_mpeg_troubleshooting_channels(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MpegTroubleshootingChannel>, ServerFnError> {
@@ -949,6 +1045,34 @@ struct FfmpegProfileSummary {
 }
 
 #[cfg(feature = "ssr")]
+fn ffmpeg_settings_summary_from_application(
+    form: ersatzrs_app::queries::FfmpegSettings,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> Result<FfmpegSettingsSummary, ServerFnError> {
+    Ok(FfmpegSettingsSummary {
+        ffmpeg_path: form.ffmpeg_path,
+        ffprobe_path: form.ffprobe_path,
+        default_ffmpeg_profile_id: i32::try_from(form.default_ffmpeg_profile_id)
+            .map_err(ServerFnError::new)?,
+        save_reports: form.save_reports,
+        use_embedded_subtitles: form.use_embedded_subtitles,
+        extract_embedded_subtitles: form.extract_embedded_subtitles,
+        preferred_audio_language_code: form.preferred_audio_language_code,
+        hls_segmenter_idle_timeout: form.hls_segmenter_idle_timeout,
+        work_ahead_segmenter_limit: form.work_ahead_segmenter_limit,
+        active_transcode_limit: form.active_transcode_limit,
+        active_transcode_capacity:
+            crate::admin::server_fns::settings::active_transcode_capacity_status(
+                form.active_transcode_limit,
+                capabilities,
+            ),
+        initial_segment_count: form.initial_segment_count,
+        hls_direct_output_format: form.hls_direct_output_format,
+        default_mpeg_ts_script: form.default_mpeg_ts_script,
+    })
+}
+
+#[cfg(all(test, feature = "ssr"))]
 async fn load_ffmpeg_settings(
     pool: &ersatzrs_infra::db::DbPool,
     capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
@@ -1027,7 +1151,7 @@ async fn load_ffmpeg_settings(
     })
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_channels(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<ChannelSummary>, ServerFnError> {
@@ -1057,7 +1181,7 @@ async fn load_channels(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_ffmpeg_profiles(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<FfmpegProfileSummary>, ServerFnError> {
@@ -1085,7 +1209,7 @@ async fn load_ffmpeg_profiles(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_string(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
@@ -1099,7 +1223,7 @@ async fn load_string(
     Ok(value.unwrap_or_else(|| default.to_owned()))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_i32(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
@@ -1111,7 +1235,7 @@ async fn load_i32(
         .unwrap_or(default))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_bool(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
@@ -1462,7 +1586,7 @@ fn validate_sequential_schedule_file_impl(
     Ok(YamlValidationResult::default())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn list_block_playout_options_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<BlockPlayoutOption>, ServerFnError> {
@@ -1491,7 +1615,7 @@ async fn list_block_playout_options_with_pool(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn list_blocks_for_playout_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     playout_id: i64,
@@ -1531,7 +1655,7 @@ async fn list_blocks_for_playout_with_pool(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn list_block_playout_history_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     playout_id: i64,
@@ -1606,7 +1730,7 @@ fn format_datetime(value: String) -> String {
         .unwrap_or(value)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn key_json_from_str(key: &str) -> serde_json::Value {
     serde_json::from_str::<serde_json::Value>(key).unwrap_or(serde_json::Value::Null)
 }
@@ -1639,7 +1763,7 @@ fn collection_type_name(value: &serde_json::Value) -> String {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn collection_name_from_key(
     pool: &ersatzrs_infra::db::DbPool,
     key_json: &serde_json::Value,
@@ -1673,7 +1797,7 @@ async fn collection_name_from_key(
     Ok(String::new())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn media_item_summary(
     pool: &ersatzrs_infra::db::DbPool,
     id: i64,
@@ -1727,6 +1851,96 @@ async fn media_item_summary(
 }
 
 #[cfg(feature = "ssr")]
+fn playback_context_from_admin(
+    read: ersatzrs_app::queries::PlaybackTroubleshootingReadModel,
+    media_item_id: i64,
+    channel_id: i64,
+    preferred_audio_title: &str,
+    selected_subtitle_id: i64,
+) -> Result<PlaybackTroubleshootingContext, ServerFnError> {
+    let options = |rows: Vec<ersatzrs_core::repositories::TroubleshootingOptionAdmin>| {
+        rows.into_iter()
+            .map(|row| PlaybackTroubleshootingOption {
+                id: row.id,
+                name: row.name,
+            })
+            .collect()
+    };
+    let default_profile_id = read
+        .data
+        .ffmpeg_profiles
+        .first()
+        .map_or(0, |profile| profile.id);
+    let ffmpeg_profiles = options(read.data.ffmpeg_profiles);
+    let watermarks = options(read.data.watermarks);
+    let graphics_elements = options(read.data.graphics_elements);
+    if media_item_id > 0 {
+        let media = read
+            .data
+            .media
+            .ok_or_else(|| ServerFnError::new("Media item does not exist"))?;
+        return Ok(PlaybackTroubleshootingContext {
+            mode: PlaybackTroubleshootingMode::MediaItem,
+            media_item_id,
+            channel_id: 0,
+            preferred_audio_title: preferred_audio_title.trim().to_owned(),
+            selected_subtitle_id: selected_subtitle_id.max(0),
+            title: media.title,
+            kind: split_pascal_case(&media.kind),
+            duration_seconds: parse_duration_seconds(&media.duration),
+            selected_ffmpeg_profile_id: default_profile_id,
+            ffmpeg_profiles,
+            stream_selectors: read.stream_selectors,
+            subtitles: read
+                .data
+                .subtitles
+                .into_iter()
+                .map(|subtitle| PlaybackTroubleshootingSubtitle {
+                    id: subtitle.id,
+                    language: subtitle.language,
+                    title: subtitle.title,
+                    codec: subtitle.codec,
+                })
+                .collect(),
+            watermarks,
+            graphics_elements,
+            media_info_json: String::new(),
+        });
+    }
+    if channel_id > 0 {
+        let channel = read
+            .data
+            .channel
+            .ok_or_else(|| ServerFnError::new("Channel does not exist"))?;
+        return Ok(PlaybackTroubleshootingContext {
+            mode: PlaybackTroubleshootingMode::Channel,
+            media_item_id: 0,
+            channel_id,
+            preferred_audio_title: String::new(),
+            selected_subtitle_id: 0,
+            title: channel.name,
+            kind: "Channel".to_owned(),
+            duration_seconds: 0,
+            selected_ffmpeg_profile_id: channel.ffmpeg_profile_id,
+            ffmpeg_profiles,
+            stream_selectors: read.stream_selectors,
+            subtitles: Vec::new(),
+            watermarks,
+            graphics_elements,
+            media_info_json: String::new(),
+        });
+    }
+    Ok(PlaybackTroubleshootingContext {
+        mode: PlaybackTroubleshootingMode::Missing,
+        ffmpeg_profiles,
+        stream_selectors: read.stream_selectors,
+        watermarks,
+        graphics_elements,
+        ..PlaybackTroubleshootingContext::default()
+    })
+}
+
+#[cfg(all(test, feature = "ssr"))]
 pub async fn load_playback_troubleshooting_context_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     media_item_id: i64,
@@ -1761,13 +1975,6 @@ pub async fn load_playback_troubleshooting_context_with_pool(
         let Some(row) = load_playback_media_item_row(pool, media_item_id).await? else {
             return Err(ServerFnError::new("Media item does not exist"));
         };
-        let media_info_json =
-            crate::admin::server_fns::media_browser::get_media_item_info_json_with_pool(
-                pool,
-                media_item_id,
-            )
-            .await
-            .unwrap_or_default();
         let subtitles = load_playback_subtitles(pool, media_item_id).await?;
         return Ok(PlaybackTroubleshootingContext {
             mode: PlaybackTroubleshootingMode::MediaItem,
@@ -1784,7 +1991,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             subtitles,
             watermarks,
             graphics_elements,
-            media_info_json,
+            media_info_json: String::new(),
         });
     }
 
@@ -1823,7 +2030,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
     })
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[derive(Debug)]
 struct PlaybackMediaItemRow {
     kind: String,
@@ -1831,14 +2038,14 @@ struct PlaybackMediaItemRow {
     duration: String,
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[derive(Debug)]
 struct PlaybackChannelRow {
     name: String,
     ffmpeg_profile_id: i64,
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_playback_media_item_row(
     pool: &ersatzrs_infra::db::DbPool,
     media_item_id: i64,
@@ -1901,7 +2108,7 @@ async fn load_playback_media_item_row(
     }))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_playback_channel_row(
     pool: &ersatzrs_infra::db::DbPool,
     channel_id: i64,
@@ -1923,7 +2130,7 @@ async fn load_playback_channel_row(
     }))
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_playback_options(
     pool: &ersatzrs_infra::db::DbPool,
     sql: &'static str,
@@ -1940,7 +2147,7 @@ async fn load_playback_options(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_stream_selectors() -> Vec<String> {
     let folder = ersatzrs_infra::file_system_layout::data_path("channel-stream-selectors");
     let mut selectors = Vec::new();
@@ -1965,7 +2172,7 @@ async fn load_stream_selectors() -> Vec<String> {
     selectors
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_playback_subtitles(
     pool: &ersatzrs_infra::db::DbPool,
     media_item_id: i64,

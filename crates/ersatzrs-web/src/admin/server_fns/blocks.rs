@@ -8,7 +8,9 @@
 //! - Autocomplete helpers → [`search_collections_for_block`],
 //!   [`search_multi_collections_for_block`], [`search_smart_collections_for_block`],
 //!   [`search_shows_for_block`], [`search_seasons_for_block`]
-#[cfg(feature = "ssr")]
+#![cfg_attr(test, allow(dead_code))]
+
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_infra::db::DbPool;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -16,12 +18,12 @@ use serde::{Deserialize, Serialize};
 use super::schedules::SmartShuffleForm;
 
 #[cfg(feature = "ssr")]
-use super::schedules::{
-    persist_smart_shuffle_attachment_tx, smart_shuffle_form_from_policy,
-    smart_shuffle_policy_from_form, validate_smart_shuffle_form,
-};
+use super::schedules::{smart_shuffle_form_from_policy, smart_shuffle_policy_from_form};
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
+use super::schedules::{persist_smart_shuffle_attachment_tx, validate_smart_shuffle_form};
+
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_core::scheduling::block_item_smart_shuffle_config_key;
 
 #[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
@@ -160,6 +162,100 @@ pub struct PlayoutPreviewRow {
     pub duration: String,
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn block_form_into_command(
+    form: BlockWithItemsForm,
+) -> ersatzrs_app::commands::SaveBlock {
+    ersatzrs_app::commands::SaveBlock {
+        id: form.id,
+        group_id: form.group_id,
+        name: form.name,
+        minutes: form.minutes,
+        stop_scheduling: form.stop_scheduling,
+        items: form
+            .items
+            .into_iter()
+            .map(|item| ersatzrs_app::commands::BlockItemAdminForm {
+                id: item.id,
+                index: item.index,
+                collection_type: item.collection_type,
+                collection_id: item.collection_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                playlist_id: item.playlist_id,
+                media_item_id: item.media_item_id,
+                search_title: item.search_title,
+                search_query: item.search_query,
+                playback_order: item.playback_order,
+                smart_shuffle: smart_shuffle_policy_from_form(&item.smart_shuffle),
+                inherited_legacy_smart_shuffle: item.smart_shuffle.inherited_legacy,
+                include_in_program_guide: item.include_in_program_guide,
+                disable_watermarks: item.disable_watermarks,
+                collection_name: item.collection_name,
+                watermark_ids: item.watermark_ids,
+                graphics_element_ids: item.graphics_element_ids,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn block_form_from_admin(
+    block: ersatzrs_core::repositories::BlockAdminRow,
+) -> BlockForm {
+    BlockForm {
+        id: block.id,
+        group_id: block.group_id,
+        group_name: block.group_name,
+        name: block.name,
+        minutes: block.minutes,
+        stop_scheduling: stop_scheduling_value(block.stop_scheduling),
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn block_item_form_from_admin(
+    item: ersatzrs_app::commands::BlockItemAdminForm,
+) -> BlockItemForm {
+    let inherited = item.inherited_legacy_smart_shuffle;
+    let mut smart_shuffle = smart_shuffle_form_from_policy(&item.smart_shuffle);
+    smart_shuffle.inherited_legacy = inherited;
+    BlockItemForm {
+        id: item.id,
+        index: item.index,
+        collection_type: item.collection_type,
+        collection_id: item.collection_id,
+        multi_collection_id: item.multi_collection_id,
+        smart_collection_id: item.smart_collection_id,
+        playlist_id: item.playlist_id,
+        media_item_id: item.media_item_id,
+        search_title: item.search_title,
+        search_query: item.search_query,
+        playback_order: item.playback_order,
+        smart_shuffle,
+        include_in_program_guide: item.include_in_program_guide,
+        disable_watermarks: item.disable_watermarks,
+        collection_name: item.collection_name,
+        watermark_ids: item.watermark_ids,
+        graphics_element_ids: item.graphics_element_ids,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn block_editor_options_from_admin(
+    options: ersatzrs_core::repositories::BlockEditorOptionsAdmin,
+) -> BlockEditorOptions {
+    BlockEditorOptions {
+        collections: map_block_editor_options(options.collections),
+        shows: map_block_editor_options(options.shows),
+        seasons: map_block_editor_options(options.seasons),
+        multi_collections: map_block_editor_options(options.multi_collections),
+        smart_collections: map_block_editor_options(options.smart_collections),
+        watermarks: map_block_editor_options(options.watermarks),
+        graphics_elements: map_block_editor_options(options.graphics_elements),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Block groups
 // ---------------------------------------------------------------------------
@@ -167,22 +263,22 @@ pub struct PlayoutPreviewRow {
 #[server]
 pub async fn list_block_groups() -> Result<Vec<BlockGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "BlockGroup" ORDER BY "Name""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| BlockGroupRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
+    state
+        .application
+        .list_block_groups()
+        .await
+        .map(|groups| {
+            groups
+                .into_iter()
+                .map(|group| BlockGroupRow {
+                    id: group.id,
+                    name: group.name,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -190,26 +286,22 @@ pub async fn create_block_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let name = validate_block_group_name(&state.pool, &name).await?;
-
-    let result = sqlx::query(r#"INSERT INTO "BlockGroup" ("Name") VALUES (?)"#)
-        .bind(&name)
-        .execute(&state.pool)
-        .await?;
-    let id = ersatzrs_infra::db::last_insert_id(result);
-
-    Ok(id)
+    state
+        .application
+        .create_block_group(ersatzrs_app::commands::CreateBlockGroup { name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
 pub async fn delete_block_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "BlockGroup" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_block_group(ersatzrs_app::commands::DeleteBlockGroup { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -219,50 +311,26 @@ pub async fn delete_block_group(id: i64) -> Result<(), ServerFnError> {
 #[server]
 pub async fn list_blocks(search: String) -> Result<Vec<BlockRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let like = format!("%{}%", search.trim());
-
-    let rows = sqlx::query(
-        r#"SELECT b."Id",
-                  b."BlockGroupId",
-                  COALESCE(bg."Name", '') AS "GroupName",
-                  COALESCE(b."Name", '') AS "Name",
-                  b."Minutes",
-                  b."StopScheduling"
-           FROM "Block" b
-           JOIN "BlockGroup" bg ON bg."Id" = b."BlockGroupId"
-           WHERE (? = '' OR b."Name" LIKE ?)
-           UNION ALL
-           SELECT -1 AS "Id",
-                  bg."Id" AS "BlockGroupId",
-                  COALESCE(bg."Name", '') AS "GroupName",
-                  '' AS "Name",
-                  0 AS "Minutes",
-                  0 AS "StopScheduling"
-           FROM "BlockGroup" bg
-           WHERE NOT EXISTS (SELECT 1 FROM "Block" b WHERE b."BlockGroupId" = bg."Id")
-             AND ? = ''
-           ORDER BY "GroupName", "Name""#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .bind(search.trim())
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| BlockRow {
-            id: r.try_get("Id").unwrap_or(0),
-            group_id: r.try_get("BlockGroupId").unwrap_or(0),
-            group_name: r.try_get("GroupName").unwrap_or_default(),
-            name: r.try_get("Name").unwrap_or_default(),
-            minutes: r.try_get("Minutes").unwrap_or(15),
-            stop_scheduling: r.try_get("StopScheduling").unwrap_or(0),
+    state
+        .application
+        .list_blocks(&search)
+        .await
+        .map(|blocks| {
+            blocks
+                .into_iter()
+                .map(|block| BlockRow {
+                    id: block.id,
+                    group_id: block.group_id,
+                    group_name: block.group_name,
+                    name: block.name,
+                    minutes: block.minutes,
+                    stop_scheduling: stop_scheduling_value(block.stop_scheduling),
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -270,19 +338,11 @@ pub async fn create_block(group_id: i64, name: String) -> Result<i64, ServerFnEr
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let name = validate_block_name(&state.pool, group_id, None, &name).await?;
-
-    let result = sqlx::query(
-        r#"INSERT INTO "Block" ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
-           VALUES (?, ?, 30, 0, CURRENT_TIMESTAMP)"#,
-    )
-    .bind(group_id)
-    .bind(&name)
-    .execute(&state.pool)
-    .await?;
-    let id = ersatzrs_infra::db::last_insert_id(result);
-
-    Ok(id)
+    state
+        .application
+        .create_block(ersatzrs_app::commands::CreateBlock { group_id, name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -295,10 +355,18 @@ pub async fn copy_block(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    copy_block_with_pool(&state.pool, block_id, new_group_id, &new_name).await
+    state
+        .application
+        .copy_block(ersatzrs_app::commands::CopyBlock {
+            block_id,
+            new_group_id,
+            name: new_name,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 #[allow(clippy::too_many_lines)]
 async fn copy_block_with_pool(
     pool: &DbPool,
@@ -436,28 +504,18 @@ async fn copy_block_with_pool(
 pub async fn delete_block(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    let item_ids: Vec<i64> =
-        sqlx::query_scalar(r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ?"#)
-            .bind(id)
-            .fetch_all(&state.pool)
-            .await?;
-    for item_id in item_ids {
-        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(block_item_smart_shuffle_config_key(item_id))
-            .execute(&state.pool)
-            .await?;
-    }
-    sqlx::query(r#"DELETE FROM "Block" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_block(ersatzrs_app::commands::DeleteBlock { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
 // Block editor
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 fn parse_id_list(s: Option<String>) -> Vec<i64> {
     s.unwrap_or_default()
         .split(',')
@@ -466,7 +524,8 @@ fn parse_id_list(s: Option<String>) -> Vec<i64> {
         .collect()
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
+#[allow(dead_code)]
 async fn validate_block_group_name(pool: &DbPool, name: &str) -> Result<String, ServerFnError> {
     let name = name.trim();
     if name.is_empty() {
@@ -488,7 +547,7 @@ async fn validate_block_group_name(pool: &DbPool, name: &str) -> Result<String, 
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_block_name(
     pool: &DbPool,
     group_id: i64,
@@ -535,6 +594,7 @@ async fn validate_block_name(
     Ok(name.to_string())
 }
 
+#[cfg(test)]
 fn validate_block_duration(minutes: i32) -> Result<(), ServerFnError> {
     if minutes > 0 && minutes % 5 == 0 && minutes <= 24 * 60 {
         Ok(())
@@ -545,6 +605,7 @@ fn validate_block_duration(minutes: i32) -> Result<(), ServerFnError> {
     }
 }
 
+#[cfg(test)]
 fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
     match item.collection_type {
         collection_type::COLLECTION if item.collection_id.is_none() => Err(ServerFnError::new(
@@ -614,7 +675,7 @@ fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_block_form(
     pool: &DbPool,
     form: &BlockWithItemsForm,
@@ -645,10 +706,24 @@ pub async fn get_block(id: i64) -> Result<Option<BlockForm>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_block_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_block(id)
+        .await
+        .map(|block| {
+            block.map(|block| BlockForm {
+                id: block.id,
+                group_id: block.group_id,
+                group_name: block.group_name,
+                name: block.name,
+                minutes: block.minutes,
+                stop_scheduling: stop_scheduling_value(block.stop_scheduling),
+            })
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_block_with_pool(
     pool: &DbPool,
     id: i64,
@@ -685,10 +760,43 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_block_items_with_pool(&state.pool, block_id).await
+    state
+        .application
+        .get_block_items(block_id)
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| {
+                    let inherited = item.inherited_legacy_smart_shuffle;
+                    let mut smart_shuffle = smart_shuffle_form_from_policy(&item.smart_shuffle);
+                    smart_shuffle.inherited_legacy = inherited;
+                    BlockItemForm {
+                        id: item.id,
+                        index: item.index,
+                        collection_type: item.collection_type,
+                        collection_id: item.collection_id,
+                        multi_collection_id: item.multi_collection_id,
+                        smart_collection_id: item.smart_collection_id,
+                        playlist_id: item.playlist_id,
+                        media_item_id: item.media_item_id,
+                        search_title: item.search_title,
+                        search_query: item.search_query,
+                        playback_order: item.playback_order,
+                        smart_shuffle,
+                        include_in_program_guide: item.include_in_program_guide,
+                        disable_watermarks: item.disable_watermarks,
+                        collection_name: item.collection_name,
+                        watermark_ids: item.watermark_ids,
+                        graphics_element_ids: item.graphics_element_ids,
+                    }
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_block_items_with_pool(
     pool: &DbPool,
     block_id: i64,
@@ -775,7 +883,7 @@ pub async fn get_block_items_with_pool(
     Ok(items)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn block_item_form_from_row(row: &ersatzrs_infra::db::DbRow) -> BlockItemForm {
     use sqlx::Row;
 
@@ -814,10 +922,14 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_block_with_pool(&state.pool, form).await
+    state
+        .application
+        .save_block(block_form_into_command(form))
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_block_with_pool(
     pool: &DbPool,
     form: BlockWithItemsForm,
@@ -1057,35 +1169,14 @@ pub async fn search_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "Collection"
-           WHERE "Name" LIKE ?
-           ORDER BY "Name"
-           LIMIT 10"#,
+    search_block_options(
+        &state,
+        ersatzrs_app::queries::BlockOptionKind::Collection,
+        &prefix,
     )
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Name").unwrap_or_default(),
-            )
-        })
-        .collect())
+    .await
 }
 
 #[server]
@@ -1093,35 +1184,14 @@ pub async fn search_smart_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "SmartCollection"
-           WHERE "Name" LIKE ?
-           ORDER BY "Name"
-           LIMIT 10"#,
+    search_block_options(
+        &state,
+        ersatzrs_app::queries::BlockOptionKind::SmartCollection,
+        &prefix,
     )
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Name").unwrap_or_default(),
-            )
-        })
-        .collect())
+    .await
 }
 
 #[server]
@@ -1129,118 +1199,67 @@ pub async fn search_multi_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "MultiCollection"
-           WHERE "Name" LIKE ?
-           ORDER BY "Name"
-           LIMIT 10"#,
+    search_block_options(
+        &state,
+        ersatzrs_app::queries::BlockOptionKind::MultiCollection,
+        &prefix,
     )
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Name").unwrap_or_default(),
-            )
-        })
-        .collect())
+    .await
 }
 
 #[server]
 pub async fn search_shows_for_block(prefix: String) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Title"
-           FROM "Show" s
-           JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-           WHERE sm."Title" LIKE ?
-           ORDER BY sm."Title"
-           LIMIT 10"#,
+    search_block_options(
+        &state,
+        ersatzrs_app::queries::BlockOptionKind::Show,
+        &prefix,
     )
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get("Title").unwrap_or_default(),
-            )
-        })
-        .collect())
+    .await
 }
 
 #[server]
 pub async fn search_seasons_for_block(prefix: String) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let prefix = prefix.trim();
-    if prefix.is_empty() {
-        return Ok(vec![]);
-    }
-    let like = format!("{prefix}%");
-
-    let rows = sqlx::query(
-        r#"SELECT se."Id",
-                  COALESCE(sm."Title", '') AS "Title",
-                  se."SeasonNumber"
-           FROM "Season" se
-           JOIN "Show" sh ON sh."Id" = se."ShowId"
-           JOIN "ShowMetadata" sm ON sm."ShowId" = sh."Id"
-           WHERE sm."Title" LIKE ?
-           ORDER BY sm."Title", se."SeasonNumber"
-           LIMIT 20"#,
+    search_block_options(
+        &state,
+        ersatzrs_app::queries::BlockOptionKind::Season,
+        &prefix,
     )
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                season_label(
-                    &r.try_get::<String, _>("Title").unwrap_or_default(),
-                    r.try_get("SeasonNumber").unwrap_or(0),
-                ),
-            )
-        })
-        .collect())
+    .await
 }
 
+#[cfg(feature = "ssr")]
+async fn search_block_options(
+    state: &crate::host::state::AppState,
+    kind: ersatzrs_app::queries::BlockOptionKind,
+    prefix: &str,
+) -> Result<Vec<(i64, String)>, ServerFnError> {
+    state
+        .application
+        .search_block_options(kind, prefix)
+        .await
+        .map(|options| {
+            options
+                .into_iter()
+                .map(|option| (option.id, option.name))
+                .collect()
+        })
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(test)]
 fn season_label(title: &str, season_number: i64) -> String {
     format!("{title} S{season_number:02}")
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_block_options(
     pool: &DbPool,
     sql: &str,
@@ -1259,7 +1278,7 @@ async fn load_block_options(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn copy_block_item_join_rows(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     table: &str,
@@ -1284,10 +1303,36 @@ pub async fn load_block_editor_options() -> Result<BlockEditorOptions, ServerFnE
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_block_editor_options_with_pool(&state.pool).await
+    state
+        .application
+        .load_block_editor_options()
+        .await
+        .map(|options| BlockEditorOptions {
+            collections: map_block_editor_options(options.collections),
+            shows: map_block_editor_options(options.shows),
+            seasons: map_block_editor_options(options.seasons),
+            multi_collections: map_block_editor_options(options.multi_collections),
+            smart_collections: map_block_editor_options(options.smart_collections),
+            watermarks: map_block_editor_options(options.watermarks),
+            graphics_elements: map_block_editor_options(options.graphics_elements),
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
+fn map_block_editor_options(
+    options: Vec<ersatzrs_core::repositories::BlockEditorOptionAdmin>,
+) -> Vec<BlockEditorOption> {
+    options
+        .into_iter()
+        .map(|option| BlockEditorOption {
+            id: option.id,
+            name: option.name,
+        })
+        .collect()
+}
+
+#[cfg(all(test, feature = "ssr"))]
 pub async fn load_block_editor_options_with_pool(
     pool: &DbPool,
 ) -> Result<BlockEditorOptions, ServerFnError> {
@@ -1358,6 +1403,13 @@ pub fn stop_scheduling_label(v: i32) -> &'static str {
         "Before Duration End"
     } else {
         "After Duration End"
+    }
+}
+
+fn stop_scheduling_value(value: ersatzrs_domain::BlockStopScheduling) -> i32 {
+    match value {
+        ersatzrs_domain::BlockStopScheduling::AfterDurationEnd => 0,
+        ersatzrs_domain::BlockStopScheduling::BeforeDurationEnd => 1,
     }
 }
 

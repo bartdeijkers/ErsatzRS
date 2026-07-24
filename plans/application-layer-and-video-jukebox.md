@@ -199,19 +199,25 @@ must not depend on concrete application services or storage.
 
 ### P7B-04 — Real block-preview vertical slice
 
-- Port the upstream temporary Template/Playout/reference-data construction.
-- Invoke the real block preview builder in Reset mode and enrich its actual
-  playout rows.
-- Remove collection-type-specific preview SQL, fabricated search rows, and
-  empty-on-error behavior.
+- Complete (2026-07-24). The application query constructs upstream-shaped
+  temporary Template/Playout/reference state, invokes the production block
+  builder in Reset mode, and returns its actual enriched rows.
+- Collection-specific preview SQL, fabricated search rows, and empty-on-error
+  behavior are removed; the unsaved editor exposes stable localized resource
+  states.
 
 ### P7B-05 — Remaining admin use cases and queries
 
-- Migrate collection, playlist, channel, schedule, settings, Trakt, and media
-  mutation slices with all validation, persistence, and side effects intact.
-- Migrate read models until admin transport adapters no longer depend on a raw
-  database pool.
-- Keep Leptos server-function names and serialized DTOs stable during moves.
+- Complete (2026-07-24). Collection, playlist, channel, schedule, settings,
+  Trakt, media, and supporting admin/API handlers are thin adapters over
+  application commands and queries.
+- Core ports and records are storage-neutral; infrastructure owns SQL, typed
+  row decoding, transaction boundaries, and SQLite/MySQL differences. The
+  composition root is the only web layer that constructs concrete adapters.
+- Architecture lint reports zero direct admin SQL, raw admin-pool consumers,
+  server-error defaults, and row-decode defaults. Leptos server-function
+  names, serialized DTOs, validation, persistence, and side effects remain
+  stable.
 
 ## Phase 7C — Secondary stopgap closeout and scaling refactors
 

@@ -28,10 +28,12 @@ use crate::admin::server_fns::schedules::{
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/schedules.module.css");
-
-type ScheduleInitialResourceValue = ((u32, u32), (Vec<ScheduleListRow>, u64));
 
 // Smart Shuffle is an editor-only selection. Persisted schedules continue to
 // use ErsatzTV-compatible Shuffle plus the additive Smart Shuffle policy.
@@ -41,22 +43,24 @@ const PLAYBACK_ORDER_SMART_SHUFFLE: i32 = -1;
 pub fn SchedulesPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<ScheduleInitialResourceValue> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async move {
-            let sizes = get_schedules_page_size().await.unwrap_or((10, 10));
-            let rows = list_schedules(String::new(), 0, sizes.0)
-                .await
-                .unwrap_or_default();
-            (sizes, rows)
+            match get_schedules_page_size().await {
+                Ok(sizes) => list_schedules(String::new(), 0, sizes.0)
+                    .await
+                    .map(|rows| (sizes, rows)),
+                Err(error) => Err(error),
+            }
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|((initial_page_size, initial_detail_page_size), (initial_rows, initial_total))| {
-                    view! {
+                initial.get().map(|result| admin_result_view(
+                    result,
+                    |((initial_page_size, initial_detail_page_size), (initial_rows, initial_total))| view! {
                         <SchedulesIsland
                             initial_error=error.clone()
                             initial_page_size=initial_page_size
@@ -64,8 +68,8 @@ pub fn SchedulesPage() -> impl IntoView {
                             initial_rows=initial_rows
                             initial_total=initial_total
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }
@@ -90,9 +94,11 @@ fn SchedulesIsland(
     let copy_open = RwSignal::new(false);
     let copy_target = RwSignal::new(None::<ScheduleListRow>);
     let copy_error = RwSignal::new(String::new());
+    let load_toast = use_toast();
 
-    let saved_page_sizes: LocalResource<(u32, u32)> =
-        LocalResource::new(|| async { get_schedules_page_size().await.unwrap_or((10, 10)) });
+    let saved_page_sizes: LocalResource<(u32, u32)> = LocalResource::new(move || async move {
+        load_or_notify(get_schedules_page_size().await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some((saved, detail_saved)) = saved_page_sizes.get() {
             page_size.set(saved);
@@ -105,11 +111,7 @@ fn SchedulesIsland(
         let query = query.get();
         let page = page.get();
         let page_size = page_size.get();
-        async move {
-            list_schedules(query, page, page_size)
-                .await
-                .unwrap_or_default()
-        }
+        async move { load_or_notify(list_schedules(query, page, page_size).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(next) = data.get() {
@@ -124,10 +126,7 @@ fn SchedulesIsland(
         let id = selected.get().map(|row| row.id);
         async move {
             if let Some(id) = id {
-                get_schedule_items_page(id)
-                    .await
-                    .ok()
-                    .flatten()
+                load_or_notify(get_schedule_items_page(id).await, load_toast)
                     .map(|data| data.items)
                     .unwrap_or_default()
             } else {
@@ -499,8 +498,9 @@ pub fn ScheduleEditorPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial_form = load_schedule_no_script_data(id);
-    view! { <ScheduleEditorIsland id initial_form initial_error=error/> }
+    admin_result_view(load_schedule_no_script_data(id), move |initial_form| {
+        view! { <ScheduleEditorIsland id initial_form initial_error=error/> }.into_any()
+    })
 }
 
 #[island]
@@ -515,10 +515,10 @@ fn ScheduleEditorIsland(
     } else {
         tr(TextKey::ScheduleSaveFailed).to_owned()
     });
-    let data = Resource::new_blocking(
-        move || id,
-        |id| async move { get_schedule_form(id).await.ok().flatten() },
-    );
+    let load_toast = use_toast();
+    let data = LocalResource::new(move || async move {
+        load_or_notify(get_schedule_form(id).await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some(Some(loaded)) = data.get() {
             form.set(loaded);
@@ -603,24 +603,23 @@ fn ScheduleEditorIsland(
     }
 }
 
-fn load_schedule_no_script_data(id: i64) -> ScheduleForm {
+fn load_schedule_no_script_data(id: i64) -> Result<ScheduleForm, String> {
     #[cfg(feature = "ssr")]
     {
-        use crate::admin::server_fns::schedules::get_schedule_form_with_pool;
+        use crate::admin::server_fns::schedules::schedule_form_from_admin;
 
         let state = expect_context::<crate::host::state::AppState>();
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(get_schedule_form_with_pool(&state.pool, id))
-                .ok()
-                .flatten()
-                .unwrap_or_default()
+                .block_on(state.application.get_schedule(id))
+                .map(|schedule| schedule.map(schedule_form_from_admin).unwrap_or_default())
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        ScheduleForm::default()
+        Ok(ScheduleForm::default())
     }
 }
 
@@ -630,20 +629,25 @@ pub fn ScheduleItemsPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let initial_error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let fallback_data = load_schedule_items_no_script_data(id);
-    view! {
-        <style>".schedule-items-noscript { display: none; }"</style>
-        <noscript>
-            <style>".schedule-items-noscript { display: block; } .schedule-items-js { display: none; }"</style>
-            <div
-                class="schedule-items-noscript"
-                inner_html=schedule_items_fallback_html(id, fallback_data.clone(), &initial_error)
-            ></div>
-        </noscript>
-        <div class="schedule-items-js">
-            <ScheduleItemsIsland id initial_data=fallback_data/>
-        </div>
-    }
+    admin_result_view(
+        load_schedule_items_no_script_data(id),
+        move |fallback_data| {
+            view! {
+                <style>".schedule-items-noscript { display: none; }"</style>
+                <noscript>
+                    <style>".schedule-items-noscript { display: block; } .schedule-items-js { display: none; }"</style>
+                    <div
+                        class="schedule-items-noscript"
+                        inner_html=schedule_items_fallback_html(id, fallback_data.clone(), &initial_error)
+                    ></div>
+                </noscript>
+                <div class="schedule-items-js">
+                    <ScheduleItemsIsland id initial_data=fallback_data/>
+                </div>
+            }
+            .into_any()
+        },
+    )
 }
 
 fn schedule_items_fallback_html(
@@ -704,37 +708,50 @@ fn schedule_items_fallback_html(
     )
 }
 
-fn load_schedule_items_no_script_data(id: i64) -> Option<ScheduleItemsPageData> {
+fn load_schedule_items_no_script_data(id: i64) -> Result<Option<ScheduleItemsPageData>, String> {
     #[cfg(feature = "ssr")]
     {
         use crate::admin::server_fns::schedules::{
-            get_schedule_form_with_pool, list_schedule_items_with_pool,
-            load_schedule_item_options_with_pool,
+            schedule_form_from_admin, schedule_item_from_admin, schedule_options_from_admin,
         };
 
         let state = expect_context::<crate::host::state::AppState>();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let schedule = get_schedule_form_with_pool(&state.pool, id)
-                    .await
-                    .ok()
-                    .flatten()?;
-                let items = list_schedule_items_with_pool(&state.pool, id).await.ok()?;
-                let options = load_schedule_item_options_with_pool(&state.pool)
-                    .await
-                    .ok()?;
-                Some(ScheduleItemsPageData {
-                    schedule,
-                    items,
-                    options,
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    let Some(schedule) = state
+                        .application
+                        .get_schedule(id)
+                        .await?
+                        .map(schedule_form_from_admin)
+                    else {
+                        return Ok(None);
+                    };
+                    let items = state
+                        .application
+                        .list_schedule_items(id)
+                        .await?
+                        .into_iter()
+                        .map(schedule_item_from_admin)
+                        .collect();
+                    let options = state
+                        .application
+                        .get_schedule_item_options()
+                        .await
+                        .map(schedule_options_from_admin)?;
+                    Ok(Some(ScheduleItemsPageData {
+                        schedule,
+                        items,
+                        options,
+                    }))
                 })
-            })
+                .map_err(|error: ersatzrs_app::ApplicationError| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 
@@ -1065,25 +1082,32 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
     let loaded = RwSignal::new(true);
     let found = RwSignal::new(initial_data.is_some());
 
-    let data = Resource::new_blocking(
-        move || id,
-        |id| async move { get_schedule_items_page(id).await.ok().flatten() },
-    );
+    let load_toast = use_toast();
+    let data = LocalResource::new(move || get_schedule_items_page(id));
     Effect::new(move |_| {
         if let Some(result) = data.get() {
             loaded.set(true);
-            if let Some(data) = result {
-                found.set(true);
-                schedule_name.set(data.schedule.name);
-                shuffle_schedule_items.set(data.schedule.shuffle_schedule_items);
-                items.set(data.items);
-                options.set(data.options);
-                selected.set(None);
-            } else if !found.get_untracked() {
-                found.set(false);
-                selected.set(None);
-                items.set(Vec::new());
-                options.set(ScheduleItemsEditorOptions::default());
+            match result {
+                Ok(Some(data)) => {
+                    found.set(true);
+                    schedule_name.set(data.schedule.name);
+                    shuffle_schedule_items.set(data.schedule.shuffle_schedule_items);
+                    items.set(data.items);
+                    options.set(data.options);
+                    selected.set(None);
+                }
+                Ok(None) => {
+                    found.set(false);
+                    selected.set(None);
+                    items.set(Vec::new());
+                    options.set(ScheduleItemsEditorOptions::default());
+                }
+                Err(error) => {
+                    load_toast.push(
+                        format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                        crate::admin::ui::primitives::toast::ToastSeverity::Error,
+                    );
+                }
             }
         }
     });

@@ -18,7 +18,10 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::card::MediaCard;
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/trash.module.css");
 
@@ -32,17 +35,14 @@ struct TrashSection {
 
 #[component]
 pub fn TrashPage() -> impl IntoView {
-    let initial: Resource<TrashPageData> = Resource::new_blocking(
-        || (),
-        |()| async move { list_trash_items().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| list_trash_items());
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_data| {
-                    view! { <TrashIsland initial_data=initial_data/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_data| {
+                    view! { <TrashIsland initial_data=initial_data/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -52,9 +52,10 @@ pub fn TrashPage() -> impl IntoView {
 fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
     let current_data = RwSignal::new(initial_data);
+    let toast = use_toast();
     let data: LocalResource<TrashPageData> = LocalResource::new(move || {
         let _ = media_revision.get();
-        async move { list_trash_items().await.unwrap_or_default() }
+        async move { load_or_notify(list_trash_items().await, toast) }
     });
     Effect::new(move |_| {
         if let Some(trash) = data.get() {
@@ -74,8 +75,8 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
     });
     let empty_action = Action::new(|(): &()| async move { empty_trash().await });
 
-    let toast = use_toast();
-
+    #[cfg(target_arch = "wasm32")]
+    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(result) = delete_action.value().get() {
             match result {
@@ -128,10 +129,21 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
         {
             leptos::task::spawn_local(async move {
                 loop {
-                    if let Ok(next) = media_state_revision().await {
-                        if media_revision.get_untracked() != next {
-                            media_revision.set(next);
+                    match media_state_revision().await {
+                        Ok(next) => {
+                            if media_revision.get_untracked() != next {
+                                media_revision.set(next);
+                            }
+                            revision_load_failed.set(false);
                         }
+                        Err(error) if !revision_load_failed.get_untracked() => {
+                            revision_load_failed.set(true);
+                            toast.push(
+                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                                ToastSeverity::Error,
+                            );
+                        }
+                        Err(_) => {}
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }

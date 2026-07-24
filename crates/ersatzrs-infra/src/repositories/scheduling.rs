@@ -8,7 +8,10 @@ use std::{
 use crate::db::DbRow;
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
-use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
+use ersatzrs_core::repositories::{
+    AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, ProgramScheduleRepository,
+    RepositoryError, Result,
+};
 use ersatzrs_core::scheduling::{
     block_item_smart_shuffle_config_key, classic_schedule_item_key,
     classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
@@ -36,6 +39,31 @@ use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column, load_ids,
 };
+
+async fn fetch_admin_search_rows(
+    pool: &Pool<crate::db::Db>,
+    sql: &str,
+    ids: &[EntityId],
+) -> Result<Vec<DbRow>> {
+    let mut query = sqlx::query(crate::db::assert_sql_safe(sql));
+    for id in ids {
+        query = query.bind(*id);
+    }
+    query.fetch_all(pool).await.repository()
+}
+
+fn admin_search_state(value: i32) -> Result<ersatzrs_domain::MediaItemState> {
+    match value {
+        0 => Ok(ersatzrs_domain::MediaItemState::Normal),
+        1 => Ok(ersatzrs_domain::MediaItemState::FileNotFound),
+        2 => Ok(ersatzrs_domain::MediaItemState::Unavailable),
+        3 => Ok(ersatzrs_domain::MediaItemState::RemoteOnly),
+        value => Err(RepositoryError::Decode {
+            kind: "media item state",
+            value: value.to_string(),
+        }),
+    }
+}
 
 #[derive(Clone)]
 pub struct SqliteSchedulingContentRepository(
@@ -3961,5 +3989,262 @@ fn normalize_graphics_path(path: &str) -> String {
         normalized
     } else {
         format!("templates/graphics-elements/{normalized}")
+    }
+}
+
+#[async_trait]
+impl AdminSearchRepository for SqliteSchedulingContentRepository {
+    async fn search_admin_documents(&self, query: &str) -> Result<Vec<SearchDocument>> {
+        let (documents, _, _) = self.search_documents_page(query, 0, 0).await?;
+        Ok(documents)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn enrich_admin_search(
+        &self,
+        kind: AdminSearchKind,
+        ids: &[EntityId],
+    ) -> Result<AdminSearchEnrichment> {
+        let mut enrichment = AdminSearchEnrichment::default();
+        if ids.is_empty() {
+            return Ok(enrichment);
+        }
+
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let state_sql =
+            format!(r#"SELECT "Id", "State" FROM "MediaItem" WHERE "Id" IN ({placeholders})"#);
+        for row in fetch_admin_search_rows(&self.0, &state_sql, ids).await? {
+            let id = row.try_get("Id").repository()?;
+            let state_value = row.try_get("State").repository()?;
+            enrichment
+                .state
+                .insert(id, admin_search_state(state_value)?);
+        }
+
+        match kind {
+            AdminSearchKind::Movie => {
+                let sql = format!(
+                    r#"SELECT mm."MovieId" AS "ItemId", a."Path" AS "Path"
+                       FROM "MovieMetadata" mm
+                       JOIN "Artwork" a
+                         ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
+                       WHERE mm."MovieId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    enrichment.poster.insert(
+                        row.try_get("ItemId").repository()?,
+                        row.try_get("Path").repository()?,
+                    );
+                }
+            }
+            AdminSearchKind::Show => {
+                let sql = format!(
+                    r#"SELECT sm."ShowId" AS "ItemId", a."Path" AS "Path"
+                       FROM "ShowMetadata" sm
+                       JOIN "Artwork" a
+                         ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
+                       WHERE sm."ShowId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    enrichment.poster.insert(
+                        row.try_get("ItemId").repository()?,
+                        row.try_get("Path").repository()?,
+                    );
+                }
+            }
+            AdminSearchKind::Season => {
+                let sql = format!(
+                    r#"SELECT sea."Id" AS "SeasonId",
+                              sea_art."Path" AS "OwnPath",
+                              show_art."Path" AS "ShowPath"
+                       FROM "Season" sea
+                       LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
+                       LEFT JOIN "Artwork" sea_art
+                         ON sea_art."SeasonMetadataId" = sem."Id"
+                         AND sea_art."ArtworkKind" = 0
+                       LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
+                       LEFT JOIN "Artwork" show_art
+                         ON show_art."ShowMetadataId" = shm."Id"
+                         AND show_art."ArtworkKind" = 0
+                       WHERE sea."Id" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("SeasonId").repository()?;
+                    if let Some(path) = row.try_get("OwnPath").repository()? {
+                        enrichment.poster.insert(id, path);
+                    }
+                    if let Some(path) = row.try_get("ShowPath").repository()? {
+                        enrichment.season_poster.insert(id, path);
+                    }
+                }
+            }
+            AdminSearchKind::Episode => {
+                let sql = format!(
+                    r#"SELECT ep."Id" AS "EpisodeId",
+                              ep."SeasonId" AS "SeasonId",
+                              ep_art."Path" AS "OwnPath",
+                              sea_art."Path" AS "SeasonPath",
+                              show_art."Path" AS "ShowPath"
+                       FROM "Episode" ep
+                       LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
+                       LEFT JOIN "Artwork" ep_art
+                         ON ep_art."EpisodeMetadataId" = em."Id"
+                         AND ep_art."ArtworkKind" = 0
+                       LEFT JOIN "Season" sea ON sea."Id" = ep."SeasonId"
+                       LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
+                       LEFT JOIN "Artwork" sea_art
+                         ON sea_art."SeasonMetadataId" = sem."Id"
+                         AND sea_art."ArtworkKind" = 0
+                       LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
+                       LEFT JOIN "Artwork" show_art
+                         ON show_art."ShowMetadataId" = shm."Id"
+                         AND show_art."ArtworkKind" = 0
+                       WHERE ep."Id" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("EpisodeId").repository()?;
+                    enrichment
+                        .episode_season_id
+                        .insert(id, row.try_get("SeasonId").repository()?);
+                    if let Some(path) = row.try_get("OwnPath").repository()? {
+                        enrichment.poster.insert(id, path);
+                    }
+                    if let Some(path) = row.try_get("SeasonPath").repository()? {
+                        enrichment.season_poster.insert(id, path);
+                    }
+                    if let Some(path) = row.try_get("ShowPath").repository()? {
+                        enrichment.show_poster.insert(id, path);
+                    }
+                }
+            }
+            AdminSearchKind::Artist => {
+                let sql = format!(
+                    r#"SELECT am."ArtistId" AS "ItemId",
+                              am."Disambiguation" AS "Disambiguation",
+                              a."Path" AS "Path"
+                       FROM "ArtistMetadata" am
+                       LEFT JOIN "Artwork" a
+                         ON a."ArtistMetadataId" = am."Id" AND a."ArtworkKind" = 1
+                       WHERE am."ArtistId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                    if let Some(value) = row.try_get("Disambiguation").repository()? {
+                        enrichment.artist_disambiguation.insert(id, value);
+                    }
+                }
+            }
+            AdminSearchKind::MusicVideo => {
+                let sql = format!(
+                    r#"SELECT mv."Id" AS "ItemId",
+                              mv."ArtistId" AS "ArtistId",
+                              a."Path" AS "Path",
+                              am."Title" AS "ArtistTitle"
+                       FROM "MusicVideo" mv
+                       LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+                       LEFT JOIN "Artwork" a
+                         ON a."MusicVideoMetadataId" = mvm."Id" AND a."ArtworkKind" = 1
+                       LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = mv."ArtistId"
+                       WHERE mv."Id" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(value) = row.try_get("ArtistId").repository()? {
+                        enrichment.music_video_artist_id.insert(id, value);
+                    }
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                    if let Some(value) = row.try_get("ArtistTitle").repository()? {
+                        enrichment.music_video_artist.insert(id, value);
+                    }
+                }
+            }
+            AdminSearchKind::OtherVideo => {
+                let sql = format!(
+                    r#"SELECT ovm."OtherVideoId" AS "ItemId",
+                              thumb."Path" AS "ThumbPath",
+                              poster."Path" AS "PosterPath"
+                       FROM "OtherVideoMetadata" ovm
+                       LEFT JOIN "Artwork" thumb
+                         ON thumb."OtherVideoMetadataId" = ovm."Id"
+                         AND thumb."ArtworkKind" = 1
+                       LEFT JOIN "Artwork" poster
+                         ON poster."OtherVideoMetadataId" = ovm."Id"
+                         AND poster."ArtworkKind" = 0
+                       WHERE ovm."OtherVideoId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("ThumbPath").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                    if let Some(path) = row.try_get("PosterPath").repository()? {
+                        enrichment.poster.insert(id, path);
+                    }
+                }
+            }
+            AdminSearchKind::Song => {
+                let sql = format!(
+                    r#"SELECT som."SongId" AS "ItemId",
+                              a."Path" AS "Path",
+                              som."Artists" AS "Artists",
+                              som."Album" AS "Album"
+                       FROM "SongMetadata" som
+                       LEFT JOIN "Artwork" a
+                         ON a."SongMetadataId" = som."Id" AND a."ArtworkKind" = 1
+                       WHERE som."SongId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                    enrichment.song_meta.insert(
+                        id,
+                        (
+                            row.try_get("Artists").repository()?,
+                            row.try_get("Album").repository()?,
+                        ),
+                    );
+                }
+            }
+            AdminSearchKind::Image => {
+                let sql = format!(
+                    r#"SELECT im."ImageId" AS "ItemId", a."Path" AS "Path"
+                       FROM "ImageMetadata" im
+                       LEFT JOIN "Artwork" a
+                         ON a."ImageMetadataId" = im."Id" AND a."ArtworkKind" = 1
+                       WHERE im."ImageId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                }
+            }
+            AdminSearchKind::RemoteStream => {
+                let sql = format!(
+                    r#"SELECT rsm."RemoteStreamId" AS "ItemId", a."Path" AS "Path"
+                       FROM "RemoteStreamMetadata" rsm
+                       LEFT JOIN "Artwork" a
+                         ON a."RemoteStreamMetadataId" = rsm."Id"
+                         AND a."ArtworkKind" = 1
+                       WHERE rsm."RemoteStreamId" IN ({placeholders})"#
+                );
+                for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.thumbnail.insert(id, path);
+                    }
+                }
+            }
+        }
+
+        Ok(enrichment)
     }
 }

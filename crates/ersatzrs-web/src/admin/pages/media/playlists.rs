@@ -17,7 +17,8 @@ use crate::admin::server_fns::media_browser::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/playlists.module.css");
@@ -43,17 +44,14 @@ const PLAYBACK_ORDER_SEASON_EPISODE: i32 = 6;
 
 #[component]
 pub fn PlaylistsPage() -> impl IntoView {
-    let initial: Resource<PlaylistPageData> = Resource::new_blocking(
-        || (),
-        |()| async { get_playlist_page().await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(|| (), |()| get_playlist_page());
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|initial_page| {
-                    view! { <PlaylistsIsland initial_page=initial_page/> }
-                })
+                initial.get().map(|result| admin_result_view(result, |initial_page| {
+                    view! { <PlaylistsIsland initial_page=initial_page/> }.into_any()
+                }))
             }}
         </Suspense>
     }
@@ -62,7 +60,9 @@ pub fn PlaylistsPage() -> impl IntoView {
 #[island]
 fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
     let current_page = RwSignal::new(initial_page);
-    let data = LocalResource::new(|| async { get_playlist_page().await.unwrap_or_default() });
+    let toast = use_toast();
+    let data =
+        LocalResource::new(move || async move { load_or_notify(get_playlist_page().await, toast) });
     Effect::new(move |_| {
         if let Some(page_data) = data.get() {
             current_page.set(page_data);
@@ -71,7 +71,6 @@ fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
     let group_name = RwSignal::new(String::new());
     let playlist_name = RwSignal::new(String::new());
     let selected_group = RwSignal::new(0_i64);
-    let toast = use_toast();
 
     let add_group = Action::new(move |name: &String| create_playlist_group(name.clone()));
     let add_playlist = Action::new(move |(group_id, name): &(i64, String)| {
@@ -356,17 +355,12 @@ pub fn PlaylistEditorPage() -> impl IntoView {
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let initial = Resource::new_blocking(
         move || id,
-        |id| async move { get_playlist_editor(id).await.unwrap_or_default() },
-    );
-    let options = Resource::new_blocking(
-        || (),
-        |()| async { get_playlist_editor_options().await.unwrap_or_default() },
+        |id| async move { tokio::try_join!(get_playlist_editor(id), get_playlist_editor_options()) },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || match (initial.get(), options.get()) {
-                (Some(initial_form), Some(initial_options)) => {
+        <Suspense fallback=admin_loading_resource_view>
+            {move || initial.get().map(|result| admin_result_view(result, |(initial_form, initial_options)| {
                     view! {
                         <PlaylistEditorIsland
                             id
@@ -375,9 +369,7 @@ pub fn PlaylistEditorPage() -> impl IntoView {
                         />
                     }
                     .into_any()
-                }
-                _ => ().into_any(),
-            }}
+            }))}
         </Suspense>
     }
 }

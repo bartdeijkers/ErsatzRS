@@ -23,6 +23,17 @@ impl FillerRepository for SqliteFillerRepository {
         map_filler(&row)
     }
 
+    async fn get_optional_admin(&self, id: EntityId) -> Result<Option<FillerPreset>> {
+        sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .as_ref()
+            .map(map_filler)
+            .transpose()
+    }
+
     async fn list(&self) -> Result<Vec<FillerPreset>> {
         let rows = sqlx::query(r#"SELECT * FROM "FillerPreset" ORDER BY "Name", "Id""#)
             .fetch_all(&self.0)
@@ -68,6 +79,67 @@ impl FillerRepository for SqliteFillerRepository {
             .execute(&self.0)
             .await
             .repository()?;
+        Ok(())
+    }
+
+    async fn name_exists(&self, id: EntityId, name: &str) -> Result<bool> {
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "FillerPreset" WHERE "Name" = ? AND "Id" <> ?"#,
+        )
+        .bind(name)
+        .bind(id)
+        .fetch_one(&self.0)
+        .await
+        .repository()?;
+        Ok(count > 0)
+    }
+
+    async fn save_admin(&self, preset: &FillerPreset) -> Result<EntityId> {
+        if preset.id > 0 {
+            self.upsert(preset).await?;
+            return Ok(preset.id);
+        }
+        let result = sqlx::query(
+            r#"INSERT INTO "FillerPreset" (
+                "Name", "FillerMode", "FillerKind", "CollectionType", "CollectionId",
+                "MediaItemId", "MultiCollectionId", "SmartCollectionId", "PlaylistId",
+                "Duration", "Count", "PadToNearestMinute", "AllowWatermarks",
+                "Expression", "UseChaptersAsMediaItems"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&preset.name)
+        .bind(encode_enum(preset.filler_mode))
+        .bind(encode_enum(preset.filler_kind))
+        .bind(encode_enum(preset.collection_type))
+        .bind(preset.collection_id)
+        .bind(preset.media_item_id)
+        .bind(preset.multi_collection_id)
+        .bind(preset.smart_collection_id)
+        .bind(preset.playlist_id)
+        .bind(preset.duration.map(encode_duration))
+        .bind(preset.count)
+        .bind(preset.pad_to_nearest_minute)
+        .bind(preset.allow_watermarks)
+        .bind(&preset.expression)
+        .bind(preset.use_chapters_as_media_items)
+        .execute(&self.0)
+        .await
+        .repository()?;
+        Ok(crate::db::last_insert_id(result))
+    }
+
+    async fn delete_admin(&self, id: EntityId) -> Result<()> {
+        let result = sqlx::query(r#"DELETE FROM "FillerPreset" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&self.0)
+            .await
+            .repository()?;
+        if result.rows_affected() == 0 {
+            return Err(ersatzrs_core::repositories::RepositoryError::NotFound {
+                kind: "filler preset",
+                id,
+            });
+        }
         Ok(())
     }
 }

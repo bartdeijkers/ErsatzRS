@@ -45,6 +45,9 @@ use crate::admin::server_fns::search::{
 use crate::admin::ui::dialogs::save_as_smart_collection::SaveAsSmartCollectionDialog;
 use crate::admin::ui::primitives::card::MediaCard;
 use crate::admin::ui::primitives::dialog::Modal;
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastAction, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/search.module.css");
@@ -169,13 +172,13 @@ pub fn SearchPage() -> impl IntoView {
     let initial_query = query_map.with(|params| params.get("query").unwrap_or_default());
     let input_value = initial_query.clone();
     let query_for_resource = initial_query.clone();
-    let data: Resource<SearchResults> = Resource::new_blocking(
+    let data = Resource::new_blocking(
         move || query_for_resource.clone(),
         move |query| async move {
             if query.trim().is_empty() {
-                SearchResults::default()
+                Ok(SearchResults::default())
             } else {
-                search_results(query).await.unwrap_or_default()
+                search_results(query).await
             }
         },
     );
@@ -195,13 +198,14 @@ pub fn SearchPage() -> impl IntoView {
             </form>
             <p class=style::query_help>{tr(TextKey::ContentVariantSearchHelp)}</p>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
-                    data.get().map(|results| {
+                    data.get().map(|result| admin_result_view(result, |results| {
                         view! {
                             <SearchIsland query=initial_query.clone() results=results/>
                         }
-                    })
+                        .into_any()
+                    }))
                 }}
             </Suspense>
             <SearchCardActionFallback/>
@@ -879,7 +883,13 @@ fn AddToCollectionModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            options.set(list_all_collections().await.unwrap_or_default());
+            match list_all_collections().await {
+                Ok(loaded) => options.set(loaded),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 
@@ -1002,7 +1012,13 @@ fn AddToPlaylistModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            groups.set(list_all_playlist_groups().await.unwrap_or_default());
+            match list_all_playlist_groups().await {
+                Ok(loaded) => groups.set(loaded),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         });
     });
 
@@ -1014,7 +1030,16 @@ fn AddToPlaylistModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            let loaded = list_playlists_by_group(gid).await.unwrap_or_default();
+            let loaded = match list_playlists_by_group(gid).await {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    toast.push(
+                        format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                        ToastSeverity::Error,
+                    );
+                    return;
+                }
+            };
             if group_id.get_untracked() == gid {
                 playlists.set(loaded);
             }

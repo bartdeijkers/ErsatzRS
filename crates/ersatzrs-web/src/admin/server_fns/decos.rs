@@ -7,23 +7,36 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_infra::db::DbPool;
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_infra::db::{Db, DbRow};
 
+#[cfg(all(test, feature = "ssr"))]
 const DECO_MODE_OVERRIDE: i32 = 2;
+#[cfg(all(test, feature = "ssr"))]
 const DECO_MODE_MERGE: i32 = 3;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_ARTIST: i32 = 3;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+#[cfg(all(test, feature = "ssr"))]
 const COLLECTION_TYPE_PLAYLIST: i32 = 6;
+#[cfg(all(test, feature = "ssr"))]
 const PLACEMENT_BLOCK_START: i32 = 0;
+#[cfg(all(test, feature = "ssr"))]
 const PLACEMENT_BLOCK_FINISH: i32 = 1;
+#[cfg(all(test, feature = "ssr"))]
 const PLACEMENT_BETWEEN_BLOCK_ITEMS: i32 = 2;
+#[cfg(all(test, feature = "ssr"))]
 const PLACEMENT_CHAPTER_MARKERS: i32 = 3;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,14 +169,210 @@ pub struct DecoForm {
     pub dead_air_fallback_smart_collection_id: Option<i64>,
 }
 
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_form_into_admin(form: DecoForm) -> ersatzrs_app::commands::DecoAdminForm {
+    ersatzrs_app::commands::DecoAdminForm {
+        id: form.id,
+        group_id: form.group_id,
+        group_name: form.group_name,
+        name: form.name,
+        watermark_mode: form.watermark_mode,
+        watermark_ids: form.watermark_ids,
+        use_watermark_during_filler: form.use_watermark_during_filler,
+        graphics_elements_mode: form.graphics_elements_mode,
+        graphics_element_ids: form.graphics_element_ids,
+        use_graphics_elements_during_filler: form.use_graphics_elements_during_filler,
+        break_content_mode: form.break_content_mode,
+        break_content: form
+            .break_content
+            .into_iter()
+            .map(|item| ersatzrs_app::commands::DecoBreakContentAdminForm {
+                id: item.id,
+                collection_type: item.collection_type,
+                collection_id: item.collection_id,
+                media_item_id: item.media_item_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                playlist_id: item.playlist_id,
+                collection_name: item.collection_name,
+                placement: item.placement,
+            })
+            .collect(),
+        default_filler_mode: form.default_filler_mode,
+        default_filler_collection_type: form.default_filler_collection_type,
+        default_filler_collection_id: form.default_filler_collection_id,
+        default_filler_media_item_id: form.default_filler_media_item_id,
+        default_filler_multi_collection_id: form.default_filler_multi_collection_id,
+        default_filler_smart_collection_id: form.default_filler_smart_collection_id,
+        default_filler_trim_to_fit: form.default_filler_trim_to_fit,
+        dead_air_fallback_mode: form.dead_air_fallback_mode,
+        dead_air_fallback_collection_type: form.dead_air_fallback_collection_type,
+        dead_air_fallback_collection_id: form.dead_air_fallback_collection_id,
+        dead_air_fallback_media_item_id: form.dead_air_fallback_media_item_id,
+        dead_air_fallback_multi_collection_id: form.dead_air_fallback_multi_collection_id,
+        dead_air_fallback_smart_collection_id: form.dead_air_fallback_smart_collection_id,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_form_from_admin(form: ersatzrs_app::commands::DecoAdminForm) -> DecoForm {
+    DecoForm {
+        id: form.id,
+        group_id: form.group_id,
+        group_name: form.group_name,
+        name: form.name,
+        watermark_mode: form.watermark_mode,
+        watermark_ids: form.watermark_ids,
+        use_watermark_during_filler: form.use_watermark_during_filler,
+        graphics_elements_mode: form.graphics_elements_mode,
+        graphics_element_ids: form.graphics_element_ids,
+        use_graphics_elements_during_filler: form.use_graphics_elements_during_filler,
+        break_content_mode: form.break_content_mode,
+        break_content: form
+            .break_content
+            .into_iter()
+            .map(|item| DecoBreakContentForm {
+                id: item.id,
+                collection_type: item.collection_type,
+                collection_id: item.collection_id,
+                media_item_id: item.media_item_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                playlist_id: item.playlist_id,
+                collection_name: item.collection_name,
+                placement: item.placement,
+            })
+            .collect(),
+        default_filler_mode: form.default_filler_mode,
+        default_filler_collection_type: form.default_filler_collection_type,
+        default_filler_collection_id: form.default_filler_collection_id,
+        default_filler_media_item_id: form.default_filler_media_item_id,
+        default_filler_multi_collection_id: form.default_filler_multi_collection_id,
+        default_filler_smart_collection_id: form.default_filler_smart_collection_id,
+        default_filler_trim_to_fit: form.default_filler_trim_to_fit,
+        dead_air_fallback_mode: form.dead_air_fallback_mode,
+        dead_air_fallback_collection_type: form.dead_air_fallback_collection_type,
+        dead_air_fallback_collection_id: form.dead_air_fallback_collection_id,
+        dead_air_fallback_media_item_id: form.dead_air_fallback_media_item_id,
+        dead_air_fallback_multi_collection_id: form.dead_air_fallback_multi_collection_id,
+        dead_air_fallback_smart_collection_id: form.dead_air_fallback_smart_collection_id,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_editor_options_from_admin(
+    options: ersatzrs_core::repositories::DecoEditorOptionsAdmin,
+) -> DecoEditorOptions {
+    fn map_options(values: Vec<ersatzrs_core::repositories::DecoOptionAdmin>) -> Vec<DecoOption> {
+        values
+            .into_iter()
+            .map(|value| DecoOption {
+                id: value.id,
+                name: value.name,
+            })
+            .collect()
+    }
+
+    DecoEditorOptions {
+        watermarks: map_options(options.watermarks),
+        graphics_elements: map_options(options.graphics_elements),
+        collections: map_options(options.collections),
+        shows: map_options(options.shows),
+        seasons: map_options(options.seasons),
+        artists: map_options(options.artists),
+        multi_collections: map_options(options.multi_collections),
+        smart_collections: map_options(options.smart_collections),
+        playlist_groups: map_options(options.playlist_groups),
+        playlists: options
+            .playlists
+            .into_iter()
+            .map(|value| DecoPlaylistOption {
+                id: value.id,
+                group_id: value.group_id,
+                name: value.name,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_template_row_from_admin(
+    row: ersatzrs_core::repositories::DecoTemplateAdminRow,
+) -> DecoTemplateRow {
+    DecoTemplateRow {
+        id: row.id,
+        group_id: row.group_id,
+        group_name: row.group_name,
+        name: row.name,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_template_form_from_admin(
+    row: ersatzrs_core::repositories::DecoTemplateAdminRow,
+) -> DecoTemplateForm {
+    DecoTemplateForm {
+        id: row.id,
+        group_id: row.group_id,
+        group_name: row.group_name,
+        name: row.name,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_template_item_from_admin(
+    item: ersatzrs_core::repositories::DecoTemplateItemAdmin,
+) -> DecoTemplateItemForm {
+    DecoTemplateItemForm {
+        deco_id: item.deco_id,
+        deco_name: item.deco_name,
+        start_minutes: item.start_minutes,
+        end_minutes: item.end_minutes,
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn deco_template_form_into_command(
+    form: DecoTemplateWithItemsForm,
+) -> ersatzrs_app::commands::SaveDecoTemplate {
+    ersatzrs_app::commands::SaveDecoTemplate {
+        id: form.id,
+        group_id: form.group_id,
+        name: form.name,
+        items: form
+            .items
+            .into_iter()
+            .map(|item| ersatzrs_core::repositories::DecoTemplateItemAdmin {
+                deco_id: item.deco_id,
+                deco_name: item.deco_name,
+                start_minutes: item.start_minutes,
+                end_minutes: item.end_minutes,
+            })
+            .collect(),
+    }
+}
+
 #[server]
 pub async fn list_deco_groups() -> Result<Vec<DecoGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_deco_groups_with_pool(&state.pool).await
+    state
+        .application
+        .list_deco_groups()
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| DecoGroupRow {
+                    id: row.id,
+                    name: row.name,
+                    deco_count: row.deco_count,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_deco_groups_with_pool(pool: &DbPool) -> Result<Vec<DecoGroupRow>, ServerFnError> {
     use sqlx::Row;
 
@@ -193,10 +402,24 @@ pub async fn list_deco_groups_with_pool(pool: &DbPool) -> Result<Vec<DecoGroupRo
 pub async fn list_decos(search: String) -> Result<Vec<DecoRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_decos_with_pool(&state.pool, &search).await
+    state
+        .application
+        .list_decos(&search)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| DecoRow {
+                    id: row.id,
+                    group_id: row.group_id,
+                    group_name: row.group_name,
+                    name: row.name,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_decos_with_pool(
     pool: &DbPool,
     search: &str,
@@ -244,10 +467,14 @@ pub async fn list_decos_with_pool(
 pub async fn create_deco_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_deco_group_with_pool(&state.pool, &name).await
+    state
+        .application
+        .create_deco_group(ersatzrs_app::commands::CreateDecoGroup { name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_deco_group_with_pool(pool: &DbPool, name: &str) -> Result<i64, ServerFnError> {
     let name = validate_deco_group_name(pool, name).await?;
     let result = sqlx::query(r#"INSERT INTO "DecoGroup" ("Name") VALUES (?)"#)
@@ -261,10 +488,14 @@ pub async fn create_deco_group_with_pool(pool: &DbPool, name: &str) -> Result<i6
 pub async fn create_deco(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_deco_with_pool(&state.pool, group_id, &name).await
+    state
+        .application
+        .create_deco(ersatzrs_app::commands::CreateDeco { group_id, name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_deco_with_pool(
     pool: &DbPool,
     group_id: i64,
@@ -292,10 +523,14 @@ pub async fn create_deco_with_pool(
 pub async fn delete_deco_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_deco_group_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_deco_group(ersatzrs_app::commands::DeleteDecoGroup { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_deco_group_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "DecoGroup" WHERE "Id" = ?"#)
         .bind(id)
@@ -313,10 +548,14 @@ pub async fn delete_deco_group_with_pool(pool: &DbPool, id: i64) -> Result<(), S
 pub async fn delete_deco(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_deco_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_deco(ersatzrs_app::commands::DeleteDeco { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_deco_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "Deco" WHERE "Id" = ?"#)
         .bind(id)
@@ -332,10 +571,15 @@ pub async fn delete_deco_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerF
 pub async fn get_deco(id: i64) -> Result<Option<DecoForm>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    get_deco_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_deco(id)
+        .await
+        .map(|form| form.map(deco_form_from_admin))
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_deco_with_pool(pool: &DbPool, id: i64) -> Result<Option<DecoForm>, ServerFnError> {
     use sqlx::Row;
 
@@ -432,10 +676,15 @@ pub async fn get_deco_with_pool(pool: &DbPool, id: i64) -> Result<Option<DecoFor
 pub async fn load_deco_editor_options() -> Result<DecoEditorOptions, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    load_deco_editor_options_with_pool(&state.pool).await
+    state
+        .application
+        .load_deco_editor_options()
+        .await
+        .map(deco_editor_options_from_admin)
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn load_deco_editor_options_with_pool(
     pool: &DbPool,
 ) -> Result<DecoEditorOptions, ServerFnError> {
@@ -504,10 +753,16 @@ pub async fn load_deco_editor_options_with_pool(
 pub async fn save_deco(form: DecoForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    save_deco_with_pool(&state.pool, form).await
+    state
+        .application
+        .save_deco(ersatzrs_app::commands::SaveDeco {
+            form: deco_form_into_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_deco_with_pool(pool: &DbPool, mut form: DecoForm) -> Result<(), ServerFnError> {
     validate_deco_exists(pool, form.id).await?;
     validate_deco_group_exists(pool, form.group_id).await?;
@@ -613,10 +868,23 @@ pub async fn save_deco_with_pool(pool: &DbPool, mut form: DecoForm) -> Result<()
 pub async fn list_deco_template_groups() -> Result<Vec<DecoTemplateGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_deco_template_groups_with_pool(&state.pool).await
+    state
+        .application
+        .list_deco_template_groups()
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| DecoTemplateGroupRow {
+                    id: row.id,
+                    name: row.name,
+                    template_count: row.template_count,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_deco_template_groups_with_pool(
     pool: &DbPool,
 ) -> Result<Vec<DecoTemplateGroupRow>, ServerFnError> {
@@ -648,10 +916,15 @@ pub async fn list_deco_template_groups_with_pool(
 pub async fn list_deco_templates(search: String) -> Result<Vec<DecoTemplateRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    list_deco_templates_with_pool(&state.pool, &search).await
+    state
+        .application
+        .list_deco_templates(&search)
+        .await
+        .map(|rows| rows.into_iter().map(deco_template_row_from_admin).collect())
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn list_deco_templates_with_pool(
     pool: &DbPool,
     search: &str,
@@ -701,10 +974,14 @@ pub async fn list_deco_templates_with_pool(
 pub async fn create_deco_template_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_deco_template_group_with_pool(&state.pool, &name).await
+    state
+        .application
+        .create_deco_template_group(ersatzrs_app::commands::CreateDecoTemplateGroup { name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_deco_template_group_with_pool(
     pool: &DbPool,
     name: &str,
@@ -721,10 +998,14 @@ pub async fn create_deco_template_group_with_pool(
 pub async fn create_deco_template(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    create_deco_template_with_pool(&state.pool, group_id, &name).await
+    state
+        .application
+        .create_deco_template(ersatzrs_app::commands::CreateDecoTemplate { group_id, name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn create_deco_template_with_pool(
     pool: &DbPool,
     group_id: i64,
@@ -747,10 +1028,14 @@ pub async fn create_deco_template_with_pool(
 pub async fn delete_deco_template_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_deco_template_group_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_deco_template_group(ersatzrs_app::commands::DeleteDecoTemplateGroup { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_deco_template_group_with_pool(
     pool: &DbPool,
     id: i64,
@@ -771,10 +1056,14 @@ pub async fn delete_deco_template_group_with_pool(
 pub async fn delete_deco_template(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    delete_deco_template_with_pool(&state.pool, id).await
+    state
+        .application
+        .delete_deco_template(ersatzrs_app::commands::DeleteDecoTemplate { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn delete_deco_template_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "DecoTemplate" WHERE "Id" = ?"#)
         .bind(id)
@@ -793,10 +1082,15 @@ pub async fn get_deco_template(id: i64) -> Result<Option<DecoTemplateForm>, Serv
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_deco_template_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_deco_template(id)
+        .await
+        .map(|row| row.map(deco_template_form_from_admin))
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_deco_template_with_pool(
     pool: &DbPool,
     id: i64,
@@ -830,10 +1124,20 @@ pub async fn get_deco_template_items(
 ) -> Result<Vec<DecoTemplateItemForm>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    get_deco_template_items_with_pool(&state.pool, template_id).await
+    state
+        .application
+        .get_deco_template_items(template_id)
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(deco_template_item_from_admin)
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn get_deco_template_items_with_pool(
     pool: &DbPool,
     template_id: i64,
@@ -879,10 +1183,14 @@ pub async fn save_deco_template_with_items(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    save_deco_template_with_pool(&state.pool, form).await
+    state
+        .application
+        .save_deco_template(deco_template_form_into_command(form))
+        .await
+        .map_err(ServerFnError::new)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn save_deco_template_with_pool(
     pool: &DbPool,
     form: DecoTemplateWithItemsForm,
@@ -930,7 +1238,7 @@ pub async fn save_deco_template_with_pool(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_group_name(pool: &DbPool, name: &str) -> Result<String, ServerFnError> {
     let name = name.trim();
     if name.is_empty() {
@@ -951,7 +1259,7 @@ async fn validate_deco_group_name(pool: &DbPool, name: &str) -> Result<String, S
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_group_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "DecoGroup" WHERE "Id" = ?"#)
         .bind(id)
@@ -963,7 +1271,7 @@ async fn validate_deco_group_exists(pool: &DbPool, id: i64) -> Result<(), Server
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_name(
     pool: &DbPool,
     group_id: i64,
@@ -1010,7 +1318,7 @@ async fn validate_deco_name(
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Deco" WHERE "Id" = ?"#)
         .bind(id)
@@ -1022,7 +1330,7 @@ async fn validate_deco_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnErro
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_references(pool: &DbPool, form: &DecoForm) -> Result<(), ServerFnError> {
     if form.watermark_mode == DECO_MODE_OVERRIDE || form.watermark_mode == DECO_MODE_MERGE {
         validate_ids_exist(
@@ -1078,7 +1386,7 @@ async fn validate_deco_references(pool: &DbPool, form: &DecoForm) -> Result<(), 
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_collection_selection(
     pool: &DbPool,
     collection_type: i32,
@@ -1111,7 +1419,7 @@ async fn validate_collection_selection(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_break_content_reference(
     pool: &DbPool,
     item: &DecoBreakContentForm,
@@ -1170,7 +1478,7 @@ async fn validate_break_content_reference(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn validate_break_content(items: &[DecoBreakContentForm]) -> Result<(), ServerFnError> {
     let count = |placement| {
         items
@@ -1201,7 +1509,7 @@ fn validate_break_content(items: &[DecoBreakContentForm]) -> Result<(), ServerFn
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_optional_reference(
     pool: &DbPool,
     table: &str,
@@ -1223,7 +1531,7 @@ async fn validate_optional_reference(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_ids_exist(
     pool: &DbPool,
     table: &str,
@@ -1244,6 +1552,7 @@ async fn validate_ids_exist(
     Ok(())
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn normalize_deco_form(form: &mut DecoForm) {
     form.watermark_ids.sort_unstable();
     form.watermark_ids.dedup();
@@ -1292,6 +1601,7 @@ fn normalize_deco_form(form: &mut DecoForm) {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn normalize_collection_fields(
     mode: i32,
     collection_type: i32,
@@ -1332,6 +1642,7 @@ fn normalize_collection_fields(
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
 fn normalize_break_content_fields(item: &mut DecoBreakContentForm) {
     match item.collection_type {
         COLLECTION_TYPE_COLLECTION => {
@@ -1367,7 +1678,7 @@ fn normalize_break_content_fields(item: &mut DecoBreakContentForm) {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_options(pool: &DbPool, sql: &str) -> Result<Vec<DecoOption>, ServerFnError> {
     use sqlx::Row;
 
@@ -1383,7 +1694,7 @@ async fn load_options(pool: &DbPool, sql: &str) -> Result<Vec<DecoOption>, Serve
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_deco_playlist_options(
     pool: &DbPool,
 ) -> Result<Vec<DecoPlaylistOption>, ServerFnError> {
@@ -1406,7 +1717,7 @@ async fn load_deco_playlist_options(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_i64_ids(pool: &DbPool, sql: &str, id: i64) -> Result<Vec<i64>, ServerFnError> {
     use sqlx::Row;
 
@@ -1420,7 +1731,7 @@ async fn load_i64_ids(pool: &DbPool, sql: &str, id: i64) -> Result<Vec<i64>, Ser
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn load_deco_break_content(
     pool: &DbPool,
     deco_id: i64,
@@ -1473,7 +1784,7 @@ async fn load_deco_break_content(
         .collect())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn replace_deco_ids(
     tx: &mut sqlx::Transaction<'_, Db>,
     delete_sql: &str,
@@ -1495,7 +1806,7 @@ async fn replace_deco_ids(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn read_bool(row: &DbRow, column: &str) -> bool {
     use sqlx::Row;
 
@@ -1504,7 +1815,7 @@ fn read_bool(row: &DbRow, column: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_template_group_name(
     pool: &DbPool,
     name: &str,
@@ -1531,7 +1842,7 @@ async fn validate_deco_template_group_name(
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_template_group_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 =
         sqlx::query_scalar(r#"SELECT COUNT(*) FROM "DecoTemplateGroup" WHERE "Id" = ?"#)
@@ -1544,7 +1855,7 @@ async fn validate_deco_template_group_exists(pool: &DbPool, id: i64) -> Result<(
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_template_exists(pool: &DbPool, id: i64) -> Result<(), ServerFnError> {
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "DecoTemplate" WHERE "Id" = ?"#)
         .bind(id)
@@ -1556,7 +1867,7 @@ async fn validate_deco_template_exists(pool: &DbPool, id: i64) -> Result<(), Ser
     Ok(())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_template_name(
     pool: &DbPool,
     group_id: i64,
@@ -1603,7 +1914,7 @@ async fn validate_deco_template_name(
     Ok(name.to_string())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 async fn validate_deco_template_items(
     pool: &DbPool,
     items: &[DecoTemplateItemForm],

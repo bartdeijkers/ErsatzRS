@@ -138,7 +138,12 @@ pub async fn load_logging_settings() -> Result<LoggingSettingsForm, ServerFnErro
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_logging_settings_with_pool(&state.pool).await
+    let settings = state
+        .application
+        .load_logging_settings()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(logging_settings_form(settings))
 }
 
 #[server]
@@ -154,7 +159,12 @@ pub async fn load_hdhr_settings() -> Result<HdhrSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_hdhr_settings_with_pool(&state.pool).await
+    let settings = state
+        .application
+        .load_hdhr_settings()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(hdhr_settings_form(settings))
 }
 
 #[server]
@@ -170,13 +180,13 @@ pub async fn load_scanner_settings() -> Result<ScannerSettingsForm, ServerFnErro
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    let settings = state
+        .application
+        .load_scanner_settings()
+        .await
+        .map_err(ServerFnError::new)?;
     Ok(ScannerSettingsForm {
-        library_refresh_interval: load_i32(
-            &state.pool,
-            ersatzrs_domain::CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
-            0,
-        )
-        .await?,
+        library_refresh_interval: settings.library_refresh_interval,
     })
 }
 
@@ -185,7 +195,7 @@ pub async fn save_scanner_settings(form: ScannerSettingsForm) -> Result<(), Serv
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_scanner_settings_with_pool(&state.pool, form).await
+    save_scanner_settings_with_state(&state, form).await
 }
 
 #[server]
@@ -193,7 +203,12 @@ pub async fn load_playout_settings() -> Result<PlayoutSettingsForm, ServerFnErro
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_playout_settings_with_pool(&state.pool).await
+    let settings = state
+        .application
+        .load_playout_settings()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(playout_settings_form(settings))
 }
 
 #[server]
@@ -209,20 +224,14 @@ pub async fn load_ui_settings() -> Result<UiSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(UiSettingsForm {
-        is_dark_mode: load_bool(
-            &state.pool,
-            ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
-            true,
-        )
-        .await?,
-        language: load_string(
-            &state.pool,
-            ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE,
-            "en-us",
-        )
+    let settings = state
+        .application
+        .load_ui_settings()
         .await
-        .map(|language| normalize_ui_language(&language))?,
+        .map_err(ServerFnError::new)?;
+    Ok(UiSettingsForm {
+        is_dark_mode: settings.is_dark_mode,
+        language: normalize_ui_language(&settings.language),
     })
 }
 
@@ -231,7 +240,7 @@ pub async fn save_ui_settings(form: UiSettingsForm) -> Result<(), ServerFnError>
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_ui_settings_with_pool(&state.pool, form).await
+    save_ui_settings_with_state(&state, form).await
 }
 
 #[server]
@@ -239,7 +248,12 @@ pub async fn load_xmltv_settings() -> Result<XmltvSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_xmltv_settings_with_pool(&state.pool).await
+    let settings = state
+        .application
+        .load_xmltv_settings()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(xmltv_settings_form(settings))
 }
 
 #[server]
@@ -255,7 +269,7 @@ pub async fn add_custom_resolution(width: i32, height: i32) -> Result<(), Server
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    create_custom_resolution(&state.pool, width, height).await
+    create_custom_resolution_with_state(&state, width, height).await
 }
 
 #[server]
@@ -263,16 +277,17 @@ pub async fn delete_custom_resolution(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    delete_custom_resolution_with_pool(&state.pool, id).await
+    delete_custom_resolution_with_state(&state, id).await
 }
 
 #[allow(clippy::too_many_lines)]
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
 pub async fn load_ffmpeg_settings_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<FfmpegSettingsPageData, ServerFnError> {
+    let repository = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
     load_ffmpeg_settings_with_capabilities(
-        pool,
+        &repository,
         &ersatzrs_ffmpeg::FfmpegCapabilityReport::default(),
     )
     .await
@@ -289,7 +304,11 @@ pub async fn load_ffmpeg_settings_with_state(
     let runtime_ffprobe_path = runtime.ffprobe.path.clone();
     drop(runtime);
 
-    let mut data = load_ffmpeg_settings_with_capabilities(&state.pool, &capabilities).await?;
+    let mut data = load_ffmpeg_settings_with_capabilities(
+        state.application.ports().admin_settings(),
+        &capabilities,
+    )
+    .await?;
     if !runtime_ffmpeg_path.is_empty() {
         data.ffmpeg_resolved = runtime_ffmpeg_path;
     }
@@ -302,104 +321,32 @@ pub async fn load_ffmpeg_settings_with_state(
 #[allow(clippy::too_many_lines)]
 #[cfg(feature = "ssr")]
 async fn load_ffmpeg_settings_with_capabilities(
-    pool: &ersatzrs_infra::db::DbPool,
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
     capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> Result<FfmpegSettingsPageData, ServerFnError> {
+    let model = ersatzrs_app::queries::load_ffmpeg_settings(repository)
+        .await
+        .map_err(ServerFnError::new)?;
+    let app_form = model.form;
     let form = FfmpegSettingsForm {
-        ffmpeg_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "").await?,
-        ffprobe_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH, "").await?,
-        default_ffmpeg_profile_id: i64::from(
-            load_i32(
-                pool,
-                ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
-                0,
-            )
-            .await?,
-        ),
-        preferred_audio_language_code: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
-            "eng",
-        )
-        .await?,
-        preferred_subtitle_language_code: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
-            "",
-        )
-        .await?,
-        fallback_subtitle_language_code: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE,
-            "",
-        )
-        .await?,
-        use_embedded_subtitles: load_bool(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
-            true,
-        )
-        .await?,
-        extract_embedded_subtitles: load_bool(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES,
-            false,
-        )
-        .await?,
-        probe_for_interlaced_frames: load_bool(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
-            false,
-        )
-        .await?,
-        save_reports: load_bool(pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_SAVE_REPORTS, false)
-            .await?,
-        global_watermark_id: load_optional_i64(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
-        )
-        .await?,
-        global_fallback_filler_id: load_optional_i64(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-        )
-        .await?,
-        hls_segmenter_idle_timeout: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
-            60,
-        )
-        .await?,
-        work_ahead_segmenter_limit: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
-            1,
-        )
-        .await?,
-        active_transcode_limit: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
-            2,
-        )
-        .await?,
-        initial_segment_count: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
-            1,
-        )
-        .await?,
-        hls_direct_output_format: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
-            2,
-        )
-        .await?,
-        default_mpeg_ts_script: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT,
-            "default",
-        )
-        .await?,
+        ffmpeg_path: app_form.ffmpeg_path,
+        ffprobe_path: app_form.ffprobe_path,
+        default_ffmpeg_profile_id: app_form.default_ffmpeg_profile_id,
+        preferred_audio_language_code: app_form.preferred_audio_language_code,
+        preferred_subtitle_language_code: app_form.preferred_subtitle_language_code,
+        fallback_subtitle_language_code: app_form.fallback_subtitle_language_code,
+        use_embedded_subtitles: app_form.use_embedded_subtitles,
+        extract_embedded_subtitles: app_form.extract_embedded_subtitles,
+        probe_for_interlaced_frames: app_form.probe_for_interlaced_frames,
+        save_reports: app_form.save_reports,
+        global_watermark_id: app_form.global_watermark_id,
+        global_fallback_filler_id: app_form.global_fallback_filler_id,
+        hls_segmenter_idle_timeout: app_form.hls_segmenter_idle_timeout,
+        work_ahead_segmenter_limit: app_form.work_ahead_segmenter_limit,
+        active_transcode_limit: app_form.active_transcode_limit,
+        initial_segment_count: app_form.initial_segment_count,
+        hls_direct_output_format: app_form.hls_direct_output_format,
+        default_mpeg_ts_script: app_form.default_mpeg_ts_script,
     };
 
     let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
@@ -412,34 +359,18 @@ async fn load_ffmpeg_settings_with_capabilities(
         ffmpeg_resolved,
         ffprobe_resolved,
         active_transcode_capacity,
-        ffmpeg_profiles: select_options(
-            pool,
-            ersatzrs_infra::admin_settings::SettingsOptionKind::FfmpegProfile,
-        )
-        .await?,
+        ffmpeg_profiles: settings_select_options(model.ffmpeg_profiles),
         languages: ersatzrs_core::language_codes::language_options()
             .into_iter()
             .map(|(value, label)| SelectOption { value, label })
             .collect(),
-        watermarks: select_options(
-            pool,
-            ersatzrs_infra::admin_settings::SettingsOptionKind::Watermark,
-        )
-        .await?,
-        fallback_fillers: select_options(
-            pool,
-            ersatzrs_infra::admin_settings::SettingsOptionKind::FallbackFiller,
-        )
-        .await?,
+        watermarks: settings_select_options(model.watermarks),
+        fallback_fillers: settings_select_options(model.fallback_fillers),
         mpeg_ts_scripts: vec![SelectOption {
             value: "default".to_owned(),
             label: "Default".to_owned(),
         }],
-        custom_resolutions: select_options(
-            pool,
-            ersatzrs_infra::admin_settings::SettingsOptionKind::CustomResolution,
-        )
-        .await?,
+        custom_resolutions: settings_select_options(model.custom_resolutions),
     })
 }
 
@@ -447,195 +378,32 @@ async fn load_ffmpeg_settings_with_capabilities(
 #[allow(clippy::too_many_lines)]
 pub async fn save_ffmpeg_settings_with_state(
     state: &crate::host::state::AppState,
-    mut form: FfmpegSettingsForm,
+    form: FfmpegSettingsForm,
 ) -> Result<(), ServerFnError> {
-    validate_ffmpeg_settings(&form).await?;
-    if !form.use_embedded_subtitles {
-        form.extract_embedded_subtitles = false;
-    }
-
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
-        &form.ffmpeg_path,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
-        &form.ffprobe_path,
-    )
-    .await?;
-    // Resolve the effective tool paths once (env override → DB config → next to
-    // the executable → PATH), mirroring ErsatzTV re-reading the FFmpegLocator
-    // config per spawn. An empty form field means "auto-detect". The resolved
-    // paths drive both the process-wide holder every spawn site reads (so the
-    // change takes effect without a restart) and the runtime/capability refresh
-    // below, keeping validation and execution consistent.
-    let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
-    let ffprobe_resolved = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
-    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(ffmpeg_resolved.clone());
-    ersatzrs_ffmpeg::set_resolved_ffprobe_path(ffprobe_resolved.clone());
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
-        &form.default_ffmpeg_profile_id.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_SAVE_REPORTS,
-        bool_value(form.save_reports),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
-        &form.preferred_audio_language_code,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
-        &form.preferred_subtitle_language_code,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE,
-        &form.fallback_subtitle_language_code,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
-        bool_value(form.use_embedded_subtitles),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES,
-        bool_value(form.extract_embedded_subtitles),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
-        bool_value(form.probe_for_interlaced_frames),
-    )
-    .await?;
-    save_optional_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
-        form.global_watermark_id,
-    )
-    .await?;
-    save_optional_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-        form.global_fallback_filler_id,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
-        &form.hls_segmenter_idle_timeout.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
-        &form.work_ahead_segmenter_limit.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
-        &form.active_transcode_limit.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
-        &form.initial_segment_count.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
-        &form.hls_direct_output_format.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT,
-        &form.default_mpeg_ts_script,
-    )
-    .await?;
-
-    if form.save_reports {
-        let path = ersatzrs_infra::logging::default_log_dir().join("ffmpeg");
-        if let Err(error) = std::fs::create_dir_all(&path) {
-            tracing::warn!(%error, path = %path.display(), "failed to create ffmpeg report folder");
-        }
-    }
-
-    if form.extract_embedded_subtitles {
-        let pool = state.pool.clone();
-        tokio::spawn(async move {
-            match load_playout_ids(&pool).await {
-                Ok(playout_ids) => {
-                    for playout_id in playout_ids {
-                        if let Err(error) =
-                            ersatzrs_infra::subtitles::extract_embedded_playout_subtitles(
-                                &pool, playout_id,
-                            )
-                            .await
-                        {
-                            tracing::warn!(
-                                playout_id,
-                                %error,
-                                "embedded subtitle extraction failed after ffmpeg settings save"
-                            );
-                        }
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "failed to load playouts for embedded subtitle extraction");
-                }
-            }
-        });
-    }
-
-    refresh_ffmpeg_runtime(state, &ffmpeg_resolved, &ffprobe_resolved).await?;
-
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn refresh_ffmpeg_runtime(
-    state: &crate::host::state::AppState,
-    ffmpeg_path: &str,
-    ffprobe_path: &str,
-) -> Result<(), ServerFnError> {
-    let config = crate::host::bootstrap::ffmpeg_runtime_config_with_profile_probes(
-        &state.pool,
-        ffmpeg_path,
-        ffprobe_path,
-    )
-    .await;
-    let report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
+    state
+        .application
+        .save_ffmpeg_settings(ersatzrs_app::commands::SaveFfmpegSettings {
+            ffmpeg_path: form.ffmpeg_path,
+            ffprobe_path: form.ffprobe_path,
+            default_ffmpeg_profile_id: form.default_ffmpeg_profile_id,
+            preferred_audio_language_code: form.preferred_audio_language_code,
+            preferred_subtitle_language_code: form.preferred_subtitle_language_code,
+            fallback_subtitle_language_code: form.fallback_subtitle_language_code,
+            use_embedded_subtitles: form.use_embedded_subtitles,
+            extract_embedded_subtitles: form.extract_embedded_subtitles,
+            probe_for_interlaced_frames: form.probe_for_interlaced_frames,
+            save_reports: form.save_reports,
+            global_watermark_id: form.global_watermark_id,
+            global_fallback_filler_id: form.global_fallback_filler_id,
+            hls_segmenter_idle_timeout: form.hls_segmenter_idle_timeout,
+            work_ahead_segmenter_limit: form.work_ahead_segmenter_limit,
+            active_transcode_limit: form.active_transcode_limit,
+            initial_segment_count: form.initial_segment_count,
+            hls_direct_output_format: form.hls_direct_output_format,
+            default_mpeg_ts_script: form.default_mpeg_ts_script,
+        })
         .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
-    // A settings-save capability refresh is one of the explicit refresh
-    // triggers of ADR 0014: learned denial rows are cleared, not reapplied —
-    // the binary/driver may have changed, so the fresh probe report decides
-    // alone until runtime evidence says otherwise.
-    ersatzrs_infra::ffmpeg_capabilities::clear_hardware_decode_denials(&state.pool)
-        .await
-        .map_err(|error| ServerFnError::new(error.to_string()))?;
-    *state.ffmpeg_runtime.write().await = report;
-    Ok(())
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
@@ -680,102 +448,13 @@ fn suggest_active_transcode_limit(
 }
 
 #[cfg(feature = "ssr")]
-pub async fn load_logging_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn load_logging_settings_with_repository(
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
 ) -> Result<LoggingSettingsForm, ServerFnError> {
-    Ok(LoggingSettingsForm {
-        default_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL,
-            "Information",
-        )
-        .await?,
-        scanning_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
-            "Information",
-        )
-        .await?,
-        scheduling_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
-            "Information",
-        )
-        .await?,
-        searching_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING,
-            "Information",
-        )
-        .await?,
-        streaming_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
-            "Information",
-        )
-        .await?,
-        http_minimum_log_level: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
-            "Information",
-        )
-        .await?,
-    })
-}
-
-#[cfg(feature = "ssr")]
-pub async fn save_logging_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: LoggingSettingsForm,
-) -> Result<(), ServerFnError> {
-    for level in [
-        &form.default_minimum_log_level,
-        &form.scanning_minimum_log_level,
-        &form.scheduling_minimum_log_level,
-        &form.searching_minimum_log_level,
-        &form.streaming_minimum_log_level,
-        &form.http_minimum_log_level,
-    ] {
-        validate_log_level(level)?;
-    }
-
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL,
-        &form.default_minimum_log_level,
-    )
-    .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
-        &form.scanning_minimum_log_level,
-    )
-    .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
-        &form.scheduling_minimum_log_level,
-    )
-    .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING,
-        &form.searching_minimum_log_level,
-    )
-    .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
-        &form.streaming_minimum_log_level,
-    )
-    .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
-        &form.http_minimum_log_level,
-    )
-    .await?;
-    Ok(())
+    let settings = ersatzrs_app::queries::load_logging_settings(repository)
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(logging_settings_form(settings))
 }
 
 #[cfg(feature = "ssr")]
@@ -783,46 +462,28 @@ pub async fn save_logging_settings_with_state(
     state: &crate::host::state::AppState,
     form: LoggingSettingsForm,
 ) -> Result<(), ServerFnError> {
-    save_logging_settings_with_pool(&state.pool, form).await?;
-    crate::host::bootstrap::reload_logging_from_database(&state.pool)
+    state
+        .application
+        .save_logging_settings(ersatzrs_app::commands::SaveLoggingSettings {
+            default_minimum_log_level: form.default_minimum_log_level,
+            scanning_minimum_log_level: form.scanning_minimum_log_level,
+            scheduling_minimum_log_level: form.scheduling_minimum_log_level,
+            searching_minimum_log_level: form.searching_minimum_log_level,
+            streaming_minimum_log_level: form.streaming_minimum_log_level,
+            http_minimum_log_level: form.http_minimum_log_level,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn load_hdhr_settings_with_repository(
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
+) -> Result<HdhrSettingsForm, ServerFnError> {
+    let settings = ersatzrs_app::queries::load_hdhr_settings(repository)
         .await
         .map_err(ServerFnError::new)?;
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-pub async fn load_hdhr_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<HdhrSettingsForm, ServerFnError> {
-    let uuid = match load_optional_string(pool, ersatzrs_domain::CONFIG_KEY_HDHR_UUID).await? {
-        Some(value) if uuid::Uuid::parse_str(&value).is_ok() => value,
-        _ => {
-            let uuid = uuid::Uuid::new_v4().to_string();
-            save_config_value(pool, ersatzrs_domain::CONFIG_KEY_HDHR_UUID, &uuid).await?;
-            uuid
-        }
-    };
-
-    Ok(HdhrSettingsForm {
-        uuid,
-        tuner_count: load_i32(pool, ersatzrs_domain::CONFIG_KEY_HDHR_TUNER_COUNT, 2).await?,
-    })
-}
-
-#[cfg(feature = "ssr")]
-pub async fn save_hdhr_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: HdhrSettingsForm,
-) -> Result<(), ServerFnError> {
-    if form.tuner_count <= 0 {
-        return Err(ServerFnError::new("Tuner count must be greater than zero"));
-    }
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_HDHR_TUNER_COUNT,
-        &form.tuner_count.to_string(),
-    )
-    .await
+    Ok(hdhr_settings_form(settings))
 }
 
 #[cfg(feature = "ssr")]
@@ -830,53 +491,37 @@ pub async fn save_hdhr_settings_with_state(
     state: &crate::host::state::AppState,
     form: HdhrSettingsForm,
 ) -> Result<(), ServerFnError> {
-    save_hdhr_settings_with_pool(&state.pool, form.clone()).await?;
-    state.set_tuner_count(form.tuner_count);
-    Ok(())
+    state
+        .application
+        .save_hdhr_settings(ersatzrs_app::commands::SaveHdhrSettings {
+            tuner_count: form.tuner_count,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn save_scanner_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn save_scanner_settings_with_state(
+    state: &crate::host::state::AppState,
     form: ScannerSettingsForm,
 ) -> Result<(), ServerFnError> {
-    if form.library_refresh_interval < 0 {
-        return Err(ServerFnError::new(
-            "Library refresh interval must be 0 (do not refresh) or greater than zero",
-        ));
-    }
-    if form.library_refresh_interval >= 1_000_000 {
-        return Err(ServerFnError::new(
-            "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh",
-        ));
-    }
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
-        &form.library_refresh_interval.to_string(),
-    )
-    .await
+    state
+        .application
+        .save_scanner_settings(ersatzrs_app::commands::SaveScannerSettings {
+            library_refresh_interval: form.library_refresh_interval,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn load_playout_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn load_playout_settings_with_repository(
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
 ) -> Result<PlayoutSettingsForm, ServerFnError> {
-    Ok(PlayoutSettingsForm {
-        days_to_build: load_i32(pool, ersatzrs_domain::CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD, 2).await?,
-        skip_missing_items: load_bool(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
-            false,
-        )
-        .await?,
-        scripted_schedule_timeout_seconds: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS,
-            30,
-        )
-        .await?,
-    })
+    let settings = ersatzrs_app::queries::load_playout_settings(repository)
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(playout_settings_form(settings))
 }
 
 #[cfg(feature = "ssr")]
@@ -884,74 +529,41 @@ pub async fn save_playout_settings_with_state(
     state: &crate::host::state::AppState,
     form: PlayoutSettingsForm,
 ) -> Result<(), ServerFnError> {
-    if form.days_to_build <= 0 {
-        return Err(ServerFnError::new(
-            "Playout days to build must be greater than zero",
-        ));
-    }
-    if form.scripted_schedule_timeout_seconds < 10 {
-        return Err(ServerFnError::new(
-            "Scripted schedule timeout seconds must be at least 10",
-        ));
-    }
-
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
-        &form.days_to_build.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
-        bool_value(form.skip_missing_items),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS,
-        &form.scripted_schedule_timeout_seconds.to_string(),
-    )
-    .await?;
-
-    let playout_ids = ersatzrs_infra::admin_settings::load_playout_ids(&state.pool).await?;
-    enqueue_playout_builds(
-        state,
-        playout_ids,
-        ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
-    );
-    Ok(())
+    state
+        .application
+        .save_playout_settings(ersatzrs_app::commands::SavePlayoutSettings {
+            days_to_build: form.days_to_build,
+            skip_missing_items: form.skip_missing_items,
+            scripted_schedule_timeout_seconds: form.scripted_schedule_timeout_seconds,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn save_ui_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn save_ui_settings_with_state(
+    state: &crate::host::state::AppState,
     form: UiSettingsForm,
 ) -> Result<(), ServerFnError> {
     let language = normalize_ui_language(&form.language);
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
-        bool_value(form.is_dark_mode),
-    )
-    .await?;
-    save_config_value(pool, ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE, &language).await
+    state
+        .application
+        .save_ui_settings(ersatzrs_app::commands::SaveUiSettings {
+            is_dark_mode: form.is_dark_mode,
+            language,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn load_xmltv_settings_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn load_xmltv_settings_with_repository(
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
 ) -> Result<XmltvSettingsForm, ServerFnError> {
-    Ok(XmltvSettingsForm {
-        days_to_build: load_i32(pool, ersatzrs_domain::CONFIG_KEY_XMLTV_DAYS_TO_BUILD, 2).await?,
-        time_zone: load_string(pool, ersatzrs_domain::CONFIG_KEY_XMLTV_TIME_ZONE, "Local").await?,
-        block_behavior: load_string(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR,
-            "SplitTimeEvenly",
-        )
-        .await?,
-    })
+    let settings = ersatzrs_app::queries::load_xmltv_settings(repository)
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(xmltv_settings_form(settings))
 }
 
 #[cfg(feature = "ssr")]
@@ -959,302 +571,132 @@ pub async fn save_xmltv_settings_with_state(
     state: &crate::host::state::AppState,
     form: XmltvSettingsForm,
 ) -> Result<(), ServerFnError> {
-    if form.days_to_build <= 0 {
-        return Err(ServerFnError::new(
-            "XMLTV days to build must be greater than zero",
-        ));
-    }
-    let playout_days = load_i32(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
-        2,
-    )
-    .await?;
-    if playout_days < form.days_to_build {
-        return Err(ServerFnError::new(format!(
-            "XMLTV days to build ({}) cannot be greater than Playout days to build ({playout_days})",
-            form.days_to_build
-        )));
-    }
-    validate_one_of(&form.time_zone, &["Local", "Utc"])?;
-    validate_one_of(&form.block_behavior, &["SplitTimeEvenly", "UseActualTimes"])?;
-
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_XMLTV_TIME_ZONE,
-        &form.time_zone,
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_XMLTV_DAYS_TO_BUILD,
-        &form.days_to_build.to_string(),
-    )
-    .await?;
-    save_config_value(
-        &state.pool,
-        ersatzrs_domain::CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR,
-        &form.block_behavior,
-    )
-    .await?;
-
-    let playout_ids = ersatzrs_infra::admin_settings::load_playout_ids(&state.pool).await?;
-    enqueue_playout_builds(
-        state,
-        playout_ids,
-        ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
-    );
-    Ok(())
+    state
+        .application
+        .save_xmltv_settings(ersatzrs_app::commands::SaveXmltvSettings {
+            days_to_build: form.days_to_build,
+            time_zone: form.time_zone,
+            block_behavior: form.block_behavior,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn create_custom_resolution(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn create_custom_resolution_with_state(
+    state: &crate::host::state::AppState,
     width: i32,
     height: i32,
 ) -> Result<(), ServerFnError> {
-    if width <= 0 || height <= 0 {
-        return Err(ServerFnError::new("Resolution width or height is invalid"));
-    }
-    ersatzrs_infra::admin_settings::create_custom_resolution(pool, width, height)
+    state
+        .application
+        .create_custom_resolution(ersatzrs_app::commands::CreateCustomResolution { width, height })
         .await
-        .map_err(ServerFnError::from)
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-pub async fn delete_custom_resolution_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
+pub async fn delete_custom_resolution_with_state(
+    state: &crate::host::state::AppState,
     id: i64,
 ) -> Result<(), ServerFnError> {
-    ersatzrs_infra::admin_settings::delete_custom_resolution(pool, id)
+    state
+        .application
+        .delete_custom_resolution(ersatzrs_app::commands::DeleteCustomResolution { id })
         .await
-        .map_err(ServerFnError::from)
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
-async fn validate_ffmpeg_settings(form: &FfmpegSettingsForm) -> Result<(), ServerFnError> {
-    // Validate the *effective* path the locator resolves to: an empty field
-    // means "auto-detect" and resolves to the tool next to the executable / on
-    // PATH, matching ErsatzTV's FFmpegLocator.
-    let ffmpeg = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
-    let ffprobe = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
-    validate_tool_path(&ffmpeg, "ffmpeg").await?;
-    validate_tool_path(&ffprobe, "ffprobe").await?;
-    if form.hls_segmenter_idle_timeout < 30 {
-        return Err(ServerFnError::new(
-            "HLS Segmenter idle timeout must be greater than or equal to 30",
-        ));
-    }
-    if form.work_ahead_segmenter_limit < 0 {
-        return Err(ServerFnError::new(
-            "Work-Ahead HLS Segmenter limit must be greater than or equal to 0",
-        ));
-    }
-    if form.active_transcode_limit < 1 {
-        return Err(ServerFnError::new(
-            "Active HLS transcode limit must be greater than or equal to 1",
-        ));
-    }
-    if form.initial_segment_count < 1 {
-        return Err(ServerFnError::new(
-            "HLS Segmenter initial segment count must be greater than or equal to 1",
-        ));
-    }
-    Ok(())
+fn settings_select_options(
+    rows: Vec<ersatzrs_core::repositories::SettingsSelectOption>,
+) -> Vec<SelectOption> {
+    rows.into_iter()
+        .map(|row| SelectOption {
+            value: row.id.to_string(),
+            label: row.name,
+        })
+        .collect()
 }
 
 #[cfg(feature = "ssr")]
-async fn load_playout_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> ersatzrs_core::repositories::Result<Vec<i64>> {
-    ersatzrs_infra::admin_settings::load_playout_ids(pool).await
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_tool_path(path: &str, name: &str) -> Result<(), ServerFnError> {
-    if path.trim().is_empty() {
-        return Err(ServerFnError::new(format!("{name} path does not exist")));
-    }
-    let output = tokio::process::Command::new(path)
-        .arg("-version")
-        .output()
-        .await
-        .map_err(|_| ServerFnError::new(format!("Unable to verify {name} version")))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if output.status.success() && stdout.contains(&format!("{name} version")) {
-        Ok(())
-    } else {
-        Err(ServerFnError::new(format!(
-            "Unable to verify {name} version"
-        )))
+fn logging_settings_form(settings: ersatzrs_app::queries::LoggingSettings) -> LoggingSettingsForm {
+    LoggingSettingsForm {
+        default_minimum_log_level: settings.default_minimum_log_level,
+        scanning_minimum_log_level: settings.scanning_minimum_log_level,
+        scheduling_minimum_log_level: settings.scheduling_minimum_log_level,
+        searching_minimum_log_level: settings.searching_minimum_log_level,
+        streaming_minimum_log_level: settings.streaming_minimum_log_level,
+        http_minimum_log_level: settings.http_minimum_log_level,
     }
 }
 
 #[cfg(feature = "ssr")]
-fn validate_log_level(level: &str) -> Result<(), ServerFnError> {
-    validate_one_of(level, &["Debug", "Information", "Warning", "Error"])
-}
-
-#[cfg(feature = "ssr")]
-fn validate_one_of(value: &str, allowed: &[&str]) -> Result<(), ServerFnError> {
-    if allowed.contains(&value) {
-        Ok(())
-    } else {
-        Err(ServerFnError::new(format!("Invalid option: {value}")))
+fn hdhr_settings_form(settings: ersatzrs_app::queries::HdhrSettings) -> HdhrSettingsForm {
+    HdhrSettingsForm {
+        uuid: settings.uuid,
+        tuner_count: settings.tuner_count,
     }
 }
 
 #[cfg(feature = "ssr")]
-fn bool_value(value: bool) -> &'static str {
-    if value {
-        "True"
-    } else {
-        "False"
+fn playout_settings_form(settings: ersatzrs_app::queries::PlayoutSettings) -> PlayoutSettingsForm {
+    PlayoutSettingsForm {
+        days_to_build: settings.days_to_build,
+        skip_missing_items: settings.skip_missing_items,
+        scripted_schedule_timeout_seconds: settings.scripted_schedule_timeout_seconds,
     }
 }
 
 #[cfg(feature = "ssr")]
-async fn select_options(
-    pool: &ersatzrs_infra::db::DbPool,
-    kind: ersatzrs_infra::admin_settings::SettingsOptionKind,
-) -> Result<Vec<SelectOption>, ServerFnError> {
-    Ok(
-        ersatzrs_infra::admin_settings::load_select_options(pool, kind)
-            .await?
-            .into_iter()
-            .map(|row| SelectOption {
-                value: row.id.to_string(),
-                label: row.name,
-            })
-            .collect(),
-    )
-}
-
-#[cfg(feature = "ssr")]
-async fn load_optional_string(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-) -> Result<Option<String>, ServerFnError> {
-    ersatzrs_infra::admin_settings::load_optional_string(pool, key)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-async fn load_string(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-    default: &str,
-) -> Result<String, ServerFnError> {
-    ersatzrs_infra::admin_settings::load_string(pool, key, default)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-async fn load_i32(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-    default: i32,
-) -> Result<i32, ServerFnError> {
-    ersatzrs_infra::admin_settings::load_i32(pool, key, default)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-async fn load_optional_i64(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-) -> Result<Option<i64>, ServerFnError> {
-    ersatzrs_infra::admin_settings::load_optional_i64(pool, key)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-async fn load_bool(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-    default: bool,
-) -> Result<bool, ServerFnError> {
-    ersatzrs_infra::admin_settings::load_bool(pool, key, default)
-        .await
-        .map_err(ServerFnError::from)
+fn xmltv_settings_form(settings: ersatzrs_app::queries::XmltvSettings) -> XmltvSettingsForm {
+    XmltvSettingsForm {
+        days_to_build: settings.days_to_build,
+        time_zone: settings.time_zone,
+        block_behavior: settings.block_behavior,
+    }
 }
 
 #[cfg(feature = "ssr")]
 pub(crate) async fn load_bool_for_api(
-    pool: &ersatzrs_infra::db::DbPool,
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
     key: &str,
     default: bool,
 ) -> Result<bool, ServerFnError> {
-    load_bool(pool, key, default).await
+    ersatzrs_app::queries::get_bool_setting(key, default, repository)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
 pub async fn load_ui_language_for_api(
-    pool: &ersatzrs_infra::db::DbPool,
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
 ) -> Result<UiLanguage, ServerFnError> {
-    load_string(pool, ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE, "en-us")
-        .await
-        .map(|language| UiLanguage::from_config(&language))
+    ersatzrs_app::queries::get_string_setting(
+        ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE,
+        "en-us",
+        repository,
+    )
+    .await
+    .map(|language| UiLanguage::from_config(&language))
+    .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]
 pub async fn save_config_value(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
+    repository: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
+    key: &'static str,
     value: &str,
 ) -> Result<(), ServerFnError> {
-    ersatzrs_infra::admin_settings::save_config_value(pool, key, value)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-async fn save_optional_config_value(
-    pool: &ersatzrs_infra::db::DbPool,
-    key: &str,
-    value: Option<i64>,
-) -> Result<(), ServerFnError> {
-    ersatzrs_infra::admin_settings::save_optional_i64(pool, key, value)
-        .await
-        .map_err(ServerFnError::from)
-}
-
-#[cfg(feature = "ssr")]
-fn enqueue_playout_builds(
-    state: &crate::host::state::AppState,
-    playout_ids: Vec<i64>,
-    mode: ersatzrs_core::scheduling::PlayoutBuildMode,
-) {
-    use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
-
-    for playout_id in playout_ids {
-        match state
-            .application
-            .request_playout_build(RequestPlayoutBuild::new(playout_id, mode))
-        {
-            RequestPlayoutBuildOutcome::Accepted
-            | RequestPlayoutBuildOutcome::AlreadyQueued
-            | RequestPlayoutBuildOutcome::AlreadyBuilding => {}
-            RequestPlayoutBuildOutcome::Unavailable { message } => {
-                tracing::warn!(
-                    playout_id,
-                    %message,
-                    "unable to enqueue settings-triggered playout build; worker queue is unavailable"
-                );
-            }
-            RequestPlayoutBuildOutcome::Rejected(reason) => {
-                tracing::warn!(
-                    playout_id,
-                    ?reason,
-                    "unable to enqueue invalid settings-triggered playout build"
-                );
-            }
-        }
-    }
+    ersatzrs_app::commands::set_admin_setting(
+        ersatzrs_app::commands::SetAdminSetting {
+            key,
+            value: value.to_owned(),
+        },
+        repository,
+    )
+    .await
+    .map_err(ServerFnError::new)
 }
 
 #[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
@@ -1275,7 +717,8 @@ mod tests {
     #[tokio::test]
     async fn load_ffmpeg_settings_resolves_auto_detect_paths() {
         let pool = fresh_pool().await;
-        save_config_value(&pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "")
+        let repository = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
+        save_config_value(&repository, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "")
             .await
             .expect("save empty ffmpeg path");
 
@@ -1324,10 +767,17 @@ mod tests {
     #[tokio::test]
     async fn create_custom_resolution_persists_custom_resolution() {
         let pool = fresh_pool().await;
+        let repository = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
 
-        create_custom_resolution(&pool, 1234, 567)
-            .await
-            .expect("create custom resolution");
+        ersatzrs_app::commands::create_custom_resolution(
+            ersatzrs_app::commands::CreateCustomResolution {
+                width: 1234,
+                height: 567,
+            },
+            &repository,
+        )
+        .await
+        .expect("create custom resolution");
 
         let row = sqlx::query(
             r#"SELECT "Name", "IsCustom", "Width", "Height"
@@ -1348,14 +798,27 @@ mod tests {
     #[tokio::test]
     async fn create_custom_resolution_rejects_duplicates() {
         let pool = fresh_pool().await;
+        let repository = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
 
-        create_custom_resolution(&pool, 1234, 567)
-            .await
-            .expect("create custom resolution");
+        ersatzrs_app::commands::create_custom_resolution(
+            ersatzrs_app::commands::CreateCustomResolution {
+                width: 1234,
+                height: 567,
+            },
+            &repository,
+        )
+        .await
+        .expect("create custom resolution");
 
-        let error = create_custom_resolution(&pool, 1234, 567)
-            .await
-            .expect_err("duplicate resolution should fail");
+        let error = ersatzrs_app::commands::create_custom_resolution(
+            ersatzrs_app::commands::CreateCustomResolution {
+                width: 1234,
+                height: 567,
+            },
+            &repository,
+        )
+        .await
+        .expect_err("duplicate resolution should fail");
 
         assert!(error
             .to_string()

@@ -237,6 +237,180 @@ pub struct PlayoutTemplatesForm {
     pub items: Vec<PlayoutTemplateItemForm>,
 }
 
+#[cfg(feature = "ssr")]
+fn playout_kind_editor_from_admin(
+    form: ersatzrs_core::repositories::PlayoutKindEditorAdmin,
+) -> PlayoutKindEditorForm {
+    PlayoutKindEditorForm {
+        id: form.id,
+        schedule_kind: form.schedule_kind,
+        channel_label: format!("{} \u{2014} {}", form.channel_number, form.channel_name),
+        channel_playout_mode: form.channel_playout_mode,
+        schedule_file: form.schedule_file,
+        default_deco_id: form.default_deco_id,
+        deco_groups: form
+            .deco_groups
+            .into_iter()
+            .map(|value| PlayoutDecoGroupOption {
+                id: value.id,
+                name: value.name,
+            })
+            .collect(),
+        decos: form
+            .decos
+            .into_iter()
+            .map(|value| PlayoutDecoOption {
+                id: value.id,
+                group_id: value.group_id,
+                name: value.name,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn date_filter_from_admin(
+    value: ersatzrs_core::repositories::PlayoutDateFilterAdmin,
+) -> PlayoutDateFilter {
+    PlayoutDateFilter {
+        limit_to_date_range: value.limit_to_date_range,
+        start_month: value.start_month,
+        start_day: value.start_day,
+        start_year: value.start_year,
+        end_month: value.end_month,
+        end_day: value.end_day,
+        end_year: value.end_year,
+        days_of_week: value.days_of_week,
+        days_of_month: value.days_of_month,
+        months_of_year: value.months_of_year,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn date_filter_into_admin(
+    value: PlayoutDateFilter,
+) -> ersatzrs_core::repositories::PlayoutDateFilterAdmin {
+    ersatzrs_core::repositories::PlayoutDateFilterAdmin {
+        limit_to_date_range: value.limit_to_date_range,
+        start_month: value.start_month,
+        start_day: value.start_day,
+        start_year: value.start_year,
+        end_month: value.end_month,
+        end_day: value.end_day,
+        end_year: value.end_year,
+        days_of_week: value.days_of_week,
+        days_of_month: value.days_of_month,
+        months_of_year: value.months_of_year,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn alternate_schedules_from_admin(
+    form: ersatzrs_core::repositories::PlayoutAlternateSchedulesAdmin,
+) -> PlayoutAlternateSchedulesForm {
+    PlayoutAlternateSchedulesForm {
+        playout_id: form.playout_id,
+        channel_label: format!("{} \u{2014} {}", form.channel_number, form.channel_name),
+        schedules: form
+            .schedules
+            .into_iter()
+            .map(|value| PlayoutNestedOption {
+                id: value.id,
+                name: value.name,
+            })
+            .collect(),
+        items: form
+            .items
+            .into_iter()
+            .map(|item| PlayoutAlternateScheduleItemForm {
+                id: item.id,
+                index: item.index,
+                program_schedule_id: item.program_schedule_id,
+                program_schedule_name: item.program_schedule_name,
+                date_filter: date_filter_from_admin(item.date_filter),
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn alternate_item_into_admin(
+    item: PlayoutAlternateScheduleItemForm,
+) -> ersatzrs_core::repositories::PlayoutAlternateScheduleItemAdmin {
+    ersatzrs_core::repositories::PlayoutAlternateScheduleItemAdmin {
+        id: item.id,
+        index: item.index,
+        program_schedule_id: item.program_schedule_id,
+        program_schedule_name: item.program_schedule_name,
+        date_filter: date_filter_into_admin(item.date_filter),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn playout_templates_from_admin(
+    form: ersatzrs_core::repositories::PlayoutTemplatesAdmin,
+) -> PlayoutTemplatesForm {
+    let options = |values: Vec<ersatzrs_core::repositories::PlayoutNestedOptionAdmin>| {
+        values
+            .into_iter()
+            .map(|value| PlayoutNestedOption {
+                id: value.id,
+                name: value.name,
+            })
+            .collect()
+    };
+    let children = |values: Vec<ersatzrs_core::repositories::PlayoutNestedChildOptionAdmin>| {
+        values
+            .into_iter()
+            .map(|value| PlayoutNestedChildOption {
+                id: value.id,
+                group_id: value.group_id,
+                name: value.name,
+            })
+            .collect()
+    };
+    PlayoutTemplatesForm {
+        playout_id: form.playout_id,
+        channel_label: format!("{} \u{2014} {}", form.channel_number, form.channel_name),
+        template_groups: options(form.template_groups),
+        templates: children(form.templates),
+        deco_template_groups: options(form.deco_template_groups),
+        deco_templates: children(form.deco_templates),
+        items: form
+            .items
+            .into_iter()
+            .map(|item| PlayoutTemplateItemForm {
+                id: item.id,
+                index: item.index,
+                template_group_id: item.template_group_id,
+                template_id: item.template_id,
+                template_name: item.template_name,
+                deco_template_group_id: item.deco_template_group_id,
+                deco_template_id: item.deco_template_id,
+                deco_template_name: item.deco_template_name,
+                date_filter: date_filter_from_admin(item.date_filter),
+            })
+            .collect(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn template_item_into_admin(
+    item: PlayoutTemplateItemForm,
+) -> ersatzrs_core::repositories::PlayoutTemplateItemAdmin {
+    ersatzrs_core::repositories::PlayoutTemplateItemAdmin {
+        id: item.id,
+        index: item.index,
+        template_group_id: item.template_group_id,
+        template_id: item.template_id,
+        template_name: item.template_name,
+        deco_template_group_id: item.deco_template_group_id,
+        deco_template_id: item.deco_template_id,
+        deco_template_name: item.deco_template_name,
+        date_filter: date_filter_into_admin(item.date_filter),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // List + detail queries
 // ---------------------------------------------------------------------------
@@ -251,67 +425,28 @@ pub async fn list_playouts(
     page_size: u32,
 ) -> Result<Vec<PlayoutListRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let trimmed = query.trim();
-    let offset = i64::from(page) * i64::from(page_size.max(1));
-    let limit = i64::from(page_size.max(1));
-
-    let base = r#"SELECT p."Id",
-                  COALESCE(c."Number", '') AS "ChannelNumber",
-                  COALESCE(c."Name",   '') AS "ChannelName",
-                  p."ScheduleKind",
-                  COALESCE(ps."Name", '') AS "ScheduleName",
-                  COALESCE(p."ScheduleFile", '') AS "ScheduleFile",
-                  p."DailyRebuildTime",
-                  pbs."Success" AS "BuildSuccess",
-                  pbs."Message" AS "BuildMessage"
-           FROM "Playout" p
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
-           LEFT JOIN "ProgramSchedule" ps ON ps."Id" = p."ProgramScheduleId"
-           LEFT JOIN "PlayoutBuildStatus" pbs ON pbs."PlayoutId" = p."Id""#;
-
-    let rows = if trimmed.is_empty() {
-        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
-            r#"{base} ORDER BY c."SortNumber", p."Id" LIMIT ? OFFSET ?"#
-        )))
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.pool)
-        .await?
-    } else {
-        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
-            r#"{base} WHERE c."Name" LIKE ? ORDER BY c."SortNumber", p."Id" LIMIT ? OFFSET ?"#
-        )))
-        .bind(format!("%{trimmed}%"))
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.pool)
-        .await?
-    };
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            let build_success: Option<i64> = r.try_get("BuildSuccess").ok().flatten();
-            PlayoutListRow {
-                id: r.try_get("Id").unwrap_or(0),
-                channel_number: r.try_get("ChannelNumber").unwrap_or_default(),
-                channel_name: r.try_get("ChannelName").unwrap_or_default(),
-                schedule_kind: r.try_get("ScheduleKind").unwrap_or(0),
-                schedule_name: r.try_get("ScheduleName").unwrap_or_default(),
-                schedule_file: r.try_get("ScheduleFile").unwrap_or_default(),
-                daily_rebuild_minutes: r
-                    .try_get::<Option<String>, _>("DailyRebuildTime")
-                    .ok()
-                    .flatten()
-                    .and_then(|v| parse_daily_rebuild_minutes(&v)),
-                build_success: build_success.map(|v| v != 0),
-                build_message: r.try_get("BuildMessage").ok().flatten(),
-            }
+    state
+        .application
+        .list_playouts(&query, page, page_size)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PlayoutListRow {
+                    id: row.id,
+                    channel_number: row.channel_number,
+                    channel_name: row.channel_name,
+                    schedule_kind: row.schedule_kind,
+                    schedule_name: row.schedule_name,
+                    schedule_file: row.schedule_file,
+                    daily_rebuild_minutes: row.daily_rebuild_minutes,
+                    build_success: row.build_success,
+                    build_message: row.build_message,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 /// Total playout count. Mirrors `GetPagedPlayoutsHandler` which counts the
@@ -321,10 +456,11 @@ pub async fn count_playouts() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playout""#)
-        .fetch_one(&state.pool)
-        .await?;
-    Ok(u64::try_from(count).unwrap_or(0))
+    state
+        .application
+        .count_playouts()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -332,7 +468,21 @@ pub async fn list_playout_create_channels() -> Result<Vec<PlayoutCreateChannel>,
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_playout_create_channels_with_pool(&state.pool).await
+    state
+        .application
+        .list_playout_create_channels()
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PlayoutCreateChannel {
+                    id: row.id,
+                    number: row.number,
+                    name: row.name,
+                    playout_count: row.playout_count,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -340,7 +490,19 @@ pub async fn list_playout_create_schedules() -> Result<Vec<PlayoutCreateSchedule
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_playout_create_schedules_with_pool(&state.pool).await
+    state
+        .application
+        .list_playout_create_schedules()
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| PlayoutCreateSchedule {
+                    id: row.id,
+                    name: row.name,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
 /// Paged, future playout items + gaps for the selected playout. Mirrors
@@ -354,90 +516,26 @@ pub async fn list_playout_detail_items(
     page_size: u32,
 ) -> Result<Vec<PlayoutDetailItem>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let now = now_sql();
-    let offset = i64::from(page) * i64::from(page_size.max(1));
-    let limit = i64::from(page_size.max(1));
-
-    let filler_clause = if show_filler {
-        ""
-    } else {
-        r#" AND pi."FillerKind" = 0"#
-    };
-
-    // Window across items + gaps to get the ordered page of rows.
-    let window_sql = format!(
-        r#"SELECT * FROM (
-              SELECT 'item' AS "Kind", pi."Id" AS "Id", pi."Start" AS "Start", pi."Finish" AS "Finish",
-                     pi."FillerKind" AS "FillerKind", pi."SchedulingContext" AS "SchedulingContext"
-              FROM "PlayoutItem" pi
-              WHERE pi."PlayoutId" = ? AND pi."Finish" >= ?{filler_clause}
-              UNION ALL
-              SELECT 'gap' AS "Kind", pg."Id" AS "Id", pg."Start" AS "Start", pg."Finish" AS "Finish",
-                     -1 AS "FillerKind", NULL AS "SchedulingContext"
-              FROM "PlayoutGap" pg
-              WHERE pg."PlayoutId" = ? AND pg."Finish" >= ?
-           ) AS combined
-           ORDER BY "Start"
-           LIMIT ? OFFSET ?"#
-    );
-
-    let window = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&window_sql))
-        .bind(playout_id)
-        .bind(&now)
-        .bind(playout_id)
-        .bind(&now)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.pool)
-        .await?;
-
-    // Resolve display titles for the item rows on this page in one query.
-    let item_ids: Vec<i64> = window
-        .iter()
-        .filter(|r| r.try_get::<String, _>("Kind").ok().as_deref() == Some("item"))
-        .filter_map(|r| r.try_get::<i64, _>("Id").ok())
-        .collect();
-    let titles = load_item_titles(&state.pool, &item_ids).await?;
-
-    let mut out = Vec::with_capacity(window.len());
-    for r in &window {
-        let kind: String = r.try_get("Kind").unwrap_or_default();
-        let id: i64 = r.try_get("Id").unwrap_or(0);
-        let start_raw: String = r.try_get("Start").unwrap_or_default();
-        let finish_raw: String = r.try_get("Finish").unwrap_or_default();
-        let duration = display_duration(&start_raw, &finish_raw);
-        if kind == "gap" {
-            out.push(PlayoutDetailItem {
-                title: String::new(), // gap title comes from i18n in the page
-                start: format_local(&start_raw),
-                finish: format_local(&finish_raw),
-                duration,
-                scheduling_context: None,
-                filler_kind: -1,
-            });
-        } else {
-            let filler_kind =
-                i32::try_from(r.try_get::<i64, _>("FillerKind").unwrap_or(0)).unwrap_or(0);
-            let ctx: Option<String> = r
-                .try_get::<Option<String>, _>("SchedulingContext")
-                .ok()
-                .flatten()
-                .filter(|v| !v.trim().is_empty());
-            out.push(PlayoutDetailItem {
-                title: titles.get(&id).cloned().unwrap_or_default(),
-                start: format_local(&start_raw),
-                finish: format_local(&finish_raw),
-                duration,
-                scheduling_context: ctx,
-                filler_kind,
-            });
-        }
-    }
-
-    Ok(out)
+    state
+        .application
+        .list_playout_detail_items(playout_id, show_filler, page, page_size)
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| PlayoutDetailItem {
+                    title: item.title,
+                    start: item.start,
+                    finish: item.finish,
+                    duration: item.duration,
+                    scheduling_context: item.scheduling_context,
+                    filler_kind: item.filler_kind,
+                })
+                .collect()
+        })
+        .map_err(ServerFnError::new)
 }
 
 /// Combined count of future items + gaps for the playout. Mirrors the
@@ -450,29 +548,11 @@ pub async fn count_playout_detail_items(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let now = now_sql();
-    let filler_clause = if show_filler {
-        ""
-    } else {
-        r#" AND "FillerKind" = 0"#
-    };
-
-    let sql = format!(
-        r#"SELECT
-              (SELECT COUNT(*) FROM "PlayoutItem"
-               WHERE "PlayoutId" = ? AND "Finish" >= ?{filler_clause})
-            + (SELECT COUNT(*) FROM "PlayoutGap"
-               WHERE "PlayoutId" = ? AND "Finish" >= ?)"#
-    );
-
-    let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
-        .bind(playout_id)
-        .bind(&now)
-        .bind(playout_id)
-        .bind(&now)
-        .fetch_one(&state.pool)
-        .await?;
-    Ok(u64::try_from(count).unwrap_or(0))
+    state
+        .application
+        .count_playout_detail_items(playout_id, show_filler)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -488,11 +568,11 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "Playout" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_playout(ersatzrs_app::commands::DeletePlayout { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Enqueues a build for one playout. Mirrors `Playouts.razor.ResetPlayout`:
@@ -515,25 +595,17 @@ pub async fn reset_playout(
 #[server]
 pub async fn reset_all_playouts() -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(r#"SELECT "Id", "ScheduleKind" FROM "Playout""#)
-        .fetch_all(&state.pool)
-        .await?;
-
-    let mut result = PlayoutBuildEnqueueResult::default();
-    for r in &rows {
-        let id: i64 = r.try_get("Id").unwrap_or(0);
-        let kind: i32 = r.try_get("ScheduleKind").unwrap_or(0);
-        let Some(mode) = reset_all_playout_mode(kind) else {
-            continue;
-        };
-        let queued = enqueue_build(&state, id, mode)?;
-        result.accepted += queued.accepted;
-        result.coalesced += queued.coalesced;
-    }
-    Ok(result)
+    state
+        .application
+        .reset_all_playouts()
+        .await
+        .map(|outcome| PlayoutBuildEnqueueResult {
+            accepted: outcome.accepted,
+            coalesced: outcome.coalesced,
+        })
+        .map_err(ServerFnError::new)
 }
 
 /// Persists a playout's `DailyRebuildTime`. Mirrors `UpdatePlayoutHandler`:
@@ -543,13 +615,11 @@ pub async fn save_playout_daily_reset(id: i64, minutes: Option<i32>) -> Result<(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let value = minutes.map(format_daily_rebuild_time);
-    sqlx::query(r#"UPDATE "Playout" SET "DailyRebuildTime" = ? WHERE "Id" = ?"#)
-        .bind(value)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .save_playout_daily_reset(ersatzrs_app::commands::SavePlayoutDailyReset { id, minutes })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Updates an external-json playout's `ScheduleFile`. Mirrors
@@ -563,13 +633,16 @@ pub async fn update_external_json_playout(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"UPDATE "Playout" SET "ScheduleFile" = ? WHERE "Id" = ? AND "ScheduleKind" = ?"#)
-        .bind(&schedule_file)
-        .bind(id)
-        .bind(KIND_EXTERNAL_JSON)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .save_playout_schedule_file(ersatzrs_app::commands::SavePlayoutScheduleFile {
+            id,
+            schedule_kind: KIND_EXTERNAL_JSON,
+            schedule_file,
+            rebuild_mode: None,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Creates a playout from the add page. Ports the `Create*PlayoutHandler`
@@ -580,7 +653,16 @@ pub async fn create_playout(form: PlayoutCreateForm) -> Result<i64, ServerFnErro
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    create_playout_with_state(&state, form).await
+    state
+        .application
+        .create_playout(ersatzrs_app::commands::CreatePlayout {
+            kind: form.kind,
+            channel_id: form.channel_id,
+            program_schedule_id: form.program_schedule_id,
+            schedule_file: form.schedule_file,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Snapshot of playout ids currently building. Mirrors the admin UI polling
@@ -615,35 +697,26 @@ pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, Se
 #[server]
 pub async fn get_show_filler_pref() -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ConfigRepository;
 
     let state = expect_context::<AppState>();
-    let value = state
-        .repositories
-        .config
-        .get("pages.playouts.detail_show_filler")
+    state
+        .application
+        .get_playout_show_filler()
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(value.is_some_and(|v| v.trim().eq_ignore_ascii_case("true")))
+        .map_err(ServerFnError::new)
 }
 
 /// Persists the `Show Filler` detail preference.
 #[server]
 pub async fn set_show_filler_pref(show_filler: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ConfigRepository;
 
     let state = expect_context::<AppState>();
     state
-        .repositories
-        .config
-        .set(
-            "pages.playouts.detail_show_filler",
-            if show_filler { "true" } else { "false" },
-        )
+        .application
+        .set_playout_show_filler(show_filler)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(())
+        .map_err(ServerFnError::new)
 }
 
 /// Enriches a serialized scheduling context. Mirrors
@@ -655,7 +728,11 @@ pub async fn process_scheduling_context(serialized: String) -> Result<String, Se
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(enrich_scheduling_context(&state.pool, &serialized).await)
+    state
+        .application
+        .process_scheduling_context(&serialized)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -669,51 +746,14 @@ pub async fn get_playout_kind_editor(
     schedule_kind: i32,
 ) -> Result<Option<PlayoutKindEditorForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    if !matches!(schedule_kind, KIND_CLASSIC | KIND_BLOCK | KIND_SCRIPTED) {
-        return Ok(None);
-    }
-
-    let row = sqlx::query(
-        r#"SELECT p."Id",
-                  p."ScheduleKind",
-                  COALESCE(c."Number", '') AS "ChannelNumber",
-                  COALESCE(c."Name", '') AS "ChannelName",
-                  COALESCE(c."PlayoutMode", 0) AS "ChannelPlayoutMode",
-                  COALESCE(p."ScheduleFile", '') AS "ScheduleFile",
-                  p."DecoId"
-           FROM "Playout" p
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
-           WHERE p."Id" = ? AND p."ScheduleKind" = ?"#,
-    )
-    .bind(id)
-    .bind(schedule_kind)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let Some(row) = row else {
-        return Ok(None);
-    };
-
-    let number: String = row.try_get("ChannelNumber").unwrap_or_default();
-    let name: String = row.try_get("ChannelName").unwrap_or_default();
-    let (deco_groups, decos) = if schedule_kind == KIND_BLOCK {
-        load_playout_deco_options(&state.pool).await?
-    } else {
-        (Vec::new(), Vec::new())
-    };
-    Ok(Some(PlayoutKindEditorForm {
-        id: row.try_get("Id").unwrap_or(0),
-        schedule_kind: row.try_get("ScheduleKind").unwrap_or(0),
-        channel_label: format!("{number} \u{2014} {name}"),
-        channel_playout_mode: row.try_get("ChannelPlayoutMode").unwrap_or(0),
-        schedule_file: row.try_get("ScheduleFile").unwrap_or_default(),
-        default_deco_id: row.try_get::<Option<i64>, _>("DecoId").ok().flatten(),
-        deco_groups,
-        decos,
-    }))
+    state
+        .application
+        .get_playout_kind_editor(id, schedule_kind)
+        .await
+        .map(|form| form.map(playout_kind_editor_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 /// Persists a Scripted playout schedule file/command line and refreshes the
@@ -724,22 +764,16 @@ pub async fn save_scripted_playout(id: i64, schedule_file: String) -> Result<(),
     use ersatzrs_core::scheduling::PlayoutBuildMode;
 
     let state = expect_context::<AppState>();
-    validate_scripted_schedule_file(&schedule_file)?;
-
-    let result = sqlx::query(
-        r#"UPDATE "Playout" SET "ScheduleFile" = ? WHERE "Id" = ? AND "ScheduleKind" = ?"#,
-    )
-    .bind(schedule_file.trim())
-    .bind(id)
-    .bind(KIND_SCRIPTED)
-    .execute(&state.pool)
-    .await?;
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new("Playout does not exist."));
-    }
-
-    enqueue_build(&state, id, PlayoutBuildMode::Reset)?;
-    Ok(())
+    state
+        .application
+        .save_playout_schedule_file(ersatzrs_app::commands::SavePlayoutScheduleFile {
+            id,
+            schedule_kind: KIND_SCRIPTED,
+            schedule_file,
+            rebuild_mode: Some(PlayoutBuildMode::Reset),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -747,24 +781,11 @@ pub async fn save_playout_default_deco(id: i64, deco_id: Option<i64>) -> Result<
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    if let Some(deco_id) = deco_id.filter(|id| *id > 0) {
-        let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Deco" WHERE "Id" = ?"#)
-            .bind(deco_id)
-            .fetch_one(&state.pool)
-            .await?;
-        if exists == 0 {
-            return Err(ServerFnError::new("Deco does not exist."));
-        }
-    }
-
-    sqlx::query(r#"UPDATE "Playout" SET "DecoId" = ? WHERE "Id" = ? AND "ScheduleKind" = ?"#)
-        .bind(deco_id.filter(|id| *id > 0))
-        .bind(id)
-        .bind(KIND_BLOCK)
-        .execute(&state.pool)
-        .await?;
-
-    Ok(())
+    state
+        .application
+        .save_playout_default_deco(ersatzrs_app::commands::SavePlayoutDefaultDeco { id, deco_id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Loads the Classic nested alternate schedule editor. ErsatzTV appends the
@@ -776,7 +797,12 @@ pub async fn get_playout_alternate_schedules(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_playout_alternate_schedules_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_playout_alternate_schedules(id)
+        .await
+        .map(|form| form.map(alternate_schedules_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -785,23 +811,15 @@ pub async fn save_playout_alternate_schedules(
     items: Vec<PlayoutAlternateScheduleItemForm>,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
-
     let state = expect_context::<AppState>();
-    save_playout_alternate_schedules_with_pool(&state.pool, playout_id, &items).await?;
-
-    // ErsatzTV's `ReplacePlayoutAlternateScheduleItemsHandler` only refreshes
-    // when an existing playout window's effective schedule actually changes,
-    // computed per-day via `AlternateScheduleSelector`. We have not ported that
-    // selector yet, so we conservatively refresh whenever the playout already
-    // has items — a safe superset of ErsatzTV's cases (a refresh is
-    // idempotent). When the playout has no items there is nothing to refresh,
-    // matching ErsatzTV's `maybeLastPlayoutItem` guard. See ParityDebt in
-    // plans/playouts-parity-slice.md.
-    if playout_has_items(&state.pool, playout_id).await? {
-        enqueue_build(&state, playout_id, PlayoutBuildMode::Refresh)?;
-    }
-    Ok(())
+    state
+        .application
+        .save_playout_alternate_schedules(ersatzrs_app::commands::SavePlayoutAlternateSchedules {
+            id: playout_id,
+            items: items.into_iter().map(alternate_item_into_admin).collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Loads the Block nested template editor.
@@ -810,7 +828,12 @@ pub async fn get_playout_templates(id: i64) -> Result<Option<PlayoutTemplatesFor
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    get_playout_templates_with_pool(&state.pool, id).await
+    state
+        .application
+        .get_playout_templates(id)
+        .await
+        .map(|form| form.map(playout_templates_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -821,7 +844,14 @@ pub async fn save_playout_templates(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_playout_templates_with_pool(&state.pool, playout_id, &items).await
+    state
+        .application
+        .save_playout_templates(ersatzrs_app::commands::SavePlayoutTemplates {
+            id: playout_id,
+            items: items.into_iter().map(template_item_into_admin).collect(),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Equivalent to ErsatzTV's `ErasePlayoutItems`: remove generated items only.
@@ -830,11 +860,11 @@ pub async fn erase_playout_items(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .erase_playout_items(ersatzrs_app::commands::DeletePlayout { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -847,60 +877,45 @@ pub async fn get_sequential_playout(
     id: i64,
 ) -> Result<Option<SequentialPlayoutForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT p."Id",
-                  COALESCE(c."Number",         '') AS "ChannelNumber",
-                  COALESCE(c."Name",           '') AS "ChannelName",
-                  COALESCE(p."ScheduleFile",   '') AS "ScheduleFile"
-           FROM "Playout" p
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
-           WHERE p."Id" = ? AND p."ScheduleKind" = 3"#,
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?;
-
-    Ok(row.map(|r| {
-        let number: String = r.try_get("ChannelNumber").unwrap_or_default();
-        let name: String = r.try_get("ChannelName").unwrap_or_default();
-        let channel_label = format!("{number} \u{2014} {name}");
-        SequentialPlayoutForm {
-            id: r.try_get("Id").unwrap_or(0),
-            channel_label,
-            yaml_content: r.try_get("ScheduleFile").unwrap_or_default(),
-        }
-    }))
+    state
+        .application
+        .get_sequential_playout(id)
+        .await
+        .map(|form| {
+            form.map(|form| SequentialPlayoutForm {
+                id: form.id,
+                channel_label: format!("{} \u{2014} {}", form.channel_number, form.channel_name),
+                yaml_content: form.yaml_content,
+            })
+        })
+        .map_err(ServerFnError::new)
 }
 
 /// Persists the YAML content for a Sequential playout and kicks off a
 /// background playout rebuild so scheduled items stay current.
 #[server]
 pub async fn save_sequential_playout(id: i64, yaml_content: String) -> Result<(), ServerFnError> {
-    use std::sync::Arc;
-
     use crate::host::state::AppState;
+    use ersatzrs_core::scheduling::PlayoutBuildMode;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"UPDATE "Playout" SET "ScheduleFile" = ? WHERE "Id" = ? AND "ScheduleKind" = 3"#)
-        .bind(&yaml_content)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-
-    let repos = Arc::clone(&state.repositories);
-    let yaml = yaml_content;
-    tokio::task::spawn(async move {
-        rebuild_yaml_playout(&repos, id, &yaml).await;
-    });
-
-    Ok(())
+    state
+        .application
+        .save_playout_schedule_file(ersatzrs_app::commands::SavePlayoutScheduleFile {
+            id,
+            schedule_kind: KIND_SEQUENTIAL,
+            schedule_file: yaml_content,
+            rebuild_mode: Some(PlayoutBuildMode::Reset),
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Runs a reset build for a Sequential (YAML) playout in the background.
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
+#[allow(dead_code)]
 async fn rebuild_yaml_playout(
     repos: &ersatzrs_infra::repositories::Repositories,
     id: i64,
@@ -966,40 +981,11 @@ pub async fn erase_playout_items_and_history(id: i64) -> Result<(), ServerFnErro
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let mut tx = state.pool.begin().await?;
-
-    sqlx::query(
-        r#"UPDATE "Playout"
-           SET "Seed" = (SELECT random()), "OnDemandCheckpoint" = NULL
-           WHERE "Id" = ?"#,
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(r#"DELETE FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-
-    for table in &[
-        "PlayoutItem",
-        "PlayoutHistory",
-        "PlayoutProgramScheduleAnchor",
-        "RerunHistory",
-        "PlayoutGap",
-        "PlayoutBuildStatus",
-    ] {
-        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
-            r#"DELETE FROM "{table}" WHERE "PlayoutId" = ?"#
-        )))
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    tx.commit().await?;
-    Ok(())
+    state
+        .application
+        .erase_playout_items_and_history(ersatzrs_app::commands::DeletePlayout { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Validates YAML playout content server-side using [`YamlPlayoutEngine`].
@@ -1026,7 +1012,7 @@ fn reset_playout_mode(schedule_kind: i32) -> ersatzrs_core::scheduling::PlayoutB
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn reset_all_playout_mode(
     schedule_kind: i32,
 ) -> Option<ersatzrs_core::scheduling::PlayoutBuildMode> {
@@ -1073,41 +1059,46 @@ fn enqueue_build(
     }
 }
 
-/// Whether the playout already has any generated items. Mirrors ErsatzTV's
-/// `maybeLastPlayoutItem` guard: with no items there is nothing to refresh.
-#[cfg(feature = "ssr")]
-async fn playout_has_items(
-    pool: &ersatzrs_infra::db::DbPool,
-    playout_id: i64,
-) -> Result<bool, ServerFnError> {
-    let exists: Option<i64> =
-        sqlx::query_scalar(r#"SELECT 1 FROM "PlayoutItem" WHERE "PlayoutId" = ? LIMIT 1"#)
-            .bind(playout_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(exists.is_some())
-}
+#[cfg(all(test, feature = "ssr"))]
+#[allow(dead_code)]
+mod legacy_sql_regressions {
+    use super::*;
 
-#[cfg(feature = "ssr")]
-pub async fn create_playout_with_state(
-    state: &crate::host::state::AppState,
-    form: PlayoutCreateForm,
-) -> Result<i64, ServerFnError> {
-    use ersatzrs_core::scheduling::PlayoutBuildMode;
+    /// Whether the playout already has any generated items. Mirrors ErsatzTV's
+    /// `maybeLastPlayoutItem` guard: with no items there is nothing to refresh.
+    #[cfg(feature = "ssr")]
+    async fn playout_has_items(
+        pool: &ersatzrs_infra::db::DbPool,
+        playout_id: i64,
+    ) -> Result<bool, ServerFnError> {
+        let exists: Option<i64> =
+            sqlx::query_scalar(r#"SELECT 1 FROM "PlayoutItem" WHERE "PlayoutId" = ? LIMIT 1"#)
+                .bind(playout_id)
+                .fetch_optional(pool)
+                .await?;
+        Ok(exists.is_some())
+    }
 
-    let id = create_playout_with_pool(&state.pool, &form).await?;
-    enqueue_build(state, id, PlayoutBuildMode::Reset)?;
-    Ok(id)
-}
+    #[cfg(feature = "ssr")]
+    pub async fn create_playout_with_state(
+        state: &crate::host::state::AppState,
+        form: PlayoutCreateForm,
+    ) -> Result<i64, ServerFnError> {
+        use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-#[cfg(feature = "ssr")]
-async fn list_playout_create_channels_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<Vec<PlayoutCreateChannel>, ServerFnError> {
-    use sqlx::Row;
+        let id = create_playout_with_pool(&state.pool, &form).await?;
+        enqueue_build(state, id, PlayoutBuildMode::Reset)?;
+        Ok(id)
+    }
 
-    let rows = sqlx::query(
-        r#"SELECT c."Id",
+    #[cfg(feature = "ssr")]
+    async fn list_playout_create_channels_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+    ) -> Result<Vec<PlayoutCreateChannel>, ServerFnError> {
+        use sqlx::Row;
+
+        let rows = sqlx::query(
+            r#"SELECT c."Id",
                   COALESCE(c."Number", '') AS "Number",
                   COALESCE(c."Name", '') AS "Name",
                   COUNT(p."Id") AS "PlayoutCount"
@@ -1115,449 +1106,449 @@ async fn list_playout_create_channels_with_pool(
            LEFT JOIN "Playout" p ON p."ChannelId" = c."Id"
            GROUP BY c."Id", c."Number", c."Name", c."SortNumber"
            ORDER BY c."SortNumber", c."Id""#,
-    )
-    .fetch_all(pool)
-    .await?;
+        )
+        .fetch_all(pool)
+        .await?;
 
-    Ok(rows
-        .iter()
-        .map(|r| PlayoutCreateChannel {
-            id: r.try_get("Id").unwrap_or(0),
-            number: r.try_get("Number").unwrap_or_default(),
-            name: r.try_get("Name").unwrap_or_default(),
-            playout_count: r.try_get("PlayoutCount").unwrap_or(0),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-async fn list_playout_create_schedules_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<Vec<PlayoutCreateSchedule>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
-           FROM "ProgramSchedule"
-           ORDER BY "Name", "Id""#,
-    )
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PlayoutCreateSchedule {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-pub async fn create_playout_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: &PlayoutCreateForm,
-) -> Result<i64, ServerFnError> {
-    use sqlx::Row;
-
-    let kind = parse_create_kind(&form.kind)?;
-    let channel_id = form.channel_id;
-    if channel_id <= 0 {
-        return Err(ServerFnError::new("Channel does not exist"));
+        Ok(rows
+            .iter()
+            .map(|r| PlayoutCreateChannel {
+                id: r.try_get("Id").unwrap_or(0),
+                number: r.try_get("Number").unwrap_or_default(),
+                name: r.try_get("Name").unwrap_or_default(),
+                playout_count: r.try_get("PlayoutCount").unwrap_or(0),
+            })
+            .collect())
     }
 
-    let channel = sqlx::query(
-        r#"SELECT c."Id",
+    #[cfg(feature = "ssr")]
+    async fn list_playout_create_schedules_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+    ) -> Result<Vec<PlayoutCreateSchedule>, ServerFnError> {
+        use sqlx::Row;
+
+        let rows = sqlx::query(
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "ProgramSchedule"
+           ORDER BY "Name", "Id""#,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(rows
+            .iter()
+            .map(|r| PlayoutCreateSchedule {
+                id: r.try_get("Id").unwrap_or(0),
+                name: r.try_get("Name").unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    #[cfg(feature = "ssr")]
+    pub async fn create_playout_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+        form: &PlayoutCreateForm,
+    ) -> Result<i64, ServerFnError> {
+        use sqlx::Row;
+
+        let kind = parse_create_kind(&form.kind)?;
+        let channel_id = form.channel_id;
+        if channel_id <= 0 {
+            return Err(ServerFnError::new("Channel does not exist"));
+        }
+
+        let channel = sqlx::query(
+            r#"SELECT c."Id",
                   c."PlayoutMode",
                   COUNT(p."Id") AS "PlayoutCount"
            FROM "Channel" c
            LEFT JOIN "Playout" p ON p."ChannelId" = c."Id"
            WHERE c."Id" = ?
            GROUP BY c."Id", c."PlayoutMode""#,
-    )
-    .bind(channel_id)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(channel_id)
+        .fetch_optional(pool)
+        .await?;
 
-    let Some(channel) = channel else {
-        return Err(ServerFnError::new("Channel does not exist"));
-    };
+        let Some(channel) = channel else {
+            return Err(ServerFnError::new("Channel does not exist"));
+        };
 
-    let playout_count: i64 = channel.try_get("PlayoutCount").unwrap_or(0);
-    if playout_count > 0 {
-        return Err(ServerFnError::new("Channel already has one playout"));
-    }
+        let playout_count: i64 = channel.try_get("PlayoutCount").unwrap_or(0);
+        if playout_count > 0 {
+            return Err(ServerFnError::new("Channel already has one playout"));
+        }
 
-    let mut program_schedule_id = None;
-    let mut schedule_file = None;
+        let mut program_schedule_id = None;
+        let mut schedule_file = None;
 
-    match kind {
-        KIND_CLASSIC => {
-            let Some(schedule_id) = form.program_schedule_id.filter(|id| *id > 0) else {
-                return Err(ServerFnError::new("Program schedule does not exist"));
-            };
-            let schedule = sqlx::query(
-                r#"SELECT ps."Id",
+        match kind {
+            KIND_CLASSIC => {
+                let Some(schedule_id) = form.program_schedule_id.filter(|id| *id > 0) else {
+                    return Err(ServerFnError::new("Program schedule does not exist"));
+                };
+                let schedule = sqlx::query(
+                    r#"SELECT ps."Id",
                           COUNT(psi."Id") AS "ItemCount"
                    FROM "ProgramSchedule" ps
                    LEFT JOIN "ProgramScheduleItem" psi ON psi."ProgramScheduleId" = ps."Id"
                    WHERE ps."Id" = ?
                    GROUP BY ps."Id""#,
-            )
-            .bind(schedule_id)
-            .fetch_optional(pool)
-            .await?;
-            let Some(schedule) = schedule else {
-                return Err(ServerFnError::new("Program schedule does not exist"));
-            };
-            let item_count: i64 = schedule.try_get("ItemCount").unwrap_or(0);
-            if item_count == 0 {
-                return Err(ServerFnError::new("Program schedule must have items"));
+                )
+                .bind(schedule_id)
+                .fetch_optional(pool)
+                .await?;
+                let Some(schedule) = schedule else {
+                    return Err(ServerFnError::new("Program schedule does not exist"));
+                };
+                let item_count: i64 = schedule.try_get("ItemCount").unwrap_or(0);
+                if item_count == 0 {
+                    return Err(ServerFnError::new("Program schedule must have items"));
+                }
+                program_schedule_id = Some(schedule_id);
             }
-            program_schedule_id = Some(schedule_id);
-        }
-        KIND_BLOCK => {}
-        KIND_SEQUENTIAL | KIND_EXTERNAL_JSON => {
-            let file = form.schedule_file.trim();
-            if file.is_empty() || std::fs::metadata(file).is_err() {
-                return Err(ServerFnError::new(schedule_file_missing_message(kind)));
+            KIND_BLOCK => {}
+            KIND_SEQUENTIAL | KIND_EXTERNAL_JSON => {
+                let file = form.schedule_file.trim();
+                if file.is_empty() || std::fs::metadata(file).is_err() {
+                    return Err(ServerFnError::new(schedule_file_missing_message(kind)));
+                }
+                schedule_file = Some(file.to_owned());
             }
-            schedule_file = Some(file.to_owned());
-        }
-        KIND_SCRIPTED => {
-            let file = form.schedule_file.trim();
-            let script_file = first_command_token(file);
-            if script_file.is_empty() || std::fs::metadata(&script_file).is_err() {
-                return Err(ServerFnError::new(schedule_file_missing_message(kind)));
+            KIND_SCRIPTED => {
+                let file = form.schedule_file.trim();
+                let script_file = first_command_token(file);
+                if script_file.is_empty() || std::fs::metadata(&script_file).is_err() {
+                    return Err(ServerFnError::new(schedule_file_missing_message(kind)));
+                }
+                schedule_file = Some(file.to_owned());
             }
-            schedule_file = Some(file.to_owned());
+            _ => return Err(ServerFnError::new("Unsupported playout kind")),
         }
-        _ => return Err(ServerFnError::new("Unsupported playout kind")),
-    }
 
-    // ErsatzTV seeds with `new Random().Next()` (non-negative 32-bit int).
-    // Generate it in Rust and bind it so the INSERT stays backend-neutral; an
-    // embedded `random()` would be SQLite-only and overflow MySQL's `INT`.
-    let seed = next_seed();
+        // ErsatzTV seeds with `new Random().Next()` (non-negative 32-bit int).
+        // Generate it in Rust and bind it so the INSERT stays backend-neutral; an
+        // embedded `random()` would be SQLite-only and overflow MySQL's `INT`.
+        let seed = next_seed();
 
-    sqlx::query(
-        r#"INSERT INTO "Playout"
+        sqlx::query(
+            r#"INSERT INTO "Playout"
            ("ChannelId", "ProgramScheduleId", "ScheduleFile", "ScheduleKind", "Seed")
            VALUES (?, ?, ?, ?, ?)"#,
-    )
-    .bind(channel_id)
-    .bind(program_schedule_id)
-    .bind(schedule_file)
-    .bind(kind)
-    .bind(seed)
-    .execute(pool)
-    .await?;
+        )
+        .bind(channel_id)
+        .bind(program_schedule_id)
+        .bind(schedule_file)
+        .bind(kind)
+        .bind(seed)
+        .execute(pool)
+        .await?;
 
-    Ok(sqlx::query_scalar(
-        r#"SELECT "Id"
+        Ok(sqlx::query_scalar(
+            r#"SELECT "Id"
            FROM "Playout"
            WHERE "ChannelId" = ?
            ORDER BY "Id" DESC"#,
-    )
-    .bind(channel_id)
-    .fetch_one(pool)
-    .await?)
-}
+        )
+        .bind(channel_id)
+        .fetch_one(pool)
+        .await?)
+    }
 
-/// A non-negative 32-bit playout seed, mirroring ErsatzTV's `new Random().Next()`.
-///
-/// The scheduling seed only needs per-playout variety, not cryptographic
-/// quality, so we derive it from a high-resolution timestamp rather than
-/// pulling in a `rand` dependency. The value is masked into `0..=i32::MAX`
-/// to fit the `Seed INT` column on every backend.
-#[cfg(feature = "ssr")]
-fn next_seed() -> i32 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    /// A non-negative 32-bit playout seed, mirroring ErsatzTV's `new Random().Next()`.
+    ///
+    /// The scheduling seed only needs per-playout variety, not cryptographic
+    /// quality, so we derive it from a high-resolution timestamp rather than
+    /// pulling in a `rand` dependency. The value is masked into `0..=i32::MAX`
+    /// to fit the `Seed INT` column on every backend.
+    #[cfg(feature = "ssr")]
+    fn next_seed() -> i32 {
+        use std::collections::hash_map::RandomState;
+        use std::hash::{BuildHasher, Hasher};
+        use std::time::{SystemTime, UNIX_EPOCH};
 
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    // Hash the timestamp with a process-randomized hasher so concurrent
-    // creates in the same nanosecond bucket still diverge.
-    let mut hasher = RandomState::new().build_hasher();
-    hasher.write_u128(nanos);
-    // Masking with `i32::MAX` guarantees the result fits `0..=i32::MAX`, so the
-    // `try_from` never fails.
-    i32::try_from(hasher.finish() & u64::try_from(i32::MAX).unwrap_or(u64::MAX)).unwrap_or(0)
-}
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        // Hash the timestamp with a process-randomized hasher so concurrent
+        // creates in the same nanosecond bucket still diverge.
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u128(nanos);
+        // Masking with `i32::MAX` guarantees the result fits `0..=i32::MAX`, so the
+        // `try_from` never fails.
+        i32::try_from(hasher.finish() & u64::try_from(i32::MAX).unwrap_or(u64::MAX)).unwrap_or(0)
+    }
 
-#[cfg(feature = "ssr")]
-async fn load_playout_deco_options(
-    pool: &ersatzrs_infra::db::DbPool,
-) -> Result<(Vec<PlayoutDecoGroupOption>, Vec<PlayoutDecoOption>), ServerFnError> {
-    use sqlx::Row;
+    #[cfg(feature = "ssr")]
+    async fn load_playout_deco_options(
+        pool: &ersatzrs_infra::db::DbPool,
+    ) -> Result<(Vec<PlayoutDecoGroupOption>, Vec<PlayoutDecoOption>), ServerFnError> {
+        use sqlx::Row;
 
-    let group_rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+        let group_rows = sqlx::query(
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name"
            FROM "DecoGroup"
            ORDER BY "Name", "Id""#,
-    )
-    .fetch_all(pool)
-    .await?;
+        )
+        .fetch_all(pool)
+        .await?;
 
-    let deco_rows = sqlx::query(
-        r#"SELECT "Id", "DecoGroupId", COALESCE("Name", '') AS "Name"
+        let deco_rows = sqlx::query(
+            r#"SELECT "Id", "DecoGroupId", COALESCE("Name", '') AS "Name"
            FROM "Deco"
            ORDER BY "DecoGroupId", "Name", "Id""#,
-    )
-    .fetch_all(pool)
-    .await?;
+        )
+        .fetch_all(pool)
+        .await?;
 
-    let groups = group_rows
-        .iter()
-        .map(|row| PlayoutDecoGroupOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect();
-    let decos = deco_rows
-        .iter()
-        .map(|row| PlayoutDecoOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            group_id: row.try_get("DecoGroupId").unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect();
+        let groups = group_rows
+            .iter()
+            .map(|row| PlayoutDecoGroupOption {
+                id: row.try_get("Id").unwrap_or_default(),
+                name: row.try_get("Name").unwrap_or_default(),
+            })
+            .collect();
+        let decos = deco_rows
+            .iter()
+            .map(|row| PlayoutDecoOption {
+                id: row.try_get("Id").unwrap_or_default(),
+                group_id: row.try_get("DecoGroupId").unwrap_or_default(),
+                name: row.try_get("Name").unwrap_or_default(),
+            })
+            .collect();
 
-    Ok((groups, decos))
-}
+        Ok((groups, decos))
+    }
 
-#[cfg(feature = "ssr")]
-async fn get_playout_alternate_schedules_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playout_id: i64,
-) -> Result<Option<PlayoutAlternateSchedulesForm>, ServerFnError> {
-    use sqlx::Row;
+    #[cfg(feature = "ssr")]
+    async fn get_playout_alternate_schedules_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+        playout_id: i64,
+    ) -> Result<Option<PlayoutAlternateSchedulesForm>, ServerFnError> {
+        use sqlx::Row;
 
-    let row = sqlx::query(
-        r#"SELECT p."Id",
+        let row = sqlx::query(
+            r#"SELECT p."Id",
                   p."ProgramScheduleId",
                   COALESCE(c."Number", '') AS "ChannelNumber",
                   COALESCE(c."Name", '') AS "ChannelName"
            FROM "Playout" p
            JOIN "Channel" c ON c."Id" = p."ChannelId"
            WHERE p."Id" = ? AND p."ScheduleKind" = ?"#,
-    )
-    .bind(playout_id)
-    .bind(KIND_CLASSIC)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(playout_id)
+        .bind(KIND_CLASSIC)
+        .fetch_optional(pool)
+        .await?;
 
-    let Some(row) = row else {
-        return Ok(None);
-    };
+        let Some(row) = row else {
+            return Ok(None);
+        };
 
-    let schedules = load_nested_options(pool, "ProgramSchedule").await?;
-    let schedule_name = schedules
-        .iter()
-        .map(|schedule| (schedule.id, schedule.name.clone()))
-        .collect::<std::collections::HashMap<_, _>>();
+        let schedules = load_nested_options(pool, "ProgramSchedule").await?;
+        let schedule_name = schedules
+            .iter()
+            .map(|schedule| (schedule.id, schedule.name.clone()))
+            .collect::<std::collections::HashMap<_, _>>();
 
-    let alternate_rows = sqlx::query(
-        r#"SELECT "Id", "ProgramScheduleId", "Index", "DaysOfWeek", "DaysOfMonth",
+        let alternate_rows = sqlx::query(
+            r#"SELECT "Id", "ProgramScheduleId", "Index", "DaysOfWeek", "DaysOfMonth",
                   "MonthsOfYear", "LimitToDateRange", "StartMonth", "StartDay",
                   "StartYear", "EndMonth", "EndDay", "EndYear"
            FROM "ProgramScheduleAlternate"
            WHERE "PlayoutId" = ?
            ORDER BY "Index", "Id""#,
-    )
-    .bind(playout_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut items = alternate_rows
-        .iter()
-        .map(|row| alternate_schedule_item_from_row(row, &schedule_name))
-        .collect::<Vec<_>>();
-
-    let default_schedule_id = row
-        .try_get::<Option<i64>, _>("ProgramScheduleId")
-        .ok()
-        .flatten()
-        .unwrap_or(0);
-    if default_schedule_id > 0 {
-        let index = items.iter().map(|item| item.index).max().unwrap_or(0) + 1;
-        items.push(PlayoutAlternateScheduleItemForm {
-            id: -1,
-            index,
-            program_schedule_id: default_schedule_id,
-            program_schedule_name: schedule_name
-                .get(&default_schedule_id)
-                .cloned()
-                .unwrap_or_default(),
-            date_filter: PlayoutDateFilter::default(),
-        });
-    }
-
-    let number: String = row.try_get("ChannelNumber").unwrap_or_default();
-    let name: String = row.try_get("ChannelName").unwrap_or_default();
-    Ok(Some(PlayoutAlternateSchedulesForm {
-        playout_id,
-        channel_label: format!("{number} \u{2014} {name}"),
-        schedules,
-        items,
-    }))
-}
-
-#[cfg(feature = "ssr")]
-async fn save_playout_alternate_schedules_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playout_id: i64,
-    items: &[PlayoutAlternateScheduleItemForm],
-) -> Result<(), ServerFnError> {
-    use sqlx::Row;
-
-    if items.is_empty() {
-        return Err(ServerFnError::new(
-            "Alternate schedules must include a default schedule.",
-        ));
-    }
-
-    let exists: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Playout" WHERE "Id" = ? AND "ScheduleKind" = ?"#,
-    )
-    .bind(playout_id)
-    .bind(KIND_CLASSIC)
-    .fetch_one(pool)
-    .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Playout does not exist."));
-    }
-
-    let mut ordered = items.to_vec();
-    ordered.sort_by_key(|item| item.index);
-    for (position, item) in ordered.iter_mut().enumerate() {
-        item.index = i32::try_from(position + 1).unwrap_or(i32::MAX);
-    }
-    let default = ordered.last().ok_or_else(|| {
-        ServerFnError::new("Alternate schedules must include a default schedule.")
-    })?;
-    validate_program_schedule_ids(pool, ordered.iter().map(|item| item.program_schedule_id))
+        )
+        .bind(playout_id)
+        .fetch_all(pool)
         .await?;
 
-    let saved_ids = ordered
-        .iter()
-        .take(ordered.len().saturating_sub(1))
-        .filter_map(|item| (item.id > 0).then_some(item.id))
-        .collect::<Vec<_>>();
-    let existing_rows =
-        sqlx::query(r#"SELECT "Id" FROM "ProgramScheduleAlternate" WHERE "PlayoutId" = ?"#)
-            .bind(playout_id)
-            .fetch_all(pool)
-            .await?;
+        let mut items = alternate_rows
+            .iter()
+            .map(|row| alternate_schedule_item_from_row(row, &schedule_name))
+            .collect::<Vec<_>>();
 
-    let mut tx = pool.begin().await?;
-    for row in existing_rows {
-        let id: i64 = row.try_get("Id").unwrap_or_default();
-        if !saved_ids.contains(&id) {
-            sqlx::query(r#"DELETE FROM "ProgramScheduleAlternate" WHERE "Id" = ?"#)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
+        let default_schedule_id = row
+            .try_get::<Option<i64>, _>("ProgramScheduleId")
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+        if default_schedule_id > 0 {
+            let index = items.iter().map(|item| item.index).max().unwrap_or(0) + 1;
+            items.push(PlayoutAlternateScheduleItemForm {
+                id: -1,
+                index,
+                program_schedule_id: default_schedule_id,
+                program_schedule_name: schedule_name
+                    .get(&default_schedule_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                date_filter: PlayoutDateFilter::default(),
+            });
         }
+
+        let number: String = row.try_get("ChannelNumber").unwrap_or_default();
+        let name: String = row.try_get("ChannelName").unwrap_or_default();
+        Ok(Some(PlayoutAlternateSchedulesForm {
+            playout_id,
+            channel_label: format!("{number} \u{2014} {name}"),
+            schedules,
+            items,
+        }))
     }
 
-    for item in ordered.iter().take(ordered.len().saturating_sub(1)) {
-        if item.id > 0 {
-            sqlx::query(
-                r#"UPDATE "ProgramScheduleAlternate"
+    #[cfg(feature = "ssr")]
+    async fn save_playout_alternate_schedules_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+        playout_id: i64,
+        items: &[PlayoutAlternateScheduleItemForm],
+    ) -> Result<(), ServerFnError> {
+        use sqlx::Row;
+
+        if items.is_empty() {
+            return Err(ServerFnError::new(
+                "Alternate schedules must include a default schedule.",
+            ));
+        }
+
+        let exists: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Playout" WHERE "Id" = ? AND "ScheduleKind" = ?"#,
+        )
+        .bind(playout_id)
+        .bind(KIND_CLASSIC)
+        .fetch_one(pool)
+        .await?;
+        if exists == 0 {
+            return Err(ServerFnError::new("Playout does not exist."));
+        }
+
+        let mut ordered = items.to_vec();
+        ordered.sort_by_key(|item| item.index);
+        for (position, item) in ordered.iter_mut().enumerate() {
+            item.index = i32::try_from(position + 1).unwrap_or(i32::MAX);
+        }
+        let default = ordered.last().ok_or_else(|| {
+            ServerFnError::new("Alternate schedules must include a default schedule.")
+        })?;
+        validate_program_schedule_ids(pool, ordered.iter().map(|item| item.program_schedule_id))
+            .await?;
+
+        let saved_ids = ordered
+            .iter()
+            .take(ordered.len().saturating_sub(1))
+            .filter_map(|item| (item.id > 0).then_some(item.id))
+            .collect::<Vec<_>>();
+        let existing_rows =
+            sqlx::query(r#"SELECT "Id" FROM "ProgramScheduleAlternate" WHERE "PlayoutId" = ?"#)
+                .bind(playout_id)
+                .fetch_all(pool)
+                .await?;
+
+        let mut tx = pool.begin().await?;
+        for row in existing_rows {
+            let id: i64 = row.try_get("Id").unwrap_or_default();
+            if !saved_ids.contains(&id) {
+                sqlx::query(r#"DELETE FROM "ProgramScheduleAlternate" WHERE "Id" = ?"#)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        for item in ordered.iter().take(ordered.len().saturating_sub(1)) {
+            if item.id > 0 {
+                sqlx::query(
+                    r#"UPDATE "ProgramScheduleAlternate"
                    SET "ProgramScheduleId" = ?, "Index" = ?, "DaysOfWeek" = ?,
                        "DaysOfMonth" = ?, "MonthsOfYear" = ?, "LimitToDateRange" = ?,
                        "StartMonth" = ?, "StartDay" = ?, "StartYear" = ?,
                        "EndMonth" = ?, "EndDay" = ?, "EndYear" = ?
                    WHERE "Id" = ? AND "PlayoutId" = ?"#,
-            )
-            .bind(item.program_schedule_id)
-            .bind(item.index)
-            .bind(encode_day_names(&item.date_filter.days_of_week))
-            .bind(encode_int_csv(&item.date_filter.days_of_month))
-            .bind(encode_int_csv(&item.date_filter.months_of_year))
-            .bind(item.date_filter.limit_to_date_range)
-            .bind(item.date_filter.start_month)
-            .bind(item.date_filter.start_day)
-            .bind(item.date_filter.start_year)
-            .bind(item.date_filter.end_month)
-            .bind(item.date_filter.end_day)
-            .bind(item.date_filter.end_year)
-            .bind(item.id)
-            .bind(playout_id)
-            .execute(&mut *tx)
-            .await?;
-        } else {
-            sqlx::query(
-                r#"INSERT INTO "ProgramScheduleAlternate"
+                )
+                .bind(item.program_schedule_id)
+                .bind(item.index)
+                .bind(encode_day_names(&item.date_filter.days_of_week))
+                .bind(encode_int_csv(&item.date_filter.days_of_month))
+                .bind(encode_int_csv(&item.date_filter.months_of_year))
+                .bind(item.date_filter.limit_to_date_range)
+                .bind(item.date_filter.start_month)
+                .bind(item.date_filter.start_day)
+                .bind(item.date_filter.start_year)
+                .bind(item.date_filter.end_month)
+                .bind(item.date_filter.end_day)
+                .bind(item.date_filter.end_year)
+                .bind(item.id)
+                .bind(playout_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                sqlx::query(
+                    r#"INSERT INTO "ProgramScheduleAlternate"
                    ("PlayoutId", "ProgramScheduleId", "Index", "DaysOfWeek", "DaysOfMonth",
                     "MonthsOfYear", "LimitToDateRange", "StartMonth", "StartDay",
                     "StartYear", "EndMonth", "EndDay", "EndYear")
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
+                )
+                .bind(playout_id)
+                .bind(item.program_schedule_id)
+                .bind(item.index)
+                .bind(encode_day_names(&item.date_filter.days_of_week))
+                .bind(encode_int_csv(&item.date_filter.days_of_month))
+                .bind(encode_int_csv(&item.date_filter.months_of_year))
+                .bind(item.date_filter.limit_to_date_range)
+                .bind(item.date_filter.start_month)
+                .bind(item.date_filter.start_day)
+                .bind(item.date_filter.start_year)
+                .bind(item.date_filter.end_month)
+                .bind(item.date_filter.end_day)
+                .bind(item.date_filter.end_year)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        sqlx::query(r#"UPDATE "Playout" SET "ProgramScheduleId" = ? WHERE "Id" = ?"#)
+            .bind(default.program_schedule_id)
             .bind(playout_id)
-            .bind(item.program_schedule_id)
-            .bind(item.index)
-            .bind(encode_day_names(&item.date_filter.days_of_week))
-            .bind(encode_int_csv(&item.date_filter.days_of_month))
-            .bind(encode_int_csv(&item.date_filter.months_of_year))
-            .bind(item.date_filter.limit_to_date_range)
-            .bind(item.date_filter.start_month)
-            .bind(item.date_filter.start_day)
-            .bind(item.date_filter.start_year)
-            .bind(item.date_filter.end_month)
-            .bind(item.date_filter.end_day)
-            .bind(item.date_filter.end_year)
             .execute(&mut *tx)
             .await?;
-        }
+
+        tx.commit().await?;
+        Ok(())
     }
 
-    sqlx::query(r#"UPDATE "Playout" SET "ProgramScheduleId" = ? WHERE "Id" = ?"#)
-        .bind(default.program_schedule_id)
-        .bind(playout_id)
-        .execute(&mut *tx)
-        .await?;
+    #[cfg(feature = "ssr")]
+    async fn get_playout_templates_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+        playout_id: i64,
+    ) -> Result<Option<PlayoutTemplatesForm>, ServerFnError> {
+        use sqlx::Row;
 
-    tx.commit().await?;
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-async fn get_playout_templates_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playout_id: i64,
-) -> Result<Option<PlayoutTemplatesForm>, ServerFnError> {
-    use sqlx::Row;
-
-    let row = sqlx::query(
-        r#"SELECT p."Id",
+        let row = sqlx::query(
+            r#"SELECT p."Id",
                   COALESCE(c."Number", '') AS "ChannelNumber",
                   COALESCE(c."Name", '') AS "ChannelName"
            FROM "Playout" p
            JOIN "Channel" c ON c."Id" = p."ChannelId"
            WHERE p."Id" = ? AND p."ScheduleKind" = ?"#,
-    )
-    .bind(playout_id)
-    .bind(KIND_BLOCK)
-    .fetch_optional(pool)
-    .await?;
+        )
+        .bind(playout_id)
+        .bind(KIND_BLOCK)
+        .fetch_optional(pool)
+        .await?;
 
-    let Some(row) = row else {
-        return Ok(None);
-    };
+        let Some(row) = row else {
+            return Ok(None);
+        };
 
-    let template_groups = load_nested_options(pool, "TemplateGroup").await?;
-    let templates = load_nested_child_options(pool, "Template", "TemplateGroupId").await?;
-    let deco_template_groups = load_nested_options(pool, "DecoTemplateGroup").await?;
-    let deco_templates =
-        load_nested_child_options(pool, "DecoTemplate", "DecoTemplateGroupId").await?;
+        let template_groups = load_nested_options(pool, "TemplateGroup").await?;
+        let templates = load_nested_child_options(pool, "Template", "TemplateGroupId").await?;
+        let deco_template_groups = load_nested_options(pool, "DecoTemplateGroup").await?;
+        let deco_templates =
+            load_nested_child_options(pool, "DecoTemplate", "DecoTemplateGroupId").await?;
 
-    let rows = sqlx::query(
-        r#"SELECT pt."Id", pt."Index", pt."TemplateId", t."TemplateGroupId",
+        let rows = sqlx::query(
+            r#"SELECT pt."Id", pt."Index", pt."TemplateId", t."TemplateGroupId",
                   COALESCE(t."Name", '') AS "TemplateName",
                   pt."DecoTemplateId", dt."DecoTemplateGroupId",
                   dt."Name" AS "DecoTemplateName",
@@ -1569,572 +1560,572 @@ async fn get_playout_templates_with_pool(
            LEFT JOIN "DecoTemplate" dt ON dt."Id" = pt."DecoTemplateId"
            WHERE pt."PlayoutId" = ?
            ORDER BY pt."Index", pt."Id""#,
-    )
-    .bind(playout_id)
-    .fetch_all(pool)
-    .await?;
-
-    let items = rows
-        .iter()
-        .map(|row| PlayoutTemplateItemForm {
-            id: row.try_get("Id").unwrap_or_default(),
-            index: row.try_get("Index").unwrap_or_default(),
-            template_group_id: row.try_get("TemplateGroupId").unwrap_or_default(),
-            template_id: row.try_get("TemplateId").unwrap_or_default(),
-            template_name: row.try_get("TemplateName").unwrap_or_default(),
-            deco_template_group_id: row.try_get("DecoTemplateGroupId").ok().flatten(),
-            deco_template_id: row.try_get("DecoTemplateId").ok().flatten(),
-            deco_template_name: row.try_get("DecoTemplateName").ok().flatten(),
-            date_filter: date_filter_from_row(row, false),
-        })
-        .collect();
-
-    let number: String = row.try_get("ChannelNumber").unwrap_or_default();
-    let name: String = row.try_get("ChannelName").unwrap_or_default();
-    Ok(Some(PlayoutTemplatesForm {
-        playout_id,
-        channel_label: format!("{number} \u{2014} {name}"),
-        template_groups,
-        templates,
-        deco_template_groups,
-        deco_templates,
-        items,
-    }))
-}
-
-#[cfg(feature = "ssr")]
-async fn save_playout_templates_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    playout_id: i64,
-    items: &[PlayoutTemplateItemForm],
-) -> Result<(), ServerFnError> {
-    use sqlx::Row;
-
-    let exists: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Playout" WHERE "Id" = ? AND "ScheduleKind" = ?"#,
-    )
-    .bind(playout_id)
-    .bind(KIND_BLOCK)
-    .fetch_one(pool)
-    .await?;
-    if exists == 0 {
-        return Err(ServerFnError::new("Playout does not exist."));
-    }
-    if items.iter().any(|item| item.template_id <= 0) {
-        return Err(ServerFnError::new(
-            "Unable to save; item has no template selected.",
-        ));
-    }
-    validate_template_ids(pool, items.iter().map(|item| item.template_id)).await?;
-    validate_deco_template_ids(pool, items.iter().filter_map(|item| item.deco_template_id)).await?;
-
-    let mut ordered = items.to_vec();
-    ordered.sort_by_key(|item| item.index);
-    for (position, item) in ordered.iter_mut().enumerate() {
-        item.index = i32::try_from(position + 1).unwrap_or(i32::MAX);
-    }
-
-    let saved_ids = ordered
-        .iter()
-        .filter_map(|item| (item.id > 0).then_some(item.id))
-        .collect::<Vec<_>>();
-    let existing_rows = sqlx::query(r#"SELECT "Id" FROM "PlayoutTemplate" WHERE "PlayoutId" = ?"#)
+        )
         .bind(playout_id)
         .fetch_all(pool)
         .await?;
 
-    let mut tx = pool.begin().await?;
-    for row in existing_rows {
-        let id: i64 = row.try_get("Id").unwrap_or_default();
-        if !saved_ids.contains(&id) {
-            sqlx::query(r#"DELETE FROM "PlayoutTemplate" WHERE "Id" = ?"#)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-        }
+        let items = rows
+            .iter()
+            .map(|row| PlayoutTemplateItemForm {
+                id: row.try_get("Id").unwrap_or_default(),
+                index: row.try_get("Index").unwrap_or_default(),
+                template_group_id: row.try_get("TemplateGroupId").unwrap_or_default(),
+                template_id: row.try_get("TemplateId").unwrap_or_default(),
+                template_name: row.try_get("TemplateName").unwrap_or_default(),
+                deco_template_group_id: row.try_get("DecoTemplateGroupId").ok().flatten(),
+                deco_template_id: row.try_get("DecoTemplateId").ok().flatten(),
+                deco_template_name: row.try_get("DecoTemplateName").ok().flatten(),
+                date_filter: date_filter_from_row(row, false),
+            })
+            .collect();
+
+        let number: String = row.try_get("ChannelNumber").unwrap_or_default();
+        let name: String = row.try_get("ChannelName").unwrap_or_default();
+        Ok(Some(PlayoutTemplatesForm {
+            playout_id,
+            channel_label: format!("{number} \u{2014} {name}"),
+            template_groups,
+            templates,
+            deco_template_groups,
+            deco_templates,
+            items,
+        }))
     }
 
-    for item in &ordered {
-        let deco_template_id = item.deco_template_id.filter(|id| *id > 0);
-        if item.id > 0 {
-            sqlx::query(
-                r#"UPDATE "PlayoutTemplate"
+    #[cfg(feature = "ssr")]
+    async fn save_playout_templates_with_pool(
+        pool: &ersatzrs_infra::db::DbPool,
+        playout_id: i64,
+        items: &[PlayoutTemplateItemForm],
+    ) -> Result<(), ServerFnError> {
+        use sqlx::Row;
+
+        let exists: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Playout" WHERE "Id" = ? AND "ScheduleKind" = ?"#,
+        )
+        .bind(playout_id)
+        .bind(KIND_BLOCK)
+        .fetch_one(pool)
+        .await?;
+        if exists == 0 {
+            return Err(ServerFnError::new("Playout does not exist."));
+        }
+        if items.iter().any(|item| item.template_id <= 0) {
+            return Err(ServerFnError::new(
+                "Unable to save; item has no template selected.",
+            ));
+        }
+        validate_template_ids(pool, items.iter().map(|item| item.template_id)).await?;
+        validate_deco_template_ids(pool, items.iter().filter_map(|item| item.deco_template_id))
+            .await?;
+
+        let mut ordered = items.to_vec();
+        ordered.sort_by_key(|item| item.index);
+        for (position, item) in ordered.iter_mut().enumerate() {
+            item.index = i32::try_from(position + 1).unwrap_or(i32::MAX);
+        }
+
+        let saved_ids = ordered
+            .iter()
+            .filter_map(|item| (item.id > 0).then_some(item.id))
+            .collect::<Vec<_>>();
+        let existing_rows =
+            sqlx::query(r#"SELECT "Id" FROM "PlayoutTemplate" WHERE "PlayoutId" = ?"#)
+                .bind(playout_id)
+                .fetch_all(pool)
+                .await?;
+
+        let mut tx = pool.begin().await?;
+        for row in existing_rows {
+            let id: i64 = row.try_get("Id").unwrap_or_default();
+            if !saved_ids.contains(&id) {
+                sqlx::query(r#"DELETE FROM "PlayoutTemplate" WHERE "Id" = ?"#)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        for item in &ordered {
+            let deco_template_id = item.deco_template_id.filter(|id| *id > 0);
+            if item.id > 0 {
+                sqlx::query(
+                    r#"UPDATE "PlayoutTemplate"
                    SET "DateUpdated" = CURRENT_TIMESTAMP, "TemplateId" = ?,
                        "DecoTemplateId" = ?, "Index" = ?, "DaysOfWeek" = ?,
                        "DaysOfMonth" = ?, "MonthsOfYear" = ?, "LimitToDateRange" = ?,
                        "StartMonth" = ?, "StartDay" = ?, "StartYear" = ?,
                        "EndMonth" = ?, "EndDay" = ?, "EndYear" = ?
                    WHERE "Id" = ? AND "PlayoutId" = ?"#,
-            )
-            .bind(item.template_id)
-            .bind(deco_template_id)
-            .bind(item.index)
-            .bind(encode_int_json(&item.date_filter.days_of_week))
-            .bind(encode_int_json(&item.date_filter.days_of_month))
-            .bind(encode_int_json(&item.date_filter.months_of_year))
-            .bind(item.date_filter.limit_to_date_range)
-            .bind(item.date_filter.start_month)
-            .bind(item.date_filter.start_day)
-            .bind(item.date_filter.start_year)
-            .bind(item.date_filter.end_month)
-            .bind(item.date_filter.end_day)
-            .bind(item.date_filter.end_year)
-            .bind(item.id)
-            .bind(playout_id)
-            .execute(&mut *tx)
-            .await?;
-        } else {
-            sqlx::query(
-                r#"INSERT INTO "PlayoutTemplate"
+                )
+                .bind(item.template_id)
+                .bind(deco_template_id)
+                .bind(item.index)
+                .bind(encode_int_json(&item.date_filter.days_of_week))
+                .bind(encode_int_json(&item.date_filter.days_of_month))
+                .bind(encode_int_json(&item.date_filter.months_of_year))
+                .bind(item.date_filter.limit_to_date_range)
+                .bind(item.date_filter.start_month)
+                .bind(item.date_filter.start_day)
+                .bind(item.date_filter.start_year)
+                .bind(item.date_filter.end_month)
+                .bind(item.date_filter.end_day)
+                .bind(item.date_filter.end_year)
+                .bind(item.id)
+                .bind(playout_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                sqlx::query(
+                    r#"INSERT INTO "PlayoutTemplate"
                    ("DateUpdated", "TemplateId", "DecoTemplateId", "Index", "DaysOfWeek",
                     "DaysOfMonth", "MonthsOfYear", "LimitToDateRange", "StartMonth",
                     "StartDay", "StartYear", "EndMonth", "EndDay", "EndYear", "PlayoutId")
                    VALUES (CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(item.template_id)
-            .bind(deco_template_id)
-            .bind(item.index)
-            .bind(encode_int_json(&item.date_filter.days_of_week))
-            .bind(encode_int_json(&item.date_filter.days_of_month))
-            .bind(encode_int_json(&item.date_filter.months_of_year))
-            .bind(item.date_filter.limit_to_date_range)
-            .bind(item.date_filter.start_month)
-            .bind(item.date_filter.start_day)
-            .bind(item.date_filter.start_year)
-            .bind(item.date_filter.end_month)
-            .bind(item.date_filter.end_day)
-            .bind(item.date_filter.end_year)
-            .bind(playout_id)
-            .execute(&mut *tx)
-            .await?;
+                )
+                .bind(item.template_id)
+                .bind(deco_template_id)
+                .bind(item.index)
+                .bind(encode_int_json(&item.date_filter.days_of_week))
+                .bind(encode_int_json(&item.date_filter.days_of_month))
+                .bind(encode_int_json(&item.date_filter.months_of_year))
+                .bind(item.date_filter.limit_to_date_range)
+                .bind(item.date_filter.start_month)
+                .bind(item.date_filter.start_day)
+                .bind(item.date_filter.start_year)
+                .bind(item.date_filter.end_month)
+                .bind(item.date_filter.end_day)
+                .bind(item.date_filter.end_year)
+                .bind(playout_id)
+                .execute(&mut *tx)
+                .await?;
+            }
         }
+
+        tx.commit().await?;
+        Ok(())
     }
 
-    tx.commit().await?;
-    Ok(())
-}
+    #[cfg(feature = "ssr")]
+    async fn load_nested_options(
+        pool: &ersatzrs_infra::db::DbPool,
+        table: &'static str,
+    ) -> Result<Vec<PlayoutNestedOption>, ServerFnError> {
+        use sqlx::Row;
 
-#[cfg(feature = "ssr")]
-async fn load_nested_options(
-    pool: &ersatzrs_infra::db::DbPool,
-    table: &'static str,
-) -> Result<Vec<PlayoutNestedOption>, ServerFnError> {
-    use sqlx::Row;
+        let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "{table}" ORDER BY "Name", "Id""#
+        )))
+        .fetch_all(pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|row| PlayoutNestedOption {
+                id: row.try_get("Id").unwrap_or_default(),
+                name: row.try_get("Name").unwrap_or_default(),
+            })
+            .collect())
+    }
 
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
-        r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "{table}" ORDER BY "Name", "Id""#
-    )))
-    .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .iter()
-        .map(|row| PlayoutNestedOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect())
-}
+    #[cfg(feature = "ssr")]
+    async fn load_nested_child_options(
+        pool: &ersatzrs_infra::db::DbPool,
+        table: &'static str,
+        group_column: &'static str,
+    ) -> Result<Vec<PlayoutNestedChildOption>, ServerFnError> {
+        use sqlx::Row;
 
-#[cfg(feature = "ssr")]
-async fn load_nested_child_options(
-    pool: &ersatzrs_infra::db::DbPool,
-    table: &'static str,
-    group_column: &'static str,
-) -> Result<Vec<PlayoutNestedChildOption>, ServerFnError> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
-        r#"SELECT "Id", "{group_column}", COALESCE("Name", '') AS "Name"
+        let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT "Id", "{group_column}", COALESCE("Name", '') AS "Name"
            FROM "{table}"
            ORDER BY "{group_column}", "Name", "Id""#
-    )))
-    .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .iter()
-        .map(|row| PlayoutNestedChildOption {
-            id: row.try_get("Id").unwrap_or_default(),
-            group_id: row.try_get(group_column).unwrap_or_default(),
-            name: row.try_get("Name").unwrap_or_default(),
-        })
-        .collect())
-}
-
-#[cfg(feature = "ssr")]
-fn alternate_schedule_item_from_row(
-    row: &ersatzrs_infra::db::DbRow,
-    schedule_name: &std::collections::HashMap<i64, String>,
-) -> PlayoutAlternateScheduleItemForm {
-    use sqlx::Row;
-
-    let schedule_id = row.try_get("ProgramScheduleId").unwrap_or_default();
-    PlayoutAlternateScheduleItemForm {
-        id: row.try_get("Id").unwrap_or_default(),
-        index: row.try_get("Index").unwrap_or_default(),
-        program_schedule_id: schedule_id,
-        program_schedule_name: schedule_name.get(&schedule_id).cloned().unwrap_or_default(),
-        date_filter: date_filter_from_row(row, true),
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn date_filter_from_row(
-    row: &ersatzrs_infra::db::DbRow,
-    alternate_day_names: bool,
-) -> PlayoutDateFilter {
-    use sqlx::Row;
-
-    let days_of_week = if alternate_day_names {
-        decode_day_names(
-            row.try_get::<Option<String>, _>("DaysOfWeek")
-                .ok()
-                .flatten(),
-        )
-    } else {
-        decode_int_json(
-            row.try_get::<Option<String>, _>("DaysOfWeek")
-                .ok()
-                .flatten(),
-        )
-    };
-
-    PlayoutDateFilter {
-        limit_to_date_range: row.try_get::<bool, _>("LimitToDateRange").unwrap_or(false),
-        start_month: row.try_get("StartMonth").unwrap_or(1),
-        start_day: row.try_get("StartDay").unwrap_or(1),
-        start_year: row.try_get("StartYear").ok().flatten(),
-        end_month: row.try_get("EndMonth").unwrap_or(12),
-        end_day: row.try_get("EndDay").unwrap_or(31),
-        end_year: row.try_get("EndYear").ok().flatten(),
-        days_of_week: normalize_days_of_week(days_of_week),
-        days_of_month: normalize_days_of_month(decode_int_list(
-            row.try_get::<Option<String>, _>("DaysOfMonth")
-                .ok()
-                .flatten(),
-        )),
-        months_of_year: normalize_months(decode_int_list(
-            row.try_get::<Option<String>, _>("MonthsOfYear")
-                .ok()
-                .flatten(),
-        )),
-    }
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_program_schedule_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-    ids: impl Iterator<Item = i64>,
-) -> Result<(), ServerFnError> {
-    validate_ids(
-        pool,
-        "ProgramSchedule",
-        ids,
-        "Program schedule does not exist.",
-    )
-    .await
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_template_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-    ids: impl Iterator<Item = i64>,
-) -> Result<(), ServerFnError> {
-    validate_ids(pool, "Template", ids, "Template does not exist.").await
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_deco_template_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-    ids: impl Iterator<Item = i64>,
-) -> Result<(), ServerFnError> {
-    validate_ids(pool, "DecoTemplate", ids, "Deco template does not exist.").await
-}
-
-#[cfg(feature = "ssr")]
-async fn validate_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-    table: &'static str,
-    ids: impl Iterator<Item = i64>,
-    message: &'static str,
-) -> Result<(), ServerFnError> {
-    let mut unique = ids.filter(|id| *id > 0).collect::<Vec<_>>();
-    unique.sort_unstable();
-    unique.dedup();
-    for id in unique {
-        let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
-            r#"SELECT COUNT(*) FROM "{table}" WHERE "Id" = ?"#
         )))
-        .bind(id)
-        .fetch_one(pool)
+        .fetch_all(pool)
         .await?;
-        if exists == 0 {
-            return Err(ServerFnError::new(message));
+        Ok(rows
+            .iter()
+            .map(|row| PlayoutNestedChildOption {
+                id: row.try_get("Id").unwrap_or_default(),
+                group_id: row.try_get(group_column).unwrap_or_default(),
+                name: row.try_get("Name").unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    #[cfg(feature = "ssr")]
+    fn alternate_schedule_item_from_row(
+        row: &ersatzrs_infra::db::DbRow,
+        schedule_name: &std::collections::HashMap<i64, String>,
+    ) -> PlayoutAlternateScheduleItemForm {
+        use sqlx::Row;
+
+        let schedule_id = row.try_get("ProgramScheduleId").unwrap_or_default();
+        PlayoutAlternateScheduleItemForm {
+            id: row.try_get("Id").unwrap_or_default(),
+            index: row.try_get("Index").unwrap_or_default(),
+            program_schedule_id: schedule_id,
+            program_schedule_name: schedule_name.get(&schedule_id).cloned().unwrap_or_default(),
+            date_filter: date_filter_from_row(row, true),
         }
     }
-    Ok(())
-}
+    #[cfg(feature = "ssr")]
+    fn date_filter_from_row(
+        row: &ersatzrs_infra::db::DbRow,
+        alternate_day_names: bool,
+    ) -> PlayoutDateFilter {
+        use sqlx::Row;
 
-#[cfg(feature = "ssr")]
-fn encode_day_names(values: &[i32]) -> String {
-    let names = normalize_days_of_week(values.to_vec())
-        .into_iter()
-        .filter_map(day_name)
-        .collect::<Vec<_>>();
-    serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_owned())
-}
+        let days_of_week = if alternate_day_names {
+            decode_day_names(
+                row.try_get::<Option<String>, _>("DaysOfWeek")
+                    .ok()
+                    .flatten(),
+            )
+        } else {
+            decode_int_json(
+                row.try_get::<Option<String>, _>("DaysOfWeek")
+                    .ok()
+                    .flatten(),
+            )
+        };
 
-#[cfg(feature = "ssr")]
-fn day_name(value: i32) -> Option<&'static str> {
-    match value {
-        0 => Some("Sunday"),
-        1 => Some("Monday"),
-        2 => Some("Tuesday"),
-        3 => Some("Wednesday"),
-        4 => Some("Thursday"),
-        5 => Some("Friday"),
-        6 => Some("Saturday"),
-        _ => None,
+        PlayoutDateFilter {
+            limit_to_date_range: row.try_get::<bool, _>("LimitToDateRange").unwrap_or(false),
+            start_month: row.try_get("StartMonth").unwrap_or(1),
+            start_day: row.try_get("StartDay").unwrap_or(1),
+            start_year: row.try_get("StartYear").ok().flatten(),
+            end_month: row.try_get("EndMonth").unwrap_or(12),
+            end_day: row.try_get("EndDay").unwrap_or(31),
+            end_year: row.try_get("EndYear").ok().flatten(),
+            days_of_week: normalize_days_of_week(days_of_week),
+            days_of_month: normalize_days_of_month(decode_int_list(
+                row.try_get::<Option<String>, _>("DaysOfMonth")
+                    .ok()
+                    .flatten(),
+            )),
+            months_of_year: normalize_months(decode_int_list(
+                row.try_get::<Option<String>, _>("MonthsOfYear")
+                    .ok()
+                    .flatten(),
+            )),
+        }
     }
-}
+    #[cfg(feature = "ssr")]
+    async fn validate_program_schedule_ids(
+        pool: &ersatzrs_infra::db::DbPool,
+        ids: impl Iterator<Item = i64>,
+    ) -> Result<(), ServerFnError> {
+        validate_ids(
+            pool,
+            "ProgramSchedule",
+            ids,
+            "Program schedule does not exist.",
+        )
+        .await
+    }
 
-#[cfg(feature = "ssr")]
-fn decode_day_names(value: Option<String>) -> Vec<i32> {
-    let Some(value) = value else {
-        return (0..=6).collect();
-    };
-    serde_json::from_str::<Vec<String>>(&value)
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|name| match name.as_str() {
-            "Sunday" => Some(0),
-            "Monday" => Some(1),
-            "Tuesday" => Some(2),
-            "Wednesday" => Some(3),
-            "Thursday" => Some(4),
-            "Friday" => Some(5),
-            "Saturday" => Some(6),
+    #[cfg(feature = "ssr")]
+    async fn validate_template_ids(
+        pool: &ersatzrs_infra::db::DbPool,
+        ids: impl Iterator<Item = i64>,
+    ) -> Result<(), ServerFnError> {
+        validate_ids(pool, "Template", ids, "Template does not exist.").await
+    }
+
+    #[cfg(feature = "ssr")]
+    async fn validate_deco_template_ids(
+        pool: &ersatzrs_infra::db::DbPool,
+        ids: impl Iterator<Item = i64>,
+    ) -> Result<(), ServerFnError> {
+        validate_ids(pool, "DecoTemplate", ids, "Deco template does not exist.").await
+    }
+
+    #[cfg(feature = "ssr")]
+    async fn validate_ids(
+        pool: &ersatzrs_infra::db::DbPool,
+        table: &'static str,
+        ids: impl Iterator<Item = i64>,
+        message: &'static str,
+    ) -> Result<(), ServerFnError> {
+        let mut unique = ids.filter(|id| *id > 0).collect::<Vec<_>>();
+        unique.sort_unstable();
+        unique.dedup();
+        for id in unique {
+            let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+                r#"SELECT COUNT(*) FROM "{table}" WHERE "Id" = ?"#
+            )))
+            .bind(id)
+            .fetch_one(pool)
+            .await?;
+            if exists == 0 {
+                return Err(ServerFnError::new(message));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "ssr")]
+    fn encode_day_names(values: &[i32]) -> String {
+        let names = normalize_days_of_week(values.to_vec())
+            .into_iter()
+            .filter_map(day_name)
+            .collect::<Vec<_>>();
+        serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_owned())
+    }
+
+    #[cfg(feature = "ssr")]
+    fn day_name(value: i32) -> Option<&'static str> {
+        match value {
+            0 => Some("Sunday"),
+            1 => Some("Monday"),
+            2 => Some("Tuesday"),
+            3 => Some("Wednesday"),
+            4 => Some("Thursday"),
+            5 => Some("Friday"),
+            6 => Some("Saturday"),
             _ => None,
-        })
-        .collect()
-}
+        }
+    }
 
-#[cfg(feature = "ssr")]
-fn decode_int_list(value: Option<String>) -> Vec<i32> {
-    let Some(value) = value else {
-        return Vec::new();
-    };
-    if value.trim_start().starts_with('[') {
-        decode_int_json(Some(value))
-    } else {
-        value
-            .split(',')
-            .filter_map(|part| part.trim().parse::<i32>().ok())
+    #[cfg(feature = "ssr")]
+    fn decode_day_names(value: Option<String>) -> Vec<i32> {
+        let Some(value) = value else {
+            return (0..=6).collect();
+        };
+        serde_json::from_str::<Vec<String>>(&value)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|name| match name.as_str() {
+                "Sunday" => Some(0),
+                "Monday" => Some(1),
+                "Tuesday" => Some(2),
+                "Wednesday" => Some(3),
+                "Thursday" => Some(4),
+                "Friday" => Some(5),
+                "Saturday" => Some(6),
+                _ => None,
+            })
             .collect()
     }
-}
 
-#[cfg(feature = "ssr")]
-fn decode_int_json(value: Option<String>) -> Vec<i32> {
-    value
-        .and_then(|value| serde_json::from_str::<Vec<i32>>(&value).ok())
-        .unwrap_or_default()
-}
-
-#[cfg(feature = "ssr")]
-fn encode_int_csv(values: &[i32]) -> String {
-    values
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-#[cfg(feature = "ssr")]
-fn encode_int_json(values: &[i32]) -> String {
-    serde_json::to_string(values).unwrap_or_else(|_| "[]".to_owned())
-}
-
-#[cfg(feature = "ssr")]
-fn normalize_days_of_week(values: Vec<i32>) -> Vec<i32> {
-    normalize_range(values, 0, 6)
-}
-
-#[cfg(feature = "ssr")]
-fn normalize_days_of_month(values: Vec<i32>) -> Vec<i32> {
-    normalize_range(values, 1, 31)
-}
-
-#[cfg(feature = "ssr")]
-fn normalize_months(values: Vec<i32>) -> Vec<i32> {
-    normalize_range(values, 1, 12)
-}
-
-#[cfg(feature = "ssr")]
-fn normalize_range(mut values: Vec<i32>, min: i32, max: i32) -> Vec<i32> {
-    values.retain(|value| (*value >= min) && (*value <= max));
-    values.sort_unstable();
-    values.dedup();
-    if values.is_empty() {
-        (min..=max).collect()
-    } else {
-        values
+    #[cfg(feature = "ssr")]
+    fn decode_int_list(value: Option<String>) -> Vec<i32> {
+        let Some(value) = value else {
+            return Vec::new();
+        };
+        if value.trim_start().starts_with('[') {
+            decode_int_json(Some(value))
+        } else {
+            value
+                .split(',')
+                .filter_map(|part| part.trim().parse::<i32>().ok())
+                .collect()
+        }
     }
-}
 
-#[cfg(feature = "ssr")]
-fn parse_create_kind(kind: &str) -> Result<i32, ServerFnError> {
-    match kind.trim().to_ascii_lowercase().as_str() {
-        "" | "classic" => Ok(KIND_CLASSIC),
-        "block" => Ok(KIND_BLOCK),
-        "sequential" => Ok(KIND_SEQUENTIAL),
-        "scripted" => Ok(KIND_SCRIPTED),
-        "externaljson" | "external-json" | "external_json" => Ok(KIND_EXTERNAL_JSON),
-        _ => Err(ServerFnError::new("Unsupported playout kind")),
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn schedule_file_missing_message(kind: i32) -> &'static str {
-    match kind {
-        KIND_EXTERNAL_JSON => "External Json File does not exist!",
-        KIND_SEQUENTIAL => "Sequential schedule does not exist!",
-        KIND_SCRIPTED => "Scripted schedule does not exist!",
-        _ => "Schedule file does not exist",
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn validate_scripted_schedule_file(schedule_file: &str) -> Result<(), ServerFnError> {
-    let script_file = first_command_token(schedule_file);
-    if script_file.is_empty() || std::fs::metadata(&script_file).is_err() {
-        return Err(ServerFnError::new(schedule_file_missing_message(
-            KIND_SCRIPTED,
-        )));
-    }
-    Ok(())
-}
-
-#[cfg(feature = "ssr")]
-fn first_command_token(value: &str) -> String {
-    let trimmed = value.trim_start();
-    let Some(first) = trimmed.chars().next() else {
-        return String::new();
-    };
-
-    if first != '"' && first != '\'' {
-        return trimmed
-            .split_whitespace()
-            .next()
+    #[cfg(feature = "ssr")]
+    fn decode_int_json(value: Option<String>) -> Vec<i32> {
+        value
+            .and_then(|value| serde_json::from_str::<Vec<i32>>(&value).ok())
             .unwrap_or_default()
-            .to_owned();
     }
 
-    // Mirror .NET's `CommandLineParser.SplitCommandLine`, which ErsatzTV uses:
-    // backslashes inside a quoted token are literal, not escape characters, so
-    // a Windows path like `"C:\Program Files\schedule.lua"` keeps its
-    // separators. Reading until the matching close quote is sufficient.
-    let quote = first;
-    let mut token = String::new();
-    for ch in trimmed[quote.len_utf8()..].chars() {
-        if ch == quote {
-            return token;
-        }
-        token.push(ch);
+    #[cfg(feature = "ssr")]
+    fn encode_int_csv(values: &[i32]) -> String {
+        values
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
     }
-    token
-}
 
-/// Now, formatted to match the stored UTC `Start`/`Finish` text columns for a
-/// lexicographic `Finish >= now` comparison.
-#[cfg(feature = "ssr")]
-fn now_sql() -> String {
-    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
-}
-
-/// Parses a stored UTC datetime string and formats it in local time
-/// (`StartOffset`/`FinishOffset` in ErsatzTV).
-#[cfg(feature = "ssr")]
-fn format_local(value: &str) -> String {
-    use chrono::{Local, TimeZone};
-    match parse_utc(value) {
-        Some(dt) => Local
-            .from_utc_datetime(&dt.naive_utc())
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string(),
-        None => value.to_owned(),
+    #[cfg(feature = "ssr")]
+    fn encode_int_json(values: &[i32]) -> String {
+        serde_json::to_string(values).unwrap_or_else(|_| "[]".to_owned())
     }
-}
 
-/// `PlayoutItem.GetDisplayDuration` parity: `mm:ss`, `h:mm:ss` (>= 1h), or
-/// `H:mm:ss` (>= 24h, hours not zero-padded).
-#[cfg(feature = "ssr")]
-fn display_duration(start: &str, finish: &str) -> String {
-    let (Some(s), Some(f)) = (parse_utc(start), parse_utc(finish)) else {
-        return String::new();
-    };
-    let total = (f - s).num_seconds().max(0);
-    let hours = total / 3600;
-    let minutes = (total % 3600) / 60;
-    let seconds = total % 60;
-    // ErsatzTV: `mm:ss` under an hour, otherwise `h:mm:ss` (hours not
-    // zero-padded, so 24h+ keeps growing the leading field).
-    if hours >= 1 {
-        format!("{hours}:{minutes:02}:{seconds:02}")
-    } else {
-        format!("{minutes:02}:{seconds:02}")
+    #[cfg(feature = "ssr")]
+    fn normalize_days_of_week(values: Vec<i32>) -> Vec<i32> {
+        normalize_range(values, 0, 6)
     }
-}
 
-#[cfg(feature = "ssr")]
-fn parse_utc(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-    use chrono::{NaiveDateTime, TimeZone, Utc};
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
-        return Some(dt.with_timezone(&Utc));
+    #[cfg(feature = "ssr")]
+    fn normalize_days_of_month(values: Vec<i32>) -> Vec<i32> {
+        normalize_range(values, 1, 31)
     }
-    for fmt in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
-        if let Ok(naive) = NaiveDateTime::parse_from_str(value.trim(), fmt) {
-            return Some(Utc.from_utc_datetime(&naive));
+
+    #[cfg(feature = "ssr")]
+    fn normalize_months(values: Vec<i32>) -> Vec<i32> {
+        normalize_range(values, 1, 12)
+    }
+
+    #[cfg(feature = "ssr")]
+    fn normalize_range(mut values: Vec<i32>, min: i32, max: i32) -> Vec<i32> {
+        values.retain(|value| (*value >= min) && (*value <= max));
+        values.sort_unstable();
+        values.dedup();
+        if values.is_empty() {
+            (min..=max).collect()
+        } else {
+            values
         }
     }
-    None
-}
 
-/// `HH:MM:SS` → minutes since midnight.
-#[cfg(feature = "ssr")]
-fn parse_daily_rebuild_minutes(value: &str) -> Option<i32> {
-    let trimmed = value.trim();
-    let mut parts = trimmed.split(':');
-    let hours: i32 = parts.next()?.parse().ok()?;
-    let minutes: i32 = parts.next().unwrap_or("0").parse().ok()?;
-    Some(hours * 60 + minutes)
-}
-
-/// minutes since midnight → `HH:MM:SS`.
-#[cfg(feature = "ssr")]
-fn format_daily_rebuild_time(minutes: i32) -> String {
-    let minutes = minutes.clamp(0, 23 * 60 + 59);
-    format!("{:02}:{:02}:00", minutes / 60, minutes % 60)
-}
-
-/// Resolves ErsatzTV `GetDisplayTitle` for the given item ids in one query,
-/// building the title in Rust (so no `printf`/`LPAD` SQL backend split).
-#[cfg(feature = "ssr")]
-async fn load_item_titles(
-    pool: &ersatzrs_infra::db::DbPool,
-    item_ids: &[i64],
-) -> Result<std::collections::HashMap<i64, String>, ServerFnError> {
-    use sqlx::Row;
-    use std::collections::HashMap;
-
-    let mut titles = HashMap::new();
-    if item_ids.is_empty() {
-        return Ok(titles);
+    #[cfg(feature = "ssr")]
+    fn parse_create_kind(kind: &str) -> Result<i32, ServerFnError> {
+        match kind.trim().to_ascii_lowercase().as_str() {
+            "" | "classic" => Ok(KIND_CLASSIC),
+            "block" => Ok(KIND_BLOCK),
+            "sequential" => Ok(KIND_SEQUENTIAL),
+            "scripted" => Ok(KIND_SCRIPTED),
+            "externaljson" | "external-json" | "external_json" => Ok(KIND_EXTERNAL_JSON),
+            _ => Err(ServerFnError::new("Unsupported playout kind")),
+        }
     }
 
-    let placeholders = vec!["?"; item_ids.len()].join(", ");
+    #[cfg(feature = "ssr")]
+    fn schedule_file_missing_message(kind: i32) -> &'static str {
+        match kind {
+            KIND_EXTERNAL_JSON => "External Json File does not exist!",
+            KIND_SEQUENTIAL => "Sequential schedule does not exist!",
+            KIND_SCRIPTED => "Scripted schedule does not exist!",
+            _ => "Schedule file does not exist",
+        }
+    }
 
-    let sql = format!(
-        r#"SELECT pi."Id" AS "Id",
+    #[cfg(feature = "ssr")]
+    fn validate_scripted_schedule_file(schedule_file: &str) -> Result<(), ServerFnError> {
+        let script_file = first_command_token(schedule_file);
+        if script_file.is_empty() || std::fs::metadata(&script_file).is_err() {
+            return Err(ServerFnError::new(schedule_file_missing_message(
+                KIND_SCRIPTED,
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "ssr")]
+    fn first_command_token(value: &str) -> String {
+        let trimmed = value.trim_start();
+        let Some(first) = trimmed.chars().next() else {
+            return String::new();
+        };
+
+        if first != '"' && first != '\'' {
+            return trimmed
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
+        }
+
+        // Mirror .NET's `CommandLineParser.SplitCommandLine`, which ErsatzTV uses:
+        // backslashes inside a quoted token are literal, not escape characters, so
+        // a Windows path like `"C:\Program Files\schedule.lua"` keeps its
+        // separators. Reading until the matching close quote is sufficient.
+        let quote = first;
+        let mut token = String::new();
+        for ch in trimmed[quote.len_utf8()..].chars() {
+            if ch == quote {
+                return token;
+            }
+            token.push(ch);
+        }
+        token
+    }
+
+    /// Now, formatted to match the stored UTC `Start`/`Finish` text columns for a
+    /// lexicographic `Finish >= now` comparison.
+    #[cfg(feature = "ssr")]
+    fn now_sql() -> String {
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+
+    /// Parses a stored UTC datetime string and formats it in local time
+    /// (`StartOffset`/`FinishOffset` in ErsatzTV).
+    #[cfg(feature = "ssr")]
+    fn format_local(value: &str) -> String {
+        use chrono::{Local, TimeZone};
+        match parse_utc(value) {
+            Some(dt) => Local
+                .from_utc_datetime(&dt.naive_utc())
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+            None => value.to_owned(),
+        }
+    }
+
+    /// `PlayoutItem.GetDisplayDuration` parity: `mm:ss`, `h:mm:ss` (>= 1h), or
+    /// `H:mm:ss` (>= 24h, hours not zero-padded).
+    #[cfg(feature = "ssr")]
+    fn display_duration(start: &str, finish: &str) -> String {
+        let (Some(s), Some(f)) = (parse_utc(start), parse_utc(finish)) else {
+            return String::new();
+        };
+        let total = (f - s).num_seconds().max(0);
+        let hours = total / 3600;
+        let minutes = (total % 3600) / 60;
+        let seconds = total % 60;
+        // ErsatzTV: `mm:ss` under an hour, otherwise `h:mm:ss` (hours not
+        // zero-padded, so 24h+ keeps growing the leading field).
+        if hours >= 1 {
+            format!("{hours}:{minutes:02}:{seconds:02}")
+        } else {
+            format!("{minutes:02}:{seconds:02}")
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    fn parse_utc(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        use chrono::{NaiveDateTime, TimeZone, Utc};
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+            return Some(dt.with_timezone(&Utc));
+        }
+        for fmt in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
+            if let Ok(naive) = NaiveDateTime::parse_from_str(value.trim(), fmt) {
+                return Some(Utc.from_utc_datetime(&naive));
+            }
+        }
+        None
+    }
+
+    /// `HH:MM:SS` → minutes since midnight.
+    #[cfg(feature = "ssr")]
+    fn parse_daily_rebuild_minutes(value: &str) -> Option<i32> {
+        let trimmed = value.trim();
+        let mut parts = trimmed.split(':');
+        let hours: i32 = parts.next()?.parse().ok()?;
+        let minutes: i32 = parts.next().unwrap_or("0").parse().ok()?;
+        Some(hours * 60 + minutes)
+    }
+
+    /// minutes since midnight → `HH:MM:SS`.
+    #[cfg(feature = "ssr")]
+    fn format_daily_rebuild_time(minutes: i32) -> String {
+        let minutes = minutes.clamp(0, 23 * 60 + 59);
+        format!("{:02}:{:02}:00", minutes / 60, minutes % 60)
+    }
+
+    /// Resolves ErsatzTV `GetDisplayTitle` for the given item ids in one query,
+    /// building the title in Rust (so no `printf`/`LPAD` SQL backend split).
+    #[cfg(feature = "ssr")]
+    async fn load_item_titles(
+        pool: &ersatzrs_infra::db::DbPool,
+        item_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, String>, ServerFnError> {
+        use sqlx::Row;
+        use std::collections::HashMap;
+
+        let mut titles = HashMap::new();
+        if item_ids.is_empty() {
+            return Ok(titles);
+        }
+
+        let placeholders = vec!["?"; item_ids.len()].join(", ");
+
+        let sql = format!(
+            r#"SELECT pi."Id" AS "Id",
                   pi."ChapterTitle" AS "ChapterTitle",
                   EXISTS(SELECT 1 FROM "Episode" e WHERE e."Id" = pi."MediaItemId") AS "IsEpisode",
                   EXISTS(SELECT 1 FROM "Movie" m WHERE m."Id" = pi."MediaItemId") AS "IsMovie",
@@ -2173,1041 +2164,1046 @@ async fn load_item_titles(
                    WHERE rsm."RemoteStreamId" = pi."MediaItemId" LIMIT 1) AS "RemoteTitle"
            FROM "PlayoutItem" pi
            WHERE pi."Id" IN ({placeholders})"#
-    );
+        );
 
-    let mut q = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql));
-    for id in item_ids {
-        q = q.bind(id);
-    }
-    let rows = q.fetch_all(pool).await?;
+        let mut q = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql));
+        for id in item_ids {
+            q = q.bind(id);
+        }
+        let rows = q.fetch_all(pool).await?;
 
-    for r in &rows {
-        let id: i64 = r.try_get("Id").unwrap_or(0);
-        let chapter: Option<String> = r
-            .try_get::<Option<String>, _>("ChapterTitle")
-            .ok()
-            .flatten()
-            .filter(|v| !v.trim().is_empty());
+        for r in &rows {
+            let id: i64 = r.try_get("Id").unwrap_or(0);
+            let chapter: Option<String> = r
+                .try_get::<Option<String>, _>("ChapterTitle")
+                .ok()
+                .flatten()
+                .filter(|v| !v.trim().is_empty());
 
-        let is_episode = r.try_get::<i64, _>("IsEpisode").unwrap_or(0) != 0;
-        let is_movie = r.try_get::<i64, _>("IsMovie").unwrap_or(0) != 0;
-        let is_music_video = r.try_get::<i64, _>("IsMusicVideo").unwrap_or(0) != 0;
-        let is_other_video = r.try_get::<i64, _>("IsOtherVideo").unwrap_or(0) != 0;
-        let is_song = r.try_get::<i64, _>("IsSong").unwrap_or(0) != 0;
-        let is_image = r.try_get::<i64, _>("IsImage").unwrap_or(0) != 0;
-        let is_remote_stream = r.try_get::<i64, _>("IsRemoteStream").unwrap_or(0) != 0;
-        let show_title: Option<String> = r.try_get("ShowTitle").ok().flatten();
-        let season_number: Option<i64> = r.try_get("SeasonNumber").ok().flatten();
-        let episode_number: Option<i64> = r.try_get("EpisodeNumber").ok().flatten();
-        let episode_title: Option<String> = r.try_get("EpisodeTitle").ok().flatten();
-        let movie_title: Option<String> = r.try_get("MovieTitle").ok().flatten();
-        let mv_artist: Option<String> = r.try_get("MvArtist").ok().flatten();
-        let mv_title: Option<String> = r.try_get("MvTitle").ok().flatten();
-        let song_title: Option<String> = r.try_get("SongTitle").ok().flatten();
-        let song_artists: Option<String> = r.try_get("SongArtists").ok().flatten();
-        let other_title: Option<String> = r.try_get("OtherTitle").ok().flatten();
-        let image_title: Option<String> = r.try_get("ImageTitle").ok().flatten();
-        let remote_title: Option<String> = r.try_get("RemoteTitle").ok().flatten();
+            let is_episode = r.try_get::<i64, _>("IsEpisode").unwrap_or(0) != 0;
+            let is_movie = r.try_get::<i64, _>("IsMovie").unwrap_or(0) != 0;
+            let is_music_video = r.try_get::<i64, _>("IsMusicVideo").unwrap_or(0) != 0;
+            let is_other_video = r.try_get::<i64, _>("IsOtherVideo").unwrap_or(0) != 0;
+            let is_song = r.try_get::<i64, _>("IsSong").unwrap_or(0) != 0;
+            let is_image = r.try_get::<i64, _>("IsImage").unwrap_or(0) != 0;
+            let is_remote_stream = r.try_get::<i64, _>("IsRemoteStream").unwrap_or(0) != 0;
+            let show_title: Option<String> = r.try_get("ShowTitle").ok().flatten();
+            let season_number: Option<i64> = r.try_get("SeasonNumber").ok().flatten();
+            let episode_number: Option<i64> = r.try_get("EpisodeNumber").ok().flatten();
+            let episode_title: Option<String> = r.try_get("EpisodeTitle").ok().flatten();
+            let movie_title: Option<String> = r.try_get("MovieTitle").ok().flatten();
+            let mv_artist: Option<String> = r.try_get("MvArtist").ok().flatten();
+            let mv_title: Option<String> = r.try_get("MvTitle").ok().flatten();
+            let song_title: Option<String> = r.try_get("SongTitle").ok().flatten();
+            let song_artists: Option<String> = r.try_get("SongArtists").ok().flatten();
+            let other_title: Option<String> = r.try_get("OtherTitle").ok().flatten();
+            let image_title: Option<String> = r.try_get("ImageTitle").ok().flatten();
+            let remote_title: Option<String> = r.try_get("RemoteTitle").ok().flatten();
 
-        let title = if is_episode {
-            if episode_number.is_none() || episode_title.is_none() {
-                "[unknown episode]".to_owned()
-            } else {
-                let show = show_title
+            let title = if is_episode {
+                if episode_number.is_none() || episode_title.is_none() {
+                    "[unknown episode]".to_owned()
+                } else {
+                    let show = show_title
+                        .as_deref()
+                        .map(|s| format!("{s} - "))
+                        .unwrap_or_default();
+                    let season = season_number.unwrap_or(0);
+                    let episode = episode_number.unwrap_or(0);
+                    let ep_title = episode_title.unwrap_or_default();
+                    with_chapter(
+                        format!("{show}s{season:02}e{episode:02} - {ep_title}"),
+                        chapter.as_deref(),
+                    )
+                }
+            } else if is_movie {
+                movie_title.unwrap_or_else(|| "[unknown movie]".to_owned())
+            } else if is_music_video {
+                let Some(mv_title) = mv_title else {
+                    titles.insert(id, "[unknown music video]".to_owned());
+                    continue;
+                };
+                let artist = mv_artist
                     .as_deref()
-                    .map(|s| format!("{s} - "))
+                    .map(|a| format!("{a} - "))
                     .unwrap_or_default();
-                let season = season_number.unwrap_or(0);
-                let episode = episode_number.unwrap_or(0);
-                let ep_title = episode_title.unwrap_or_default();
+                with_chapter(format!("{artist}{mv_title}"), chapter.as_deref())
+            } else if is_other_video {
                 with_chapter(
-                    format!("{show}s{season:02}e{episode:02} - {ep_title}"),
+                    other_title.unwrap_or_else(|| "[unknown video]".to_owned()),
                     chapter.as_deref(),
                 )
-            }
-        } else if is_movie {
-            movie_title.unwrap_or_else(|| "[unknown movie]".to_owned())
-        } else if is_music_video {
-            let Some(mv_title) = mv_title else {
-                titles.insert(id, "[unknown music video]".to_owned());
-                continue;
+            } else if is_song {
+                let Some(song_title) = song_title else {
+                    titles.insert(id, "[unknown song]".to_owned());
+                    continue;
+                };
+                let artists = song_artists
+                    .as_deref()
+                    .filter(|a| !a.trim().is_empty())
+                    .map(|a| format!("{} - ", normalize_song_artists(a)))
+                    .unwrap_or_default();
+                with_chapter(format!("{artists}{song_title}"), chapter.as_deref())
+            } else if is_image {
+                image_title.unwrap_or_else(|| "[unknown image]".to_owned())
+            } else if is_remote_stream {
+                remote_title.unwrap_or_else(|| "[unknown remote stream]".to_owned())
+            } else {
+                String::new()
             };
-            let artist = mv_artist
-                .as_deref()
-                .map(|a| format!("{a} - "))
-                .unwrap_or_default();
-            with_chapter(format!("{artist}{mv_title}"), chapter.as_deref())
-        } else if is_other_video {
-            with_chapter(
-                other_title.unwrap_or_else(|| "[unknown video]".to_owned()),
-                chapter.as_deref(),
-            )
-        } else if is_song {
-            let Some(song_title) = song_title else {
-                titles.insert(id, "[unknown song]".to_owned());
-                continue;
-            };
-            let artists = song_artists
-                .as_deref()
-                .filter(|a| !a.trim().is_empty())
-                .map(|a| format!("{} - ", normalize_song_artists(a)))
-                .unwrap_or_default();
-            with_chapter(format!("{artists}{song_title}"), chapter.as_deref())
-        } else if is_image {
-            image_title.unwrap_or_else(|| "[unknown image]".to_owned())
-        } else if is_remote_stream {
-            remote_title.unwrap_or_else(|| "[unknown remote stream]".to_owned())
+
+            titles.insert(id, title);
+        }
+
+        Ok(titles)
+    }
+
+    #[cfg(feature = "ssr")]
+    fn normalize_song_artists(value: &str) -> String {
+        let trimmed = value.trim();
+        if trimmed.starts_with('[') {
+            serde_json::from_str::<Vec<String>>(trimmed)
+                .map_or_else(|_| trimmed.to_owned(), |artists| artists.join(", "))
         } else {
-            String::new()
+            trimmed.to_owned()
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    fn with_chapter(title: String, chapter: Option<&str>) -> String {
+        match chapter {
+            Some(c) if !c.trim().is_empty() => format!("{title} ({c})"),
+            _ => title,
+        }
+    }
+
+    /// Enriches a Classic/Block scheduling-context JSON blob with human-readable
+    /// names. Ports `ProcessSchedulingContextHandler`.
+    #[cfg(feature = "ssr")]
+    async fn enrich_scheduling_context(
+        pool: &ersatzrs_infra::db::DbPool,
+        serialized: &str,
+    ) -> String {
+        use serde_json::Value;
+
+        let Ok(value) = serde_json::from_str::<Value>(serialized) else {
+            return serialized.to_owned();
+        };
+        let Some(obj) = value.as_object() else {
+            return pretty(&value, serialized);
         };
 
-        titles.insert(id, title);
-    }
-
-    Ok(titles)
-}
-
-#[cfg(feature = "ssr")]
-fn normalize_song_artists(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.starts_with('[') {
-        serde_json::from_str::<Vec<String>>(trimmed)
-            .map_or_else(|_| trimmed.to_owned(), |artists| artists.join(", "))
-    } else {
-        trimmed.to_owned()
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn with_chapter(title: String, chapter: Option<&str>) -> String {
-    match chapter {
-        Some(c) if !c.trim().is_empty() => format!("{title} ({c})"),
-        _ => title,
-    }
-}
-
-/// Enriches a Classic/Block scheduling-context JSON blob with human-readable
-/// names. Ports `ProcessSchedulingContextHandler`.
-#[cfg(feature = "ssr")]
-async fn enrich_scheduling_context(pool: &ersatzrs_infra::db::DbPool, serialized: &str) -> String {
-    use serde_json::Value;
-
-    let Ok(value) = serde_json::from_str::<Value>(serialized) else {
-        return serialized.to_owned();
-    };
-    let Some(obj) = value.as_object() else {
-        return pretty(&value, serialized);
-    };
-
-    if let Some(schedule_id) = obj.get("ScheduleId").and_then(Value::as_i64) {
-        if schedule_id > 0 {
-            return enrich_classic(pool, obj, schedule_id).await;
+        if let Some(schedule_id) = obj.get("ScheduleId").and_then(Value::as_i64) {
+            if schedule_id > 0 {
+                return enrich_classic(pool, obj, schedule_id).await;
+            }
+        } else if let Some(block_id) = obj.get("BlockId").and_then(Value::as_i64) {
+            if block_id > 0 {
+                return enrich_block(pool, obj, block_id).await;
+            }
         }
-    } else if let Some(block_id) = obj.get("BlockId").and_then(Value::as_i64) {
-        if block_id > 0 {
-            return enrich_block(pool, obj, block_id).await;
-        }
+
+        pretty(&value, serialized)
     }
 
-    pretty(&value, serialized)
-}
-
-#[cfg(feature = "ssr")]
-fn pretty(value: &serde_json::Value, original: &str) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_else(|_| original.to_owned())
-}
-
-#[cfg(feature = "ssr")]
-async fn enrich_classic(
-    pool: &ersatzrs_infra::db::DbPool,
-    obj: &serde_json::Map<String, serde_json::Value>,
-    schedule_id: i64,
-) -> String {
-    use serde_json::{json, Value};
-
-    let item_id = obj.get("ItemId").and_then(Value::as_i64).unwrap_or(0);
-    let filler_preset_id = obj.get("FillerPresetId").and_then(Value::as_i64);
-
-    let schedule_name: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Name" FROM "ProgramSchedule" WHERE "Id" = ?"#)
-            .bind(schedule_id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten();
-
-    let schedule_item = collection_ref_for_schedule_item(pool, item_id).await;
-
-    let mut name = "Classic";
-    let mut filler_value = Value::Null;
-    if let Some(preset_id) = filler_preset_id {
-        if preset_id > 0 {
-            name = "Classic - Filler";
-            filler_value = filler_preset_value(pool, preset_id).await;
-        }
+    #[cfg(feature = "ssr")]
+    fn pretty(value: &serde_json::Value, original: &str) -> String {
+        serde_json::to_string_pretty(value).unwrap_or_else(|_| original.to_owned())
     }
 
-    let context = json!({
-        "Scheduler": { "Type": name, "Mode": obj.get("Scheduler") },
-        "Schedule": { "Id": schedule_id, "Name": schedule_name.unwrap_or_default() },
-        "ScheduleItem": schedule_item.into_value(item_id),
-        "Filler": filler_value,
-        "Enumerator": enumerator_value(obj),
-    });
-    serde_json::to_string_pretty(&context).unwrap_or_default()
-}
+    #[cfg(feature = "ssr")]
+    async fn enrich_classic(
+        pool: &ersatzrs_infra::db::DbPool,
+        obj: &serde_json::Map<String, serde_json::Value>,
+        schedule_id: i64,
+    ) -> String {
+        use serde_json::{json, Value};
 
-#[cfg(feature = "ssr")]
-async fn enrich_block(
-    pool: &ersatzrs_infra::db::DbPool,
-    obj: &serde_json::Map<String, serde_json::Value>,
-    block_id: i64,
-) -> String {
-    use serde_json::{json, Value};
-    use sqlx::Row;
+        let item_id = obj.get("ItemId").and_then(Value::as_i64).unwrap_or(0);
+        let filler_preset_id = obj.get("FillerPresetId").and_then(Value::as_i64);
 
-    let block_item_id = obj.get("BlockItemId").and_then(Value::as_i64).unwrap_or(0);
+        let schedule_name: Option<String> =
+            sqlx::query_scalar(r#"SELECT "Name" FROM "ProgramSchedule" WHERE "Id" = ?"#)
+                .bind(schedule_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
 
-    let block = sqlx::query(
-        r#"SELECT b."Name" AS "Name", bg."Name" AS "Group"
+        let schedule_item = collection_ref_for_schedule_item(pool, item_id).await;
+
+        let mut name = "Classic";
+        let mut filler_value = Value::Null;
+        if let Some(preset_id) = filler_preset_id {
+            if preset_id > 0 {
+                name = "Classic - Filler";
+                filler_value = filler_preset_value(pool, preset_id).await;
+            }
+        }
+
+        let context = json!({
+            "Scheduler": { "Type": name, "Mode": obj.get("Scheduler") },
+            "Schedule": { "Id": schedule_id, "Name": schedule_name.unwrap_or_default() },
+            "ScheduleItem": schedule_item.into_value(item_id),
+            "Filler": filler_value,
+            "Enumerator": enumerator_value(obj),
+        });
+        serde_json::to_string_pretty(&context).unwrap_or_default()
+    }
+
+    #[cfg(feature = "ssr")]
+    async fn enrich_block(
+        pool: &ersatzrs_infra::db::DbPool,
+        obj: &serde_json::Map<String, serde_json::Value>,
+        block_id: i64,
+    ) -> String {
+        use serde_json::{json, Value};
+        use sqlx::Row;
+
+        let block_item_id = obj.get("BlockItemId").and_then(Value::as_i64).unwrap_or(0);
+
+        let block = sqlx::query(
+            r#"SELECT b."Name" AS "Name", bg."Name" AS "Group"
            FROM "Block" b JOIN "BlockGroup" bg ON bg."Id" = b."BlockGroupId"
            WHERE b."Id" = ?"#,
-    )
-    .bind(block_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-    let (group, block_name) = block
-        .map(|r| {
-            (
-                r.try_get::<Option<String>, _>("Group")
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default(),
-                r.try_get::<Option<String>, _>("Name")
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default(),
-            )
-        })
-        .unwrap_or_default();
+        )
+        .bind(block_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        let (group, block_name) = block
+            .map(|r| {
+                (
+                    r.try_get::<Option<String>, _>("Group")
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default(),
+                    r.try_get::<Option<String>, _>("Name")
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default(),
+                )
+            })
+            .unwrap_or_default();
 
-    let block_item = collection_ref_for_block_item(pool, block_item_id).await;
+        let block_item = collection_ref_for_block_item(pool, block_item_id).await;
 
-    let context = json!({
-        "Scheduler": { "Type": "Block", "Mode": Value::Null },
-        "Block": { "Id": block_id, "Group": group, "Name": block_name },
-        "BlockItem": block_item.into_value(block_item_id),
-        "Enumerator": enumerator_value(obj),
-    });
-    serde_json::to_string_pretty(&context).unwrap_or_default()
-}
+        let context = json!({
+            "Scheduler": { "Type": "Block", "Mode": Value::Null },
+            "Block": { "Id": block_id, "Group": group, "Name": block_name },
+            "BlockItem": block_item.into_value(block_item_id),
+            "Enumerator": enumerator_value(obj),
+        });
+        serde_json::to_string_pretty(&context).unwrap_or_default()
+    }
 
-#[cfg(feature = "ssr")]
-fn enumerator_value(obj: &serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
-    use serde_json::{json, Value};
-    json!({
-        "Name": obj.get("Enumerator").cloned().unwrap_or(Value::Null),
-        "Seed": obj.get("Seed").cloned().unwrap_or(Value::Null),
-        "Index": obj.get("Index").cloned().unwrap_or(Value::Null),
-    })
-}
-
-/// (collection-type integer, resolved collection name) for a schedule/block item.
-#[cfg(feature = "ssr")]
-struct CollectionRef {
-    collection_type: Option<i32>,
-    collection_name: Option<String>,
-}
-
-#[cfg(feature = "ssr")]
-impl CollectionRef {
-    fn into_value(self, id: i64) -> serde_json::Value {
-        use serde_json::json;
+    #[cfg(feature = "ssr")]
+    fn enumerator_value(obj: &serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
+        use serde_json::{json, Value};
         json!({
-            "Id": id,
-            "CollectionType": self.collection_type.map(collection_type_name),
-            "CollectionName": self.collection_name,
+            "Name": obj.get("Enumerator").cloned().unwrap_or(Value::Null),
+            "Seed": obj.get("Seed").cloned().unwrap_or(Value::Null),
+            "Index": obj.get("Index").cloned().unwrap_or(Value::Null),
         })
     }
-}
 
-#[cfg(feature = "ssr")]
-async fn collection_ref_for_schedule_item(
-    pool: &ersatzrs_infra::db::DbPool,
-    item_id: i64,
-) -> CollectionRef {
-    use sqlx::Row;
-    let Some(row) = sqlx::query(
-        r#"SELECT "CollectionType", "CollectionId", "MultiCollectionId", "PlaylistId",
+    /// (collection-type integer, resolved collection name) for a schedule/block item.
+    #[cfg(feature = "ssr")]
+    struct CollectionRef {
+        collection_type: Option<i32>,
+        collection_name: Option<String>,
+    }
+
+    #[cfg(feature = "ssr")]
+    impl CollectionRef {
+        fn into_value(self, id: i64) -> serde_json::Value {
+            use serde_json::json;
+            json!({
+                "Id": id,
+                "CollectionType": self.collection_type.map(collection_type_name),
+                "CollectionName": self.collection_name,
+            })
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    async fn collection_ref_for_schedule_item(
+        pool: &ersatzrs_infra::db::DbPool,
+        item_id: i64,
+    ) -> CollectionRef {
+        use sqlx::Row;
+        let Some(row) = sqlx::query(
+            r#"SELECT "CollectionType", "CollectionId", "MultiCollectionId", "PlaylistId",
                   "RerunCollectionId", "SmartCollectionId"
            FROM "ProgramScheduleItem" WHERE "Id" = ?"#,
-    )
-    .bind(item_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten() else {
-        return CollectionRef {
-            collection_type: None,
-            collection_name: None,
+        )
+        .bind(item_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten() else {
+            return CollectionRef {
+                collection_type: None,
+                collection_name: None,
+            };
         };
-    };
-    let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
-    let name = resolve_collection_name(
-        pool,
-        ct,
-        row.try_get("CollectionId").ok().flatten(),
-        row.try_get("MultiCollectionId").ok().flatten(),
-        row.try_get("PlaylistId").ok().flatten(),
-        row.try_get("RerunCollectionId").ok().flatten(),
-        row.try_get("SmartCollectionId").ok().flatten(),
-    )
-    .await;
-    CollectionRef {
-        collection_type: Some(ct),
-        collection_name: name,
+        let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
+        let name = resolve_collection_name(
+            pool,
+            ct,
+            row.try_get("CollectionId").ok().flatten(),
+            row.try_get("MultiCollectionId").ok().flatten(),
+            row.try_get("PlaylistId").ok().flatten(),
+            row.try_get("RerunCollectionId").ok().flatten(),
+            row.try_get("SmartCollectionId").ok().flatten(),
+        )
+        .await;
+        CollectionRef {
+            collection_type: Some(ct),
+            collection_name: name,
+        }
     }
-}
 
-#[cfg(feature = "ssr")]
-async fn collection_ref_for_block_item(
-    pool: &ersatzrs_infra::db::DbPool,
-    item_id: i64,
-) -> CollectionRef {
-    use sqlx::Row;
-    let Some(row) = sqlx::query(
-        r#"SELECT "CollectionType", "CollectionId", "MultiCollectionId", "SmartCollectionId"
+    #[cfg(feature = "ssr")]
+    async fn collection_ref_for_block_item(
+        pool: &ersatzrs_infra::db::DbPool,
+        item_id: i64,
+    ) -> CollectionRef {
+        use sqlx::Row;
+        let Some(row) = sqlx::query(
+            r#"SELECT "CollectionType", "CollectionId", "MultiCollectionId", "SmartCollectionId"
            FROM "BlockItem" WHERE "Id" = ?"#,
-    )
-    .bind(item_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten() else {
-        return CollectionRef {
-            collection_type: None,
-            collection_name: None,
+        )
+        .bind(item_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten() else {
+            return CollectionRef {
+                collection_type: None,
+                collection_name: None,
+            };
         };
-    };
-    let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
-    let name = resolve_collection_name(
-        pool,
-        ct,
-        row.try_get("CollectionId").ok().flatten(),
-        row.try_get("MultiCollectionId").ok().flatten(),
-        None,
-        None,
-        row.try_get("SmartCollectionId").ok().flatten(),
-    )
-    .await;
-    CollectionRef {
-        collection_type: Some(ct),
-        collection_name: name,
+        let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
+        let name = resolve_collection_name(
+            pool,
+            ct,
+            row.try_get("CollectionId").ok().flatten(),
+            row.try_get("MultiCollectionId").ok().flatten(),
+            None,
+            None,
+            row.try_get("SmartCollectionId").ok().flatten(),
+        )
+        .await;
+        CollectionRef {
+            collection_type: Some(ct),
+            collection_name: name,
+        }
     }
-}
 
-#[cfg(feature = "ssr")]
-async fn filler_preset_value(
-    pool: &ersatzrs_infra::db::DbPool,
-    preset_id: i64,
-) -> serde_json::Value {
-    use serde_json::{json, Value};
-    use sqlx::Row;
-    let Some(row) = sqlx::query(
-        r#"SELECT "Name", "FillerKind", "FillerMode", "CollectionType",
+    #[cfg(feature = "ssr")]
+    async fn filler_preset_value(
+        pool: &ersatzrs_infra::db::DbPool,
+        preset_id: i64,
+    ) -> serde_json::Value {
+        use serde_json::{json, Value};
+        use sqlx::Row;
+        let Some(row) = sqlx::query(
+            r#"SELECT "Name", "FillerKind", "FillerMode", "CollectionType",
                   "CollectionId", "MultiCollectionId", "PlaylistId", "SmartCollectionId"
            FROM "FillerPreset" WHERE "Id" = ?"#,
-    )
-    .bind(preset_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten() else {
-        return Value::Null;
-    };
-    let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
-    let name = resolve_collection_name(
-        pool,
-        ct,
-        row.try_get("CollectionId").ok().flatten(),
-        row.try_get("MultiCollectionId").ok().flatten(),
-        row.try_get("PlaylistId").ok().flatten(),
-        None,
-        row.try_get("SmartCollectionId").ok().flatten(),
-    )
-    .await;
-    json!({
-        "Id": preset_id,
-        "Name": row.try_get::<Option<String>, _>("Name").ok().flatten(),
-        "Kind": filler_kind_name(row.try_get("FillerKind").unwrap_or(0)),
-        "Mode": filler_mode_name(row.try_get("FillerMode").unwrap_or(0)),
-        "CollectionType": collection_type_name(ct),
-        "CollectionName": name,
-    })
-}
-
-#[cfg(feature = "ssr")]
-#[allow(clippy::too_many_arguments)]
-async fn resolve_collection_name(
-    pool: &ersatzrs_infra::db::DbPool,
-    collection_type: i32,
-    collection_id: Option<i64>,
-    multi_collection_id: Option<i64>,
-    playlist_id: Option<i64>,
-    rerun_collection_id: Option<i64>,
-    smart_collection_id: Option<i64>,
-) -> Option<String> {
-    // CollectionType: 0 Collection, 4 MultiCollection, 5 SmartCollection,
-    // 6 Playlist, 7 RerunFirstRun, 8 RerunRerun.
-    let (table, id) = match collection_type {
-        0 => ("Collection", collection_id),
-        4 => ("MultiCollection", multi_collection_id),
-        5 => ("SmartCollection", smart_collection_id),
-        6 => ("Playlist", playlist_id),
-        7 | 8 => ("RerunCollection", rerun_collection_id),
-        _ => return None,
-    };
-    let id = id?;
-    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
-        r#"SELECT "Name" FROM "{table}" WHERE "Id" = ?"#
-    )))
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-}
-
-#[cfg(feature = "ssr")]
-fn collection_type_name(value: i32) -> &'static str {
-    match value {
-        0 => "Collection",
-        1 => "TelevisionShow",
-        2 => "TelevisionSeason",
-        3 => "Artist",
-        4 => "MultiCollection",
-        5 => "SmartCollection",
-        6 => "Playlist",
-        7 => "RerunFirstRun",
-        8 => "RerunRerun",
-        9 => "SearchQuery",
-        10 => "Movie",
-        20 => "Episode",
-        _ => "Unknown",
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn filler_kind_name(value: i32) -> &'static str {
-    match value {
-        0 => "None",
-        1 => "PreRoll",
-        2 => "MidRoll",
-        3 => "PostRoll",
-        4 => "Tail",
-        5 => "Fallback",
-        99 => "GuideMode",
-        100 => "DecoDefault",
-        _ => "Unknown",
-    }
-}
-
-#[cfg(feature = "ssr")]
-fn filler_mode_name(value: i32) -> &'static str {
-    match value {
-        0 => "None",
-        1 => "Duration",
-        2 => "Count",
-        3 => "Pad",
-        4 => "RandomCount",
-        _ => "Unknown",
-    }
-}
-
-#[cfg(all(test, feature = "ssr"))]
-mod tests {
-    use super::*;
-
-    async fn test_db() -> ersatzrs_infra::db::DbPool {
-        #[cfg(feature = "mysql")]
-        {
-            sqlx::any::install_default_drivers();
-            sqlx::any::AnyPoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .expect("pool")
-        }
-
-        #[cfg(not(feature = "mysql"))]
-        {
-            sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .expect("pool")
-        }
-    }
-
-    fn playout_queue_state() -> (
-        crate::host::state::AppState,
-        tokio::sync::mpsc::UnboundedReceiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
-    ) {
-        let pool =
-            ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
-        let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
-        let state = crate::host::state::AppState::new(
+        )
+        .bind(preset_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten() else {
+            return Value::Null;
+        };
+        let ct: i32 = row.try_get("CollectionType").unwrap_or(0);
+        let name = resolve_collection_name(
             pool,
-            ersatzrs_infra::db::DatabaseBackend::Sqlite,
-            crate::host::state::SystemStartup {
-                database_ready: true,
-                schema_status: ersatzrs_infra::db::DatabaseSchemaStatus::default(),
-            },
-            ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
-            uuid::Uuid::nil(),
-            1,
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
-            playout_build_tx,
-            ersatzrs_core::locking::EntityLocker::default(),
-        );
-        (state, playout_build_rx)
+            ct,
+            row.try_get("CollectionId").ok().flatten(),
+            row.try_get("MultiCollectionId").ok().flatten(),
+            row.try_get("PlaylistId").ok().flatten(),
+            None,
+            row.try_get("SmartCollectionId").ok().flatten(),
+        )
+        .await;
+        json!({
+            "Id": preset_id,
+            "Name": row.try_get::<Option<String>, _>("Name").ok().flatten(),
+            "Kind": filler_kind_name(row.try_get("FillerKind").unwrap_or(0)),
+            "Mode": filler_mode_name(row.try_get("FillerMode").unwrap_or(0)),
+            "CollectionType": collection_type_name(ct),
+            "CollectionName": name,
+        })
     }
 
-    #[tokio::test]
-    async fn enqueue_build_preserves_transport_counts_and_upgrades_queued_mode() {
-        use ersatzrs_core::scheduling::PlayoutBuildMode;
+    #[cfg(feature = "ssr")]
+    #[allow(clippy::too_many_arguments)]
+    async fn resolve_collection_name(
+        pool: &ersatzrs_infra::db::DbPool,
+        collection_type: i32,
+        collection_id: Option<i64>,
+        multi_collection_id: Option<i64>,
+        playlist_id: Option<i64>,
+        rerun_collection_id: Option<i64>,
+        smart_collection_id: Option<i64>,
+    ) -> Option<String> {
+        // CollectionType: 0 Collection, 4 MultiCollection, 5 SmartCollection,
+        // 6 Playlist, 7 RerunFirstRun, 8 RerunRerun.
+        let (table, id) = match collection_type {
+            0 => ("Collection", collection_id),
+            4 => ("MultiCollection", multi_collection_id),
+            5 => ("SmartCollection", smart_collection_id),
+            6 => ("Playlist", playlist_id),
+            7 | 8 => ("RerunCollection", rerun_collection_id),
+            _ => return None,
+        };
+        let id = id?;
+        sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT "Name" FROM "{table}" WHERE "Id" = ?"#
+        )))
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+    }
 
-        let (state, mut receiver) = playout_queue_state();
-        assert_eq!(
-            enqueue_build(&state, 44, PlayoutBuildMode::Refresh).expect("accepted request"),
-            PlayoutBuildEnqueueResult {
-                accepted: 1,
-                coalesced: 0,
+    #[cfg(feature = "ssr")]
+    fn collection_type_name(value: i32) -> &'static str {
+        match value {
+            0 => "Collection",
+            1 => "TelevisionShow",
+            2 => "TelevisionSeason",
+            3 => "Artist",
+            4 => "MultiCollection",
+            5 => "SmartCollection",
+            6 => "Playlist",
+            7 => "RerunFirstRun",
+            8 => "RerunRerun",
+            9 => "SearchQuery",
+            10 => "Movie",
+            20 => "Episode",
+            _ => "Unknown",
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    fn filler_kind_name(value: i32) -> &'static str {
+        match value {
+            0 => "None",
+            1 => "PreRoll",
+            2 => "MidRoll",
+            3 => "PostRoll",
+            4 => "Tail",
+            5 => "Fallback",
+            99 => "GuideMode",
+            100 => "DecoDefault",
+            _ => "Unknown",
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    fn filler_mode_name(value: i32) -> &'static str {
+        match value {
+            0 => "None",
+            1 => "Duration",
+            2 => "Count",
+            3 => "Pad",
+            4 => "RandomCount",
+            _ => "Unknown",
+        }
+    }
+
+    #[cfg(all(test, feature = "ssr"))]
+    mod tests {
+        use super::*;
+
+        async fn test_db() -> ersatzrs_infra::db::DbPool {
+            #[cfg(feature = "mysql")]
+            {
+                sqlx::any::install_default_drivers();
+                sqlx::any::AnyPoolOptions::new()
+                    .max_connections(1)
+                    .connect("sqlite::memory:")
+                    .await
+                    .expect("pool")
             }
-        );
-        assert_eq!(
-            enqueue_build(&state, 44, PlayoutBuildMode::Reset).expect("coalesced request"),
-            PlayoutBuildEnqueueResult {
-                accepted: 0,
-                coalesced: 1,
+
+            #[cfg(not(feature = "mysql"))]
+            {
+                sqlx::sqlite::SqlitePoolOptions::new()
+                    .max_connections(1)
+                    .connect("sqlite::memory:")
+                    .await
+                    .expect("pool")
             }
-        );
+        }
 
-        let token = receiver.try_recv().expect("queued request");
-        assert_eq!(token.playout_id, 44);
-        let (request, guard) = state
-            .application
-            .operations()
-            .playout_activity()
-            .start_guard(token);
-        assert_eq!(request.mode, PlayoutBuildMode::Reset);
-        assert!(receiver.try_recv().is_err(), "duplicate must not be queued");
-        drop(guard);
-    }
+        fn playout_queue_state() -> (
+            crate::host::state::AppState,
+            tokio::sync::mpsc::UnboundedReceiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+        ) {
+            let pool =
+                ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
+            let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
+            let state = crate::host::state::AppState::new(
+                pool,
+                ersatzrs_infra::db::DatabaseBackend::Sqlite,
+                crate::host::state::SystemStartup {
+                    database_ready: true,
+                    schema_status: ersatzrs_infra::db::DatabaseSchemaStatus::default(),
+                },
+                ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+                uuid::Uuid::nil(),
+                1,
+                crate::host::state::IptvAccessTokenVerifier::disabled(),
+                playout_build_tx,
+                ersatzrs_core::locking::EntityLocker::default(),
+            );
+            (state, playout_build_rx)
+        }
 
-    #[tokio::test]
-    async fn enqueue_build_retains_one_upgradable_follow_up_during_active_build() {
-        use ersatzrs_core::scheduling::PlayoutBuildMode;
+        #[tokio::test]
+        async fn enqueue_build_preserves_transport_counts_and_upgrades_queued_mode() {
+            use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-        let (state, mut receiver) = playout_queue_state();
-        enqueue_build(&state, 46, PlayoutBuildMode::Continue).expect("initial request");
-        let initial_token = receiver.try_recv().expect("initial token");
-        let (_, active_guard) = state
-            .application
-            .operations()
-            .playout_activity()
-            .start_guard(initial_token);
+            let (state, mut receiver) = playout_queue_state();
+            assert_eq!(
+                enqueue_build(&state, 44, PlayoutBuildMode::Refresh).expect("accepted request"),
+                PlayoutBuildEnqueueResult {
+                    accepted: 1,
+                    coalesced: 0,
+                }
+            );
+            assert_eq!(
+                enqueue_build(&state, 44, PlayoutBuildMode::Reset).expect("coalesced request"),
+                PlayoutBuildEnqueueResult {
+                    accepted: 0,
+                    coalesced: 1,
+                }
+            );
 
-        assert_eq!(
-            enqueue_build(&state, 46, PlayoutBuildMode::Refresh).expect("follow-up"),
-            PlayoutBuildEnqueueResult {
-                accepted: 0,
-                coalesced: 1,
-            }
-        );
-        assert_eq!(
-            enqueue_build(&state, 46, PlayoutBuildMode::Reset).expect("upgraded follow-up"),
-            PlayoutBuildEnqueueResult {
-                accepted: 0,
-                coalesced: 1,
-            }
-        );
-        let follow_up_token = receiver.try_recv().expect("follow-up token");
-        assert!(
-            receiver.try_recv().is_err(),
-            "active mutations must share one follow-up token"
-        );
+            let token = receiver.try_recv().expect("queued request");
+            assert_eq!(token.playout_id, 44);
+            let (request, guard) = state
+                .application
+                .operations()
+                .playout_activity()
+                .start_guard(token);
+            assert_eq!(request.mode, PlayoutBuildMode::Reset);
+            assert!(receiver.try_recv().is_err(), "duplicate must not be queued");
+            drop(guard);
+        }
 
-        drop(active_guard);
-        let (follow_up, follow_up_guard) = state
-            .application
-            .operations()
-            .playout_activity()
-            .start_guard(follow_up_token);
-        assert_eq!(follow_up.mode, PlayoutBuildMode::Reset);
-        drop(follow_up_guard);
-    }
+        #[tokio::test]
+        async fn enqueue_build_retains_one_upgradable_follow_up_during_active_build() {
+            use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-    #[tokio::test]
-    async fn enqueue_build_maps_closed_worker_and_cleans_activity() {
-        use ersatzrs_core::scheduling::PlayoutBuildMode;
+            let (state, mut receiver) = playout_queue_state();
+            enqueue_build(&state, 46, PlayoutBuildMode::Continue).expect("initial request");
+            let initial_token = receiver.try_recv().expect("initial token");
+            let (_, active_guard) = state
+                .application
+                .operations()
+                .playout_activity()
+                .start_guard(initial_token);
 
-        let (state, receiver) = playout_queue_state();
-        drop(receiver);
+            assert_eq!(
+                enqueue_build(&state, 46, PlayoutBuildMode::Refresh).expect("follow-up"),
+                PlayoutBuildEnqueueResult {
+                    accepted: 0,
+                    coalesced: 1,
+                }
+            );
+            assert_eq!(
+                enqueue_build(&state, 46, PlayoutBuildMode::Reset).expect("upgraded follow-up"),
+                PlayoutBuildEnqueueResult {
+                    accepted: 0,
+                    coalesced: 1,
+                }
+            );
+            let follow_up_token = receiver.try_recv().expect("follow-up token");
+            assert!(
+                receiver.try_recv().is_err(),
+                "active mutations must share one follow-up token"
+            );
 
-        let error = enqueue_build(&state, 45, PlayoutBuildMode::Reset)
-            .expect_err("closed worker must fail");
-        assert!(error.to_string().contains("worker is unavailable"));
-        assert!(state
-            .application
-            .operations()
-            .playout_activity()
-            .queued_playouts()
-            .is_empty());
-    }
+            drop(active_guard);
+            let (follow_up, follow_up_guard) = state
+                .application
+                .operations()
+                .playout_activity()
+                .start_guard(follow_up_token);
+            assert_eq!(follow_up.mode, PlayoutBuildMode::Reset);
+            drop(follow_up_guard);
+        }
 
-    #[test]
-    fn display_duration_uses_minute_seconds_under_an_hour() {
-        // 00:05:30 -> 00:10:00 == 4m30s
-        assert_eq!(
-            display_duration("2024-01-01 00:05:30", "2024-01-01 00:10:00"),
-            "04:30"
-        );
-    }
+        #[tokio::test]
+        async fn enqueue_build_maps_closed_worker_and_cleans_activity() {
+            use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-    #[test]
-    fn display_duration_uses_hours_at_or_above_one_hour() {
-        assert_eq!(
-            display_duration("2024-01-01 00:00:00", "2024-01-01 02:03:04"),
-            "2:03:04"
-        );
-        // 25h keeps growing the leading hours field (ErsatzTV behavior).
-        assert_eq!(
-            display_duration("2024-01-01 00:00:00", "2024-01-02 01:00:00"),
-            "25:00:00"
-        );
-    }
+            let (state, receiver) = playout_queue_state();
+            drop(receiver);
 
-    #[test]
-    fn daily_rebuild_time_round_trips() {
-        assert_eq!(parse_daily_rebuild_minutes("06:30:00"), Some(390));
-        assert_eq!(parse_daily_rebuild_minutes("00:30"), Some(30));
-        assert_eq!(format_daily_rebuild_time(390), "06:30:00");
-        assert_eq!(format_daily_rebuild_time(30), "00:30:00");
-        assert_eq!(format_daily_rebuild_time(23 * 60 + 30), "23:30:00");
-    }
+            let error = enqueue_build(&state, 45, PlayoutBuildMode::Reset)
+                .expect_err("closed worker must fail");
+            assert!(error.to_string().contains("worker is unavailable"));
+            assert!(state
+                .application
+                .operations()
+                .playout_activity()
+                .queued_playouts()
+                .is_empty());
+        }
 
-    #[test]
-    fn with_chapter_appends_when_present() {
-        assert_eq!(with_chapter("Movie".into(), None), "Movie");
-        assert_eq!(with_chapter("Movie".into(), Some("  ")), "Movie");
-        assert_eq!(with_chapter("Movie".into(), Some("Ch 1")), "Movie (Ch 1)");
-    }
+        #[test]
+        fn display_duration_uses_minute_seconds_under_an_hour() {
+            // 00:05:30 -> 00:10:00 == 4m30s
+            assert_eq!(
+                display_duration("2024-01-01 00:05:30", "2024-01-01 00:10:00"),
+                "04:30"
+            );
+        }
 
-    #[test]
-    fn song_artists_json_is_displayed_like_ersatztv_list_join() {
-        assert_eq!(normalize_song_artists(r#"["One","Two"]"#), "One, Two");
-        assert_eq!(normalize_song_artists("One, Two"), "One, Two");
-    }
+        #[test]
+        fn display_duration_uses_hours_at_or_above_one_hour() {
+            assert_eq!(
+                display_duration("2024-01-01 00:00:00", "2024-01-01 02:03:04"),
+                "2:03:04"
+            );
+            // 25h keeps growing the leading hours field (ErsatzTV behavior).
+            assert_eq!(
+                display_duration("2024-01-01 00:00:00", "2024-01-02 01:00:00"),
+                "25:00:00"
+            );
+        }
 
-    #[test]
-    fn scripted_schedule_validation_uses_first_command_token() {
-        assert_eq!(
-            first_command_token("/tmp/script.lua --flag value"),
-            "/tmp/script.lua"
-        );
-        assert_eq!(
-            first_command_token(r#""/tmp/script file.lua" --flag value"#),
-            "/tmp/script file.lua"
-        );
-        assert_eq!(
-            first_command_token(r"'/tmp/script file.lua' --flag value"),
-            "/tmp/script file.lua"
-        );
-        // Backslashes inside a quoted token are literal path separators, not
-        // escapes (parity with .NET `SplitCommandLine`); a Windows path must
-        // survive intact so `std::fs::metadata` can find it.
-        assert_eq!(
-            first_command_token(r#""C:\Program Files\schedule.lua" --slot prime"#),
-            r"C:\Program Files\schedule.lua"
-        );
-        assert_eq!(
-            first_command_token(r"C:\scripts\schedule.lua --slot prime"),
-            r"C:\scripts\schedule.lua"
-        );
-    }
+        #[test]
+        fn daily_rebuild_time_round_trips() {
+            assert_eq!(parse_daily_rebuild_minutes("06:30:00"), Some(390));
+            assert_eq!(parse_daily_rebuild_minutes("00:30"), Some(30));
+            assert_eq!(format_daily_rebuild_time(390), "06:30:00");
+            assert_eq!(format_daily_rebuild_time(30), "00:30:00");
+            assert_eq!(format_daily_rebuild_time(23 * 60 + 30), "23:30:00");
+        }
 
-    #[test]
-    fn playout_seed_is_non_negative_and_varies() {
-        // Mirrors ErsatzTV's `Random().Next()` range (`0..=i32::MAX`).
-        assert!(next_seed() >= 0);
-        // Distinct calls should diverge; collisions are astronomically unlikely.
-        let seeds: std::collections::HashSet<i32> = (0..16).map(|_| next_seed()).collect();
-        assert!(seeds.len() > 1, "next_seed produced no variety");
-    }
+        #[test]
+        fn with_chapter_appends_when_present() {
+            assert_eq!(with_chapter("Movie".into(), None), "Movie");
+            assert_eq!(with_chapter("Movie".into(), Some("  ")), "Movie");
+            assert_eq!(with_chapter("Movie".into(), Some("Ch 1")), "Movie (Ch 1)");
+        }
 
-    #[tokio::test]
-    async fn display_title_keeps_movie_chapter_out_and_uses_unknown_fallback() {
-        let pool = test_db().await;
-        create_title_projection_tables(&pool).await;
+        #[test]
+        fn song_artists_json_is_displayed_like_ersatztv_list_join() {
+            assert_eq!(normalize_song_artists(r#"["One","Two"]"#), "One, Two");
+            assert_eq!(normalize_song_artists("One, Two"), "One, Two");
+        }
 
-        sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (10), (11)"#)
-            .execute(&pool)
-            .await
-            .expect("movies");
-        sqlx::query(r#"INSERT INTO "MovieMetadata" ("MovieId", "Title") VALUES (10, 'Feature')"#)
+        #[test]
+        fn scripted_schedule_validation_uses_first_command_token() {
+            assert_eq!(
+                first_command_token("/tmp/script.lua --flag value"),
+                "/tmp/script.lua"
+            );
+            assert_eq!(
+                first_command_token(r#""/tmp/script file.lua" --flag value"#),
+                "/tmp/script file.lua"
+            );
+            assert_eq!(
+                first_command_token(r"'/tmp/script file.lua' --flag value"),
+                "/tmp/script file.lua"
+            );
+            // Backslashes inside a quoted token are literal path separators, not
+            // escapes (parity with .NET `SplitCommandLine`); a Windows path must
+            // survive intact so `std::fs::metadata` can find it.
+            assert_eq!(
+                first_command_token(r#""C:\Program Files\schedule.lua" --slot prime"#),
+                r"C:\Program Files\schedule.lua"
+            );
+            assert_eq!(
+                first_command_token(r"C:\scripts\schedule.lua --slot prime"),
+                r"C:\scripts\schedule.lua"
+            );
+        }
+
+        #[test]
+        fn playout_seed_is_non_negative_and_varies() {
+            // Mirrors ErsatzTV's `Random().Next()` range (`0..=i32::MAX`).
+            assert!(next_seed() >= 0);
+            // Distinct calls should diverge; collisions are astronomically unlikely.
+            let seeds: std::collections::HashSet<i32> = (0..16).map(|_| next_seed()).collect();
+            assert!(seeds.len() > 1, "next_seed produced no variety");
+        }
+
+        #[tokio::test]
+        async fn display_title_keeps_movie_chapter_out_and_uses_unknown_fallback() {
+            let pool = test_db().await;
+            create_title_projection_tables(&pool).await;
+
+            sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (10), (11)"#)
+                .execute(&pool)
+                .await
+                .expect("movies");
+            sqlx::query(
+                r#"INSERT INTO "MovieMetadata" ("MovieId", "Title") VALUES (10, 'Feature')"#,
+            )
             .execute(&pool)
             .await
             .expect("movie metadata");
-        sqlx::query(
-            r#"INSERT INTO "PlayoutItem" ("Id", "MediaItemId", "ChapterTitle") VALUES
+            sqlx::query(
+                r#"INSERT INTO "PlayoutItem" ("Id", "MediaItemId", "ChapterTitle") VALUES
                (1, 10, 'Chapter One'),
                (2, 11, NULL)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("playout items");
-
-        let titles = load_item_titles(&pool, &[1, 2]).await.expect("titles");
-        assert_eq!(titles.get(&1).map(String::as_str), Some("Feature"));
-        assert_eq!(titles.get(&2).map(String::as_str), Some("[unknown movie]"));
-    }
-
-    #[tokio::test]
-    async fn display_title_includes_song_artists_and_chapter() {
-        let pool = test_db().await;
-        create_title_projection_tables(&pool).await;
-
-        sqlx::query(r#"INSERT INTO "Song" ("Id") VALUES (20)"#)
+            )
             .execute(&pool)
             .await
-            .expect("song");
-        sqlx::query(
-            r#"INSERT INTO "SongMetadata" ("SongId", "Title", "Artists")
+            .expect("playout items");
+
+            let titles = load_item_titles(&pool, &[1, 2]).await.expect("titles");
+            assert_eq!(titles.get(&1).map(String::as_str), Some("Feature"));
+            assert_eq!(titles.get(&2).map(String::as_str), Some("[unknown movie]"));
+        }
+
+        #[tokio::test]
+        async fn display_title_includes_song_artists_and_chapter() {
+            let pool = test_db().await;
+            create_title_projection_tables(&pool).await;
+
+            sqlx::query(r#"INSERT INTO "Song" ("Id") VALUES (20)"#)
+                .execute(&pool)
+                .await
+                .expect("song");
+            sqlx::query(
+                r#"INSERT INTO "SongMetadata" ("SongId", "Title", "Artists")
                VALUES (20, 'Track', '["One","Two"]')"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("song metadata");
-        sqlx::query(
-            r#"INSERT INTO "PlayoutItem" ("Id", "MediaItemId", "ChapterTitle")
-               VALUES (3, 20, 'Live')"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("playout item");
-
-        let titles = load_item_titles(&pool, &[3]).await.expect("titles");
-        assert_eq!(
-            titles.get(&3).map(String::as_str),
-            Some("One, Two - Track (Live)")
-        );
-    }
-
-    #[test]
-    fn enum_name_helpers_match_ersatztv() {
-        assert_eq!(collection_type_name(4), "MultiCollection");
-        assert_eq!(collection_type_name(8), "RerunRerun");
-        assert_eq!(filler_kind_name(2), "MidRoll");
-        assert_eq!(filler_mode_name(3), "Pad");
-    }
-
-    #[test]
-    fn reset_playout_mode_matches_ersatztv_classic_refresh_mapping() {
-        use ersatzrs_core::scheduling::PlayoutBuildMode;
-
-        assert_eq!(reset_playout_mode(KIND_CLASSIC), PlayoutBuildMode::Refresh);
-        assert_eq!(reset_playout_mode(KIND_BLOCK), PlayoutBuildMode::Reset);
-        assert_eq!(reset_playout_mode(KIND_SEQUENTIAL), PlayoutBuildMode::Reset);
-        assert_eq!(reset_playout_mode(KIND_SCRIPTED), PlayoutBuildMode::Reset);
-        assert_eq!(
-            reset_playout_mode(KIND_EXTERNAL_JSON),
-            PlayoutBuildMode::Reset
-        );
-    }
-
-    #[test]
-    fn reset_all_playout_mode_skips_unsupported_kinds() {
-        use ersatzrs_core::scheduling::PlayoutBuildMode;
-
-        assert_eq!(
-            reset_all_playout_mode(KIND_CLASSIC),
-            Some(PlayoutBuildMode::Refresh)
-        );
-        assert_eq!(
-            reset_all_playout_mode(KIND_BLOCK),
-            Some(PlayoutBuildMode::Reset)
-        );
-        assert_eq!(
-            reset_all_playout_mode(KIND_SEQUENTIAL),
-            Some(PlayoutBuildMode::Reset)
-        );
-        assert_eq!(
-            reset_all_playout_mode(KIND_SCRIPTED),
-            Some(PlayoutBuildMode::Reset)
-        );
-        assert_eq!(reset_all_playout_mode(KIND_EXTERNAL_JSON), None);
-        assert_eq!(reset_all_playout_mode(0), None);
-    }
-
-    #[tokio::test]
-    async fn scheduling_context_pretty_prints_unknown_json() {
-        let pool = test_db().await;
-        // No ScheduleId/BlockId -> pretty-printed without touching the DB.
-        let out = enrich_scheduling_context(&pool, r#"{"Foo":1}"#).await;
-        assert!(
-            out.contains("\"Foo\": 1"),
-            "expected pretty JSON, got: {out}"
-        );
-    }
-
-    #[tokio::test]
-    async fn scheduling_context_returns_raw_for_invalid_json() {
-        let pool = test_db().await;
-        let out = enrich_scheduling_context(&pool, "not json").await;
-        assert_eq!(out, "not json");
-    }
-
-    #[tokio::test]
-    async fn create_classic_playout_requires_schedule_items_and_inserts() {
-        let pool = test_db().await;
-        create_playout_create_tables(&pool).await;
-        seed_create_channel(&pool, 10).await;
-        sqlx::query(r#"INSERT INTO "ProgramSchedule" ("Id", "Name") VALUES (20, 'Prime')"#)
+            )
             .execute(&pool)
             .await
-            .expect("schedule");
+            .expect("song metadata");
+            sqlx::query(
+                r#"INSERT INTO "PlayoutItem" ("Id", "MediaItemId", "ChapterTitle")
+               VALUES (3, 20, 'Live')"#,
+            )
+            .execute(&pool)
+            .await
+            .expect("playout item");
 
-        let empty = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Classic".to_owned(),
-                channel_id: 10,
-                program_schedule_id: Some(20),
-                schedule_file: String::new(),
-            },
-        )
-        .await
-        .expect_err("empty schedule rejected");
-        assert!(empty
-            .to_string()
-            .contains("Program schedule must have items"));
+            let titles = load_item_titles(&pool, &[3]).await.expect("titles");
+            assert_eq!(
+                titles.get(&3).map(String::as_str),
+                Some("One, Two - Track (Live)")
+            );
+        }
 
-        sqlx::query(
-            r#"INSERT INTO "ProgramScheduleItem" ("Id", "ProgramScheduleId") VALUES (30, 20)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("schedule item");
+        #[test]
+        fn enum_name_helpers_match_ersatztv() {
+            assert_eq!(collection_type_name(4), "MultiCollection");
+            assert_eq!(collection_type_name(8), "RerunRerun");
+            assert_eq!(filler_kind_name(2), "MidRoll");
+            assert_eq!(filler_mode_name(3), "Pad");
+        }
 
-        let id = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Classic".to_owned(),
-                channel_id: 10,
-                program_schedule_id: Some(20),
-                schedule_file: String::new(),
-            },
-        )
-        .await
-        .expect("created");
+        #[test]
+        fn reset_playout_mode_matches_ersatztv_classic_refresh_mapping() {
+            use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-        let row: (i64, i32, Option<i64>, Option<String>) = sqlx::query_as(
-            r#"SELECT "ChannelId", "ScheduleKind", "ProgramScheduleId", "ScheduleFile"
+            assert_eq!(reset_playout_mode(KIND_CLASSIC), PlayoutBuildMode::Refresh);
+            assert_eq!(reset_playout_mode(KIND_BLOCK), PlayoutBuildMode::Reset);
+            assert_eq!(reset_playout_mode(KIND_SEQUENTIAL), PlayoutBuildMode::Reset);
+            assert_eq!(reset_playout_mode(KIND_SCRIPTED), PlayoutBuildMode::Reset);
+            assert_eq!(
+                reset_playout_mode(KIND_EXTERNAL_JSON),
+                PlayoutBuildMode::Reset
+            );
+        }
+
+        #[test]
+        fn reset_all_playout_mode_skips_unsupported_kinds() {
+            use ersatzrs_core::scheduling::PlayoutBuildMode;
+
+            assert_eq!(
+                reset_all_playout_mode(KIND_CLASSIC),
+                Some(PlayoutBuildMode::Refresh)
+            );
+            assert_eq!(
+                reset_all_playout_mode(KIND_BLOCK),
+                Some(PlayoutBuildMode::Reset)
+            );
+            assert_eq!(
+                reset_all_playout_mode(KIND_SEQUENTIAL),
+                Some(PlayoutBuildMode::Reset)
+            );
+            assert_eq!(
+                reset_all_playout_mode(KIND_SCRIPTED),
+                Some(PlayoutBuildMode::Reset)
+            );
+            assert_eq!(reset_all_playout_mode(KIND_EXTERNAL_JSON), None);
+            assert_eq!(reset_all_playout_mode(0), None);
+        }
+
+        #[tokio::test]
+        async fn scheduling_context_pretty_prints_unknown_json() {
+            let pool = test_db().await;
+            // No ScheduleId/BlockId -> pretty-printed without touching the DB.
+            let out = enrich_scheduling_context(&pool, r#"{"Foo":1}"#).await;
+            assert!(
+                out.contains("\"Foo\": 1"),
+                "expected pretty JSON, got: {out}"
+            );
+        }
+
+        #[tokio::test]
+        async fn scheduling_context_returns_raw_for_invalid_json() {
+            let pool = test_db().await;
+            let out = enrich_scheduling_context(&pool, "not json").await;
+            assert_eq!(out, "not json");
+        }
+
+        #[tokio::test]
+        async fn create_classic_playout_requires_schedule_items_and_inserts() {
+            let pool = test_db().await;
+            create_playout_create_tables(&pool).await;
+            seed_create_channel(&pool, 10).await;
+            sqlx::query(r#"INSERT INTO "ProgramSchedule" ("Id", "Name") VALUES (20, 'Prime')"#)
+                .execute(&pool)
+                .await
+                .expect("schedule");
+
+            let empty = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Classic".to_owned(),
+                    channel_id: 10,
+                    program_schedule_id: Some(20),
+                    schedule_file: String::new(),
+                },
+            )
+            .await
+            .expect_err("empty schedule rejected");
+            assert!(empty
+                .to_string()
+                .contains("Program schedule must have items"));
+
+            sqlx::query(
+                r#"INSERT INTO "ProgramScheduleItem" ("Id", "ProgramScheduleId") VALUES (30, 20)"#,
+            )
+            .execute(&pool)
+            .await
+            .expect("schedule item");
+
+            let id = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Classic".to_owned(),
+                    channel_id: 10,
+                    program_schedule_id: Some(20),
+                    schedule_file: String::new(),
+                },
+            )
+            .await
+            .expect("created");
+
+            let row: (i64, i32, Option<i64>, Option<String>) = sqlx::query_as(
+                r#"SELECT "ChannelId", "ScheduleKind", "ProgramScheduleId", "ScheduleFile"
                FROM "Playout" WHERE "Id" = ?"#,
-        )
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .expect("playout");
-        assert_eq!(row, (10, KIND_CLASSIC, Some(20), None));
-    }
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("playout");
+            assert_eq!(row, (10, KIND_CLASSIC, Some(20), None));
+        }
 
-    #[tokio::test]
-    async fn create_playout_rejects_channel_that_already_has_playout() {
-        let pool = test_db().await;
-        create_playout_create_tables(&pool).await;
-        seed_create_channel(&pool, 11).await;
-        sqlx::query(
-            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+        #[tokio::test]
+        async fn create_playout_rejects_channel_that_already_has_playout() {
+            let pool = test_db().await;
+            create_playout_create_tables(&pool).await;
+            seed_create_channel(&pool, 11).await;
+            sqlx::query(
+                r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
                VALUES (50, 11, 2, 1)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("existing playout");
+            )
+            .execute(&pool)
+            .await
+            .expect("existing playout");
 
-        let error = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Block".to_owned(),
-                channel_id: 11,
-                ..PlayoutCreateForm::default()
-            },
-        )
-        .await
-        .expect_err("duplicate rejected");
+            let error = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Block".to_owned(),
+                    channel_id: 11,
+                    ..PlayoutCreateForm::default()
+                },
+            )
+            .await
+            .expect_err("duplicate rejected");
 
-        assert!(error
-            .to_string()
-            .contains("Channel already has one playout"));
-    }
+            assert!(error
+                .to_string()
+                .contains("Channel already has one playout"));
+        }
 
-    #[tokio::test]
-    async fn create_sequential_playout_requires_existing_file() {
-        let pool = test_db().await;
-        create_playout_create_tables(&pool).await;
-        seed_create_channel(&pool, 12).await;
+        #[tokio::test]
+        async fn create_sequential_playout_requires_existing_file() {
+            let pool = test_db().await;
+            create_playout_create_tables(&pool).await;
+            seed_create_channel(&pool, 12).await;
 
-        let missing = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Sequential".to_owned(),
-                channel_id: 12,
-                schedule_file: "/definitely/missing/schedule.yml".to_owned(),
-                ..PlayoutCreateForm::default()
-            },
-        )
-        .await
-        .expect_err("missing file rejected");
-        assert!(missing
-            .to_string()
-            .contains("Sequential schedule does not exist!"));
+            let missing = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Sequential".to_owned(),
+                    channel_id: 12,
+                    schedule_file: "/definitely/missing/schedule.yml".to_owned(),
+                    ..PlayoutCreateForm::default()
+                },
+            )
+            .await
+            .expect_err("missing file rejected");
+            assert!(missing
+                .to_string()
+                .contains("Sequential schedule does not exist!"));
 
-        let file = tempfile::NamedTempFile::new().expect("temp file");
-        let path = file.path().to_string_lossy().into_owned();
-        let id = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Sequential".to_owned(),
-                channel_id: 12,
-                schedule_file: path.clone(),
-                ..PlayoutCreateForm::default()
-            },
-        )
-        .await
-        .expect("created");
+            let file = tempfile::NamedTempFile::new().expect("temp file");
+            let path = file.path().to_string_lossy().into_owned();
+            let id = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Sequential".to_owned(),
+                    channel_id: 12,
+                    schedule_file: path.clone(),
+                    ..PlayoutCreateForm::default()
+                },
+            )
+            .await
+            .expect("created");
 
-        let row: (i32, String) = sqlx::query_as(
-            r#"SELECT "ScheduleKind", "ScheduleFile" FROM "Playout" WHERE "Id" = ?"#,
-        )
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .expect("playout");
-        assert_eq!(row, (KIND_SEQUENTIAL, path));
-    }
+            let row: (i32, String) = sqlx::query_as(
+                r#"SELECT "ScheduleKind", "ScheduleFile" FROM "Playout" WHERE "Id" = ?"#,
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("playout");
+            assert_eq!(row, (KIND_SEQUENTIAL, path));
+        }
 
-    #[tokio::test]
-    async fn create_scripted_playout_accepts_script_path_with_arguments() {
-        let pool = test_db().await;
-        create_playout_create_tables(&pool).await;
-        seed_create_channel(&pool, 13).await;
+        #[tokio::test]
+        async fn create_scripted_playout_accepts_script_path_with_arguments() {
+            let pool = test_db().await;
+            create_playout_create_tables(&pool).await;
+            seed_create_channel(&pool, 13).await;
 
-        let file = tempfile::NamedTempFile::new().expect("temp file");
-        let path = file.path().to_string_lossy().into_owned();
-        let command = format!("\"{path}\" --slot prime");
-        let id = create_playout_with_pool(
-            &pool,
-            &PlayoutCreateForm {
-                kind: "Scripted".to_owned(),
-                channel_id: 13,
-                schedule_file: command.clone(),
-                ..PlayoutCreateForm::default()
-            },
-        )
-        .await
-        .expect("created");
+            let file = tempfile::NamedTempFile::new().expect("temp file");
+            let path = file.path().to_string_lossy().into_owned();
+            let command = format!("\"{path}\" --slot prime");
+            let id = create_playout_with_pool(
+                &pool,
+                &PlayoutCreateForm {
+                    kind: "Scripted".to_owned(),
+                    channel_id: 13,
+                    schedule_file: command.clone(),
+                    ..PlayoutCreateForm::default()
+                },
+            )
+            .await
+            .expect("created");
 
-        let row: (i32, String) = sqlx::query_as(
-            r#"SELECT "ScheduleKind", "ScheduleFile" FROM "Playout" WHERE "Id" = ?"#,
-        )
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .expect("playout");
-        assert_eq!(row, (KIND_SCRIPTED, command));
-    }
+            let row: (i32, String) = sqlx::query_as(
+                r#"SELECT "ScheduleKind", "ScheduleFile" FROM "Playout" WHERE "Id" = ?"#,
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("playout");
+            assert_eq!(row, (KIND_SCRIPTED, command));
+        }
 
-    #[tokio::test]
-    async fn alternate_schedules_append_default_and_save_default_from_last_row() {
-        let pool = test_db().await;
-        create_nested_playout_tables(&pool).await;
-        seed_nested_channel_and_playouts(&pool).await;
-        sqlx::query(
-            r#"INSERT INTO "ProgramSchedule" ("Id", "Name")
+        #[tokio::test]
+        async fn alternate_schedules_append_default_and_save_default_from_last_row() {
+            let pool = test_db().await;
+            create_nested_playout_tables(&pool).await;
+            seed_nested_channel_and_playouts(&pool).await;
+            sqlx::query(
+                r#"INSERT INTO "ProgramSchedule" ("Id", "Name")
                VALUES (10, 'Default'), (11, 'Weekends'), (12, 'Late')"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("schedules");
-        sqlx::query(
-            r#"INSERT INTO "ProgramScheduleAlternate"
+            )
+            .execute(&pool)
+            .await
+            .expect("schedules");
+            sqlx::query(
+                r#"INSERT INTO "ProgramScheduleAlternate"
                ("Id", "PlayoutId", "ProgramScheduleId", "Index", "DaysOfWeek",
                 "DaysOfMonth", "MonthsOfYear", "LimitToDateRange", "StartMonth",
                 "StartDay", "EndMonth", "EndDay")
                VALUES (20, 100, 11, 1, '["Saturday","Sunday"]', '1,2', '1',
                        0, 1, 1, 12, 31)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("alternate");
-
-        let form = get_playout_alternate_schedules_with_pool(&pool, 100)
+            )
+            .execute(&pool)
             .await
-            .expect("form")
-            .expect("classic playout");
-        assert_eq!(form.items.len(), 2);
-        assert_eq!(form.items[0].date_filter.days_of_week, vec![0, 6]);
-        assert_eq!(form.items[1].id, -1);
-        assert_eq!(form.items[1].program_schedule_id, 10);
+            .expect("alternate");
 
-        let mut saved = form.items;
-        saved[0].program_schedule_id = 12;
-        saved[1].program_schedule_id = 11;
-        save_playout_alternate_schedules_with_pool(&pool, 100, &saved)
-            .await
-            .expect("saved");
-
-        let default_id: Option<i64> =
-            sqlx::query_scalar(r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = 100"#)
-                .fetch_one(&pool)
+            let form = get_playout_alternate_schedules_with_pool(&pool, 100)
                 .await
-                .expect("default");
-        assert_eq!(default_id, Some(11));
+                .expect("form")
+                .expect("classic playout");
+            assert_eq!(form.items.len(), 2);
+            assert_eq!(form.items[0].date_filter.days_of_week, vec![0, 6]);
+            assert_eq!(form.items[1].id, -1);
+            assert_eq!(form.items[1].program_schedule_id, 10);
 
-        let rows: Vec<(i64, i64)> = sqlx::query_as(
-            r#"SELECT "Id", "ProgramScheduleId"
+            let mut saved = form.items;
+            saved[0].program_schedule_id = 12;
+            saved[1].program_schedule_id = 11;
+            save_playout_alternate_schedules_with_pool(&pool, 100, &saved)
+                .await
+                .expect("saved");
+
+            let default_id: Option<i64> =
+                sqlx::query_scalar(r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = 100"#)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("default");
+            assert_eq!(default_id, Some(11));
+
+            let rows: Vec<(i64, i64)> = sqlx::query_as(
+                r#"SELECT "Id", "ProgramScheduleId"
                FROM "ProgramScheduleAlternate"
                WHERE "PlayoutId" = 100
                ORDER BY "Index""#,
-        )
-        .fetch_all(&pool)
-        .await
-        .expect("alternates");
-        assert_eq!(rows, vec![(20, 12)]);
-    }
-
-    #[tokio::test]
-    async fn playout_templates_save_replaces_rows() {
-        let pool = test_db().await;
-        create_nested_playout_tables(&pool).await;
-        seed_nested_channel_and_playouts(&pool).await;
-        sqlx::query(r#"INSERT INTO "TemplateGroup" ("Id", "Name") VALUES (1, 'Main')"#)
-            .execute(&pool)
+            )
+            .fetch_all(&pool)
             .await
-            .expect("template group");
-        sqlx::query(
-            r#"INSERT INTO "Template" ("Id", "TemplateGroupId", "Name", "DateUpdated")
+            .expect("alternates");
+            assert_eq!(rows, vec![(20, 12)]);
+        }
+
+        #[tokio::test]
+        async fn playout_templates_save_replaces_rows() {
+            let pool = test_db().await;
+            create_nested_playout_tables(&pool).await;
+            seed_nested_channel_and_playouts(&pool).await;
+            sqlx::query(r#"INSERT INTO "TemplateGroup" ("Id", "Name") VALUES (1, 'Main')"#)
+                .execute(&pool)
+                .await
+                .expect("template group");
+            sqlx::query(
+                r#"INSERT INTO "Template" ("Id", "TemplateGroupId", "Name", "DateUpdated")
                VALUES (10, 1, 'Prime', CURRENT_TIMESTAMP),
                       (11, 1, 'Late', CURRENT_TIMESTAMP)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("templates");
-        sqlx::query(
-            r#"INSERT INTO "PlayoutTemplate"
+            )
+            .execute(&pool)
+            .await
+            .expect("templates");
+            sqlx::query(
+                r#"INSERT INTO "PlayoutTemplate"
                ("Id", "PlayoutId", "TemplateId", "Index", "DaysOfWeek", "DaysOfMonth",
                 "MonthsOfYear", "LimitToDateRange", "StartMonth", "StartDay",
                 "EndMonth", "EndDay", "DateUpdated")
@@ -3215,87 +3211,87 @@ mod tests {
                        CURRENT_TIMESTAMP),
                       (31, 101, 11, 2, '[4]', '[2]', '[2]', 0, 1, 1, 12, 31,
                        CURRENT_TIMESTAMP)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("playout templates");
-
-        let form = get_playout_templates_with_pool(&pool, 101)
+            )
+            .execute(&pool)
             .await
-            .expect("form")
-            .expect("block playout");
-        assert_eq!(form.items.len(), 2);
+            .expect("playout templates");
 
-        let saved = vec![PlayoutTemplateItemForm {
-            id: 30,
-            index: 1,
-            template_group_id: 1,
-            template_id: 11,
-            template_name: "Late".to_owned(),
-            deco_template_group_id: None,
-            deco_template_id: None,
-            deco_template_name: None,
-            date_filter: PlayoutDateFilter {
-                days_of_week: vec![0, 6],
-                days_of_month: vec![1, 15],
-                months_of_year: vec![12],
-                ..PlayoutDateFilter::default()
-            },
-        }];
-        save_playout_templates_with_pool(&pool, 101, &saved)
-            .await
-            .expect("saved");
+            let form = get_playout_templates_with_pool(&pool, 101)
+                .await
+                .expect("form")
+                .expect("block playout");
+            assert_eq!(form.items.len(), 2);
 
-        let rows: Vec<(i64, i64, String)> = sqlx::query_as(
-            r#"SELECT "Id", "TemplateId", "DaysOfWeek"
+            let saved = vec![PlayoutTemplateItemForm {
+                id: 30,
+                index: 1,
+                template_group_id: 1,
+                template_id: 11,
+                template_name: "Late".to_owned(),
+                deco_template_group_id: None,
+                deco_template_id: None,
+                deco_template_name: None,
+                date_filter: PlayoutDateFilter {
+                    days_of_week: vec![0, 6],
+                    days_of_month: vec![1, 15],
+                    months_of_year: vec![12],
+                    ..PlayoutDateFilter::default()
+                },
+            }];
+            save_playout_templates_with_pool(&pool, 101, &saved)
+                .await
+                .expect("saved");
+
+            let rows: Vec<(i64, i64, String)> = sqlx::query_as(
+                r#"SELECT "Id", "TemplateId", "DaysOfWeek"
                FROM "PlayoutTemplate"
                WHERE "PlayoutId" = 101
                ORDER BY "Index""#,
-        )
-        .fetch_all(&pool)
-        .await
-        .expect("templates");
-        assert_eq!(rows, vec![(30, 11, "[0,6]".to_owned())]);
-    }
-
-    async fn create_title_projection_tables(pool: &ersatzrs_infra::db::DbPool) {
-        for sql in [
-            r#"CREATE TABLE "PlayoutItem" ("Id" INTEGER, "MediaItemId" INTEGER, "ChapterTitle" TEXT)"#,
-            r#"CREATE TABLE "Episode" ("Id" INTEGER, "SeasonId" INTEGER)"#,
-            r#"CREATE TABLE "Movie" ("Id" INTEGER)"#,
-            r#"CREATE TABLE "MusicVideo" ("Id" INTEGER, "ArtistId" INTEGER)"#,
-            r#"CREATE TABLE "OtherVideo" ("Id" INTEGER)"#,
-            r#"CREATE TABLE "Song" ("Id" INTEGER)"#,
-            r#"CREATE TABLE "Image" ("Id" INTEGER)"#,
-            r#"CREATE TABLE "RemoteStream" ("Id" INTEGER)"#,
-            r#"CREATE TABLE "Season" ("Id" INTEGER, "ShowId" INTEGER, "SeasonNumber" INTEGER)"#,
-            r#"CREATE TABLE "ShowMetadata" ("ShowId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "EpisodeMetadata" ("EpisodeId" INTEGER, "EpisodeNumber" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "MovieMetadata" ("MovieId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "ArtistMetadata" ("ArtistId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "MusicVideoMetadata" ("MusicVideoId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "SongMetadata" ("SongId" INTEGER, "Title" TEXT, "Artists" TEXT)"#,
-            r#"CREATE TABLE "OtherVideoMetadata" ("OtherVideoId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "ImageMetadata" ("ImageId" INTEGER, "Title" TEXT)"#,
-            r#"CREATE TABLE "RemoteStreamMetadata" ("RemoteStreamId" INTEGER, "Title" TEXT)"#,
-        ] {
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-                .execute(pool)
-                .await
-                .expect("create table");
+            )
+            .fetch_all(&pool)
+            .await
+            .expect("templates");
+            assert_eq!(rows, vec![(30, 11, "[0,6]".to_owned())]);
         }
-    }
 
-    async fn create_playout_create_tables(pool: &ersatzrs_infra::db::DbPool) {
-        for sql in [
-            r#"CREATE TABLE "Channel" (
+        async fn create_title_projection_tables(pool: &ersatzrs_infra::db::DbPool) {
+            for sql in [
+                r#"CREATE TABLE "PlayoutItem" ("Id" INTEGER, "MediaItemId" INTEGER, "ChapterTitle" TEXT)"#,
+                r#"CREATE TABLE "Episode" ("Id" INTEGER, "SeasonId" INTEGER)"#,
+                r#"CREATE TABLE "Movie" ("Id" INTEGER)"#,
+                r#"CREATE TABLE "MusicVideo" ("Id" INTEGER, "ArtistId" INTEGER)"#,
+                r#"CREATE TABLE "OtherVideo" ("Id" INTEGER)"#,
+                r#"CREATE TABLE "Song" ("Id" INTEGER)"#,
+                r#"CREATE TABLE "Image" ("Id" INTEGER)"#,
+                r#"CREATE TABLE "RemoteStream" ("Id" INTEGER)"#,
+                r#"CREATE TABLE "Season" ("Id" INTEGER, "ShowId" INTEGER, "SeasonNumber" INTEGER)"#,
+                r#"CREATE TABLE "ShowMetadata" ("ShowId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "EpisodeMetadata" ("EpisodeId" INTEGER, "EpisodeNumber" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "MovieMetadata" ("MovieId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "ArtistMetadata" ("ArtistId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "MusicVideoMetadata" ("MusicVideoId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "SongMetadata" ("SongId" INTEGER, "Title" TEXT, "Artists" TEXT)"#,
+                r#"CREATE TABLE "OtherVideoMetadata" ("OtherVideoId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "ImageMetadata" ("ImageId" INTEGER, "Title" TEXT)"#,
+                r#"CREATE TABLE "RemoteStreamMetadata" ("RemoteStreamId" INTEGER, "Title" TEXT)"#,
+            ] {
+                sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                    .execute(pool)
+                    .await
+                    .expect("create table");
+            }
+        }
+
+        async fn create_playout_create_tables(pool: &ersatzrs_infra::db::DbPool) {
+            for sql in [
+                r#"CREATE TABLE "Channel" (
                 "Id" INTEGER PRIMARY KEY,
                 "Number" TEXT NULL,
                 "Name" TEXT NULL,
                 "SortNumber" REAL NOT NULL,
                 "PlayoutMode" INTEGER NOT NULL
             )"#,
-            r#"CREATE TABLE "Playout" (
+                r#"CREATE TABLE "Playout" (
                 "Id" INTEGER PRIMARY KEY AUTOINCREMENT,
                 "ChannelId" INTEGER NOT NULL,
                 "ProgramScheduleId" INTEGER NULL,
@@ -3303,43 +3299,43 @@ mod tests {
                 "ScheduleKind" INTEGER NOT NULL,
                 "Seed" INTEGER NOT NULL
             )"#,
-            r#"CREATE TABLE "ProgramSchedule" (
+                r#"CREATE TABLE "ProgramSchedule" (
                 "Id" INTEGER PRIMARY KEY,
                 "Name" TEXT NULL
             )"#,
-            r#"CREATE TABLE "ProgramScheduleItem" (
+                r#"CREATE TABLE "ProgramScheduleItem" (
                 "Id" INTEGER PRIMARY KEY,
                 "ProgramScheduleId" INTEGER NOT NULL
             )"#,
-        ] {
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-                .execute(pool)
-                .await
-                .expect("create table");
+            ] {
+                sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                    .execute(pool)
+                    .await
+                    .expect("create table");
+            }
         }
-    }
 
-    async fn seed_create_channel(pool: &ersatzrs_infra::db::DbPool, id: i64) {
-        sqlx::query(
-            r#"INSERT INTO "Channel" ("Id", "Number", "Name", "SortNumber", "PlayoutMode")
+        async fn seed_create_channel(pool: &ersatzrs_infra::db::DbPool, id: i64) {
+            sqlx::query(
+                r#"INSERT INTO "Channel" ("Id", "Number", "Name", "SortNumber", "PlayoutMode")
                VALUES (?, '1', 'One', 1.0, 0)"#,
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .expect("channel");
-    }
+            )
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("channel");
+        }
 
-    async fn create_nested_playout_tables(pool: &ersatzrs_infra::db::DbPool) {
-        for sql in [
-            r#"CREATE TABLE "Channel" (
+        async fn create_nested_playout_tables(pool: &ersatzrs_infra::db::DbPool) {
+            for sql in [
+                r#"CREATE TABLE "Channel" (
                 "Id" INTEGER PRIMARY KEY,
                 "Number" TEXT NULL,
                 "Name" TEXT NULL,
                 "SortNumber" REAL NOT NULL,
                 "PlayoutMode" INTEGER NOT NULL
             )"#,
-            r#"CREATE TABLE "Playout" (
+                r#"CREATE TABLE "Playout" (
                 "Id" INTEGER PRIMARY KEY,
                 "ChannelId" INTEGER NOT NULL,
                 "ProgramScheduleId" INTEGER NULL,
@@ -3347,11 +3343,11 @@ mod tests {
                 "ScheduleKind" INTEGER NOT NULL,
                 "Seed" INTEGER NOT NULL
             )"#,
-            r#"CREATE TABLE "ProgramSchedule" (
+                r#"CREATE TABLE "ProgramSchedule" (
                 "Id" INTEGER PRIMARY KEY,
                 "Name" TEXT NULL
             )"#,
-            r#"CREATE TABLE "ProgramScheduleAlternate" (
+                r#"CREATE TABLE "ProgramScheduleAlternate" (
                 "Id" INTEGER PRIMARY KEY,
                 "PlayoutId" INTEGER NOT NULL,
                 "ProgramScheduleId" INTEGER NOT NULL,
@@ -3367,27 +3363,27 @@ mod tests {
                 "EndDay" INTEGER NOT NULL DEFAULT 31,
                 "EndYear" INTEGER NULL
             )"#,
-            r#"CREATE TABLE "TemplateGroup" (
+                r#"CREATE TABLE "TemplateGroup" (
                 "Id" INTEGER PRIMARY KEY,
                 "Name" TEXT NULL
             )"#,
-            r#"CREATE TABLE "Template" (
+                r#"CREATE TABLE "Template" (
                 "Id" INTEGER PRIMARY KEY,
                 "TemplateGroupId" INTEGER NOT NULL,
                 "Name" TEXT NULL,
                 "DateUpdated" TEXT NULL
             )"#,
-            r#"CREATE TABLE "DecoTemplateGroup" (
+                r#"CREATE TABLE "DecoTemplateGroup" (
                 "Id" INTEGER PRIMARY KEY,
                 "Name" TEXT NULL
             )"#,
-            r#"CREATE TABLE "DecoTemplate" (
+                r#"CREATE TABLE "DecoTemplate" (
                 "Id" INTEGER PRIMARY KEY,
                 "DecoTemplateGroupId" INTEGER NOT NULL,
                 "Name" TEXT NULL,
                 "DateUpdated" TEXT NULL
             )"#,
-            r#"CREATE TABLE "PlayoutTemplate" (
+                r#"CREATE TABLE "PlayoutTemplate" (
                 "Id" INTEGER PRIMARY KEY,
                 "DateUpdated" TEXT NULL,
                 "DaysOfMonth" TEXT NULL,
@@ -3405,29 +3401,30 @@ mod tests {
                 "EndYear" INTEGER NULL,
                 "StartYear" INTEGER NULL
             )"#,
-        ] {
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-                .execute(pool)
-                .await
-                .expect("create table");
+            ] {
+                sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                    .execute(pool)
+                    .await
+                    .expect("create table");
+            }
         }
-    }
 
-    async fn seed_nested_channel_and_playouts(pool: &ersatzrs_infra::db::DbPool) {
-        sqlx::query(
-            r#"INSERT INTO "Channel" ("Id", "Number", "Name", "SortNumber", "PlayoutMode")
+        async fn seed_nested_channel_and_playouts(pool: &ersatzrs_infra::db::DbPool) {
+            sqlx::query(
+                r#"INSERT INTO "Channel" ("Id", "Number", "Name", "SortNumber", "PlayoutMode")
                VALUES (1, '1', 'One', 1.0, 0)"#,
-        )
-        .execute(pool)
-        .await
-        .expect("channel");
-        sqlx::query(
-            r#"INSERT INTO "Playout"
+            )
+            .execute(pool)
+            .await
+            .expect("channel");
+            sqlx::query(
+                r#"INSERT INTO "Playout"
                ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
                VALUES (100, 1, 10, 1, 1), (101, 1, NULL, 2, 2)"#,
-        )
-        .execute(pool)
-        .await
-        .expect("playouts");
+            )
+            .execute(pool)
+            .await
+            .expect("playouts");
+        }
     }
 }

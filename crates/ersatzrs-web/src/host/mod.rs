@@ -1,7 +1,12 @@
 pub mod assets;
 pub mod bootstrap;
+pub mod channels;
 pub mod config;
+pub mod health;
+pub mod media_sources;
 pub mod router;
 pub mod scanning;
+pub mod settings;
 pub mod state;
 pub mod tasks;
+pub mod troubleshooting;

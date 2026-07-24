@@ -21,6 +21,7 @@ use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::media_browser::{
     get_media_item_info_json, EpisodeCardRow, MediaBrowserKind, SeasonDetailRow,
 };
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(
@@ -40,14 +41,15 @@ pub fn SeasonPage() -> impl IntoView {
     let season = load_season_detail_initial(id);
 
     match season {
-        Some(season) => view! { <SeasonDetailIsland season/> }.into_any(),
-        None => view! {
+        Ok(Some(season)) => view! { <SeasonDetailIsland season/> }.into_any(),
+        Ok(None) => view! {
             <div class=shell_style::not_found>
                 <h1>{tr(TextKey::SeasonNotFound)}</h1>
                 <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
             </div>
         }
         .into_any(),
+        Err(error) => view! { <AdminErrorState error/> }.into_any(),
     }
 }
 
@@ -56,22 +58,21 @@ fn SeasonDetailIsland(season: SeasonDetailRow) -> impl IntoView {
     view! { <SeasonDetailView season/> }
 }
 
-fn load_season_detail_initial(id: i64) -> Option<SeasonDetailRow> {
+fn load_season_detail_initial(id: i64) -> Result<Option<SeasonDetailRow>, String> {
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                crate::admin::server_fns::media_browser::get_season_details(id)
-                    .await
-                    .ok()
-                    .flatten()
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    crate::admin::server_fns::media_browser::get_season_details(id).await
+                })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 

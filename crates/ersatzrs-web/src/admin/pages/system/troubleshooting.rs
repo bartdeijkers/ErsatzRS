@@ -12,15 +12,15 @@ use crate::admin::server_fns::troubleshooting::{
     TroubleshootingBlockRow, TroubleshootingReport, YamlValidationResult,
     MPEG_DEFAULT_SAMPLE_DURATION_SECONDS, MPEG_MAX_SAMPLE_DURATION_SECONDS,
 };
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 
 stylance::import_crate_style!(style, "src/admin/pages/system/troubleshooting.module.css");
 
 #[component]
 pub fn TroubleshootingPage() -> impl IntoView {
-    let report = Resource::new_blocking(
-        || (),
-        |()| async move { load_troubleshooting_report().await.unwrap_or_default() },
-    );
+    let report = Resource::new_blocking(|| (), |()| load_troubleshooting_report());
 
     view! {
         <div class=style::page>
@@ -31,8 +31,8 @@ pub fn TroubleshootingPage() -> impl IntoView {
                 <div class=style::divider></div>
             </header>
 
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || report.get().map(render_report)}
+            <Suspense fallback=admin_loading_resource_view>
+                {move || report.get().map(|result| admin_result_view(result, render_report))}
             </Suspense>
         </div>
     }
@@ -767,15 +767,9 @@ pub fn SequentialScheduleValidationPage() -> impl IntoView {
         move || (yaml_file(), is_import()),
         |(path, import)| async move {
             if path.trim().is_empty() {
-                YamlValidationResult::default()
+                Ok(YamlValidationResult::default())
             } else {
-                validate_sequential_schedule_file(path, import)
-                    .await
-                    .unwrap_or_else(|error| YamlValidationResult {
-                        exists: true,
-                        messages: vec![error.to_string()],
-                        ..YamlValidationResult::default()
-                    })
+                validate_sequential_schedule_file(path, import).await
             }
         },
     );
@@ -809,8 +803,8 @@ pub fn SequentialScheduleValidationPage() -> impl IntoView {
                 </button>
             </form>
 
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || result.get().map(render_yaml_validation)}
+            <Suspense fallback=admin_loading_resource_view>
+                {move || result.get().map(|result| admin_result_view(result, render_yaml_validation))}
             </Suspense>
         </div>
     }
@@ -830,15 +824,8 @@ pub fn BlockPlayoutTroubleshootingPage() -> impl IntoView {
     };
     let search = move || query.with(|params| params.get("q").unwrap_or_default());
 
-    let options = Resource::new_blocking(
-        || (),
-        |()| async move { list_block_playout_options().await.unwrap_or_default() },
-    );
-    let blocks = Resource::new_blocking(selected_playout, |playout_id| async move {
-        list_blocks_for_playout(playout_id)
-            .await
-            .unwrap_or_default()
-    });
+    let options = Resource::new_blocking(|| (), |()| list_block_playout_options());
+    let blocks = Resource::new_blocking(selected_playout, list_blocks_for_playout);
 
     view! {
         <div class=style::page>
@@ -847,20 +834,18 @@ pub fn BlockPlayoutTroubleshootingPage() -> impl IntoView {
                 <div class=style::divider></div>
             </header>
 
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || options.get().map(|items| {
-                    let search = search();
-                    render_block_playout_selector(items, selected_playout(), &search)
-                })}
+            <Suspense fallback=admin_loading_resource_view>
+                {move || options.get().map(|result| admin_result_view(result, |items| {
+                    render_block_playout_selector(items, selected_playout(), &search())
+                }))}
             </Suspense>
 
             <section>
                 <h2 class=style::subheading>{tr(TextKey::Blocks)}</h2>
-                <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                    {move || blocks.get().map(|items| {
-                        let search = search();
-                        render_blocks_table(items, selected_playout(), &search)
-                    })}
+                <Suspense fallback=admin_loading_resource_view>
+                    {move || blocks.get().map(|result| admin_result_view(result, |items| {
+                        render_blocks_table(items, selected_playout(), &search())
+                    }))}
                 </Suspense>
             </section>
         </div>
@@ -897,11 +882,7 @@ pub fn BlockPlayoutHistoryPage() -> impl IntoView {
 
     let history = Resource::new_blocking(
         move || (playout_id(), block_id()),
-        |(playout, block)| async move {
-            list_block_playout_history(playout, block)
-                .await
-                .unwrap_or_default()
-        },
+        |(playout, block)| list_block_playout_history(playout, block),
     );
 
     view! {
@@ -911,8 +892,10 @@ pub fn BlockPlayoutHistoryPage() -> impl IntoView {
                 <div class=style::divider></div>
             </header>
 
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || history.get().map(|items| render_history(items, playout_id(), block_id(), history_id()))}
+            <Suspense fallback=admin_loading_resource_view>
+                {move || history.get().map(|result| admin_result_view(result, |items| {
+                    render_history(items, playout_id(), block_id(), history_id())
+                }))}
             </Suspense>
         </div>
     }

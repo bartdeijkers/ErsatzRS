@@ -6,9 +6,7 @@ use serde::{de, Deserialize, Deserializer};
 
 use crate::{
     admin::server_fns::templates::{
-        copy_template_with_pool, create_template_group_with_pool, create_template_with_pool,
-        delete_template_group_with_pool, delete_template_with_pool, save_template_with_pool,
-        TemplateItemForm, TemplateWithItemsForm,
+        template_form_into_command, TemplateItemForm, TemplateWithItemsForm,
     },
     host::state::AppState,
 };
@@ -23,7 +21,11 @@ pub async fn create_template_group_form(
     State(state): State<AppState>,
     Form(input): Form<CreateTemplateGroupForm>,
 ) -> Redirect {
-    match create_template_group_with_pool(&state.pool, &input.name).await {
+    match state
+        .application
+        .create_template_group(ersatzrs_app::commands::CreateTemplateGroup { name: input.name })
+        .await
+    {
         Ok(_) => Redirect::to("/templates"),
         Err(error) => {
             tracing::error!(%error, "failed to create template group from HTML form");
@@ -43,7 +45,14 @@ pub async fn create_template_form(
     State(state): State<AppState>,
     Form(input): Form<CreateTemplateForm>,
 ) -> Redirect {
-    match create_template_with_pool(&state.pool, input.group_id, &input.name).await {
+    match state
+        .application
+        .create_template(ersatzrs_app::commands::CreateTemplate {
+            group_id: input.group_id,
+            name: input.name,
+        })
+        .await
+    {
         Ok(id) => Redirect::to(&format!("/templates/{id}")),
         Err(error) => {
             tracing::error!(%error, "failed to create template from HTML form");
@@ -61,7 +70,11 @@ pub async fn delete_template_group_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_template_group_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_template_group(ersatzrs_app::commands::DeleteTemplateGroup { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/templates"),
         Err(error) => {
             tracing::error!(%error, group_id = input.id, "failed to delete template group from HTML form");
@@ -74,7 +87,11 @@ pub async fn delete_template_form(
     State(state): State<AppState>,
     Form(input): Form<IdForm>,
 ) -> Redirect {
-    match delete_template_with_pool(&state.pool, input.id).await {
+    match state
+        .application
+        .delete_template(ersatzrs_app::commands::DeleteTemplate { id: input.id })
+        .await
+    {
         Ok(()) => Redirect::to("/templates"),
         Err(error) => {
             tracing::error!(%error, template_id = input.id, "failed to delete template from HTML form");
@@ -95,7 +112,15 @@ pub async fn copy_template_form(
     State(state): State<AppState>,
     Form(input): Form<CopyTemplateForm>,
 ) -> Redirect {
-    match copy_template_with_pool(&state.pool, input.id, input.group_id, &input.name).await {
+    match state
+        .application
+        .copy_template(ersatzrs_app::commands::CopyTemplate {
+            template_id: input.id,
+            new_group_id: input.group_id,
+            name: input.name,
+        })
+        .await
+    {
         Ok(id) => Redirect::to(&format!("/templates/{id}")),
         Err(error) => {
             tracing::error!(%error, template_id = input.id, "failed to copy template from HTML form");
@@ -125,7 +150,11 @@ pub async fn save_template_items_form(
     Form(input): Form<TemplateItemsSaveForm>,
 ) -> Redirect {
     let template_id = input.template_id;
-    match save_template_with_pool(&state.pool, input.into_template_form()).await {
+    match state
+        .application
+        .save_template(template_form_into_command(input.into_template_form()))
+        .await
+    {
         Ok(()) => Redirect::to("/templates"),
         Err(error) => {
             tracing::error!(%error, template_id, "failed to save template items from HTML form");

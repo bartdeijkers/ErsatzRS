@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::{
     admin::server_fns::blocks::{
-        collection_type, playback_order, save_block_with_pool, stop_scheduling, BlockItemForm,
+        block_form_into_command, collection_type, playback_order, stop_scheduling, BlockItemForm,
         BlockWithItemsForm,
     },
     admin::server_fns::schedules::SmartShuffleForm,
@@ -123,7 +123,11 @@ pub async fn save_block_items_form(State(state): State<AppState>, body: Bytes) -
         items,
     };
 
-    match save_block_with_pool(&state.pool, form).await {
+    match state
+        .application
+        .save_block(block_form_into_command(form))
+        .await
+    {
         Ok(()) if action == "save" || action.is_empty() => Redirect::to("/blocks"),
         Ok(()) => Redirect::to(&format!("/blocks/{block_id}")),
         Err(error) => {

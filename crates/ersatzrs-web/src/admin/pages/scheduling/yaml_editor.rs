@@ -20,6 +20,9 @@ use crate::admin::server_fns::playouts::{
     validate_yaml_playout, SequentialPlayoutForm,
 };
 use crate::admin::ui::primitives::dialog::Modal;
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/yaml_editor.module.css");
@@ -48,21 +51,20 @@ pub fn YamlEditorPage() -> impl IntoView {
 
 #[island]
 fn YamlEditorIsland(playout_id: i64) -> impl IntoView {
-    let playout_data: Resource<Option<SequentialPlayoutForm>> = Resource::new_blocking(
-        move || playout_id,
-        |id| async move { get_sequential_playout(id).await.unwrap_or(None) },
-    );
+    let playout_data = Resource::new_blocking(move || playout_id, get_sequential_playout);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                playout_data.get().map(|maybe| match maybe {
-                    Some(form) => view! { <YamlEditorForm initial_form=form/> }.into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
+                playout_data.get().map(|result| admin_result_view(result, |maybe| {
+                    match maybe {
+                        Some(form) => view! { <YamlEditorForm initial_form=form/> }.into_any(),
+                        None => view! {
+                            <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
+                        }
+                            .into_any(),
                     }
-                        .into_any(),
-                })
+                }))
             }}
         </Suspense>
     }

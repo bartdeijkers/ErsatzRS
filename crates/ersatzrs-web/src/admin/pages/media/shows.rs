@@ -41,6 +41,7 @@ use crate::admin::server_fns::media_browser::{
     get_media_item_info_json, MediaBrowserKind, ShowDetailRow,
 };
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 // Hero/fanart/facts styles are shared with the movies detail page. Wrapped
@@ -78,14 +79,15 @@ pub fn ShowPage() -> impl IntoView {
     let show = load_show_detail_initial(id);
 
     match show {
-        Some(show) => view! { <ShowDetailIsland show/> }.into_any(),
-        None => view! {
+        Ok(Some(show)) => view! { <ShowDetailIsland show/> }.into_any(),
+        Ok(None) => view! {
             <div class=detail_style::not_found>
                 <h1>{tr(TextKey::ShowNotFound)}</h1>
                 <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
             </div>
         }
         .into_any(),
+        Err(error) => view! { <AdminErrorState error/> }.into_any(),
     }
 }
 
@@ -94,18 +96,19 @@ fn ShowDetailIsland(show: ShowDetailRow) -> impl IntoView {
     view! { <ShowDetailView show/> }
 }
 
-fn load_show_detail_initial(id: i64) -> Option<ShowDetailRow> {
+fn load_show_detail_initial(id: i64) -> Result<Option<ShowDetailRow>, String> {
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async move { get_show_details(id).await.ok().flatten() })
+                .block_on(async move { get_show_details(id).await })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 

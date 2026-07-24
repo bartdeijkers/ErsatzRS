@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(dead_code))]
+
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -72,28 +74,18 @@ pub struct PathReplacementRow {
 #[server]
 pub async fn list_local_libraries() -> Result<Vec<LocalLibraryRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT l."Id", l."Name", l."MediaKind",
-                  COUNT(lp."Id") AS "PathCount"
-           FROM "Library" l
-           JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
-           LEFT JOIN "LibraryPath" lp ON lp."LibraryId" = l."Id"
-           GROUP BY l."Id", l."Name", l."MediaKind"
-           ORDER BY l."Name""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LocalLibraryRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            media_kind: r.try_get("MediaKind").unwrap_or(1),
-            path_count: r.try_get("PathCount").unwrap_or(0),
+    Ok(state
+        .application
+        .list_local_libraries()
+        .await?
+        .into_iter()
+        .map(|row| LocalLibraryRow {
+            id: row.id,
+            name: row.name,
+            media_kind: row.media_kind,
+            path_count: i64::try_from(row.path_count).unwrap_or(i64::MAX),
         })
         .collect())
 }
@@ -101,38 +93,22 @@ pub async fn list_local_libraries() -> Result<Vec<LocalLibraryRow>, ServerFnErro
 #[server]
 pub async fn get_local_library_form(id: i64) -> Result<LocalLibraryForm, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let row = sqlx::query(
-        r#"SELECT l."Id", l."Name", l."MediaKind"
-           FROM "Library" l
-           JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
-           WHERE l."Id" = ?"#,
-    )
-    .bind(id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    let path_rows = sqlx::query(
-        r#"SELECT "Id", COALESCE("Path", '') AS "Path"
-           FROM "LibraryPath"
-           WHERE "LibraryId" = ?
-           ORDER BY "Id""#,
-    )
-    .bind(id)
-    .fetch_all(&state.pool)
-    .await?;
-
+    let row = state
+        .application
+        .get_local_library(id)
+        .await?
+        .ok_or_else(|| ServerFnError::new(format!("Local library {id} was not found")))?;
     Ok(LocalLibraryForm {
-        id: row.try_get("Id").unwrap_or(0),
-        name: row.try_get("Name").unwrap_or_default(),
-        media_kind: row.try_get("MediaKind").unwrap_or(1),
-        paths: path_rows
-            .iter()
-            .map(|r| LocalLibraryPath {
-                id: r.try_get("Id").unwrap_or(0),
-                path: r.try_get("Path").unwrap_or_default(),
+        id: row.id,
+        name: row.name,
+        media_kind: row.media_kind,
+        paths: row
+            .paths
+            .into_iter()
+            .map(|path| LocalLibraryPath {
+                id: path.id,
+                path: path.path,
             })
             .collect(),
     })
@@ -147,10 +123,25 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    save_local_library_with_pool(&state.pool, form).await
+    Ok(state
+        .application
+        .save_local_library(ersatzrs_core::repositories::LocalLibraryAdmin {
+            id: form.id,
+            name: form.name,
+            media_kind: form.media_kind,
+            paths: form
+                .paths
+                .into_iter()
+                .map(|path| ersatzrs_core::repositories::LocalLibraryPathAdmin {
+                    id: path.id,
+                    path: path.path,
+                })
+                .collect(),
+        })
+        .await?)
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 pub(crate) async fn save_local_library_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     form: LocalLibraryForm,
@@ -221,6 +212,7 @@ pub(crate) async fn save_local_library_with_pool(
     }
 }
 
+#[cfg(test)]
 fn normalize_local_library_paths(paths: &[LocalLibraryPath]) -> Result<Vec<String>, ServerFnError> {
     let mut seen = std::collections::HashSet::new();
     let mut normalized = Vec::new();
@@ -244,6 +236,7 @@ fn normalize_local_library_paths(paths: &[LocalLibraryPath]) -> Result<Vec<Strin
     Ok(normalized)
 }
 
+#[cfg(test)]
 fn normalize_local_library_path(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -269,15 +262,7 @@ pub async fn delete_local_library(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    // Delete MediaSource; FK ON DELETE CASCADE propagates to Library → LocalLibrary + LibraryPath.
-    sqlx::query(
-        r#"DELETE FROM "MediaSource"
-           WHERE "Id" = (SELECT "MediaSourceId" FROM "Library" WHERE "Id" = ?)"#,
-    )
-    .bind(id)
-    .execute(&state.pool)
-    .await?;
-    Ok(())
+    Ok(state.application.delete_local_library(id).await?)
 }
 
 // ─── Jellyfin ─────────────────────────────────────────────────────────────────
@@ -285,29 +270,17 @@ pub async fn delete_local_library(id: i64) -> Result<(), ServerFnError> {
 #[server]
 pub async fn list_jellyfin_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT jms."Id",
-                  COALESCE(jms."ServerName", 'Jellyfin') AS "Name",
-                  COALESCE(
-                      (SELECT "Address" FROM "JellyfinConnection"
-                       WHERE "JellyfinMediaSourceId" = jms."Id"
-                       ORDER BY "Id" LIMIT 1),
-                      '') AS "Address"
-           FROM "JellyfinMediaSource" jms
-           ORDER BY jms."Id""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| RemoteSourceRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            address: r.try_get("Address").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_remote_sources(ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin)
+        .await?
+        .into_iter()
+        .map(|row| RemoteSourceRow {
+            id: row.id,
+            name: row.name,
+            address: row.address,
         })
         .collect())
 }
@@ -316,46 +289,23 @@ pub async fn list_jellyfin_sources() -> Result<Vec<RemoteSourceRow>, ServerFnErr
 #[server]
 pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-
-    let source_row = sqlx::query(
-        r#"SELECT jms."Id",
-                  COALESCE(
-                      (SELECT "Address" FROM "JellyfinConnection"
-                       WHERE "JellyfinMediaSourceId" = jms."Id"
-                       ORDER BY "Id" LIMIT 1),
-                      '') AS "Address"
-           FROM "JellyfinMediaSource" jms
-           ORDER BY jms."Id"
-           LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let (source_id, address) = source_row
-        .as_ref()
-        .map(|r| {
-            (
-                r.try_get::<i64, _>("Id").unwrap_or(0),
-                r.try_get::<String, _>("Address").unwrap_or_default(),
-            )
-        })
-        .unwrap_or_default();
-
-    let api_key: String = sqlx::query_scalar(
-        r#"SELECT COALESCE("Value", '') FROM "ConfigElement"
-           WHERE "Key" = 'jellyfin.current_server_api_key'
-           LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?
-    .unwrap_or_default();
+    let connection = state
+        .application
+        .get_remote_connection(ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin)
+        .await?
+        .unwrap_or(ersatzrs_core::repositories::RemoteConnectionAdmin {
+            source_id: 0,
+            address: String::new(),
+        });
+    let api_key = state
+        .application
+        .get_string_setting("jellyfin.current_server_api_key", "")
+        .await?;
 
     Ok(ConnectionForm {
-        source_id,
-        address,
+        source_id: connection.source_id,
+        address: connection.address,
         api_key,
     })
 }
@@ -370,106 +320,17 @@ pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> 
 #[server]
 pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
-    use ersatzrs_infra::jellyfin::{
-        fetch_server_information, format_jellyfin_auth_header, sync_jellyfin_libraries,
-        JellyfinService,
-    };
-
     let state = expect_context::<AppState>();
-
-    let address = form.address.trim().trim_end_matches('/').to_string();
-    let api_key = form.api_key.trim().to_string();
-    if address.is_empty() {
-        return Err(ServerFnError::new("Address is required."));
-    }
-    if api_key.is_empty() {
-        return Err(ServerFnError::new("API key is required."));
-    }
-
-    let info = fetch_server_information(&address, &api_key)
-        .await
-        .map_err(|e| ServerFnError::new(format!("Could not reach Jellyfin: {e}")))?;
-
-    let source_id = if form.source_id == 0 {
-        let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
-            .execute(&state.pool)
-            .await?;
-        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
-
-        sqlx::query(
-            r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName", "OperatingSystem")
-               VALUES (?, ?, ?)"#,
+    Ok(state
+        .application
+        .save_jellyfin_connection(
+            ersatzrs_core::repositories::RemoteConnectionAdmin {
+                source_id: form.source_id,
+                address: form.address,
+            },
+            &form.api_key,
         )
-        .bind(ms_id)
-        .bind(&info.server_name)
-        .bind(&info.operating_system)
-        .execute(&state.pool)
-        .await?;
-
-        sqlx::query(
-            r#"INSERT INTO "JellyfinConnection" ("Address", "JellyfinMediaSourceId") VALUES (?, ?)"#,
-        )
-        .bind(&address)
-        .bind(ms_id)
-        .execute(&state.pool)
-        .await?;
-
-        ms_id
-    } else {
-        sqlx::query(
-            r#"UPDATE "JellyfinMediaSource" SET "ServerName" = ?, "OperatingSystem" = ?
-               WHERE "Id" = ?"#,
-        )
-        .bind(&info.server_name)
-        .bind(&info.operating_system)
-        .bind(form.source_id)
-        .execute(&state.pool)
-        .await?;
-
-        sqlx::query(
-            r#"UPDATE "JellyfinConnection" SET "Address" = ?
-               WHERE "JellyfinMediaSourceId" = ?
-               AND "Id" = (SELECT MIN("Id") FROM "JellyfinConnection"
-                           WHERE "JellyfinMediaSourceId" = ?)"#,
-        )
-        .bind(&address)
-        .bind(form.source_id)
-        .bind(form.source_id)
-        .execute(&state.pool)
-        .await?;
-
-        form.source_id
-    };
-
-    sqlx::query(
-        r#"REPLACE INTO "ConfigElement" ("Key", "Value")
-           VALUES ('jellyfin.current_server_api_key', ?)"#,
-    )
-    .bind(&api_key)
-    .execute(&state.pool)
-    .await?;
-
-    // Mirrors ErsatzTV's SynchronizeJellyfinMediaSources channel write: fetch
-    // the library list now so the libraries page is populated immediately
-    // after save.
-    let service = JellyfinService::new();
-    let config = JellyfinConnectionConfig {
-        address: address.clone(),
-        authorization_header: format_jellyfin_auth_header(api_key),
-    };
-    match service.list_libraries(&config).await {
-        Ok(libraries) => {
-            if let Err(e) = sync_jellyfin_libraries(&state.pool, source_id, &libraries).await {
-                tracing::warn!(error = %e, "failed to upsert jellyfin libraries");
-            }
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to fetch jellyfin libraries after save");
-        }
-    }
-
-    Ok(source_id)
+        .await?)
 }
 
 #[server]
@@ -477,101 +338,44 @@ pub async fn delete_jellyfin_source(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "MediaSource" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    Ok(state.application.delete_remote_source(id).await?)
 }
 
 #[server]
 pub async fn list_jellyfin_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind", jl."ShouldSyncItems"
-           FROM "Library" l
-           JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
-           WHERE l."MediaSourceId" = ?
-           ORDER BY l."MediaKind", l."Name""#,
+    list_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LibraryPrefRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            media_kind: r.try_get("MediaKind").unwrap_or(1),
-            should_sync: r.try_get::<bool, _>("ShouldSyncItems").unwrap_or(false),
-        })
-        .collect())
+    .await
 }
 
 #[server]
 pub async fn save_jellyfin_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::jellyfin::sync_library_by_id as jellyfin_sync;
-
     let state = expect_context::<AppState>();
-    for pref in &prefs {
-        sqlx::query(r#"UPDATE "JellyfinLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#)
-            .bind(pref.should_sync)
-            .bind(pref.id)
-            .execute(&state.pool)
-            .await?;
-    }
-
-    // Mirrors RemoteMediaSourceLibrariesEditor.razor SaveChanges: enqueue sync
-    // for each library that has ShouldSyncItems = true.
-    let sync_ids: Vec<i64> = prefs
-        .iter()
-        .filter(|p| p.should_sync)
-        .map(|p| p.id)
-        .collect();
-    if !sync_ids.is_empty() {
-        let pool = state.pool.clone();
-        tokio::task::spawn(async move {
-            for id in sync_ids {
-                if let Err(e) = jellyfin_sync(&pool, id).await {
-                    tracing::warn!(library_id = id, error = %e, "jellyfin sync failed");
-                }
-            }
-        });
-    }
-    Ok(())
+    save_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+        prefs,
+    )
+    .await
 }
 
 #[server]
 pub async fn list_jellyfin_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id",
-                  COALESCE("JellyfinPath", '') AS "JellyfinPath",
-                  COALESCE("LocalPath", '') AS "LocalPath"
-           FROM "JellyfinPathReplacement"
-           WHERE "JellyfinMediaSourceId" = ?
-           ORDER BY "Id""#,
+    list_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PathReplacementRow {
-            id: r.try_get("Id").unwrap_or(0),
-            remote_path: r.try_get("JellyfinPath").unwrap_or_default(),
-            local_path: r.try_get("LocalPath").unwrap_or_default(),
-        })
-        .collect())
+    .await
 }
 
 #[server]
@@ -582,24 +386,13 @@ pub async fn save_jellyfin_paths(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "JellyfinPathReplacement" WHERE "JellyfinMediaSourceId" = ?"#)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-
-    for p in &paths {
-        sqlx::query(
-            r#"INSERT INTO "JellyfinPathReplacement"
-               ("JellyfinPath", "LocalPath", "JellyfinMediaSourceId")
-               VALUES (?, ?, ?)"#,
-        )
-        .bind(&p.remote_path)
-        .bind(&p.local_path)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-    }
-    Ok(())
+    save_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin,
+        source_id,
+        paths,
+    )
+    .await
 }
 
 // ─── Emby ─────────────────────────────────────────────────────────────────────
@@ -607,29 +400,17 @@ pub async fn save_jellyfin_paths(
 #[server]
 pub async fn list_emby_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT ems."Id",
-                  COALESCE(ems."ServerName", 'Emby') AS "Name",
-                  COALESCE(
-                      (SELECT "Address" FROM "EmbyConnection"
-                       WHERE "EmbyMediaSourceId" = ems."Id"
-                       ORDER BY "Id" LIMIT 1),
-                      '') AS "Address"
-           FROM "EmbyMediaSource" ems
-           ORDER BY ems."Id""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| RemoteSourceRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            address: r.try_get("Address").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_remote_sources(ersatzrs_core::repositories::RemoteMediaSourceKind::Emby)
+        .await?
+        .into_iter()
+        .map(|row| RemoteSourceRow {
+            id: row.id,
+            name: row.name,
+            address: row.address,
         })
         .collect())
 }
@@ -637,46 +418,23 @@ pub async fn list_emby_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> 
 #[server]
 pub async fn get_emby_connection() -> Result<ConnectionForm, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-
-    let source_row = sqlx::query(
-        r#"SELECT ems."Id",
-                  COALESCE(
-                      (SELECT "Address" FROM "EmbyConnection"
-                       WHERE "EmbyMediaSourceId" = ems."Id"
-                       ORDER BY "Id" LIMIT 1),
-                      '') AS "Address"
-           FROM "EmbyMediaSource" ems
-           ORDER BY ems."Id"
-           LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let (source_id, address) = source_row
-        .as_ref()
-        .map(|r| {
-            (
-                r.try_get::<i64, _>("Id").unwrap_or(0),
-                r.try_get::<String, _>("Address").unwrap_or_default(),
-            )
-        })
-        .unwrap_or_default();
-
-    let api_key: String = sqlx::query_scalar(
-        r#"SELECT COALESCE("Value", '') FROM "ConfigElement"
-           WHERE "Key" = 'emby.current_server_api_key'
-           LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?
-    .unwrap_or_default();
+    let connection = state
+        .application
+        .get_remote_connection(ersatzrs_core::repositories::RemoteMediaSourceKind::Emby)
+        .await?
+        .unwrap_or(ersatzrs_core::repositories::RemoteConnectionAdmin {
+            source_id: 0,
+            address: String::new(),
+        });
+    let api_key = state
+        .application
+        .get_string_setting("emby.current_server_api_key", "")
+        .await?;
 
     Ok(ConnectionForm {
-        source_id,
-        address,
+        source_id: connection.source_id,
+        address: connection.address,
         api_key,
     })
 }
@@ -687,51 +445,16 @@ pub async fn save_emby_connection(form: ConnectionForm) -> Result<i64, ServerFnE
 
     let state = expect_context::<AppState>();
 
-    let source_id = if form.source_id == 0 {
-        let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
-            .execute(&state.pool)
-            .await?;
-        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
-
-        sqlx::query(r#"INSERT INTO "EmbyMediaSource" ("Id", "ServerName") VALUES (?, 'Emby')"#)
-            .bind(ms_id)
-            .execute(&state.pool)
-            .await?;
-
-        sqlx::query(
-            r#"INSERT INTO "EmbyConnection" ("Address", "EmbyMediaSourceId") VALUES (?, ?)"#,
+    Ok(state
+        .application
+        .save_emby_connection(
+            ersatzrs_core::repositories::RemoteConnectionAdmin {
+                source_id: form.source_id,
+                address: form.address,
+            },
+            &form.api_key,
         )
-        .bind(&form.address)
-        .bind(ms_id)
-        .execute(&state.pool)
-        .await?;
-
-        ms_id
-    } else {
-        sqlx::query(
-            r#"UPDATE "EmbyConnection" SET "Address" = ?
-               WHERE "EmbyMediaSourceId" = ?
-               AND "Id" = (SELECT MIN("Id") FROM "EmbyConnection"
-                           WHERE "EmbyMediaSourceId" = ?)"#,
-        )
-        .bind(&form.address)
-        .bind(form.source_id)
-        .bind(form.source_id)
-        .execute(&state.pool)
-        .await?;
-
-        form.source_id
-    };
-
-    sqlx::query(
-        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('emby.current_server_api_key', ?)
-           "#,
-    )
-    .bind(&form.api_key)
-    .execute(&state.pool)
-    .await?;
-
-    Ok(source_id)
+        .await?)
 }
 
 #[server]
@@ -739,101 +462,43 @@ pub async fn delete_emby_source(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "MediaSource" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    Ok(state.application.delete_remote_source(id).await?)
 }
 
 #[server]
 pub async fn list_emby_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind", el."ShouldSyncItems"
-           FROM "Library" l
-           JOIN "EmbyLibrary" el ON el."Id" = l."Id"
-           WHERE l."MediaSourceId" = ?
-           ORDER BY l."MediaKind", l."Name""#,
+    list_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LibraryPrefRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            media_kind: r.try_get("MediaKind").unwrap_or(1),
-            should_sync: r.try_get::<bool, _>("ShouldSyncItems").unwrap_or(false),
-        })
-        .collect())
+    .await
 }
 
 #[server]
 pub async fn save_emby_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::emby::sync_library_by_id as emby_sync;
-
     let state = expect_context::<AppState>();
-    for pref in &prefs {
-        sqlx::query(r#"UPDATE "EmbyLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#)
-            .bind(pref.should_sync)
-            .bind(pref.id)
-            .execute(&state.pool)
-            .await?;
-    }
-
-    // Mirrors RemoteMediaSourceLibrariesEditor.razor SaveChanges: enqueue sync
-    // for each library that has ShouldSyncItems = true.
-    let sync_ids: Vec<i64> = prefs
-        .iter()
-        .filter(|p| p.should_sync)
-        .map(|p| p.id)
-        .collect();
-    if !sync_ids.is_empty() {
-        let pool = state.pool.clone();
-        tokio::task::spawn(async move {
-            for id in sync_ids {
-                if let Err(e) = emby_sync(&pool, id).await {
-                    tracing::warn!(library_id = id, error = %e, "emby sync failed");
-                }
-            }
-        });
-    }
-    Ok(())
+    save_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+        prefs,
+    )
+    .await
 }
 
 #[server]
 pub async fn list_emby_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id",
-                  COALESCE("EmbyPath", '') AS "EmbyPath",
-                  COALESCE("LocalPath", '') AS "LocalPath"
-           FROM "EmbyPathReplacement"
-           WHERE "EmbyMediaSourceId" = ?
-           ORDER BY "Id""#,
+    list_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PathReplacementRow {
-            id: r.try_get("Id").unwrap_or(0),
-            remote_path: r.try_get("EmbyPath").unwrap_or_default(),
-            local_path: r.try_get("LocalPath").unwrap_or_default(),
-        })
-        .collect())
+    .await
 }
 
 #[server]
@@ -844,24 +509,13 @@ pub async fn save_emby_paths(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "EmbyPathReplacement" WHERE "EmbyMediaSourceId" = ?"#)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-
-    for p in &paths {
-        sqlx::query(
-            r#"INSERT INTO "EmbyPathReplacement"
-               ("EmbyPath", "LocalPath", "EmbyMediaSourceId")
-               VALUES (?, ?, ?)"#,
-        )
-        .bind(&p.remote_path)
-        .bind(&p.local_path)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-    }
-    Ok(())
+    save_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Emby,
+        source_id,
+        paths,
+    )
+    .await
 }
 
 // ─── Plex ─────────────────────────────────────────────────────────────────────
@@ -876,29 +530,17 @@ pub struct PlexSourceRow {
 #[server]
 pub async fn list_plex_sources() -> Result<Vec<PlexSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT pms."Id",
-                  COALESCE(pms."ServerName", 'Plex') AS "Name",
-                  COALESCE(
-                      (SELECT "Uri" FROM "PlexConnection"
-                       WHERE "PlexMediaSourceId" = pms."Id" AND "IsActive" = 1
-                       ORDER BY "Id" LIMIT 1),
-                      '') AS "Address"
-           FROM "PlexMediaSource" pms
-           ORDER BY pms."Id""#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PlexSourceRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            address: r.try_get("Address").unwrap_or_default(),
+    Ok(state
+        .application
+        .list_remote_sources(ersatzrs_core::repositories::RemoteMediaSourceKind::Plex)
+        .await?
+        .into_iter()
+        .map(|row| PlexSourceRow {
+            id: row.id,
+            name: row.name,
+            address: row.address,
         })
         .collect())
 }
@@ -908,15 +550,7 @@ pub async fn has_plex_token() -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let val: Option<String> = sqlx::query_scalar(
-        r#"SELECT "Value" FROM "ConfigElement"
-           WHERE "Key" = 'plex.current_server_auth_token'
-           LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?;
-
-    Ok(val.is_some_and(|v| !v.is_empty()))
+    Ok(state.application.has_plex_token().await?)
 }
 
 #[server]
@@ -924,14 +558,7 @@ pub async fn sign_out_plex() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    // Remove all Plex auth tokens and wipe media source rows.
-    sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" LIKE 'plex.%auth_token%'"#)
-        .execute(&state.pool)
-        .await?;
-    sqlx::query(r#"DELETE FROM "MediaSource" WHERE "Id" IN (SELECT "Id" FROM "PlexMediaSource")"#)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    Ok(state.application.sign_out_plex().await?)
 }
 
 /// Begins a Plex PIN auth flow. Returns `(pin_id, auth_url)`.
@@ -941,29 +568,8 @@ pub async fn sign_out_plex() -> Result<(), ServerFnError> {
 #[server]
 pub async fn start_plex_pin_flow() -> Result<(String, String), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::plex::PlexService;
-
     let state = expect_context::<AppState>();
-    let client_id = PlexService::get_or_create_client_identifier(&state.pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    let service = PlexService::new();
-    let pin = service
-        .start_pin_flow(&client_id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    sqlx::query(
-        r#"REPLACE INTO "ConfigElement" ("Key", "Value")
-           VALUES ('plex.pending_pin_code', ?)
-           "#,
-    )
-    .bind(&pin.code)
-    .execute(&state.pool)
-    .await?;
-
-    Ok((pin.id, pin.auth_url))
+    Ok(state.application.start_plex_pin_flow().await?)
 }
 
 /// Polls Plex for PIN completion. Returns `Some(token)` when the user has
@@ -974,139 +580,44 @@ pub async fn start_plex_pin_flow() -> Result<(String, String), ServerFnError> {
 #[server]
 pub async fn check_plex_pin(pin_id: String) -> Result<Option<String>, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::plex::PlexService;
-
     let state = expect_context::<AppState>();
-
-    let client_id = PlexService::get_or_create_client_identifier(&state.pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    let pin_code: String = sqlx::query_scalar(
-        r#"SELECT COALESCE("Value", '') FROM "ConfigElement"
-           WHERE "Key" = 'plex.pending_pin_code' LIMIT 1"#,
-    )
-    .fetch_optional(&state.pool)
-    .await?
-    .unwrap_or_default();
-
-    let service = PlexService::new();
-    let token = service
-        .complete_pin_flow(&pin_id, &pin_code, &client_id)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    if let Some(ref user_token) = token {
-        sqlx::query(
-            r#"REPLACE INTO "ConfigElement" ("Key", "Value")
-               VALUES ('plex.user_auth_token', ?)
-               "#,
-        )
-        .bind(user_token)
-        .execute(&state.pool)
-        .await?;
-
-        let servers = service
-            .get_servers(user_token, &client_id)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-        PlexService::upsert_sources(&state.pool, &servers)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
-    }
-
-    Ok(token)
+    Ok(state.application.check_plex_pin(&pin_id).await?)
 }
 
 #[server]
 pub async fn list_plex_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT l."Id", COALESCE(l."Name", '') AS "Name", l."MediaKind", pl."ShouldSyncItems"
-           FROM "Library" l
-           JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
-           WHERE l."MediaSourceId" = ?
-           ORDER BY l."MediaKind", l."Name""#,
+    list_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| LibraryPrefRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            media_kind: r.try_get("MediaKind").unwrap_or(1),
-            should_sync: r.try_get::<bool, _>("ShouldSyncItems").unwrap_or(false),
-        })
-        .collect())
+    .await
 }
 
 #[server]
 pub async fn save_plex_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_infra::plex::sync_library_by_id as plex_sync;
-
     let state = expect_context::<AppState>();
-    for pref in &prefs {
-        sqlx::query(r#"UPDATE "PlexLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#)
-            .bind(pref.should_sync)
-            .bind(pref.id)
-            .execute(&state.pool)
-            .await?;
-    }
-
-    // Mirrors RemoteMediaSourceLibrariesEditor.razor SaveChanges: enqueue sync
-    // for each library that has ShouldSyncItems = true.
-    let sync_ids: Vec<i64> = prefs
-        .iter()
-        .filter(|p| p.should_sync)
-        .map(|p| p.id)
-        .collect();
-    if !sync_ids.is_empty() {
-        let pool = state.pool.clone();
-        tokio::task::spawn(async move {
-            for id in sync_ids {
-                if let Err(e) = plex_sync(&pool, id).await {
-                    tracing::warn!(library_id = id, error = %e, "plex sync failed");
-                }
-            }
-        });
-    }
-    Ok(())
+    save_library_preferences_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+        prefs,
+    )
+    .await
 }
 
 #[server]
 pub async fn list_plex_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(
-        r#"SELECT "Id",
-                  COALESCE("PlexPath", '') AS "PlexPath",
-                  COALESCE("LocalPath", '') AS "LocalPath"
-           FROM "PlexPathReplacement"
-           WHERE "PlexMediaSourceId" = ?
-           ORDER BY "Id""#,
+    list_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+        source_id,
     )
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| PathReplacementRow {
-            id: r.try_get("Id").unwrap_or(0),
-            remote_path: r.try_get("PlexPath").unwrap_or_default(),
-            local_path: r.try_get("LocalPath").unwrap_or_default(),
-        })
-        .collect())
+    .await
 }
 
 #[server]
@@ -1117,27 +628,99 @@ pub async fn save_plex_paths(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "PlexPathReplacement" WHERE "PlexMediaSourceId" = ?"#)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-
-    for p in &paths {
-        sqlx::query(
-            r#"INSERT INTO "PlexPathReplacement"
-               ("PlexPath", "LocalPath", "PlexMediaSourceId")
-               VALUES (?, ?, ?)"#,
-        )
-        .bind(&p.remote_path)
-        .bind(&p.local_path)
-        .bind(source_id)
-        .execute(&state.pool)
-        .await?;
-    }
-    Ok(())
+    save_path_replacements_with_application(
+        &state,
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Plex,
+        source_id,
+        paths,
+    )
+    .await
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "ssr")]
+async fn list_library_preferences_with_application(
+    state: &crate::host::state::AppState,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    source_id: i64,
+) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
+    Ok(state
+        .application
+        .list_library_preferences(kind, source_id)
+        .await?
+        .into_iter()
+        .map(|preference| LibraryPrefRow {
+            id: preference.id,
+            name: preference.name,
+            media_kind: preference.media_kind,
+            should_sync: preference.should_sync,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn save_library_preferences_with_application(
+    state: &crate::host::state::AppState,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    preferences: Vec<LibraryPrefRow>,
+) -> Result<(), ServerFnError> {
+    let preferences = preferences
+        .into_iter()
+        .map(
+            |preference| ersatzrs_core::repositories::LibraryPreferenceAdmin {
+                id: preference.id,
+                name: preference.name,
+                media_kind: preference.media_kind,
+                should_sync: preference.should_sync,
+            },
+        )
+        .collect::<Vec<_>>();
+    Ok(state
+        .application
+        .save_library_preferences_and_sync(kind, &preferences)
+        .await?)
+}
+
+#[cfg(feature = "ssr")]
+async fn list_path_replacements_with_application(
+    state: &crate::host::state::AppState,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    source_id: i64,
+) -> Result<Vec<PathReplacementRow>, ServerFnError> {
+    Ok(state
+        .application
+        .list_path_replacements(kind, source_id)
+        .await?
+        .into_iter()
+        .map(|path| PathReplacementRow {
+            id: path.id,
+            remote_path: path.remote_path,
+            local_path: path.local_path,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn save_path_replacements_with_application(
+    state: &crate::host::state::AppState,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    source_id: i64,
+    paths: Vec<PathReplacementRow>,
+) -> Result<(), ServerFnError> {
+    let paths = paths
+        .into_iter()
+        .map(|path| ersatzrs_core::repositories::PathReplacementAdmin {
+            id: path.id,
+            remote_path: path.remote_path,
+            local_path: path.local_path,
+        })
+        .collect::<Vec<_>>();
+    Ok(state
+        .application
+        .save_path_replacements(kind, source_id, &paths)
+        .await?)
+}
 
 pub fn media_kind_label(kind: i32) -> &'static str {
     match kind {

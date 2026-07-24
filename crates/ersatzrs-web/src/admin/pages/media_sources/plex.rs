@@ -12,6 +12,7 @@ use crate::admin::server_fns::media_sources::{
     PathReplacementRow, PlexSourceRow,
 };
 use crate::admin::ui::primitives::dialog::DeleteDialog;
+use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 use super::jellyfin::PathsEditor;
 
@@ -40,10 +41,15 @@ fn PlexSourcesIsland() -> impl IntoView {
     let current_authorized = RwSignal::new(false);
     let sources_loaded = RwSignal::new(false);
     let token_loaded = RwSignal::new(false);
+    let load_toast = use_toast();
     let rows: LocalResource<Vec<PlexSourceRow>> =
-        LocalResource::new(|| async { list_plex_sources().await.unwrap_or_default() });
+        LocalResource::new(
+            move || async move { load_or_notify(list_plex_sources().await, load_toast) },
+        );
     let has_token: LocalResource<bool> =
-        LocalResource::new(|| async { has_plex_token().await.unwrap_or(false) });
+        LocalResource::new(
+            move || async move { load_or_notify(has_plex_token().await, load_toast) },
+        );
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
             current_sources.set(next_rows);
@@ -283,9 +289,10 @@ pub fn PlexLibrariesPage() -> impl IntoView {
 
 #[island]
 fn PlexLibrariesIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_plex_libraries(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_plex_libraries(id).await, load_toast) },
     );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
@@ -396,9 +403,10 @@ pub fn PlexPathsPage() -> impl IntoView {
 
 #[island]
 fn PlexPathsIsland(source_id: i64) -> impl IntoView {
+    let load_toast = use_toast();
     let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
         move || source_id,
-        |id| async move { list_plex_paths(id).await.unwrap_or_default() },
+        move |id| async move { load_or_notify(list_plex_paths(id).await, load_toast) },
     );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);

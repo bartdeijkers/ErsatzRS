@@ -2862,6 +2862,7 @@ pub fn load_language_initial() -> UiLanguage {
         use crate::host::state::AppState;
 
         let Some(state) = use_context::<AppState>() else {
+            tracing::warn!("admin language fallback: application state is unavailable");
             return UiLanguage::English;
         };
         load_language_initial_for_state(&state)
@@ -2887,13 +2888,23 @@ pub fn load_language_initial() -> UiLanguage {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_language_initial_for_state(app_state: &crate::host::state::AppState) -> UiLanguage {
     match tokio::runtime::Handle::try_current() {
-        Ok(handle) => tokio::task::block_in_place(|| {
+        Ok(handle) => match tokio::task::block_in_place(|| {
             handle.block_on(
-                crate::admin::server_fns::settings::load_ui_language_for_api(&app_state.pool),
+                crate::admin::server_fns::settings::load_ui_language_for_api(
+                    app_state.application.ports().admin_settings(),
+                ),
             )
-        })
-        .unwrap_or(UiLanguage::English),
-        Err(_) => UiLanguage::English,
+        }) {
+            Ok(language) => language,
+            Err(error) => {
+                tracing::warn!(%error, "admin language fallback: persisted setting load failed");
+                UiLanguage::English
+            }
+        },
+        Err(error) => {
+            tracing::warn!(%error, "admin language fallback: async runtime is unavailable");
+            UiLanguage::English
+        }
     }
 }
 

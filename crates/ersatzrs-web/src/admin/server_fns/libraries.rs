@@ -3,10 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
 use ersatzrs_app::{
-    commands::{
-        BeginOperation, RequestLibraryScan, RequestScanOutcome, RequestShowScan, ScanRequest,
-    },
-    operations::OperationKey,
+    commands::{RequestLibraryScan, RequestScanOutcome, RequestShowScan, ScanRequest},
     queries::ScanOperationState,
 };
 
@@ -25,8 +22,8 @@ pub struct LibraryRow {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl From<ersatzrs_infra::admin_libraries::AdminLibraryRow> for LibraryRow {
-    fn from(row: ersatzrs_infra::admin_libraries::AdminLibraryRow) -> Self {
+impl From<ersatzrs_core::repositories::AdminLibraryRow> for LibraryRow {
+    fn from(row: ersatzrs_core::repositories::AdminLibraryRow) -> Self {
         Self {
             id: row.id,
             name: row.name,
@@ -48,8 +45,8 @@ pub struct ExternalCollectionRow {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl From<ersatzrs_infra::admin_libraries::AdminExternalCollectionRow> for ExternalCollectionRow {
-    fn from(row: ersatzrs_infra::admin_libraries::AdminExternalCollectionRow) -> Self {
+impl From<ersatzrs_core::repositories::AdminExternalCollectionRow> for ExternalCollectionRow {
+    fn from(row: ersatzrs_core::repositories::AdminExternalCollectionRow) -> Self {
         Self {
             media_source_id: row.media_source_id,
             kind: row.kind,
@@ -80,7 +77,9 @@ pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(ersatzrs_infra::admin_libraries::load_libraries(&state.pool)
+    Ok(state
+        .application
+        .list_admin_libraries()
         .await?
         .into_iter()
         .map(Into::into)
@@ -92,10 +91,17 @@ pub async fn load_libraries_page() -> Result<LibrariesPageData, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(load_libraries_page_with_pool(&state.pool).await?)
+    let (libraries, external_collections) = tokio::try_join!(
+        state.application.list_admin_libraries(),
+        state.application.list_external_collections(),
+    )?;
+    Ok(LibrariesPageData {
+        libraries: libraries.into_iter().map(Into::into).collect(),
+        external_collections: external_collections.into_iter().map(Into::into).collect(),
+    })
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 pub async fn load_libraries_page_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> ersatzrs_core::repositories::Result<LibrariesPageData> {
@@ -240,13 +246,13 @@ pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, S
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(
-        ersatzrs_infra::admin_libraries::load_external_collections(&state.pool)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    )
+    Ok(state
+        .application
+        .list_external_collections()
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
 
 /// Fires a background sync of external collections for a single remote
@@ -262,66 +268,9 @@ pub async fn scan_external_collections(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let pool = state.pool.clone();
-    let operations = state.application.operations().clone();
-    let key = OperationKey::ExternalCollections {
-        provider: kind.clone(),
-        media_source_id,
-    };
-
-    tracing::info!(media_source_id, kind = %kind, deep_scan, "scan_external_collections invoked");
-
-    let Some(operation_guard) = operations.begin(BeginOperation::new(key)).into_guard() else {
-        tracing::info!(media_source_id, kind = %kind, "scan_external_collections: already locked, no-op");
-        return Ok(false);
-    };
-
-    tokio::task::spawn(async move {
-        let _operation_guard = operation_guard;
-        let started = std::time::Instant::now();
-        tracing::info!(media_source_id, kind = %kind, "external collections sync started");
-        let res = match kind.as_str() {
-            "Plex" => {
-                ersatzrs_infra::plex::sync_collections_for_media_source(
-                    &pool,
-                    media_source_id,
-                    deep_scan,
-                )
-                .await
-            }
-            "Jellyfin" => {
-                ersatzrs_infra::jellyfin::sync_collections_for_media_source(
-                    &pool,
-                    media_source_id,
-                    deep_scan,
-                )
-                .await
-            }
-            "Emby" => {
-                ersatzrs_infra::emby::sync_collections_for_media_source(
-                    &pool,
-                    media_source_id,
-                    deep_scan,
-                )
-                .await
-            }
-            other => {
-                tracing::warn!(kind = other, "unknown kind in scan_external_collections");
-                Ok(0)
-            }
-        };
-        if let Err(e) = res {
-            tracing::warn!(media_source_id, kind = %kind, error = %e, "external collections sync failed");
-        }
-        tracing::info!(
-            media_source_id,
-            kind = %kind,
-            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            "external collections sync finished"
-        );
-    });
-
-    Ok(true)
+    Ok(state
+        .application
+        .request_external_collections_sync(media_source_id, &kind, deep_scan)?)
 }
 
 /// Returns the `(kind, media_source_id)` pairs whose collections sync is

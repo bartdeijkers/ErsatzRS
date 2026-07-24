@@ -5,6 +5,7 @@ use crate::admin::i18n::{tr, TextKey};
 #[cfg(feature = "ssr")]
 use crate::admin::server_fns::channels::list_channel_number_rows;
 use crate::admin::server_fns::channels::ChannelNumberEditorRow;
+use crate::admin::ui::primitives::resource_state::admin_result_view;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/numbers.module.css");
 
@@ -13,23 +14,23 @@ pub fn ChannelNumbersPage() -> impl IntoView {
     let query = use_query_map();
     let form_error = query.with_untracked(|params| params.get("error").unwrap_or_default());
 
-    view! {
-        <ChannelNumbersForm rows=channel_number_rows_for_page() form_error=form_error/>
-    }
+    admin_result_view(channel_number_rows_for_page(), move |rows| {
+        view! { <ChannelNumbersForm rows form_error=form_error/> }.into_any()
+    })
 }
 
 #[cfg(feature = "ssr")]
-fn channel_number_rows_for_page() -> Vec<ChannelNumberEditorRow> {
+fn channel_number_rows_for_page() -> Result<Vec<ChannelNumberEditorRow>, String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current()
             .block_on(list_channel_number_rows())
-            .unwrap_or_default()
+            .map_err(|error| error.to_string())
     })
 }
 
 #[cfg(not(feature = "ssr"))]
-fn channel_number_rows_for_page() -> Vec<ChannelNumberEditorRow> {
-    Vec::new()
+fn channel_number_rows_for_page() -> Result<Vec<ChannelNumberEditorRow>, String> {
+    Ok(Vec::new())
 }
 
 #[component]

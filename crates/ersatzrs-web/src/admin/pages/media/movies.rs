@@ -25,6 +25,7 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::card::{first_letter_placeholder, MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 #[allow(dead_code)]
@@ -53,14 +54,15 @@ pub fn MoviePage() -> impl IntoView {
     let movie = load_movie_detail_initial(id);
 
     match movie {
-        Some(movie) => view! { <MovieDetailIsland movie/> }.into_any(),
-        None => view! {
+        Ok(Some(movie)) => view! { <MovieDetailIsland movie/> }.into_any(),
+        Ok(None) => view! {
             <div class=detail_style::not_found>
                 <h1>{tr(TextKey::MovieNotFound)}</h1>
                 <a href="/media/movies">{tr(TextKey::BackToMovies)}</a>
             </div>
         }
         .into_any(),
+        Err(error) => view! { <AdminErrorState error/> }.into_any(),
     }
 }
 
@@ -69,22 +71,21 @@ fn MovieDetailIsland(movie: MovieDetailRow) -> impl IntoView {
     view! { <MovieDetailView movie/> }
 }
 
-fn load_movie_detail_initial(id: i64) -> Option<MovieDetailRow> {
+fn load_movie_detail_initial(id: i64) -> Result<Option<MovieDetailRow>, String> {
     #[cfg(feature = "ssr")]
     {
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                crate::admin::server_fns::media_browser::get_movie_details(id)
-                    .await
-                    .ok()
-                    .flatten()
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    crate::admin::server_fns::media_browser::get_movie_details(id).await
+                })
+                .map_err(|error| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = id;
-        None
+        Ok(None)
     }
 }
 

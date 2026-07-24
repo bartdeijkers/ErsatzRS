@@ -18,7 +18,12 @@ use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
+use super::channels::NativeChannelRuntime;
+use super::health::NativeAdminHealthRuntime;
+use super::media_sources::NativeMediaSourceRuntime;
 use super::scanning::{NativeScanRuntime, TokioScanWorkQueue};
+use super::settings::NativeSettingsRuntime;
+use super::troubleshooting::NativeAdminTroubleshootingRuntime;
 
 #[derive(Clone)]
 struct TokioPlayoutBuildQueue {
@@ -119,10 +124,53 @@ impl AppState {
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
+        let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
+        let ffmpeg_runtime = Arc::new(RwLock::new(ffmpeg_runtime));
+        let tuner_count = Arc::new(AtomicI32::new(tuner_count));
+        let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
         let application = Arc::new(ApplicationServices::new(
             ApplicationPorts::new(
+                Arc::new(repositories.channel.clone()),
+                Arc::new(NativeChannelRuntime::new(
+                    pool.clone(),
+                    Arc::clone(&hls_sessions),
+                )),
+                Arc::new(repositories.trakt.clone()),
+                Arc::new(repositories.admin_settings.clone()),
+                Arc::new(NativeSettingsRuntime::new(
+                    pool.clone(),
+                    Arc::clone(&ffmpeg_runtime),
+                    Arc::clone(&tuner_count),
+                )),
+                Arc::new(repositories.collection.clone()),
+                Arc::new(repositories.ffmpeg_profile.clone()),
+                Arc::new(repositories.filler.clone()),
+                Arc::new(repositories.watermark.clone()),
+                Arc::new(repositories.template.clone()),
+                Arc::new(repositories.block.clone()),
+                Arc::new(repositories.deco.clone()),
+                Arc::new(repositories.program_schedule.clone()),
                 Arc::new(repositories.playout.clone()),
                 Arc::new(repositories.library.clone()),
+                Arc::new(repositories.media_source.clone()),
+                Arc::new(repositories.media_item.clone()),
+                Arc::new(repositories.admin_media.clone()),
+                Arc::new(repositories.television.clone()),
+                Arc::new(NativeAdminHealthRuntime::new(
+                    pool.clone(),
+                    Arc::clone(&ffmpeg_runtime),
+                    system_startup.schema_status.clone(),
+                    startup_errors,
+                    startup_warnings,
+                )),
+                Arc::new(repositories.troubleshooting.clone()),
+                Arc::new(NativeAdminTroubleshootingRuntime::new(
+                    pool.clone(),
+                    Arc::clone(&repositories),
+                    Arc::clone(&ffmpeg_runtime),
+                )),
+                Arc::new(NativeMediaSourceRuntime::new(pool.clone())),
+                Arc::new(repositories.scheduling.clone()),
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(ersatzrs_core::playout_builder::PlayoutBuilder::default()),
                 Arc::new(TokioPlayoutBuildQueue {
@@ -136,7 +184,6 @@ impl AppState {
                 ersatzrs_core::locking::PlayoutBuildActivity::default(),
             ),
         ));
-        let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
         Self {
             application,
@@ -144,9 +191,9 @@ impl AppState {
             pool,
             database_backend,
             system_startup: Arc::new(system_startup),
-            ffmpeg_runtime: Arc::new(RwLock::new(ffmpeg_runtime)),
+            ffmpeg_runtime,
             device_uuid,
-            tuner_count: Arc::new(AtomicI32::new(tuner_count)),
+            tuner_count,
             hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,

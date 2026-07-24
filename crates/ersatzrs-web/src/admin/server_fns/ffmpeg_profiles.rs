@@ -107,6 +107,84 @@ impl FfmpegProfileForm {
     }
 }
 
+#[cfg(feature = "ssr")]
+fn ffmpeg_profile_form_into_admin(
+    form: FfmpegProfileForm,
+) -> ersatzrs_app::commands::FfmpegProfileAdminForm {
+    ersatzrs_app::commands::FfmpegProfileAdminForm {
+        id: form.id,
+        name: form.name,
+        thread_count: form.thread_count,
+        transcode_video: form.transcode_video,
+        transcode_audio: form.transcode_audio,
+        hardware_acceleration: form.hardware_acceleration,
+        vaapi_display: form.vaapi_display,
+        vaapi_driver: form.vaapi_driver,
+        vaapi_device: form.vaapi_device,
+        qsv_extra_hardware_frames: form.qsv_extra_hardware_frames,
+        resolution_id: form.resolution_id,
+        scaling_behavior: form.scaling_behavior,
+        pad_mode: form.pad_mode,
+        video_format: form.video_format,
+        video_profile: form.video_profile,
+        video_preset: form.video_preset,
+        allow_b_frames: form.allow_b_frames,
+        bit_depth: form.bit_depth,
+        video_bitrate: form.video_bitrate,
+        video_buffer_size: form.video_buffer_size,
+        tonemap_algorithm: form.tonemap_algorithm,
+        audio_format: form.audio_format,
+        audio_bitrate: form.audio_bitrate,
+        audio_buffer_size: form.audio_buffer_size,
+        normalize_loudness_mode: form.normalize_loudness_mode,
+        target_loudness: form.target_loudness,
+        audio_channels: form.audio_channels,
+        audio_sample_rate: form.audio_sample_rate,
+        normalize_framerate: form.normalize_framerate,
+        normalize_colors: form.normalize_colors,
+        deinterlace_video: form.deinterlace_video,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn ffmpeg_profile_form_from_admin(
+    form: ersatzrs_app::commands::FfmpegProfileAdminForm,
+) -> FfmpegProfileForm {
+    FfmpegProfileForm {
+        id: form.id,
+        name: form.name,
+        thread_count: form.thread_count,
+        transcode_video: form.transcode_video,
+        transcode_audio: form.transcode_audio,
+        hardware_acceleration: form.hardware_acceleration,
+        vaapi_display: form.vaapi_display,
+        vaapi_driver: form.vaapi_driver,
+        vaapi_device: form.vaapi_device,
+        qsv_extra_hardware_frames: form.qsv_extra_hardware_frames,
+        resolution_id: form.resolution_id,
+        scaling_behavior: form.scaling_behavior,
+        pad_mode: form.pad_mode,
+        video_format: form.video_format,
+        video_profile: form.video_profile,
+        video_preset: form.video_preset,
+        allow_b_frames: form.allow_b_frames,
+        bit_depth: form.bit_depth,
+        video_bitrate: form.video_bitrate,
+        video_buffer_size: form.video_buffer_size,
+        tonemap_algorithm: form.tonemap_algorithm,
+        audio_format: form.audio_format,
+        audio_bitrate: form.audio_bitrate,
+        audio_buffer_size: form.audio_buffer_size,
+        normalize_loudness_mode: form.normalize_loudness_mode,
+        target_loudness: form.target_loudness,
+        audio_channels: form.audio_channels,
+        audio_sample_rate: form.audio_sample_rate,
+        normalize_framerate: form.normalize_framerate,
+        normalize_colors: form.normalize_colors,
+        deinterlace_video: form.deinterlace_video,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Label helpers (C# enum integer → display string)
 // ---------------------------------------------------------------------------
@@ -174,7 +252,7 @@ pub fn video_format_validation_error(hw: i32, vf: i32) -> Option<&'static str> {
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn normalized_video_profile_for_persist(
     hw: i32,
     vf: i32,
@@ -199,7 +277,7 @@ fn normalized_video_profile_for_persist(
         .then(|| requested.to_owned())
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn validate_profile_options(
     hw: i32,
     vf: i32,
@@ -240,35 +318,24 @@ pub async fn list_ffmpeg_profile_rows(
     page_size: u32,
 ) -> Result<Vec<FfmpegProfileListRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-
-    let rows = sqlx::query(
-        r#"SELECT p."Id", p."Name", COALESCE(r."Name", '') AS "ResolutionName",
-                  p."VideoFormat", p."AudioFormat", p."HardwareAcceleration"
-           FROM "FFmpegProfile" p
-           LEFT JOIN "Resolution" r ON r."Id" = p."ResolutionId"
-           ORDER BY p."Name", p."Id"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| FfmpegProfileListRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            resolution: r.try_get("ResolutionName").unwrap_or_default(),
-            video_format: r.try_get("VideoFormat").unwrap_or(0),
-            audio_format: r.try_get("AudioFormat").unwrap_or(0),
-            hardware_acceleration: r.try_get("HardwareAcceleration").unwrap_or(0),
+    state
+        .application
+        .list_ffmpeg_profiles(page, page_size)
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| FfmpegProfileListRow {
+                    id: row.id,
+                    name: row.name,
+                    resolution: row.resolution,
+                    video_format: row.video_format,
+                    audio_format: row.audio_format,
+                    hardware_acceleration: row.hardware_acceleration,
+                })
+                .collect()
         })
-        .collect())
+        .map_err(ServerFnError::new)
 }
 
 /// Returns the total `FFmpegProfile` count.
@@ -277,36 +344,23 @@ pub async fn count_ffmpeg_profiles() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "FFmpegProfile""#)
-        .fetch_one(&state.pool)
-        .await?;
-    Ok(u64::try_from(count).unwrap_or(0))
+    state
+        .application
+        .count_ffmpeg_profiles()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Returns `(id, name)` pairs for resolutions.
 #[server]
 pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
-
     let state = expect_context::<AppState>();
-
-    let rows =
-        sqlx::query(r#"SELECT "Id", "Name" FROM "Resolution" ORDER BY "Height", "Width", "Id""#)
-            .fetch_all(&state.pool)
-            .await?;
-
-    Ok(rows
-        .iter()
-        .map(|r| {
-            (
-                r.try_get("Id").unwrap_or(0),
-                r.try_get::<Option<String>, _>("Name")
-                    .unwrap_or_default()
-                    .unwrap_or_default(),
-            )
-        })
-        .collect())
+    state
+        .application
+        .list_ffmpeg_resolutions()
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Returns all hardware acceleration kinds, annotating each with whether it is
@@ -389,92 +443,21 @@ fn hw_acceleration_select_items(
 #[server]
 pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let maybe = sqlx::query(r#"SELECT * FROM "FFmpegProfile" WHERE "Id" = ?"#)
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await?;
-
-    Ok(maybe.map(|r| {
-        let target: Option<f64> = r
-            .try_get::<Option<f64>, _>("TargetLoudness")
-            .unwrap_or_default();
-        FfmpegProfileForm {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r
-                .try_get::<Option<String>, _>("Name")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            thread_count: r.try_get("ThreadCount").unwrap_or(0),
-            transcode_video: r.try_get::<i32, _>("TranscodeVideo").unwrap_or(1) != 0,
-            transcode_audio: r.try_get::<i32, _>("TranscodeAudio").unwrap_or(1) != 0,
-            hardware_acceleration: r.try_get("HardwareAcceleration").unwrap_or(0),
-            vaapi_display: r
-                .try_get::<Option<String>, _>("VaapiDisplay")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            vaapi_driver: r.try_get("VaapiDriver").unwrap_or(0),
-            vaapi_device: r
-                .try_get::<Option<String>, _>("VaapiDevice")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            qsv_extra_hardware_frames: r
-                .try_get::<Option<i32>, _>("QsvExtraHardwareFrames")
-                .unwrap_or_default()
-                .unwrap_or(64),
-            resolution_id: r.try_get("ResolutionId").unwrap_or(0),
-            scaling_behavior: r.try_get("ScalingBehavior").unwrap_or(0),
-            pad_mode: r.try_get("PadMode").unwrap_or(1),
-            video_format: r.try_get("VideoFormat").unwrap_or(1),
-            video_profile: r
-                .try_get::<Option<String>, _>("VideoProfile")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            video_preset: r
-                .try_get::<Option<String>, _>("VideoPreset")
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            allow_b_frames: r.try_get::<i32, _>("AllowBFrames").unwrap_or(0) != 0,
-            bit_depth: r.try_get("BitDepth").unwrap_or(0),
-            video_bitrate: r.try_get("VideoBitrate").unwrap_or(2000),
-            video_buffer_size: r.try_get("VideoBufferSize").unwrap_or(4000),
-            tonemap_algorithm: r.try_get("TonemapAlgorithm").unwrap_or(0),
-            audio_format: r.try_get("AudioFormat").unwrap_or(1),
-            audio_bitrate: r.try_get("AudioBitrate").unwrap_or(192),
-            audio_buffer_size: r.try_get("AudioBufferSize").unwrap_or(384),
-            normalize_loudness_mode: r.try_get("NormalizeLoudnessMode").unwrap_or(0),
-            // When LoudNorm is active and TargetLoudness is null, default to -16
-            // (mirrors FFmpegProfileEditViewModel's NormalizeLoudnessMode setter).
-            target_loudness: target.map_or_else(
-                || {
-                    if r.try_get::<i32, _>("NormalizeLoudnessMode").unwrap_or(0) == 1 {
-                        "-16".to_string()
-                    } else {
-                        String::new()
-                    }
-                },
-                |v| format!("{v}"),
-            ),
-            audio_channels: r.try_get("AudioChannels").unwrap_or(2),
-            audio_sample_rate: r.try_get("AudioSampleRate").unwrap_or(48),
-            normalize_framerate: r.try_get::<i32, _>("NormalizeFramerate").unwrap_or(0) != 0,
-            normalize_colors: r.try_get::<i32, _>("NormalizeColors").unwrap_or(1) != 0,
-            deinterlace_video: r
-                .try_get::<Option<i32>, _>("DeinterlaceVideo")
-                .unwrap_or_default()
-                .unwrap_or(1)
-                != 0,
-        }
-    }))
+    state
+        .application
+        .get_ffmpeg_profile(id)
+        .await
+        .map(|form| form.map(ffmpeg_profile_form_from_admin))
+        .map_err(ServerFnError::new)
 }
 
 /// `QsvExtraHardwareFrames` is only meaningful for QSV acceleration, so it is
 /// persisted as a value only when QSV (1) is selected and `NULL` otherwise. The
 /// editor form always carries the field (see [`FfmpegProfileForm`]); this is the
 /// single place that decides whether it reaches the database.
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn qsv_extra_hardware_frames_for_persist(
     hardware_acceleration: i32,
     qsv_extra_hardware_frames: i32,
@@ -493,8 +476,23 @@ fn qsv_extra_hardware_frames_for_persist(
 /// - `PadMode` is Software (1) for None, VAAPI-controlled otherwise.
 /// - `BitDepth` is forced to EightBit (0) for `Mpeg2Video`.
 #[server]
-#[allow(clippy::too_many_lines)]
 pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .save_ffmpeg_profile(ersatzrs_app::commands::SaveFfmpegProfile {
+            form: ffmpeg_profile_form_into_admin(form),
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(all(test, feature = "ssr"))]
+#[allow(dead_code)]
+#[allow(clippy::too_many_lines)]
+async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -728,13 +726,14 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
 #[server]
 pub async fn delete_ffmpeg_profile(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_app::commands::DeleteFfmpegProfile;
 
     let state = expect_context::<AppState>();
-    sqlx::query(r#"DELETE FROM "FFmpegProfile" WHERE "Id" = ?"#)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
+    state
+        .application
+        .delete_ffmpeg_profile(DeleteFfmpegProfile { id })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 /// Copies a profile, giving the copy `new_name`. Returns the new profile's id.
@@ -744,53 +743,14 @@ pub async fn delete_ffmpeg_profile(id: i64) -> Result<(), ServerFnError> {
 #[server]
 pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
-
-    let name = new_name.trim().to_string();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Profile name is required."));
-    }
-    if name.len() > 50 {
-        return Err(ServerFnError::new(
-            "Profile name must be 50 characters or fewer.",
-        ));
-    }
+    use ersatzrs_app::commands::CopyFfmpegProfile;
 
     let state = expect_context::<AppState>();
-    let result = sqlx::query(
-        r#"INSERT INTO "FFmpegProfile" (
-               "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
-               "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
-               "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
-               "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
-               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm",
-               "AudioFormat", "AudioBitrate", "AudioBufferSize",
-               "NormalizeLoudnessMode", "TargetLoudness",
-               "AudioChannels", "AudioSampleRate",
-               "NormalizeFramerate", "NormalizeColors", "DeinterlaceVideo"
-           )
-           SELECT
-               ?, "ThreadCount", "TranscodeVideo", "TranscodeAudio",
-               "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
-               "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
-               "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
-               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm",
-               "AudioFormat", "AudioBitrate", "AudioBufferSize",
-               "NormalizeLoudnessMode", "TargetLoudness",
-               "AudioChannels", "AudioSampleRate",
-               "NormalizeFramerate", "NormalizeColors", "DeinterlaceVideo"
-           FROM "FFmpegProfile"
-           WHERE "Id" = ?"#,
-    )
-    .bind(&name)
-    .bind(id)
-    .execute(&state.pool)
-    .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new("Source profile not found."));
-    }
-
-    Ok(ersatzrs_infra::db::last_insert_id(result))
+    state
+        .application
+        .copy_ffmpeg_profile(CopyFfmpegProfile { id, name: new_name })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(all(test, feature = "ssr"))]

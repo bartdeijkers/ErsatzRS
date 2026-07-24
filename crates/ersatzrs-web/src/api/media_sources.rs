@@ -4,12 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{
-    admin::server_fns::media_sources::{
-        save_local_library_with_pool, LocalLibraryForm, LocalLibraryPath,
-    },
-    host::state::AppState,
-};
+use crate::host::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct LocalLibrarySaveForm {
@@ -29,20 +24,20 @@ pub async fn save_local_library_form(
         .lines()
         .map(str::trim)
         .filter(|path| !path.is_empty())
-        .map(|path| LocalLibraryPath {
+        .map(|path| ersatzrs_core::repositories::LocalLibraryPathAdmin {
             id: 0,
             path: path.to_string(),
         })
         .collect();
 
-    let form = LocalLibraryForm {
+    let form = ersatzrs_core::repositories::LocalLibraryAdmin {
         id: input.id,
         name: input.name,
         media_kind: input.media_kind,
         paths,
     };
 
-    match save_local_library_with_pool(&state.pool, form).await {
+    match state.application.save_local_library(form).await {
         Ok(_) => Redirect::to("/media/sources/local"),
         Err(error) => {
             tracing::error!(%error, "failed to save local library from HTML form");

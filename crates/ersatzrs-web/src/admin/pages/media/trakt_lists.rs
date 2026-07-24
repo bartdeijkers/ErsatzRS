@@ -15,7 +15,8 @@ use crate::admin::server_fns::trakt::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/trakt_lists.module.css");
@@ -34,20 +35,20 @@ fn set_browser_location(_path: &str) {}
 pub fn TraktListsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<(u32, (Vec<TraktListRow>, u64))> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
         |()| async {
-            let page_size = get_trakt_lists_page_size().await.unwrap_or(10);
-            let rows = list_trakt_lists(0, page_size).await.unwrap_or_default();
-            (page_size, rows)
+            let page_size = get_trakt_lists_page_size().await?;
+            let rows = list_trakt_lists(0, page_size).await?;
+            Ok::<_, ServerFnError>((page_size, rows))
         },
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_page_size, (initial_rows, initial_total))| {
                     view! {
                         <TraktListsIsland
                             initial_error=error.clone()
@@ -56,7 +57,8 @@ pub fn TraktListsPage() -> impl IntoView {
                             initial_total=initial_total
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }
@@ -75,11 +77,12 @@ fn TraktListsIsland(
     let add_value = RwSignal::new(String::new());
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
+    let toast = use_toast();
 
     let data: LocalResource<(Vec<TraktListRow>, u64)> = LocalResource::new(move || {
         let p = page.get();
         let size = page_size.get();
-        async move { list_trakt_lists(p, size).await.unwrap_or_default() }
+        async move { load_or_notify(list_trakt_lists(p, size).await, toast) }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -96,7 +99,6 @@ fn TraktListsIsland(
 
     let delete_target: RwSignal<Option<TraktListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
-    let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(result) = add_action.value().get() {
@@ -441,16 +443,13 @@ pub fn TraktListEditorPage() -> impl IntoView {
             .unwrap_or(0)
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<Option<TraktListForm>> = Resource::new_blocking(
-        move || id,
-        |id| async move { get_trakt_list_form(id).await.unwrap_or_default() },
-    );
+    let initial = Resource::new_blocking(move || id, get_trakt_list_form);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |initial_form| {
+                initial.get().map(move |result| admin_result_view(result, |initial_form| {
                     view! {
                         <TraktListEditorIsland
                             id=id
@@ -458,7 +457,8 @@ pub fn TraktListEditorPage() -> impl IntoView {
                             initial_form=initial_form
                         />
                     }
-                })
+                    .into_any()
+                }))
             }}
         </Suspense>
     }

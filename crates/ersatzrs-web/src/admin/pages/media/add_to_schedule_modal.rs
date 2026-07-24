@@ -27,6 +27,7 @@ pub(crate) fn AddToScheduleModal(
 ) -> impl IntoView {
     let options: RwSignal<Vec<ScheduleOption>> = RwSignal::new(Vec::new());
     let schedule_id: RwSignal<i64> = RwSignal::new(0);
+    let toast = use_toast();
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -34,7 +35,16 @@ pub(crate) fn AddToScheduleModal(
             return;
         }
         leptos::task::spawn_local(async move {
-            let loaded = list_program_schedules().await.unwrap_or_default();
+            let loaded = match list_program_schedules().await {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    toast.push(
+                        format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                        ToastSeverity::Error,
+                    );
+                    return;
+                }
+            };
             if schedule_id.get_untracked() == 0 {
                 if let Some(first) = loaded.first() {
                     schedule_id.set(first.id);
@@ -54,7 +64,6 @@ pub(crate) fn AddToScheduleModal(
         }
     });
 
-    let toast = use_toast();
     Effect::new(move |_| {
         if let Some(res) = submit_action.value().get() {
             match res {

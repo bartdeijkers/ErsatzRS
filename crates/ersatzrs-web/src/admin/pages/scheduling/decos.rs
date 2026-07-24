@@ -21,13 +21,13 @@ use crate::admin::server_fns::decos::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
-    toast::{use_toast, ToastSeverity},
+    resource_state::{admin_loading_resource_view, admin_result_view},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 #[cfg(feature = "ssr")]
 use crate::{
     admin::server_fns::decos::{
-        get_deco_with_pool, list_deco_groups_with_pool, list_deco_template_groups_with_pool,
-        list_deco_templates_with_pool, list_decos_with_pool, load_deco_editor_options_with_pool,
+        deco_editor_options_from_admin, deco_form_from_admin, deco_template_row_from_admin,
     },
     host::state::AppState,
 };
@@ -40,12 +40,9 @@ mod style {
 
 #[component]
 pub fn DecosPage() -> impl IntoView {
-    let initial: Resource<(Vec<DecoGroupRow>, Vec<DecoRow>)> = Resource::new_blocking(
+    let initial = Resource::new_blocking(
         || (),
-        |()| async move {
-            let (groups, decos) = tokio::join!(list_deco_groups(), list_decos(String::new()));
-            (groups.unwrap_or_default(), decos.unwrap_or_default())
-        },
+        |()| async move { tokio::try_join!(list_deco_groups(), list_decos(String::new())) },
     );
 
     view! {
@@ -56,16 +53,17 @@ pub fn DecosPage() -> impl IntoView {
                 <DecosNoScriptRows/>
             </div>
         </noscript>
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_groups, initial_decos)| {
-                    view! {
+                initial.get().map(|result| admin_result_view(
+                    result,
+                    |(initial_groups, initial_decos)| view! {
                         <DecosIsland
                             initial_groups=initial_groups
                             initial_decos=initial_decos
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }
@@ -73,25 +71,30 @@ pub fn DecosPage() -> impl IntoView {
 
 #[component]
 fn DecosNoScriptRows() -> impl IntoView {
-    let (groups, rows) = load_decos_no_script_rows().unwrap_or_default();
-    view! {
-        <div class=style::page>
-            <div class=style::content>
-                <section class=style::section>
-                    <h2 class=style::section_title>{tr(TextKey::SavedDecos)}</h2>
-                    <div class=style::divider></div>
-                    <NoScriptDecoTree groups=groups rows=rows/>
-                </section>
+    admin_result_view(load_decos_no_script_rows(), |(groups, rows)| {
+        view! {
+            <div class=style::page>
+                <div class=style::content>
+                    <section class=style::section>
+                        <h2 class=style::section_title>{tr(TextKey::SavedDecos)}</h2>
+                        <div class=style::divider></div>
+                        <NoScriptDecoTree groups=groups rows=rows/>
+                    </section>
+                </div>
             </div>
-        </div>
-    }
+        }
+        .into_any()
+    })
 }
 
 #[island]
 fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -> impl IntoView {
     let current_groups = RwSignal::new(initial_groups);
+    let load_toast = use_toast();
     let groups: LocalResource<Vec<DecoGroupRow>> =
-        LocalResource::new(|| async { list_deco_groups().await.unwrap_or_default() });
+        LocalResource::new(
+            move || async move { load_or_notify(list_deco_groups().await, load_toast) },
+        );
     Effect::new(move |_| {
         if let Some(rows) = groups.get() {
             current_groups.set(rows);
@@ -101,7 +104,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
     let current_decos = RwSignal::new(initial_decos);
     let decos: LocalResource<Vec<DecoRow>> = LocalResource::new(move || {
         let query = search.get();
-        async move { list_decos(query).await.unwrap_or_default() }
+        async move { load_or_notify(list_decos(query).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(rows) = decos.get() {
@@ -500,13 +503,9 @@ pub fn DecoEditorPage() -> impl IntoView {
         })
     };
     let deco_id_value = deco_id();
-    let data: Resource<(Option<DecoForm>, DecoEditorOptions)> = Resource::new_blocking(
+    let data = Resource::new_blocking(
         move || deco_id_value,
-        |id| async move {
-            let deco = get_deco(id).await.unwrap_or(None);
-            let options = load_deco_editor_options().await.unwrap_or_default();
-            (deco, options)
-        },
+        |id| async move { tokio::try_join!(get_deco(id), load_deco_editor_options()) },
     );
 
     view! {
@@ -518,16 +517,21 @@ pub fn DecoEditorPage() -> impl IntoView {
             </div>
         </noscript>
         <div class="deco-js-editor">
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || data.get().map(|(deco, options)| match deco {
-                    Some(deco) => view! { <DecoEditorIsland initial=deco options=options/> }.into_any(),
-                    None => view! {
-                        <p class=style::empty>
-                            {tr(TextKey::DecoNotFound)} " "
-                            <a href="/decos">{tr(TextKey::BackToDecos)}</a>
-                        </p>
-                    }.into_any(),
-                })}
+            <Suspense fallback=admin_loading_resource_view>
+                {move || data.get().map(|result| admin_result_view(
+                    result,
+                    |(deco, options)| match deco {
+                        Some(deco) => view! {
+                            <DecoEditorIsland initial=deco options=options/>
+                        }.into_any(),
+                        None => view! {
+                            <p class=style::empty>
+                                {tr(TextKey::DecoNotFound)} " "
+                                <a href="/decos">{tr(TextKey::BackToDecos)}</a>
+                            </p>
+                        }.into_any(),
+                    },
+                ))}
             </Suspense>
         </div>
     }
@@ -540,18 +544,21 @@ fn DecoEditorIsland(initial: DecoForm, options: DecoEditorOptions) -> impl IntoV
 
 #[component]
 fn DecoEditorNoScript(deco_id: i64) -> impl IntoView {
-    match load_deco_editor_no_script_data(deco_id) {
-        Some((deco, options)) => {
-            view! { <DecoEditorForm initial=deco options=options/> }.into_any()
-        }
-        None => view! {
-            <p class=style::empty>
-                {tr(TextKey::DecoNotFound)} " "
-                <a href="/decos">{tr(TextKey::BackToDecos)}</a>
-            </p>
-        }
-        .into_any(),
-    }
+    admin_result_view(
+        load_deco_editor_no_script_data(deco_id),
+        |data| match data {
+            Some((deco, options)) => {
+                view! { <DecoEditorForm initial=deco options=options/> }.into_any()
+            }
+            None => view! {
+                <p class=style::empty>
+                    {tr(TextKey::DecoNotFound)} " "
+                    <a href="/decos">{tr(TextKey::BackToDecos)}</a>
+                </p>
+            }
+            .into_any(),
+        },
+    )
 }
 
 #[component]
@@ -771,17 +778,15 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
 
 #[component]
 pub fn DecoTemplatesPage() -> impl IntoView {
-    let initial: Resource<(Vec<DecoTemplateGroupRow>, Vec<DecoTemplateRow>)> =
-        Resource::new_blocking(
-            || (),
-            |()| async move {
-                let (groups, templates) = tokio::join!(
-                    list_deco_template_groups(),
-                    list_deco_templates(String::new())
-                );
-                (groups.unwrap_or_default(), templates.unwrap_or_default())
-            },
-        );
+    let initial = Resource::new_blocking(
+        || (),
+        |()| async move {
+            tokio::try_join!(
+                list_deco_template_groups(),
+                list_deco_templates(String::new())
+            )
+        },
+    );
 
     view! {
         <style>".deco-templates-noscript-list { display: none; }"</style>
@@ -791,16 +796,17 @@ pub fn DecoTemplatesPage() -> impl IntoView {
                 <DecoTemplatesNoScriptRows/>
             </div>
         </noscript>
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <Suspense fallback=admin_loading_resource_view>
             {move || {
-                initial.get().map(|(initial_groups, initial_templates)| {
-                    view! {
+                initial.get().map(|result| admin_result_view(
+                    result,
+                    |(initial_groups, initial_templates)| view! {
                         <DecoTemplatesIsland
                             initial_groups=initial_groups
                             initial_templates=initial_templates
                         />
-                    }
-                })
+                    }.into_any(),
+                ))
             }}
         </Suspense>
     }
@@ -808,18 +814,20 @@ pub fn DecoTemplatesPage() -> impl IntoView {
 
 #[component]
 fn DecoTemplatesNoScriptRows() -> impl IntoView {
-    let (groups, rows) = load_deco_templates_no_script_rows().unwrap_or_default();
-    view! {
-        <div class=style::page>
-            <div class=style::content>
-                <section class=style::section>
-                    <h2 class=style::section_title>{tr(TextKey::SavedDecoTemplates)}</h2>
-                    <div class=style::divider></div>
-                    <NoScriptDecoTemplateTree groups=groups rows=rows/>
-                </section>
+    admin_result_view(load_deco_templates_no_script_rows(), |(groups, rows)| {
+        view! {
+            <div class=style::page>
+                <div class=style::content>
+                    <section class=style::section>
+                        <h2 class=style::section_title>{tr(TextKey::SavedDecoTemplates)}</h2>
+                        <div class=style::divider></div>
+                        <NoScriptDecoTemplateTree groups=groups rows=rows/>
+                    </section>
+                </div>
             </div>
-        </div>
-    }
+        }
+        .into_any()
+    })
 }
 
 #[island]
@@ -828,8 +836,10 @@ fn DecoTemplatesIsland(
     initial_templates: Vec<DecoTemplateRow>,
 ) -> impl IntoView {
     let current_groups = RwSignal::new(initial_groups);
-    let groups: LocalResource<Vec<DecoTemplateGroupRow>> =
-        LocalResource::new(|| async { list_deco_template_groups().await.unwrap_or_default() });
+    let load_toast = use_toast();
+    let groups: LocalResource<Vec<DecoTemplateGroupRow>> = LocalResource::new(move || async move {
+        load_or_notify(list_deco_template_groups().await, load_toast)
+    });
     Effect::new(move |_| {
         if let Some(rows) = groups.get() {
             current_groups.set(rows);
@@ -839,7 +849,7 @@ fn DecoTemplatesIsland(
     let current_templates = RwSignal::new(initial_templates);
     let templates: LocalResource<Vec<DecoTemplateRow>> = LocalResource::new(move || {
         let query = search.get();
-        async move { list_deco_templates(query).await.unwrap_or_default() }
+        async move { load_or_notify(list_deco_templates(query).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(rows) = templates.get() {
@@ -1246,21 +1256,19 @@ pub fn DecoTemplateEditorPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
-    let data: Resource<(
-        Option<DecoTemplateForm>,
-        Vec<DecoTemplateItemForm>,
-        Vec<DecoGroupRow>,
-    )> = Resource::new_blocking(template_id, |id| async move {
-        let template = get_deco_template(id).await.unwrap_or(None);
-        let items = get_deco_template_items(id).await.unwrap_or_default();
-        let groups = list_deco_groups().await.unwrap_or_default();
-        (template, items, groups)
+    let data = Resource::new_blocking(template_id, |id| async move {
+        tokio::try_join!(
+            get_deco_template(id),
+            get_deco_template_items(id),
+            list_deco_groups(),
+        )
     });
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || data.get().map(|(template, items, groups)| {
-                match template {
+        <Suspense fallback=admin_loading_resource_view>
+            {move || data.get().map(|result| admin_result_view(
+                result,
+                |(template, items, groups)| match template {
                     Some(template) => view! {
                         <DecoTemplateEditorIsland
                             template=template
@@ -1274,8 +1282,8 @@ pub fn DecoTemplateEditorPage() -> impl IntoView {
                             <a href="/deco-templates">{tr(TextKey::BackToDecoTemplates)}</a>
                         </p>
                     }.into_any(),
-                }
-            })}
+                },
+            ))}
         </Suspense>
     }
 }
@@ -1311,19 +1319,20 @@ fn DecoTemplateEditorForm(
     Effect::new(move |_| {
         let group_id = selected_deco_group.get();
         #[cfg(target_arch = "wasm32")]
-        leptos::task::spawn_local(async move {
-            let rows = if group_id <= 0 {
-                Vec::new()
-            } else {
-                list_decos(String::new())
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|row| row.group_id == group_id && row.id >= 0)
-                    .collect()
-            };
-            decos.set(rows);
-        });
+        {
+            let load_toast = use_toast();
+            leptos::task::spawn_local(async move {
+                let rows = if group_id <= 0 {
+                    Vec::new()
+                } else {
+                    load_or_notify(list_decos(String::new()).await, load_toast)
+                        .into_iter()
+                        .filter(|row| row.group_id == group_id && row.id >= 0)
+                        .collect()
+                };
+                decos.set(rows);
+            });
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             let _ = group_id;
@@ -1705,64 +1714,115 @@ fn hidden_deco_template_item_inputs(items: Vec<DecoTemplateItemForm>) -> impl In
     }
 }
 
-fn load_decos_no_script_rows() -> Option<(Vec<DecoGroupRow>, Vec<DecoRow>)> {
+fn load_decos_no_script_rows() -> Result<(Vec<DecoGroupRow>, Vec<DecoRow>), String> {
     #[cfg(feature = "ssr")]
     {
         let state = expect_context::<AppState>();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let groups = list_deco_groups_with_pool(&state.pool).await.ok()?;
-                let rows = list_decos_with_pool(&state.pool, "").await.ok()?;
-                Some((groups, rows))
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    let groups = state
+                        .application
+                        .list_deco_groups()
+                        .await?
+                        .into_iter()
+                        .map(|row| DecoGroupRow {
+                            id: row.id,
+                            name: row.name,
+                            deco_count: row.deco_count,
+                        })
+                        .collect();
+                    let rows = state
+                        .application
+                        .list_decos("")
+                        .await?
+                        .into_iter()
+                        .map(|row| DecoRow {
+                            id: row.id,
+                            group_id: row.group_id,
+                            group_name: row.group_name,
+                            name: row.name,
+                        })
+                        .collect();
+                    Ok((groups, rows))
+                })
+                .map_err(|error: ersatzrs_app::ApplicationError| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
-        None
+        Ok((Vec::new(), Vec::new()))
     }
 }
 
-fn load_deco_templates_no_script_rows() -> Option<(Vec<DecoTemplateGroupRow>, Vec<DecoTemplateRow>)>
-{
+fn load_deco_templates_no_script_rows(
+) -> Result<(Vec<DecoTemplateGroupRow>, Vec<DecoTemplateRow>), String> {
     #[cfg(feature = "ssr")]
     {
         let state = expect_context::<AppState>();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let groups = list_deco_template_groups_with_pool(&state.pool)
-                    .await
-                    .ok()?;
-                let rows = list_deco_templates_with_pool(&state.pool, "").await.ok()?;
-                Some((groups, rows))
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    let groups = state
+                        .application
+                        .list_deco_template_groups()
+                        .await?
+                        .into_iter()
+                        .map(|row| DecoTemplateGroupRow {
+                            id: row.id,
+                            name: row.name,
+                            template_count: row.template_count,
+                        })
+                        .collect();
+                    let rows = state
+                        .application
+                        .list_deco_templates("")
+                        .await?
+                        .into_iter()
+                        .map(deco_template_row_from_admin)
+                        .collect();
+                    Ok((groups, rows))
+                })
+                .map_err(|error: ersatzrs_app::ApplicationError| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
-        None
+        Ok((Vec::new(), Vec::new()))
     }
 }
 
-fn load_deco_editor_no_script_data(deco_id: i64) -> Option<(DecoForm, DecoEditorOptions)> {
+fn load_deco_editor_no_script_data(
+    deco_id: i64,
+) -> Result<Option<(DecoForm, DecoEditorOptions)>, String> {
     #[cfg(feature = "ssr")]
     {
         let state = expect_context::<AppState>();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let deco = get_deco_with_pool(&state.pool, deco_id)
-                    .await
-                    .ok()
-                    .flatten()?;
-                let options = load_deco_editor_options_with_pool(&state.pool).await.ok()?;
-                Some((deco, options))
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async move {
+                    let Some(deco) = state
+                        .application
+                        .get_deco(deco_id)
+                        .await?
+                        .map(deco_form_from_admin)
+                    else {
+                        return Ok(None);
+                    };
+                    let options = state
+                        .application
+                        .load_deco_editor_options()
+                        .await
+                        .map(deco_editor_options_from_admin)?;
+                    Ok(Some((deco, options)))
+                })
+                .map_err(|error: ersatzrs_app::ApplicationError| error.to_string())
         })
     }
     #[cfg(not(feature = "ssr"))]
     {
         let _ = deco_id;
-        None
+        Ok(None)
     }
 }
 
