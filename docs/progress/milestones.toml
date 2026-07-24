@@ -186,7 +186,7 @@ configurations, `./run.sh test-closeout` (977 nextest tests plus doctests), and
 id         = 'p7b-03'
 phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Migrate scan-operation orchestration'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'application-use-case-layer'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-01']
@@ -195,7 +195,31 @@ Application services own library/show scan admission, FIFO queueing, locking,
 progress, and failure lifecycle; every transport observes one operation
 registry and existing scan behavior remains regression-proven.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-24. `RequestLibraryScan` and `RequestShowScan` validate
+positive persisted identities, provider subtype, show membership, and sync
+eligibility before admitting every accepted request to one unbounded FIFO
+worker port. Scheduled admission atomically coalesces a library that is already
+queued or running while manual repeats retain FIFO semantics.
+`ScanOperationRegistry` owns queued/running/completed/failed state, per-library
+full/show exclusion, clamped progress, retained failure diagnostics, bounded
+terminal history, and success/failure/cancellation/worker shutdown cleanup.
+The native composition root dispatches Plex, Jellyfin, and Emby targeted show
+scans, preserves Local full-library fallback and deep-scan semantics, and
+extracts embedded subtitles only after successful eligible deep show scans.
+Leptos server-function names, arguments, polling DTOs, progress rings/spinners,
+localization, and hydration shape remain unchanged; rejected requests now use
+the existing transport error path instead of reporting a queued bool, and an
+additive diagnostic query exposes terminal operation state.
+Periodic refreshes and web producers now use application admission, and
+architecture lint rejects reintroduced web queue/progress ownership, direct
+server-function provider dispatch, scheduler subprocess dispatch, or concrete
+application dependencies. External-collection synchronization remains the
+separate keyed operation already owned by the shared application coordinator.
+Focused application, infrastructure, scheduler, web route, and architecture
+regressions passed; complete closeout evidence is recorded in the matching
+session and parity feature.
+'''
 
 [[milestone]]
 id         = 'p7b-04'

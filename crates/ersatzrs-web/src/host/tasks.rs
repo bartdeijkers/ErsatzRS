@@ -27,8 +27,13 @@ pub fn spawn_background_tasks(
         tokio::spawn(run_trakt_maintenance(maintenance.pool, shutdown.clone())),
         tokio::spawn(run_maintenance_scheduler(
             maintenance.playout_build_rx,
-            maintenance.application,
+            maintenance.application.clone(),
             maintenance.hls_sessions,
+            shutdown.clone(),
+        )),
+        tokio::spawn(crate::host::scanning::run_scan_worker(
+            maintenance.scan_work_rx,
+            maintenance.application,
             shutdown,
         )),
     ]
@@ -43,6 +48,7 @@ pub struct HdhrTaskInputs {
 pub struct MaintenanceTaskInputs {
     pub pool: DbPool,
     pub playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
+    pub scan_work_rx: mpsc::UnboundedReceiver<ersatzrs_app::commands::ScanWorkRequest>,
     pub application: Arc<ersatzrs_app::ApplicationServices>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
 }
@@ -57,6 +63,7 @@ async fn run_maintenance_scheduler(
     if let Err(error) = run_scheduler(SchedulerOptions {
         tick: std::time::Duration::from_mins(1),
         build_requests: Some(playout_build_rx),
+        application: Some(application.clone()),
         build_activity: Some(operations.playout_activity()),
         hls_sessions: Some(hls_sessions),
         locker: Some(operations.entity_locker()),

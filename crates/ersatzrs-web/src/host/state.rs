@@ -1,7 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicI32, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 
 use ersatzrs_app::{
@@ -18,6 +18,8 @@ use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
+use super::scanning::{NativeScanRuntime, TokioScanWorkQueue};
+
 #[derive(Clone)]
 struct TokioPlayoutBuildQueue {
     sender: mpsc::UnboundedSender<PlayoutBuildRequest>,
@@ -28,115 +30,6 @@ impl PlayoutBuildQueue for TokioPlayoutBuildQueue {
         self.sender
             .send(request)
             .map_err(|error| PlayoutBuildQueueError::unavailable(error.to_string()))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LibraryScanJob {
-    pub library_id: i64,
-    pub kind: String,
-    pub deep_scan: bool,
-}
-
-#[derive(Default)]
-struct LibraryScanQueueState {
-    active: bool,
-    pending: VecDeque<LibraryScanJob>,
-}
-
-/// FIFO queue for library scans. ErsatzTV serializes scans through its hosted
-/// scanner queue; this keeps repeated admin clicks ordered instead of racing
-/// provider scans or dropping requests while one scan is already active.
-#[derive(Clone, Default)]
-pub struct LibraryScanQueue {
-    inner: Arc<Mutex<LibraryScanQueueState>>,
-}
-
-/// In-process map of `library_id -> fractional progress in [0.0, 1.0]`.
-/// Mirrors ETV's `IScannerProxyService.GetProgress` + the `LibraryScanProgress`
-/// Courier notification, but polled rather than push-based.
-///
-/// Scanner entry points write through a `ScanProgressSink` adapter that
-/// targets this map; the libraries page reads a snapshot via a server fn.
-#[derive(Clone, Default)]
-pub struct ScanProgressMap {
-    inner: Arc<Mutex<HashMap<i64, f32>>>,
-}
-
-impl ScanProgressMap {
-    pub fn set(&self, library_id: i64, fraction: f32) {
-        let clamped = fraction.clamp(0.0, 1.0);
-        if let Ok(mut map) = self.inner.lock() {
-            map.insert(library_id, clamped);
-        }
-    }
-
-    pub fn clear(&self, library_id: i64) {
-        if let Ok(mut map) = self.inner.lock() {
-            map.remove(&library_id);
-        }
-    }
-
-    pub fn snapshot(&self) -> HashMap<i64, f32> {
-        self.inner.lock().map(|map| map.clone()).unwrap_or_default()
-    }
-}
-
-/// `ScanProgressSink` impl that fans out into a `ScanProgressMap` for one
-/// specific `library_id`. Use `ScanProgressMap::sink_for(library_id)` to build
-/// one inside the scan server fn before spawning the background task.
-pub struct LibraryProgressSink {
-    map: ScanProgressMap,
-    library_id: i64,
-}
-
-impl ScanProgressMap {
-    #[must_use]
-    pub fn sink_for(&self, library_id: i64) -> LibraryProgressSink {
-        LibraryProgressSink {
-            map: self.clone(),
-            library_id,
-        }
-    }
-}
-
-impl ersatzrs_domain::ScanProgressSink for LibraryProgressSink {
-    fn report(&self, fraction: f32) {
-        self.map.set(self.library_id, fraction);
-    }
-}
-
-impl LibraryScanQueue {
-    /// Enqueue `job`. Returns true only when a worker should be spawned.
-    pub fn enqueue(&self, job: LibraryScanJob) -> bool {
-        self.inner.lock().is_ok_and(|mut state| {
-            state.pending.push_back(job);
-            if state.active {
-                false
-            } else {
-                state.active = true;
-                true
-            }
-        })
-    }
-
-    pub fn pop_next_or_stop(&self) -> Option<LibraryScanJob> {
-        self.inner.lock().ok().and_then(|mut state| {
-            if let Some(job) = state.pending.pop_front() {
-                Some(job)
-            } else {
-                state.active = false;
-                None
-            }
-        })
-    }
-
-    #[must_use]
-    pub fn queued_libraries(&self) -> Vec<i64> {
-        self.inner
-            .lock()
-            .map(|state| state.pending.iter().map(|job| job.library_id).collect())
-            .unwrap_or_default()
     }
 }
 
@@ -174,8 +67,6 @@ pub struct AppState {
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
-    pub library_scan_queue: LibraryScanQueue,
-    pub scan_progress: ScanProgressMap,
 }
 
 #[derive(Clone)]
@@ -198,6 +89,35 @@ impl AppState {
         playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
+        let (scan_work_tx, _scan_work_rx) = mpsc::unbounded_channel();
+        Self::new_with_scan_queue(
+            pool,
+            database_backend,
+            system_startup,
+            ffmpeg_runtime,
+            device_uuid,
+            tuner_count,
+            iptv_access_token_verifier,
+            playout_build_tx,
+            scan_work_tx,
+            playout_locker,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn new_with_scan_queue(
+        pool: DbPool,
+        database_backend: DatabaseBackend,
+        system_startup: SystemStartup,
+        ffmpeg_runtime: FfmpegRuntimeReport,
+        device_uuid: Uuid,
+        tuner_count: i32,
+        iptv_access_token_verifier: IptvAccessTokenVerifier,
+        playout_build_tx: mpsc::UnboundedSender<PlayoutBuildRequest>,
+        scan_work_tx: mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
+        playout_locker: ersatzrs_core::locking::EntityLocker,
+    ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let application = Arc::new(ApplicationServices::new(
             ApplicationPorts::new(
@@ -206,6 +126,8 @@ impl AppState {
                 Arc::new(TokioPlayoutBuildQueue {
                     sender: playout_build_tx,
                 }),
+                Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
+                Arc::new(NativeScanRuntime::new(pool.clone())),
             ),
             OperationCoordinator::new(
                 playout_locker,
@@ -226,8 +148,6 @@ impl AppState {
             hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,
-            library_scan_queue: LibraryScanQueue::default(),
-            scan_progress: ScanProgressMap::default(),
         }
     }
 
@@ -276,11 +196,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AppState, IptvAccessTokenVerifier, LibraryScanJob, LibraryScanQueue, ScanProgressMap,
-        SystemStartup,
-    };
-    use ersatzrs_domain::ScanProgressSink;
+    use super::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_infra::db::DatabaseSchemaStatus;
 
     #[test]
@@ -292,64 +208,6 @@ mod tests {
 
         assert!(startup.is_ready());
         assert_eq!(startup.health_issue_counts(), (0, 0));
-    }
-
-    #[test]
-    fn scan_progress_map_set_clear_snapshot_round_trip() {
-        let map = ScanProgressMap::default();
-        assert!(map.snapshot().is_empty());
-
-        map.set(7, 0.25);
-        map.set(8, 1.5); // should clamp to 1.0
-        map.set(9, -0.5); // should clamp to 0.0
-
-        let snap = map.snapshot();
-        assert_eq!(snap.get(&7).copied(), Some(0.25));
-        assert_eq!(snap.get(&8).copied(), Some(1.0));
-        assert_eq!(snap.get(&9).copied(), Some(0.0));
-
-        map.clear(7);
-        let snap = map.snapshot();
-        assert!(!snap.contains_key(&7));
-        assert_eq!(snap.len(), 2);
-    }
-
-    #[test]
-    fn library_progress_sink_writes_into_owning_map() {
-        let map = ScanProgressMap::default();
-        let sink = map.sink_for(42);
-        sink.report(0.0);
-        sink.report(0.5);
-        sink.report(0.9);
-        assert_eq!(map.snapshot().get(&42).copied(), Some(0.9));
-    }
-
-    #[test]
-    fn library_scan_queue_runs_jobs_fifo_and_stops_when_empty() {
-        let queue = LibraryScanQueue::default();
-
-        assert!(queue.enqueue(LibraryScanJob {
-            library_id: 2,
-            kind: "Plex".to_owned(),
-            deep_scan: false,
-        }));
-        assert!(!queue.enqueue(LibraryScanJob {
-            library_id: 1,
-            kind: "Local".to_owned(),
-            deep_scan: true,
-        }));
-        assert_eq!(queue.queued_libraries(), [2, 1]);
-
-        assert_eq!(queue.pop_next_or_stop().expect("first job").library_id, 2);
-        assert_eq!(queue.queued_libraries(), [1]);
-        assert_eq!(queue.pop_next_or_stop().expect("second job").library_id, 1);
-        assert!(queue.pop_next_or_stop().is_none());
-
-        assert!(queue.enqueue(LibraryScanJob {
-            library_id: 3,
-            kind: "Emby".to_owned(),
-            deep_scan: false,
-        }));
     }
 
     #[tokio::test]
@@ -379,33 +237,6 @@ mod tests {
         let locker = state.application.operations().entity_locker();
         assert!(locker.lock_playout(12));
         assert_eq!(state.application.operations().active_playout_builds(), [12]);
-    }
-
-    #[test]
-    fn scan_progress_map_handles_concurrent_writes() {
-        use std::thread;
-
-        let map = ScanProgressMap::default();
-        let mut handles = Vec::new();
-        for library_id in 0..16i64 {
-            let map = map.clone();
-            handles.push(thread::spawn(move || {
-                for step in 0..100i32 {
-                    #[allow(clippy::cast_precision_loss)]
-                    let fraction = step as f32 / 100.0;
-                    map.set(library_id, fraction);
-                }
-            }));
-        }
-        for h in handles {
-            h.join().unwrap();
-        }
-        let snap = map.snapshot();
-        assert_eq!(snap.len(), 16);
-        for library_id in 0..16i64 {
-            let v = snap.get(&library_id).copied().unwrap();
-            assert!((0.0..=1.0).contains(&v));
-        }
     }
 
     #[test]

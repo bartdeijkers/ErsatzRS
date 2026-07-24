@@ -1,22 +1,21 @@
 //! Shared process-local coordination for long-running application operations.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use ersatzrs_core::locking::{
-    EntityLocker, LibraryLockGuard, PlayoutBuildActivity, PlayoutLockGuard,
-};
+use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity, PlayoutLockGuard};
 use ersatzrs_domain::EntityId;
 
-use crate::commands::BeginOperation;
-use crate::queries::{GetOperationStatus, OperationStatus};
+use crate::commands::{BeginOperation, ScanOperationId, ScanRequest, ScanWorkRequest};
+use crate::queries::{
+    GetLibraryScanStatus, GetOperationStatus, LibraryScanStatus, OperationStatus,
+    ScanOperationSnapshot, ScanOperationState,
+};
 
 /// Stable identity for an operation coordinated across transport and worker
 /// adapters.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum OperationKey {
-    /// Scan one library.
-    LibraryScan(EntityId),
     /// Build one playout.
     PlayoutBuild(EntityId),
     /// Synchronize remote collections for one media source.
@@ -52,9 +51,6 @@ pub struct OperationGuard {
 }
 
 enum OperationGuardKind {
-    Library {
-        _guard: LibraryLockGuard,
-    },
     Playout {
         _guard: PlayoutLockGuard,
     },
@@ -77,11 +73,84 @@ struct OperationCoordinatorInner {
     external: Mutex<HashSet<OperationKey>>,
 }
 
+const MAX_TERMINAL_SCAN_OPERATIONS: usize = 256;
+
+struct ScanOperationRecord {
+    request: ScanRequest,
+    state: ScanOperationState,
+    progress: Option<f32>,
+}
+
+struct ScanOperationRegistryInner {
+    next_id: u64,
+    worker_available: bool,
+    operations: BTreeMap<ScanOperationId, ScanOperationRecord>,
+    terminal_order: VecDeque<ScanOperationId>,
+}
+
+impl Default for ScanOperationRegistryInner {
+    fn default() -> Self {
+        Self {
+            next_id: 0,
+            worker_available: true,
+            operations: BTreeMap::new(),
+            terminal_order: VecDeque::new(),
+        }
+    }
+}
+
+/// Application-owned library/show scan admission and lifecycle registry.
+#[derive(Clone, Default)]
+pub struct ScanOperationRegistry {
+    inner: Arc<Mutex<ScanOperationRegistryInner>>,
+}
+
+/// Scan admission failure before a queue token was accepted.
+#[derive(Debug)]
+pub(crate) enum ScanAdmissionError<E> {
+    /// The native worker has stopped.
+    WorkerUnavailable,
+    /// The queue adapter rejected the token.
+    Queue(E),
+}
+
+/// Guard that records cancellation if worker execution exits unexpectedly.
+#[must_use = "bind the guard for the complete scan execution lifecycle"]
+pub struct ScanExecutionGuard {
+    registry: ScanOperationRegistry,
+    operation_id: ScanOperationId,
+    finished: bool,
+}
+
+impl ScanExecutionGuard {
+    /// Mark worker execution as successfully completed.
+    pub fn complete(mut self) {
+        self.registry.complete(self.operation_id);
+        self.finished = true;
+    }
+
+    /// Mark worker execution as failed with an observable diagnostic.
+    pub fn fail(mut self, message: impl Into<String>) {
+        self.registry.fail(self.operation_id, message.into());
+        self.finished = true;
+    }
+}
+
+impl Drop for ScanExecutionGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.registry
+                .fail(self.operation_id, "scan cancelled".to_owned());
+        }
+    }
+}
+
 /// Single application-owned coordination surface shared by web and workers.
 #[derive(Clone)]
 pub struct OperationCoordinator {
     locker: EntityLocker,
     playout_activity: PlayoutBuildActivity,
+    scan_activity: ScanOperationRegistry,
     inner: Arc<OperationCoordinatorInner>,
 }
 
@@ -93,6 +162,7 @@ impl OperationCoordinator {
         Self {
             locker,
             playout_activity,
+            scan_activity: ScanOperationRegistry::default(),
             inner: Arc::new(OperationCoordinatorInner::default()),
         }
     }
@@ -101,13 +171,6 @@ impl OperationCoordinator {
     #[must_use]
     pub fn begin(&self, command: BeginOperation) -> BeginOperationOutcome {
         let guard = match command.key {
-            OperationKey::LibraryScan(library_id) => {
-                LibraryLockGuard::try_acquire(&self.locker, library_id).map(|guard| {
-                    OperationGuard {
-                        kind: OperationGuardKind::Library { _guard: guard },
-                    }
-                })
-            }
             OperationKey::PlayoutBuild(playout_id) => {
                 PlayoutLockGuard::try_acquire(&self.locker, playout_id).map(|guard| {
                     OperationGuard {
@@ -139,7 +202,6 @@ impl OperationCoordinator {
     #[must_use]
     pub fn status(&self, query: GetOperationStatus) -> OperationStatus {
         let running = match query.key {
-            OperationKey::LibraryScan(id) => self.locker.is_library_locked(id),
             OperationKey::PlayoutBuild(id) => self.locker.is_playout_locked(id),
             key @ OperationKey::ExternalCollections { .. } => {
                 recover(self.inner.external.lock()).contains(&key)
@@ -155,7 +217,7 @@ impl OperationCoordinator {
     /// Snapshot active library scan ids for polling adapters.
     #[must_use]
     pub fn active_library_scans(&self) -> Vec<EntityId> {
-        self.locker.locked_libraries()
+        self.scan_activity.active_library_ids()
     }
 
     /// Snapshot active playout build ids for polling adapters.
@@ -174,7 +236,7 @@ impl OperationCoordinator {
                     provider,
                     media_source_id,
                 } => Some((provider.clone(), *media_source_id)),
-                OperationKey::LibraryScan(_) | OperationKey::PlayoutBuild(_) => None,
+                OperationKey::PlayoutBuild(_) => None,
             })
             .collect()
     }
@@ -192,6 +254,12 @@ impl OperationCoordinator {
     pub fn playout_activity(&self) -> PlayoutBuildActivity {
         self.playout_activity.clone()
     }
+
+    /// Shared scan admission, progress, and terminal-state registry.
+    #[must_use]
+    pub fn scan_activity(&self) -> ScanOperationRegistry {
+        self.scan_activity.clone()
+    }
 }
 
 impl std::fmt::Debug for OperationCoordinator {
@@ -208,6 +276,262 @@ impl std::fmt::Debug for OperationCoordinator {
     }
 }
 
+impl ScanOperationRegistry {
+    pub(crate) fn admit<E>(
+        &self,
+        request: ScanRequest,
+        enqueue: impl FnOnce(ScanWorkRequest) -> std::result::Result<(), E>,
+    ) -> std::result::Result<ScanOperationId, ScanAdmissionError<E>> {
+        self.admit_inner(request, false, enqueue)
+            .map(|operation_id| operation_id.expect("manual scan admission cannot coalesce"))
+    }
+
+    pub(crate) fn admit_if_idle<E>(
+        &self,
+        request: ScanRequest,
+        enqueue: impl FnOnce(ScanWorkRequest) -> std::result::Result<(), E>,
+    ) -> std::result::Result<Option<ScanOperationId>, ScanAdmissionError<E>> {
+        self.admit_inner(request, true, enqueue)
+    }
+
+    fn admit_inner<E>(
+        &self,
+        request: ScanRequest,
+        coalesce_if_active: bool,
+        enqueue: impl FnOnce(ScanWorkRequest) -> std::result::Result<(), E>,
+    ) -> std::result::Result<Option<ScanOperationId>, ScanAdmissionError<E>> {
+        let mut inner = recover(self.inner.lock());
+        if !inner.worker_available {
+            return Err(ScanAdmissionError::WorkerUnavailable);
+        }
+        if coalesce_if_active
+            && inner.operations.values().any(|record| {
+                record.request.library_id() == request.library_id()
+                    && matches!(
+                        record.state,
+                        ScanOperationState::Queued | ScanOperationState::Running
+                    )
+            })
+        {
+            return Ok(None);
+        }
+
+        inner.next_id = inner.next_id.saturating_add(1);
+        let operation_id = ScanOperationId(inner.next_id);
+        let work = ScanWorkRequest {
+            operation_id,
+            request,
+        };
+        enqueue(work).map_err(ScanAdmissionError::Queue)?;
+        inner.operations.insert(
+            operation_id,
+            ScanOperationRecord {
+                request,
+                state: ScanOperationState::Queued,
+                progress: None,
+            },
+        );
+        Ok(Some(operation_id))
+    }
+
+    /// Mark the native FIFO worker available for admission.
+    pub fn worker_started(&self) {
+        recover(self.inner.lock()).worker_available = true;
+    }
+
+    /// Fail every non-terminal request and stop accepting new work.
+    pub fn worker_stopped(&self, message: impl Into<String>) {
+        let message = message.into();
+        let mut inner = recover(self.inner.lock());
+        inner.worker_available = false;
+        let active_ids = inner
+            .operations
+            .iter()
+            .filter_map(|(id, record)| {
+                matches!(
+                    record.state,
+                    ScanOperationState::Queued | ScanOperationState::Running
+                )
+                .then_some(*id)
+            })
+            .collect::<Vec<_>>();
+        for operation_id in active_ids {
+            mark_terminal(
+                &mut inner,
+                operation_id,
+                ScanOperationState::Failed {
+                    message: message.clone(),
+                },
+            );
+        }
+    }
+
+    /// Start one queued request and acquire its per-library exclusion guard.
+    #[must_use]
+    pub fn start_guard(&self, operation_id: ScanOperationId) -> Option<ScanExecutionGuard> {
+        let mut inner = recover(self.inner.lock());
+        let library_id = inner.operations.get(&operation_id)?.request.library_id();
+        let another_running = inner.operations.iter().any(|(candidate_id, record)| {
+            *candidate_id != operation_id
+                && record.request.library_id() == library_id
+                && matches!(record.state, ScanOperationState::Running)
+        });
+        if another_running {
+            return None;
+        }
+
+        let record = inner.operations.get_mut(&operation_id)?;
+        if !matches!(record.state, ScanOperationState::Queued) {
+            return None;
+        }
+        record.state = ScanOperationState::Running;
+        record.progress = None;
+        Some(ScanExecutionGuard {
+            registry: self.clone(),
+            operation_id,
+            finished: false,
+        })
+    }
+
+    /// Record clamped active progress for one running request.
+    pub fn report_progress(&self, operation_id: ScanOperationId, fraction: f32) {
+        let mut inner = recover(self.inner.lock());
+        if let Some(record) = inner.operations.get_mut(&operation_id) {
+            if matches!(record.state, ScanOperationState::Running) {
+                record.progress = Some(fraction.clamp(0.0, 1.0));
+            }
+        }
+    }
+
+    /// Snapshot all retained active and terminal operations.
+    #[must_use]
+    pub fn snapshots(&self) -> Vec<ScanOperationSnapshot> {
+        recover(self.inner.lock())
+            .operations
+            .iter()
+            .map(|(operation_id, record)| ScanOperationSnapshot {
+                operation_id: *operation_id,
+                request: record.request,
+                state: record.state.clone(),
+                progress: record.progress,
+            })
+            .collect()
+    }
+
+    /// Snapshot distinct library ids with queued or running work.
+    #[must_use]
+    pub fn active_library_ids(&self) -> Vec<EntityId> {
+        let mut ids = recover(self.inner.lock())
+            .operations
+            .values()
+            .filter_map(|record| {
+                matches!(
+                    record.state,
+                    ScanOperationState::Queued | ScanOperationState::Running
+                )
+                .then_some(record.request.library_id())
+            })
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
+    /// Snapshot active progress by library.
+    #[must_use]
+    pub fn progress_by_library(&self) -> Vec<(EntityId, f32)> {
+        let mut result = recover(self.inner.lock())
+            .operations
+            .values()
+            .filter_map(|record| {
+                matches!(record.state, ScanOperationState::Running)
+                    .then(|| {
+                        record
+                            .progress
+                            .map(|progress| (record.request.library_id(), progress))
+                    })
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        result.sort_unstable_by_key(|(library_id, _)| *library_id);
+        result
+    }
+
+    /// Read the aggregate state for one library.
+    #[must_use]
+    pub fn library_status(&self, query: GetLibraryScanStatus) -> LibraryScanStatus {
+        let inner = recover(self.inner.lock());
+        let matching = inner
+            .operations
+            .iter()
+            .rev()
+            .filter(|(_, record)| record.request.library_id() == query.library_id)
+            .collect::<Vec<_>>();
+        if matching
+            .iter()
+            .any(|(_, record)| matches!(record.state, ScanOperationState::Running))
+        {
+            return LibraryScanStatus::Running;
+        }
+        if matching
+            .iter()
+            .any(|(_, record)| matches!(record.state, ScanOperationState::Queued))
+        {
+            return LibraryScanStatus::Queued;
+        }
+        match matching.first().map(|(_, record)| &record.state) {
+            Some(ScanOperationState::Completed) => LibraryScanStatus::Completed,
+            Some(ScanOperationState::Failed { message }) => LibraryScanStatus::Failed {
+                message: message.clone(),
+            },
+            Some(ScanOperationState::Queued | ScanOperationState::Running) => {
+                unreachable!("active states handled above")
+            }
+            None => LibraryScanStatus::Idle,
+        }
+    }
+
+    fn complete(&self, operation_id: ScanOperationId) {
+        mark_terminal(
+            &mut recover(self.inner.lock()),
+            operation_id,
+            ScanOperationState::Completed,
+        );
+    }
+
+    fn fail(&self, operation_id: ScanOperationId, message: String) {
+        mark_terminal(
+            &mut recover(self.inner.lock()),
+            operation_id,
+            ScanOperationState::Failed { message },
+        );
+    }
+}
+
+fn mark_terminal(
+    inner: &mut ScanOperationRegistryInner,
+    operation_id: ScanOperationId,
+    state: ScanOperationState,
+) {
+    let Some(record) = inner.operations.get_mut(&operation_id) else {
+        return;
+    };
+    if matches!(
+        record.state,
+        ScanOperationState::Completed | ScanOperationState::Failed { .. }
+    ) {
+        return;
+    }
+    record.state = state;
+    record.progress = None;
+    inner.terminal_order.push_back(operation_id);
+    while inner.terminal_order.len() > MAX_TERMINAL_SCAN_OPERATIONS {
+        if let Some(expired) = inner.terminal_order.pop_front() {
+            inner.operations.remove(&expired);
+        }
+    }
+}
+
 fn recover<'a, T>(
     result: std::result::Result<MutexGuard<'a, T>, PoisonError<MutexGuard<'a, T>>>,
 ) -> MutexGuard<'a, T> {
@@ -217,40 +541,38 @@ fn recover<'a, T>(
 #[cfg(test)]
 mod tests {
     use super::{BeginOperationOutcome, OperationCoordinator, OperationKey};
-    use crate::commands::BeginOperation;
-    use crate::queries::{GetOperationStatus, OperationStatus};
+    use crate::commands::{BeginOperation, ScanRequest};
+    use crate::queries::{
+        GetLibraryScanStatus, GetOperationStatus, LibraryScanStatus, OperationStatus,
+        ScanOperationState,
+    };
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
+    use ersatzrs_domain::MediaSourceKind;
 
     #[test]
-    fn one_coordinator_excludes_library_and_playout_operations() {
+    fn one_coordinator_excludes_playout_operations() {
         let coordinator =
             OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
 
-        let library = OperationKey::LibraryScan(4);
-        let library_guard = coordinator
-            .begin(BeginOperation::new(library.clone()))
-            .into_guard()
-            .expect("first library operation");
-        assert_eq!(
-            coordinator.status(GetOperationStatus::new(library.clone())),
-            OperationStatus::Running
-        );
-        assert!(matches!(
-            coordinator.begin(BeginOperation::new(library.clone())),
-            BeginOperationOutcome::AlreadyRunning
-        ));
-        drop(library_guard);
-        assert_eq!(
-            coordinator.status(GetOperationStatus::new(library)),
-            OperationStatus::Idle
-        );
-
         let playout = OperationKey::PlayoutBuild(9);
-        let _playout_guard = coordinator
+        let playout_guard = coordinator
             .begin(BeginOperation::new(playout.clone()))
             .into_guard()
             .expect("first playout operation");
+        assert_eq!(
+            coordinator.status(GetOperationStatus::new(playout.clone())),
+            OperationStatus::Running
+        );
+        assert!(matches!(
+            coordinator.begin(BeginOperation::new(playout.clone())),
+            BeginOperationOutcome::AlreadyRunning
+        ));
         assert_eq!(coordinator.active_playout_builds(), [9]);
+        drop(playout_guard);
+        assert_eq!(
+            coordinator.status(GetOperationStatus::new(playout)),
+            OperationStatus::Idle
+        );
     }
 
     #[test]
@@ -277,5 +599,118 @@ mod tests {
             coordinator.status(GetOperationStatus::new(key)),
             OperationStatus::Idle
         );
+    }
+
+    #[test]
+    fn scan_registry_tracks_success_and_cleans_terminal_progress() {
+        let coordinator =
+            OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+        let registry = coordinator.scan_activity();
+        let request = ScanRequest::Library {
+            provider: MediaSourceKind::Plex,
+            library_id: 7,
+            deep_scan: false,
+        };
+        let operation_id = registry
+            .admit(request, |_| Ok::<(), ()>(()))
+            .expect("accepted");
+        assert_eq!(
+            registry.library_status(GetLibraryScanStatus::new(7)),
+            LibraryScanStatus::Queued
+        );
+
+        let guard = registry.start_guard(operation_id).expect("worker start");
+        registry.report_progress(operation_id, 1.5);
+        assert_eq!(registry.progress_by_library(), [(7, 1.0)]);
+        assert_eq!(
+            registry.library_status(GetLibraryScanStatus::new(7)),
+            LibraryScanStatus::Running
+        );
+
+        guard.complete();
+
+        assert!(registry.active_library_ids().is_empty());
+        assert!(registry.progress_by_library().is_empty());
+        assert_eq!(
+            registry.library_status(GetLibraryScanStatus::new(7)),
+            LibraryScanStatus::Completed
+        );
+        assert!(matches!(
+            registry.snapshots()[0].state,
+            ScanOperationState::Completed
+        ));
+        assert_eq!(registry.snapshots()[0].progress, None);
+    }
+
+    #[test]
+    fn scan_registry_retains_failure_and_releases_shared_library_boundary() {
+        let coordinator =
+            OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+        let registry = coordinator.scan_activity();
+        let library = ScanRequest::Library {
+            provider: MediaSourceKind::Emby,
+            library_id: 11,
+            deep_scan: false,
+        };
+        let show = ScanRequest::Show {
+            provider: MediaSourceKind::Emby,
+            library_id: 11,
+            show_id: 12,
+            deep_scan: true,
+        };
+        let first = registry
+            .admit(library, |_| Ok::<(), ()>(()))
+            .expect("first");
+        let second = registry
+            .admit(show, |_| Ok::<(), ()>(()))
+            .expect("repeated request remains queued");
+        let first_guard = registry.start_guard(first).expect("first start");
+        assert!(
+            registry.start_guard(second).is_none(),
+            "library and show commands share one exclusion boundary"
+        );
+
+        first_guard.fail("provider offline");
+        let second_guard = registry
+            .start_guard(second)
+            .expect("next queued request starts after failure");
+        drop(second_guard);
+
+        assert!(matches!(
+            registry.library_status(GetLibraryScanStatus::new(11)),
+            LibraryScanStatus::Failed { .. }
+        ));
+        let failures = registry
+            .snapshots()
+            .into_iter()
+            .filter(|snapshot| matches!(snapshot.state, ScanOperationState::Failed { .. }))
+            .count();
+        assert_eq!(failures, 2);
+    }
+
+    #[test]
+    fn worker_shutdown_fails_queued_work_and_rejects_new_admission() {
+        let coordinator =
+            OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+        let registry = coordinator.scan_activity();
+        let request = ScanRequest::Library {
+            provider: MediaSourceKind::Local,
+            library_id: 13,
+            deep_scan: false,
+        };
+        registry
+            .admit(request, |_| Ok::<(), ()>(()))
+            .expect("queued");
+
+        registry.worker_stopped("shutdown");
+
+        assert!(matches!(
+            registry.library_status(GetLibraryScanStatus::new(13)),
+            LibraryScanStatus::Failed { ref message } if message == "shutdown"
+        ));
+        assert!(matches!(
+            registry.admit(request, |_| Ok::<(), ()>(())),
+            Err(super::ScanAdmissionError::WorkerUnavailable)
+        ));
     }
 }

@@ -44,7 +44,7 @@ pub use jellyfin::{
     JellyfinPathInfo, JellyfinPlaybackMetadata, JellyfinSeasonItem, JellyfinSeasonPage,
     JellyfinService, JellyfinShowItem, JellyfinShowPage,
 };
-pub use library::LibraryRepository;
+pub use library::{LibraryRepository, LibraryScanTarget};
 pub use media_item::MediaItemRepository;
 pub use media_source::MediaSourceRepository;
 pub use metadata::MetadataRepository;

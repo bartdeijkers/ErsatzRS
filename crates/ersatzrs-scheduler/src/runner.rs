@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
@@ -9,7 +8,7 @@ use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
-    run_maintenance_once, run_requested_playout_build, LibraryDispatchConfig, MaintenancePassReport,
+    run_maintenance_once, run_requested_playout_build, MaintenancePassReport,
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
@@ -27,11 +26,8 @@ pub struct SchedulerOptions {
     pub transcode_dir: Option<PathBuf>,
     /// Optional channel-guide cache folder pruned of orphaned XML files.
     pub channel_guide_dir: Option<PathBuf>,
-    /// Override path to the `ersatzrs-scanner` binary used by the library
-    /// refresh dispatcher.
-    pub scanner_command: Option<PathBuf>,
-    /// Extra arguments appended to every scanner invocation.
-    pub scanner_extra_args: Vec<OsString>,
+    /// Shared application command boundary for periodic library scans.
+    pub application: Option<Arc<ersatzrs_app::ApplicationServices>>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
     /// Shared activity registry used by the web host to distinguish accepted
@@ -65,8 +61,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         tick,
         transcode_dir,
         channel_guide_dir,
-        scanner_command,
-        scanner_extra_args,
+        application,
         mut build_requests,
         build_activity,
         hls_sessions,
@@ -76,10 +71,6 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
 
     let startup = db::bootstrap_media_server_database().await?;
     let cache_config = CacheCleanupConfig::from_paths(transcode_dir, channel_guide_dir);
-    let library_dispatch = LibraryDispatchConfig {
-        scanner_command,
-        extra_args: scanner_extra_args,
-    };
     // Single in-process `EntityLocker` shared across maintenance passes,
     // matching ErsatzTV's `IEntityLocker` singleton. When the web host supplies
     // one, reuse it so the admin UI can observe playout lock state.
@@ -89,7 +80,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         let report = run_maintenance_once(
             startup.pool,
             &cache_config,
-            &library_dispatch,
+            application.as_deref().map(|services| {
+                services as &dyn ersatzrs_core::maintenance::ScheduledLibraryScanRequester
+            }),
             &locker,
             startup.schema_status,
             hls_sessions.clone(),
@@ -113,7 +106,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 match run_maintenance_once(
                     startup.pool.clone(),
                     &cache_config,
-                    &library_dispatch,
+                    application.as_deref().map(|services| {
+                        services as &dyn ersatzrs_core::maintenance::ScheduledLibraryScanRequester
+                    }),
                     &locker,
                     startup.schema_status.clone(),
                     hls_sessions.clone(),

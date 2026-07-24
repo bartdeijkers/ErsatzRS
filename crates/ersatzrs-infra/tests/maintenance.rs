@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::locking::EntityLocker;
+use ersatzrs_core::maintenance::{ScheduledLibraryScanRequester, ScheduledScanRequestOutcome};
 use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_domain::{
@@ -16,7 +17,6 @@ use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db::DatabaseSchemaStatus;
 use ersatzrs_infra::maintenance::{
     load_library_refresh_interval, run_maintenance_once, run_requested_playout_build,
-    LibraryDispatchConfig,
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, Row, SqlitePool};
@@ -53,32 +53,29 @@ impl HlsSessionRegistry for FakeHlsRegistry {
     }
 }
 
-/// Build a tiny shell script that records its arguments to `record_path`,
-/// then exits with the requested status. The returned path is suitable for
-/// `LibraryDispatchConfig::scanner_command` on Unix.
-#[cfg(unix)]
-fn write_fake_scanner(
-    dir: &std::path::Path,
-    record_path: &std::path::Path,
-    exit_code: i32,
-) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let script = dir.join("fake-ersatzrs-scanner");
-    let body = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> {record}\nexit {exit}\n",
-        record = shell_escape(record_path.to_str().unwrap()),
-        exit = exit_code,
-    );
-    std::fs::write(&script, body).unwrap();
-    let mut perms = std::fs::metadata(&script).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(&script, perms).unwrap();
-    script
+struct FakeLibraryScanRequester {
+    requests: Mutex<Vec<i64>>,
+    outcome: ScheduledScanRequestOutcome,
 }
 
-#[cfg(unix)]
-fn shell_escape(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
+impl FakeLibraryScanRequester {
+    fn new(outcome: ScheduledScanRequestOutcome) -> Self {
+        Self {
+            requests: Mutex::new(Vec::new()),
+            outcome,
+        }
+    }
+}
+
+#[async_trait]
+impl ScheduledLibraryScanRequester for FakeLibraryScanRequester {
+    async fn request_scheduled_library_scan(&self, library_id: i64) -> ScheduledScanRequestOutcome {
+        self.requests
+            .lock()
+            .expect("fake library scan requester lock")
+            .push(library_id);
+        self.outcome.clone()
+    }
 }
 
 #[tokio::test]
@@ -108,10 +105,11 @@ async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
     .await
     .unwrap();
 
+    let library_scans = FakeLibraryScanRequester::new(ScheduledScanRequestOutcome::Accepted);
     let report = run_maintenance_once(
         pool.clone(),
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig::default(),
+        Some(&library_scans),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
         None,
@@ -120,6 +118,11 @@ async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
     .unwrap();
 
     assert!(report.loops_ran.library_refresh());
+    assert_eq!(
+        *library_scans.requests.lock().unwrap(),
+        vec![20],
+        "the periodic producer must use the application scan boundary"
+    );
     let rows = sqlx::query(
         r#"SELECT "Key", "Value"
            FROM "ConfigElement"
@@ -168,7 +171,7 @@ async fn maintenance_skips_disabled_library_refresh_loop_by_default() {
     let report = run_maintenance_once(
         pool.clone(),
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig::default(),
+        None,
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
         None,
@@ -225,7 +228,7 @@ async fn maintenance_respects_recent_library_scan_cutoff() {
     let report = run_maintenance_once(
         pool,
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig::default(),
+        None,
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
         None,
@@ -255,7 +258,7 @@ async fn maintenance_skips_playouts_with_held_in_memory_lock() {
     let report = run_maintenance_once(
         pool,
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig::default(),
+        None,
         &locker,
         DatabaseSchemaStatus::default(),
         None,
@@ -558,9 +561,8 @@ async fn maintenance_reads_scanner_refresh_interval_from_config() {
     );
 }
 
-#[cfg(unix)]
 #[tokio::test]
-async fn maintenance_dispatch_invokes_scanner_subprocess() {
+async fn maintenance_dispatch_uses_application_scan_requester() {
     let pool = common::test_db().await;
     sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
         .execute(&pool)
@@ -585,17 +587,11 @@ async fn maintenance_dispatch_invokes_scanner_subprocess() {
     .await
     .unwrap();
 
-    let tempdir = tempfile::tempdir().unwrap();
-    let record = tempdir.path().join("invocations.log");
-    let scanner = write_fake_scanner(tempdir.path(), &record, 0);
-
+    let library_scans = FakeLibraryScanRequester::new(ScheduledScanRequestOutcome::Accepted);
     let report = run_maintenance_once(
         pool,
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig {
-            scanner_command: Some(scanner),
-            extra_args: vec!["--dry-run".into()],
-        },
+        Some(&library_scans),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
         None,
@@ -606,16 +602,11 @@ async fn maintenance_dispatch_invokes_scanner_subprocess() {
     assert!(report.loops_ran.library_refresh());
     assert_eq!(report.libraries_dispatched, 1);
     assert_eq!(report.libraries_failed, 0);
-    let invocations = std::fs::read_to_string(&record).unwrap();
-    assert!(
-        invocations.contains("--provider local --library-id 42 --dry-run"),
-        "expected scanner invocation, got: {invocations}"
-    );
+    assert_eq!(*library_scans.requests.lock().unwrap(), vec![42]);
 }
 
-#[cfg(unix)]
 #[tokio::test]
-async fn maintenance_dispatch_marks_failed_libraries_when_scanner_exits_nonzero() {
+async fn maintenance_dispatch_marks_rejected_application_requests_failed() {
     let pool = common::test_db().await;
     sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
         .execute(&pool)
@@ -640,17 +631,13 @@ async fn maintenance_dispatch_marks_failed_libraries_when_scanner_exits_nonzero(
     .await
     .unwrap();
 
-    let tempdir = tempfile::tempdir().unwrap();
-    let record = tempdir.path().join("invocations.log");
-    let scanner = write_fake_scanner(tempdir.path(), &record, 7);
-
+    let library_scans = FakeLibraryScanRequester::new(ScheduledScanRequestOutcome::Rejected {
+        message: "library scanning is disabled".to_owned(),
+    });
     let report = run_maintenance_once(
         pool,
         &CacheCleanupConfig::default(),
-        &LibraryDispatchConfig {
-            scanner_command: Some(scanner),
-            extra_args: Vec::new(),
-        },
+        Some(&library_scans),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
         None,
@@ -661,4 +648,5 @@ async fn maintenance_dispatch_marks_failed_libraries_when_scanner_exits_nonzero(
     assert!(report.loops_ran.library_refresh());
     assert_eq!(report.libraries_dispatched, 0);
     assert_eq!(report.libraries_failed, 1);
+    assert_eq!(*library_scans.requests.lock().unwrap(), vec![43]);
 }

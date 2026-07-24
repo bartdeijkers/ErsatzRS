@@ -115,15 +115,7 @@ pub async fn run() {
     init_logging(&startup.pool).await;
     let listen_addr = configured_listen_addr();
 
-    if let Err(error) = seed_default_mpegts_script().await {
-        tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
-    }
-    if let Err(error) = extract_streaming_resources().await {
-        tracing::warn!(%error, "failed to extract bundled streaming resources");
-    }
-    if let Err(error) = extract_streaming_fonts().await {
-        tracing::warn!(%error, "failed to extract bundled streaming fonts");
-    }
+    prepare_streaming_resources().await;
 
     tracing::info!(
         database_url = %startup.database_url,
@@ -137,11 +129,10 @@ pub async fn run() {
     // must be accepted or return an error; bounded `try_send` silently lost
     // requests during Reset All operations.
     let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::unbounded_channel();
-    // Single playout lock registry shared with the scheduler: the web host
-    // clones it into AppState (so the playouts page can poll which playouts are
-    // building) and hands the same instance to the scheduler (the sole builder).
-    // Library/collection scan locks use the separate web-host `EntityLocker` in
-    // AppState; together they cover ErsatzTV's single `IEntityLocker` surface.
+    let (scan_work_tx, scan_work_rx) = tokio::sync::mpsc::unbounded_channel();
+    // Single playout lock registry shared with the scheduler. Library/show scan
+    // admission and lifecycle live in ApplicationServices and are consumed by
+    // the separate single-reader scan channel above.
     let playout_locker = ersatzrs_core::locking::EntityLocker::new();
 
     if let Some(version) = startup.schema_status.dirty_version {
@@ -169,6 +160,7 @@ pub async fn run() {
         startup.schema_status,
         ffmpeg_runtime,
         playout_build_tx,
+        scan_work_tx,
         playout_locker.clone(),
     )
     .await
@@ -189,6 +181,7 @@ pub async fn run() {
         super::tasks::MaintenanceTaskInputs {
             pool: app_state.pool.clone(),
             playout_build_rx,
+            scan_work_rx,
             application: app_state.application.clone(),
             hls_sessions: app_state.hls_sessions.clone(),
         },
@@ -237,6 +230,18 @@ pub async fn run() {
 
     pool.close().await;
     tracing::info!("shutdown complete");
+}
+
+async fn prepare_streaming_resources() {
+    if let Err(error) = seed_default_mpegts_script().await {
+        tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
+    }
+    if let Err(error) = extract_streaming_resources().await {
+        tracing::warn!(%error, "failed to extract bundled streaming resources");
+    }
+    if let Err(error) = extract_streaming_fonts().await {
+        tracing::warn!(%error, "failed to extract bundled streaming fonts");
+    }
 }
 
 fn configured_listen_addr() -> std::net::SocketAddr {
@@ -793,6 +798,7 @@ async fn build_app_state(
     playout_build_tx: tokio::sync::mpsc::UnboundedSender<
         ersatzrs_core::scheduling::PlayoutBuildRequest,
     >,
+    scan_work_tx: tokio::sync::mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
     playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> ersatzrs_app::Result<AppState> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
@@ -826,7 +832,7 @@ async fn build_app_state(
     .and_then(|value| value.trim().parse::<i32>().ok())
     .unwrap_or(DEFAULT_TUNER_COUNT);
 
-    Ok(AppState::new(
+    Ok(AppState::new_with_scan_queue(
         pool,
         database_backend,
         SystemStartup {
@@ -838,6 +844,7 @@ async fn build_app_state(
         tuner_count,
         iptv_access_token_verifier,
         playout_build_tx,
+        scan_work_tx,
         playout_locker,
     ))
 }

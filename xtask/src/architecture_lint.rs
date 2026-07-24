@@ -15,6 +15,9 @@ const DEFAULT_BASELINE: &str = ".architecture-lint-baseline.toml";
 const APP_MANIFEST: &str = "crates/ersatzrs-app/Cargo.toml";
 const APP_SOURCE: &str = "crates/ersatzrs-app/src/lib.rs";
 const CORE_MANIFEST: &str = "crates/ersatzrs-core/Cargo.toml";
+const SCAN_STATE_SOURCE: &str = "crates/ersatzrs-web/src/host/state.rs";
+const SCAN_SERVER_FN_SOURCE: &str = "crates/ersatzrs-web/src/admin/server_fns/libraries.rs";
+const SCAN_MAINTENANCE_SOURCE: &str = "crates/ersatzrs-infra/src/maintenance.rs";
 const ADMIN_ROOTS: &[&str] = &[
     "crates/ersatzrs-web/src/admin",
     "crates/ersatzrs-web/src/api",
@@ -58,6 +61,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     let workspace = Path::new(".");
     check_app_crate(workspace)?;
     check_core_crate(workspace)?;
+    check_scan_orchestration_boundary(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
     if opts.print_baseline {
@@ -209,6 +213,89 @@ fn check_core_crate(workspace: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn check_scan_orchestration_boundary(workspace: &Path) -> Result<()> {
+    let state = read_workspace_source(workspace, SCAN_STATE_SOURCE)?;
+    let server_fns = read_workspace_source(workspace, SCAN_SERVER_FN_SOURCE)?;
+    let maintenance = read_workspace_source(workspace, SCAN_MAINTENANCE_SOURCE)?;
+    let problems = scan_orchestration_boundary_problems(&state, &server_fns, &maintenance);
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "scan orchestration must remain application-owned: {}",
+            problems.join("; ")
+        );
+    }
+    Ok(())
+}
+
+fn read_workspace_source(workspace: &Path, relative: &str) -> Result<String> {
+    let path = workspace.join(relative);
+    fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
+}
+
+fn scan_orchestration_boundary_problems(
+    state: &str,
+    server_fns: &str,
+    maintenance: &str,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    for forbidden in [
+        "struct LibraryScanJob",
+        "struct LibraryScanQueue",
+        "struct ScanProgressMap",
+        "library_scan_queue",
+        "scan_progress:",
+    ] {
+        if state.contains(forbidden) {
+            problems.push(format!("{SCAN_STATE_SOURCE} contains `{forbidden}`"));
+        }
+    }
+
+    for forbidden in [
+        "sync_library_by_id_with_progress",
+        "sync_plex_show_by_id",
+        "sync_jellyfin_show_by_id",
+        "sync_emby_show_by_id",
+        "scan_local_library_with_progress",
+        "tokio::spawn",
+    ] {
+        if server_fns.contains(forbidden) {
+            problems.push(format!(
+                "{SCAN_SERVER_FN_SOURCE} bypasses the application boundary with `{forbidden}`"
+            ));
+        }
+    }
+    for required in [
+        ".request_library_scan(",
+        ".request_show_scan(",
+        ".scan_operations(",
+        ".scan_progress(",
+    ] {
+        if !server_fns.contains(required) {
+            problems.push(format!(
+                "{SCAN_SERVER_FN_SOURCE} is missing application call `{required}`"
+            ));
+        }
+    }
+
+    for forbidden in [
+        "tokio::process::Command",
+        "scanner_command",
+        "ersatzrs-scanner",
+    ] {
+        if maintenance.contains(forbidden) {
+            problems.push(format!(
+                "{SCAN_MAINTENANCE_SOURCE} bypasses the application boundary with `{forbidden}`"
+            ));
+        }
+    }
+    if !maintenance.contains(".request_scheduled_library_scan(") {
+        problems.push(format!(
+            "{SCAN_MAINTENANCE_SOURCE} is missing scheduled application scan admission"
+        ));
+    }
+    problems
 }
 
 fn is_public_item(item: &syn::Item) -> bool {
@@ -914,6 +1001,42 @@ fn compare_rule(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_transport_owners_cannot_reintroduce_web_or_subprocess_orchestration() {
+        let state = "struct LibraryScanQueue; struct ScanProgressMap;";
+        let server_fns = "tokio::spawn(sync_plex_show_by_id());";
+        let maintenance = "tokio::process::Command::new(\"ersatzrs-scanner\");";
+
+        let problems = scan_orchestration_boundary_problems(state, server_fns, maintenance);
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("LibraryScanQueue")));
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("sync_plex_show_by_id")));
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("tokio::process::Command")));
+    }
+
+    #[test]
+    fn application_scan_commands_and_queries_satisfy_transport_boundary() {
+        let server_fns = "
+            app.request_library_scan();
+            app.request_show_scan();
+            app.scan_operations();
+            app.scan_progress();
+        ";
+        let maintenance = "application.request_scheduled_library_scan();";
+
+        assert!(scan_orchestration_boundary_problems(
+            "pub struct AppState;",
+            server_fns,
+            maintenance
+        )
+        .is_empty());
+    }
 
     #[test]
     fn admin_debt_visitor_counts_production_patterns_only() {

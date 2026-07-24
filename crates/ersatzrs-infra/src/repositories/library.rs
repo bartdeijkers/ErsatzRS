@@ -1,7 +1,7 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{LibraryRepository, Result};
+use ersatzrs_core::repositories::{LibraryRepository, LibraryScanTarget, RepositoryError, Result};
 use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
 use sqlx::{Pool, Row};
 
@@ -100,6 +100,85 @@ impl LibraryRepository for SqliteLibraryRepository {
 
         tx.commit().await.repository()?;
         Ok(())
+    }
+
+    async fn get_scan_target(&self, id: EntityId) -> Result<LibraryScanTarget> {
+        let row = sqlx::query(
+            r#"SELECT l."MediaKind",
+                      CASE
+                          WHEN ll."Id" IS NOT NULL THEN 'Local'
+                          WHEN pl."Id" IS NOT NULL THEN 'Plex'
+                          WHEN jl."Id" IS NOT NULL THEN 'Jellyfin'
+                          WHEN el."Id" IS NOT NULL THEN 'Emby'
+                          ELSE NULL
+                      END AS "Provider",
+                      COALESCE(
+                          pl."ShouldSyncItems",
+                          jl."ShouldSyncItems",
+                          el."ShouldSyncItems",
+                          1
+                      ) AS "ShouldSyncItems"
+               FROM "Library" l
+               LEFT JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
+               LEFT JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+               LEFT JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
+               LEFT JOIN "EmbyLibrary" el ON el."Id" = l."Id"
+               WHERE l."Id" = ?
+               LIMIT 1"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "library",
+            id,
+        })?;
+
+        let provider = match row
+            .try_get::<Option<String>, _>("Provider")
+            .repository()?
+            .as_deref()
+        {
+            Some("Local") => MediaSourceKind::Local,
+            Some("Plex") => MediaSourceKind::Plex,
+            Some("Jellyfin") => MediaSourceKind::Jellyfin,
+            Some("Emby") => MediaSourceKind::Emby,
+            value => {
+                return Err(RepositoryError::Decode {
+                    kind: "library provider",
+                    value: value.unwrap_or("<missing>").to_owned(),
+                });
+            }
+        };
+
+        Ok(LibraryScanTarget {
+            library_id: id,
+            provider,
+            media_kind: decode_enum_column("library media_kind", &row, "MediaKind")?,
+            should_sync_items: row.try_get::<i64, _>("ShouldSyncItems").repository()? != 0,
+        })
+    }
+
+    async fn show_belongs_to_library(
+        &self,
+        library_id: EntityId,
+        show_id: EntityId,
+    ) -> Result<bool> {
+        sqlx::query_scalar(
+            r#"SELECT EXISTS(
+                   SELECT 1
+                   FROM "Show" s
+                   JOIN "MediaItem" mi ON mi."Id" = s."Id"
+                   JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+                   WHERE s."Id" = ? AND lp."LibraryId" = ?
+               )"#,
+        )
+        .bind(show_id)
+        .bind(library_id)
+        .fetch_one(&self.0)
+        .await
+        .repository()
     }
 }
 

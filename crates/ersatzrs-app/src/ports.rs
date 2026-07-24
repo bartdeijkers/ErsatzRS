@@ -2,8 +2,12 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use ersatzrs_core::repositories::{LibraryRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
+use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
+
+use crate::commands::ScanWorkRequest;
 
 /// Failure returned when the scheduler work queue cannot accept a request.
 #[derive(Debug, thiserror::Error)]
@@ -33,12 +37,87 @@ pub trait PlayoutBuildQueue: Send + Sync {
     fn enqueue(&self, request: PlayoutBuildRequest) -> Result<(), PlayoutBuildQueueError>;
 }
 
+/// Failure returned when the native scanner queue cannot accept work.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct ScanWorkQueueError {
+    message: String,
+}
+
+impl ScanWorkQueueError {
+    /// Describe an unavailable scanner worker queue.
+    #[must_use]
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// Outbound application port for FIFO scanner work.
+pub trait ScanWorkQueue: Send + Sync {
+    /// Enqueue one already-validated scan request for the sole native worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the worker queue is closed or unavailable.
+    fn enqueue(&self, request: ScanWorkRequest) -> Result<(), ScanWorkQueueError>;
+}
+
+/// Storage- and runtime-neutral scanner adapter failure.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct ScanRuntimeError {
+    message: String,
+}
+
+impl ScanRuntimeError {
+    /// Create an adapter failure suitable for the shared operation registry.
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// Native scanner execution supplied by the composition root.
+#[async_trait]
+pub trait ScanRuntime: Send + Sync {
+    /// Execute one full library scan.
+    async fn scan_library(
+        &self,
+        provider: MediaSourceKind,
+        library_id: EntityId,
+        deep_scan: bool,
+        progress: &dyn ScanProgressSink,
+    ) -> Result<(), ScanRuntimeError>;
+
+    /// Execute one provider-specific targeted show scan.
+    async fn scan_show(
+        &self,
+        provider: MediaSourceKind,
+        library_id: EntityId,
+        show_id: EntityId,
+        deep_scan: bool,
+        progress: &dyn ScanProgressSink,
+    ) -> Result<(), ScanRuntimeError>;
+
+    /// Extract embedded subtitles after a successful eligible deep show scan.
+    async fn extract_embedded_show_subtitles(
+        &self,
+        show_id: EntityId,
+    ) -> Result<(), ScanRuntimeError>;
+}
+
 /// Bounded repository port set for the next playout and scan vertical slices.
 #[derive(Clone)]
 pub struct ApplicationPorts {
     playouts: Arc<dyn PlayoutRepository>,
     libraries: Arc<dyn LibraryRepository>,
     playout_builds: Arc<dyn PlayoutBuildQueue>,
+    scan_work: Arc<dyn ScanWorkQueue>,
+    scan_runtime: Arc<dyn ScanRuntime>,
 }
 
 impl ApplicationPorts {
@@ -48,11 +127,15 @@ impl ApplicationPorts {
         playouts: Arc<dyn PlayoutRepository>,
         libraries: Arc<dyn LibraryRepository>,
         playout_builds: Arc<dyn PlayoutBuildQueue>,
+        scan_work: Arc<dyn ScanWorkQueue>,
+        scan_runtime: Arc<dyn ScanRuntime>,
     ) -> Self {
         Self {
             playouts,
             libraries,
             playout_builds,
+            scan_work,
+            scan_runtime,
         }
     }
 
@@ -73,6 +156,18 @@ impl ApplicationPorts {
     pub fn playout_builds(&self) -> &(dyn PlayoutBuildQueue + 'static) {
         self.playout_builds.as_ref()
     }
+
+    /// FIFO scanner work queue used by library and show commands.
+    #[must_use]
+    pub fn scan_work(&self) -> &(dyn ScanWorkQueue + 'static) {
+        self.scan_work.as_ref()
+    }
+
+    /// Native scanner runtime used only by the composition-root worker.
+    #[must_use]
+    pub fn scan_runtime(&self) -> &(dyn ScanRuntime + 'static) {
+        self.scan_runtime.as_ref()
+    }
 }
 
 impl std::fmt::Debug for ApplicationPorts {
@@ -82,6 +177,8 @@ impl std::fmt::Debug for ApplicationPorts {
             .field("playouts", &"dyn PlayoutRepository")
             .field("libraries", &"dyn LibraryRepository")
             .field("playout_builds", &"dyn PlayoutBuildQueue")
+            .field("scan_work", &"dyn ScanWorkQueue")
+            .field("scan_runtime", &"dyn ScanRuntime")
             .finish()
     }
 }

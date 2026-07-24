@@ -80,15 +80,19 @@ DELETE FROM "Show" WHERE "Id" = ${seed.showId};
 DELETE FROM "MediaItem" WHERE "Id" IN (${seed.showId}, ${seed.seasonId}, ${seed.episodeId}, ${seed.episodeTwoId});
 DELETE FROM "LibraryPath" WHERE "Id" = ${seed.libraryPathId};
 DELETE FROM "LocalLibrary" WHERE "Id" = ${seed.libraryId};
+DELETE FROM "PlexLibrary" WHERE "Id" = ${seed.libraryId};
 DELETE FROM "Library" WHERE "Id" = ${seed.libraryId};
 DELETE FROM "LocalMediaSource" WHERE "Id" = ${seed.mediaSourceId};
+DELETE FROM "PlexMediaSource" WHERE "Id" = ${seed.mediaSourceId};
 DELETE FROM "MediaSource" WHERE "Id" = ${seed.mediaSourceId};
 
 INSERT INTO "MediaSource" ("Id") VALUES (${seed.mediaSourceId});
-INSERT INTO "LocalMediaSource" ("Id") VALUES (${seed.mediaSourceId});
+INSERT INTO "PlexMediaSource" ("Id", "ServerName")
+  VALUES (${seed.mediaSourceId}, 'E2E Plex');
 INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
   VALUES (${seed.libraryId}, 'E2E Windows TV', 2, ${seed.mediaSourceId});
-INSERT INTO "LocalLibrary" ("Id") VALUES (${seed.libraryId});
+INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
+  VALUES (${seed.libraryId}, 'e2e-tv', 1);
 INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId")
   VALUES (${seed.libraryPathId}, '/tmp/ersatzrs-e2e-windows-release', ${seed.libraryId});
 
@@ -181,7 +185,7 @@ async function gotoHydrated(page: Page, route: string): Promise<void> {
 test.describe('Windows release interaction regressions', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed media rows');
 
-  test('library scan, logs pager, and season episode media info stay interactive', async ({
+  test('show and library scans, logs pager, and season media info stay interactive', async ({
     page,
   }, testInfo) => {
     test.skip(
@@ -200,10 +204,15 @@ test.describe('Windows release interaction regressions', () => {
     await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
     await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
 
+    await gotoHydrated(page, `/media/tv/shows/${seed.showId}`);
+    await page.getByRole('button', { name: 'Quick Scan' }).click();
+    await expect(page.getByText('Scan queued', { exact: true })).toBeVisible();
+    await expect(page.locator('body')).not.toContainText('Scan failed');
+
     await gotoHydrated(page, '/media/libraries');
     const libraryRow = page.getByRole('row').filter({ hasText: 'E2E Windows TV' });
     await expect(libraryRow).toBeVisible();
-    await libraryRow.getByRole('button', { name: 'Scan Library' }).click();
+    await libraryRow.getByRole('button', { name: 'Scan Library', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText(/Scan queued/);
     await expect(page.locator('body')).not.toContainText('Scan failed');
 

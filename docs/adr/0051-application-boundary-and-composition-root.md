@@ -20,10 +20,17 @@ shared activity registry upgrades queued work to the strongest requested mode
 (`Reset` over `Refresh` over `Continue`) and retains one upgradable follow-up
 when a mutation arrives during an active build. A lifecycle guard clears the
 completed build while preserving that pending follow-up on every scheduler
-exit path. The
-baseline-aware `cargo xtask architecture-lint` gate also prevents concrete
+exit path. The second complete vertical slice, p7b-03, moves library/show scan
+admission, persisted validation, FIFO queueing, per-library exclusion,
+progress, retained terminal failures, and worker lifecycle behind application
+commands, queries, and runtime-neutral ports. Web and periodic producers now
+share that registry; the native composition root retains concrete provider,
+local scanner, and subtitle execution. External-collection synchronization
+remains a distinct keyed operation in the same coordinator, matching its
+separate upstream media-source lifecycle. The baseline-aware
+`cargo xtask architecture-lint` gate also prevents concrete
 storage dependencies from re-entering core. Phase 7B still has to migrate the
-scan, block-preview, and remaining admin vertical slices.
+block-preview and remaining admin vertical slices.
 
 ## Context
 

@@ -187,10 +187,15 @@ must not depend on concrete application services or storage.
 
 ### P7B-03 — Scan-operation vertical slice
 
-- Move library/show scan admission, FIFO queueing, locking, and progress
-  lifecycle into application services.
-- Ensure all transport adapters observe one operation registry and the same
-  accepted/running/failed state.
+- Complete (2026-07-24). Library/show scan admission, persisted validation,
+  distinct FIFO queueing, per-library exclusion, progress, and retained
+  terminal failures now live in application services.
+- Web and periodic producers use the same commands; polling and the additive
+  diagnostic endpoint read one operation registry. Concrete provider/local
+  execution and deep-show subtitle extraction remain native adapters.
+- External-collection synchronization remains a separate keyed operation in
+  the shared application coordinator because upstream gives it a distinct
+  media-source lifecycle rather than the library/show scanner queue.
 
 ### P7B-04 — Real block-preview vertical slice
 

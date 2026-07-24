@@ -39,6 +39,15 @@ release section when tagging a release.
   build behavior. Stronger modes now upgrade queued work, and mutations that
   arrive during an active build retain one mode-upgradable follow-up instead
   of being silently discarded.
+- Library and targeted-show scans now enter through one application-owned FIFO
+  command boundary and operation registry. Web and periodic refresh producers
+  share persisted provider validation, queued/running/progress/terminal state,
+  Local show fallback, provider-specific show synchronization, and retained
+  failure diagnostics while the native composition root keeps concrete
+  provider, local scanner, and embedded-subtitle execution. Periodic refresh
+  coalesces a library that is already queued or running without changing manual
+  FIFO repeat behavior, and rejected scan requests now surface as failures
+  instead of false queued confirmations.
 - The Phase 7B application-service foundation now gives `ersatzrs-app`
   documented command, query, typed-error, port, and operation-coordination
   boundaries. Core no longer exposes SQLx errors, infrastructure maps concrete

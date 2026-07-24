@@ -1075,6 +1075,7 @@ dependencies = [
  "ersatzrs-core",
  "ersatzrs-domain",
  "thiserror 2.0.19",
+ "tokio",
 ]
 
 [[package]]
@@ -1202,6 +1203,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "ersatzrs-app",
  "ersatzrs-core",
  "ersatzrs-ffmpeg",
  "ersatzrs-infra",

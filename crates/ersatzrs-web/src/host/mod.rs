@@ -2,5 +2,6 @@ pub mod assets;
 pub mod bootstrap;
 pub mod config;
 pub mod router;
+pub mod scanning;
 pub mod state;
 pub mod tasks;

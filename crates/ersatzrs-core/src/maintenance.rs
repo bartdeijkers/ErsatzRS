@@ -1,4 +1,6 @@
+use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use ersatzrs_domain::EntityId;
 
 /// Default playout build/reset cadence used by `ErsatzTV` background work.
 pub const PLAYOUT_BUILD_INTERVAL: Duration = Duration::minutes(30);
@@ -16,6 +18,36 @@ pub const SEARCH_INDEX_REBUILD_INTERVAL: Duration = Duration::hours(24);
 /// reports `false` for an empty interval — i.e. the scanner is opted in by
 /// configuration, not by default.
 pub const DEFAULT_LIBRARY_REFRESH_INTERVAL: Duration = Duration::zero();
+
+/// Outcome returned to the periodic maintenance producer after application
+/// scan admission.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScheduledScanRequestOutcome {
+    /// A distinct request entered the shared FIFO scan queue.
+    Accepted,
+    /// The library already has queued or running scan work.
+    AlreadyActive,
+    /// Persisted library state rejected the request.
+    Rejected {
+        /// Storage-neutral validation diagnostic.
+        message: String,
+    },
+    /// The repository or scanner worker was unavailable.
+    Unavailable {
+        /// Storage-neutral operational diagnostic.
+        message: String,
+    },
+}
+
+/// Application command boundary used by periodic library-refresh producers.
+#[async_trait]
+pub trait ScheduledLibraryScanRequester: Send + Sync {
+    /// Request a shallow scan for one due persisted library.
+    async fn request_scheduled_library_scan(
+        &self,
+        library_id: EntityId,
+    ) -> ScheduledScanRequestOutcome;
+}
 
 /// One periodic background loop tracked by the scheduler binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

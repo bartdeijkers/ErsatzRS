@@ -2,26 +2,13 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::host::state::{LibraryScanJob, LibraryScanQueue, ScanProgressMap};
-#[cfg(not(target_arch = "wasm32"))]
 use ersatzrs_app::{
-    commands::BeginOperation,
-    operations::{OperationCoordinator, OperationGuard, OperationKey},
+    commands::{
+        BeginOperation, RequestLibraryScan, RequestScanOutcome, RequestShowScan, ScanRequest,
+    },
+    operations::OperationKey,
+    queries::ScanOperationState,
 };
-
-#[cfg(not(target_arch = "wasm32"))]
-struct ScanCleanup {
-    _lock_guard: OperationGuard,
-    progress_map: ScanProgressMap,
-    library_id: i64,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Drop for ScanCleanup {
-    fn drop(&mut self) {
-        self.progress_map.clear(self.library_id);
-    }
-}
 
 /// Serializable transport row shared by the SSR server function and WASM
 /// island. Native SQL decoding stays in `ersatzrs-infra::admin_libraries`.
@@ -77,6 +64,16 @@ pub struct LibrariesPageData {
     pub external_collections: Vec<ExternalCollectionRow>,
 }
 
+/// Transport-neutral scan lifecycle row for diagnostics and future adapters.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScanOperationRow {
+    pub operation_id: u64,
+    pub library_id: i64,
+    pub state: String,
+    pub progress: Option<f32>,
+    pub error: Option<String>,
+}
+
 /// Returns every configured library with its provider kind and media kind.
 #[server]
 pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
@@ -112,12 +109,8 @@ pub async fn load_libraries_page_with_pool(
     })
 }
 
-/// Fires a background scan for a single library. Returns immediately.
-/// The actual sync work runs in a spawned tokio task. The library is marked
-/// as active in the application operation coordinator for the duration of the
-/// scan so the UI can render an indeterminate spinner while it runs.
+/// Admit a background scan through the application-owned FIFO worker.
 #[server]
-#[allow(clippy::unused_async)]
 pub async fn scan_library(
     library_id: i64,
     kind: String,
@@ -126,140 +119,21 @@ pub async fn scan_library(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let pool = state.pool.clone();
-    let operations = state.application.operations().clone();
-    let progress_map = state.scan_progress.clone();
-    let queue = state.library_scan_queue.clone();
-
     tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
-
-    let should_spawn = queue.enqueue(LibraryScanJob {
-        library_id,
-        kind,
-        deep_scan,
-    });
-    if should_spawn {
-        tokio::task::spawn(run_library_scan_queue(
-            pool,
-            operations,
-            progress_map,
-            queue,
-        ));
-    }
-
-    Ok(true)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-async fn run_library_scan_queue(
-    pool: ersatzrs_infra::db::DbPool,
-    operations: OperationCoordinator,
-    progress_map: ScanProgressMap,
-    queue: LibraryScanQueue,
-) {
-    while let Some(job) = queue.pop_next_or_stop() {
-        run_library_scan_job(&pool, &operations, &progress_map, job).await;
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-async fn run_library_scan_job(
-    pool: &ersatzrs_infra::db::DbPool,
-    operations: &OperationCoordinator,
-    progress_map: &ScanProgressMap,
-    job: LibraryScanJob,
-) {
-    let LibraryScanJob {
-        library_id,
-        kind,
-        deep_scan,
-    } = job;
-    let Some(lock_guard) = operations
-        .begin(BeginOperation::new(OperationKey::LibraryScan(library_id)))
-        .into_guard()
-    else {
-        tracing::info!(
-            library_id,
-            "library scan queue: already locked, skipping job"
-        );
-        return;
-    };
-    let cleanup = ScanCleanup {
-        _lock_guard: lock_guard,
-        progress_map: progress_map.clone(),
-        library_id,
-    };
-    let started = std::time::Instant::now();
-    tracing::info!(library_id, kind = %kind, "library scan started");
-    let sink = progress_map.sink_for(library_id);
-    let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
-    macro_rules! log_err {
-        ($res:expr) => {
-            if let Err(e) = $res {
-                tracing::warn!(library_id, kind = %kind, error = %e, "library scan failed");
-            }
-        };
-    }
-    match kind.as_str() {
-        "Plex" => log_err!(
-            ersatzrs_infra::plex::sync_library_by_id_with_progress(
-                pool,
-                library_id,
-                deep_scan,
-                Some(sink_ref),
-            )
-            .await
-        ),
-        "Jellyfin" => {
-            log_err!(
-                ersatzrs_infra::jellyfin::sync_library_by_id_with_progress(
-                    pool,
-                    library_id,
-                    deep_scan,
-                    Some(sink_ref),
-                )
-                .await
-            );
-        }
-        "Emby" => {
-            log_err!(
-                ersatzrs_infra::emby::sync_library_by_id_with_progress(
-                    pool,
-                    library_id,
-                    deep_scan,
-                    Some(sink_ref),
-                )
-                .await
-            );
-        }
-        "Local" => {
-            use ersatzrs_scanner::{scan_local_library_with_progress, LocalScanConfig};
-            let config = LocalScanConfig {
-                library_id,
-                ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
-            };
-            log_err!(scan_local_library_with_progress(pool, &config, Some(sink_ref)).await);
-        }
-        other => {
-            tracing::warn!(kind = other, "unknown library kind in scan_library");
-        }
-    }
-    drop(cleanup);
-    tracing::info!(
-        library_id,
-        elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-        "library scan finished"
-    );
+    map_scan_outcome(
+        state
+            .application
+            .request_library_scan(RequestLibraryScan::new(library_id, deep_scan))
+            .await,
+    )
 }
 
 /// Fires a background scan for a single show.
 ///
-/// Plex, Jellyfin, and Emby use the targeted ErsatzTV-equivalent path. Local
-/// intentionally falls back to a full library scan (matches ErsatzTV's
-/// behaviour). Mirrors
+/// Provider dispatch and Local full-library fallback are resolved from
+/// persisted state by the application command. Mirrors
 /// `$ERSATZTV_SRC/ErsatzTV.Application/Libraries/Commands/QueueShowScanByLibraryIdHandler.cs`.
 #[server]
-#[allow(clippy::unused_async)]
 pub async fn scan_show(
     library_id: i64,
     show_id: i64,
@@ -268,15 +142,7 @@ pub async fn scan_show(
 ) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
-    if kind != "Plex" && kind != "Jellyfin" && kind != "Emby" {
-        return scan_library(library_id, kind, deep_scan).await;
-    }
-
     let state = expect_context::<AppState>();
-    let pool = state.pool.clone();
-    let operations = state.application.operations().clone();
-    let progress_map = state.scan_progress.clone();
-
     tracing::info!(
         library_id,
         show_id,
@@ -284,96 +150,26 @@ pub async fn scan_show(
         deep_scan,
         "scan_show invoked"
     );
+    map_scan_outcome(
+        state
+            .application
+            .request_show_scan(RequestShowScan::new(library_id, show_id, deep_scan))
+            .await,
+    )
+}
 
-    let Some(lock_guard) = operations
-        .begin(BeginOperation::new(OperationKey::LibraryScan(library_id)))
-        .into_guard()
-    else {
-        tracing::info!(library_id, show_id, "scan_show: already locked, no-op");
-        return Ok(false);
-    };
-
-    tokio::task::spawn(async move {
-        let cleanup = ScanCleanup {
-            _lock_guard: lock_guard,
-            progress_map: progress_map.clone(),
-            library_id,
-        };
-        let started = std::time::Instant::now();
-        tracing::info!(library_id, show_id, kind = %kind, "show scan started");
-        let sink = progress_map.sink_for(library_id);
-        let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
-        let result = match kind.as_str() {
-            "Plex" => {
-                ersatzrs_infra::plex::sync_plex_show_by_id(
-                    &pool,
-                    library_id,
-                    show_id,
-                    deep_scan,
-                    Some(sink_ref),
-                )
-                .await
-            }
-            "Jellyfin" => {
-                ersatzrs_infra::jellyfin::sync_jellyfin_show_by_id(
-                    &pool,
-                    library_id,
-                    show_id,
-                    deep_scan,
-                    Some(sink_ref),
-                )
-                .await
-            }
-            "Emby" => {
-                ersatzrs_infra::emby::sync_emby_show_by_id(
-                    &pool,
-                    library_id,
-                    show_id,
-                    deep_scan,
-                    Some(sink_ref),
-                )
-                .await
-            }
-            // Other kinds were filtered out above; defensively no-op.
-            _ => Ok(0),
-        };
-
-        match result {
-            Ok(_) => {
-                if deep_scan {
-                    // Mirror `QueueShowScanByLibraryIdHandler` (success && deepScan):
-                    // extract embedded text subtitles + font attachments. The
-                    // function self-gates on the `ffmpeg.use_embedded_subtitles` /
-                    // `ffmpeg.extract_embedded_subtitles` config keys, so it is a
-                    // no-op under the default (extract = false) configuration.
-                    if let Err(e) =
-                        ersatzrs_infra::subtitles::extract_embedded_show_subtitles(&pool, show_id)
-                            .await
-                    {
-                        tracing::warn!(
-                            library_id,
-                            show_id,
-                            error = %e,
-                            "embedded subtitle extraction failed"
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!(library_id, show_id, kind, error = %e, "show scan failed");
-            }
+#[cfg(not(target_arch = "wasm32"))]
+fn map_scan_outcome(outcome: RequestScanOutcome) -> Result<bool, ServerFnError> {
+    match outcome {
+        RequestScanOutcome::Accepted { .. } => Ok(true),
+        RequestScanOutcome::Rejected(reason) => {
+            tracing::warn!(?reason, "scan command rejected");
+            Err(ServerFnError::new(format!(
+                "scan request rejected: {reason:?}"
+            )))
         }
-
-        drop(cleanup);
-        tracing::info!(
-            library_id,
-            show_id,
-            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            "show scan finished"
-        );
-    });
-
-    Ok(true)
+        RequestScanOutcome::Unavailable { message } => Err(ServerFnError::new(message)),
+    }
 }
 
 /// Returns the ids of libraries currently being scanned. Polled by the
@@ -384,11 +180,7 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let mut library_ids = state.application.operations().active_library_scans();
-    library_ids.extend(state.library_scan_queue.queued_libraries());
-    library_ids.sort_unstable();
-    library_ids.dedup();
-    Ok(library_ids)
+    Ok(state.application.active_library_scans())
 }
 
 /// Returns the fractional scan progress per library in `[0.0, 1.0]`. Polled
@@ -402,7 +194,39 @@ pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.scan_progress.snapshot().into_iter().collect())
+    Ok(state.application.scan_progress())
+}
+
+/// Returns retained queued, running, completed, and failed scan operations.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn list_scan_operations() -> Result<Vec<ScanOperationRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state
+        .application
+        .scan_operations()
+        .into_iter()
+        .map(|operation| {
+            let (state, error) = match operation.state {
+                ScanOperationState::Queued => ("queued", None),
+                ScanOperationState::Running => ("running", None),
+                ScanOperationState::Completed => ("completed", None),
+                ScanOperationState::Failed { message } => ("failed", Some(message)),
+            };
+            ScanOperationRow {
+                operation_id: operation.operation_id.0,
+                library_id: match operation.request {
+                    ScanRequest::Library { library_id, .. }
+                    | ScanRequest::Show { library_id, .. } => library_id,
+                },
+                state: state.to_owned(),
+                progress: operation.progress,
+                error,
+            }
+        })
+        .collect())
 }
 
 /// One row of the External Collections table. Mirrors ETV's
@@ -522,6 +346,7 @@ mod server_fn_path_stability {
     //! route and all server-function calls 404 with the empty-body error
     //! `Invalid format: missing delimiter in ""`. Re-deriving the hash with the
     //! pinned key fails fast if the pin is dropped, changed, or the module moves.
+    use ersatzrs_app::commands::{RequestScanOutcome, RequestScanRejection, ScanOperationId};
     use leptos::server_fn::{xxhash_rust::const_xxh64::xxh64, ServerFn};
 
     fn pinned_route(fn_name: &str, module_path: &str) -> String {
@@ -531,11 +356,33 @@ mod server_fn_path_stability {
 
     #[test]
     fn server_fn_routes_are_build_dir_independent() {
-        assert_eq!(
-            super::ScanLibrary::PATH,
-            pinned_route("scan_library", "ersatzrs_web::admin::server_fns::libraries"),
-            "server_fn routes must hash the pinned SERVER_FN_OVERRIDE_KEY, not \
-             CARGO_MANIFEST_DIR; see .cargo/config.toml",
-        );
+        for (actual, function_name) in [
+            (super::ScanLibrary::PATH, "scan_library"),
+            (super::ScanShow::PATH, "scan_show"),
+            (super::ListLockedLibraries::PATH, "list_locked_libraries"),
+            (super::ListScanProgress::PATH, "list_scan_progress"),
+            (super::ListScanOperations::PATH, "list_scan_operations"),
+        ] {
+            assert_eq!(
+                actual,
+                pinned_route(function_name, "ersatzrs_web::admin::server_fns::libraries"),
+                "server_fn routes must hash the pinned SERVER_FN_OVERRIDE_KEY, not \
+                 CARGO_MANIFEST_DIR; see .cargo/config.toml",
+            );
+        }
+    }
+
+    #[test]
+    fn rejected_scan_outcomes_are_transport_errors() {
+        assert!(super::map_scan_outcome(RequestScanOutcome::Accepted {
+            operation_id: ScanOperationId(1),
+        })
+        .expect("accepted scan"));
+
+        let error = super::map_scan_outcome(RequestScanOutcome::Rejected(
+            RequestScanRejection::SynchronizationDisabled,
+        ))
+        .expect_err("rejected scan must not be rendered as queued");
+        assert!(error.to_string().contains("SynchronizationDisabled"));
     }
 }

@@ -1,14 +1,12 @@
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
 use ersatzrs_core::maintenance::{
-    scanner_library_refresh_interval, MaintenanceLoop, CACHE_CLEANUP_INTERVAL,
-    PLAYOUT_BUILD_INTERVAL, PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
+    scanner_library_refresh_interval, MaintenanceLoop, ScheduledLibraryScanRequester,
+    ScheduledScanRequestOutcome, CACHE_CLEANUP_INTERVAL, PLAYOUT_BUILD_INTERVAL,
+    PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
 };
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
@@ -20,7 +18,6 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 use thiserror::Error;
-use tokio::process::Command;
 use tracing::{debug, warn};
 
 use crate::cache_cleanup::{
@@ -56,10 +53,10 @@ pub struct MaintenancePassReport {
     /// Playouts queued for `PlayoutBuildMode::Reset` because their
     /// `DailyRebuildTime` is within the tolerance window.
     pub playouts_reset: usize,
-    /// Libraries that completed a scan during this pass.
+    /// Due libraries accepted by the shared application scan queue.
     pub libraries_dispatched: usize,
-    /// Libraries that the dispatcher could not finish (subprocess failure or
-    /// missing scanner binary). The detailed reason is logged.
+    /// Due libraries rejected by application validation or an unavailable
+    /// worker. The detailed reason is logged.
     pub libraries_failed: usize,
     /// Provider endpoints polled.
     pub providers_polled: usize,
@@ -73,18 +70,6 @@ pub struct MaintenancePassReport {
     pub loops_ran: MaintenanceLoopFlags,
     /// Health warning/error counts after the automatic run.
     pub health_summary: Option<ersatzrs_core::health::HealthCheckSummary>,
-}
-
-/// How the maintenance pass should dispatch a due library refresh.
-#[derive(Debug, Clone, Default)]
-pub struct LibraryDispatchConfig {
-    /// Path to the `ersatzrs-scanner` binary. When `None`, the dispatcher tries
-    /// to find a sibling binary next to `std::env::current_exe()` (matching
-    /// `ErsatzTV`'s `CallLibraryScannerHandler` resolution). When set, the path
-    /// is used verbatim (useful for tests and operator overrides).
-    pub scanner_command: Option<PathBuf>,
-    /// Extra arguments appended after `--provider <kind> --library-id <id>`.
-    pub extra_args: Vec<OsString>,
 }
 
 /// Set of loops that executed during a [`run_maintenance_once`] pass.
@@ -158,24 +143,6 @@ pub enum MaintenanceError {
     /// HTTP client setup failed.
     #[error(transparent)]
     Http(#[from] reqwest::Error),
-    /// Failed to spawn or wait on the `ersatzrs-scanner` subprocess.
-    #[error("scanner subprocess io error: {0}")]
-    Io(#[source] std::io::Error),
-    /// `ersatzrs-scanner` exited with a non-zero status during a library
-    /// refresh dispatch.
-    #[error(
-        "ersatzrs-scanner failed for {provider} library {library_id} (status {status:?}): {stderr}"
-    )]
-    ScannerFailed {
-        /// Provider kind passed to the scanner (`local`/`plex`/`jellyfin`/`emby`).
-        provider: String,
-        /// Library row id that the scanner was dispatched against.
-        library_id: EntityId,
-        /// Subprocess exit code, if any.
-        status: Option<i32>,
-        /// Trimmed stderr from the failed subprocess.
-        stderr: String,
-    },
 }
 
 /// Result alias for maintenance operations.
@@ -192,7 +159,7 @@ pub type Result<T> = std::result::Result<T, MaintenanceError>;
 pub async fn run_maintenance_once(
     pool: Pool<Db>,
     cache_config: &CacheCleanupConfig,
-    library_dispatch: &LibraryDispatchConfig,
+    library_scans: Option<&dyn ScheduledLibraryScanRequester>,
     locker: &EntityLocker,
     schema_status: DatabaseSchemaStatus,
     hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
@@ -214,7 +181,7 @@ pub async fn run_maintenance_once(
 
     if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
         let library_report =
-            dispatch_due_library_refreshes(&pool, library_refresh_interval, library_dispatch, now)
+            dispatch_due_library_refreshes(&pool, library_refresh_interval, library_scans, now)
                 .await?;
         report.libraries_dispatched = library_report.completed;
         report.libraries_failed = library_report.failed;
@@ -568,39 +535,19 @@ fn scheduling_result_has_persisted_changes(result: &SchedulingResult) -> bool {
 async fn dispatch_due_library_refreshes(
     pool: &Pool<Db>,
     interval: Duration,
-    config: &LibraryDispatchConfig,
+    library_scans: Option<&dyn ScheduledLibraryScanRequester>,
     now: DateTime<Utc>,
 ) -> Result<LibraryDispatchReport> {
     let cutoff = encode_datetime(now - interval);
-    let rows = sqlx::query(
-        r#"SELECT "l"."Id" AS "Id",
-                  CASE
-                      WHEN "pms"."Id" IS NOT NULL THEN 'plex'
-                      WHEN "jms"."Id" IS NOT NULL THEN 'jellyfin'
-                      WHEN "ems"."Id" IS NOT NULL THEN 'emby'
-                      WHEN "lms"."Id" IS NOT NULL THEN 'local'
-                      ELSE NULL
-                  END AS "Provider"
-           FROM "Library" AS "l"
-           LEFT JOIN "PlexMediaSource"     AS "pms" ON "pms"."Id" = "l"."MediaSourceId"
-           LEFT JOIN "JellyfinMediaSource" AS "jms" ON "jms"."Id" = "l"."MediaSourceId"
-           LEFT JOIN "EmbyMediaSource"     AS "ems" ON "ems"."Id" = "l"."MediaSourceId"
-           LEFT JOIN "LocalMediaSource"    AS "lms" ON "lms"."Id" = "l"."MediaSourceId"
-           WHERE "l"."LastScan" IS NULL OR "l"."LastScan" <= ?
-           ORDER BY "l"."Id""#,
+    let due_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "Id"
+           FROM "Library"
+           WHERE "LastScan" IS NULL OR "LastScan" <= ?
+           ORDER BY "Id""#,
     )
     .bind(cutoff)
     .fetch_all(pool)
     .await?;
-
-    let mut due = Vec::with_capacity(rows.len());
-    let mut due_ids = Vec::with_capacity(rows.len());
-    for row in rows {
-        let id: EntityId = row.try_get("Id")?;
-        let provider: Option<String> = row.try_get("Provider")?;
-        due_ids.push(id);
-        due.push(DueLibrary { id, provider });
-    }
 
     upsert_config(pool, LIBRARY_DISPATCH_KEY, &encode_datetime(now)).await?;
     upsert_config(
@@ -610,90 +557,43 @@ async fn dispatch_due_library_refreshes(
     )
     .await?;
 
-    if due.is_empty() {
+    if due_ids.is_empty() {
         return Ok(LibraryDispatchReport::default());
     }
 
-    let Some(scanner) = resolve_scanner_command(config) else {
-        warn!(
-            "skipping library refresh dispatch: ersatzrs-scanner binary not found near \
-             current_exe and no scanner_command override was provided"
-        );
-        return Ok(LibraryDispatchReport {
-            completed: 0,
-            failed: due.len(),
-        });
-    };
-
     let mut report = LibraryDispatchReport::default();
-    for entry in due {
-        let Some(provider) = entry.provider.as_deref() else {
+    for library_id in due_ids {
+        let Some(library_scans) = library_scans else {
             warn!(
-                library_id = entry.id,
-                "skipping library refresh: media source has no Plex/Jellyfin/Emby/Local subtype row"
+                library_id,
+                "library refresh admission failed because application services are unavailable"
             );
             report.failed += 1;
             continue;
         };
-        match run_scanner(&scanner, provider, entry.id, &config.extra_args).await {
-            Ok(()) => report.completed += 1,
-            Err(error) => {
-                warn!(library_id = entry.id, provider, %error, "library refresh dispatch failed");
+        match library_scans
+            .request_scheduled_library_scan(library_id)
+            .await
+        {
+            ScheduledScanRequestOutcome::Accepted => report.completed += 1,
+            ScheduledScanRequestOutcome::AlreadyActive => {
+                debug!(
+                    library_id,
+                    "library refresh coalesced with queued or running scan"
+                );
+            }
+            ScheduledScanRequestOutcome::Rejected { message }
+            | ScheduledScanRequestOutcome::Unavailable { message } => {
+                warn!(
+                    library_id,
+                    error = %message,
+                    "library refresh admission failed"
+                );
                 report.failed += 1;
             }
         }
     }
     Ok(report)
-}
-
-fn resolve_scanner_command(config: &LibraryDispatchConfig) -> Option<PathBuf> {
-    if let Some(explicit) = &config.scanner_command {
-        return Some(explicit.clone());
-    }
-    let current_exe = std::env::current_exe().ok()?;
-    let parent = current_exe.parent()?;
-    let candidate = parent.join(scanner_binary_name());
-    if candidate.exists() {
-        Some(candidate)
-    } else {
-        None
-    }
-}
-
-fn scanner_binary_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "ersatzrs-scanner.exe"
-    } else {
-        "ersatzrs-scanner"
-    }
-}
-
-async fn run_scanner(
-    scanner: &Path,
-    provider: &str,
-    library_id: EntityId,
-    extra_args: &[OsString],
-) -> Result<()> {
-    let mut command = Command::new(scanner);
-    command
-        .arg("--provider")
-        .arg(provider)
-        .arg("--library-id")
-        .arg(library_id.to_string())
-        .args(extra_args)
-        .stdin(Stdio::null())
-        .kill_on_drop(true);
-
-    let output = command.output().await.map_err(MaintenanceError::Io)?;
-    if !output.status.success() {
-        return Err(MaintenanceError::ScannerFailed {
-            provider: provider.to_owned(),
-            library_id,
-            status: output.status.code(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        });
-    }
-    Ok(())
 }
 
 async fn poll_provider_connectivity(pool: &Pool<Db>) -> Result<ProviderPollReport> {
@@ -923,12 +823,6 @@ pub struct ProviderConnectivityResult {
 struct ProviderPollReport {
     polled: usize,
     reachable: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct DueLibrary {
-    id: EntityId,
-    provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
