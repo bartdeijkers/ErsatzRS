@@ -1057,6 +1057,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockItems => "Blokitems",
         TextKey::BlockName => "Bloknaam",
         TextKey::BlockNotFound => "Blok niet gevonden.",
+        TextKey::BlockPreviewFailed => "Het blokvoorbeeld kon niet worden gemaakt. Controleer de blokitems en probeer het opnieuw.",
         TextKey::Blocks => "Blokken",
         TextKey::BlockToRemove => "Te verwijderen blok",
         TextKey::BlockWillNotFit => "Het blok past niet op of na de gekozen starttijd.",

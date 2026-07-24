@@ -58,6 +58,7 @@
     white-space: nowrap;
 }
 .btn-preview:hover { opacity: 0.85; }
+.btn-preview:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .content {
     padding: 1.5rem 1rem;
@@ -332,45 +333,25 @@
     font-size: 0.875rem;
 }
 
-/* Preview modal overlay */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    z-index: 200;
+/* Inline preview mirrors ErsatzTV's dense table below the item editor. */
+.preview {
+    min-width: 0;
 }
 
-.modal-panel {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 201;
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
+.preview-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.preview-error {
+    margin: 0;
+    padding: 1rem;
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
     border-radius: var(--radius);
-    padding: 1.5rem;
-    max-width: 56rem;
-    width: 95vw;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.modal-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--color-gray-200);
-    margin: 0 0 1rem 0;
-}
-
-.modal-close {
-    float: right;
-    padding: 0.25rem 0.5rem;
+    background-color: var(--color-danger-20);
     font-size: 0.875rem;
-    color: var(--color-muted);
-    border-radius: var(--radius);
 }
-.modal-close:hover { background-color: var(--color-surface); color: var(--color-gray-200); }
 
 .preview-table {
     width: 100%;
@@ -398,4 +379,38 @@
 .preview-table td:nth-child(3) {
     font-family: inherit;
     font-size: 0.875rem;
+}
+
+@media (max-width: 720px) {
+    .action-bar {
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .action-bar-title {
+        flex-basis: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-preview {
+        flex: 1 1 9rem;
+        text-align: center;
+    }
+
+    .content {
+        padding: 1rem 0.75rem;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .items-table,
+    .preview-table {
+        min-width: 42rem;
+    }
 }

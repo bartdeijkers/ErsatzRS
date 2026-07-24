@@ -8,7 +8,7 @@
 
 [direct_admin_sql]
 "crates/ersatzrs-web/src/admin/layout/badges.rs" = 1
-"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 38
+"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 34
 "crates/ersatzrs-web/src/admin/server_fns/channels.rs" = 7
 "crates/ersatzrs-web/src/admin/server_fns/decos.rs" = 40
 "crates/ersatzrs-web/src/admin/server_fns/ffmpeg_profiles.rs" = 11
@@ -58,7 +58,7 @@
 "crates/ersatzrs-web/src/admin/pages/media_sources/jellyfin.rs" = 5
 "crates/ersatzrs-web/src/admin/pages/media_sources/local.rs" = 2
 "crates/ersatzrs-web/src/admin/pages/media_sources/plex.rs" = 4
-"crates/ersatzrs-web/src/admin/pages/scheduling/block_editor.rs" = 12
+"crates/ersatzrs-web/src/admin/pages/scheduling/block_editor.rs" = 5
 "crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs" = 2
 "crates/ersatzrs-web/src/admin/pages/scheduling/decos.rs" = 16
 "crates/ersatzrs-web/src/admin/pages/scheduling/playout_kind_editor.rs" = 2
@@ -73,7 +73,6 @@
 "crates/ersatzrs-web/src/admin/pages/system/troubleshooting.rs" = 5
 "crates/ersatzrs-web/src/admin/pages/watermarks/editor.rs" = 4
 "crates/ersatzrs-web/src/admin/pages/watermarks/list.rs" = 2
-"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 4
 "crates/ersatzrs-web/src/admin/server_fns/layout.rs" = 1
 "crates/ersatzrs-web/src/admin/server_fns/playouts.rs" = 6
 "crates/ersatzrs-web/src/admin/server_fns/troubleshooting.rs" = 1
@@ -87,7 +86,7 @@
 "crates/ersatzrs-web/src/api/watermarks.rs" = 2
 
 [row_decode_default]
-"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 67
+"crates/ersatzrs-web/src/admin/server_fns/blocks.rs" = 57
 "crates/ersatzrs-web/src/admin/server_fns/channels.rs" = 16
 "crates/ersatzrs-web/src/admin/server_fns/decos.rs" = 55
 "crates/ersatzrs-web/src/admin/server_fns/ffmpeg_profiles.rs" = 40

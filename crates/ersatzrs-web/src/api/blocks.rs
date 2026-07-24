@@ -37,6 +37,8 @@ pub struct BlockItemsSaveForm {
     #[serde(default)]
     item_smart_collection_id: Vec<String>,
     #[serde(default)]
+    item_playlist_id: Vec<String>,
+    #[serde(default)]
     item_media_item_id: Vec<String>,
     #[serde(default)]
     item_search_title: Vec<String>,
@@ -152,6 +154,7 @@ impl BlockItemsSaveForm {
                 "item_collection_id" => form.item_collection_id.push(value),
                 "item_multi_collection_id" => form.item_multi_collection_id.push(value),
                 "item_smart_collection_id" => form.item_smart_collection_id.push(value),
+                "item_playlist_id" => form.item_playlist_id.push(value),
                 "item_media_item_id" => form.item_media_item_id.push(value),
                 "item_search_title" => form.item_search_title.push(value),
                 "item_search_query" => form.item_search_query.push(value),
@@ -204,6 +207,7 @@ impl BlockItemsSaveForm {
                 collection_id: parse_i64(self.item_collection_id.get(pos)),
                 multi_collection_id: parse_i64(self.item_multi_collection_id.get(pos)),
                 smart_collection_id: parse_i64(self.item_smart_collection_id.get(pos)),
+                playlist_id: parse_i64(self.item_playlist_id.get(pos)),
                 media_item_id: parse_i64(self.item_media_item_id.get(pos)),
                 search_title: parse_optional_string(self.item_search_title.get(pos)),
                 search_query: parse_optional_string(self.item_search_query.get(pos)),

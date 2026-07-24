@@ -394,6 +394,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockItems => "Block Items",
         TextKey::BlockName => "Block Name",
         TextKey::BlockNotFound => "Block not found.",
+        TextKey::BlockPreviewFailed => "Could not generate the block preview. Check the block items and try again.",
         TextKey::Blocks => "Blocks",
         TextKey::BlockToRemove => "Block To Remove",
         TextKey::BlockWillNotFit => "Block will not fit at or after the selected start time.",

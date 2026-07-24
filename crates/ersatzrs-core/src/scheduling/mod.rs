@@ -205,6 +205,26 @@ pub trait SchedulingContentRepository: Send + Sync {
     async fn graphics_element_id_by_path(&self, path: &str) -> RepositoryResult<Option<EntityId>>;
 }
 
+/// Storage-neutral content loader for an unsaved block-preview draft.
+///
+/// The application layer constructs the temporary template, playout, and
+/// effective block graph. Implementations hydrate only the real media and
+/// Smart Shuffle reference data required by that graph.
+#[async_trait]
+pub trait BlockPreviewRepository: Send + Sync {
+    /// Load real scheduling content for temporary block items.
+    ///
+    /// # Errors
+    ///
+    /// Returns a repository error when any referenced collection, search, or
+    /// media lookup cannot be completed.
+    async fn load_block_preview_content(
+        &self,
+        items: &[EffectiveBlockItem],
+        policies: &BTreeMap<String, SchedulingSmartShufflePolicy>,
+    ) -> RepositoryResult<SchedulingReferenceData>;
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
     /// Legacy schedule/playout-wide policy used only when an item has not yet

@@ -1,9 +1,10 @@
 //! Block editor — ports `Pages/BlockEditor.razor`.
 //!
 //! The entire editor is a single `#[island]` so all item-list mutations
-//! (add, remove, reorder, field changes) and the preview modal happen
-//! client-side without round-trips. The `#[server]` functions are called only
-//! before hydration and for the save / preview actions.
+//! (add, remove, reorder, field changes) and the inline preview happen
+//! client-side without full-page round-trips. The plain page wrapper resolves
+//! the initial payload before rendering the island; server functions handle
+//! save, autocomplete, and preview actions after hydration.
 #![allow(clippy::too_many_lines, dead_code)]
 use std::fmt::Write;
 
@@ -12,14 +13,35 @@ use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{save_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::blocks::{
-    collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
-    preview_block_playout, save_block_with_items, stop_scheduling, BlockEditorOptions, BlockForm,
-    BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
+    collection_type, playback_order, preview_block_playout, save_block_with_items, stop_scheduling,
+    BlockEditorOptions, BlockForm, BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
 };
 use crate::admin::server_fns::schedules::SmartShuffleForm;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/block_editor.module.css");
+
+#[derive(Clone, Debug, Default, PartialEq)]
+enum BlockPreviewState {
+    #[default]
+    Idle,
+    Loading,
+    Empty,
+    Ready(Vec<PlayoutPreviewRow>),
+    Error,
+}
+
+impl BlockPreviewState {
+    const fn data_state(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Loading => "loading",
+            Self::Empty => "empty",
+            Self::Ready(_) => "ready",
+            Self::Error => "error",
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // SSR wrapper
@@ -28,47 +50,32 @@ stylance::import_crate_style!(style, "src/admin/pages/scheduling/block_editor.mo
 #[component]
 pub fn BlockEditorPage() -> impl IntoView {
     let params = use_params_map();
-    let block_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
-    let block_id_value = block_id();
-    let data: Resource<(Option<BlockForm>, Vec<BlockItemForm>, BlockEditorOptions)> =
-        Resource::new_blocking(
-            move || block_id_value,
-            |id| async move {
-                let block_fut = async move { get_block(id).await.unwrap_or(None) };
-                let items_fut = async move { get_block_items(id).await.unwrap_or_default() };
-                let options_fut =
-                    async move { load_block_editor_options().await.unwrap_or_default() };
-                let (block, items, options) = tokio::join!(block_fut, items_fut, options_fut);
-                (block, items, options)
-            },
-        );
-    let no_script_data = load_block_editor_no_script_data(block_id_value);
+    let block_id_value = params.with_untracked(|p| {
+        p.get("id")
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
+    let initial_data = load_block_editor_no_script_data(block_id_value);
+    let no_script_html = block_editor_no_script_html(initial_data.clone());
 
     view! {
         <style>".block-editor-noscript { display: none; }"</style>
         <noscript>
             <style>".block-editor-noscript { display: block; } .block-editor-js { display: none; }"</style>
-            <div class="block-editor-noscript" inner_html=block_editor_no_script_html(no_script_data)></div>
+            <div class="block-editor-noscript" inner_html=no_script_html></div>
         </noscript>
         <div class="block-editor-js">
-            {move || {
-                data.get()
-                    .map_or_else(
-                        || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
-                        |(maybe_block, items, options)| match maybe_block {
-                            Some(block) => view! {
-                                <BlockEditorIsland
-                                    initial_block=block
-                                    initial_items=items
-                                    options=options
-                                />
-                            }.into_any(),
-                            None => view! {
-                                <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
-                            }.into_any(),
-                        },
-                    )
+            {match initial_data {
+                Some((block, items, options)) => view! {
+                    <BlockEditorIsland
+                        initial_block=block
+                        initial_items=items
+                        options=options
+                    />
+                }.into_any(),
+                None => view! {
+                    <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
+                }.into_any(),
             }}
         </div>
     }
@@ -113,10 +120,8 @@ fn BlockEditorForm(
     // ── Selected item index (into items vec) ────────────────────────────
     let selected_idx: RwSignal<Option<usize>> = RwSignal::new(None);
 
-    // ── Preview modal ────────────────────────────────────────────────────
-    let preview_open = RwSignal::new(false);
-    let preview_rows: RwSignal<Vec<PlayoutPreviewRow>> = RwSignal::new(Vec::new());
-    let preview_pending = RwSignal::new(false);
+    // ── Inline preview ───────────────────────────────────────────────────
+    let preview_state = RwSignal::new(BlockPreviewState::Idle);
 
     // ── Actions ─────────────────────────────────────────────────────────
     let save_action = Action::new(|form: &BlockWithItemsForm| {
@@ -167,19 +172,21 @@ fn BlockEditorForm(
             stop_scheduling: stop_sched.get_untracked(),
             items: items.get_untracked(),
         };
-        preview_rows.set(Vec::new());
-        preview_open.set(true);
-        preview_pending.set(true);
+        selected_idx.set(None);
+        preview_state.set(BlockPreviewState::Loading);
         leptos::task::spawn_local(async move {
-            let result = preview_block_playout(form).await.unwrap_or_default();
-            preview_rows.set(result);
-            preview_pending.set(false);
+            match preview_block_playout(form).await {
+                Ok(rows) if rows.is_empty() => preview_state.set(BlockPreviewState::Empty),
+                Ok(rows) => preview_state.set(BlockPreviewState::Ready(rows)),
+                Err(_) => preview_state.set(BlockPreviewState::Error),
+            }
         });
     };
 
     // ── Item list operations ─────────────────────────────────────────────
 
     let add_item = move |()| {
+        preview_state.set(BlockPreviewState::Idle);
         let next_idx = items
             .get_untracked()
             .iter()
@@ -250,6 +257,7 @@ fn BlockEditorForm(
                 </button>
                 <button
                     class=style::btn_preview
+                    disabled=move || matches!(preview_state.get(), BlockPreviewState::Loading)
                     on:click=move |_| on_preview(())
                 >
                     {tr(TextKey::PreviewBlockPlayout)}
@@ -360,6 +368,7 @@ fn BlockEditorForm(
                                                 <tr
                                                     class=if is_selected { style::row_selected } else { "" }
                                                     on:click=move |_| {
+                                                        preview_state.set(BlockPreviewState::Idle);
                                                         selected_idx.set(Some(idx));
                                                     }
                                                 >
@@ -456,56 +465,67 @@ fn BlockEditorForm(
                         })
                     }}
                 </div>
-            </div>
 
-            // ── Preview modal ───────────────────────────────────────────
-            // Always rendered with stable DOM shape; visibility via style:display.
-            <div
-                class=style::modal_backdrop
-                style:display=move || if preview_open.get() { "" } else { "none" }
-                on:click=move |_| preview_open.set(false)
-            />
-            <div
-                class=style::modal_panel
-                style:display=move || if preview_open.get() { "" } else { "none" }
-            >
-                <button
-                    class=style::modal_close
-                    on:click=move |_| preview_open.set(false)
+                // ── Inline preview ──────────────────────────────────────
+                // One stable wrapper and stable children across all states.
+                <section
+                    class=style::preview
+                    data-block-preview
+                    data-state=move || preview_state.get().data_state()
+                    style:display=move || {
+                        if matches!(preview_state.get(), BlockPreviewState::Idle) { "none" } else { "" }
+                    }
                 >
-                    {format!("x {}", tr(TextKey::Close))}
-                </button>
-                <h2 class=style::modal_title>{tr(TextKey::PreviewBlockPlayout)}</h2>
+                    <h2 class=style::section_title>{tr(TextKey::PreviewBlockPlayout)}</h2>
                 <p
                     class=style::empty
-                    style:display=move || if preview_pending.get() { "" } else { "none" }
+                        data-preview-loading
+                        style:display=move || {
+                            if matches!(preview_state.get(), BlockPreviewState::Loading) { "" } else { "none" }
+                        }
                 >
                     {tr(TextKey::ComputingPreview)}
                 </p>
                 <p
                     class=style::empty
+                        data-preview-empty
                     style:display=move || {
-                        if !preview_pending.get() && preview_rows.get().is_empty() { "" } else { "none" }
+                            if matches!(preview_state.get(), BlockPreviewState::Empty) { "" } else { "none" }
                     }
                 >
                     {tr(TextKey::NoItemsToPreview)}
                 </p>
-                <table
-                    class=style::preview_table
+                    <p
+                        class=style::preview_error
+                        role="alert"
+                        data-preview-error
+                        style:display=move || {
+                            if matches!(preview_state.get(), BlockPreviewState::Error) { "" } else { "none" }
+                        }
+                    >
+                        {tr(TextKey::BlockPreviewFailed)}
+                    </p>
+                    <div
+                        class=style::preview_table_wrap
+                        data-preview-ready
                     style:display=move || {
-                        if !preview_pending.get() && !preview_rows.get().is_empty() { "" } else { "none" }
+                            if matches!(preview_state.get(), BlockPreviewState::Ready(_)) { "" } else { "none" }
                     }
-                >
-                    <thead>
-                        <tr>
-                            <th>{tr(TextKey::Start)}</th>
-                            <th>{tr(TextKey::Finish)}</th>
-                            <th>{tr(TextKey::MediaItem)}</th>
-                            <th>{tr(TextKey::Duration)}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {move || preview_rows.get().into_iter().map(|r| view! {
+                    >
+                        <table class=style::preview_table>
+                            <thead>
+                                <tr>
+                                    <th>{tr(TextKey::Start)}</th>
+                                    <th>{tr(TextKey::Finish)}</th>
+                                    <th>{tr(TextKey::MediaItem)}</th>
+                                    <th>{tr(TextKey::Duration)}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {move || match preview_state.get() {
+                                    BlockPreviewState::Ready(rows) => rows,
+                                    _ => Vec::new(),
+                                }.into_iter().map(|r| view! {
                             <tr>
                                 <td>{r.start}</td>
                                 <td>{r.finish}</td>
@@ -513,8 +533,10 @@ fn BlockEditorForm(
                                 <td>{r.duration}</td>
                             </tr>
                         }).collect_view()}
-                    </tbody>
-                </table>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
     }
@@ -629,11 +651,38 @@ fn load_block_editor_no_script_data(
 ) -> Option<(BlockForm, Vec<BlockItemForm>, BlockEditorOptions)> {
     #[cfg(feature = "ssr")]
     {
+        use crate::admin::server_fns::blocks::{
+            get_block_items_with_pool, get_block_with_pool, load_block_editor_options_with_pool,
+        };
+
+        let state = expect_context::<crate::host::state::AppState>();
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
-                let block = get_block(block_id).await.ok().flatten()?;
-                let items = get_block_items(block_id).await.ok()?;
-                let options = load_block_editor_options().await.ok()?;
+                let block = match get_block_with_pool(&state.pool, block_id).await {
+                    Ok(Some(block)) => block,
+                    Ok(None) => {
+                        tracing::warn!(block_id, "block editor initial block was not found");
+                        return None;
+                    }
+                    Err(error) => {
+                        tracing::error!(block_id, %error, "failed to load block editor block");
+                        return None;
+                    }
+                };
+                let items = match get_block_items_with_pool(&state.pool, block_id).await {
+                    Ok(items) => items,
+                    Err(error) => {
+                        tracing::error!(block_id, %error, "failed to load block editor items");
+                        return None;
+                    }
+                };
+                let options = match load_block_editor_options_with_pool(&state.pool).await {
+                    Ok(options) => options,
+                    Err(error) => {
+                        tracing::error!(block_id, %error, "failed to load block editor options");
+                        return None;
+                    }
+                };
                 Some((block, items, options))
             })
         })
@@ -651,7 +700,7 @@ fn block_item_fallback_row_html(
     options: &BlockEditorOptions,
 ) -> String {
     format!(
-        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{smart_shuffle_hidden}{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
+        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{smart_shuffle_hidden}{collection_type}</td><td>{collection}{multi_collection}{smart_collection}<input type="hidden" name="item_playlist_id" value="{playlist_id}">{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
         item_index = item.index,
         id = item.id,
         smart_shuffle_hidden = smart_shuffle_hidden_fields_html(item),
@@ -694,6 +743,9 @@ fn block_item_fallback_row_html(
             item.smart_collection_id,
             &options.smart_collections
         ),
+        playlist_id = item
+            .playlist_id
+            .map_or_else(String::new, |id| id.to_string()),
         media_item = media_item_select_html(item, options),
         input = style::input,
         search_title = escape_html(&item.search_title.clone().unwrap_or_default()),
@@ -1435,6 +1487,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::admin::i18n::{text, UiLanguage};
 
     #[test]
     fn no_script_rows_repeat_the_block_inheritance_marker() {
@@ -1444,5 +1497,32 @@ mod tests {
         let html = smart_shuffle_hidden_fields_html(&item);
 
         assert!(html.contains(r#"name="item_smart_shuffle_inherited_legacy" value="true""#));
+    }
+
+    #[test]
+    fn preview_states_are_stable_and_failure_copy_is_localized() {
+        assert_eq!(BlockPreviewState::Idle.data_state(), "idle");
+        assert_eq!(BlockPreviewState::Loading.data_state(), "loading");
+        assert_eq!(BlockPreviewState::Empty.data_state(), "empty");
+        assert_eq!(BlockPreviewState::Ready(Vec::new()).data_state(), "ready");
+        assert_eq!(BlockPreviewState::Error.data_state(), "error");
+
+        let messages = [
+            UiLanguage::English,
+            UiLanguage::Polish,
+            UiLanguage::PortugueseBrazil,
+            UiLanguage::Dutch,
+            UiLanguage::French,
+        ]
+        .map(|language| text(language, TextKey::BlockPreviewFailed));
+        assert!(messages.iter().all(|message| !message.trim().is_empty()));
+        assert_eq!(
+            messages
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            messages.len()
+        );
     }
 }

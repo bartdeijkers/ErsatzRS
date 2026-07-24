@@ -390,6 +390,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockItems => "Éléments de bloc",
         TextKey::BlockName => "Nom du bloc",
         TextKey::BlockNotFound => "Bloc introuvable.",
+        TextKey::BlockPreviewFailed => "Impossible de générer l'aperçu du bloc. Vérifiez les éléments du bloc et réessayez.",
         TextKey::Blocks => "Blocs",
         TextKey::BlockToRemove => "Bloc à retirer",
         TextKey::BlockWillNotFit => {

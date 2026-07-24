@@ -9,7 +9,7 @@
 //!   [`search_multi_collections_for_block`], [`search_smart_collections_for_block`],
 //!   [`search_shows_for_block`], [`search_seasons_for_block`]
 #[cfg(feature = "ssr")]
-use ersatzrs_infra::db::{DatabaseBackend, DbPool};
+use ersatzrs_infra::db::DbPool;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -36,9 +36,18 @@ pub mod collection_type {
     pub const COLLECTION: i32 = 0;
     pub const TELEVISION_SHOW: i32 = 1;
     pub const TELEVISION_SEASON: i32 = 2;
+    pub const ARTIST: i32 = 3;
     pub const MULTI_COLLECTION: i32 = 4;
     pub const SMART_COLLECTION: i32 = 5;
+    pub const PLAYLIST: i32 = 6;
     pub const SEARCH_QUERY: i32 = 9;
+    pub const MOVIE: i32 = 10;
+    pub const EPISODE: i32 = 20;
+    pub const MUSIC_VIDEO: i32 = 30;
+    pub const OTHER_VIDEO: i32 = 40;
+    pub const SONG: i32 = 50;
+    pub const IMAGE: i32 = 60;
+    pub const REMOTE_STREAM: i32 = 70;
 }
 
 /// `PlaybackOrder` discriminants (mirrors `ErsatzTV.Core.Domain.PlaybackOrder`).
@@ -95,6 +104,8 @@ pub struct BlockItemForm {
     pub collection_id: Option<i64>,
     pub multi_collection_id: Option<i64>,
     pub smart_collection_id: Option<i64>,
+    #[serde(default)]
+    pub playlist_id: Option<i64>,
     pub media_item_id: Option<i64>,
     pub search_title: Option<String>,
     pub search_query: Option<String>,
@@ -137,10 +148,11 @@ pub struct BlockWithItemsForm {
     pub name: String,
     pub minutes: i32,
     pub stop_scheduling: i32,
+    #[serde(default)]
     pub items: Vec<BlockItemForm>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayoutPreviewRow {
     pub start: String,
     pub finish: String,
@@ -544,6 +556,20 @@ fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
         collection_type::TELEVISION_SEASON if item.media_item_id.is_none() => Err(
             ServerFnError::new("[MediaItem] is required for collection type 'TelevisionSeason'"),
         ),
+        collection_type::ARTIST
+        | collection_type::MOVIE
+        | collection_type::EPISODE
+        | collection_type::MUSIC_VIDEO
+        | collection_type::OTHER_VIDEO
+        | collection_type::SONG
+        | collection_type::IMAGE
+        | collection_type::REMOTE_STREAM
+            if item.media_item_id.is_none() =>
+        {
+            Err(ServerFnError::new(
+                "[MediaItem] is required for this collection type",
+            ))
+        }
         collection_type::MULTI_COLLECTION if item.multi_collection_id.is_none() => {
             Err(ServerFnError::new(
                 "[MultiCollection] is required for collection type 'MultiCollection'",
@@ -554,7 +580,15 @@ fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
                 "[SmartCollection] is required for collection type 'SmartCollection'",
             ))
         }
-        collection_type::SEARCH_QUERY if item.search_query.as_deref().is_none_or(str::is_empty) => {
+        collection_type::PLAYLIST if item.playlist_id.is_none() => Err(ServerFnError::new(
+            "[Playlist] is required for collection type 'Playlist'",
+        )),
+        collection_type::SEARCH_QUERY
+            if item
+                .search_query
+                .as_deref()
+                .is_none_or(|query| query.trim().is_empty()) =>
+        {
             Err(ServerFnError::new(
                 "[SearchQuery] is required for collection type 'SearchQuery'",
             ))
@@ -562,10 +596,21 @@ fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
         collection_type::COLLECTION
         | collection_type::TELEVISION_SHOW
         | collection_type::TELEVISION_SEASON
+        | collection_type::ARTIST
         | collection_type::MULTI_COLLECTION
         | collection_type::SMART_COLLECTION
-        | collection_type::SEARCH_QUERY => Ok(()),
-        _ => Err(ServerFnError::new("[CollectionType] is invalid")),
+        | collection_type::PLAYLIST
+        | collection_type::SEARCH_QUERY
+        | collection_type::MOVIE
+        | collection_type::EPISODE
+        | collection_type::MUSIC_VIDEO
+        | collection_type::OTHER_VIDEO
+        | collection_type::SONG
+        | collection_type::IMAGE
+        | collection_type::REMOTE_STREAM => Ok(()),
+        value => Err(ServerFnError::new(format!(
+            "Collection type {value} is not supported by the real block scheduler"
+        ))),
     }
 }
 
@@ -584,6 +629,11 @@ async fn validate_block_form(
     validate_block_duration(form.minutes)?;
     validate_block_name(pool, form.group_id, Some(form.id), &form.name).await?;
     for item in &form.items {
+        if item.collection_type == collection_type::PLAYLIST {
+            return Err(ServerFnError::new(
+                "Playlist block items can be previewed but are not persisted by ErsatzTV's BlockItem schema",
+            ));
+        }
         validate_block_item(item)?;
         validate_smart_shuffle_form(&item.smart_shuffle)?;
     }
@@ -593,9 +643,18 @@ async fn validate_block_form(
 #[server]
 pub async fn get_block(id: i64) -> Result<Option<BlockForm>, ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
+    get_block_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn get_block_with_pool(
+    pool: &DbPool,
+    id: i64,
+) -> Result<Option<BlockForm>, ServerFnError> {
+    use sqlx::Row;
+
     let row = sqlx::query(
         r#"SELECT b."Id",
                   b."BlockGroupId",
@@ -608,7 +667,7 @@ pub async fn get_block(id: i64) -> Result<Option<BlockForm>, ServerFnError> {
            WHERE b."Id" = ?"#,
     )
     .bind(id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|r| BlockForm {
@@ -630,12 +689,10 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
 }
 
 #[cfg(feature = "ssr")]
-async fn get_block_items_with_pool(
+pub async fn get_block_items_with_pool(
     pool: &DbPool,
     block_id: i64,
 ) -> Result<Vec<BlockItemForm>, ServerFnError> {
-    use sqlx::Row;
-
     let rows = sqlx::query(
         r#"SELECT
                bi."Id",
@@ -655,9 +712,17 @@ async fn get_block_items_with_pool(
                    WHEN 0 THEN COALESCE(c."Name", '')
                    WHEN 1 THEN COALESCE(sm."Title", '')
                    WHEN 2 THEN COALESCE(sh."Title", '')
+                   WHEN 3 THEN COALESCE(am."Title", '')
                    WHEN 4 THEN COALESCE(mc."Name", '')
                    WHEN 5 THEN COALESCE(sc."Name", '')
                    WHEN 9 THEN COALESCE(bi."SearchTitle", bi."SearchQuery", '')
+                   WHEN 10 THEN COALESCE(mm."Title", '')
+                   WHEN 20 THEN COALESCE(em."Title", '')
+                   WHEN 30 THEN COALESCE(mvm."Title", '')
+                   WHEN 40 THEN COALESCE(ovm."Title", '')
+                   WHEN 50 THEN COALESCE(som."Title", '')
+                   WHEN 60 THEN COALESCE(im."Title", '')
+                   WHEN 70 THEN COALESCE(rsm."Title", '')
                    ELSE ''
                END AS "CollectionName",
                (SELECT GROUP_CONCAT(biw."WatermarkId")
@@ -673,6 +738,14 @@ async fn get_block_items_with_pool(
            LEFT JOIN "ShowMetadata"   sh ON sh."ShowId" = sh_row."Id"
            LEFT JOIN "Show"           show_tv ON show_tv."Id" = bi."MediaItemId" AND bi."CollectionType" = 1
            LEFT JOIN "ShowMetadata"   sm ON sm."ShowId" = show_tv."Id"
+           LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = bi."MediaItemId"
+           LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = bi."MediaItemId"
+           LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = bi."MediaItemId"
+           LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = bi."MediaItemId"
+           LEFT JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = bi."MediaItemId"
+           LEFT JOIN "SongMetadata" som ON som."SongId" = bi."MediaItemId"
+           LEFT JOIN "ImageMetadata" im ON im."ImageId" = bi."MediaItemId"
+           LEFT JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = bi."MediaItemId"
            WHERE bi."BlockId" = ?
            ORDER BY bi."Index""#,
     )
@@ -682,35 +755,7 @@ async fn get_block_items_with_pool(
 
     let mut items = rows
         .iter()
-        .map(|r| BlockItemForm {
-            id: r.try_get("Id").unwrap_or(0),
-            index: r.try_get("Index").unwrap_or(0),
-            collection_type: r.try_get("CollectionType").unwrap_or(0),
-            collection_id: r.try_get("CollectionId").unwrap_or(None),
-            multi_collection_id: r.try_get("MultiCollectionId").unwrap_or(None),
-            smart_collection_id: r.try_get("SmartCollectionId").unwrap_or(None),
-            media_item_id: r.try_get("MediaItemId").unwrap_or(None),
-            search_title: r.try_get("SearchTitle").unwrap_or(None),
-            search_query: r.try_get("SearchQuery").unwrap_or(None),
-            playback_order: r.try_get("PlaybackOrder").unwrap_or(1),
-            smart_shuffle: SmartShuffleForm::default(),
-            include_in_program_guide: r
-                .try_get::<bool, _>("IncludeInProgramGuide")
-                .unwrap_or(false),
-            disable_watermarks: r.try_get::<bool, _>("DisableWatermarks").unwrap_or(false),
-            collection_name: if r.try_get::<i32, _>("CollectionType").unwrap_or(0)
-                == collection_type::TELEVISION_SEASON
-            {
-                season_label(
-                    &r.try_get::<String, _>("CollectionName").unwrap_or_default(),
-                    r.try_get("SeasonNumber").unwrap_or(0),
-                )
-            } else {
-                r.try_get("CollectionName").unwrap_or_default()
-            },
-            watermark_ids: parse_id_list(r.try_get("WatermarkIds").unwrap_or(None)),
-            graphics_element_ids: parse_id_list(r.try_get("GraphicsElementIds").unwrap_or(None)),
-        })
+        .map(block_item_form_from_row)
         .collect::<Vec<_>>();
     for item in &mut items {
         let value = sqlx::query_scalar::<_, String>(
@@ -728,6 +773,39 @@ async fn get_block_items_with_pool(
         }
     }
     Ok(items)
+}
+
+#[cfg(feature = "ssr")]
+fn block_item_form_from_row(row: &ersatzrs_infra::db::DbRow) -> BlockItemForm {
+    use sqlx::Row;
+
+    let collection_type = row.try_get("CollectionType").unwrap_or(0);
+    let collection_name: String = row.try_get("CollectionName").unwrap_or_default();
+    BlockItemForm {
+        id: row.try_get("Id").unwrap_or(0),
+        index: row.try_get("Index").unwrap_or(0),
+        collection_type,
+        collection_id: row.try_get("CollectionId").unwrap_or(None),
+        multi_collection_id: row.try_get("MultiCollectionId").unwrap_or(None),
+        smart_collection_id: row.try_get("SmartCollectionId").unwrap_or(None),
+        playlist_id: None,
+        media_item_id: row.try_get("MediaItemId").unwrap_or(None),
+        search_title: row.try_get("SearchTitle").unwrap_or(None),
+        search_query: row.try_get("SearchQuery").unwrap_or(None),
+        playback_order: row.try_get("PlaybackOrder").unwrap_or(1),
+        smart_shuffle: SmartShuffleForm::default(),
+        include_in_program_guide: row
+            .try_get::<bool, _>("IncludeInProgramGuide")
+            .unwrap_or(false),
+        disable_watermarks: row.try_get::<bool, _>("DisableWatermarks").unwrap_or(false),
+        collection_name: if collection_type == collection_type::TELEVISION_SEASON {
+            season_label(&collection_name, row.try_get("SeasonNumber").unwrap_or(0))
+        } else {
+            collection_name
+        },
+        watermark_ids: parse_id_list(row.try_get("WatermarkIds").unwrap_or(None)),
+        graphics_element_ids: parse_id_list(row.try_get("GraphicsElementIds").unwrap_or(None)),
+    }
 }
 
 /// Replace the block metadata and all its items atomically.
@@ -835,9 +913,8 @@ pub async fn save_block_with_pool(
 }
 
 // ---------------------------------------------------------------------------
-// Preview playout (simplified: list media items from each block item's
-// collection in playback order, accumulating start times from MediaVersion
-// durations).
+// Preview playout. Transport adaptation stays here; temporary scheduling
+// state, real Reset-mode building, and enrichment live in ersatzrs-app.
 // ---------------------------------------------------------------------------
 
 #[server]
@@ -847,27 +924,22 @@ pub async fn preview_block_playout(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    let query = block_preview_query(form)?;
+    let rows = state
+        .application
+        .preview_block_playout(query)
+        .await
+        .map_err(ServerFnError::new)?;
 
-    let mut rows: Vec<PlayoutPreviewRow> = Vec::new();
-    let mut elapsed_secs: i64 = 0;
-
-    for item in &form.items {
-        let media_rows = query_items_for_preview(item, &state.pool, state.database_backend).await;
-        for (title, dur_secs) in media_rows {
-            let start = format_hms(elapsed_secs);
-            elapsed_secs += dur_secs;
-            let finish = format_hms(elapsed_secs);
-            let duration = format_hms(dur_secs);
-            rows.push(PlayoutPreviewRow {
-                start,
-                finish,
-                title,
-                duration,
-            });
-        }
-    }
-
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|row| PlayoutPreviewRow {
+            start: row.start.format("%H:%M:%S").to_string(),
+            finish: row.finish.format("%H:%M:%S").to_string(),
+            title: row.title,
+            duration: format_hms(row.duration.num_seconds()),
+        })
+        .collect())
 }
 
 fn format_hms(secs: i64) -> String {
@@ -875,192 +947,104 @@ fn format_hms(secs: i64) -> String {
     format!("{:02}:{:02}:{:02}", s / 3600, (s % 3600) / 60, s % 60)
 }
 
-fn parse_hms(s: &str) -> i64 {
-    let parts: Vec<&str> = s.splitn(3, ':').collect();
-    if parts.len() < 3 {
-        return 0;
-    }
-    let h: i64 = parts[0].parse().unwrap_or(0);
-    let m: i64 = parts[1].parse().unwrap_or(0);
-    let sec: i64 = parts[2].parse().unwrap_or(0);
-    h * 3600 + m * 60 + sec
+#[cfg(not(target_arch = "wasm32"))]
+fn block_preview_query(
+    form: BlockWithItemsForm,
+) -> Result<ersatzrs_app::queries::PreviewBlockPlayout, ServerFnError> {
+    use ersatzrs_app::queries::{PreviewBlockItem, PreviewBlockPlayout};
+    use ersatzrs_core::scheduling::SchedulingCollectionKey;
+
+    let stop_scheduling = match form.stop_scheduling {
+        stop_scheduling::AFTER_DURATION_END => {
+            ersatzrs_domain::BlockStopScheduling::AfterDurationEnd
+        }
+        stop_scheduling::BEFORE_DURATION_END => {
+            ersatzrs_domain::BlockStopScheduling::BeforeDurationEnd
+        }
+        value => {
+            return Err(ServerFnError::new(format!(
+                "invalid stop scheduling: {value}"
+            )))
+        }
+    };
+    let items = form
+        .items
+        .into_iter()
+        .map(|item| {
+            Ok(PreviewBlockItem {
+                index: item.index,
+                collection_key: SchedulingCollectionKey {
+                    collection_type: preview_collection_type(item.collection_type)?,
+                    collection_id: item.collection_id,
+                    multi_collection_id: item.multi_collection_id,
+                    smart_collection_id: item.smart_collection_id,
+                    media_item_id: item.media_item_id,
+                    playlist_id: item.playlist_id,
+                    search_query: item.search_query,
+                    fake_collection_key: None,
+                },
+                playback_order: preview_playback_order(item.playback_order)?,
+                include_in_program_guide: item.include_in_program_guide,
+                disable_watermarks: item.disable_watermarks,
+                watermark_ids: item.watermark_ids,
+                graphics_element_ids: item.graphics_element_ids,
+                smart_shuffle_policy: smart_shuffle_policy_from_form(&item.smart_shuffle),
+            })
+        })
+        .collect::<Result<Vec<_>, ServerFnError>>()?;
+
+    Ok(PreviewBlockPlayout {
+        name: form.name,
+        minutes: form.minutes,
+        stop_scheduling,
+        items,
+    })
 }
 
-fn duration_secs(duration: Option<&str>) -> i64 {
-    duration.map_or(0, parse_hms)
-}
+#[cfg(not(target_arch = "wasm32"))]
+fn preview_collection_type(value: i32) -> Result<ersatzrs_domain::CollectionType, ServerFnError> {
+    use collection_type as kind;
+    use ersatzrs_domain::CollectionType;
 
-#[allow(clippy::too_many_lines)]
-#[cfg(feature = "ssr")]
-async fn query_items_for_preview(
-    item: &BlockItemForm,
-    pool: &DbPool,
-    database_backend: DatabaseBackend,
-) -> Vec<(String, i64)> {
-    use sqlx::Row;
-
-    match item.collection_type {
-        // Manual collection — list its media items with title + duration
-        0 => {
-            let Some(cid) = item.collection_id else {
-                return vec![];
-            };
-            let order_clause = playback_order_clause(item.playback_order, false, database_backend);
-            let sql = format!(
-                r#"SELECT "Title", "Duration" FROM (
-                       SELECT COALESCE(mm."Title", '') AS "Title",
-                              mvv."Duration" AS "Duration"
-                       FROM "CollectionItem" ci
-                       JOIN "MediaItem" mi ON mi."Id" = ci."MediaItemId"
-                       LEFT JOIN "Movie" mv_row ON mv_row."Id" = mi."Id"
-                       LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = mv_row."Id"
-                       LEFT JOIN "MediaVersion" mvv ON mvv."MovieId" = mv_row."Id"
-                       WHERE ci."CollectionId" = ?
-                       UNION ALL
-                       SELECT COALESCE(sm."Title", '') AS "Title",
-                              mvv."Duration" AS "Duration"
-                       FROM "CollectionItem" ci
-                       JOIN "MediaItem" mi ON mi."Id" = ci."MediaItemId"
-                       LEFT JOIN "Episode" ep ON ep."Id" = mi."Id"
-                       LEFT JOIN "EpisodeMetadata" sm ON sm."EpisodeId" = ep."Id"
-                       LEFT JOIN "MediaVersion" mvv ON mvv."EpisodeId" = ep."Id"
-                       WHERE ci."CollectionId" = ?
-                   ) ORDER BY {order_clause}"#,
-            );
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
-                .bind(cid)
-                .bind(cid)
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default()
-                .iter()
-                .map(|r| {
-                    let title: String = r.try_get("Title").unwrap_or_default();
-                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
-                    let dur = duration_secs(duration.as_deref());
-                    (title, dur)
-                })
-                .collect()
-        }
-
-        // Television show — list episodes
-        1 => {
-            let Some(show_id) = item.media_item_id else {
-                return vec![];
-            };
-            let order_clause = playback_order_clause(item.playback_order, true, database_backend);
-            let sql = format!(
-                r#"SELECT COALESCE(sm."Title", '') AS "Title",
-                          se."SeasonNumber" AS "SeasonNum",
-                          em."EpisodeNumber" AS "EpNum",
-                          mv."Duration" AS "Duration"
-                   FROM "Episode" e
-                   JOIN "Season" se ON se."Id" = e."SeasonId"
-                   JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
-                   LEFT JOIN "MediaVersion" mv ON mv."EpisodeId" = e."Id"
-                   WHERE se."ShowId" = ?
-                   ORDER BY {order_clause}"#,
-            );
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
-                .bind(show_id)
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default()
-                .iter()
-                .map(|r| {
-                    let title: String = r.try_get("Title").unwrap_or_default();
-                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
-                    let dur = duration_secs(duration.as_deref());
-                    (title, dur)
-                })
-                .collect()
-        }
-
-        // Television season — list episodes of the season
-        2 => {
-            let Some(season_id) = item.media_item_id else {
-                return vec![];
-            };
-            let sql = r#"SELECT COALESCE(em."Title", '') AS "Title",
-                                mv."Duration" AS "Duration"
-                         FROM "Episode" e
-                         JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
-                         LEFT JOIN "MediaVersion" mv ON mv."EpisodeId" = e."Id"
-                         WHERE e."SeasonId" = ?
-                         ORDER BY em."EpisodeNumber""#;
-            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
-                .bind(season_id)
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default()
-                .iter()
-                .map(|r| {
-                    let title: String = r.try_get("Title").unwrap_or_default();
-                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
-                    let dur = duration_secs(duration.as_deref());
-                    (title, dur)
-                })
-                .collect()
-        }
-
-        // Multi collection — expand nested collection and smart collection items.
-        4 => {
-            let Some(mid) = item.multi_collection_id else {
-                return vec![];
-            };
-            let rows = sqlx::query(
-                r#"SELECT ci."MediaItemId", COALESCE(mm."Title", em."Title", '') AS "Title",
-                          COALESCE(mvm."Duration", mve."Duration") AS "Duration"
-                   FROM "MultiCollectionItem" mci
-                   JOIN "CollectionItem" ci ON ci."CollectionId" = mci."CollectionId"
-                   LEFT JOIN "Movie" mv ON mv."Id" = ci."MediaItemId"
-                   LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = mv."Id"
-                   LEFT JOIN "MediaVersion" mvm ON mvm."MovieId" = mv."Id"
-                   LEFT JOIN "Episode" ep ON ep."Id" = ci."MediaItemId"
-                   LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
-                   LEFT JOIN "MediaVersion" mve ON mve."EpisodeId" = ep."Id"
-                   WHERE mci."MultiCollectionId" = ?
-                   ORDER BY "Title""#,
-            )
-            .bind(mid)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
-
-            rows.iter()
-                .map(|r| {
-                    let title: String = r.try_get("Title").unwrap_or_default();
-                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
-                    (title, duration_secs(duration.as_deref()))
-                })
-                .collect()
-        }
-
-        // Search query — name placeholder
-        9 => {
-            let label = item
-                .search_title
-                .as_deref()
-                .or(item.search_query.as_deref())
-                .unwrap_or("(search query)")
-                .to_string();
-            vec![(label, 0)]
-        }
-
-        _ => vec![],
+    match value {
+        kind::COLLECTION => Ok(CollectionType::Collection),
+        kind::TELEVISION_SHOW => Ok(CollectionType::TelevisionShow),
+        kind::TELEVISION_SEASON => Ok(CollectionType::TelevisionSeason),
+        kind::ARTIST => Ok(CollectionType::Artist),
+        kind::MULTI_COLLECTION => Ok(CollectionType::MultiCollection),
+        kind::SMART_COLLECTION => Ok(CollectionType::SmartCollection),
+        kind::PLAYLIST => Ok(CollectionType::Playlist),
+        kind::SEARCH_QUERY => Ok(CollectionType::SearchQuery),
+        kind::MOVIE => Ok(CollectionType::Movie),
+        kind::EPISODE => Ok(CollectionType::Episode),
+        kind::MUSIC_VIDEO => Ok(CollectionType::MusicVideo),
+        kind::OTHER_VIDEO => Ok(CollectionType::OtherVideo),
+        kind::SONG => Ok(CollectionType::Song),
+        kind::IMAGE => Ok(CollectionType::Image),
+        kind::REMOTE_STREAM => Ok(CollectionType::RemoteStream),
+        _ => Err(ServerFnError::new(format!(
+            "unsupported block collection type: {value}"
+        ))),
     }
 }
 
-#[cfg(feature = "ssr")]
-fn playback_order_clause(
-    order: i32,
-    is_episode: bool,
-    database_backend: DatabaseBackend,
-) -> &'static str {
-    match order {
-        6 if is_episode => r#""SeasonNum", "EpNum""#,
-        2 | 3 => ersatzrs_infra::db::random_order_expression(database_backend),
-        _ => r#""Title""#,
+#[cfg(not(target_arch = "wasm32"))]
+fn preview_playback_order(value: i32) -> Result<ersatzrs_domain::PlaybackOrder, ServerFnError> {
+    use ersatzrs_domain::PlaybackOrder;
+
+    match value {
+        0 => Ok(PlaybackOrder::None),
+        playback_order::CHRONOLOGICAL => Ok(PlaybackOrder::Chronological),
+        playback_order::RANDOM => Ok(PlaybackOrder::Random),
+        playback_order::SHUFFLE => Ok(PlaybackOrder::Shuffle),
+        playback_order::SHUFFLE_IN_ORDER => Ok(PlaybackOrder::ShuffleInOrder),
+        5 => Ok(PlaybackOrder::MultiEpisodeShuffle),
+        playback_order::SEASON_EPISODE => Ok(PlaybackOrder::SeasonEpisode),
+        playback_order::RANDOM_ROTATION => Ok(PlaybackOrder::RandomRotation),
+        8 => Ok(PlaybackOrder::Marathon),
+        _ => Err(ServerFnError::new(format!(
+            "unsupported block playback order: {value}"
+        ))),
     }
 }
 
@@ -1389,10 +1373,6 @@ pub fn format_duration_label(minutes: i32) -> String {
     }
 }
 
-// suppress dead-code warning on parse_hms which is only used transitively
-#[allow(dead_code)]
-const _: fn(&str) -> i64 = parse_hms;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1469,6 +1449,109 @@ mod tests {
             "Random Rotation"
         );
         assert_eq!(format_duration_label(30), "30m");
+    }
+
+    #[test]
+    fn preview_transport_maps_every_real_block_collection_kind() {
+        let mut items = vec![
+            BlockItemForm {
+                collection_type: collection_type::COLLECTION,
+                collection_id: Some(1),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::TELEVISION_SHOW,
+                media_item_id: Some(2),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::TELEVISION_SEASON,
+                media_item_id: Some(3),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::ARTIST,
+                media_item_id: Some(4),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::MULTI_COLLECTION,
+                multi_collection_id: Some(5),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::SMART_COLLECTION,
+                smart_collection_id: Some(6),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::PLAYLIST,
+                playlist_id: Some(7),
+                ..BlockItemForm::default()
+            },
+            BlockItemForm {
+                collection_type: collection_type::SEARCH_QUERY,
+                search_query: Some("title:pilot".to_owned()),
+                ..BlockItemForm::default()
+            },
+        ];
+        for kind in [
+            collection_type::MOVIE,
+            collection_type::EPISODE,
+            collection_type::MUSIC_VIDEO,
+            collection_type::OTHER_VIDEO,
+            collection_type::SONG,
+            collection_type::IMAGE,
+            collection_type::REMOTE_STREAM,
+        ] {
+            items.push(BlockItemForm {
+                collection_type: kind,
+                media_item_id: Some(i64::from(kind)),
+                ..BlockItemForm::default()
+            });
+        }
+        for (index, item) in items.iter_mut().enumerate() {
+            item.index = i32::try_from(index).unwrap_or_default();
+            item.playback_order = playback_order::CHRONOLOGICAL;
+        }
+
+        let query = block_preview_query(BlockWithItemsForm {
+            name: "Unsaved".to_owned(),
+            minutes: 60,
+            stop_scheduling: stop_scheduling::BEFORE_DURATION_END,
+            items,
+            ..BlockWithItemsForm::default()
+        })
+        .expect("transport adaptation succeeds");
+
+        assert_eq!(
+            query
+                .items
+                .iter()
+                .map(|item| item.collection_key.collection_type)
+                .collect::<Vec<_>>(),
+            vec![
+                ersatzrs_domain::CollectionType::Collection,
+                ersatzrs_domain::CollectionType::TelevisionShow,
+                ersatzrs_domain::CollectionType::TelevisionSeason,
+                ersatzrs_domain::CollectionType::Artist,
+                ersatzrs_domain::CollectionType::MultiCollection,
+                ersatzrs_domain::CollectionType::SmartCollection,
+                ersatzrs_domain::CollectionType::Playlist,
+                ersatzrs_domain::CollectionType::SearchQuery,
+                ersatzrs_domain::CollectionType::Movie,
+                ersatzrs_domain::CollectionType::Episode,
+                ersatzrs_domain::CollectionType::MusicVideo,
+                ersatzrs_domain::CollectionType::OtherVideo,
+                ersatzrs_domain::CollectionType::Song,
+                ersatzrs_domain::CollectionType::Image,
+                ersatzrs_domain::CollectionType::RemoteStream,
+            ]
+        );
+        assert_eq!(
+            query.stop_scheduling,
+            ersatzrs_domain::BlockStopScheduling::BeforeDurationEnd
+        );
     }
 
     #[cfg(all(feature = "ssr", not(feature = "mysql")))]

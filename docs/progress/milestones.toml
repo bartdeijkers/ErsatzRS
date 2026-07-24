@@ -225,7 +225,7 @@ session and parity feature.
 id         = 'p7b-04'
 phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Replace simplified block preview with the real engine'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'block-scheduling-ui'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-02', 'p7a-03', 'p7b-01']
@@ -234,7 +234,26 @@ Unsaved block preview constructs upstream-shaped temporary scheduling state,
 invokes the real block preview builder in Reset mode, returns actual enriched
 playout rows, and surfaces failures instead of empty results.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-24. The block editor keeps its public server-function and row
+DTO contract while adapting every real block collection key into an
+application-owned preview query. The application service validates the unsaved
+draft, constructs temporary all-days block-template/playout/reference state at
+the current request time, and invokes the production `PlayoutBuilder` in Reset
+mode through a storage-neutral port. Infrastructure hydrates the same media,
+collection, smart-shuffle, tag, and reference data used by persisted block
+scheduling; only rows actually added by the builder are returned with their
+real media title, start, finish, and duration.
+
+The inline editor preview has stable idle, loading, empty, ready, and localized
+error states without persisting the draft. Typed application, infrastructure,
+and transport regressions cover all supported collection kinds, valid empty
+output, missing references, builder failures, and closed storage. A database-
+seeded Playwright scenario proves the real generated row, unsaved-name
+isolation across reload, error and empty states, stable geometry, and responsive
+containment in Chromium and Firefox; architecture, hydration, parity, and full
+workspace closeout gates passed.
+'''
 
 [[milestone]]
 id         = 'p7b-05'

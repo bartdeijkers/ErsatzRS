@@ -27,6 +27,15 @@ pub enum ApplicationError {
         operation: &'static str,
         message: String,
     },
+    /// A real scheduling engine rejected the temporary or persisted graph.
+    #[error("{operation} failed: {message}")]
+    Scheduling {
+        operation: &'static str,
+        message: String,
+    },
+    /// A builder row could not be enriched from its loaded reference data.
+    #[error("missing {kind} reference for id {id}")]
+    MissingReference { kind: &'static str, id: EntityId },
 }
 
 impl From<RepositoryError> for ApplicationError {

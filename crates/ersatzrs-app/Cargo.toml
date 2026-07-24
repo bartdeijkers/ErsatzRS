@@ -7,12 +7,12 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 thiserror = "2"
 
 [dev-dependencies]
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [lints]

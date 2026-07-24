@@ -123,6 +123,8 @@ impl AppState {
             ApplicationPorts::new(
                 Arc::new(repositories.playout.clone()),
                 Arc::new(repositories.library.clone()),
+                Arc::new(repositories.scheduling.clone()),
+                Arc::new(ersatzrs_core::playout_builder::PlayoutBuilder::default()),
                 Arc::new(TokioPlayoutBuildQueue {
                     sender: playout_build_tx,
                 }),

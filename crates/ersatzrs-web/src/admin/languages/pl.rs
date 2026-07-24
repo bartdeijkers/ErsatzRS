@@ -1065,6 +1065,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockItems => "Elementy bloku",
         TextKey::BlockName => "Nazwa bloku",
         TextKey::BlockNotFound => "Nie znaleziono bloku.",
+        TextKey::BlockPreviewFailed => "Nie udało się wygenerować podglądu bloku. Sprawdź elementy bloku i spróbuj ponownie.",
         TextKey::Blocks => "Bloki",
         TextKey::BlockToRemove => "Blok do usunięcia",
         TextKey::BlockWillNotFit => {

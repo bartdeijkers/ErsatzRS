@@ -1,17 +1,19 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
+use std::collections::BTreeMap;
+
 use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
 use ersatzrs_core::repositories::{FillerRepository, ProgramScheduleRepository};
 use ersatzrs_core::scheduling::{
     block_item_smart_shuffle_config_key, classic_schedule_item_key,
     classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
-    program_schedule_item_smart_shuffle_config_key, BlockSchedulingEngine, ClassicSchedulingEngine,
-    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
-    SchedulingContentSource, SchedulingRequest, SchedulingSmartShufflePolicy,
-    SchedulingSmartShufflePreset, SchedulingSmartShuffleRule, SchedulingSmartShuffleRuleKind,
-    ScriptedSchedulingEngine,
+    program_schedule_item_smart_shuffle_config_key, BlockPreviewRepository, BlockSchedulingEngine,
+    ClassicSchedulingEngine, EffectiveBlockItem, PlayoutSchedulingEngine, SchedulingCollectionKey,
+    SchedulingContentGuid, SchedulingContentSource, SchedulingRequest,
+    SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset, SchedulingSmartShuffleRule,
+    SchedulingSmartShuffleRuleKind, ScriptedSchedulingEngine,
 };
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode,
@@ -994,6 +996,166 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
         reference_data.existing_history[0].key,
         "persisted-block-history"
     );
+}
+
+fn block_preview_items() -> Vec<EffectiveBlockItem> {
+    let keys = [
+        SchedulingCollectionKey {
+            collection_type: CollectionType::Collection,
+            collection_id: Some(1),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::TelevisionShow,
+            media_item_id: Some(10),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::TelevisionSeason,
+            media_item_id: Some(11),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::Artist,
+            media_item_id: Some(30),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::MultiCollection,
+            multi_collection_id: Some(3),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::SmartCollection,
+            smart_collection_id: Some(2),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::Playlist,
+            playlist_id: Some(4),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::SearchQuery,
+            search_query: Some("title contains Pilot".to_owned()),
+            ..SchedulingCollectionKey::default()
+        },
+        SchedulingCollectionKey {
+            collection_type: CollectionType::Movie,
+            media_item_id: Some(20),
+            ..SchedulingCollectionKey::default()
+        },
+    ];
+
+    keys.into_iter()
+        .enumerate()
+        .map(|(index, collection_key)| EffectiveBlockItem {
+            id: i64::try_from(index).unwrap_or_default() + 1,
+            block_id: 1,
+            content: format!("preview:{index}"),
+            collection_key,
+            playback_order: PlaybackOrder::Chronological,
+            include_in_program_guide: true,
+            disable_watermarks: false,
+            watermark_ids: Vec::new(),
+            graphics_element_ids: Vec::new(),
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn block_preview_content_uses_real_sql_resolvers_for_supported_sources() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    let reference_data = repos
+        .scheduling
+        .load_block_preview_content(&block_preview_items(), &BTreeMap::new())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get("preview:0")
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
+    );
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get("preview:3")
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![31]
+    );
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get("preview:6")
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20, 21]
+    );
+    assert_eq!(
+        reference_data
+            .media_items_by_id
+            .get(&12)
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Pilot")
+    );
+    assert_eq!(
+        reference_data
+            .media_items_by_id
+            .get(&20)
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Feature")
+    );
+}
+
+#[tokio::test]
+async fn block_preview_content_propagates_closed_pool_failure() {
+    let pool = common::test_db().await;
+    let repository = make_repositories(pool.clone()).scheduling;
+    pool.close().await;
+    let item = EffectiveBlockItem {
+        id: 1,
+        block_id: 1,
+        content: "preview:closed".to_owned(),
+        collection_key: SchedulingCollectionKey {
+            collection_type: CollectionType::Collection,
+            collection_id: Some(1),
+            ..SchedulingCollectionKey::default()
+        },
+        playback_order: PlaybackOrder::Chronological,
+        include_in_program_guide: true,
+        disable_watermarks: false,
+        watermark_ids: Vec::new(),
+        graphics_element_ids: Vec::new(),
+    };
+
+    let error = repository
+        .load_block_preview_content(&[item], &BTreeMap::new())
+        .await
+        .expect_err("closed pool must fail");
+
+    assert!(matches!(
+        error,
+        ersatzrs_core::repositories::RepositoryError::Unavailable { .. }
+    ));
 }
 
 #[tokio::test]

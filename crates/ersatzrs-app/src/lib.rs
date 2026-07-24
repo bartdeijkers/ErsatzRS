@@ -14,8 +14,8 @@ pub mod queries;
 pub use error::{ApplicationError, Result};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    ApplicationPorts, PlayoutBuildQueue, PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError,
-    ScanWorkQueue, ScanWorkQueueError,
+    ApplicationPorts, BlockPreviewBuilder, PlayoutBuildQueue, PlayoutBuildQueueError, ScanRuntime,
+    ScanRuntimeError, ScanWorkQueue, ScanWorkQueueError,
 };
 
 /// Native application services assembled by a composition root.
@@ -57,6 +57,24 @@ impl ApplicationServices {
         command: commands::RequestPlayoutBuild,
     ) -> commands::RequestPlayoutBuildOutcome {
         commands::request_playout_build(command, self.ports.playout_builds(), &self.operations)
+    }
+
+    /// Preview an unsaved block through the real block scheduling builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, repository, scheduling, or enrichment
+    /// failure from the preview vertical slice.
+    pub async fn preview_block_playout(
+        &self,
+        query: queries::PreviewBlockPlayout,
+    ) -> Result<Vec<queries::PreviewBlockPlayoutRow>> {
+        queries::preview_block_playout(
+            query,
+            self.ports.block_previews(),
+            self.ports.block_preview_builder(),
+        )
+        .await
     }
 
     /// Validate and admit one full library scan.

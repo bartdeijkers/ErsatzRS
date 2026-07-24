@@ -13,12 +13,12 @@ use ersatzrs_core::scheduling::{
     block_item_smart_shuffle_config_key, classic_schedule_item_key,
     classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
-    BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
-    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, EffectiveDecoSelection,
-    EffectiveDecoTemplateItem, SchedulingCollectionKey, SchedulingContentRepository,
-    SchedulingContentSource, SchedulingFallbackPreset, SchedulingFillerPreset, SchedulingMediaItem,
-    SchedulingPlaylistItem, SchedulingReferenceData, SchedulingSmartShufflePolicy,
-    SchedulingSmartShuffleRuleKind,
+    BlockDefinition, BlockPreviewRepository, BlockTemplate, BlockTemplateItem,
+    BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
+    EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
+    SchedulingContentRepository, SchedulingContentSource, SchedulingFallbackPreset,
+    SchedulingFillerPreset, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
+    SchedulingSmartShufflePolicy, SchedulingSmartShuffleRuleKind,
 };
 use ersatzrs_core::search::{
     search_page_map, SearchDocument, SearchExpression, SearchField, SearchPageMap,
@@ -256,6 +256,50 @@ impl SchedulingContentRepository for SqliteSchedulingContentRepository {
 
     async fn graphics_element_id_by_path(&self, path: &str) -> Result<Option<EntityId>> {
         self.graphics_element_id_by_path(path).await
+    }
+}
+
+#[async_trait]
+impl BlockPreviewRepository for SqliteSchedulingContentRepository {
+    async fn load_block_preview_content(
+        &self,
+        items: &[EffectiveBlockItem],
+        policies: &BTreeMap<String, SchedulingSmartShufflePolicy>,
+    ) -> Result<SchedulingReferenceData> {
+        let mut reference_data = SchedulingReferenceData::default();
+        let mut target_ids = BTreeMap::new();
+        let mut seen = BTreeSet::new();
+
+        for item in items {
+            if !seen.insert(item.id) {
+                continue;
+            }
+
+            let media_items = self
+                .items_for_collection_key(&item.collection_key, 0)
+                .await?;
+            target_ids.insert(
+                item.id.to_string(),
+                media_items.iter().map(|media| media.id).collect(),
+            );
+            for media in &media_items {
+                reference_data
+                    .media_items_by_id
+                    .entry(media.id)
+                    .or_insert_with(|| media.clone());
+            }
+            reference_data
+                .media_by_key
+                .insert(item.content.clone(), media_items);
+        }
+
+        self.with_smart_shuffle_policies(
+            reference_data,
+            SchedulingSmartShufflePolicy::default(),
+            policies.clone(),
+            target_ids,
+        )
+        .await
     }
 }
 

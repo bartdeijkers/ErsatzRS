@@ -1,18 +1,20 @@
 feature    = 'Block scheduling UI'
-etv_source = '`ErsatzTV/Pages/Blocks*.razor`'
+etv_source = '`ErsatzTV/Pages/Blocks*.razor`, `ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs`, `block_editor.rs`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
-Reopened 2026-07-21: `/blocks` retains its ported group/editor/action and
-hydration behavior, but unsaved-form preview is a simplified SQL projection
-instead of the real block playout preview builder used by ErsatzTV. Milestone
-p7b-04 in `plans/application-layer-and-video-jukebox.md` owns the closeout.
+`/blocks` retains its ported group/editor/action and hydration behavior. Unsaved
+block preview now follows ErsatzTV's real vertical slice: application-owned
+temporary template/playout/reference state, production block scheduling in
+Reset mode, and enriched rows for the media items actually added by the
+builder. The inline editor exposes stable idle, loading, empty, ready, and
+localized error states while leaving the draft unpersisted.
 '''
 
 [[debt]]
 id          = 'block-preview-bypasses-real-scheduling-engine'
-description = 'Unsaved block preview manually lists a subset of collection types and accumulates durations instead of invoking the real block playout preview builder with temporary scheduling state; query failures are returned as an empty preview.'
+description = 'Unsaved block preview now constructs temporary scheduling state and invokes the real block builder in Reset mode through the application boundary. It returns only actual generated rows enriched from real reference data, and typed storage, validation, scheduling, and missing-reference failures reach a localized error state instead of becoming an empty preview.'
 discovered  = '2026-07-21'
-evidence    = 'Compared `crates/ersatzrs-web/src/admin/server_fns/blocks.rs::preview_block_playout` with `$ERSATZTV_SRC/ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`, which constructs temporary Template/Playout/reference data and calls `IBlockPlayoutPreviewBuilder.Build` in Reset mode. Close through milestone p7b-04.'
-resolved    = false
+evidence    = 'Source-mapped against `$ERSATZTV_SRC/ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`. `ersatzrs-app::queries::preview_block_playout` creates the upstream-shaped temporary state and calls the injected production `PlayoutBuilder`; `SqliteSchedulingContentRepository` hydrates real scheduler inputs, and the web adapter preserves the existing public DTO. Focused regressions cover all real collection kinds and failure classes. Database-seeded Chromium and Firefox coverage proves real generated rows, unsaved-draft isolation, the five UI states, stable geometry, and mobile containment.'
+resolved    = true

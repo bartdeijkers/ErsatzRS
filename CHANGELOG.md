@@ -28,6 +28,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Unsaved block previews now use the production block scheduling engine in
+  Reset mode with temporary template, playout, and reference state instead of a
+  simplified duration projection. The editor shows the actual enriched rows
+  produced from every supported block collection kind, preserves drafts
+  without saving, and distinguishes loading, valid empty, and localized
+  failure states.
 - Updated futures-util to 0.3.33, Tokio to 1.53.1, leptos_axum to 0.8.10,
   async-trait to 0.1.91, and clap to 4.6.4. Scheduled Cargo and GitHub Actions
   updates now arrive in one weekly multi-ecosystem Dependabot rollup instead of

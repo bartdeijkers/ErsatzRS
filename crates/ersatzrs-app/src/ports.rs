@@ -3,8 +3,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{LibraryRepository, PlayoutRepository};
-use ersatzrs_core::scheduling::PlayoutBuildRequest;
+use ersatzrs_core::scheduling::{
+    BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
+    SchedulingResult,
+};
 use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
 
 use crate::commands::ScanWorkRequest;
@@ -35,6 +39,23 @@ pub trait PlayoutBuildQueue: Send + Sync {
     /// Returns an error when the worker queue is closed or otherwise
     /// unavailable.
     fn enqueue(&self, request: PlayoutBuildRequest) -> Result<(), PlayoutBuildQueueError>;
+}
+
+/// Outbound application port for the real block scheduling builder.
+pub trait BlockPreviewBuilder: Send + Sync {
+    /// Build the temporary playout and return the engine's actual result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the real scheduling error when the temporary graph cannot be
+    /// evaluated.
+    fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError>;
+}
+
+impl BlockPreviewBuilder for PlayoutBuilder {
+    fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        PlayoutBuilder::build(self, request)
+    }
 }
 
 /// Failure returned when the native scanner queue cannot accept work.
@@ -115,6 +136,8 @@ pub trait ScanRuntime: Send + Sync {
 pub struct ApplicationPorts {
     playouts: Arc<dyn PlayoutRepository>,
     libraries: Arc<dyn LibraryRepository>,
+    block_previews: Arc<dyn BlockPreviewRepository>,
+    block_preview_builder: Arc<dyn BlockPreviewBuilder>,
     playout_builds: Arc<dyn PlayoutBuildQueue>,
     scan_work: Arc<dyn ScanWorkQueue>,
     scan_runtime: Arc<dyn ScanRuntime>,
@@ -126,6 +149,8 @@ impl ApplicationPorts {
     pub fn new(
         playouts: Arc<dyn PlayoutRepository>,
         libraries: Arc<dyn LibraryRepository>,
+        block_previews: Arc<dyn BlockPreviewRepository>,
+        block_preview_builder: Arc<dyn BlockPreviewBuilder>,
         playout_builds: Arc<dyn PlayoutBuildQueue>,
         scan_work: Arc<dyn ScanWorkQueue>,
         scan_runtime: Arc<dyn ScanRuntime>,
@@ -133,6 +158,8 @@ impl ApplicationPorts {
         Self {
             playouts,
             libraries,
+            block_previews,
+            block_preview_builder,
             playout_builds,
             scan_work,
             scan_runtime,
@@ -149,6 +176,18 @@ impl ApplicationPorts {
     #[must_use]
     pub fn libraries(&self) -> &(dyn LibraryRepository + 'static) {
         self.libraries.as_ref()
+    }
+
+    /// Real media/reference-data loader used by unsaved block preview.
+    #[must_use]
+    pub fn block_previews(&self) -> &(dyn BlockPreviewRepository + 'static) {
+        self.block_previews.as_ref()
+    }
+
+    /// Real scheduling builder used by unsaved block preview.
+    #[must_use]
+    pub fn block_preview_builder(&self) -> &(dyn BlockPreviewBuilder + 'static) {
+        self.block_preview_builder.as_ref()
     }
 
     /// Scheduler work queue used by the playout-build command.
@@ -176,6 +215,8 @@ impl std::fmt::Debug for ApplicationPorts {
             .debug_struct("ApplicationPorts")
             .field("playouts", &"dyn PlayoutRepository")
             .field("libraries", &"dyn LibraryRepository")
+            .field("block_previews", &"dyn BlockPreviewRepository")
+            .field("block_preview_builder", &"dyn BlockPreviewBuilder")
             .field("playout_builds", &"dyn PlayoutBuildQueue")
             .field("scan_work", &"dyn ScanWorkQueue")
             .field("scan_runtime", &"dyn ScanRuntime")
