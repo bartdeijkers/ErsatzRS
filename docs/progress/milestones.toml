@@ -336,7 +336,8 @@ plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-03']
 acceptance = '''
 Watermark Actual Size uses selected-asset dimensions or is explicitly
-schematic; the preview shows distinguishable 4:3 and 16:9 content guides; and
+schematic; the preview shows a centered 4:3 content guide without an outer
+16:9 guideline; and
 localized Previous/Next controls navigate deterministically between saved
 watermarks without silently discarding edits. Focused desktop/mobile browser
 coverage proves preview geometry and comparison navigation.
@@ -347,9 +348,9 @@ dimensions and asks the real FFmpeg path to composite it onto a 1920x1080
 reference frame; Actual Size uses those dimensions, Scaled preserves aspect
 ratio, and placement is clamped without hiding oversized crop behavior.
 Distinct localized unavailable, loading, ready, and failure states keep the
-SSR/hydration geometry stable. Teal 16:9 and centered amber 4:3 guides plus
-localized legend labels make the content boundaries explicit in every
-supported culture.
+SSR/hydration geometry stable. A centered amber 4:3 guide and localized legend
+label make the safe-frame boundary explicit in every supported culture without
+marking the outer 16:9 preview edge.
 
 The application query owns deterministic previous/next navigation in
 repository order (`Name`, then `Id`) and keeps missing records separate from
@@ -359,7 +360,8 @@ states and a dirty-form confirmation prevents silent edit loss.
 Focused application, infrastructure, and web regressions passed. Chromium and
 Firefox browser coverage proved delayed loading-to-ready behavior, real
 1024x1024 asset pixels and 171x171 preview geometry, distinct guide pixels,
-localized labels, deterministic navigation, dirty cancel/confirm behavior,
+absence of the removed 16:9 guide, localized labels, deterministic navigation,
+dirty cancel/confirm behavior,
 render failure, mobile containment at 390x844, and hydration without
 panic/checksum errors. Both workspace clippy configurations, 1,033 nextest
 tests plus doctests, matched SSR/WASM build, web parity/hydration/architecture
@@ -370,7 +372,7 @@ gates, and the real MPEG-TS/HLS smoke gate passed.
 id         = 'p7c-03'
 phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Resolve deferred search and browser behavior'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'media-browsers'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-03']
@@ -379,7 +381,24 @@ Search thumbnail sizing is wired; deferred See All detail/library-filter
 behavior is implemented from upstream evidence or recorded as an intentional
 non-goal with focused route/search coverage.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-25. The pinned ErsatzTV search, season-result, episode-list,
+music-video-list, media-card, pager, letter-bar, mapper, and search-handler
+sources establish poster height 440, thumbnail height 220, dedicated
+query-preserving See All routes, season detail links, episode owner-season
+anchors, intentionally nonclickable music-video cards, and no library-filter
+combobox. ErsatzRS now centralizes that artwork classification and provider
+resize replacement, reuses it across search/list/collection projections, and
+projects only source-valid card destinations.
+
+Focused application tests keep valid empty search results distinct from typed
+repository failure. Focused web tests cover every search artwork kind,
+provider/local URL families and sizes, See All query encoding, and list-card
+navigation. `tests/e2e/search-see-all.spec.ts` passed in Chromium and Firefox,
+proving rendered 440/220 artwork requests, query-preserving pager and letter
+links, season/episode/music-video navigation disposition, hydrated selection,
+and 390x844 containment without runtime or request failures.
+'''
 
 [[milestone]]
 id         = 'p7c-04'

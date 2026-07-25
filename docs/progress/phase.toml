@@ -20,10 +20,11 @@ preview, and all remaining production admin/API workflows now use the
 application boundary without raw admin SQL, pool access, silent resource
 defaults, or row-decode defaults. P7C-01 is complete: local Trakt maintenance
 no longer carries a placeholder remote capability. P7C-02 is complete: the
-watermark editor has truthful real-asset geometry, visible 4:3/16:9 guides,
-and deterministic dirty-safe comparison navigation. Phase 7C milestone
-p7c-03 is the next runnable slice; close its deferred search/browser behavior
-before the dependent p7c-04 module-split closeout. Phase 8 jukebox
+watermark editor has truthful real-asset geometry, a visible 4:3 safe-frame guide,
+and deterministic dirty-safe comparison navigation. P7C-03 is complete:
+search and See All browser cards now preserve upstream artwork sizing,
+query/navigation behavior, and the upstream absence of a library filter.
+Phase 7C milestone p7c-04 is the next runnable slice. Phase 8 jukebox
 implementation must still wait for p7c-04 and the accepted p8a-01 product
 contract. Use
 `cargo xtask progress milestones --runnable` for runnable work,

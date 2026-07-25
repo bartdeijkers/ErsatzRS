@@ -1,7 +1,7 @@
 feature    = 'Media browsers (movies, shows, images, music, other videos, songs)'
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0048']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
@@ -38,11 +38,13 @@ selection with that single row, matching browser-list item-menu behavior.
 Proven by the multi-select assertions in
 `tests/e2e/media-browser-actions.spec.ts`.
 
-Reopened 2026-07-21 for two explicit deferred search/browser details:
-thumbnail-kind cards still route through poster-size artwork URLs, and the
-per-kind See All pages defer richer detail/library-filter behavior without a
-recorded upstream/product disposition. Milestone p7c-03 owns the decision and
-closeout.
+Closed 2026-07-25 for the two deferred search/browser details. The shared
+artwork projection maps poster cards to provider height 440 and thumbnail
+cards to height 220 while replacing stale resize parameters. Search and list
+cards share that mapping. Pinned ErsatzTV search/list/card sources confirm
+query-preserving See All routes, season detail links, episode season anchors,
+nonclickable music-video cards, and no library-filter combobox. ErsatzRS
+implements those behaviors without inventing a filter.
 '''
 
 [[debt]]
@@ -98,12 +100,12 @@ resolved    = true
 id          = 'search-thumbnail-size-plumbing-deferred'
 description = 'Search classifies several card kinds as Thumbnail but still builds their artwork URLs with the poster-size path, leaving the explicit Thumbnail size plumbing deferred.'
 discovered  = '2026-07-21'
-evidence    = '`crates/ersatzrs-web/src/admin/server_fns/search.rs` documents the deferred Thumbnail size in the artwork URL path. Close through milestone p7c-03 with focused search card/artwork coverage.'
-resolved    = false
+evidence    = 'Resolved 2026-07-25: `crates/ersatzrs-web/src/api/artwork.rs` owns the exhaustive search-kind artwork mapping and provider query replacement; search and browser projections reuse it. Focused Rust tests cover every search kind, local/provider poster versus thumbnail URL families, 440/220 sizing, and preservation of unrelated provider parameters. `tests/e2e/search-see-all.spec.ts` proves the rendered URL families and sizes in Chromium and Firefox.'
+resolved    = true
 
 [[debt]]
 id          = 'see-all-detail-and-library-filter-disposition'
 description = 'Per-kind See All pages explicitly defer full detail-page behavior and the library-filter combobox, but the repository does not yet record whether upstream requires them or ErsatzRS intentionally omits them.'
 discovered  = '2026-07-21'
-evidence    = '`crates/ersatzrs-web/src/admin/pages/media/see_all_lists.rs` names the deferral. Close through milestone p7c-03 by source-checking the pinned ErsatzTV search flow and either implementing parity or recording an intentional non-goal.'
-resolved    = false
+evidence    = 'Resolved 2026-07-25 from the pinned ErsatzTV search/list/card/pager/letter-bar sources: See All opens dedicated filtered routes, query state survives pagination and letter navigation, seasons link to detail, episodes link to their owning season anchor, music-video cards intentionally have no detail href, and the pages expose no library-filter combobox. `tests/e2e/search-see-all.spec.ts` proves those dispositions, hydration, desktop/mobile containment, and clean Chromium/Firefox runtime behavior.'
+resolved    = true

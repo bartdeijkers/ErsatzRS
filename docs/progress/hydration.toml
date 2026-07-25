@@ -18,7 +18,7 @@ notes  = '`Scan Library` server fn smoke clean; lock-state polling present. 2026
 name   = 'SearchPage'
 status = '✅'
 routes = ['/search']
-notes  = 'Search result `Save As` smart collection server fn smoke clean.'
+notes  = 'Search result `Save As` smart collection server fn smoke clean. 2026-07-25: `tests/e2e/search-see-all.spec.ts` passed in Chromium and Firefox with exhaustive poster/thumbnail URL-family assertions, query-preserving See All links, and clean hydration.'
 
 [[page]]
 name   = 'PlexSourcesPage'
@@ -30,7 +30,7 @@ notes  = 'OAuth PIN controls. 2026-06-28: seeded Plex source list now resolves i
 name   = 'WatermarksEditorPage'
 status = '✅'
 routes = ['/watermarks/add', '/watermarks/:id']
-notes  = '2026-07-25: `tests/e2e/watermark-preview.spec.ts` passed in Chromium and Firefox with successful hydration, real native-dimension Actual Size geometry, distinguishable 4:3/16:9 guides, deterministic Previous/Next ends and ordering, unsaved-edit confirmation, stable loading/error/ready states, and desktop/mobile containment.'
+notes  = '2026-07-25: `tests/e2e/watermark-preview.spec.ts` passed in Chromium and Firefox with successful hydration, real native-dimension Actual Size geometry, a centered 4:3 safe-frame guide without an outer 16:9 guideline, deterministic Previous/Next ends and ordering, unsaved-edit confirmation, stable loading/error/ready states, and desktop/mobile containment.'
 
 [[page]]
 name   = 'BlockEditorPage'
@@ -313,6 +313,12 @@ name   = 'ShowPage'
 status = '✅'
 routes = ['/media/tv/shows/:id', '/media/shows/:id']
 notes  = '`tests/e2e/content-variants.spec.ts` covers hydrated show details, Add To actions, special-feature rows, and playback troubleshooting links.'
+
+[[page]]
+name   = 'SearchSeeAllPages'
+status = '✅'
+routes = ['/media/tv/seasons', '/media/tv/episodes', '/media/music/videos']
+notes  = '2026-07-25: `tests/e2e/search-see-all.spec.ts` passed in Chromium and Firefox with query-preserving pagination and letter navigation, source-valid card destinations, hydrated selection, and 390x844 containment.'
 
 [[page]]
 name   = 'SeasonPage'

@@ -7,8 +7,8 @@ summary    = '''
 Completed 2026-07-25. The ported list/editor, validation, upload, and drawvg
 placement behavior now have a truthful real-asset preview: Actual Size uses
 the selected image's probed dimensions, Scaled preserves its aspect ratio,
-and the rendered frame shows distinguishable localized 16:9 and 4:3 content
-guides. Deterministically ordered Previous/Next controls compare saved
+and the rendered frame shows a localized centered 4:3 safe-frame guide without
+an outer 16:9 guideline. Deterministically ordered Previous/Next controls compare saved
 watermarks without returning to the list, with explicit end states and a
 localized dirty-form confirmation before navigation. Loading, unavailable,
 ready, and render-failure states remain distinct.
@@ -23,9 +23,9 @@ resolved    = true
 
 [[debt]]
 id          = 'preview-lacks-aspect-ratio-positioning-guides'
-description = 'The placement preview does not show clearly distinguishable 4:3 and 16:9 content-boundary helper lines, making it difficult to position a watermark consistently relative to content with different aspect ratios.'
+description = 'The placement preview does not show a clearly distinguishable centered 4:3 content-boundary helper line, making it difficult to position a watermark consistently relative to 4:3 content.'
 discovered  = '2026-07-21'
-evidence    = 'The real composite renders an outer teal 16:9 frame and centered amber 4:3 frame with localized legend labels in every supported culture. Chromium and Firefox pixel-sampling coverage distinguishes both guides and proves the preview plus legend remain contained at a 390x844 mobile viewport.'
+evidence    = 'The real composite renders a centered amber 4:3 frame with a localized legend label in every supported culture and intentionally leaves the outer 16:9 preview edge unmarked. Chromium and Firefox pixel-sampling coverage proves the 4:3 guide is present, the removed 16:9 guide is absent, and the preview plus legend remain contained at a 390x844 mobile viewport.'
 resolved    = true
 
 [[debt]]

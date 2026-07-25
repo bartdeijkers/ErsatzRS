@@ -234,8 +234,8 @@ must not depend on concrete application services or storage.
 
 - Render watermark Actual Size using the selected asset dimensions, or rename
   the result as a schematic preview.
-- Add clearly distinguishable 4:3 and 16:9 content-boundary helper lines so
-  watermark placement can be aligned across content aspect ratios.
+- Add a clearly distinguishable centered 4:3 content-boundary helper line
+  without marking the outer 16:9 preview edge.
 - Add localized Previous/Next controls that navigate saved watermarks in a
   deterministic order for rapid comparison, handle list ends explicitly, and
   never silently discard unsaved edits.

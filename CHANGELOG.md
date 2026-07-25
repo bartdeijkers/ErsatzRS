@@ -28,11 +28,19 @@ release section when tagging a release.
 
 ### Changed
 
+- Search and per-kind media browser cards now preserve ErsatzTV's artwork
+  semantics: poster cards request provider height 440, thumbnail cards request
+  height 220, and existing provider resize parameters are replaced instead of
+  duplicated. Season and episode cards keep valid upstream navigation, music
+  videos no longer receive fabricated detail links, and See All routes preserve
+  the active query through pagination and letter navigation. The pinned
+  upstream routes have no library-filter combobox, so ErsatzRS does not invent
+  one.
 - Watermark editing now renders the selected custom asset in a truthful
   Full-HD reference preview. Actual Size uses native image dimensions, the
-  preview distinguishes 4:3 and 16:9 framing, and localized Previous/Next
-  controls provide deterministic comparison navigation with explicit list
-  ends and unsaved-edit protection.
+  preview includes a centered 4:3 safe-frame guide without an outer 16:9
+  guideline, and localized Previous/Next controls provide deterministic
+  comparison navigation with explicit list ends and unsaved-edit protection.
 - Split Trakt maintenance into capability-honest local and remote paths. Local
   matching, generated playlists, settings, deletion, and hourly rematching no
   longer require a placeholder API client; interactive and scheduled remote
