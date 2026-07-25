@@ -30,7 +30,7 @@ notes  = 'OAuth PIN controls. 2026-06-28: seeded Plex source list now resolves i
 name   = 'WatermarksEditorPage'
 status = '✅'
 routes = ['/watermarks/add', '/watermarks/:id']
-notes  = ''
+notes  = '2026-07-25: `tests/e2e/watermark-preview.spec.ts` passed in Chromium and Firefox with successful hydration, real native-dimension Actual Size geometry, distinguishable 4:3/16:9 guides, deterministic Previous/Next ends and ordering, unsaved-edit confirmation, stable loading/error/ready states, and desktop/mobile containment.'
 
 [[page]]
 name   = 'BlockEditorPage'

@@ -330,7 +330,7 @@ gates passed.
 id         = 'p7c-02'
 phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Make watermark preview claims truthful'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'watermark-editor'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-03']
@@ -341,7 +341,30 @@ localized Previous/Next controls navigate deterministically between saved
 watermarks without silently discarding edits. Focused desktop/mobile browser
 coverage proves preview geometry and comparison navigation.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-25. The editor preview now probes the selected asset's native
+dimensions and asks the real FFmpeg path to composite it onto a 1920x1080
+reference frame; Actual Size uses those dimensions, Scaled preserves aspect
+ratio, and placement is clamped without hiding oversized crop behavior.
+Distinct localized unavailable, loading, ready, and failure states keep the
+SSR/hydration geometry stable. Teal 16:9 and centered amber 4:3 guides plus
+localized legend labels make the content boundaries explicit in every
+supported culture.
+
+The application query owns deterministic previous/next navigation in
+repository order (`Name`, then `Id`) and keeps missing records separate from
+repository failures. Localized editor controls expose disabled first/last
+states and a dirty-form confirmation prevents silent edit loss.
+
+Focused application, infrastructure, and web regressions passed. Chromium and
+Firefox browser coverage proved delayed loading-to-ready behavior, real
+1024x1024 asset pixels and 171x171 preview geometry, distinct guide pixels,
+localized labels, deterministic navigation, dirty cancel/confirm behavior,
+render failure, mobile containment at 390x844, and hydration without
+panic/checksum errors. Both workspace clippy configurations, 1,033 nextest
+tests plus doctests, matched SSR/WASM build, web parity/hydration/architecture
+gates, and the real MPEG-TS/HLS smoke gate passed.
+'''
 
 [[milestone]]
 id         = 'p7c-03'
