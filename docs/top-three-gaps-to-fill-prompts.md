@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-24
-last_processed_commit: d54ef7557f4e272bb86fc8b3d41a6e474adf6c9f
+generated: 2026-07-25
+last_processed_commit: 436a94029d9ce37217ae310d930e665dea8ee238
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
