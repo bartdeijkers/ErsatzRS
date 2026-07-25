@@ -437,6 +437,12 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
       `/search?query=trakt_list%3a${seed.editorTraktId}`,
     );
     await editorRow.getByRole('button', { name: /^match trakt list items$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT COALESCE("PlaylistId", '') FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+`)).not.toBe('');
+    const generatedPlaylistId = sqlite(`
+SELECT "PlaylistId" FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+`);
     const deleteRow = page.locator('tr').filter({ hasText: seed.deleteListName });
     await deleteRow.getByRole('button', { name: /^delete trakt list$/i }).click();
     const deleteDialog = page
@@ -464,6 +470,12 @@ SELECT COUNT(*) FROM "TraktList" WHERE "Id" = ${seed.deleteListId};
 SELECT "AutoRefresh" || ',' || "GeneratePlaylist"
 FROM "TraktList" WHERE "Id" = ${seed.editorListId};
 `)).toBe('1,0');
+    expect(sqlite(`
+SELECT COALESCE("PlaylistId", '') FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+`)).toBe('');
+    expect(sqlite(`
+SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
+`)).toBe('0');
     expect(runtimeErrors).toEqual([]);
   });
 

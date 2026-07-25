@@ -28,6 +28,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Split Trakt maintenance into capability-honest local and remote paths. Local
+  matching, generated playlists, settings, deletion, and hourly rematching no
+  longer require a placeholder API client; interactive and scheduled remote
+  refresh require real configuration and retain typed failures without
+  preventing independent local matching.
 - Completed the admin application-layer extraction. Collection, playlist,
   channel, schedule, settings, Trakt, media, playout, template, deco, filler,
   watermark, troubleshooting, artwork, and layout transports now call

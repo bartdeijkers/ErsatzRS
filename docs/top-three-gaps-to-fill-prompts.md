@@ -8,76 +8,13 @@ rules: docs/automation/gap-prompt-rules.md
 
 # Top three chores to do - goal prompts
 
-Actionable paste-and-run goal prompts selected from the current progress files,
-ADR index, active plans, and Phase 7C state. Phase 7B is complete; all three
-currently runnable Phase 7C closeouts are listed in milestone order.
+Goal prompts selected from the current progress files, ADR index, active plans,
+and Phase 7C state. P7C-01 is complete; p7c-02 and p7c-03 are runnable, while
+the third prompt records the dependent p7c-04 closeout that follows them.
 
 ---
 
-## 1. Fix the next ErsatzTV parity gap in ErsatzRS: split local Trakt work from remote refresh (slug `trakt-lists`)
-
-Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7c-01** and the
-remaining Trakt responsibility debt in
-[`docs/progress/parity/trakt-lists.toml`](progress/parity/trakt-lists.toml).
-Preserve the ported list/editor, matching, generated-playlist, refresh, and
-maintenance behavior without retaining a fake remote capability.
-
-Current debt:
-
-> `local-trakt-operations-require-noop-api-client` — local matching and
-> generated-playlist operations instantiate `NoopTraktApiClient` because one
-> synchronizer type couples local persistence work to remote API refresh.
-
-Before editing:
-
-1. Read the pinned `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`,
-   `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`,
-   `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`,
-   and `ErsatzTV/Shared/AddTraktListDialog.razor` chain.
-2. Read the Trakt parity file, the plan's P7C-01 section, and
-   `cargo xtask progress milestones --id p7c-01 --full`; inspect every
-   synchronizer constructor, local maintenance caller, refresh caller, API
-   handler, background task, and test double.
-3. Build a Source Map covering remote fetch/authentication, persisted list
-   state, local item matching, generated-playlist maintenance, delete/update
-   behavior, errors, and transaction/side-effect ordering.
-
-Implement the complete slice:
-
-- Split local matching/generated-playlist maintenance from remote refresh so
-  local operations accept only the capabilities they use.
-- Require a real configured Trakt client for remote refresh and delete
-  `NoopTraktApiClient`; do not replace it with another placeholder or optional
-  remote path that can fail only at runtime.
-- Keep application commands, public server-function/API DTOs, localized
-  feedback, persisted identifiers, matching rules, and maintenance scheduling
-  stable.
-- Preserve typed operational failures and prove local calls cannot reach
-  remote methods by construction.
-- Add focused regressions for local match/update/delete, generated playlists,
-  configured and unavailable remote refresh, and transaction/side-effect
-  ordering.
-- Resolve the debt and update p7c-01 evidence, parity, plan, changelog, phase,
-  prompts, and session records.
-
-Verification:
-
-- `cargo fmt --all -- --check`
-- `cargo xtask architecture-lint`
-- focused app/infra/web tests through `./run.sh`
-- both workspace clippy configurations
-- `./run.sh test-closeout`
-- `cargo xtask parity-check web`
-- `cargo xtask progress check`
-- `git diff --check`
-
-Report the Source Map, new capability boundaries, preserved local/remote
-behavior, closed and remaining debt, verification results, changed files, and
-the live next milestone. Do not commit or push unless explicitly requested.
-
----
-
-## 2. Fix the next maintainer-requested parity chore: truthful watermark preview and comparison (slug `watermark-editor`)
+## 1. Fix the next maintainer-requested parity chore: truthful watermark preview and comparison (slug `watermark-editor`)
 
 Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7c-02** and all
 three open debts in
@@ -153,7 +90,7 @@ unless explicitly requested.
 
 ---
 
-## 3. Fix the next ErsatzTV parity gap in ErsatzRS: deferred search and See All behavior (slug `media-browsers`)
+## 2. Fix the next ErsatzTV parity gap in ErsatzRS: deferred search and See All behavior (slug `media-browsers`)
 
 Use AGENTS.md plus `skills/parity-slice.md`. Close milestone **p7c-03** and the
 two open debts in
@@ -224,3 +161,47 @@ Report both source maps, pinned See All/filter disposition, artwork behavior,
 intentional deviations and ADR decision, closed and remaining debt,
 verification results, changed files, and the live next milestone. Do not
 commit or push unless explicitly requested.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: split large modules after boundary extraction (slug `application-use-case-layer`)
+
+Start only after milestones **p7c-02** and **p7c-03** are complete. Follow
+AGENTS.md and the P7C-04 contract in
+[`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md).
+Close p7c-04 without changing public behavior or weakening completeness gates.
+
+Before editing:
+
+1. Reconfirm that `cargo xtask progress milestones --id p7c-04 --full` is
+   runnable, then refresh the measurements in `plans/module-split-survey.md`.
+2. Read the web/WASM split plan and inspect the reduced media-browser
+   transport, YAML/scripted registries, and provider adapters.
+3. Build a Source Map of module ownership, dependency directions, exhaustive
+   dispatch, tests, and public transport contracts.
+
+Implement the complete slice:
+
+- Split the reduced modules along application, infrastructure, scheduler, and
+  transport ownership boundaries.
+- Keep native application code out of hydration/WASM code and preserve all
+  public DTOs, routes, persisted shapes, dispatch behavior, and provider
+  semantics.
+- Retain or strengthen exhaustive dispatch/completeness gates so file moves
+  cannot silently drop behavior.
+- Update p7c-04 evidence, the active plans, changelog, phase, prompts, and
+  session records.
+
+Verification:
+
+- focused crate tests through `./run.sh`
+- `cargo xtask architecture-lint`
+- both workspace clippy configurations
+- `./run.sh test-closeout`
+- `cargo xtask parity-check web`
+- `cargo xtask progress check`
+- `git diff --check`
+
+Report the refreshed measurements, Source Map, final module ownership,
+preserved contracts, verification results, changed files, and the live next
+milestone. Do not commit or push unless explicitly requested.

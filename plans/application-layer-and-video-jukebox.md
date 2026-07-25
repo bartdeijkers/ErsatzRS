@@ -223,10 +223,12 @@ must not depend on concrete application services or storage.
 
 ### P7C-01 — Trakt responsibility split
 
-- Separate local matching/generated-playlist maintenance from remote API
-  refresh operations.
-- Delete `NoopTraktApiClient`; operations that do not need a remote capability
-  must not accept one.
+- Complete (2026-07-25). Client-free local maintenance now owns matching,
+  generated playlists, settings, deletion, and hourly due-match work.
+- Remote import and daily refresh require `TraktApiClient`, persist fetched
+  list state before matching, and surface typed configuration/API failures.
+  `NoopTraktApiClient` is removed, and unavailable remote configuration cannot
+  prevent the independent local maintenance pass.
 
 ### P7C-02 — Watermark preview truthfulness
 

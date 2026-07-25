@@ -1,8 +1,8 @@
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::db::DbPool;
-use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
-use ersatzrs_infra::trakt_sync::TraktSynchronizer;
+use ersatzrs_infra::trakt::TraktApiClient;
+use ersatzrs_infra::trakt_sync::{TraktRemoteSynchronizer, TraktSynchronizer};
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
 use std::sync::{atomic::AtomicI32, Arc};
 use tokio::sync::mpsc;
@@ -85,13 +85,13 @@ async fn run_trakt_maintenance(pool: DbPool, shutdown: CancellationToken) {
         }
 
         if let Ok(client) = TraktApiClient::from_env() {
-            let sync = TraktSynchronizer::new(pool.clone(), client);
+            let sync = TraktRemoteSynchronizer::new(pool.clone(), client);
             if let Err(error) = sync.refresh_due_auto_lists().await {
                 tracing::warn!(error = %error, "failed to refresh due Trakt lists");
             }
         }
 
-        let sync = TraktSynchronizer::new(pool.clone(), NoopTraktApiClient);
+        let sync = TraktSynchronizer::new(pool.clone());
         if let Err(error) = sync.match_due_lists().await {
             tracing::warn!(error = %error, "failed to match due Trakt lists");
         }

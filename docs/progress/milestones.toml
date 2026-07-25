@@ -307,7 +307,7 @@ and persisted side effects remain intact.
 id         = 'p7c-01'
 phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Split local Trakt work from remote refresh'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'trakt-lists'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-05']
@@ -316,7 +316,15 @@ Local matching/generated-playlist operations do not accept a remote API
 capability, refresh operations require a real configured client, and
 NoopTraktApiClient is removed with focused Trakt regressions passing.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-25. `TraktSynchronizer` is now a client-free local
+maintenance boundary, while `TraktRemoteSynchronizer<C: TraktApiClient>` owns
+remote import/refresh and delegates matching only after persistence succeeds.
+`NoopTraktApiClient` was removed. Focused infra/app/web Trakt tests, the
+Chromium/Firefox Trakt workflow, architecture lint, both workspace clippy
+configurations, 1,029 nextest tests plus doctests, and web parity/hydration
+gates passed.
+'''
 
 [[milestone]]
 id         = 'p7c-02'

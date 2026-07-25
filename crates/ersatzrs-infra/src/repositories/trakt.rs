@@ -8,8 +8,8 @@ use sqlx::{Pool, Row};
 
 use crate::repositories::common::decode_bool_column;
 use crate::repositories::SqlxResultExt as _;
-use crate::trakt::{NoopTraktApiClient, TraktApiClient};
-use crate::trakt_sync::TraktSynchronizer;
+use crate::trakt::TraktApiClient;
+use crate::trakt_sync::{TraktRemoteSynchronizer, TraktSynchronizer};
 
 const PAGE_SIZE_KEY: &str = "pages.trakt.lists_page_size";
 
@@ -108,13 +108,13 @@ impl TraktRepository for SqliteTraktRepository {
 
     async fn add_or_refresh(&self, locator: &TraktListLocator) -> Result<EntityId> {
         let client = TraktApiClient::from_env()?;
-        TraktSynchronizer::new(self.0.clone(), client)
+        TraktRemoteSynchronizer::new(self.0.clone(), client)
             .add_or_refresh(locator)
             .await
     }
 
     async fn match_items(&self, id: EntityId) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone(), NoopTraktApiClient)
+        TraktSynchronizer::new(self.0.clone())
             .match_list_items(id)
             .await
     }
@@ -125,15 +125,13 @@ impl TraktRepository for SqliteTraktRepository {
         auto_refresh: bool,
         generate_playlist: bool,
     ) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone(), NoopTraktApiClient)
+        TraktSynchronizer::new(self.0.clone())
             .update_settings(id, auto_refresh, generate_playlist)
             .await
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone(), NoopTraktApiClient)
-            .delete_list(id)
-            .await
+        TraktSynchronizer::new(self.0.clone()).delete_list(id).await
     }
 
     async fn get_page_size(&self) -> Result<u32> {

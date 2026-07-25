@@ -18,39 +18,15 @@ const COLLECTION_TYPE_SEASON: i32 = 2;
 const COLLECTION_TYPE_MOVIE: i32 = 10;
 const COLLECTION_TYPE_EPISODE: i32 = 20;
 
-/// Coordinates Trakt API reads with the ErsatzTV-compatible Trakt tables.
-pub struct TraktSynchronizer<C> {
+/// Maintains locally persisted Trakt lists and generated playlists.
+pub struct TraktSynchronizer {
     pool: DbPool,
-    api_client: C,
 }
 
-impl<C> TraktSynchronizer<C>
-where
-    C: TraktApiClient,
-{
+impl TraktSynchronizer {
     #[must_use]
-    pub fn new(pool: DbPool, api_client: C) -> Self {
-        Self { pool, api_client }
-    }
-
-    /// Add or refresh a Trakt list, then immediately match its items.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the Trakt API request fails or persistence fails.
-    pub async fn add_or_refresh(&self, locator: &TraktListLocator) -> Result<EntityId> {
-        let mut list = self
-            .api_client
-            .get_user_list(&locator.user, &locator.list)
-            .await?;
-
-        // ErsatzTV overwrites the API user slug with the requested lower-case
-        // user before saving, then keeps the API list slug for future refreshes.
-        list.user = locator.user.to_ascii_lowercase();
-        let list_id = self.save_list(&list).await?;
-        let list = self.save_list_items(list_id).await?;
-        self.match_list_items(list.id).await?;
-        Ok(list.id)
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
     }
 
     /// Match a saved Trakt list against local metadata and update generated
@@ -204,44 +180,6 @@ where
         Ok(())
     }
 
-    /// Refresh auto-refresh lists whose last Trakt download is older than one
-    /// day.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when list loading, API reads, or persistence fails.
-    pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
-        let cutoff = Utc::now() - Duration::days(1);
-        let rows = sqlx::query(
-            r#"SELECT "User", "List"
-               FROM "TraktList"
-               WHERE "AutoRefresh" = 1 AND ("LastUpdate" IS NULL OR "LastUpdate" <= ?)
-               ORDER BY "Id""#,
-        )
-        .bind(encode_datetime(cutoff))
-        .fetch_all(&self.pool)
-        .await
-        .repository()?;
-
-        let mut count = 0;
-        for row in rows {
-            let locator = TraktListLocator {
-                user: row
-                    .try_get::<Option<String>, _>("User")
-                    .repository()?
-                    .unwrap_or_default(),
-                list: row
-                    .try_get::<Option<String>, _>("List")
-                    .repository()?
-                    .unwrap_or_default(),
-            };
-            self.add_or_refresh(&locator).await?;
-            count += 1;
-        }
-
-        Ok(count)
-    }
-
     /// Re-match lists whose last local match is older than one hour.
     ///
     /// # Errors
@@ -321,10 +259,12 @@ where
         }
     }
 
-    async fn save_list_items(&self, list_id: EntityId) -> Result<TraktList> {
+    async fn save_list_items<C>(&self, api_client: &C, list_id: EntityId) -> Result<TraktList>
+    where
+        C: TraktApiClient,
+    {
         let list = self.load_list(list_id).await?;
-        let incoming = self
-            .api_client
+        let incoming = api_client
             .get_user_list_items(&list.user, &list.list)
             .await?;
         let incoming_ids = incoming
@@ -743,6 +683,81 @@ where
             .await
             .repository()?;
         Ok(())
+    }
+}
+
+/// Imports and refreshes Trakt data using a configured remote API capability.
+pub struct TraktRemoteSynchronizer<C> {
+    local: TraktSynchronizer,
+    api_client: C,
+}
+
+impl<C> TraktRemoteSynchronizer<C>
+where
+    C: TraktApiClient,
+{
+    #[must_use]
+    pub fn new(pool: DbPool, api_client: C) -> Self {
+        Self {
+            local: TraktSynchronizer::new(pool),
+            api_client,
+        }
+    }
+
+    /// Add or refresh a Trakt list, then immediately match its persisted items.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the Trakt API request fails or persistence fails.
+    pub async fn add_or_refresh(&self, locator: &TraktListLocator) -> Result<EntityId> {
+        let mut list = self
+            .api_client
+            .get_user_list(&locator.user, &locator.list)
+            .await?;
+        list.user = locator.user.to_ascii_lowercase();
+        let list_id = self.local.save_list(&list).await?;
+        let list = self
+            .local
+            .save_list_items(&self.api_client, list_id)
+            .await?;
+        self.local.match_list_items(list.id).await?;
+        Ok(list.id)
+    }
+
+    /// Refresh auto-refresh lists whose last Trakt download is older than one day.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when list loading, API reads, or persistence fails.
+    pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
+        let cutoff = Utc::now() - Duration::days(1);
+        let rows = sqlx::query(
+            r#"SELECT "User", "List"
+               FROM "TraktList"
+               WHERE "AutoRefresh" = 1 AND ("LastUpdate" IS NULL OR "LastUpdate" <= ?)
+               ORDER BY "Id""#,
+        )
+        .bind(encode_datetime(cutoff))
+        .fetch_all(&self.local.pool)
+        .await
+        .repository()?;
+
+        let mut count = 0;
+        for row in rows {
+            let locator = TraktListLocator {
+                user: row
+                    .try_get::<Option<String>, _>("User")
+                    .repository()?
+                    .unwrap_or_default(),
+                list: row
+                    .try_get::<Option<String>, _>("List")
+                    .repository()?
+                    .unwrap_or_default(),
+            };
+            self.add_or_refresh(&locator).await?;
+            count += 1;
+        }
+        Ok(count)
     }
 }
 

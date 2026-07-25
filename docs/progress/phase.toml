@@ -18,11 +18,12 @@ next_steps = '''
 Phase 7B is complete: playout-build and scan operation ownership, real block
 preview, and all remaining production admin/API workflows now use the
 application boundary without raw admin SQL, pool access, silent resource
-defaults, or row-decode defaults. Phase 7C milestones p7c-01, p7c-02, and
-p7c-03 are runnable; close the Trakt responsibility split, truthful watermark
-preview/navigation, and deferred search/browser behavior before the dependent
-p7c-04 module-split closeout. Phase 8 jukebox implementation must still wait
-for p7c-04 and the accepted p8a-01 product contract. Use
+defaults, or row-decode defaults. P7C-01 is complete: local Trakt maintenance
+no longer carries a placeholder remote capability. Phase 7C milestones p7c-02
+and p7c-03 are runnable; close truthful watermark preview/navigation and
+deferred search/browser behavior before the dependent p7c-04 module-split
+closeout. Phase 8 jukebox implementation must still wait for p7c-04 and the
+accepted p8a-01 product contract. Use
 `cargo xtask progress milestones --runnable` for runnable work,
 `cargo xtask progress milestones --id <id> --full` for acceptance criteria,
 and `cargo xtask progress gaps` for feature/debt state. Historical completion

@@ -21,29 +21,6 @@ pub struct TraktApiClient {
     client_id: String,
 }
 
-/// Placeholder client for synchronizer operations that do not call Trakt.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoopTraktApiClient;
-
-#[async_trait]
-impl TraktApiClientTrait for NoopTraktApiClient {
-    async fn get_user_list(&self, _user: &str, _list: &str) -> Result<TraktList> {
-        Err(RepositoryError::Conflict(
-            "Trakt API client is not configured for this operation".to_string(),
-        ))
-    }
-
-    async fn get_user_list_items(
-        &self,
-        _user: &str,
-        _list: &str,
-    ) -> Result<Vec<TraktListItemWithGuids>> {
-        Err(RepositoryError::Conflict(
-            "Trakt API client is not configured for this operation".to_string(),
-        ))
-    }
-}
-
 impl TraktApiClient {
     /// Build a Trakt API client from environment configuration.
     ///
@@ -59,13 +36,7 @@ impl TraktApiClient {
         let client_id = std::env::var("TRAKT__CLIENTID")
             .ok()
             .or_else(|| std::env::var("TRAKT:ClientId").ok())
-            .or_else(|| std::env::var("ErsatzRS_TRAKT__CLIENTID").ok())
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                RepositoryError::Conflict(
-                    "Trakt ClientId is not configured; set TRAKT__CLIENTID".to_string(),
-                )
-            })?;
+            .or_else(|| std::env::var("ErsatzRS_TRAKT__CLIENTID").ok());
 
         #[allow(clippy::disallowed_methods)]
         let base_url = std::env::var("TRAKT__BASEURL")
@@ -74,7 +45,7 @@ impl TraktApiClient {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| TRAKT_BASE_URL.to_string());
 
-        Ok(Self::new(base_url, client_id))
+        Self::from_configuration(base_url, client_id)
     }
 
     #[must_use]
@@ -84,6 +55,17 @@ impl TraktApiClient {
             base_url,
             client_id,
         }
+    }
+
+    fn from_configuration(base_url: String, client_id: Option<String>) -> Result<Self> {
+        let client_id = client_id
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                RepositoryError::Conflict(
+                    "Trakt ClientId is not configured; set TRAKT__CLIENTID".to_string(),
+                )
+            })?;
+        Ok(Self::new(base_url, client_id))
     }
 
     async fn get_json<T>(&self, path: &str) -> Result<T>
@@ -341,11 +323,22 @@ struct TraktListItemIds {
 
 #[cfg(test)]
 mod tests {
+    use ersatzrs_core::repositories::RepositoryError;
     use ersatzrs_core::trakt::TraktApiClient as _;
     use httpmock::Method::GET;
     use httpmock::MockServer;
 
     use super::TraktApiClient;
+
+    #[test]
+    fn missing_remote_configuration_is_a_typed_failure() {
+        let error = TraktApiClient::from_configuration(
+            "https://api.trakt.tv".to_string(),
+            Some(" ".to_string()),
+        )
+        .expect_err("blank client id must fail");
+        assert!(matches!(error, RepositoryError::Conflict(_)));
+    }
 
     #[tokio::test]
     async fn fetches_user_list_with_ersatztv_headers() {

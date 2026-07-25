@@ -1,13 +1,15 @@
 feature    = 'Trakt lists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`, `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`, `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`, `ErsatzTV/Shared/AddTraktListDialog.razor`'
 rs_target  = '`crates/ersatzrs-core/src/trakt.rs`, `crates/ersatzrs-infra/src/{trakt,trakt_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/trakt,pages/media/trakt_lists}.rs`, `crates/ersatzrs-web/src/api/trakt.rs`, `crates/ersatzrs-web/src/admin/languages/`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
-Reopened 2026-07-21 for structural closeout: the ported Trakt behavior remains,
-but local match/update/delete operations instantiate a placeholder remote API
-client because the synchronizer couples local and remote responsibilities.
-Milestone p7c-01 separates those capabilities without changing user behavior.
+Completed 2026-07-25. Local matching, generated-playlist maintenance, settings
+updates, deletion, and due-local matching use a client-free synchronizer.
+Remote import and scheduled refresh require a configured Trakt API client and
+persist remote data before local matching. Public admin/API behavior, list
+identity, matching rules, timestamps, generated-playlist ordering, and
+maintenance cadence remain unchanged.
 '''
 
 [[debt]]
@@ -15,4 +17,4 @@ id          = 'local-trakt-operations-require-noop-api-client'
 description = 'Local Trakt matching/generated-playlist operations require a synchronizer generic that includes remote API methods, so callers inject NoopTraktApiClient and rely on those methods never being reached.'
 discovered  = '2026-07-21'
 evidence    = '`crates/ersatzrs-infra/src/trakt.rs` labels NoopTraktApiClient as a placeholder and returns Conflict from remote methods; web handlers and maintenance tasks instantiate it for local-only work. Close through milestone p7c-01.'
-resolved    = false
+resolved    = true
