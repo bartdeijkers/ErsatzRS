@@ -1545,6 +1545,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MediaItemTitle => "Titre de l'élément multimédia",
         TextKey::ActualSize => "Taille réelle",
         TextKey::AddWatermark => "Ajouter un filigrane",
+        TextKey::AspectRatioGuides => "Repères de format d’image",
         TextKey::BottomLeft => "En bas à gauche",
         TextKey::BottomMiddle => "En bas au centre",
         TextKey::BottomRight => "En bas à droite",
@@ -1552,12 +1553,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CopyOf => "Copie de",
         TextKey::CurrentImage => "Image actuelle",
         TextKey::Custom => "Personnalisé",
+        TextKey::ChannelLogoPreviewUnavailable => {
+            "L’aperçu du logo de chaîne nécessite une chaîne. Choisissez ici une image personnalisée."
+        }
         TextKey::DeleteWatermark => "Supprimer le filigrane",
         TextKey::DurationSeconds => "Durée (secondes)",
         TextKey::EditWatermark => "Modifier le filigrane",
+        TextKey::EnableWatermarkToPreview => {
+            "Activez le filigrane pour afficher son emplacement."
+        }
         TextKey::Frequency => "Fréquence",
         TextKey::GeneratingPreview => "Génération de l'aperçu...",
         TextKey::HorizontalMarginPercent => "Marge horizontale (%)",
+        TextKey::GuideFourThree => "Cadre sûr 4:3",
+        TextKey::GuideSixteenNine => "Cadre 16:9",
         TextKey::Identity => "Identité",
         TextKey::Image => "Image",
         TextKey::ImageSource => "Source de l'image",
@@ -1570,6 +1579,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Minutes => "minutes",
         TextKey::Moods => "Ambiances",
         TextKey::NewName => "Nouveau nom",
+        TextKey::NativeAssetDimensions => "Taille native et taille affichée",
+        TextKey::NextWatermark => "Filigrane suivant",
         TextKey::Opacity => "Opacité",
         TextKey::OpacityExpression => "Expression d'opacité",
         TextKey::OpacityOneToHundred => "Opacité (1-100)",
@@ -1578,22 +1589,34 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlaceWithinSourceContent => "Placer dans le contenu source",
         TextKey::Placement => "Placement",
         TextKey::PlacementPreview => "Aperçu du placement",
+        TextKey::PreviewFailed => "Échec de l’aperçu",
+        TextKey::PreviewReferenceFullHd => "Cadre de référence Full HD · 1920×1080",
+        TextKey::PreviousWatermark => "Filigrane précédent",
         TextKey::RightMiddle => "À droite au centre",
         TextKey::SaveWatermark => "Enregistrer le filigrane",
         TextKey::Scaled => "Mis à l'échelle",
+        TextKey::SelectCustomImageToPreview => {
+            "Sélectionnez ou importez une image personnalisée à prévisualiser."
+        }
         TextKey::Size => "Taille",
         TextKey::TopLeft => "En haut à gauche",
         TextKey::TopMiddle => "En haut au centre",
         TextKey::TopRight => "En haut à droite",
         TextKey::UploadFailed => "Échec de l'envoi.",
         TextKey::UploadImage => "Envoyer une image",
+        TextKey::UnsavedChanges => "Modifications non enregistrées",
+        TextKey::UnsavedWatermarkChangesMessage => {
+            "Abandonner les modifications du filigrane et ouvrir le filigrane sélectionné ?"
+        }
         TextKey::VerticalMarginPercent => "Marge verticale (%)",
         TextKey::WatermarkCopied => "Filigrane copié.",
         TextKey::WatermarkNotFound => "Filigrane introuvable.",
         TextKey::WatermarkPlacementPreview => "aperçu du placement du filigrane",
         TextKey::WatermarkPreview => "aperçu du filigrane",
+        TextKey::WatermarkNavigation => "Navigation entre les filigranes",
         TextKey::WidthPercent => "Largeur (%)",
         TextKey::ZIndex => "Z-Index",
+        TextKey::DiscardChanges => "Abandonner les modifications",
         TextKey::XmltvBlockBehavior => "Comportement des blocs XMLTV",
         TextKey::XmltvTimeZone => "Fuseau horaire XMLTV",
         TextKey::Xmltv => "XMLTV",

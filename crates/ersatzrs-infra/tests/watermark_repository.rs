@@ -85,3 +85,35 @@ async fn watermark_admin_reads_report_closed_pool_errors() {
     assert!(repos.watermark.get_admin(1).await.is_err());
     assert!(repos.watermark.name_exists(0, "station").await.is_err());
 }
+
+#[tokio::test]
+async fn watermark_admin_list_has_deterministic_name_then_id_order() {
+    let repos = make_repositories(common::test_db().await);
+    let charlie = repos
+        .watermark
+        .save_admin(&watermark("Charlie"))
+        .await
+        .unwrap();
+    let alpha = repos
+        .watermark
+        .save_admin(&watermark("Alpha"))
+        .await
+        .unwrap();
+    let bravo = repos
+        .watermark
+        .save_admin(&watermark("Bravo"))
+        .await
+        .unwrap();
+
+    let rows = repos.watermark.list_admin().await.unwrap();
+    assert_eq!(
+        rows.into_iter()
+            .map(|row| (row.id, row.name))
+            .collect::<Vec<_>>(),
+        vec![
+            (alpha, "Alpha".to_owned()),
+            (bravo, "Bravo".to_owned()),
+            (charlie, "Charlie".to_owned()),
+        ]
+    );
+}

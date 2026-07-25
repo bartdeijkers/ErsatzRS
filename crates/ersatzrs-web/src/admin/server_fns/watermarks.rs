@@ -20,7 +20,7 @@ pub struct WatermarkListRow {
 /// - `WatermarkLocation`: BottomRight=0, BottomLeft=1, TopRight=2, TopLeft=3,
 ///   TopMiddle=4, RightMiddle=5, BottomMiddle=6, LeftMiddle=7, MiddleCenter=8
 /// - `WatermarkSize`: Scaled=0, ActualSize=1
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WatermarkForm {
     pub id: i64,
     pub name: String,
@@ -39,6 +39,21 @@ pub struct WatermarkForm {
     pub place_within_source_content: bool,
     pub opacity_expression: String,
     pub z_index: i32,
+}
+
+/// One adjacent watermark in deterministic editor comparison order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatermarkNavigationItem {
+    pub id: i64,
+    pub name: String,
+}
+
+/// Watermark editor form plus explicit comparison boundaries.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WatermarkEditorData {
+    pub form: WatermarkForm,
+    pub previous: Option<WatermarkNavigationItem>,
+    pub next: Option<WatermarkNavigationItem>,
 }
 
 impl Default for WatermarkForm {
@@ -113,6 +128,27 @@ fn watermark_form_from_admin(form: ersatzrs_app::commands::WatermarkAdminForm) -
     }
 }
 
+#[cfg(feature = "ssr")]
+fn watermark_navigation_from_admin(
+    item: ersatzrs_app::queries::WatermarkNavigationRead,
+) -> WatermarkNavigationItem {
+    WatermarkNavigationItem {
+        id: item.id,
+        name: item.name,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn watermark_editor_from_admin(
+    editor: ersatzrs_app::queries::WatermarkEditorRead,
+) -> WatermarkEditorData {
+    WatermarkEditorData {
+        form: watermark_form_from_admin(editor.form),
+        previous: editor.previous.map(watermark_navigation_from_admin),
+        next: editor.next.map(watermark_navigation_from_admin),
+    }
+}
+
 /// Parameters for the `drawvg`-based placement preview.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WatermarkPreviewParams {
@@ -123,6 +159,23 @@ pub struct WatermarkPreviewParams {
     pub mode: i32,
     pub size: i32,
     pub opacity: i32,
+}
+
+/// Selected custom asset rendered by the truthful placement preview.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WatermarkAssetPreviewParams {
+    pub placement: WatermarkPreviewParams,
+    pub image_path: String,
+}
+
+/// Metadata for the real-asset placement preview.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WatermarkAssetPreview {
+    pub data_url: String,
+    pub asset_width: u32,
+    pub asset_height: u32,
+    pub rendered_width: u32,
+    pub rendered_height: u32,
 }
 
 #[server]
@@ -175,6 +228,20 @@ pub async fn get_watermark_form(id: i64) -> Result<WatermarkForm, ServerFnError>
         .await
         .map_err(ServerFnError::new)?
         .map(watermark_form_from_admin)
+        .ok_or_else(|| ServerFnError::new("Watermark not found"))
+}
+
+#[server]
+pub async fn get_watermark_editor_data(id: i64) -> Result<WatermarkEditorData, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .get_watermark_editor(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .map(watermark_editor_from_admin)
         .ok_or_else(|| ServerFnError::new("Watermark not found"))
 }
 
@@ -387,9 +454,12 @@ pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnEr
         .map_err(ServerFnError::new)
 }
 
-/// Generates a 320×180 drawvg-based preview PNG of the watermark placement.
-/// Returns a base64 `data:image/png;base64,…` URL, or an empty string when
-/// `mode == 0` (None).
+/// Generates the legacy schematic placement preview.
+///
+/// The editor uses [`preview_watermark_asset_placement`] so the visible
+/// preview contains the selected image and can represent `ActualSize`
+/// truthfully. This server function remains available for matched older
+/// clients, but no longer claims a fixed-height box is the asset's real size.
 #[server]
 pub async fn preview_watermark_placement(
     params: WatermarkPreviewParams,
@@ -406,12 +476,7 @@ pub async fn preview_watermark_placement(
     }
 
     let wm_w = W * params.width_pct / 100.0;
-    let wm_h = if params.size == 1 {
-        // ActualSize — use a fixed placeholder size
-        32.0_f64
-    } else {
-        (wm_w * 0.5).max(8.0)
-    };
+    let wm_h = (wm_w * 0.5).max(8.0);
     let h_px = W * params.h_margin / 100.0;
     let v_px = H * params.v_margin / 100.0;
     let cx = (W - wm_w) / 2.0;
@@ -490,6 +555,251 @@ rect {rx:.1} {ry:.1} {wm_w:.1} {wm_h:.1} fill
     Ok(format!("data:image/png;base64,{encoded}"))
 }
 
+const PREVIEW_WIDTH: f64 = 320.0;
+const PREVIEW_HEIGHT: f64 = 180.0;
+const REFERENCE_WIDTH: f64 = 1920.0;
+const REFERENCE_HEIGHT: f64 = 1080.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PreviewLayout {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn preview_asset_size(
+    params: &WatermarkPreviewParams,
+    asset_width: u32,
+    asset_height: u32,
+) -> Result<(f64, f64), &'static str> {
+    if asset_width == 0 || asset_height == 0 {
+        return Err("watermark image dimensions must be greater than zero");
+    }
+
+    if params.size == 1 {
+        return Ok((
+            f64::from(asset_width) * PREVIEW_WIDTH / REFERENCE_WIDTH,
+            f64::from(asset_height) * PREVIEW_HEIGHT / REFERENCE_HEIGHT,
+        ));
+    }
+
+    let width = (PREVIEW_WIDTH * params.width_pct / 100.0).max(1.0);
+    let height = width * f64::from(asset_height) / f64::from(asset_width);
+    Ok((width, height.max(1.0)))
+}
+
+fn preview_layout(params: &WatermarkPreviewParams, width: f64, height: f64) -> PreviewLayout {
+    let horizontal_margin = PREVIEW_WIDTH * params.h_margin / 100.0;
+    let vertical_margin = PREVIEW_HEIGHT * params.v_margin / 100.0;
+    let center_x = (PREVIEW_WIDTH - width) / 2.0;
+    let center_y = (PREVIEW_HEIGHT - height) / 2.0;
+    let (x, y) = match params.location {
+        0 => (
+            PREVIEW_WIDTH - width - horizontal_margin,
+            PREVIEW_HEIGHT - height - vertical_margin,
+        ),
+        1 => (horizontal_margin, PREVIEW_HEIGHT - height - vertical_margin),
+        2 => (PREVIEW_WIDTH - width - horizontal_margin, vertical_margin),
+        3 => (horizontal_margin, vertical_margin),
+        4 => (center_x, vertical_margin),
+        5 => (PREVIEW_WIDTH - width - horizontal_margin, center_y),
+        6 => (center_x, PREVIEW_HEIGHT - height - vertical_margin),
+        7 => (horizontal_margin, center_y),
+        _ => (center_x, center_y),
+    };
+
+    PreviewLayout {
+        x: x.clamp(0.0, (PREVIEW_WIDTH - width).max(0.0)),
+        y: y.clamp(0.0, (PREVIEW_HEIGHT - height).max(0.0)),
+        width,
+        height,
+    }
+}
+
+fn rounded_render_dimension(value: f64) -> u32 {
+    let bounded = value.round().clamp(1.0, f64::from(u32::MAX));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    {
+        bounded as u32
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn watermark_asset_path(image_path: &str) -> Result<std::path::PathBuf, ServerFnError> {
+    use std::path::{Component, Path};
+
+    let path = Path::new(image_path);
+    let mut components = path.components();
+    let Some(Component::Normal(file_name)) = components.next() else {
+        return Err(ServerFnError::new("Watermark image path is invalid"));
+    };
+    if components.next().is_some() {
+        return Err(ServerFnError::new("Watermark image path is invalid"));
+    }
+
+    Ok(ersatzrs_infra::file_system_layout::data_path("watermarks").join(file_name))
+}
+
+#[cfg(feature = "ssr")]
+fn parse_image_dimensions(output: &str) -> Result<(u32, u32), ServerFnError> {
+    let dimensions = output
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .ok_or_else(|| ServerFnError::new("FFprobe returned no watermark dimensions"))?;
+    let (width, height) = dimensions
+        .split_once('x')
+        .ok_or_else(|| ServerFnError::new("FFprobe returned invalid watermark dimensions"))?;
+    let width = width
+        .parse::<u32>()
+        .map_err(|_| ServerFnError::new("FFprobe returned invalid watermark width"))?;
+    let height = height
+        .parse::<u32>()
+        .map_err(|_| ServerFnError::new("FFprobe returned invalid watermark height"))?;
+    if width == 0 || height == 0 {
+        return Err(ServerFnError::new(
+            "Watermark image dimensions must be greater than zero",
+        ));
+    }
+    Ok((width, height))
+}
+
+#[cfg(feature = "ssr")]
+async fn probe_image_dimensions(path: &std::path::Path) -> Result<(u32, u32), ServerFnError> {
+    let output = tokio::process::Command::new(ersatzrs_ffmpeg::ffprobe_path())
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+        ])
+        .arg(path)
+        .output()
+        .await
+        .map_err(|error| ServerFnError::new(format!("ffprobe spawn: {error}")))?;
+    if !output.status.success() {
+        return Err(ServerFnError::new(format!(
+            "ffprobe: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    parse_image_dimensions(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Render the selected custom watermark into a 1920×1080 reference frame.
+///
+/// The returned 320×180 PNG is exactly one sixth of that reference in each
+/// dimension. `ActualSize` therefore uses the selected asset's native pixel
+/// dimensions at a truthful 1:6 scale; `Scaled` uses the configured percentage
+/// of the reference output width while preserving the asset aspect ratio.
+#[server]
+pub async fn preview_watermark_asset_placement(
+    params: WatermarkAssetPreviewParams,
+) -> Result<WatermarkAssetPreview, ServerFnError> {
+    use base64::Engine;
+    use std::io::Write;
+    use tokio::process::Command;
+
+    if params.placement.mode == 0 {
+        return Err(ServerFnError::new(
+            "Watermark preview is unavailable while mode is None",
+        ));
+    }
+
+    let image_path = watermark_asset_path(&params.image_path)?;
+    let (asset_width, asset_height) = probe_image_dimensions(&image_path).await?;
+    let (width, height) = preview_asset_size(&params.placement, asset_width, asset_height)
+        .map_err(ServerFnError::new)?;
+    let layout = preview_layout(&params.placement, width, height);
+    let rendered_width = rounded_render_dimension(layout.width);
+    let rendered_height = rounded_render_dimension(layout.height);
+    let opacity = (f64::from(params.placement.opacity) / 100.0).clamp(0.0, 1.0);
+
+    // A 4:3 frame inside 320x180 is exactly 240x180, centered at x=40.
+    // Its horizontal edges share the 16:9 boundary; amber overwrites only the
+    // centered span so both guides remain distinguishable.
+    let drawvg = "\
+setcolor #111827
+rect 0 0 320 180 fill
+setcolor #14b8a6@0.90
+rect 1 1 318 2 fill
+rect 1 177 318 2 fill
+rect 1 1 2 178 fill
+rect 317 1 2 178 fill
+setcolor #f59e0b@0.90
+rect 40 0 2 180 fill
+rect 278 0 2 180 fill
+rect 40 0 240 2 fill
+rect 40 178 240 2 fill
+";
+    let mut script = tempfile::NamedTempFile::new()
+        .map_err(|error| ServerFnError::new(format!("temp file: {error}")))?;
+    script
+        .write_all(drawvg.as_bytes())
+        .map_err(|error| ServerFnError::new(format!("write drawvg: {error}")))?;
+    let script_dir = script
+        .path()
+        .parent()
+        .ok_or_else(|| ServerFnError::new("drawvg temp file has no parent directory"))?
+        .to_path_buf();
+    let script_name = script
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| ServerFnError::new("drawvg temp file name is not valid UTF-8"))?
+        .to_owned();
+    let filter = format!(
+        "[0:v]drawvg=file={script_name}[frame];\
+         [1:v]scale={rendered_width}:{rendered_height},format=rgba,\
+         colorchannelmixer=aa={opacity:.2}[watermark];\
+         [frame][watermark]overlay=x={x:.1}:y={y:.1}:format=auto,format=rgba[out]",
+        x = layout.x,
+        y = layout.y,
+    );
+
+    let output = Command::new(ersatzrs_ffmpeg::ffmpeg_path())
+        .current_dir(script_dir)
+        .args(["-y", "-f", "lavfi", "-i", "color=c=0x111827:s=320x180:r=1"])
+        .arg("-i")
+        .arg(&image_path)
+        .args([
+            "-filter_complex",
+            &filter,
+            "-map",
+            "[out]",
+            "-frames:v",
+            "1",
+            "-f",
+            "image2pipe",
+            "-c:v",
+            "png",
+            "pipe:1",
+        ])
+        .output()
+        .await
+        .map_err(|error| ServerFnError::new(format!("ffmpeg spawn: {error}")))?;
+    if !output.status.success() {
+        return Err(ServerFnError::new(format!(
+            "ffmpeg: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
+    Ok(WatermarkAssetPreview {
+        data_url: format!("data:image/png;base64,{encoded}"),
+        asset_width,
+        asset_height,
+        rendered_width,
+        rendered_height,
+    })
+}
+
 #[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
 mod tests {
     use super::*;
@@ -511,6 +821,104 @@ mod tests {
             original_content_type: Some("image/png".to_owned()),
             ..WatermarkForm::default()
         }
+    }
+
+    #[test]
+    fn actual_size_preview_uses_native_asset_dimensions_at_reference_scale() {
+        let params = WatermarkPreviewParams {
+            location: 0,
+            width_pct: 15.0,
+            h_margin: 5.0,
+            v_margin: 5.0,
+            mode: 1,
+            size: 1,
+            opacity: 100,
+        };
+
+        let (width, height) =
+            preview_asset_size(&params, 600, 300).expect("valid asset dimensions");
+        let layout = preview_layout(&params, width, height);
+
+        assert_eq!((width, height), (100.0, 50.0));
+        assert_eq!(
+            layout,
+            PreviewLayout {
+                x: 204.0,
+                y: 121.0,
+                width: 100.0,
+                height: 50.0,
+            }
+        );
+    }
+
+    #[test]
+    fn scaled_preview_preserves_asset_aspect_ratio_and_placement() {
+        let params = WatermarkPreviewParams {
+            location: 3,
+            width_pct: 20.0,
+            h_margin: 5.0,
+            v_margin: 5.0,
+            mode: 1,
+            size: 0,
+            opacity: 75,
+        };
+
+        let (width, height) =
+            preview_asset_size(&params, 800, 400).expect("valid asset dimensions");
+        let layout = preview_layout(&params, width, height);
+
+        assert_eq!((width, height), (64.0, 32.0));
+        assert_eq!(
+            layout,
+            PreviewLayout {
+                x: 16.0,
+                y: 9.0,
+                width: 64.0,
+                height: 32.0,
+            }
+        );
+    }
+
+    #[test]
+    fn preview_layout_clamps_each_edge_and_keeps_oversized_assets_contained_by_cropping() {
+        let params = WatermarkPreviewParams {
+            location: 0,
+            width_pct: 15.0,
+            h_margin: -20.0,
+            v_margin: 200.0,
+            mode: 1,
+            size: 1,
+            opacity: 100,
+        };
+
+        assert_eq!(
+            preview_layout(&params, 40.0, 20.0),
+            PreviewLayout {
+                x: 280.0,
+                y: 0.0,
+                width: 40.0,
+                height: 20.0,
+            }
+        );
+        assert_eq!(
+            preview_layout(&params, 640.0, 360.0),
+            PreviewLayout {
+                x: 0.0,
+                y: 0.0,
+                width: 640.0,
+                height: 360.0,
+            }
+        );
+    }
+
+    #[test]
+    fn preview_dimension_parsing_and_asset_paths_reject_invalid_input() {
+        assert_eq!(parse_image_dimensions("600x300\n").unwrap(), (600, 300));
+        assert!(parse_image_dimensions("600").is_err());
+        assert!(parse_image_dimensions("0x300").is_err());
+        assert!(watermark_asset_path("station.png").is_ok());
+        assert!(watermark_asset_path("../station.png").is_err());
+        assert!(watermark_asset_path("nested/station.png").is_err());
     }
 
     #[tokio::test]

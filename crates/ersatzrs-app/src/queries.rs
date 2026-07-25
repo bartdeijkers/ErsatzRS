@@ -216,6 +216,21 @@ pub struct WatermarkListRead {
     pub image_source: i32,
 }
 
+/// One deterministic neighbor in the watermark editor comparison sequence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WatermarkNavigationRead {
+    pub id: EntityId,
+    pub name: String,
+}
+
+/// Watermark editor form plus its immediate neighbors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WatermarkEditorRead {
+    pub form: WatermarkAdminForm,
+    pub previous: Option<WatermarkNavigationRead>,
+    pub next: Option<WatermarkNavigationRead>,
+}
+
 pub async fn list_ffmpeg_profiles(
     page: u32,
     page_size: u32,
@@ -533,6 +548,43 @@ pub async fn get_watermark(
         });
     }
     Ok(repository.get_admin(id).await?.map(watermark_admin_form))
+}
+
+pub async fn get_watermark_editor(
+    id: EntityId,
+    repository: &dyn WatermarkRepository,
+) -> Result<Option<WatermarkEditorRead>> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "watermark_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+
+    let watermarks = repository.list_admin().await?;
+    let Some(index) = watermarks.iter().position(|watermark| watermark.id == id) else {
+        return Ok(None);
+    };
+    let form = watermark_admin_form(watermarks[index].clone());
+    let previous = index.checked_sub(1).map(|previous_index| {
+        let watermark = &watermarks[previous_index];
+        WatermarkNavigationRead {
+            id: watermark.id,
+            name: watermark.name.clone(),
+        }
+    });
+    let next = watermarks
+        .get(index + 1)
+        .map(|watermark| WatermarkNavigationRead {
+            id: watermark.id,
+            name: watermark.name.clone(),
+        });
+
+    Ok(Some(WatermarkEditorRead {
+        form,
+        previous,
+        next,
+    }))
 }
 
 pub async fn list_template_groups(
@@ -2694,6 +2746,169 @@ pub enum LibraryScanStatus {
         /// Storage-neutral worker or adapter diagnostic.
         message: String,
     },
+}
+
+#[cfg(test)]
+mod watermark_editor_tests {
+    use async_trait::async_trait;
+    use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
+
+    use super::*;
+
+    struct WatermarkNavigationRepository {
+        watermarks: Vec<ChannelWatermark>,
+        fail_list: bool,
+    }
+
+    #[async_trait]
+    impl WatermarkRepository for WatermarkNavigationRepository {
+        async fn list_admin(&self) -> RepositoryResult<Vec<ChannelWatermark>> {
+            if self.fail_list {
+                return Err(RepositoryError::unavailable(
+                    "list watermark editor navigation",
+                    "database closed",
+                ));
+            }
+            Ok(self.watermarks.clone())
+        }
+
+        async fn get_admin(&self, id: EntityId) -> RepositoryResult<Option<ChannelWatermark>> {
+            Ok(self
+                .watermarks
+                .iter()
+                .find(|watermark| watermark.id == id)
+                .cloned())
+        }
+
+        async fn name_exists(&self, id: EntityId, name: &str) -> RepositoryResult<bool> {
+            Ok(self
+                .watermarks
+                .iter()
+                .any(|watermark| watermark.id != id && watermark.name == name))
+        }
+
+        async fn save_admin(&self, watermark: &ChannelWatermark) -> RepositoryResult<EntityId> {
+            Ok(watermark.id)
+        }
+
+        async fn delete_admin(&self, _id: EntityId) -> RepositoryResult<()> {
+            Ok(())
+        }
+
+        async fn copy_admin(&self, id: EntityId, _name: &str) -> RepositoryResult<EntityId> {
+            Ok(id)
+        }
+    }
+
+    fn watermark(id: EntityId, name: &str) -> ChannelWatermark {
+        ChannelWatermark {
+            id,
+            name: name.to_owned(),
+            mode: ChannelWatermarkMode::Permanent,
+            image_source: ChannelWatermarkImageSource::Custom,
+            image: Some(format!("{name}.png")),
+            original_content_type: Some("image/png".to_owned()),
+            location: WatermarkLocation::BottomRight,
+            size: WatermarkSize::ActualSize,
+            width_percent: 15.0,
+            horizontal_margin_percent: 5.0,
+            vertical_margin_percent: 5.0,
+            frequency_minutes: 15,
+            duration_seconds: 15,
+            opacity: 100,
+            place_within_source_content: false,
+            opacity_expression: None,
+            z_index: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn editor_navigation_preserves_repository_order_and_explicit_ends() {
+        let repository = WatermarkNavigationRepository {
+            watermarks: vec![
+                watermark(10, "Alpha"),
+                watermark(20, "Bravo"),
+                watermark(30, "Charlie"),
+            ],
+            fail_list: false,
+        };
+
+        let first = get_watermark_editor(10, &repository)
+            .await
+            .expect("first editor query")
+            .expect("first watermark");
+        assert_eq!(first.previous, None);
+        assert_eq!(
+            first.next,
+            Some(WatermarkNavigationRead {
+                id: 20,
+                name: "Bravo".to_owned(),
+            })
+        );
+
+        let middle = get_watermark_editor(20, &repository)
+            .await
+            .expect("middle editor query")
+            .expect("middle watermark");
+        assert_eq!(
+            middle.previous,
+            Some(WatermarkNavigationRead {
+                id: 10,
+                name: "Alpha".to_owned(),
+            })
+        );
+        assert_eq!(
+            middle.next,
+            Some(WatermarkNavigationRead {
+                id: 30,
+                name: "Charlie".to_owned(),
+            })
+        );
+
+        let last = get_watermark_editor(30, &repository)
+            .await
+            .expect("last editor query")
+            .expect("last watermark");
+        assert_eq!(
+            last.previous,
+            Some(WatermarkNavigationRead {
+                id: 20,
+                name: "Bravo".to_owned(),
+            })
+        );
+        assert_eq!(last.next, None);
+    }
+
+    #[tokio::test]
+    async fn editor_navigation_distinguishes_absence_and_repository_failure() {
+        let repository = WatermarkNavigationRepository {
+            watermarks: vec![watermark(10, "Alpha")],
+            fail_list: false,
+        };
+        assert_eq!(
+            get_watermark_editor(99, &repository)
+                .await
+                .expect("valid absence"),
+            None
+        );
+
+        let error = get_watermark_editor(
+            10,
+            &WatermarkNavigationRepository {
+                watermarks: Vec::new(),
+                fail_list: true,
+            },
+        )
+        .await
+        .expect_err("repository failure remains typed");
+        assert!(matches!(
+            error,
+            ApplicationError::Unavailable {
+                operation: "list watermark editor navigation",
+                ..
+            }
+        ));
+    }
 }
 
 /// Query one library's aggregate scan state.

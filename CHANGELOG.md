@@ -28,6 +28,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Watermark editing now renders the selected custom asset in a truthful
+  Full-HD reference preview. Actual Size uses native image dimensions, the
+  preview distinguishes 4:3 and 16:9 framing, and localized Previous/Next
+  controls provide deterministic comparison navigation with explicit list
+  ends and unsaved-edit protection.
 - Split Trakt maintenance into capability-honest local and remote paths. Local
   matching, generated playlists, settings, deletion, and hourly rematching no
   longer require a placeholder API client; interactive and scheduled remote

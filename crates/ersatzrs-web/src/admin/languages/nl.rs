@@ -2147,6 +2147,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MediaItemTitle => "Media-itemtitel",
         TextKey::ActualSize => "Werkelijke grootte",
         TextKey::AddWatermark => "Zenderlogo toevoegen",
+        TextKey::AspectRatioGuides => "Beeldverhoudingshulplijnen",
         TextKey::BottomLeft => "Linksonder",
         TextKey::BottomMiddle => "Middenonder",
         TextKey::BottomRight => "Rechtsonder",
@@ -2154,12 +2155,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CopyOf => "Kopie van",
         TextKey::CurrentImage => "Huidige afbeelding",
         TextKey::Custom => "Aangepast",
+        TextKey::ChannelLogoPreviewUnavailable => {
+            "Voor een voorbeeld van het kanaallogo is een kanaalcontext nodig. Kies hier een aangepaste afbeelding."
+        }
         TextKey::DeleteWatermark => "Zenderlogo verwijderen",
         TextKey::DurationSeconds => "Duur (seconden)",
         TextKey::EditWatermark => "Zenderlogo bewerken",
+        TextKey::EnableWatermarkToPreview => {
+            "Schakel het zenderlogo in om de plaatsing te bekijken."
+        }
         TextKey::Frequency => "Frequentie",
         TextKey::GeneratingPreview => "Voorbeeld genereren...",
         TextKey::HorizontalMarginPercent => "Horizontale marge (%)",
+        TextKey::GuideFourThree => "Veilig 4:3-kader",
+        TextKey::GuideSixteenNine => "16:9-kader",
         TextKey::Identity => "Identiteit",
         TextKey::Image => "Afbeelding",
         TextKey::ImageSource => "Afbeeldingsbron",
@@ -2172,6 +2181,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Minutes => "minuten",
         TextKey::Moods => "Stemmingen",
         TextKey::NewName => "Nieuwe naam",
+        TextKey::NativeAssetDimensions => "Oorspronkelijke en weergegeven grootte",
+        TextKey::NextWatermark => "Volgend zenderlogo",
         TextKey::Opacity => "Dekking",
         TextKey::OpacityExpression => "Dekkingsuitdrukking",
         TextKey::OpacityOneToHundred => "Dekking (1-100)",
@@ -2180,22 +2191,34 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlaceWithinSourceContent => "Binnen broninhoud plaatsen",
         TextKey::Placement => "Plaatsing",
         TextKey::PlacementPreview => "Plaatsingsvoorbeeld",
+        TextKey::PreviewFailed => "Voorbeeld mislukt",
+        TextKey::PreviewReferenceFullHd => "Full-HD-referentiekader · 1920×1080",
+        TextKey::PreviousWatermark => "Vorig zenderlogo",
         TextKey::RightMiddle => "Midden rechts",
         TextKey::SaveWatermark => "Zenderlogo opslaan",
         TextKey::Scaled => "Geschaald",
+        TextKey::SelectCustomImageToPreview => {
+            "Selecteer of upload een aangepaste afbeelding voor het voorbeeld."
+        }
         TextKey::Size => "Grootte",
         TextKey::TopLeft => "Linksboven",
         TextKey::TopMiddle => "Middenboven",
         TextKey::TopRight => "Rechtsboven",
         TextKey::UploadFailed => "Uploaden mislukt.",
         TextKey::UploadImage => "Afbeelding uploaden",
+        TextKey::UnsavedChanges => "Niet-opgeslagen wijzigingen",
+        TextKey::UnsavedWatermarkChangesMessage => {
+            "Uw wijzigingen aan het zenderlogo weggooien en het geselecteerde zenderlogo openen?"
+        }
         TextKey::VerticalMarginPercent => "Verticale marge (%)",
         TextKey::WatermarkCopied => "Zenderlogo gekopieerd.",
         TextKey::WatermarkNotFound => "Zenderlogo niet gevonden.",
         TextKey::WatermarkPlacementPreview => "voorbeeld van zenderlogoplaatsing",
         TextKey::WatermarkPreview => "zenderlogovoorbeeld",
+        TextKey::WatermarkNavigation => "Navigatie tussen zenderlogo's",
         TextKey::WidthPercent => "Breedte (%)",
         TextKey::ZIndex => "Z-index",
+        TextKey::DiscardChanges => "Wijzigingen weggooien",
         TextKey::XmltvBlockBehavior => "XMLTV-blokgedrag",
         TextKey::XmltvTimeZone => "XMLTV-tijdzone",
         TextKey::Xmltv => "XMLTV",

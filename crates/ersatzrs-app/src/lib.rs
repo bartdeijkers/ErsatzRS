@@ -318,6 +318,14 @@ impl ApplicationServices {
         queries::get_watermark(id, self.ports.watermarks()).await
     }
 
+    /// Load one watermark editor model and its deterministic comparison neighbors.
+    pub async fn get_watermark_editor(
+        &self,
+        id: i64,
+    ) -> Result<Option<queries::WatermarkEditorRead>> {
+        queries::get_watermark_editor(id, self.ports.watermarks()).await
+    }
+
     /// Validate and persist one watermark.
     pub async fn save_watermark(&self, command: commands::SaveWatermark) -> Result<i64> {
         commands::save_watermark(command, self.ports.watermarks()).await

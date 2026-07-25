@@ -2173,6 +2173,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MediaItemTitle => "Título do item de mídia",
         TextKey::ActualSize => "Tamanho real",
         TextKey::AddWatermark => "Adicionar marca d'água",
+        TextKey::AspectRatioGuides => "Guias de proporção",
         TextKey::BottomLeft => "Inferior esquerdo",
         TextKey::BottomMiddle => "Inferior central",
         TextKey::BottomRight => "Inferior direito",
@@ -2180,12 +2181,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CopyOf => "Cópia de",
         TextKey::CurrentImage => "Imagem atual",
         TextKey::Custom => "Personalizado",
+        TextKey::ChannelLogoPreviewUnavailable => {
+            "A prévia do logotipo do canal requer o contexto de um canal. Escolha uma imagem personalizada aqui."
+        }
         TextKey::DeleteWatermark => "Excluir marca d'água",
         TextKey::DurationSeconds => "Duração (segundos)",
         TextKey::EditWatermark => "Editar marca d'água",
+        TextKey::EnableWatermarkToPreview => {
+            "Ative a marca d'água para ver seu posicionamento."
+        }
         TextKey::Frequency => "Frequência",
         TextKey::GeneratingPreview => "Gerando prévia...",
         TextKey::HorizontalMarginPercent => "Margem horizontal (%)",
+        TextKey::GuideFourThree => "Quadro seguro 4:3",
+        TextKey::GuideSixteenNine => "Quadro 16:9",
         TextKey::Identity => "Identidade",
         TextKey::Image => "Imagem",
         TextKey::ImageSource => "Fonte da imagem",
@@ -2198,6 +2207,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Minutes => "minutos",
         TextKey::Moods => "Humores",
         TextKey::NewName => "Novo nome",
+        TextKey::NativeAssetDimensions => "Tamanho original e renderizado",
+        TextKey::NextWatermark => "Próxima marca d'água",
         TextKey::Opacity => "Opacidade",
         TextKey::OpacityExpression => "Expressão de opacidade",
         TextKey::OpacityOneToHundred => "Opacidade (1-100)",
@@ -2206,22 +2217,34 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlaceWithinSourceContent => "Posicionar dentro do conteúdo de origem",
         TextKey::Placement => "Posicionamento",
         TextKey::PlacementPreview => "Prévia do posicionamento",
+        TextKey::PreviewFailed => "Falha na prévia",
+        TextKey::PreviewReferenceFullHd => "Quadro de referência Full HD · 1920×1080",
+        TextKey::PreviousWatermark => "Marca d'água anterior",
         TextKey::RightMiddle => "Meio direito",
         TextKey::SaveWatermark => "Salvar marca d'água",
         TextKey::Scaled => "Escalado",
+        TextKey::SelectCustomImageToPreview => {
+            "Selecione ou envie uma imagem personalizada para visualizar."
+        }
         TextKey::Size => "Tamanho",
         TextKey::TopLeft => "Superior esquerdo",
         TextKey::TopMiddle => "Superior central",
         TextKey::TopRight => "Superior direito",
         TextKey::UploadFailed => "Falha no upload.",
         TextKey::UploadImage => "Enviar imagem",
+        TextKey::UnsavedChanges => "Alterações não salvas",
+        TextKey::UnsavedWatermarkChangesMessage => {
+            "Descartar as alterações da marca d'água e abrir a marca d'água selecionada?"
+        }
         TextKey::VerticalMarginPercent => "Margem vertical (%)",
         TextKey::WatermarkCopied => "Marca d'água copiada.",
         TextKey::WatermarkNotFound => "Marca d'água não encontrada.",
         TextKey::WatermarkPlacementPreview => "prévia do posicionamento da marca d'água",
         TextKey::WatermarkPreview => "prévia da marca d'água",
+        TextKey::WatermarkNavigation => "Navegação entre marcas d'água",
         TextKey::WidthPercent => "Largura (%)",
         TextKey::ZIndex => "Índice Z",
+        TextKey::DiscardChanges => "Descartar alterações",
         TextKey::XmltvBlockBehavior => "Comportamento de blocos XMLTV",
         TextKey::XmltvTimeZone => "Fuso horário XMLTV",
         TextKey::Xmltv => "XMLTV",
