@@ -14,9 +14,12 @@ use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::MediaCardRow;
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
+use crate::admin::ui::primitives::resource_state::{
+    admin_loading_resource_view, admin_result_view,
+};
+use crate::admin::ui::primitives::toast::load_failed_message;
 #[cfg(target_arch = "wasm32")]
-use crate::admin::ui::primitives::toast::ToastSeverity;
-use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
 
@@ -54,18 +57,23 @@ where
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let media_revision = RwSignal::new(String::new());
-    let load_toast = use_toast();
-
     Effect::new(move |_| {
         let _ = search.get();
         page.set(0);
     });
 
-    let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new(
+    // This loader runs during SSR, where the toast channel is inert by
+    // construction (hydration-lint rule-3), so the failure is carried in the
+    // resource value and rendered by `admin_result_view` instead.
+    let data: Resource<Result<(Vec<MediaCardRow>, u64), String>> = Resource::new(
         move || (search.get(), page.get(), media_revision.get()),
         move |(q, p, _)| {
             let loader = loader.clone();
-            async move { load_or_notify(loader(q, p, PAGE_SIZE, true).await, load_toast) }
+            async move {
+                loader(q, p, PAGE_SIZE, true)
+                    .await
+                    .map_err(load_failed_message)
+            }
         },
     );
 
@@ -74,6 +82,7 @@ where
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
+            let load_toast = use_toast();
             leptos::task::spawn_local(async move {
                 loop {
                     match media_state_revision().await {
@@ -85,10 +94,7 @@ where
                         }
                         Err(error) if !revision_load_failed.get_untracked() => {
                             revision_load_failed.set(true);
-                            load_toast.push(
-                                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
-                                ToastSeverity::Error,
-                            );
+                            load_toast.push(load_failed_message(error), ToastSeverity::Error);
                         }
                         Err(_) => {}
                     }
@@ -98,10 +104,10 @@ where
         }
     });
 
-    let total = Signal::derive(move || data.get().map(|(_, t)| t));
+    let total = Signal::derive(move || data.get().and_then(Result::ok).map(|(_, t)| t));
 
     let present: Signal<Option<HashSet<char>>> = Signal::derive(move || {
-        data.get().map(|(rows, _)| {
+        data.get().and_then(Result::ok).map(|(rows, _)| {
             rows.iter()
                 .map(|r| letter_bucket(&r.sort_title))
                 .collect::<HashSet<_>>()
@@ -125,10 +131,10 @@ where
 
             <MediaCardPager total=total page=page page_size=PAGE_SIZE/>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
                     data.get()
-                        .map(|(rows, _)| {
+                        .map(|result| admin_result_view(result, |(rows, _)| {
                             if rows.is_empty() {
                                 return view! {
                                     <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p>
@@ -171,7 +177,7 @@ where
                                 </div>
                             }
                             .into_any()
-                        })
+                        }))
                 }}
             </Suspense>
 

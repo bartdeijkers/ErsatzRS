@@ -503,6 +503,14 @@ tbody tr:hover {
     font-size: 0.75rem;
 }
 
+/* Load failure for the collection editors. Always present in the DOM and
+   toggled with `style:display` so the editor keeps one stable shape. */
+.load-error {
+    margin: 0;
+    color: var(--color-error, #f87171);
+    font-size: 0.875rem;
+}
+
 .pager {
     display: flex;
     align-items: center;

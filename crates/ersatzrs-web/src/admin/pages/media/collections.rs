@@ -18,7 +18,7 @@ use crate::admin::ui::primitives::{
     form::TextField,
     icon::{icon_style, IconName},
     resource_state::{admin_loading_resource_view, admin_result_view},
-    toast::{load_or_notify, use_toast, ToastSeverity},
+    toast::{load_failed_message, load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
@@ -280,31 +280,44 @@ pub fn CollectionEditorPage() -> impl IntoView {
 fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
     let default_name = tr(TextKey::NewCollectionTitle).to_string();
     let toast = use_toast();
-    let initial: Resource<CollectionForm> = Resource::new_blocking(
+    // `/media/collections/add` has no `:id` segment, so id 0 means "new" and
+    // must not be queried — the application layer rejects it as invalid.
+    //
+    // The failure travels in the resource value, not through the toast channel:
+    // this loader runs during SSR where `ToastStore::push` is inert by
+    // construction (hydration-lint rule-3). The island keeps ownership of the
+    // async boundary so the `<form>` stays server-rendered for the no-JS
+    // fallback; `load_error` below is read reactively, so a failed load is
+    // already visible and non-submittable in the SSR HTML.
+    let initial: Resource<Result<CollectionForm, String>> = Resource::new_blocking(
         move || collection_id,
         move |id| {
             let default_name = default_name.clone();
             async move {
                 match (id != 0).then_some(id) {
-                    Some(id) => load_or_notify(get_collection(id).await, toast).unwrap_or_default(),
-                    None => CollectionForm {
+                    Some(id) => get_collection(id)
+                        .await
+                        .map(Option::unwrap_or_default)
+                        .map_err(load_failed_message),
+                    None => Ok(CollectionForm {
                         name: default_name,
                         ..CollectionForm::default()
-                    },
+                    }),
                 }
             }
         },
     );
+    let load_error = Signal::derive(move || initial.get().and_then(Result::err));
 
     let name = RwSignal::new(String::new());
     let id_signal: RwSignal<i64> = RwSignal::new(0);
     let hydrated = RwSignal::new(false);
     Effect::new(move |_| {
-        if let Some(f) = initial.get() {
+        if let Some(Ok(f)) = initial.get() {
             id_signal.set(f.id);
             name.set(f.name);
-            hydrated.set(true);
         }
+        hydrated.set(true);
     });
 
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
@@ -374,7 +387,7 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
                 <button
                     type="submit"
                     class=style::btn_add
-                    disabled=move || save_action.pending().get()
+                    disabled=move || save_action.pending().get() || load_error.get().is_some()
                 >
                     <span>{move || if id_signal.get() == 0 { "+" } else { "✓" }}</span>
                     {move || if id_signal.get() == 0 {
@@ -387,6 +400,12 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
 
             <div class=style::editor>
                 <h1 class=style::page_title>{tr(TextKey::Collection)}</h1>
+                <p
+                    class=style::load_error
+                    style:display=move || if load_error.get().is_some() { "" } else { "none" }
+                >
+                    {move || load_error.get().unwrap_or_default()}
+                </p>
                 <TextField
                     label=tr(TextKey::Name)
                     value=name
@@ -408,10 +427,19 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
 fn MembersSection(collection_id: i64) -> impl IntoView {
     use crate::admin::server_fns::media_browser::{suggest_media_items, MediaItemSuggestion};
 
+    // The suggestion fetch below runs only after hydration, so it can keep
+    // using the toast channel.
     let load_toast = use_toast();
-    let members: Resource<Vec<CollectionMember>> = Resource::new(
+    // This loader runs during SSR, where the toast channel is inert by
+    // construction (hydration-lint rule-3), so the failure is carried in the
+    // resource value and rendered by `admin_result_view` instead.
+    let members: Resource<Result<Vec<CollectionMember>, String>> = Resource::new(
         move || collection_id,
-        move |id| async move { load_or_notify(list_collection_members(id).await, load_toast) },
+        move |id| async move {
+            list_collection_members(id)
+                .await
+                .map_err(load_failed_message)
+        },
     );
 
     let query = RwSignal::new(String::new());
@@ -431,10 +459,9 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
         leptos::task::spawn_local(async move {
             match suggest_media_items(trimmed).await {
                 Ok(results) => suggestions.set(results),
-                Err(error) => load_toast.push(
-                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
-                    ToastSeverity::Error,
-                ),
+                Err(error) => {
+                    load_toast.push(load_failed_message(error), ToastSeverity::Error);
+                }
             }
         });
     });
@@ -506,9 +533,9 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
                 </ul>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::LoadingMembers)}</p> }>
+            <Suspense fallback=admin_loading_resource_view>
                 {move || {
-                    members.get().map(|rows| {
+                    members.get().map(|result| admin_result_view(result, |rows| {
                         if rows.is_empty() {
                             return view! {
                                 <p class=style::empty>{tr(TextKey::NoMembers)}</p>
@@ -539,7 +566,7 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
                             </ul>
                         }
                         .into_any()
-                    })
+                    }))
                 }}
             </Suspense>
         </div>

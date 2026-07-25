@@ -12,7 +12,7 @@ use crate::admin::server_fns::media_sources::{
     PathReplacementRow, PlexSourceRow,
 };
 use crate::admin::ui::primitives::dialog::DeleteDialog;
-use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
+use crate::admin::ui::primitives::toast::{load_failed_message, load_or_notify, use_toast};
 
 use super::jellyfin::PathsEditor;
 
@@ -289,17 +289,24 @@ pub fn PlexLibrariesPage() -> impl IntoView {
 
 #[island]
 fn PlexLibrariesIsland(source_id: i64) -> impl IntoView {
-    let load_toast = use_toast();
-    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
+    let libs: Resource<Result<Vec<LibraryPrefRow>, String>> = Resource::new(
         move || source_id,
-        move |id| async move { load_or_notify(list_plex_libraries(id).await, load_toast) },
+        move |id| async move { list_plex_libraries(id).await.map_err(load_failed_message) },
     );
+    // A failed load must stay visible and must not offer to persist an empty
+    // list over real data. The toast channel cannot do that here: this loader
+    // runs during SSR, where `ToastStore::push` is inert by construction
+    // (hydration-lint rule-3).
+    let load_error: RwSignal<Option<String>> = RwSignal::new(None);
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
-    Effect::new(move |_| {
-        if let Some(list) = libs.get() {
+    Effect::new(move |_| match libs.get() {
+        Some(Ok(list)) => {
+            load_error.set(None);
             prefs.set(list);
         }
+        Some(Err(message)) => load_error.set(Some(message)),
+        None => {}
     });
 
     let err: RwSignal<Option<String>> = RwSignal::new(None);
@@ -326,6 +333,7 @@ fn PlexLibrariesIsland(source_id: i64) -> impl IntoView {
                 <div class=style::toolbar_actions>
                     <button
                         class=style::btn_primary
+                        disabled=move || load_error.get().is_some()
                         on:click=move |_| {
                             saved.set(false);
                             save_action.dispatch(prefs.get_untracked());
@@ -378,9 +386,11 @@ fn PlexLibrariesIsland(source_id: i64) -> impl IntoView {
 
             <p
                 class=style::form_error
-                style:display=move || if err.get().is_some() { "" } else { "none" }
+                style:display=move || {
+                    if load_error.get().or_else(|| err.get()).is_some() { "" } else { "none" }
+                }
             >
-                {move || err.get().unwrap_or_default()}
+                {move || load_error.get().or_else(|| err.get()).unwrap_or_default()}
             </p>
             <p
                 class=style::success_msg
@@ -403,17 +413,24 @@ pub fn PlexPathsPage() -> impl IntoView {
 
 #[island]
 fn PlexPathsIsland(source_id: i64) -> impl IntoView {
-    let load_toast = use_toast();
-    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
+    let loaded: Resource<Result<Vec<PathReplacementRow>, String>> = Resource::new(
         move || source_id,
-        move |id| async move { load_or_notify(list_plex_paths(id).await, load_toast) },
+        move |id| async move { list_plex_paths(id).await.map_err(load_failed_message) },
     );
+    // A failed load must stay visible and must not offer to persist an empty
+    // list over real data. The toast channel cannot do that here: this loader
+    // runs during SSR, where `ToastStore::push` is inert by construction
+    // (hydration-lint rule-3).
+    let load_error: RwSignal<Option<String>> = RwSignal::new(None);
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);
-    Effect::new(move |_| {
-        if let Some(list) = loaded.get() {
+    Effect::new(move |_| match loaded.get() {
+        Some(Ok(list)) => {
+            load_error.set(None);
             paths.set(list);
         }
+        Some(Err(message)) => load_error.set(Some(message)),
+        None => {}
     });
 
     let new_remote = RwSignal::new(String::new());
@@ -459,6 +476,7 @@ fn PlexPathsIsland(source_id: i64) -> impl IntoView {
                 <div class=style::toolbar_actions>
                     <button
                         class=style::btn_primary
+                        disabled=move || load_error.get().is_some()
                         on:click=move |_| {
                             saved.set(false);
                             save_action.dispatch((source_id, paths.get_untracked()));
@@ -477,9 +495,11 @@ fn PlexPathsIsland(source_id: i64) -> impl IntoView {
 
             <p
                 class=style::form_error
-                style:display=move || if err.get().is_some() { "" } else { "none" }
+                style:display=move || {
+                    if load_error.get().or_else(|| err.get()).is_some() { "" } else { "none" }
+                }
             >
-                {move || err.get().unwrap_or_default()}
+                {move || load_error.get().or_else(|| err.get()).unwrap_or_default()}
             </p>
             <p
                 class=style::success_msg

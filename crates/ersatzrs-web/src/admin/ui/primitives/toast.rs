@@ -58,12 +58,32 @@ impl ToastStore {
         self.push_toast(message, severity, Some(action));
     }
 
+    /// Queue a toast, but only on the client.
+    ///
+    /// The toast store is deliberately not hydration-stable: on the server it
+    /// is request-scoped context, on the client a single process-wide store
+    /// that starts empty (see [`use_toast`]). A toast pushed while SSR is still
+    /// rendering therefore serializes a `<For>` child into
+    /// [`ToastContainer`]'s HTML that the client store can never reproduce, and
+    /// hydration aborts with "expected a marker node" the moment it reaches the
+    /// container — taking every island on the page down with it.
+    ///
+    /// Making the write itself inert off-wasm keeps that whole failure class
+    /// unrepresentable, no matter which call site reaches it. Server-side load
+    /// failures belong in the stable resource surface
+    /// (`admin_result_view` / `AdminResourceState`), which is serialized as
+    /// part of the page instead of as shell state; `cargo xtask
+    /// hydration-lint`'s rule-3 enforces that split.
     fn push_toast(
         &self,
         message: impl Into<String>,
         severity: ToastSeverity,
         action: Option<ToastAction>,
     ) {
+        if !cfg!(target_arch = "wasm32") {
+            return;
+        }
+
         let id = self.next_id.get_untracked();
         self.next_id.update(|n| *n += 1);
         self.inner.update(|v| {
@@ -124,6 +144,15 @@ pub fn use_toast() -> ToastStore {
 
 /// Keep an interactive list usable after a refresh failure while surfacing
 /// the operational error through the shared, localized toast channel.
+///
+/// **Client-side channel only.** `ToastStore::push` is inert off-wasm, so on a
+/// server-executed loader (`Resource::new`, `Resource::new_blocking`) this
+/// silently degrades to `T::default()` and the failure is never reported. Use it
+/// from `Action` callbacks, `Effect`s, and `LocalResource` loaders — anything
+/// that runs after hydration. A server-backed load that can fail belongs in
+/// `admin_result_view`, which renders the failure inside the stable
+/// `[data-admin-resource]` wrapper. `cargo xtask hydration-lint` rule-3 fails
+/// the build on the wrong side of that split.
 pub fn load_or_notify<T, E>(result: Result<T, E>, toast: ToastStore) -> T
 where
     T: Default,
@@ -132,13 +161,19 @@ where
     match result {
         Ok(value) => value,
         Err(error) => {
-            toast.push(
-                format!("{}: {error}", tr(TextKey::ErrorOccurred)),
-                ToastSeverity::Error,
-            );
+            toast.push(load_failed_message(error), ToastSeverity::Error);
             T::default()
         }
     }
+}
+
+/// The localized load-failure message, shared with [`load_or_notify`].
+///
+/// Server-executed loaders render their failure in a stable, always-present
+/// element instead of the toast channel (see [`load_or_notify`]); using the same
+/// message keeps the wording identical whichever surface reports it.
+pub fn load_failed_message(error: impl std::fmt::Display) -> String {
+    format!("{}: {error}", tr(TextKey::ErrorOccurred))
 }
 
 fn severity_class(s: ToastSeverity) -> &'static str {
@@ -196,5 +231,51 @@ pub fn ToastContainer() -> impl IntoView {
                 }
             />
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The server must never serialize a toast into `ToastContainer`'s HTML:
+    /// the client store starts empty, so the extra `<For>` child is a
+    /// guaranteed hydration marker mismatch that aborts every island on the
+    /// page. Keeping the write inert off-wasm makes that unrepresentable.
+    #[test]
+    fn pushing_off_wasm_leaves_the_store_empty() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let store = ToastStore::new();
+            store.push("boom", ToastSeverity::Error);
+            store.push_with_action(
+                "boom",
+                ToastSeverity::Error,
+                ToastAction {
+                    label: "View".to_owned(),
+                    href: "/".to_owned(),
+                },
+            );
+
+            assert!(
+                store.toasts().get_untracked().is_empty(),
+                "a server-side push must not reach the serialized toast container"
+            );
+        });
+    }
+
+    /// `load_or_notify` still yields a usable default off-wasm, so an island
+    /// that reaches it from a server-executed loader renders rather than panics
+    /// — it just cannot report the failure, which is what rule-3 guards.
+    #[test]
+    fn load_or_notify_returns_the_default_without_queueing_a_toast() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let store = ToastStore::new();
+            let value = load_or_notify(Err::<Vec<u8>, _>("nope"), store);
+
+            assert!(value.is_empty());
+            assert!(store.toasts().get_untracked().is_empty());
+        });
     }
 }

@@ -71,7 +71,7 @@ test.describe('collections parity', () => {
     expect(actionBox?.height).toBeLessThanOrEqual(80);
 
     const content = page
-      .locator('section')
+      .locator('section[class*="content"]:not([data-admin-resource])')
       .filter({ has: page.getByRole('heading', { name: 'Manual Collections' }) })
       .first();
     const contentBox = await content.boundingBox();
@@ -110,7 +110,7 @@ test.describe('collections parity', () => {
     await expect(page.getByRole('cell', { name })).toBeVisible();
 
     const content = page
-      .locator('section')
+      .locator('section[class*="content"]:not([data-admin-resource])')
       .filter({ has: page.getByRole('heading', { name: 'Smart Collections', exact: true }) })
       .first();
     const contentBox = await content.boundingBox();

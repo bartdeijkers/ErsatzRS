@@ -111,8 +111,10 @@ INSERT INTO "FillerPreset" (
 
 async function expectContentGeometry(page: Page, heading: string): Promise<void> {
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  // Skip `admin_result_view`'s unconstrained `<section data-admin-resource>`
+  // wrapper so this measures the page's own max-width container.
   const content = page
-    .locator('section, form, div')
+    .locator(':is(section, form, div):not([data-admin-resource])')
     .filter({ has: page.getByRole('heading', { name: heading, exact: true }) })
     .first();
   const box = await content.boundingBox();

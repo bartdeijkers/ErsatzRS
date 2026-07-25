@@ -18,7 +18,8 @@ use ersatzrs_infra::{
     db::DbPool,
     ffmpeg_config::playback_language_preferences,
     file_system_layout::{
-        data_path, transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
+        channel_stream_selectors_folder, list_channel_stream_selectors,
+        transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
     },
     hls_worker::build_hls_command_with_opacity_clock,
     playback::{
@@ -113,31 +114,7 @@ impl std::error::Error for PreviewNotFound {}
 #[async_trait]
 impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
     async fn list_stream_selectors(&self) -> Result<Vec<String>, AdminTroubleshootingRuntimeError> {
-        let folder = data_path("channel-stream-selectors");
-        let mut entries = tokio::fs::read_dir(folder)
-            .await
-            .map_err(|error| AdminTroubleshootingRuntimeError::unavailable(error.to_string()))?;
-        let mut selectors = Vec::new();
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|error| AdminTroubleshootingRuntimeError::unavailable(error.to_string()))?
-        {
-            let path = entry.path();
-            let is_yaml = path
-                .extension()
-                .and_then(|extension| extension.to_str())
-                .is_some_and(|extension| {
-                    matches!(extension.to_ascii_lowercase().as_str(), "yml" | "yaml")
-                });
-            if is_yaml {
-                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                    selectors.push(name.to_owned());
-                }
-            }
-        }
-        selectors.sort();
-        Ok(selectors)
+        Ok(list_channel_stream_selectors().await)
     }
 
     async fn start_playback_preview(
@@ -697,7 +674,7 @@ async fn copy_stream_selector(selector: Option<&str>, working_dir: &FsPath) -> A
     if selector.contains("..") || selector.contains('/') || selector.contains('\\') {
         return Ok(());
     }
-    let source = data_path("channel-stream-selectors").join(selector);
+    let source = channel_stream_selectors_folder().join(selector);
     if tokio::fs::try_exists(&source).await? {
         tokio::fs::copy(source, working_dir.join("stream-selector.yml")).await?;
     }

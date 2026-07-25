@@ -13,6 +13,15 @@
 //!   * **rule-2** — Prop-bearing call to a known `#[island]` function inside
 //!     a `<Suspense>` region. Hoist `Suspense` out of the wrapper, or pass only
 //!     stable scalar props and let the island own the async boundary.
+//!   * **rule-3** — The toast channel (`load_or_notify`, `ToastStore::push`)
+//!     reached from a server-executing `Resource::new` / `Resource::new_blocking`
+//!     loader. The store is not hydration-stable — request-scoped on the server,
+//!     an empty process-wide store on the client — so a toast queued while SSR
+//!     renders would serialize a `ToastContainer` child the client cannot
+//!     reproduce. `ToastStore::push` is inert off-wasm precisely so that can
+//!     never happen, which means the failure is simply *lost* here instead.
+//!     Report failures a server-backed load can hit through `admin_result_view`,
+//!     or move the load to a `LocalResource` that runs after hydration.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -246,7 +255,8 @@ impl<'ast> Visit<'ast> for LintVisitor<'_> {
             findings: self.findings,
             suppressed: self.suppressed,
         };
-        walk_for_view_macros(&mut ctx, tokens);
+        walk_for_view_macros(&mut ctx, tokens.clone());
+        walk_for_server_resource_loaders(&mut ctx, tokens);
         // Don't recurse into the fn body with syn::visit — token-walking covers it.
     }
 }
@@ -284,6 +294,93 @@ fn walk_for_view_macros(ctx: &mut Ctx<'_>, tokens: TokenStream) {
         }
         i += 1;
     }
+}
+
+/// rule-3 — find `Resource::new(…)` / `Resource::new_blocking(…)` calls whose
+/// loader reaches the toast channel.
+///
+/// `LocalResource` is a distinct single ident, so it never matches here; that is
+/// deliberate, since a `LocalResource` loader only runs on the client where the
+/// toast store is real.
+fn walk_for_server_resource_loaders(ctx: &mut Ctx<'_>, tokens: TokenStream) {
+    let toks: Vec<TokenTree> = tokens.into_iter().collect();
+    let n = toks.len();
+    let mut i = 0usize;
+    while i < n {
+        if let TokenTree::Ident(id) = &toks[i] {
+            if id == "Resource" {
+                let is_path = matches!(toks.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':')
+                    && matches!(toks.get(i + 2), Some(TokenTree::Punct(p)) if p.as_char() == ':');
+                let ctor = toks.get(i + 3).and_then(|t| match t {
+                    TokenTree::Ident(name) => Some(name.to_string()),
+                    _ => None,
+                });
+                let args = match toks.get(i + 4) {
+                    Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => {
+                        Some(g.stream())
+                    }
+                    _ => None,
+                };
+                if let (true, Some(ctor), Some(args)) = (is_path, ctor, args) {
+                    if matches!(ctor.as_str(), "new" | "new_blocking") {
+                        if let Some(offender) = toast_channel_call(&args) {
+                            report(
+                                ctx,
+                                id.span(),
+                                "rule-3",
+                                &format!(
+                                    "`{offender}` inside a server-executing `Resource::{ctor}` loader in `{}` \u{2014} the toast store is not hydration-stable, so this failure is silently dropped during SSR; render it with `admin_result_view` or move the load to a `LocalResource` (TEST.md hydration rule 5)",
+                                    ctx.fn_name
+                                ),
+                            );
+                        }
+                        // Keep walking the args so a nested `Resource::new` is
+                        // still reached.
+                        walk_for_server_resource_loaders(ctx, args);
+                        i += 5;
+                        continue;
+                    }
+                }
+            }
+        }
+        if let TokenTree::Group(g) = &toks[i] {
+            walk_for_server_resource_loaders(ctx, g.stream());
+        }
+        i += 1;
+    }
+}
+
+/// Name the toast-channel call inside `tokens`, if any.
+///
+/// Lexical on purpose, like the rest of this lint: `load_or_notify` by ident,
+/// and `.push` / `.push_with_action` only when the receiver reads as a toast
+/// store, so unrelated `Vec::push` calls in a loader stay quiet.
+fn toast_channel_call(tokens: &TokenStream) -> Option<String> {
+    let toks: Vec<TokenTree> = tokens.clone().into_iter().collect();
+    for (i, tok) in toks.iter().enumerate() {
+        match tok {
+            TokenTree::Ident(id) if id == "load_or_notify" => {
+                return Some("load_or_notify".to_owned())
+            }
+            TokenTree::Ident(id) if id == "push" || id == "push_with_action" => {
+                let is_method = matches!(toks.get(i.wrapping_sub(1)), Some(TokenTree::Punct(p)) if p.as_char() == '.');
+                let receiver_is_toast = matches!(
+                    toks.get(i.wrapping_sub(2)),
+                    Some(TokenTree::Ident(recv)) if recv.to_string().contains("toast")
+                );
+                if i >= 2 && is_method && receiver_is_toast {
+                    return Some(id.to_string());
+                }
+            }
+            TokenTree::Group(g) => {
+                if let Some(found) = toast_channel_call(&g.stream()) {
+                    return Some(found);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn scan_view_body(ctx: &mut Ctx<'_>, body: TokenStream, suspense_depth: &mut i32) {

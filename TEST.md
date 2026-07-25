@@ -91,7 +91,23 @@ stabilisation. Apply them every time you wire interactive UI:
    visibility via the `open: RwSignal<bool>` signal. Never conditionally render a dialog via
    `delete_target.get().map(|...| view!{<DeleteDialog .../>})`. Derive the name as
    `Signal::derive(move || delete_target.get().map(|t| t.name.clone()).unwrap_or_default())`.
-5. **Server-state polling pattern.** When the UI needs a server-driven signal
+5. **Never report a server-side failure through the toast channel.** The toast
+   store is deliberately not hydration-stable: request-scoped context on the
+   server, one empty process-wide store on the client (`use_toast`). A toast
+   queued while SSR renders would serialize a `ToastContainer` child the client
+   cannot reproduce, and hydration aborts with "expected a marker node" the
+   moment it reaches the container — killing every island on the page. This bit
+   `/media/smart-collections/add` in CI run 30132852456. `ToastStore::push` is
+   now inert off-wasm so the crash is unrepresentable — which also means a
+   server-side push reports nothing at all. Use the toast channel from `Action`
+   callbacks, `Effect`s, and `LocalResource` loaders only. A server-backed load
+   that can fail belongs in `admin_result_view`, whose `[data-admin-resource]`
+   wrapper is serialized as part of the page. `hydration-lint` rule-3 enforces
+   this, and carries no baseline entries — a server-executed loader must render
+   its failure in the resource value, either through `admin_result_view` or, when
+   the `<form>` has to stay server-rendered for a no-JS fallback, through an
+   always-present error element plus a disabled submit control.
+6. **Server-state polling pattern.** When the UI needs a server-driven signal
    (e.g. lock state), copy the wasm32-gated `Effect` from
    `libraries/mod.rs:81-95`: `gloo_timers::future::TimeoutFuture::new(1_500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
@@ -147,6 +163,10 @@ Rules enforced (v1):
   `<Suspense>` region (rule 3 above). The lint guards only the known lexical
   boundary hazard; whole-app marker mismatches still require the browser smoke
   because list/table DOM shape is not statically provable here.
+- **rule-3** — The toast channel (`load_or_notify`, `ToastStore::push`) reached
+  from a server-executing `Resource::new` / `Resource::new_blocking` loader
+  (rule 5 above). `LocalResource` loaders are exempt: they only run on the
+  client, where the store is real.
 
 Known pre-existing findings are listed in `.hydration-lint-baseline` at the
 repo root. When you fix one, delete its line — new findings in files not
@@ -245,6 +265,16 @@ Workflow:
    inspect console output.
 3. Check browser console for `failed_to_cast_marker_node` or other hydration
    errors; any such error is a product bug in the affected island.
+
+**Geometry assertions must pin the element they measure.** `admin_result_view`
+wraps page content in an unconstrained `<section data-admin-resource>`, so a
+bare `locator('section').first()` resolves to that wrapper and measures the full
+main-content box instead of the page's max-width container — silently, with no
+visual regression to notice. Target the container itself
+(`section[class*="content"]:not([data-admin-resource])`) or exclude the wrapper
+(`:not([data-admin-resource])`). CI run 30132852456 lost `remote-streams.spec.ts`
+this way: 1764px measured against a 1540px bound, while the 1536px grid it meant
+to check was still correct.
 
 ### Whole-app island hydration smoke (CI/release gate)
 

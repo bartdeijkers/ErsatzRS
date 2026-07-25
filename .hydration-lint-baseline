@@ -35,3 +35,4 @@ crates/ersatzrs-web/src/admin/pages/media/rerun_collections.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/watermarks/editor.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.rs:rule-2
+

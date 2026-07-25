@@ -15,3 +15,10 @@ Evidence:
 - Hydration lint: `cargo xtask hydration-lint -p ersatzrs-web`.
 - Browser spec: `E2E_DB_PATH=.tmp/remote-streams-e2e.db npx playwright test tests/e2e/remote-streams.spec.ts --project=chromium`.
 '''
+
+[[debt]]
+id          = 'geometry-assertions-retargeted-by-the-resource-wrapper'
+description = 'The desktop geometry proof measured `locator("section").first()`, which resolved to the unconstrained `admin_result_view` `<section data-admin-resource>` wrapper once the page adopted it, reporting the full main-content width instead of the 96rem card grid. Nothing regressed visually; the assertion had silently stopped measuring the container it named.'
+discovered  = '2026-07-25'
+evidence    = 'Fixed 2026-07-25: `tests/e2e/remote-streams.spec.ts` now pins the locator to `section[class*="content"]:not([data-admin-resource])`. The same latent retargeting was fixed in `collections.spec.ts` and `media-collection-route-family.spec.ts`, which passed only because they never widened the viewport past 1280px. TEST.md records the rule under Admin UI E2E. Regression seen in CI run 30132852456 (1764px measured against a 1540px bound at a 2048px viewport).'
+resolved    = true

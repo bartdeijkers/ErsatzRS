@@ -11,10 +11,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::music_video_credits::list_music_video_credit_template_names;
@@ -690,13 +687,7 @@ async fn load_editor_options(pool: &Pool<crate::db::Db>) -> Result<ChannelEditor
         .await?,
         mirror_channels: load_mirror_channels(pool).await?,
         language_codes: load_language_codes(pool).await?,
-        stream_selectors: list_file_names(
-            &crate::file_system_layout::data_path(
-                Path::new("scripts").join("channel-stream-selectors"),
-            ),
-            true,
-        )
-        .await?,
+        stream_selectors: crate::file_system_layout::list_channel_stream_selectors().await,
         music_video_credit_templates: list_music_video_credit_template_names().await?,
         default_ffmpeg_profile_id: load_default_ffmpeg_profile_id(pool).await?,
     })
@@ -849,42 +840,6 @@ async fn next_channel_number(pool: &Pool<crate::db::Db>) -> Result<String> {
         .max()
         .unwrap_or_default();
     Ok((max_number + 1).to_string())
-}
-
-async fn list_file_names(path: &Path, keep_extension: bool) -> Result<Vec<String>> {
-    let mut names = Vec::new();
-    let Ok(mut entries) = tokio::fs::read_dir(path).await else {
-        return Ok(names);
-    };
-
-    while let Some(entry) = entries.next_entry().await.map_err(|error| {
-        ersatzrs_core::repositories::RepositoryError::Decode {
-            kind: "channel editor file list",
-            value: error.to_string(),
-        }
-    })? {
-        let file_type = entry.file_type().await.map_err(|error| {
-            ersatzrs_core::repositories::RepositoryError::Decode {
-                kind: "channel editor file type",
-                value: error.to_string(),
-            }
-        })?;
-        if !file_type.is_file() {
-            continue;
-        }
-        let path = entry.path();
-        let name = if keep_extension {
-            path.file_name().map(std::ffi::OsStr::to_os_string)
-        } else {
-            path.file_stem().map(std::ffi::OsStr::to_os_string)
-        };
-        if let Some(name) = name.and_then(|value| value.into_string().ok()) {
-            names.push(name);
-        }
-    }
-
-    names.sort();
-    Ok(names)
 }
 
 async fn validate_editor_form(

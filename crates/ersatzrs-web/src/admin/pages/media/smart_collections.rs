@@ -17,7 +17,7 @@ use crate::admin::ui::primitives::{
     form::TextField,
     icon::{icon_style, IconName},
     resource_state::{admin_loading_resource_view, admin_result_view},
-    toast::{load_or_notify, use_toast, ToastSeverity},
+    toast::{load_failed_message, load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
@@ -280,24 +280,41 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
 #[island]
 fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
     let toast = use_toast();
-    let initial: Resource<CollectionForm> = Resource::new_blocking(
+    // `/media/smart-collections/add` has no `:id` segment, so id 0 means "new"
+    // and must not be queried — the application layer rejects it as invalid.
+    // This was the CI regression: querying id 0 failed on every page load.
+    //
+    // The failure travels in the resource value, not through the toast channel:
+    // this loader runs during SSR where `ToastStore::push` is inert by
+    // construction (hydration-lint rule-3). The island keeps ownership of the
+    // async boundary so the `<form>` stays server-rendered for the no-JS
+    // fallback; `load_error` below is read reactively, so a failed load is
+    // already visible and non-submittable in the SSR HTML.
+    let initial: Resource<Result<CollectionForm, String>> = Resource::new_blocking(
         move || collection_id,
         move |id| async move {
-            load_or_notify(get_smart_collection(id).await, toast).unwrap_or_default()
+            match (id != 0).then_some(id) {
+                Some(id) => get_smart_collection(id)
+                    .await
+                    .map(Option::unwrap_or_default)
+                    .map_err(load_failed_message),
+                None => Ok(CollectionForm::default()),
+            }
         },
     );
+    let load_error = Signal::derive(move || initial.get().and_then(Result::err));
 
     let name = RwSignal::new(String::new());
     let query = RwSignal::new(String::new());
     let id_signal: RwSignal<i64> = RwSignal::new(0);
     let hydrated = RwSignal::new(false);
     Effect::new(move |_| {
-        if let Some(f) = initial.get() {
+        if let Some(Ok(f)) = initial.get() {
             id_signal.set(f.id);
             name.set(f.name);
             query.set(f.query);
-            hydrated.set(true);
         }
+        hydrated.set(true);
     });
 
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
@@ -363,7 +380,7 @@ fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl Int
                 <button
                     type="submit"
                     class=style::btn_add
-                    disabled=move || save_action.pending().get()
+                    disabled=move || save_action.pending().get() || load_error.get().is_some()
                 >
                     <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
                     {tr(TextKey::SaveSmartCollection)}
@@ -372,6 +389,12 @@ fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl Int
 
             <div class=style::editor>
                 <h1 class=style::page_title>{tr(TextKey::SmartCollection)}</h1>
+                <p
+                    class=style::load_error
+                    style:display=move || if load_error.get().is_some() { "" } else { "none" }
+                >
+                    {move || load_error.get().unwrap_or_default()}
+                </p>
                 <TextField
                     label=tr(TextKey::Name)
                     value=name

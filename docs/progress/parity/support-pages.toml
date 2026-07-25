@@ -32,3 +32,10 @@ description = 'Remote stream media versions with placeholder `00:00:00` duration
 discovered  = '2026-06-22'
 evidence    = 'Fixed 2026-06-22: `ZeroDurationHealthCheck` now excludes `MediaVersion` rows backed by `RemoteStreamId`; `zero_duration_check_ignores_remote_stream_placeholders` covers a live remote stream with a zero-duration placeholder and media-file URL.'
 resolved    = true
+
+[[debt]]
+id          = 'channel-stream-selector-folder-disagreement'
+description = 'The channel editor listed custom stream selectors from `<data>/scripts/channel-stream-selectors` while playback and playback troubleshooting read `<data>/channel-stream-selectors`, so a selector offered by the channel dropdown was never applied. The folder was also never created at startup, and the extracted troubleshooting runtime turned the resulting `NotFound` into a hard error that replaced the whole `/system/troubleshooting/playback` page with an error message.'
+discovered  = '2026-07-25'
+evidence    = 'Fixed 2026-07-25: `file_system_layout::channel_stream_selectors_folder` is now the single source of truth for all four call sites, matching `FileSystemLayout.ChannelStreamSelectorsFolder` (`ScriptsFolder/channel-stream-selectors`). `list_channel_stream_selectors` mirrors `LocalFileSystem.ListFiles` — files only, `._*` skipped, absent or unreadable folder yields an empty list — and both the channel editor and the troubleshooting page call it, so they cannot disagree. `host::bootstrap` creates the folder like `Startup.cs` does. Covered by `listing_channel_stream_selectors_treats_a_missing_folder_as_empty`, `listing_channel_stream_selectors_keeps_every_file_but_resource_forks`, and `channel_stream_selectors_folder_keeps_the_ersatztv_scripts_grouping`; regression seen in CI run 30132852456 (`support-pages.spec.ts`, `content-variants.spec.ts`).'
+resolved    = true

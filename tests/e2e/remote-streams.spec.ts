@@ -161,7 +161,14 @@ test.describe('remote streams browser parity', () => {
     expect(actionBox?.height).toBeGreaterThanOrEqual(60);
     expect(actionBox?.height).toBeLessThanOrEqual(80);
 
-    const content = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Remote Streams' }) }).first();
+    // Pin the measurement to the max-width content container. `admin_result_view`
+    // wraps page content in an unconstrained `<section data-admin-resource>`, so a
+    // bare `section` locator would silently retarget to that wrapper and measure
+    // the full main-content box instead of the 96rem grid.
+    const content = page
+      .locator('section[class*="content"]:not([data-admin-resource])')
+      .filter({ has: page.getByRole('heading', { name: 'Remote Streams' }) })
+      .first();
     const contentBox = await content.boundingBox();
     expect(contentBox?.width).toBeGreaterThan(700);
     expect(contentBox?.width).toBeLessThanOrEqual(1540);

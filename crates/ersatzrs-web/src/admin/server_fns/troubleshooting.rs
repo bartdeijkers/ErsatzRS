@@ -1987,7 +1987,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             duration_seconds: parse_duration_seconds(&row.duration),
             selected_ffmpeg_profile_id: default_profile_id,
             ffmpeg_profiles,
-            stream_selectors: load_stream_selectors().await,
+            stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
+                .await,
             subtitles,
             watermarks,
             graphics_elements,
@@ -2010,7 +2011,8 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             duration_seconds: 0,
             selected_ffmpeg_profile_id: channel.ffmpeg_profile_id,
             ffmpeg_profiles,
-            stream_selectors: load_stream_selectors().await,
+            stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
+                .await,
             subtitles: Vec::new(),
             watermarks,
             graphics_elements,
@@ -2023,7 +2025,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
         preferred_audio_title: String::new(),
         selected_subtitle_id: 0,
         ffmpeg_profiles,
-        stream_selectors: load_stream_selectors().await,
+        stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors().await,
         watermarks,
         graphics_elements,
         ..PlaybackTroubleshootingContext::default()
@@ -2145,31 +2147,6 @@ async fn load_playback_options(
             name: row.try_get("Name").unwrap_or_default(),
         })
         .collect())
-}
-
-#[cfg(all(test, feature = "ssr"))]
-async fn load_stream_selectors() -> Vec<String> {
-    let folder = ersatzrs_infra::file_system_layout::data_path("channel-stream-selectors");
-    let mut selectors = Vec::new();
-    let Ok(mut entries) = tokio::fs::read_dir(folder).await else {
-        return selectors;
-    };
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let path = entry.path();
-        let is_yaml = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| {
-                matches!(extension.to_ascii_lowercase().as_str(), "yml" | "yaml")
-            });
-        if is_yaml {
-            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                selectors.push(name.to_owned());
-            }
-        }
-    }
-    selectors.sort();
-    selectors
 }
 
 #[cfg(all(test, feature = "ssr"))]

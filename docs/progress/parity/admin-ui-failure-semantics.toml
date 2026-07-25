@@ -11,6 +11,16 @@ states retain stable DOM placement; failed resources do not expose submittable
 forms or plausible empty/default data. Architecture lint prevents direct admin
 SQL, raw admin pool access, awaited error-to-default loaders, and row-decode
 defaults from returning.
+
+The toast channel is client-only by construction: `ToastStore::push` is inert
+off-wasm, because the store is request-scoped on the server and an empty
+process-wide store on the client, so a server-rendered toast is always a
+hydration marker mismatch. Every server-executed loader therefore carries its
+failure in the resource value and renders it in a stable surface —
+`admin_result_view` where the page can drop the failed subtree, or an
+always-present error element plus a disabled submit control where the `<form>`
+must stay server-rendered for the no-JS fallback. `hydration-lint` rule-3
+enforces the split with no baseline entries.
 '''
 
 [[debt]]
@@ -25,4 +35,11 @@ id          = 'admin-row-decode-defaults-hide-invalid-data'
 description = 'Direct SQL handlers frequently default failed `try_get` row decoding to zero identifiers, empty strings, or false values instead of returning the shared typed decode/storage error.'
 discovered  = '2026-07-21'
 evidence    = 'The row-decode architecture ratchet was tightened from 851 initial production `try_get(...).unwrap_or*` occurrences (833 at p7b-05 start) to zero. Infrastructure typed records now return decode/storage errors instead of inventing identifiers, strings, booleans, or collection entries, with focused invalid-row coverage.'
+resolved    = true
+
+[[debt]]
+id          = 'ssr-load-failures-lost-in-the-toast-channel'
+description = 'Eleven islands reported a failed server-executed `Resource` load through `load_or_notify`, which reaches the toast store. That store is request-scoped on the server and an empty process-wide store on the client, so an SSR toast serialized a `ToastContainer` child the client could not reproduce and aborted island hydration for the whole page — and on the routes that did not crash, the failure was silently replaced by default data.'
+discovered  = '2026-07-25'
+evidence    = 'Fixed 2026-07-25. `ToastStore::push` is inert off-wasm, so a server-rendered toast is unrepresentable (unit coverage in `toast.rs`). All ten server-executed loaders now carry the failure in the resource value: `MediaBrowserPage` and `MembersSection` render it through `admin_result_view`; the six Plex/Jellyfin/Emby library and path islands surface it in an always-present error element and disable Save so a failed load cannot overwrite real data; the collection and smart-collection editors read the failure reactively from their blocking resource, so it is visible and the submit button is disabled in the SSR HTML while the `<form>` stays server-rendered for the no-JS fallback (`collections.spec.ts` "no-JS add form posts through the HTML fallback"). The eleventh finding, the watermark placement preview, was a false positive and is now typed as the `LocalResource` it always was. Two conditional error/success nodes in `jellyfin.rs` were converted to the stable `style:display` idiom in passing. `cargo xtask hydration-lint` rule-3 reports zero findings with no baseline entries; full Playwright suite 170 passed / 12 skipped / 0 failed.'
 resolved    = true

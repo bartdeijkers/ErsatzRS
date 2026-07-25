@@ -242,6 +242,16 @@ async fn prepare_streaming_resources() {
     if let Err(error) = extract_streaming_fonts().await {
         tracing::warn!(%error, "failed to extract bundled streaming fonts");
     }
+    if let Err(error) = create_user_content_folders().await {
+        tracing::warn!(%error, "failed to create user content folders");
+    }
+}
+
+/// Create the folders users drop their own content into, mirroring ErsatzTV's
+/// `directoriesToCreate` list in `Startup.cs`. Readers already treat an absent
+/// folder as empty, so this only makes the drop locations discoverable.
+async fn create_user_content_folders() -> io::Result<()> {
+    tokio::fs::create_dir_all(file_system_layout::channel_stream_selectors_folder()).await
 }
 
 fn configured_listen_addr() -> std::net::SocketAddr {

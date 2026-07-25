@@ -122,6 +122,29 @@ release section when tagging a release.
 
 ### Fixed
 
+- Custom channel stream selectors are now read from one canonical folder,
+  `<data>/scripts/channel-stream-selectors`, matching ErsatzTV's
+  `ScriptsFolder/channel-stream-selectors`. Playback and playback
+  troubleshooting previously looked one level higher than the channel editor
+  listed them, so a selector that appeared in the channel dropdown was never
+  applied. The folder is created at startup, an absent or unreadable folder is
+  reported as "no selectors" instead of an error, and every file in it is
+  offered (not only `.yml`/`.yaml`), so the channel editor and the
+  troubleshooting page can no longer disagree. This fixes
+  `/system/troubleshooting/playback` rendering only an error message on installs
+  that never created the folder.
+- The Add Smart Collection page no longer breaks admin-UI interactivity. It
+  queried for collection id 0, and reporting that failure through the toast
+  channel during server rendering left the client unable to hydrate, disabling
+  every button and dialog on the page. Toasts are now client-only by
+  construction, and `cargo xtask hydration-lint` gained a rule that fails the
+  build when a server-side load reaches for the toast channel.
+- Admin pages now report a failed initial load instead of quietly showing empty
+  or default data. Media browsers and collection member lists render the shared
+  error state; the Plex, Jellyfin, and Emby library and path editors show the
+  error and disable Save so a failed load cannot overwrite real settings; and
+  the collection and smart-collection editors surface it with the form disabled
+  while still server-rendering the no-JS fallback.
 - Preserved typed failures and consistency across extracted admin mutations.
   Collection media actions now validate referenced records and create a new
   collection with its first item in one transaction. Initial playout creation

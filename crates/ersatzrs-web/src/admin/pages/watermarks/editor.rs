@@ -148,16 +148,20 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
     });
 
     let toast = use_toast();
-    let preview_resource: Resource<Option<String>> = Resource::new(
-        move || preview_key.get(),
-        move |maybe_params| async move {
+    // The placement preview is inherently client-side: `preview_key` starts as
+    // `None` and is only ever set by the debounced effect above, which does not
+    // run during SSR. Typing it as a `LocalResource` says so, and keeps the
+    // toast channel valid here (it is inert off-wasm — hydration-lint rule-3).
+    let preview_resource: LocalResource<Option<String>> = LocalResource::new(move || {
+        let maybe_params = preview_key.get();
+        async move {
             let params = maybe_params?;
             Some(load_or_notify(
                 preview_watermark_placement(params).await,
                 toast,
             ))
-        },
-    );
+        }
+    });
 
     // ── Save action ──────────────────────────────────────────────────────
     let save_action = Action::new(move |form: &WatermarkForm| {

@@ -895,7 +895,7 @@ pub async fn select_custom_playback_streams(
         return Ok(None);
     }
 
-    let selector_path = data_path("channel-stream-selectors").join(selector);
+    let selector_path = crate::file_system_layout::channel_stream_selectors_folder().join(selector);
     let yaml = match tokio::fs::read_to_string(&selector_path).await {
         Ok(yaml) => yaml,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

@@ -41,6 +41,87 @@ pub fn data_path(path: impl AsRef<Path>) -> PathBuf {
     data_folder().join(path)
 }
 
+/// `<data>/scripts/channel-stream-selectors` — user-authored custom stream
+/// selectors. Mirrors `FileSystemLayout.ChannelStreamSelectorsFolder`
+/// (`ScriptsFolder/channel-stream-selectors`).
+///
+/// User-authored content folders that ErsatzTV roots at `<AppDataFolder>/…`
+/// live below the persistent data root in ErsatzRS (the same mapping
+/// `templates/music-video-credits` uses), so the ErsatzTV `scripts` grouping
+/// is preserved here rather than resolved through [`scripts_folder`].
+/// This is the single source of truth: the channel editor, playback, and
+/// playback troubleshooting must all resolve selectors through this function,
+/// or the read and write sides of the feature silently disagree.
+#[must_use]
+pub fn channel_stream_selectors_folder() -> PathBuf {
+    data_path(Path::new("scripts").join("channel-stream-selectors"))
+}
+
+/// List the custom stream selectors available to channels and playback
+/// troubleshooting, sorted by file name.
+///
+/// Mirrors `GetChannelStreamSelectorsHandler` on top of
+/// `LocalFileSystem.ListFiles`: only files in the top directory are listed,
+/// macOS resource-fork siblings (`._*`) are skipped, and an absent folder, a
+/// permission error, or any other listing failure yields an empty list rather
+/// than an error. An empty list is a first-class state — the playback
+/// troubleshooting page disables its Stream Selector dropdown — so treating it
+/// as a failure would take the whole page down on every install that has never
+/// created the folder.
+///
+/// Both the channel editor and playback troubleshooting must call this so their
+/// dropdowns can never disagree about which selectors exist.
+pub async fn list_channel_stream_selectors() -> Vec<String> {
+    list_channel_stream_selectors_in(&channel_stream_selectors_folder()).await
+}
+
+async fn list_channel_stream_selectors_in(folder: &Path) -> Vec<String> {
+    let mut selectors = Vec::new();
+    let mut entries = match tokio::fs::read_dir(folder).await {
+        Ok(entries) => entries,
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(
+                    folder = %folder.display(),
+                    %error,
+                    "unable to list channel stream selectors"
+                );
+            }
+            return selectors;
+        }
+    };
+
+    loop {
+        match entries.next_entry().await {
+            Ok(Some(entry)) => {
+                if !entry.file_type().await.is_ok_and(|kind| kind.is_file()) {
+                    continue;
+                }
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if name.starts_with("._") {
+                    continue;
+                }
+                selectors.push(name.to_owned());
+            }
+            Ok(None) => break,
+            Err(error) => {
+                tracing::warn!(
+                    folder = %folder.display(),
+                    %error,
+                    "unable to list channel stream selectors"
+                );
+                break;
+            }
+        }
+    }
+
+    selectors.sort();
+    selectors
+}
+
 /// Application data root, matching `logging::default_log_dir`'s base
 /// (`data_local_dir()/ErsatzRS`), falling back to `./` when no home directory
 /// is available.
@@ -130,6 +211,47 @@ pub fn resources_cache_folder() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channel_stream_selectors_folder_keeps_the_ersatztv_scripts_grouping() {
+        let path = channel_stream_selectors_folder();
+        assert!(
+            path.ends_with(Path::new("scripts").join("channel-stream-selectors")),
+            "unexpected channel stream selector path: {}",
+            path.display()
+        );
+    }
+
+    #[tokio::test]
+    async fn listing_channel_stream_selectors_treats_a_missing_folder_as_empty() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let missing = root.path().join("never-created");
+
+        assert!(list_channel_stream_selectors_in(&missing).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn listing_channel_stream_selectors_keeps_every_file_but_resource_forks() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let folder = root.path();
+        for name in ["b.yml", "a.yaml", "plain.txt", "._a.yaml"] {
+            tokio::fs::write(folder.join(name), "")
+                .await
+                .expect("write");
+        }
+        tokio::fs::create_dir(folder.join("nested"))
+            .await
+            .expect("nested dir");
+
+        assert_eq!(
+            list_channel_stream_selectors_in(folder).await,
+            vec![
+                "a.yaml".to_owned(),
+                "b.yml".to_owned(),
+                "plain.txt".to_owned()
+            ]
+        );
+    }
 
     #[test]
     fn subtitle_cache_folder_ends_with_streams_subtitles() {
