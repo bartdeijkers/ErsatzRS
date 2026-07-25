@@ -2108,6 +2108,65 @@ pub async fn admin_search_documents(
         .map_err(Into::into)
 }
 
+#[cfg(test)]
+mod admin_search_query_tests {
+    use super::{admin_search_snapshot, ApplicationError};
+    use async_trait::async_trait;
+    use ersatzrs_core::repositories::{
+        AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, RepositoryError,
+    };
+    use ersatzrs_core::search::SearchDocument;
+    use ersatzrs_domain::EntityId;
+
+    struct SearchRepository {
+        fail: bool,
+    }
+
+    #[async_trait]
+    impl AdminSearchRepository for SearchRepository {
+        async fn search_admin_documents(
+            &self,
+            _query: &str,
+        ) -> ersatzrs_core::repositories::Result<Vec<SearchDocument>> {
+            if self.fail {
+                Err(RepositoryError::unavailable(
+                    "search admin media",
+                    "injected failure",
+                ))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+
+        async fn enrich_admin_search(
+            &self,
+            _kind: AdminSearchKind,
+            _ids: &[EntityId],
+        ) -> ersatzrs_core::repositories::Result<AdminSearchEnrichment> {
+            Ok(AdminSearchEnrichment::default())
+        }
+    }
+
+    #[tokio::test]
+    async fn valid_empty_search_is_distinct_from_typed_repository_failure() {
+        let empty = admin_search_snapshot("nothing", &SearchRepository { fail: false })
+            .await
+            .expect("valid empty search");
+        assert!(empty.documents.is_empty());
+
+        let error = admin_search_snapshot("anything", &SearchRepository { fail: true })
+            .await
+            .expect_err("repository failure remains typed");
+        assert!(matches!(
+            error,
+            ApplicationError::Unavailable {
+                operation: "search admin media",
+                ..
+            }
+        ));
+    }
+}
+
 pub async fn list_playout_detail_items(
     playout_id: EntityId,
     show_filler: bool,

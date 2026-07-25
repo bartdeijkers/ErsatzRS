@@ -127,7 +127,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Episode,
         title: TextKey::Episodes,
         base_path: "/media/tv/episodes",
-        card_base_path: "/media/tv/episodes",
+        card_base_path: "",
         has_media_info: true,
         placeholder_icon: "📺",
     };
@@ -135,7 +135,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::MusicVideo,
         title: TextKey::MusicVideos,
         base_path: "/media/music/videos",
-        card_base_path: "/media/music/videos",
+        card_base_path: "",
         has_media_info: true,
         placeholder_icon: "🎵",
     };
@@ -604,11 +604,10 @@ fn SelectableCard(
     let subtitle_text = subtitle.unwrap_or_default();
     let has_subtitle = !subtitle_text.is_empty();
     let artwork = row.artwork_path.clone();
-    let href = if config.card_base_path.is_empty() {
-        None
-    } else {
-        Some(format!("{}/{}", config.card_base_path, item_id))
-    };
+    let href = row.href.clone().or_else(|| {
+        (!config.card_base_path.is_empty())
+            .then(|| format!("{}/{}", config.card_base_path, item_id))
+    });
     let placeholder = config.placeholder_icon;
 
     let is_selected = Signal::derive(move || selected.with(|s| s.contains(&item_id)));

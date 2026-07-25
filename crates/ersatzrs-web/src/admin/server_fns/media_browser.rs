@@ -39,6 +39,9 @@ pub struct MediaCardRow {
     pub sort_title: String,
     pub subtitle: Option<String>,
     pub artwork_path: Option<String>,
+    /// Valid destination for the card, when this media kind has one.
+    #[serde(default)]
+    pub href: Option<String>,
     #[serde(default)]
     pub season_number: Option<i64>,
     #[serde(default)]
@@ -79,6 +82,115 @@ fn media_card_search_query(media_kind: &str, search: &str, show_variants: bool) 
 }
 
 #[cfg(feature = "ssr")]
+fn browser_card_artwork_url(
+    kind: ersatzrs_core::repositories::AdminSearchKind,
+    id: i64,
+    enrichment: &ersatzrs_core::repositories::AdminSearchEnrichment,
+) -> Option<String> {
+    use crate::api::artwork::{artwork_kind_for_admin_search, artwork_url, ArtworkUrlKind};
+
+    let artwork_kind = artwork_kind_for_admin_search(kind);
+    let raw_artwork = match artwork_kind {
+        ArtworkUrlKind::Thumbnail => enrichment
+            .thumbnail
+            .get(&id)
+            .or_else(|| enrichment.poster.get(&id)),
+        ArtworkUrlKind::Poster => enrichment
+            .poster
+            .get(&id)
+            .or_else(|| enrichment.season_poster.get(&id))
+            .or_else(|| enrichment.show_poster.get(&id)),
+        ArtworkUrlKind::FanArt => None,
+    };
+    raw_artwork.and_then(|path| artwork_url(path, artwork_kind))
+}
+
+#[cfg(feature = "ssr")]
+fn browser_card_href(
+    kind: ersatzrs_core::repositories::AdminSearchKind,
+    id: i64,
+    enrichment: &ersatzrs_core::repositories::AdminSearchEnrichment,
+) -> Option<String> {
+    use ersatzrs_core::repositories::AdminSearchKind as Kind;
+
+    match kind {
+        Kind::Movie => Some(format!("/media/movies/{id}")),
+        Kind::Show => Some(format!("/media/tv/shows/{id}")),
+        Kind::Season => Some(format!("/media/tv/seasons/{id}")),
+        Kind::Episode => enrichment
+            .episode_season_id
+            .get(&id)
+            .map(|season_id| format!("/media/tv/seasons/{season_id}#episode-{id}")),
+        Kind::Artist => Some(format!("/media/music/artists/{id}")),
+        // ErsatzTV's dedicated MusicVideoList renders Href="", and these
+        // remaining kinds likewise have no item detail route.
+        Kind::MusicVideo | Kind::Song | Kind::Image | Kind::RemoteStream => None,
+        Kind::OtherVideo => Some(format!("/media/other/videos/{id}")),
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod browser_card_projection_tests {
+    use super::{browser_card_artwork_url, browser_card_href};
+    use ersatzrs_core::repositories::{AdminSearchEnrichment, AdminSearchKind as Kind};
+
+    #[test]
+    fn browser_projection_retains_poster_and_thumbnail_families() {
+        let mut enrichment = AdminSearchEnrichment::default();
+        for id in 1..=4 {
+            enrichment.poster.insert(id, format!("poster-{id}.jpg"));
+        }
+        for id in 5..=10 {
+            enrichment
+                .thumbnail
+                .insert(id, format!("thumbnail-{id}.jpg"));
+        }
+
+        for (kind, id) in [
+            (Kind::Movie, 1),
+            (Kind::Show, 2),
+            (Kind::Season, 3),
+            (Kind::Episode, 4),
+        ] {
+            assert_eq!(
+                browser_card_artwork_url(kind, id, &enrichment),
+                Some(format!("/artwork/posters/poster-{id}.jpg"))
+            );
+        }
+        for (kind, id) in [
+            (Kind::Artist, 5),
+            (Kind::MusicVideo, 6),
+            (Kind::OtherVideo, 7),
+            (Kind::Song, 8),
+            (Kind::Image, 9),
+            (Kind::RemoteStream, 10),
+        ] {
+            assert_eq!(
+                browser_card_artwork_url(kind, id, &enrichment),
+                Some(format!("/artwork/thumbnails/thumbnail-{id}.jpg"))
+            );
+        }
+    }
+
+    #[test]
+    fn browser_projection_uses_only_valid_card_destinations() {
+        let mut enrichment = AdminSearchEnrichment::default();
+        enrichment.episode_season_id.insert(41, 31);
+
+        assert_eq!(
+            browser_card_href(Kind::Season, 31, &enrichment).as_deref(),
+            Some("/media/tv/seasons/31")
+        );
+        assert_eq!(
+            browser_card_href(Kind::Episode, 41, &enrichment).as_deref(),
+            Some("/media/tv/seasons/31#episode-41")
+        );
+        assert_eq!(browser_card_href(Kind::Episode, 42, &enrichment), None);
+        assert_eq!(browser_card_href(Kind::MusicVideo, 51, &enrichment), None);
+    }
+}
+
+#[cfg(feature = "ssr")]
 async fn list_media_cards_from_application(
     state: &crate::host::state::AppState,
     media_kind: &str,
@@ -113,7 +225,6 @@ async fn list_media_cards_from_application_filtered(
     show_variants: bool,
     required_state: Option<ersatzrs_domain::MediaItemState>,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use ersatzrs_domain::ContentKind;
 
     let query = media_card_search_query(media_kind, search, show_variants);
@@ -206,19 +317,13 @@ async fn list_media_cards_from_application_filtered(
                 }
                 _ => (title, document.year.map(|year| year.to_string()), None),
             };
-            let raw_artwork = enrichment
-                .poster
-                .get(&id)
-                .or_else(|| enrichment.thumbnail.get(&id))
-                .or_else(|| enrichment.season_poster.get(&id))
-                .or_else(|| enrichment.show_poster.get(&id));
             MediaCardRow {
                 id,
                 title,
                 sort_title,
                 subtitle,
-                artwork_path: raw_artwork
-                    .and_then(|path| artwork_url(path, ArtworkUrlKind::Poster)),
+                artwork_path: browser_card_artwork_url(kind, id, &enrichment),
+                href: browser_card_href(kind, id, &enrichment),
                 season_number,
                 variant: ContentVariantInfo {
                     content_kind: document.content_kind,
@@ -758,6 +863,7 @@ fn media_card_from_admin(row: ersatzrs_core::repositories::AdminMediaCard) -> Me
         artwork_path: row
             .artwork_path
             .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+        href: None,
         season_number: row.season_number,
         variant: ContentVariantInfo {
             content_kind: row.content_kind,
@@ -1011,6 +1117,7 @@ async fn load_extra_cards(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -1062,6 +1169,7 @@ async fn load_movie_alternate_version_cards(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -2857,6 +2965,7 @@ async fn list_shows_legacy_sql(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -2958,6 +3067,7 @@ async fn list_images_legacy_sql(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -3057,6 +3167,7 @@ async fn list_artists_legacy_sql(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -3294,6 +3405,7 @@ async fn list_other_videos_legacy_sql(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -3477,6 +3589,7 @@ async fn list_seasons_legacy_sql(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                href: None,
                 season_number: Some(number),
                 variant: content_variant_from_row(r),
             }
@@ -3596,6 +3709,7 @@ async fn list_episodes_legacy_sql(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                href: None,
                 season_number: None,
                 variant: content_variant_from_row(r),
             }
@@ -3703,6 +3817,7 @@ async fn list_music_videos_legacy_sql(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -3853,6 +3968,7 @@ async fn list_remote_streams_legacy_sql(
                 artwork_path: thumbs
                     .get(&hit.media_item_id)
                     .and_then(|p| artwork_url(p, ArtworkUrlKind::Poster)),
+                href: None,
                 season_number: None,
                 variant: ContentVariantInfo {
                     content_kind: hit.content_kind,
@@ -3960,6 +4076,7 @@ async fn list_songs_legacy_sql(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -4073,6 +4190,7 @@ async fn load_trash_movies(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4116,6 +4234,7 @@ async fn load_trash_shows(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4164,6 +4283,7 @@ async fn load_trash_seasons(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                href: None,
                 season_number: Some(number),
                 variant: ContentVariantInfo::default(),
             }
@@ -4221,6 +4341,7 @@ async fn load_trash_episodes(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                href: None,
                 season_number: None,
                 variant: ContentVariantInfo::default(),
             }
@@ -4262,6 +4383,7 @@ async fn load_trash_artists(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4307,6 +4429,7 @@ async fn load_trash_music_videos(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4349,6 +4472,7 @@ async fn load_trash_other_videos(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4393,6 +4517,7 @@ async fn load_trash_songs(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4434,6 +4559,7 @@ async fn load_trash_images(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -4474,6 +4600,7 @@ async fn load_trash_remote_streams(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            href: None,
             season_number: None,
             variant: ContentVariantInfo::default(),
         })
@@ -7001,7 +7128,7 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 fn collection_detail_from_admin(
     detail: ersatzrs_core::repositories::CollectionDetailAdmin,
 ) -> CollectionDetail {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_kind_for_media_kind, artwork_url};
 
     CollectionDetail {
         id: detail.id,
@@ -7011,6 +7138,7 @@ fn collection_detail_from_admin(
             .items
             .into_iter()
             .map(|item| {
+                let artwork_kind = artwork_kind_for_media_kind(&item.kind);
                 let href = match item.kind.as_str() {
                     "movie" => Some(format!("/media/movies/{}", item.media_item_id)),
                     "show" => Some(format!("/media/tv/shows/{}", item.media_item_id)),
@@ -7026,7 +7154,7 @@ fn collection_detail_from_admin(
                     subtitle: item.subtitle,
                     artwork_path: item
                         .artwork_path
-                        .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+                        .and_then(|path| artwork_url(&path, artwork_kind)),
                     href,
                     custom_index: item.custom_index,
                     preferred_audio_language_code: item.playback.preferred_audio_language_code,
@@ -7312,17 +7440,15 @@ async fn get_collection_detail_legacy_sql(
         .map(|r| {
             let kind: String = r.try_get("Kind").unwrap_or_default();
             let item_id: i64 = r.try_get("Id").unwrap_or(0);
-            // ErsatzTV's `MediaCard` defaults to poster artwork; for artists,
-            // music videos, etc. the card explicitly opts into thumbnail
-            // artwork. We don't yet have a `Thumbnail` variant in
-            // `ArtworkUrlKind` (it maps to the same posters cache anyway),
-            // so reuse `Poster` for both — the underlying `ArtworkController`
-            // routes by stored hash, not by the requested kind.
-            let _ = r.try_get::<i64, _>("ArtworkKindHint").unwrap_or(0);
+            let artwork_kind = if r.try_get::<i64, _>("ArtworkKindHint").unwrap_or(0) == 1 {
+                ArtworkUrlKind::Thumbnail
+            } else {
+                ArtworkUrlKind::Poster
+            };
             let artwork_path = r
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster));
+                .and_then(|p| artwork_url(&p, artwork_kind));
 
             let href = match kind.as_str() {
                 "movie" => Some(format!("/media/movies/{item_id}")),

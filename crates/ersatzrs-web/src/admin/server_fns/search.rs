@@ -499,13 +499,11 @@ fn build_card(
 
     let raw_path = resolve_artwork_path(kind, hit.media_item_id, enrichment);
     let artwork_url = raw_path.and_then(|path| {
-        use crate::api::artwork::{artwork_url, ArtworkUrlKind};
-        // `ArtworkUrlKind::Poster` (440px) is also used by the existing card
-        // grids when displaying thumbnails — the URL endpoint is the same,
-        // only the upstream resize hint differs. Plumbing a separate
-        // `Thumbnail` size through `artwork_url` is deferred (it would also
-        // touch every list page that currently passes `Poster`).
-        artwork_url(&path, ArtworkUrlKind::Poster)
+        use crate::api::artwork::{artwork_kind_for_admin_search, artwork_url};
+        artwork_url(
+            &path,
+            artwork_kind_for_admin_search(admin_search_kind(kind)),
+        )
     });
 
     let href = search_href(
@@ -1041,6 +1039,60 @@ mod tests {
             search_artwork_kind(SearchCardKind::Song),
             SearchArtworkKind::Thumbnail
         );
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn card_projection_builds_correct_url_family_for_every_kind() {
+        use ersatzrs_core::search::SearchDocument;
+
+        let kinds = [
+            SearchCardKind::Movie,
+            SearchCardKind::Show,
+            SearchCardKind::Season,
+            SearchCardKind::Episode,
+            SearchCardKind::Artist,
+            SearchCardKind::MusicVideo,
+            SearchCardKind::OtherVideo,
+            SearchCardKind::Song,
+            SearchCardKind::Image,
+            SearchCardKind::RemoteStream,
+        ];
+        for (offset, kind) in kinds.into_iter().enumerate() {
+            let id = i64::try_from(offset + 1).unwrap();
+            let mut enrichment = SectionEnrichment::default();
+            let expected_family = match search_artwork_kind(kind) {
+                SearchArtworkKind::Poster => {
+                    enrichment.poster.insert(id, format!("poster-{id}.jpg"));
+                    "posters"
+                }
+                SearchArtworkKind::Thumbnail => {
+                    enrichment
+                        .thumbnail
+                        .insert(id, format!("thumbnail-{id}.jpg"));
+                    "thumbnails"
+                }
+            };
+            let hit = SearchDocument {
+                media_item_id: id,
+                media_kind: kind.media_kind().to_owned(),
+                title: Some(format!("Card {id}")),
+                sort_title: Some(format!("card {id}")),
+                ..SearchDocument::default()
+            };
+
+            assert_eq!(
+                build_card(kind, &hit, &enrichment).artwork_url,
+                Some(format!(
+                    "/artwork/{expected_family}/{}-{id}.jpg",
+                    if expected_family == "posters" {
+                        "poster"
+                    } else {
+                        "thumbnail"
+                    }
+                ))
+            );
+        }
     }
 
     #[test]

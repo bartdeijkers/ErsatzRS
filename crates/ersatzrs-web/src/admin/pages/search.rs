@@ -166,6 +166,23 @@ fn see_all_href(list_path: &str, query: &str) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::see_all_href;
+
+    #[test]
+    fn see_all_links_preserve_encoded_query_and_first_page() {
+        assert_eq!(
+            see_all_href("/media/tv/episodes", "title:\"A & B\""),
+            "/media/tv/episodes?query=title%3A%22A%20%26%20B%22&page=1"
+        );
+        assert_eq!(
+            see_all_href("/media/music/videos", "   "),
+            "/media/music/videos?page=1"
+        );
+    }
+}
+
 #[component]
 pub fn SearchPage() -> impl IntoView {
     let query_map = use_query_map();

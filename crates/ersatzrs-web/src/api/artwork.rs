@@ -90,6 +90,37 @@ pub enum ArtworkUrlKind {
     Thumbnail,
 }
 
+/// Select the URL family and resize budget used by ErsatzTV's media-card
+/// mapper for one admin-search kind.
+#[must_use]
+pub const fn artwork_kind_for_admin_search(
+    kind: ersatzrs_core::repositories::AdminSearchKind,
+) -> ArtworkUrlKind {
+    use ersatzrs_core::repositories::AdminSearchKind as Kind;
+
+    match kind {
+        Kind::Movie | Kind::Show | Kind::Season | Kind::Episode => ArtworkUrlKind::Poster,
+        Kind::Artist
+        | Kind::MusicVideo
+        | Kind::OtherVideo
+        | Kind::Song
+        | Kind::Image
+        | Kind::RemoteStream => ArtworkUrlKind::Thumbnail,
+    }
+}
+
+/// Select the media-card artwork family from the stable search/document kind
+/// string used by reusable browser and collection projections.
+#[must_use]
+pub fn artwork_kind_for_media_kind(media_kind: &str) -> ArtworkUrlKind {
+    match media_kind {
+        "artist" | "music_video" | "other_video" | "song" | "image" | "remote_stream" => {
+            ArtworkUrlKind::Thumbnail
+        }
+        _ => ArtworkUrlKind::Poster,
+    }
+}
+
 impl ArtworkUrlKind {
     fn url_segment(self) -> &'static str {
         match self {
@@ -101,10 +132,11 @@ impl ArtworkUrlKind {
 
     fn max_height(self) -> i32 {
         match self {
-            // `ErsatzTV`'s MediaCards `GetPoster` uses 440. Fan art is full-size
-            // (no resize parameter on ETV either). Actor thumbnails reuse the
-            // poster resize budget.
-            ArtworkUrlKind::Poster | ArtworkUrlKind::Thumbnail => 440,
+            // `ErsatzTV`'s MediaCards mapper uses distinct 440px poster and
+            // 220px thumbnail hints. Fan art remains full-size in upstream;
+            // the existing proxy budget is unchanged here.
+            ArtworkUrlKind::Poster => 440,
+            ArtworkUrlKind::Thumbnail => 220,
             ArtworkUrlKind::FanArt => 1080,
         }
     }
@@ -121,10 +153,18 @@ fn build_query<I>(existing: &str, extras: I) -> String
 where
     I: IntoIterator<Item = (&'static str, String)>,
 {
+    let extras = extras.into_iter().collect::<Vec<_>>();
     let mut parts: Vec<String> = if existing.is_empty() {
         Vec::new()
     } else {
-        existing.split('&').map(str::to_string).collect()
+        existing
+            .split('&')
+            .filter(|part| {
+                let key = part.split_once('=').map_or(*part, |(key, _)| key);
+                !extras.iter().any(|(extra, _)| *extra == key)
+            })
+            .map(str::to_string)
+            .collect()
     };
     for (k, v) in extras {
         parts.push(format!("{k}={v}"));
@@ -373,6 +413,78 @@ mod tests {
             url,
             "/artwork/posters/emby/Items/42/Images/Primary?tag=ff&maxHeight=440"
         );
+    }
+
+    #[test]
+    fn thumbnail_paths_use_thumbnail_family_and_upstream_resize_hints() {
+        assert_eq!(
+            artwork_url(
+                "jellyfin://Items/thumb/Images/Primary?tag=jf",
+                ArtworkUrlKind::Thumbnail,
+            )
+            .as_deref(),
+            Some("/artwork/thumbnails/jellyfin/Items/thumb/Images/Primary?tag=jf&fillHeight=220")
+        );
+        assert_eq!(
+            artwork_url(
+                "emby://Items/thumb/Images/Primary?tag=emby",
+                ArtworkUrlKind::Thumbnail,
+            )
+            .as_deref(),
+            Some("/artwork/thumbnails/emby/Items/thumb/Images/Primary?tag=emby&maxHeight=220")
+        );
+        assert_eq!(
+            artwork_url("thumbnail.jpg", ArtworkUrlKind::Thumbnail).as_deref(),
+            Some("/artwork/thumbnails/thumbnail.jpg")
+        );
+        assert_eq!(
+            artwork_url(
+                "jellyfin://Items/thumb/Images/Primary?tag=jf&fillHeight=999&quality=90",
+                ArtworkUrlKind::Thumbnail,
+            )
+            .as_deref(),
+            Some(
+                "/artwork/thumbnails/jellyfin/Items/thumb/Images/Primary?tag=jf&quality=90&fillHeight=220"
+            )
+        );
+    }
+
+    #[test]
+    fn every_search_kind_maps_to_the_upstream_artwork_family() {
+        use ersatzrs_core::repositories::AdminSearchKind as Kind;
+
+        for kind in [Kind::Movie, Kind::Show, Kind::Season, Kind::Episode] {
+            assert!(matches!(
+                artwork_kind_for_admin_search(kind),
+                ArtworkUrlKind::Poster
+            ));
+        }
+        for kind in [
+            Kind::Artist,
+            Kind::MusicVideo,
+            Kind::OtherVideo,
+            Kind::Song,
+            Kind::Image,
+            Kind::RemoteStream,
+        ] {
+            assert!(matches!(
+                artwork_kind_for_admin_search(kind),
+                ArtworkUrlKind::Thumbnail
+            ));
+        }
+        for kind in [
+            "artist",
+            "music_video",
+            "other_video",
+            "song",
+            "image",
+            "remote_stream",
+        ] {
+            assert!(matches!(
+                artwork_kind_for_media_kind(kind),
+                ArtworkUrlKind::Thumbnail
+            ));
+        }
     }
 
     #[test]

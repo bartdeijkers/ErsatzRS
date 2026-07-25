@@ -1,12 +1,11 @@
 //! "See All" list-route pages for the search page's per-kind sections.
 //!
-//! These three kinds (seasons, episodes, music videos) have no
-//! dedicated `*List.razor` in `ErsatzTV` — the search page is their only entry
-//! point. Each delegates to the shared [`MultiSelectBrowserPage`], which
-//! supplies the letter-bar + paginated grid + query echo that satisfies the
-//! "See All" contract ("land on a page that shows all hits of this kind for
-//! this query"). Full per-kind detail pages and the library-filter combobox
-//! are deferred to a separate plan.
+//! ErsatzTV has dedicated `TelevisionSeasonSearchResults.razor`,
+//! `EpisodeList.razor`, and `MusicVideoList.razor` routes. Each delegates here
+//! to the shared [`MultiSelectBrowserPage`], which preserves their filtered
+//! pager, letter bar, selection/actions, and card-navigation behavior.
+//! The pinned upstream pages expose no library-filter combobox, so none is
+//! invented on these parity routes.
 use leptos::prelude::*;
 
 use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
