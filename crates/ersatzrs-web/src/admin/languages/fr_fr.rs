@@ -1566,7 +1566,6 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GeneratingPreview => "Génération de l'aperçu...",
         TextKey::HorizontalMarginPercent => "Marge horizontale (%)",
         TextKey::GuideFourThree => "Cadre sûr 4:3",
-        TextKey::GuideSixteenNine => "Cadre 16:9",
         TextKey::Identity => "Identité",
         TextKey::Image => "Image",
         TextKey::ImageSource => "Source de l'image",

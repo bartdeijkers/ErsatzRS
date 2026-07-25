@@ -168,16 +168,15 @@ test.describe('truthful watermark preview and comparison navigation', () => {
       }
       context.drawImage(element, 0, 0);
       return {
-        sixteenNine: Array.from(context.getImageData(1, 1, 1, 1).data),
+        outerFrame: Array.from(context.getImageData(1, 1, 1, 1).data),
         fourThree: Array.from(context.getImageData(40, 6, 1, 1).data),
         watermark: Array.from(context.getImageData(218, 85, 1, 1).data),
       };
     });
-    expect(framePixels.sixteenNine).not.toEqual(framePixels.fourThree);
-    expect(framePixels.sixteenNine[1]).toBeGreaterThan(framePixels.sixteenNine[0]);
+    expect(framePixels.outerFrame[2]).toBeGreaterThan(framePixels.outerFrame[1]);
     expect(framePixels.fourThree[0]).toBeGreaterThan(framePixels.fourThree[2]);
     expect(framePixels.watermark[1]).toBeGreaterThan(framePixels.watermark[0]);
-    await expect(page.getByText('16:9 frame', { exact: true })).toBeVisible();
+    await expect(page.getByText('16:9 frame', { exact: true })).toHaveCount(0);
     await expect(page.getByText('4:3 safe frame', { exact: true })).toBeVisible();
 
     const previous = page.getByRole('button', { name: 'Previous watermark' });

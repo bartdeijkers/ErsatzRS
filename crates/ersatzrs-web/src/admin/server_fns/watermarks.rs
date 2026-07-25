@@ -721,16 +721,11 @@ pub async fn preview_watermark_asset_placement(
     let opacity = (f64::from(params.placement.opacity) / 100.0).clamp(0.0, 1.0);
 
     // A 4:3 frame inside 320x180 is exactly 240x180, centered at x=40.
-    // Its horizontal edges share the 16:9 boundary; amber overwrites only the
-    // centered span so both guides remain distinguishable.
+    // The outer 16:9 edge is intentionally left unmarked so the preview has
+    // one unambiguous positioning guide.
     let drawvg = "\
 setcolor #111827
 rect 0 0 320 180 fill
-setcolor #14b8a6@0.90
-rect 1 1 318 2 fill
-rect 1 177 318 2 fill
-rect 1 1 2 178 fill
-rect 317 1 2 178 fill
 setcolor #f59e0b@0.90
 rect 40 0 2 180 fill
 rect 278 0 2 180 fill

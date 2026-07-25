@@ -1506,7 +1506,6 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GeneratingPreview => "Generating preview...",
         TextKey::HorizontalMarginPercent => "Horizontal Margin (%)",
         TextKey::GuideFourThree => "4:3 safe frame",
-        TextKey::GuideSixteenNine => "16:9 frame",
         TextKey::Identity => "Identity",
         TextKey::Image => "Image",
         TextKey::ImageSource => "Image Source",

@@ -2168,7 +2168,6 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GeneratingPreview => "Voorbeeld genereren...",
         TextKey::HorizontalMarginPercent => "Horizontale marge (%)",
         TextKey::GuideFourThree => "Veilig 4:3-kader",
-        TextKey::GuideSixteenNine => "16:9-kader",
         TextKey::Identity => "Identiteit",
         TextKey::Image => "Afbeelding",
         TextKey::ImageSource => "Afbeeldingsbron",

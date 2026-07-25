@@ -808,10 +808,6 @@ fn WatermarkEditorForm(initial_data: WatermarkEditorData) -> impl IntoView {
                     </div>
                     <div class=style::guide_legend aria-label=tr(TextKey::AspectRatioGuides)>
                         <span class=style::guide_item>
-                            <span class=format!("{} {}", style::guide_swatch, style::guide_sixteen_nine)></span>
-                            {tr(TextKey::GuideSixteenNine)}
-                        </span>
-                        <span class=style::guide_item>
                             <span class=format!("{} {}", style::guide_swatch, style::guide_four_three)></span>
                             {tr(TextKey::GuideFourThree)}
                         </span>
