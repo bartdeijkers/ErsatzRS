@@ -12,6 +12,19 @@ pub enum RemoteMediaSourceKind {
     Plex,
 }
 
+impl RemoteMediaSourceKind {
+    pub const ALL: [Self; 3] = [Self::Plex, Self::Jellyfin, Self::Emby];
+
+    #[must_use]
+    pub const fn provider_name(self) -> &'static str {
+        match self {
+            Self::Plex => "Plex",
+            Self::Jellyfin => "Jellyfin",
+            Self::Emby => "Emby",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalLibraryAdminRow {
     pub id: EntityId,
@@ -115,4 +128,17 @@ pub trait MediaSourceRepository: Send + Sync {
         paths: &[PathReplacementAdmin],
     ) -> Result<()>;
     async fn delete_all_plex_sources_admin(&self) -> Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RemoteMediaSourceKind;
+
+    #[test]
+    fn remote_media_source_registry_covers_every_provider() {
+        assert_eq!(
+            RemoteMediaSourceKind::ALL.map(RemoteMediaSourceKind::provider_name),
+            ["Plex", "Jellyfin", "Emby"]
+        );
+    }
 }

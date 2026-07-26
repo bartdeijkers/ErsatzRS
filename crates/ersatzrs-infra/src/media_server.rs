@@ -21,6 +21,8 @@ use sqlx::Row;
 
 use crate::db::{assert_sql_safe, DbPool};
 
+pub(crate) mod jellyfin_emby;
+
 /// State values mirroring `ErsatzTV.Core.Domain.MediaItemState`.
 pub(crate) const STATE_NORMAL: i64 = 0;
 pub(crate) const STATE_FILE_NOT_FOUND: i64 = 1;

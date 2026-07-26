@@ -12,6 +12,20 @@ pub enum MediaSourceKind {
     Emby,
 }
 
+impl MediaSourceKind {
+    pub const ALL: [Self; 4] = [Self::Local, Self::Plex, Self::Jellyfin, Self::Emby];
+
+    #[must_use]
+    pub const fn provider_name(self) -> &'static str {
+        match self {
+            Self::Local => "Local",
+            Self::Plex => "Plex",
+            Self::Jellyfin => "Jellyfin",
+            Self::Emby => "Emby",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct MediaServerConnectionParameters {
     pub address: String,
@@ -105,4 +119,17 @@ pub struct EmbyPathReplacement {
     pub emby_media_source_id: EntityId,
     pub path: String,
     pub replacement_path: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MediaSourceKind;
+
+    #[test]
+    fn media_source_registry_covers_local_and_every_remote_provider() {
+        assert_eq!(
+            MediaSourceKind::ALL.map(MediaSourceKind::provider_name),
+            ["Local", "Plex", "Jellyfin", "Emby"]
+        );
+    }
 }
