@@ -15,6 +15,13 @@ application commands or queries. Web retains only transport mapping and
 native adapter construction. Stable server-function names, serialized DTOs,
 endpoint behavior, validation, transaction/side-effect order, scheduler and
 scanner semantics, and persisted contracts are preserved.
+
+P7C-04 completed the structural closeout after extraction. Media-browser
+transport, YAML and scripted registries, and Jellyfin/Emby adapters now split
+along enumerable seams behind exhaustive route, instruction, Lua-global, and
+media-source gates. The original public imports, Leptos endpoints, serialized
+YAML, scheduler output, provider requests and persistence, SSR/WASM boundary,
+and visible admin behavior remain unchanged.
 '''
 
 [[debt]]

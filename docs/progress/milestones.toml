@@ -404,7 +404,7 @@ and 390x844 containment without runtime or request failures.
 id         = 'p7c-04'
 phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Split large modules after boundary extraction'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'application-use-case-layer'
 plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-05', 'p7c-01', 'p7c-02', 'p7c-03']
@@ -413,7 +413,26 @@ The module-split survey uses current measurements; reduced web transport,
 YAML/scripted registries, and provider adapters are split behind exhaustive
 dispatch/completeness gates and remain compatible with the web/WASM split.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-07-26. The refreshed source and visual survey records the
+pre/post measurements, all 71 stable Leptos endpoint declarations, 38-field
+YAML shape and 19-choice precedence, 37 Lua globals, provider divergences,
+native/WASM boundary, final layouts, callers, and browser consumers.
+
+Media browser transport is split by kind and collection/action family behind
+exhaustive kind/route tests while the original module retains every public
+server-function declaration. YAML uses a post-deserialization instruction kind
+with exhaustive dispatch and the original malformed-input precedence.
+Scripted registration is split into category registrars with an exact-global
+gate. Jellyfin and Emby retain separate request/projection/sync strategies and
+share only identical persistence mechanics; exhaustive Local/Plex/Jellyfin/
+Emby gates prevent silent provider fallthrough. Plex is unchanged.
+
+Focused web/core/provider suites and unchanged snapshots passed. Both workspace
+Clippy configurations, 1,050 nextest tests plus doctests, matched SSR/WASM
+build, web parity, zero-ratchet architecture lint, no-new-finding hydration
+lint, and 141 selected Chromium/Firefox browser checks passed.
+'''
 
 [[milestone]]
 id         = 'p8a-01'

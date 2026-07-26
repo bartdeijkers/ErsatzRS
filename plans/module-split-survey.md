@@ -1,7 +1,7 @@
 # Module-split survey
 
 > **Type:** Structural refactoring contract.
-> **Status:** P7C-04 execution baseline, refreshed 2026-07-26.
+> **Status:** P7C-04 complete, refreshed and closed 2026-07-26.
 > **Milestone:** `p7c-04` in `docs/progress/milestones.toml`.
 
 ## Purpose
@@ -61,21 +61,28 @@ run both Clippy configurations, a matched `cargo leptos build`, web parity,
 architecture, hydration, and progress gates exactly as documented in
 `AGENTS.md`, `BUILD.md`, and `TEST.md`. Do not use direct `cargo test`.
 
-The configured target directory measured 9.6 GiB on 2026-07-26, below the
-40 GiB `cargo clean` threshold.
+The configured target directory measured 9.6 GiB at initial reconnaissance and
+37 GiB before the closeout gate, both below the 40 GiB `cargo clean` threshold.
+The multi-configuration closeout then grew it to 50 GiB, so the required
+`cargo clean` was run before rebuilding the matched web bundle and parity
+checks. Cargo reported 61.3 GiB of rebuildable artifacts removed; source and
+user data were not touched.
 
-## Measurements
+## Before/after measurements
 
-Measured from `main` at `ae0f8c0` on 2026-07-26:
+The baseline was measured from `main` at `ae0f8c0`; the final layout was
+remeasured after all P7C-04 code slices on 2026-07-26. Extracted-line totals
+include tests where the original file contained them. They describe
+responsibility distribution, not a code-reduction target.
 
-| Target | Lines | Enumerable surface |
-| --- | ---: | --- |
-| `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` | 9,020 | 71 `#[server]` functions; 128 public/public-crate items |
-| `crates/ersatzrs-core/src/scheduling/yaml.rs` | 3,367 | 38 serialized instruction fields; 19 dispatch choices |
-| `crates/ersatzrs-core/src/scheduling/scripted.rs` | 2,451 | 37 registered Lua globals |
-| `crates/ersatzrs-infra/src/jellyfin.rs` | 3,475 | Jellyfin HTTP projection and sync adapter |
-| `crates/ersatzrs-infra/src/emby.rs` | 3,376 | Emby HTTP projection and sync adapter |
-| `crates/ersatzrs-infra/src/plex.rs` | 2,953 | Plex adapter; deliberately out of the dedup slice |
+| Target | Before | Final root | Extracted layout and completeness surface |
+| --- | ---: | ---: | --- |
+| `admin/server_fns/media_browser.rs` | 9,020 | 2,271 | 7,631 lines under `media_browser/`; all 71 `#[server]` declarations remain in the original module and all 10 `MediaBrowserKind` variants are gated |
+| `core/scheduling/yaml.rs` | 3,367 | 918 | 2,709 lines under `yaml/`; 38 serialized fields and 19 precedence choices are gated |
+| `core/scheduling/scripted.rs` | 2,451 | 1,735 | 983 lines under `scripted/api/`; exactly 37 Lua globals are gated |
+| `infra/jellyfin.rs` | 3,475 | 57 | 3,161 provider-owned lines under `jellyfin/`, plus the 507-line shared Jellyfin/Emby persistence boundary |
+| `infra/emby.rs` | 3,376 | 53 | 3,062 provider-owned lines under `emby/`, plus the same 507-line shared boundary |
+| `infra/plex.rs` | 2,953 | 2,953 | Deliberately unchanged; covered by exhaustive remote-provider gates |
 
 The health-check pilot is complete and must not be repeated.
 `crates/ersatzrs-infra/src/health/checks/` contains 21 concrete checks behind
@@ -147,9 +154,10 @@ codec. Its route is:
 
 This corrects the old survey assumption that only a function name determines
 the endpoint. Leptos also hashes `module_path!()`. The macro-decorated
-declarations must therefore remain in `media_browser/mod.rs`, or an explicit
-endpoint must preserve the old value. P7C-04 keeps them in `mod.rs` as thin
-wrappers and adds a path-stability test for all 71 routes.
+declarations therefore remain in the original `media_browser.rs` module as
+thin wrappers while its implementation children live under `media_browser/`.
+This preserves `module_path!()` and adds a path-stability test for all 71
+routes.
 
 The other stable public surface is the set of DTOs, helpers, and
 `MediaBrowserKind`. Existing callers continue to import them through
@@ -162,38 +170,41 @@ core, infrastructure, SQL, path replacement, and native runtime helpers remain
 under `feature = "ssr"` or `all(test, feature = "ssr")`. No native adapter may
 become a WASM dependency.
 
-### Target layout
+### Final layout
 
 ```text
-admin/server_fns/media_browser/
-  mod.rs                  public DTO/re-export surface, 71 thin #[server]
-                          declarations, MediaBrowserKind dispatch
-  shared.rs               shared projections and transport helpers
-  kinds/
-    movies.rs
-    shows.rs
-    seasons.rs
-    episodes.rs
-    artists.rs
-    music_videos.rs
-    other_videos.rs
-    songs.rs
-    images.rs
-    remote_streams.rs
-  collections/
-    manual.rs
-    smart.rs
-    multi.rs
-    rerun.rs
-    detail.rs
-  playlists.rs
-  trash.rs
-  autocomplete.rs
-  test_support.rs
+admin/server_fns/
+  media_browser.rs        stable public DTO/re-export surface, 71 thin
+                          #[server] declarations, MediaBrowserKind dispatch
+  media_browser/
+    autocomplete.rs
+    collection_detail.rs
+    playlists.rs
+    trash.rs
+    test_support.rs
+    kinds/
+      mod.rs
+      artists.rs
+      episodes.rs
+      images.rs
+      movies.rs
+      music_videos.rs
+      other_videos.rs
+      remote_streams.rs
+      seasons.rs
+      shows.rs
+      songs.rs
+    collections/
+      mod.rs
+      manual.rs
+      multi.rs
+      rerun.rs
+      smart.rs
 ```
 
-The exact number of files may consolidate tiny handlers, but the named feature
-seams, stable root import path, and thin root dispatch are mandatory.
+The original module path and public imports stay stable. Native application and
+provider imports in the extracted leaves remain SSR-gated; the matched hydrate
+build proves no native adapter leaked into WASM.
 
 ### Visual source map
 
@@ -235,10 +246,24 @@ wait_until -> rewind -> epg_group -> watermark -> graphics_on -> graphics_off
 -> pad_to_next -> pad_until -> unsupported
 ```
 
-The target is `scheduling/yaml/mod.rs` for the public model, engine, context,
-kind derivation, and exhaustive dispatch, with coherent handlers under
-`scheduling/yaml/instructions/`. Snapshot names and generated timelines must
-not change.
+The final layout keeps `scheduling/yaml/mod.rs` as the public model, engine,
+context, kind derivation, and exhaustive dispatcher:
+
+```text
+scheduling/yaml/
+  mod.rs
+  expressions.rs
+  sequences.rs
+  tests.rs
+  instructions/
+    mod.rs
+    content.rs
+    skipping.rs
+    state.rs
+    timing.rs
+```
+
+Snapshot names and generated timelines did not change.
 
 ## Source map: scripted scheduling
 
@@ -263,6 +288,23 @@ add_show, add_playlist, add_key, add_marathon, create_playlist
 Category registrars under `scripted/api/` receive the same
 `Rc<RefCell<ScriptState>>`. A single expected-name registry and a Lua-global
 completeness test prove that `register_all` exposes exactly this set.
+
+```text
+scheduling/scripted/
+  mod.rs
+  api/
+    mod.rs
+    content.rs
+    graphics.rs
+    guide.rs
+    policy.rs
+    pre_roll.rs
+    skipping.rs
+    sources.rs
+    state_queries.rs
+    timing.rs
+    watermark.rs
+```
 
 ## Source map: Jellyfin and Emby
 
@@ -293,7 +335,29 @@ remote-provider dispatch covers Plex, Jellyfin, and Emby; a companion
 `MediaSourceKind` gate covers Local plus all three remote kinds so a new source
 cannot silently fall through.
 
-## Baseline evidence
+The final provider layout is:
+
+```text
+infra/src/
+  jellyfin/
+    mod.rs
+    client.rs
+    models.rs
+    persistence.rs
+    projection.rs
+    sync.rs
+  emby/
+    mod.rs
+    client.rs
+    models.rs
+    persistence.rs
+    projection.rs
+    sync.rs
+  media_server/
+    jellyfin_emby.rs
+```
+
+## Verification evidence
 
 Before P7C-04 edits on 2026-07-26:
 
@@ -305,6 +369,27 @@ Before P7C-04 edits on 2026-07-26:
 
 The first sandboxed Jellyfin integration run could not bind
 `127.0.0.1:0`; the unchanged command passed with local loopback permission.
+
+After the split:
+
+- focused web tests passed 401 tests with 6 explicitly skipped;
+- focused core tests passed 151 tests, including the byte-compatible YAML
+  round trip, malformed multi-field precedence, and exact Lua-global registry;
+- Jellyfin and Emby integration suites passed 9 and 8 tests respectively,
+  covering requests, pagination, ETAG restore/skip, persistence, variants,
+  streams, collections, shows, and targeted-show sync;
+- no `.snap.new` files were produced and the existing YAML/scripted snapshots
+  remained unchanged;
+- both workspace Clippy configurations passed, and `./run.sh test-closeout`
+  passed all 1,050 nextest tests with 11 explicitly skipped plus every doctest;
+- a matched `cargo leptos build`, `cargo xtask parity-check web`, architecture
+  lint, and hydration lint passed. Architecture ratchets remain at zero and
+  hydration lint reports no new findings;
+- the seven affected Playwright specs passed 141 checks with 1 explicitly
+  skipped across Chromium and Firefox. They cover every media-browser island
+  route, collection and playlist workflows, content variants, remote streams,
+  search navigation, hydrated actions, no-JS fallbacks, and desktop/mobile
+  containment.
 
 ## Considered and skipped
 

@@ -1,32 +1,28 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7C — Secondary stopgap closeout'
+current_phase = 'Phase 8 — The Box video-jukebox extension'
+current_focus = 'Phase 8A — Durable video-jukebox domain'
 
 summary = '''
-Phases 0–6 are complete: the workspace, FFmpeg pipeline, scheduling engines,
-media-source scanning, IPTV/HDHomeRun endpoints, and the main admin UI route
-families are in place. The 2026-07-21 structural audit reopened cross-cutting
-Phase 7 work around the unused application crate, silent data-access/UI failure
-fallbacks, simplified block preview, production-visible development routes,
-and secondary placeholder/deferred behavior. Phase 8 is reserved for the
-dependency-gated "The Box" video-jukebox extension.
+Phases 0–7 are complete: the workspace, FFmpeg pipeline, scheduling engines,
+media-source scanning, IPTV/HDHomeRun endpoints, main admin UI route families,
+hardening, application-boundary extraction, secondary stopgap closeout, and
+exhaustive large-module splits are in place. Phase 8 is the dependency-gated
+"The Box" video-jukebox extension.
 '''
 
 next_steps = '''
-Phase 7B is complete: playout-build and scan operation ownership, real block
-preview, and all remaining production admin/API workflows now use the
-application boundary without raw admin SQL, pool access, silent resource
-defaults, or row-decode defaults. P7C-01 is complete: local Trakt maintenance
-no longer carries a placeholder remote capability. P7C-02 is complete: the
-watermark editor has truthful real-asset geometry, a visible 4:3 safe-frame guide,
-and deterministic dirty-safe comparison navigation. P7C-03 is complete:
-search and See All browser cards now preserve upstream artwork sizing,
-query/navigation behavior, and the upstream absence of a library filter.
-Phase 7C milestone p7c-04 is the next runnable slice. Phase 8 jukebox
-implementation must still wait for p7c-04 and the accepted p8a-01 product
-contract. Use
+Phase 7 is complete. P7C-04 split media-browser transport, YAML/scripted
+registries, and Jellyfin/Emby adapters behind exhaustive completeness gates
+without changing public, serialized, provider, scheduler, hydration, or visual
+behavior.
+
+P8A-01 is the live next slice. It is a product and architecture decision only:
+define eligibility, queue policy, identity/moderation, cooldowns/rate limits,
+insertion/cancellation/retry/recovery semantics, and the versioned
+out-of-process add-on transport in an accepted ADR. Do not begin schema,
+public-API, or video-jukebox implementation before that ADR is accepted. Use
 `cargo xtask progress milestones --runnable` for runnable work,
 `cargo xtask progress milestones --id <id> --full` for acceptance criteria,
 and `cargo xtask progress gaps` for feature/debt state. Historical completion
@@ -35,4 +31,4 @@ instead of accumulating in this current-focus field.
 '''
 
 [[blocking_decision]]
-note = 'No Phase 7 blocking decision. Milestone p8a-01 must produce an accepted ADR before Phase 8 schema or public add-on API implementation starts.'
+note = 'Milestone p8a-01 is the live decision gate and must produce an accepted ADR before Phase 8 schema, public add-on API, or video-jukebox implementation starts.'

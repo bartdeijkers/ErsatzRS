@@ -28,6 +28,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Split the largest media-browser transport, YAML and scripted scheduling
+  registries, and Jellyfin/Emby adapters into enumerable feature modules.
+  Exhaustive route, instruction, Lua-global, and media-source gates now prevent
+  new variants from silently falling through while preserving public imports,
+  server-function endpoints, serialized YAML, scheduler output, provider
+  requests and persistence, hydration, and visible admin behavior.
 - Search and per-kind media browser cards now preserve ErsatzTV's artwork
   semantics: poster cards request provider height 440, thumbnail cards request
   height 220, and existing provider resize parameters are replaced instead of
