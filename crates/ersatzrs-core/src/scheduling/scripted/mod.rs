@@ -421,796 +421,23 @@ fn parse_playback_order(s: Option<&str>) -> PlaybackOrder {
 
 // ── Lua binding registration ──────────────────────────────────────────────────
 
-#[allow(clippy::too_many_lines)]
+mod api;
+
 fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua::Error> {
-    let globals = lua.globals();
-
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "set_smart_shuffle_policy",
-            lua.create_function_mut(move |_, (content_key, json): (String, String)| {
-                let policy = serde_json::from_str(&json).map_err(mlua::Error::external)?;
-                s.borrow_mut()
-                    .reference_data
-                    .smart_shuffle_policies_by_unit
-                    .insert(content_key, policy);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "set_cooldown_policy",
-            lua.create_function_mut(move |_, json: String| {
-                let policy = serde_json::from_str(&json).map_err(mlua::Error::external)?;
-                s.borrow_mut().reference_data.smart_shuffle_policy = policy;
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // schedule_count(content, count)  [legacy alias]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "schedule_count",
-            lua.create_function_mut(move |_, (content, count): (String, usize)| {
-                let mut st = s.borrow_mut();
-                for _ in 0..count {
-                    st.add_item_simple(&content, None);
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // schedule_duration(content, duration)  [legacy alias]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "schedule_duration",
-            lua.create_function_mut(move |_, (content, duration): (String, String)| {
-                let target = {
-                    let st = s.borrow();
-                    st.current_time + parse_duration(&duration).map_err(mlua::Error::external)?
-                };
-                let opts = AddOptions::default();
-                s.borrow_mut()
-                    .add_duration_internal(&content, target, &opts);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // set_watermark(id)  [legacy: by numeric ID]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "set_watermark",
-            lua.create_function_mut(move |_, id: EntityId| {
-                s.borrow_mut().watermark_ids.push(id);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // clear_watermarks()  [legacy]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "clear_watermarks",
-            lua.create_function_mut(move |_, ()| {
-                s.borrow_mut().watermark_ids.clear();
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // graphics_on(id)  [legacy: by numeric ID]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "graphics_on",
-            lua.create_function_mut(move |_, id: EntityId| {
-                let mut st = s.borrow_mut();
-                if !st.graphics_element_ids.contains(&id) {
-                    st.graphics_element_ids.push(id);
-                }
-                st.graphics_element_variables.insert(id, None);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // graphics_off(id?)  [legacy]
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "graphics_off",
-            lua.create_function_mut(move |_, id: Option<EntityId>| {
-                let mut st = s.borrow_mut();
-                if let Some(id) = id {
-                    st.graphics_element_ids.retain(|c| *c != id);
-                    st.graphics_element_variables.remove(&id);
-                } else {
-                    st.graphics_element_ids.clear();
-                    st.graphics_element_variables.clear();
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // wait_until(hh:mm[:ss])
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "wait_until",
-            lua.create_function_mut(move |_, value: String| {
-                let (hour, minute, second) = parse_hhmm(&value).map_err(mlua::Error::external)?;
-                let mut st = s.borrow_mut();
-                let date = st.current_time.date_naive();
-                let target = date
-                    .and_hms_opt(hour, minute, second)
-                    .ok_or_else(|| mlua::Error::external("invalid time"))?;
-                st.current_time = DateTime::from_naive_utc_and_offset(target, Utc);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // add_count(content, count)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_count",
-            lua.create_function_mut(move |_, (content, count): (String, usize)| {
-                let mut st = s.borrow_mut();
-                for _ in 0..count {
-                    st.add_item_simple(&content, None);
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // add_all(content, opts?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_all",
-            lua.create_function_mut(move |_, (content, opts): (String, Option<Table>)| {
-                let count = s.borrow_mut().key_len(&content);
-                let opts = read_add_options(opts.as_ref());
-                for _ in 0..count {
-                    s.borrow_mut().add_item_with_opts(&content, None, &opts);
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // add_duration(content, duration, opts?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_duration",
-            lua.create_function_mut(
-                move |_, (content, duration, opts): (String, String, Option<Table>)| {
-                    let opts = read_add_options(opts.as_ref());
-                    let target = {
-                        let st = s.borrow();
-                        st.current_time
-                            + parse_duration(&duration).map_err(mlua::Error::external)?
-                    };
-                    s.borrow_mut()
-                        .add_duration_internal(&content, target, &opts);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // pad_to_next(content, minutes, opts?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "pad_to_next",
-            lua.create_function_mut(
-                move |_, (content, minutes, opts): (String, i64, Option<Table>)| {
-                    let opts = read_add_options(opts.as_ref());
-                    let target = {
-                        let st = s.borrow();
-                        next_n_minute_boundary(st.current_time, minutes)
-                    };
-                    s.borrow_mut()
-                        .add_duration_internal(&content, target, &opts);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // pad_until(content, time_str, opts?)  — opts may contain {tomorrow=true}
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "pad_until",
-            lua.create_function_mut(
-                move |_, (content, time_str, opts): (String, String, Option<Table>)| {
-                    let opts = read_add_options(opts.as_ref());
-                    let target = {
-                        let st = s.borrow();
-                        let (hour, minute, second) =
-                            parse_hhmm(&time_str).map_err(mlua::Error::external)?;
-                        let nt = NaiveTime::from_hms_opt(hour, minute, second)
-                            .ok_or_else(|| mlua::Error::external("invalid time"))?;
-                        pad_until_target(st.current_time, nt, opts.tomorrow)
-                    };
-                    s.borrow_mut()
-                        .add_duration_internal(&content, target, &opts);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // skip(content, count)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "skip",
-            lua.create_function_mut(move |_, (content, count): (String, usize)| {
-                let mut st = s.borrow_mut();
-                let e = st.enumerator(&content);
-                for _ in 0..count {
-                    e.advance();
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // skip_to(content, season, episode)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "skip_to",
-            lua.create_function_mut(move |_, (content, season, episode): (String, i32, i32)| {
-                let mut st = s.borrow_mut();
-                let len = st.enumerator(&content).len();
-                for _ in 0..len {
-                    let matches = st.enumerator(&content).current().is_some_and(|item| {
-                        item.season == Some(season) && item.episode == Some(episode)
-                    });
-                    if matches {
-                        break;
-                    }
-                    st.enumerator(&content).advance();
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // rewind(content)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "rewind",
-            lua.create_function_mut(move |_, content: String| {
-                s.borrow_mut().enumerator(&content).set_index(0);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // pre_roll_on(content_key)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "pre_roll_on",
-            lua.create_function_mut(move |_, key: String| {
-                s.borrow_mut().pre_roll_key = Some(key);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // pre_roll_off()
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "pre_roll_off",
-            lua.create_function_mut(move |_, ()| {
-                s.borrow_mut().pre_roll_key = None;
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // lock_guide_group(advance?, title?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "lock_guide_group",
-            lua.create_function_mut(move |_, (advance, title): (Option<bool>, Option<String>)| {
-                s.borrow_mut()
-                    .lock_guide_group(advance.unwrap_or(true), title);
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // unlock_guide_group()
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "unlock_guide_group",
-            lua.create_function_mut(move |_, ()| {
-                s.borrow_mut().unlock_guide_group();
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // is_done()  →  bool
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "is_done",
-            lua.create_function_mut(move |_, ()| {
-                let mut st = s.borrow_mut();
-                let current = st.current_time;
-                if st.last_progress_time == Some(current) {
-                    st.no_progress_counter += 1;
-                    if st.no_progress_counter >= 20 {
-                        return Err(mlua::Error::external(
-                            "is_done() called 20 times without time advancing",
-                        ));
-                    }
-                } else {
-                    st.last_progress_time = Some(current);
-                    st.no_progress_counter = 0;
-                }
-                Ok(current >= st.finish)
-            })?,
-        )?;
-    }
-
-    // current_time()  →  RFC-3339 string
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "current_time",
-            lua.create_function(move |_, ()| Ok(s.borrow().current_time.to_rfc3339()))?,
-        )?;
-    }
-
-    // finish_time()  →  RFC-3339 string
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "finish_time",
-            lua.create_function(move |_, ()| Ok(s.borrow().finish.to_rfc3339()))?,
-        )?;
-    }
-
-    // watermark_on(name)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "watermark_on",
-            lua.create_function_mut(move |_, name: String| {
-                let mut st = s.borrow_mut();
-                if let Some(&id) = st.reference_data.watermark_ids_by_name.get(&name) {
-                    if !st.watermark_ids.contains(&id) {
-                        st.watermark_ids.push(id);
-                    }
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // watermark_off(name?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "watermark_off",
-            lua.create_function_mut(move |_, name: Option<String>| {
-                let mut st = s.borrow_mut();
-                match name {
-                    Some(n) => {
-                        if let Some(&id) = st.reference_data.watermark_ids_by_name.get(&n) {
-                            st.watermark_ids.retain(|c| *c != id);
-                        }
-                    }
-                    None => st.watermark_ids.clear(),
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // graphics_on_path(path, variables_json?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "graphics_on_path",
-            lua.create_function_mut(move |_, (path, vars): (String, Option<String>)| {
-                let mut st = s.borrow_mut();
-                if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&path) {
-                    if !st.graphics_element_ids.contains(&id) {
-                        st.graphics_element_ids.push(id);
-                    }
-                    st.graphics_element_variables.insert(id, vars);
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // graphics_off_path(path?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "graphics_off_path",
-            lua.create_function_mut(move |_, path: Option<String>| {
-                let mut st = s.borrow_mut();
-                if let Some(p) = path {
-                    if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&p) {
-                        st.graphics_element_ids.retain(|c| *c != id);
-                        st.graphics_element_variables.remove(&id);
-                    }
-                } else {
-                    st.graphics_element_ids.clear();
-                    st.graphics_element_variables.clear();
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // add_collection(key, name, order?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_collection",
-            lua.create_function_mut(
-                move |_, (key, name, order): (String, String, Option<String>)| {
-                    let po = parse_playback_order(order.as_deref());
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let items = st
-                        .reference_data
-                        .collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
-                    st.apply_history(&key, &mut e, po);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_multi_collection(key, name, order?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_multi_collection",
-            lua.create_function_mut(
-                move |_, (key, name, order): (String, String, Option<String>)| {
-                    let po = parse_playback_order(order.as_deref());
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let items = st
-                        .reference_data
-                        .multi_collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
-                    st.apply_history(&key, &mut e, po);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_smart_collection(key, name, order?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_smart_collection",
-            lua.create_function_mut(
-                move |_, (key, name, order): (String, String, Option<String>)| {
-                    let po = parse_playback_order(order.as_deref());
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let items = st
-                        .reference_data
-                        .smart_collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
-                    st.apply_history(&key, &mut e, po);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_search(key, query, order?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_search",
-            lua.create_function_mut(
-                move |_, (key, query, order): (String, String, Option<String>)| {
-                    let po = parse_playback_order(order.as_deref());
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let items = st
-                        .reference_data
-                        .searches_by_query
-                        .get(&query)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
-                    st.apply_history(&key, &mut e, po);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_show(key, guids_table, order?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_show",
-            lua.create_function_mut(
-                move |_, (key, guids_table, order): (String, Table, Option<String>)| {
-                    let po = parse_playback_order(order.as_deref());
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let mut items = Vec::new();
-                    let mut seen = std::collections::BTreeSet::new();
-                    for pair in guids_table.pairs::<String, String>() {
-                        let (source, value) = pair?;
-                        let guid_key = format!("{source}://{value}");
-                        if let Some(show_items) =
-                            st.reference_data.media_by_show_guid.get(&guid_key)
-                        {
-                            for item in show_items {
-                                if seen.insert(item.id) {
-                                    items.push(item.clone());
-                                }
-                            }
-                        }
-                    }
-                    let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
-                    st.apply_history(&key, &mut e, po);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_playlist(key, name, group?)
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_playlist",
-            lua.create_function_mut(
-                move |_, (key, name, group): (String, String, Option<String>)| {
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
-                        return Ok(());
-                    }
-                    let items = st
-                        .reference_data
-                        .playlists_by_group_and_name
-                        .get(&(group.clone(), name.clone()))
-                        .or_else(|| {
-                            st.reference_data
-                                .playlists_by_group_and_name
-                                .get(&(None, name.clone()))
-                        })
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e =
-                        MediaEnumerator::new(&key, items).with_playback_order(PlaybackOrder::None);
-                    st.apply_history(&key, &mut e, PlaybackOrder::None);
-                    st.enumerators.insert(key, e);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // add_key(key)  — register a pre-loaded direct-key from reference_data.media_by_key
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_key",
-            lua.create_function_mut(move |_, key: String| {
-                let mut st = s.borrow_mut();
-                if st.enumerators.contains_key(&key) {
-                    return Ok(());
-                }
-                let items = st
-                    .reference_data
-                    .media_by_key
-                    .get(&key)
-                    .cloned()
-                    .unwrap_or_default();
-                st.enumerators
-                    .insert(key.clone(), MediaEnumerator::new(&key, items));
-                Ok(())
-            })?,
-        )?;
-    }
-
-    // add_marathon(key, guids_table, searches_table, group_by, opts?)
-    // opts = {shuffle_groups=false, item_order="season_episode", play_all=false}
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "add_marathon",
-            lua.create_function_mut(
-                move |_,
-                      (key, guids_table, searches_table, group_by, opts): (
-                    String,
-                    Table,
-                    Table,
-                    String,
-                    Option<Table>,
-                )| {
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key)
-                        || st.playlist_enumerators.contains_key(&key)
-                    {
-                        return Ok(());
-                    }
-
-                    let shuffle_groups = opts
-                        .as_ref()
-                        .and_then(|t| t.get::<Option<bool>>("shuffle_groups").ok().flatten())
-                        .unwrap_or(false);
-                    let play_all = opts
-                        .as_ref()
-                        .and_then(|t| t.get::<Option<bool>>("play_all").ok().flatten())
-                        .unwrap_or(false);
-                    let item_order = parse_playback_order(
-                        opts.as_ref()
-                            .and_then(|t| t.get::<Option<String>>("item_order").ok().flatten())
-                            .as_deref(),
-                    );
-
-                    let mut guids: Vec<SchedulingContentGuid> = Vec::new();
-                    for pair in guids_table.pairs::<String, String>() {
-                        let (source, value) = pair?;
-                        guids.push(SchedulingContentGuid { source, value });
-                    }
-                    guids.sort_by(|left, right| {
-                        left.source
-                            .cmp(&right.source)
-                            .then(left.value.cmp(&right.value))
-                    });
-
-                    let mut searches: Vec<String> = Vec::new();
-                    for v in searches_table.sequence_values::<String>() {
-                        searches.push(v?);
-                    }
-
-                    let mut items = st.reference_data.marathon_playlist_items(
-                        None, &guids, &searches, &group_by, item_order, play_all,
-                    );
-
-                    if shuffle_groups {
-                        let seed = st
-                            .playout_id
-                            .unsigned_abs()
-                            .wrapping_add(st.enumerators.len() as u64);
-                        shuffle_with_seed(&mut items, seed);
-                    }
-
-                    let history_key = history_key_for_marathon_content(&key, item_order, &group_by);
-                    let relevant_history = st.collect_playlist_history(&history_key);
-
-                    let mut playlist = PlaylistEnumerator::new(items);
-                    if !relevant_history.is_empty() {
-                        playlist.apply_history(&relevant_history);
-                    }
-
-                    st.playlist_history_keys.insert(key.clone(), history_key);
-                    st.playlist_enumerators.insert(key, playlist);
-                    Ok(())
-                },
-            )?,
-        )?;
-    }
-
-    // create_playlist(key, items_table)
-    // items_table = {enumerator_key = count, ...}
-    // Assembles an inline playlist from already-registered enumerators.
-    {
-        let s = Rc::clone(state);
-        globals.set(
-            "create_playlist",
-            lua.create_function_mut(move |_, (key, items_table): (String, Table)| {
-                let mut st = s.borrow_mut();
-                if st.enumerators.contains_key(&key) || st.playlist_enumerators.contains_key(&key) {
-                    return Ok(());
-                }
-
-                let mut playlist_items: Vec<SchedulingPlaylistItem> = Vec::new();
-                let mut playlist_index: i64 = 0;
-                let mut entries = Vec::new();
-                for pair in items_table.pairs::<String, usize>() {
-                    let (child_key, count) = pair?;
-                    entries.push((child_key, count));
-                }
-                entries.sort_by(|left, right| left.0.cmp(&right.0));
-                for (child_key, count) in entries {
-                    let (playback_order, media_items) =
-                        if let Some(e) = st.enumerators.get(&child_key) {
-                            (e.playback_order, e.items.clone())
-                        } else {
-                            continue;
-                        };
-                    for _ in 0..count {
-                        playlist_items.push(SchedulingPlaylistItem {
-                            collection_key: SchedulingCollectionKey::fake_playlist_item(
-                                playlist_index,
-                            ),
-                            playback_order,
-                            play_all: false,
-                            count: None,
-                            media_items: media_items.clone(),
-                        });
-                        playlist_index += 1;
-                    }
-                }
-
-                let history_key = history_key_for_content(&key, PlaybackOrder::None);
-                let relevant_history = st.collect_playlist_history(&history_key);
-
-                let mut playlist = PlaylistEnumerator::new(playlist_items);
-                if !relevant_history.is_empty() {
-                    playlist.apply_history(&relevant_history);
-                }
-
-                st.playlist_history_keys.insert(key.clone(), history_key);
-                st.playlist_enumerators.insert(key, playlist);
-                Ok(())
-            })?,
-        )?;
-    }
-
+    api::policy::register(lua, state)?;
+    api::content::register_legacy(lua, state)?;
+    api::watermark::register_legacy(lua, state)?;
+    api::graphics::register_legacy(lua, state)?;
+    api::timing::register_wait(lua, state)?;
+    api::content::register_add(lua, state)?;
+    api::timing::register_padding(lua, state)?;
+    api::skipping::register(lua, state)?;
+    api::pre_roll::register(lua, state)?;
+    api::guide::register(lua, state)?;
+    api::state_queries::register(lua, state)?;
+    api::watermark::register_named(lua, state)?;
+    api::graphics::register_paths(lua, state)?;
+    api::sources::register(lua, state)?;
     Ok(())
 }
 
@@ -1781,6 +1008,14 @@ mod tests {
     use super::*;
     use crate::scheduling::{SchedulingMediaItem, SchedulingReferenceData};
 
+    macro_rules! assert_scripted_json_snapshot {
+        ($($tokens:tt)*) => {
+            insta::with_settings!({ snapshot_path => "../snapshots" }, {
+                insta::assert_json_snapshot!($($tokens)*);
+            });
+        };
+    }
+
     fn base_start() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-04-15T12:00:00Z")
             .expect("valid time")
@@ -1810,6 +1045,55 @@ mod tests {
                 },
             )
             .expect("script succeeds")
+    }
+
+    #[test]
+    fn lua_registry_exposes_exact_supported_function_set() {
+        fn string_global_names(lua: &Lua) -> std::collections::BTreeSet<String> {
+            lua.globals()
+                .pairs::<String, mlua::Value>()
+                .map(|pair| pair.map(|(name, _)| name))
+                .collect::<Result<_, _>>()
+                .expect("Lua globals are readable")
+        }
+
+        let lua = Lua::new();
+        let before = string_global_names(&lua);
+        let state = Rc::new(RefCell::new(ScriptState::new(
+            100,
+            base_start(),
+            base_start() + Duration::hours(2),
+            PlayoutBuildMode::Reset,
+            SchedulingReferenceData::default(),
+            crate::scheduling::SchedulingSmartShuffleState::default(),
+        )));
+
+        register_all(&lua, &state).expect("Lua functions register");
+
+        let after = string_global_names(&lua);
+        let added = after.difference(&before).cloned().collect::<Vec<_>>();
+        let expected = api::REGISTERED_GLOBALS
+            .iter()
+            .map(ToString::to_string)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            added,
+            expected.iter().cloned().collect::<Vec<_>>(),
+            "registration must add every supported global and no others"
+        );
+
+        let globals = lua.globals();
+        for name in api::REGISTERED_GLOBALS {
+            assert!(
+                matches!(
+                    globals
+                        .get::<mlua::Value>(name)
+                        .expect("registered global is readable"),
+                    mlua::Value::Function(_)
+                ),
+                "{name} must be registered as a Lua function"
+            );
+        }
     }
 
     fn snapshot_items(result: &SchedulingResult) -> serde_json::Value {
@@ -1906,7 +1190,7 @@ schedule_duration("main", "00:05:00")
             )
             .expect("script builds");
 
-        insta::assert_json_snapshot!(serde_json::json!({
+        assert_scripted_json_snapshot!(serde_json::json!({
             "items": result.added_items.iter().map(|item| serde_json::json!({
                 "media": item.media_item_id,
                 "start": item.start.to_rfc3339(),
@@ -2001,7 +1285,7 @@ add_count("main", 1)
             ],
         );
         let result = run(r#"add_all("movies")"#, rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_duration with trim ────────────────────────────────────────────────
@@ -2022,7 +1306,7 @@ add_count("main", 1)
             r#"add_duration("ep", "00:45:00", {trim=true, stop_before_end=true})"#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_duration stop_before_end ──────────────────────────────────────────
@@ -2042,7 +1326,7 @@ add_count("main", 1)
             r#"add_duration("ep", "00:40:00", {stop_before_end=true})"#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_duration with fallback ────────────────────────────────────────────
@@ -2063,7 +1347,7 @@ add_count("main", 1)
             r#"add_duration("main", "00:30:00", {stop_before_end=true, fallback="filler"})"#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── pad_to_next ───────────────────────────────────────────────────────────
@@ -2077,7 +1361,7 @@ add_count("main", 1)
         );
         // base_start()=12:00; next 30-min boundary=12:30; 6 × 5-min bumpers fit exactly
         let result = run(r#"pad_to_next("bumper", 30, {trim=true})"#, rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── pad_until ─────────────────────────────────────────────────────────────
@@ -2094,7 +1378,7 @@ add_count("main", 1)
         );
         // 12:00 → 12:20: two 8-min items fit, 4 min of the third would be trimmed
         let result = run(r#"pad_until("shorts", "12:20", {trim=true})"#, rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── skip ──────────────────────────────────────────────────────────────────
@@ -2111,7 +1395,7 @@ add_count("main", 1)
             ],
         );
         let result = run("skip(\"eps\", 2)\nadd_count(\"eps\", 1)", rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── skip_to ───────────────────────────────────────────────────────────────
@@ -2131,7 +1415,7 @@ add_count("main", 1)
         rd.media_by_key
             .insert("show".to_owned(), vec![ep1, ep2, ep3]);
         let result = run("skip_to(\"show\", 2, 1)\nadd_count(\"show\", 1)", rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── pre_roll ──────────────────────────────────────────────────────────────
@@ -2151,7 +1435,7 @@ add_count("main", 1)
             "pre_roll_on(\"bumper\")\nadd_count(\"main\", 2)\npre_roll_off()",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── guide groups ──────────────────────────────────────────────────────────
@@ -2170,7 +1454,7 @@ add_count("main", 1)
             "lock_guide_group(true, \"Movie Night\")\nadd_count(\"movies\", 1)\nunlock_guide_group()\nadd_count(\"movies\", 1)",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── is_done loop ──────────────────────────────────────────────────────────
@@ -2188,7 +1472,7 @@ add_count("main", 1)
             ],
         );
         let result = run("while not is_done() do\n  add_count(\"ep\", 1)\nend", rd);
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── watermark by name ─────────────────────────────────────────────────────
@@ -2207,7 +1491,7 @@ add_count("main", 1)
             "watermark_on(\"Main Watermark\")\nadd_count(\"main\", 1)\nwatermark_on(\"Secondary\")\nadd_count(\"main\", 1)\nwatermark_off(\"Main Watermark\")",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── graphics by path ─────────────────────────────────────────────────────
@@ -2233,7 +1517,7 @@ add_count("main", 1)
             Some(r#"{"title":"Now"}"#)
         );
         assert!(result.added_items[1].graphics_elements.is_empty());
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_collection registration ───────────────────────────────────────────
@@ -2252,7 +1536,7 @@ add_count("main", 1)
             "add_collection(\"movies\", \"Action Movies\", \"chronological\")\nadd_count(\"movies\", 2)",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_show registration ─────────────────────────────────────────────────
@@ -2271,7 +1555,7 @@ add_count("main", 1)
             "add_show(\"myshow\", {plex=\"show-abc\"}, \"chronological\")\nadd_count(\"myshow\", 2)",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── history resume via add_collection ─────────────────────────────────────
@@ -2304,7 +1588,7 @@ add_count("main", 1)
             "add_collection(\"shorts\", \"Shorts\", \"chronological\")\nadd_count(\"shorts\", 2)",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── rewind ────────────────────────────────────────────────────────────────
@@ -2323,7 +1607,7 @@ add_count("main", 1)
             "add_count(\"ep\", 2)\nrewind(\"ep\")\nadd_count(\"ep\", 1)",
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── add_marathon grouping ─────────────────────────────────────────────────
@@ -2361,7 +1645,7 @@ add_count("marathon", 4)
 "#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     #[test]
@@ -2375,7 +1659,7 @@ add_count("marathon", 3)
 "#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── create_playlist inline assembly ──────────────────────────────────────
@@ -2405,7 +1689,7 @@ add_count("pl", 4)
 "#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     #[test]
@@ -2425,7 +1709,7 @@ add_count("pl", 2)
 "#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 
     // ── discard_attempts ──────────────────────────────────────────────────────
@@ -2446,6 +1730,6 @@ add_count("pl", 2)
             r#"add_duration("ep", "00:30:00", {stop_before_end=true, discard_attempts=1})"#,
             rd,
         );
-        insta::assert_json_snapshot!(snapshot_items(&result));
+        assert_scripted_json_snapshot!(snapshot_items(&result));
     }
 }
