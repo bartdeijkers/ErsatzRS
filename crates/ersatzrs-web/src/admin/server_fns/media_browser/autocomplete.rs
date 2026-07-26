@@ -1,4 +1,6 @@
-use super::{expect_context, Deserialize, Serialize, ServerFnError};
+#[cfg(feature = "ssr")]
+use super::{expect_context, ServerFnError};
+use super::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Autocomplete for collection editors

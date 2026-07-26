@@ -1,4 +1,6 @@
-use super::{expect_context, CollectionMember, Deserialize, Serialize, ServerFnError};
+#[cfg(feature = "ssr")]
+use super::{expect_context, CollectionMember, ServerFnError};
+use super::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Collection detail page (`/media/collections/:id`).
