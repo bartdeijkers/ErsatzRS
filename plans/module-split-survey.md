@@ -1,296 +1,319 @@
-# Module-Split Survey: Files to Split for Future Scaling
+# Module-split survey
 
-> **Type:** Refactoring backlog / analysis. No work is scheduled by this
-> document — lift items off the backlog one at a time (see *Suggested order*).
-> Each tier carries a ready-to-run `/goal` prompt (ErsatzRS `prompt.md` house
-> style) so the work can be dispatched without re-deriving context.
+> **Type:** Structural refactoring contract.
+> **Status:** P7C-04 execution baseline, refreshed 2026-07-26.
+> **Milestone:** `p7c-04` in `docs/progress/milestones.toml`.
 
-> **Sequencing:** this backlog is milestone `p7c-04` in
-> `docs/progress/milestones.toml`. Do not mechanically split
-> `admin/server_fns/media_browser.rs` before milestone `p7b-05` extracts its
-> application use cases and data-access queries; otherwise the same code will
-> move twice. Refresh the measurements and prompts when `p7c-04` starts.
+## Purpose
 
-## Context
+Split modules only when an enumerable growth axis can sit behind thin dispatch
+and an exhaustive completeness gate. File size is evidence of pressure, not a
+selection rule by itself.
 
-The admin UI i18n layer was split so that each UI culture lives in its own file
-(`crates/ersatzrs-web/src/admin/languages/{en_us,pl,pt_br,nl_nl}.rs`, ~96 lines
-each) behind a thin orchestrator (`admin/i18n.rs`). The motivation: cramming
-every language into one file does not scale as cultures are added. This survey
-records the *other* places in ErsatzRS with the same problem — a single file
-that grows along an enumerable dimension as ErsatzTV parity expands — with a
-concrete split target for each, so the work can be picked up incrementally
-without re-deriving the analysis.
+The reference pattern remains admin localization:
 
-## The reference pattern (what made the i18n split good)
+- `admin/i18n.rs` owns `UiLanguage`, `TextKey`, registry metadata, and dispatch;
+- `admin/languages/*.rs` owns per-language values;
+- `all_languages_translate_each_key` proves every language covers every key.
 
-`i18n.rs` is now a **thin dispatcher** that keeps:
+A split is warranted when all of these are true:
 
-- the enumerable dimension as an enum (`UiLanguage`) + its metadata,
-- a registry of the things that must exist for every variant (`TextKey` +
-  `ALL_TEXT_KEYS`),
-- a single dispatch fn (`text(language, key)`) delegating to per-item modules
-  (`languages::en_us::text`, …),
-- a **completeness test** (`all_languages_translate_each_key`) that fails if any
-  variant is missing coverage.
+1. variation follows an enumerable dimension;
+2. the dimension grows as parity expands;
+3. each variant has a similar responsibility;
+4. a thin dispatcher or registry is natural; and
+5. compiler exhaustiveness or a registry test can prove completeness.
 
-A file is a good split candidate when **all** of these hold:
+Large but cohesive state machines remain intact when they do not meet this
+rule.
 
-1. **Enumerable dimension.** Variation is along a list (media kinds, instruction
-   types, health checks), not tangled control flow.
-2. **Grows with parity.** New variants get added over time as ErsatzTV features
-   land — this is the scaling argument, not just current size.
-3. **Near-homogeneous per item.** Each variant's code has the same shape.
-4. **Isolable behind a dispatcher/registry.** A thin seam already exists or is
-   natural to introduce.
-5. **A completeness gate is possible.** Either compiler exhaustiveness (match on
-   an enum) or a runtime test over a registry.
+## Current architecture and workflow
 
-The repo already uses folder-modules (`scheduling/classic/`, `repositories/`,
-`admin/languages/`, `admin/pages/media/`), so converting `foo.rs` →
-`foo/mod.rs` + submodules is an established, low-friction move.
-
----
-
-## Ranked candidates
-
-### Tier 1 — clearest "split for scaling" wins
-
-#### 1. `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` — 7,859 lines
-By far the largest file in the repo. ~66 `#[server]` fns across ~22 sections,
-varying along **two orthogonal dimensions**: media kind and feature domain.
-
-- **Scaling axis:** new media kinds (movies/shows/artists/seasons/episodes/
-  music-videos/remote-streams/songs/images/other-videos) and new collection
-  types (manual/smart/multi/rerun). The 10 list fns (L548–3024) are ~95%
-  identical — differ only in table/metadata/artwork names.
-- **Existing seam:** `MediaBrowserKind` enum (L5995–6377) already dispatches
-  cross-kind ops (`media_page_map`, `add_media_items_to_collection/playlist`).
-- **Target layout** (`media_browser/`):
-  - `mod.rs` — `pub use` re-exports (keep public paths stable), `MediaBrowserKind`
-    enum + impl, shared row/form types (`MediaCardRow`, …), shared helpers (path
-    resolution, language load, playout refresh), cross-kind dispatch fns.
-  - per-kind files: `movies.rs` (list + detail + `get_media_item_info_json`),
-    `shows.rs`, `artists.rs`, `other_videos.rs`, `seasons.rs`, `episodes.rs`,
-    `music_videos.rs`, `remote_streams.rs`, `songs.rs`, `images.rs`.
-  - `collections/{manual,smart,multi,rerun}.rs` — each the full CRUD set
-    (incl. `_with_pool`/`_with_state` variants).
-  - `trash.rs`, `playlists.rs`, `autocomplete.rs`, `collection_detail.rs`.
-  - move the ~1,161 lines of seed/test helpers (L6698–7858) into a
-    `#[cfg(test)]` module / `test_support.rs`.
-- **Completeness gate:** `MediaBrowserKind` is an enum matched exhaustively →
-  compiler enforces every kind is handled in dispatch. Add a test enumerating all
-  kinds through `media_page_map` + list.
-- **Risk / effort:** High effort (mechanical, large), **low conceptual coupling**.
-  Leptos `#[server]` endpoint URLs derive from the **fn name**, not the module
-  path — moving fns between submodules is safe **provided names are unchanged**.
-- **Note (separate from the split):** the 10 near-identical list fns are also a
-  dedup opportunity (one generic helper / macro), but that is a different change.
-
-#### 2. `crates/ersatzrs-core/src/scheduling/yaml.rs` — 3,131 lines
-The closest structural twin of `i18n.rs`: per-instruction dispatch.
-
-- **Scaling axis:** YAML instruction types (~14 today). Dispatch is a flat
-  if-else chain at **L771–835**; per-instruction `handle_*` fns at L837–1200;
-  the `YamlInstruction` struct (26 optional fields) at L172–249. ErsatzTV's YAML
-  playout DSL keeps growing → new instructions land regularly.
-- **Target layout** (`yaml/`):
-  - `mod.rs` — `YamlInstruction` (serde shape, unchanged for parity),
-    `YamlPlayoutEngine` impl, the dispatcher, shared context types.
-  - `instructions/{wait_until,rewind,epg_group,watermark,graphics,sequence,
-    all,count,duration,pad}.rs` — one `handle_*` each.
-- **Completeness gate (design decision):** the current if-else over struct
-  fields is **not** exhaustiveness-checked. The structural upgrade that makes the
-  split actually scale is to route parsed instructions through an
-  `enum YamlInstructionKind` so the dispatch `match` is compiler-enforced
-  exhaustive (like `TextKey`). The serde wire shape must stay byte-compatible
-  with ErsatzTV — keep the existing struct for parsing and derive the enum after
-  parse, rather than changing the serialized contract.
-- **Risk / effort:** Medium. Parity-sensitive; guarded by `insta` snapshots of
-  generated playout. The enum-dispatch refactor is the only non-mechanical part.
-
-#### 3. `crates/ersatzrs-infra/src/health.rs` — implemented 2026-06-28
-Purest match to the i18n registry shape, and AGENTS.md/CLAUDE.md explicitly make
-it a **port-completeness contract** that *must* grow as parity expands.
-
-- **Scaling axis:** health checks. The implemented split now has one concrete
-  check module per health-check struct under `crates/ersatzrs-infra/src/health/checks/`.
-  The registry stays in `health/mod.rs`, and `HealthCheck` /
-  `HealthCheckService` remain in `ersatzrs-core`.
-- **Original scope:** 14 homogeneous structs (each `struct` +
-  `impl HealthCheck`, ~28–81 lines) registered in the factory
-  `make_health_check_service()` (L114–138). Trait `HealthCheck` and the
-  `HealthCheckService` run-loop live in `crates/ersatzrs-core/src/health.rs`
-  (L144–188) and **stay put**.
-- **Target layout** (`infra/health/`):
-  - `mod.rs` — `make_health_check_service()` (the registry, == `ALL_TEXT_KEYS`),
-    shared imports/helpers, re-exports.
-  - `checks/{ffmpeg_version,ffmpeg_capabilities,ffmpeg_reports,
-    hardware_acceleration,vaapi_driver,vaapi_device,file_not_found,unavailable,
-    empty_schedule,zero_duration,movie_metadata,episode_metadata,downgrade,
-    provider_connectivity}.rs` — one check each.
-- **Completeness gate:** test asserting every check the factory registers has a
-  non-empty title and is runnable; optionally assert the registered set matches
-  the ErsatzTV check list.
-- **Risk / effort:** **Lowest** — homogeneous structs, single factory entry
-  point, no public-path concerns. Best **pilot** to validate the split pattern.
-
-**`/goal` prompt for the remaining Tier 1 work** — body for a `/goal` task
-(ErsatzRS `prompt.md` style), ≤3950 chars. The health split pilot is already
-implemented and must not be redone.
+P7B-05 is complete. Production admin server functions no longer own direct SQL,
+raw pool access, silent resource defaults, or row-decode defaults:
 
 ```text
-Execute the remaining Tier 1 "split for scaling" refactors in ErsatzRS: split the media-browser server functions and YAML scheduling instructions into per-dimension submodules, mirroring the i18n split (`admin/i18n.rs` + `admin/languages/*.rs`) — a thin orchestrator/registry in `mod.rs` that re-exports per-item submodules, plus a completeness gate where natural. The health split pilot is already implemented; do not move it again. The goal is a behavior-preserving refactor with no stopgaps: zero logic, SQL, serialized-shape, endpoint, or public-name changes.
-
-Use the repo workflow from AGENTS.md. The full per-file target layout is recorded in `plans/module-split-survey.md` (remaining Tier 1 candidates, with the implemented health pilot kept for reference) — treat that section as the spec. Do the two remaining splits as separate commits, in this order:
-1. `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` (7,859 lines) → `media_browser/`: per-kind files, `collections/*`, trash/playlists/autocomplete/collection_detail, shared types + `MediaBrowserKind` in `mod.rs`, seed/test helpers behind `#[cfg(test)]`.
-2. `crates/ersatzrs-core/src/scheduling/yaml.rs` → `yaml/`: `mod.rs` = `YamlInstruction` + `YamlPlayoutEngine` + dispatcher; `instructions/<name>.rs` = one handler each.
-
-Before editing:
-1. Read `plans/module-split-survey.md` (reference pattern + Tier 1 sections).
-2. Read the target file and map its current sections/seams.
-3. Enumerate the public surface (every `pub`/`#[server]` item) so you can prove it is preserved.
-
-Implement:
-- Move code verbatim into submodules; re-export everything from `mod.rs` with `pub use` so external import paths stay identical.
-- Do NOT rename any `#[server]` fn — Leptos derives the endpoint URL from the fn name, so a rename breaks the wire contract.
-- yaml.rs: the serde wire shape MUST stay byte-compatible with ErsatzTV. Keep the existing struct for parsing; if you add an enum for exhaustive dispatch, derive it AFTER parse.
-- Add a completeness gate where natural (health: a test that every registered check has a non-empty title and runs).
-- Match surrounding style; no new deps.
-
-Verification (after EACH step):
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`, then again with `--features mysql` (feature-gated test files escape lint otherwise)
-- `cargo build --workspace && cargo test --workspace`
-- media_browser.rs: `(cd crates/ersatzrs-web && cargo leptos build)`, then browser-smoke the interactive admin buttons per TEST.md
-- yaml.rs: `cargo insta review` — generated-playout snapshots are the parity gate and must NOT change
-
-When done, report per file: the before/after layout and line counts, the preserved public surface (proof nothing was renamed), the verification runs, and changed files. Stop and report if any snapshot, endpoint, or test output changes — that means the refactor altered behavior.
+Leptos/Axum transport
+        |
+        v
+ersatzrs-app commands and queries
+        |
+        v
+ersatzrs-core storage-neutral ports
+        |
+        v
+ersatzrs-infra adapters
 ```
 
-### Tier 2 — real, lower urgency
+The remaining large-module work is therefore structural. It must not move
+orchestration or SQL back into `ersatzrs-web`.
 
-#### 4. `crates/ersatzrs-core/src/scheduling/scripted.rs` — 1,942 lines
-~35 Lua bindings registered flat in `register_all()` (L165–850+), groupable by
-category (content / timing / watermark / graphics / guide / state-queries /
-skipping / pre-roll).
+Use the current repository runner and preserve one compile configuration during
+focused iteration:
 
-- **Target:** `scripted/mod.rs` (engine + `ScriptState` + `register_all()`
-  calling category registrars) + `scripted/api/{content,timing,watermark,
-  graphics,guide,state_queries,skipping,pre_roll}.rs`, each a
-  `register_*(lua, state)` fn.
-- **Why lower:** the Lua API surface is near-complete (fixed parity target), and
-  bindings are tightly coupled to shared mutable `ScriptState`, so each registrar
-  must thread a state handle. Readability win > scaling win.
+```bash
+./run.sh check -p <crate>
+./run.sh test -p <crate> [filter]
+```
 
-**`/goal` prompt for Tier 2** — body for a `/goal` task (ErsatzRS `prompt.md` style), ≤3950 chars:
+Use `./run.sh test-closeout` for workspace tests plus doctests. At closeout,
+run both Clippy configurations, a matched `cargo leptos build`, web parity,
+architecture, hydration, and progress gates exactly as documented in
+`AGENTS.md`, `BUILD.md`, and `TEST.md`. Do not use direct `cargo test`.
+
+The configured target directory measured 9.6 GiB on 2026-07-26, below the
+40 GiB `cargo clean` threshold.
+
+## Measurements
+
+Measured from `main` at `ae0f8c0` on 2026-07-26:
+
+| Target | Lines | Enumerable surface |
+| --- | ---: | --- |
+| `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` | 9,020 | 71 `#[server]` functions; 128 public/public-crate items |
+| `crates/ersatzrs-core/src/scheduling/yaml.rs` | 3,367 | 38 serialized instruction fields; 19 dispatch choices |
+| `crates/ersatzrs-core/src/scheduling/scripted.rs` | 2,451 | 37 registered Lua globals |
+| `crates/ersatzrs-infra/src/jellyfin.rs` | 3,475 | Jellyfin HTTP projection and sync adapter |
+| `crates/ersatzrs-infra/src/emby.rs` | 3,376 | Emby HTTP projection and sync adapter |
+| `crates/ersatzrs-infra/src/plex.rs` | 2,953 | Plex adapter; deliberately out of the dedup slice |
+
+The health-check pilot is complete and must not be repeated.
+`crates/ersatzrs-infra/src/health/checks/` contains 21 concrete checks behind
+the registry in `health/mod.rs`.
+
+## Source map: media-browser transport
+
+### Responsibilities and stable surfaces
+
+The module owns shared browser/detail DTOs, transport validation and mapping,
+71 Leptos server-function declarations, cross-kind collection/playlist
+dispatch, and SSR-only adapters into application commands and queries.
+Test-only legacy SQL helpers remain solely as regression oracles.
+
+The 71 server-function names, grouped by their natural seams, are:
+
+- browser/detail kinds:
+  `list_movies`, `get_movie_details`, `get_show_details`,
+  `get_season_details`, `get_media_item_info_json`, `list_shows`,
+  `list_images`, `list_artists`, `get_artist_details`,
+  `list_other_videos`, `get_other_video_details`, `list_seasons`,
+  `list_episodes`, `list_music_videos`, `remote_stream_page_map`,
+  `list_remote_streams`, and `list_songs`;
+- trash:
+  `list_trash_items`, `delete_media_items`, and `empty_trash`;
+- manual collections:
+  `list_collections`, `get_collection`, `save_collection`, and
+  `delete_collection`;
+- smart collections:
+  `list_smart_collections`, `get_smart_collection`,
+  `save_smart_collection`, and `delete_smart_collection`;
+- multi-collections:
+  `get_multi_collections_page_size`, `list_multi_collections`,
+  `get_multi_collection`, `get_multi_collection_editor_options`,
+  `save_multi_collection`, and `delete_multi_collection`;
+- rerun collections:
+  `get_rerun_collections_page_size`, `list_rerun_collections`,
+  `get_rerun_collection_form`, `get_rerun_collection_editor_options`,
+  `save_rerun_collection`, and `delete_rerun_collection`;
+- collection autocomplete, membership, and scheduling:
+  `suggest_media_items`, `add_item_to_collection`,
+  `remove_item_from_collection`, `list_program_schedules`,
+  `add_show_to_schedule`, `add_media_item_to_schedule`,
+  `list_all_collections`, `list_smart_collections_for_select`, and
+  `create_collection`;
+- playlists:
+  `get_playlist_page`, `create_playlist_group`, `create_playlist`,
+  `delete_playlist_group`, `delete_playlist`, `get_playlist_editor`,
+  `get_playlist_editor_options`, `save_playlist`,
+  `preview_playlist_playout`, `list_all_playlist_groups`, and
+  `list_playlists_by_group`;
+- cross-kind browser actions:
+  `media_page_map`, `add_media_items_to_collection`,
+  `add_media_items_to_collection_with_playback`,
+  `add_media_items_to_playlist`,
+  `add_media_items_to_playlist_with_playback`, and
+  `add_media_items_to_playlist_mixed`;
+- collection detail:
+  `get_collection_detail`, `set_collection_use_custom_order`,
+  `remove_items_from_collection`, `update_collection_custom_order`, and
+  `list_collection_members`.
+
+Every function currently uses the default `PostUrl` input and JSON output
+codec. Its route is:
 
 ```text
-Execute the Tier 2 refactor in ErsatzRS: split `crates/ersatzrs-core/src/scheduling/scripted.rs` (~1,942 lines; ~35 Lua bindings registered flat in `register_all()` around L165–850) into per-category submodules, mirroring the i18n split (thin orchestrator + per-item submodules). This is a behavior-preserving readability refactor with no stopgaps: every Lua global keeps its exact name and semantics.
-
-Use the repo workflow from AGENTS.md. The target layout is recorded in `plans/module-split-survey.md` (candidate 4) — treat that as the spec.
-
-Before editing:
-1. Read `plans/module-split-survey.md` (reference pattern + candidate 4).
-2. Read scripted.rs and list every `globals.set(...)` binding plus the `ScriptState` access pattern (Rc/RefCell etc.).
-
-Implement:
-- Convert to `scripted/`: `mod.rs` keeps `ScriptedSchedulingEngine`, `ScriptState`, and `register_all()` — which now only calls per-category registrars.
-- `scripted/api/<category>.rs` (content, timing, watermark, graphics, guide, state_queries, skipping, pre_roll) each expose one `register_<category>(lua, state)` fn.
-- Move each binding into its matching category file, unchanged.
-- Bindings share mutable `ScriptState` — thread the SAME state handle into each `register_*` fn rather than cloning state.
-- No new deps; match surrounding style.
-
-Verification:
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`, then again with `--features mysql`
-- `cargo build --workspace && cargo test --workspace`
-- Run any scripted-engine snapshot/integration tests; output must not change.
-
-When done, report: `register_all()` before/after line count, proof the set of registered Lua global names is identical (diff the names), the verification runs, and changed files.
+/api/<function-name><xxh64("ersatzrs:ersatzrs_web::admin::server_fns::media_browser")>
 ```
 
-### Not a "split" — flagged separately
+This corrects the old survey assumption that only a function name determines
+the endpoint. Leptos also hashes `module_path!()`. The macro-decorated
+declarations must therefore remain in `media_browser/mod.rs`, or an explicit
+endpoint must preserve the old value. P7C-04 keeps them in `mod.rs` as thin
+wrappers and adds a path-stability test for all 71 routes.
 
-#### 5. `infra/{jellyfin.rs, emby.rs, plex.rs}` — 3,274 / 3,175 / 2,602 lines
-Already split by the natural axis (provider). The real smell is that
-**jellyfin.rs and emby.rs are ~85–90% duplicates** (same pagination, sync,
-upsert, metadata, media-version/file/stream logic; divergence is auth header +
-a couple of endpoint shapes + field names).
+The other stable public surface is the set of DTOs, helpers, and
+`MediaBrowserKind`. Existing callers continue to import them through
+`admin::server_fns::media_browser`; deliberate re-exports preserve that path.
 
-- This is **deduplication**, not per-dimension splitting: extract a shared
-  `jellyfin_emby_common` module parameterized by a small provider trait
-  (endpoints, auth header, response field mapping).
-- **Highest regression risk** (parity-sensitive sync). Should be its own
-  initiative, guarded by the existing integration tests
-  (`tests/jellyfin_service.rs` ~1,110, `tests/emby_service.rs` ~988). Out of
-  scope for the "split for scaling" theme; recorded here so it isn't forgotten.
+### Native/WASM boundary
 
-**`/goal` prompt for the provider-dedup initiative** — body for a `/goal` task (ErsatzRS `prompt.md` style), ≤3950 chars:
+DTOs and `#[server]` declarations compile for SSR and hydration. Application,
+core, infrastructure, SQL, path replacement, and native runtime helpers remain
+under `feature = "ssr"` or `all(test, feature = "ssr")`. No native adapter may
+become a WASM dependency.
+
+### Target layout
 
 ```text
-Execute the provider-deduplication initiative in ErsatzRS. NOTE: this is dedup, not a per-dimension split, and it is the HIGHEST-risk item — parity-sensitive media-server sync logic. Treat it as its own initiative; do not bundle it with the Tier 1/2 splits. This is a behavior-preserving extraction with no stopgaps.
-
-Use the repo workflow from AGENTS.md. Details are in `plans/module-split-survey.md` (candidate 5). `crates/ersatzrs-infra/src/jellyfin.rs` (~3,274 lines) and `emby.rs` (~3,175 lines) are ~85–90% identical (same pagination, sync, upsert, metadata, media-version/file/stream logic). Divergence is small: auth header (Authorization vs X-Emby-Token), a couple of endpoint shapes (Emby uses `/Shows/{id}/Seasons` and `/Shows/{id}/Episodes`), and some response field names.
-
-Before editing:
-1. Read `plans/module-split-survey.md` (candidate 5).
-2. Establish the green baseline FIRST: `./run.sh test -p ersatzrs-infra --test jellyfin_service` and `./run.sh test -p ersatzrs-infra --test emby_service`. Capture the output as the regression baseline. Do NOT start if these are red.
-3. Diff jellyfin.rs against emby.rs to enumerate the exact divergences.
-
-Implement:
-- Extract shared logic into a `jellyfin_emby_common` module parameterized by a small provider trait that abstracts ONLY the differences (auth header, endpoint builders, response field mapping).
-- jellyfin.rs and emby.rs become thin impls of that trait plus their provider-specific projection types. Leave plex.rs alone (different architecture).
-- Identical SQL, identical upsert/etag logic, identical HTTP requests per provider — structural extraction only.
-- Keep public fn names and signatures stable.
-
-Verification:
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`, then again with `--features mysql`
-- `cargo build --workspace && cargo test --workspace`
-- Re-run `tests/jellyfin_service.rs` and `tests/emby_service.rs`; output must be identical to the baseline.
-
-When done, report: the divergence list, the shared trait surface, before/after line counts, baseline-vs-after test comparison, and changed files. If any integration-test assertion changes, revert — the extraction leaked a behavior difference.
+admin/server_fns/media_browser/
+  mod.rs                  public DTO/re-export surface, 71 thin #[server]
+                          declarations, MediaBrowserKind dispatch
+  shared.rs               shared projections and transport helpers
+  kinds/
+    movies.rs
+    shows.rs
+    seasons.rs
+    episodes.rs
+    artists.rs
+    music_videos.rs
+    other_videos.rs
+    songs.rs
+    images.rs
+    remote_streams.rs
+  collections/
+    manual.rs
+    smart.rs
+    multi.rs
+    rerun.rs
+    detail.rs
+  playlists.rs
+  trash.rs
+  autocomplete.rs
+  test_support.rs
 ```
 
-### Considered and skipped
-- `server_fns/schedules.rs` (2,016), `decos.rs` (1,667), `blocks.rs` (1,357),
-  `media_sources.rs` (1,219), `settings.rs` (1,265) — large but cohesive,
-  already one-feature-per-file; no growing sub-dimension.
-- `server_fns/search.rs` (1,357) — minor per-media-kind projection split
-  possible, low value.
-- `repositories/scheduling.rs` (2,637) — bitmask-driven SQL hydration; tightly
-  coupled, hard/risky to split. Skip.
-- `scheduling/block.rs` (1,771), `classic/mod.rs` (1,423) — single scheduling
-  mode each; complexity is state-machine, not an enumerable dimension. Not
-  scaling bottlenecks.
+The exact number of files may consolidate tiny handlers, but the named feature
+seams, stable root import path, and thin root dispatch are mandatory.
 
----
+### Visual source map
 
-## Suggested order (when execution begins)
+No rendered markup or CSS moves in this milestone.
 
-1. **`infra/health.rs`** — lowest risk, parity contract, cleanest registry;
-   proves the per-item + factory + completeness-test pattern end-to-end.
-2. **`media_browser.rs`** — highest value, mostly mechanical, isolated.
-3. **`yaml.rs`** — after deciding the `enum`-dispatch question.
-4. **`scripted.rs`** — optional readability pass.
-5. **Provider dedup** — separate initiative, only with integration tests green.
+| Routes/pages | Server-function concerns | Shared UI primitives |
+| --- | --- | --- |
+| `/media/movies`, `/media/tv/shows`, `/media/tv/seasons`, `/media/tv/episodes`, `/media/music/artists`, `/media/music/videos`, `/media/other/videos`, `/media/music/songs`, `/media/browser/images`, `/media/remote/streams` and detail aliases | per-kind list/detail/page-map and cross-kind actions | `multi_select_browser`, browser cards, letter bar, add-to-schedule modal |
+| `/media/collections`, `/media/smart-collections`, `/media/multi-collections`, `/media/rerun-collections` and editor/detail routes | collection CRUD, autocomplete, membership, ordering | collection editors, save-as dialog, modal/delete primitives |
+| `/media/playlists` and `/:id` | playlist group/playlist CRUD, editor options, preview | playlist tree/editor and shared collection selectors |
+| `/media/trash` | list/delete/empty | trash cards and dialogs |
+| `/search` | collection/playlist selection and mixed inserts | search result actions and save-as dialog |
 
-## How each future split should be verified
+Relevant durable browser coverage is in
+`media-browser-actions.spec.ts`, `media-collection-route-family.spec.ts`,
+`collections.spec.ts`, `content-variants.spec.ts`, `remote-streams.spec.ts`,
+`search-see-all.spec.ts`, and `island-hydration.spec.ts`.
 
-General gate for every split:
-- `cargo fmt --all -- --check`
-- `cargo clippy` **twice** per the project rule: once without `--all-features`,
-  once with `--features mysql` (feature-gated test files escape lint otherwise).
-- `cargo build --workspace` and `cargo test --workspace`.
-- Keep public fn names and module re-exports stable (`pub use` in `mod.rs`) so
-  Leptos server-fn endpoints and external imports are unchanged.
+The completeness gate enumerates every `MediaBrowserKind`, its route/list
+metadata, collection type, and playlist type. Compiler-exhaustive matches must
+have no wildcard arm.
 
-Per-candidate additions:
-- **media_browser.rs:** build hydration assets (`cd crates/ersatzrs-web &&
-  cargo leptos build`) and smoke-test the interactive admin buttons (Playwright
-  per `TEST.md`) — server fns moving modules must still register and hydrate.
-- **yaml.rs:** `cargo insta review` — generated-playout snapshots are the parity
-  regression gate; they must not change.
-- **health.rs:** assert the factory still registers all checks and the
-  `health.results`/`health.summary` `ConfigElement` output is unchanged.
+## Source map: YAML scheduling
+
+`YamlPlayoutDefinition`, `YamlContentItem`, `YamlPlayoutSequenceItem`,
+`YamlInstruction`, and `YamlPlayoutEngine` are the stable public surface
+re-exported by `scheduling/mod.rs`.
+
+`YamlInstruction` remains the 38-field serde struct. Its field names, defaults,
+omission behavior, and ordering are the current serialized contract. An
+internal kind is derived only after deserialization.
+
+Malformed multi-field input keeps this exact first-match precedence:
+
+```text
+wait_until -> rewind -> epg_group -> watermark -> graphics_on -> graphics_off
+-> pre_roll -> post_roll -> mid_roll -> repeat(true) -> sequence
+-> shuffle_sequence -> skip_items -> skip_to_item -> all -> count -> duration
+-> pad_to_next -> pad_until -> unsupported
+```
+
+The target is `scheduling/yaml/mod.rs` for the public model, engine, context,
+kind derivation, and exhaustive dispatch, with coherent handlers under
+`scheduling/yaml/instructions/`. Snapshot names and generated timelines must
+not change.
+
+## Source map: scripted scheduling
+
+`ScriptedSchedulingEngine`, its parsing helpers, shared `ScriptState`, and a
+thin `register_all` remain in `scripted/mod.rs`.
+
+The 37 stable Lua globals are:
+
+```text
+set_smart_shuffle_policy, set_cooldown_policy,
+schedule_count, schedule_duration,
+set_watermark, clear_watermarks, graphics_on, graphics_off,
+wait_until, add_count, add_all, add_duration, pad_to_next, pad_until,
+skip, skip_to, rewind, pre_roll_on, pre_roll_off,
+lock_guide_group, unlock_guide_group,
+is_done, current_time, finish_time,
+watermark_on, watermark_off, graphics_on_path, graphics_off_path,
+add_collection, add_multi_collection, add_smart_collection, add_search,
+add_show, add_playlist, add_key, add_marathon, create_playlist
+```
+
+Category registrars under `scripted/api/` receive the same
+`Rc<RefCell<ScriptState>>`. A single expected-name registry and a Lua-global
+completeness test prove that `register_all` exposes exactly this set.
+
+## Source map: Jellyfin and Emby
+
+Jellyfin and Emby public service structs, functions, core provider-specific
+types, and core service traits remain stable. Plex is not changed.
+
+The normalized implementations share pagination loops, progress calculation,
+ETAG restoration/skip behavior, transactions, metadata/media-version/file/
+stream/chapter persistence, content-variant handling, path replacement,
+collection membership, cleanup, and scan outcomes.
+
+Real divergences that must remain strategy-owned are:
+
+| Concern | Jellyfin | Emby |
+| --- | --- | --- |
+| Authentication | `Authorization: MediaBrowser Token="..."`; accepts already formatted headers | `X-Emby-Token: <api_key>` |
+| General item fields | `Tags` string array; narrower movie/show/episode field lists; movie query adds `filters=IsNotFolder` | `TagItems[].Name`; requests production year, premiere date, media sources, and location type where needed |
+| Seasons | `/Items` with parent id, `Season`, recursive | `/Shows/{show_id}/Seasons` |
+| Episodes | `/Items` with season parent id, `Episode`, recursive | `/Shows/{show_id}/Episodes?seasonId={season_id}` |
+| Episode inclusion | only `LocationType=FileSystem` | excludes `LocationType=Virtual` |
+| Connection persistence | Jellyfin auth-header keys plus API-key fallbacks | Emby API-key keys |
+| Provider identity | Jellyfin tables, config keys, GUID/artwork prefixes, log/error labels | Emby tables, config keys, GUID/artwork prefixes, log/error labels |
+| Connection validation | public Jellyfin header formatter and `/System/Info` helper | no equivalent public helper in the current adapter |
+
+The shared boundary may own only behavior identical in both columns. Request
+construction and response projection remain provider strategies. An exhaustive
+remote-provider dispatch covers Plex, Jellyfin, and Emby; a companion
+`MediaSourceKind` gate covers Local plus all three remote kinds so a new source
+cannot silently fall through.
+
+## Baseline evidence
+
+Before P7C-04 edits on 2026-07-26:
+
+- `./run.sh test -p ersatzrs-web`: 399 passed, 6 skipped;
+- `./run.sh test -p ersatzrs-core`: 148 passed;
+- `./run.sh test -p ersatzrs-infra --test jellyfin_service`: 9 passed;
+- `./run.sh test -p ersatzrs-infra --test emby_service`: 8 passed;
+- no `.snap.new` files and a clean worktree.
+
+The first sandboxed Jellyfin integration run could not bind
+`127.0.0.1:0`; the unchanged command passed with local loopback permission.
+
+## Considered and skipped
+
+- `server_fns/schedules.rs`, `decos.rs`, `blocks.rs`, `media_sources.rs`, and
+  `settings.rs` are large but cohesive feature modules.
+- `server_fns/search.rs` has a possible projection split but lower value.
+- `repositories/scheduling.rs` is tightly coupled SQL hydration.
+- `scheduling/block.rs` and `scheduling/classic/mod.rs` are state machines,
+  not enumerable registries.
+- `plex.rs` is a distinct provider architecture and remains untouched.
+- `plans/web-server-wasm-crate-split.md` remains proposed; P7C-04 proves
+  compatibility but does not execute it.
