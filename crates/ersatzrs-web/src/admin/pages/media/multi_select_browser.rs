@@ -83,6 +83,20 @@ pub struct BrowserKindConfig {
 }
 
 impl BrowserKindConfig {
+    /// Complete UI routing registry for every [`MediaBrowserKind`].
+    pub const ALL: [Self; 10] = [
+        Self::MOVIES,
+        Self::SHOWS,
+        Self::ARTISTS,
+        Self::OTHER_VIDEOS,
+        Self::SEASONS,
+        Self::EPISODES,
+        Self::MUSIC_VIDEOS,
+        Self::REMOTE_STREAMS,
+        Self::SONGS,
+        Self::IMAGES,
+    ];
+
     pub const MOVIES: Self = Self {
         kind: MediaBrowserKind::Movie,
         title: TextKey::Movies,
@@ -1248,6 +1262,21 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_media_browser_kind_has_exactly_one_ui_route() {
+        assert_eq!(
+            BrowserKindConfig::ALL.map(|config| config.kind),
+            MediaBrowserKind::ALL
+        );
+
+        let mut routes = BrowserKindConfig::ALL
+            .map(|config| config.base_path)
+            .to_vec();
+        routes.sort_unstable();
+        routes.dedup();
+        assert_eq!(routes.len(), MediaBrowserKind::ALL.len());
+    }
 
     #[test]
     fn localizes_episode_subtitle_from_ersatztv_shape() {
