@@ -47,8 +47,8 @@ notes  = ''
 [[page]]
 name   = 'TimelinePage` (`/playouts`)'
 status = '✅'
-routes = ['/playouts']
-notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback.'
+routes = ['/playouts', '/playouts/add', '/playouts/add/:kind', '/playouts/classic/:id', '/playouts/block/:id', '/playouts/scripted/:id', '/playouts/:id/alternate-schedules', '/playouts/:id/templates']
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; kind and nested editor workflows remain covered by their owning scheduling/browser specs.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -77,7 +77,7 @@ notes  = 'Closed 2026-07-01: focused Chromium `tests/e2e/content-variants.spec.t
 [[page]]
 name   = 'ArtistPage` (`/media/music/artists/:id`)'
 status = '✅'
-routes = ['/media/music/artists/:id']
+routes = ['/media/music/artists', '/media/music/artists/:id']
 notes  = 'Closed 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` seeds artist thumbnail/fanart and a music-video thumbnail, proves `/media/music/artists/:id` hydrates without console/page errors, renders the artist and music-video preview images, opens artist Add To Collection, redirects to the selected collection, and persists collection membership; `cargo xtask hydration-lint -p ersatzrs-web` reports no new findings.'
 
 [[page]]
@@ -107,8 +107,8 @@ notes  = 'SSR multipart form; `/channels/add` and `/channels/:id` smoke clean.'
 [[page]]
 name   = 'LocalLibrariesPage'
 status = '✅'
-routes = ['/media/sources/local']
-notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged.'
+routes = ['/media/sources/local', '/media/sources/local/add', '/media/sources/local/:id/edit']
+notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
 
 [[page]]
 name   = 'JellyfinSourcesPage` etc.'
@@ -274,9 +274,9 @@ notes  = '`tests/e2e/scheduling-route-family.spec.ts` covers hydrated list/add/i
 
 [[page]]
 name   = 'CollectionDetailPage'
-status = 'TODO'
+status = '✅'
 routes = ['/media/collections/:id']
-notes  = 'The detail route is implemented and receives navigation coverage, but its poster selection, inline rename, removal, and custom playback-order workflow still need a focused durable browser test.'
+notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection and proves completed hydration, card rendering, custom-order persistence, accessible move controls, selected-item removal, and the post-mutation refresh.'
 
 [[page]]
 name   = 'HealthPage'
@@ -293,8 +293,8 @@ notes  = '`tests/e2e/support-pages.spec.ts` covers the Support logs surface.'
 [[page]]
 name   = 'TroubleshootingPage'
 status = '✅'
-routes = ['/system/troubleshooting']
-notes  = '`tests/e2e/support-pages.spec.ts` covers the ErsatzTV-style tools and report tabs.'
+routes = ['/system/troubleshooting', '/system/troubleshooting/mpeg', '/system/troubleshooting/sequential-schedule', '/system/troubleshooting/block-playout', '/system/troubleshooting/block-playout/history']
+notes  = '`tests/e2e/support-pages.spec.ts` covers the ErsatzTV-style tools and report tabs. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
 
 [[page]]
 name   = 'PlaybackTroubleshootingPage'
@@ -337,3 +337,27 @@ name   = 'ImagesPage'
 status = '✅'
 routes = ['/media/browser/images', '/media/images']
 notes  = '`tests/e2e/media-browser-actions.spec.ts` covers the shared browser action shell, playlist image stamping, media info, and playback troubleshooting.'
+
+[[page]]
+name   = 'HomePage'
+status = '✅'
+routes = ['/']
+notes  = 'The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; the server-rendered dashboard is covered by the whole application shell smoke.'
+
+[[page]]
+name   = 'SettingsPages'
+status = '✅'
+routes = ['/settings/ffmpeg', '/settings/logging', '/settings/hdhr', '/settings/scanner', '/settings/playout', '/settings/ui', '/settings/xmltv']
+notes  = '`tests/e2e/settings-i18n.spec.ts` covers all settings pages in every supported culture plus FFmpeg form persistence; `tests/e2e/island-hydration.spec.ts` covers their island startup and injected storage failure.'
+
+[[page]]
+name   = 'OtherVideosPages'
+status = '✅'
+routes = ['/media/other/videos', '/media/other/videos/:id']
+notes  = '`tests/e2e/content-variants.spec.ts` covers the seeded browser route, hydrated content, special-feature search, and no-JS rendering; the production router contract records the detail route alongside it.'
+
+[[page]]
+name   = 'MultiCollectionsPages'
+status = '✅'
+routes = ['/media/multi-collections', '/media/multi-collections/add', '/media/multi-collections/:id/edit']
+notes  = '`tests/e2e/media-collection-route-family.spec.ts` covers seeded list and editor workflows, persistence, hydration, and supported HTML fallbacks.'

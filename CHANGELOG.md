@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Added an exhaustive production-admin route contract for Playwright coverage,
+  with seeded collection-detail interaction proof for custom playback order and
+  item removal. The contract excludes only the feature-gated developer gallery
+  and fails when the production router and hydration evidence drift apart.
 - Added on-demand GitHub-hosted CI through a manual runner selector. Pull
   requests and `main` pushes still use self-hosted Linux by default, while
   hosted Test work is sharded by web target, uses a lower-memory test profile
