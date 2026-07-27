@@ -47,6 +47,20 @@ concurrency:
 permissions:
   contents: read
 
+# The self-hosted runner is a single persistent machine: every job in this
+# workflow queues and runs serially on it, so there is no wall-clock
+# parallelism to lose by sharing build output across jobs. Point
+# CARGO_TARGET_DIR at github.workspace's parent, which the runner creates
+# once per repo and actions/checkout's default `git clean -ffdx` does not
+# touch (it only cleans inside the checkout itself) — so target/ now
+# persists across every job and run on that runner instead of being wiped
+# and restored through Swatinem/rust-cache's remote blob service every
+# time. Harmless on the GitHub-hosted fallback path: it just relocates
+# target/ within the same disposable VM disk. See BUILD.md "CI runner
+# selection" for the recovery step if this directory ever looks stale.
+env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
+
 jobs:
   fmt:
     name: Format
@@ -102,6 +116,8 @@ jobs:
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
         run: cargo xtask architecture-lint
+      - name: Check persistent target-dir size
+        run: cargo xtask target-size
 
   test_hosted:
     name: Test (${{ matrix.shard }})
