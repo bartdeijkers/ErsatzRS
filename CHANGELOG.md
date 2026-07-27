@@ -40,6 +40,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Self-hosted CI jobs now share a persistent `CARGO_TARGET_DIR` outside the
+  auto-cleaned checkout instead of restoring `target/` through a remote cache
+  round-trip on every run; `clippy`, `test`, and `hydration` no longer pay
+  that round-trip on the self-hosted path (the GitHub-hosted fallback is
+  unaffected). Also fixes a `test_hosted` matrix cache-key collision, adds a
+  manual `reset_target_dir` dispatch input, and adds idempotency guards and
+  npm caching for a few smaller redundant CI steps.
 - Split the largest media-browser transport, YAML and scripted scheduling
   registries, and Jellyfin/Emby adapters into enumerable feature modules.
   Exhaustive route, instruction, Lua-global, and media-source gates now prevent
