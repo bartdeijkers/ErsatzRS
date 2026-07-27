@@ -177,6 +177,17 @@ release section when tagging a release.
   a cycle wraparound now avoids repeating the same schedule item across the
   reshuffle boundary, matching the equivalent protection Classic collection
   shuffles already had.
+- `Random Start Point` now only affects `Chronological`, `Season, Episode`,
+  and `Shuffle In Order` schedule items, matching ErsatzTV. Previously it was
+  applied to every playback order, including ones that are already
+  randomized by construction.
+- Classic scheduling's `Shuffle`, `Shuffle In Order`, `Random`, and `Random
+  Rotation` playback orders are no longer aliases of each other. `Shuffle` is
+  now a plain flat shuffle; `Shuffle In Order` (and the `Multi-Episode
+  Shuffle` placeholder) keep the group-distance spread that previously
+  applied to `Shuffle` too, now generalized to spread by show as well as
+  artist; `Random Rotation` gained its own algorithm that avoids drawing the
+  same show/artist group twice in a row.
 - Browser-preview E2E fixtures now preserve the channel-number and integer
   schedule-kind database contracts, so the shared Playwright database cannot
   invalidate later channel-number and playout coverage.

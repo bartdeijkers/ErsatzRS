@@ -48,6 +48,29 @@ and generated fake group schedule items should be revisited only when the
 corresponding ErsatzTV behavior is needed by real imported databases or the
 final Slice 21 import verification.
 
+### 2026-07-27 addendum: seed/anchor semantics fix and `RandomRotation`
+
+Reset and Refresh previously reproduced the identical shuffle order for a
+playout's entire life: `Playout.seed` was regenerated only at playout
+creation (never on a later Reset), and Refresh could never retain
+per-collection or schedule-item shuffle state because the only anchors the
+engine wrote were undated while retention required a dated checkpoint. This
+was a bug in the port, not an intended deviation — ErsatzTV's `ResetPlayout()`
+regenerates `playout.Seed` on every Reset, and its Refresh is designed to
+continue the existing shuffle sequence. Both are now fixed; see the
+`classic-scheduling` parity file for the full account and regression list.
+
+`PlaybackOrder::RandomRotation` is a deliberate, spirit-preserving adaptation
+rather than a literal port of ErsatzTV's live
+`RandomizedRotatingMediaCollectionEnumerator`. Upstream tracks per-draw group
+state and bumps to a different group only when a live draw repeats the
+previous one; ErsatzRS's `MediaEnumerator` instead materializes a full
+arranged order once per cycle (the same pattern `Shuffle`/`ShuffleInOrder`
+already use), so `RandomRotation` bucket-and-walks a random remaining group at
+materialization time, preferring a group other than the previous pick. The
+observable property — no two adjacent items from the same show/artist when
+avoidable — matches upstream even though the mechanism differs.
+
 ## Alternatives Considered
 
 - Drop Classic scheduling and require migration to YAML or Block: rejected

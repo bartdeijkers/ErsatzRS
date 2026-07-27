@@ -178,7 +178,22 @@ impl ClassicContext {
                     item.playback_order,
                     seed_to_u64(request.playout.seed),
                 );
-                if request.reference_data.classic_random_start_point && !enumerator.is_empty() {
+                // Matching ErsatzTV: Random Start Point only affects orders
+                // that would otherwise always start from a fixed position
+                // (the sorted-by-date/episode orders, and ShuffleInOrder's
+                // own per-cycle start offset); Random/Shuffle/RandomRotation/
+                // Marathon are already randomized by construction, so it
+                // would be a no-op there.
+                let random_start_point_applies = matches!(
+                    item.playback_order,
+                    PlaybackOrder::Chronological
+                        | PlaybackOrder::SeasonEpisode
+                        | PlaybackOrder::ShuffleInOrder
+                );
+                if request.reference_data.classic_random_start_point
+                    && random_start_point_applies
+                    && !enumerator.is_empty()
+                {
                     let index = usize::try_from(
                         seed_to_u64(request.playout.seed) % enumerator.len() as u64,
                     )
@@ -1909,43 +1924,55 @@ fn prepare_enumerator_items(
                 .then(left.release_date.cmp(&right.release_date))
                 .then(left.id.cmp(&right.id))
         }),
-        PlaybackOrder::Shuffle
-        | PlaybackOrder::ShuffleInOrder
-        | PlaybackOrder::MultiEpisodeShuffle => {
-            shuffle_with_artist_distance(&mut enumerator.items, seed);
+        PlaybackOrder::Shuffle => shuffle_with_seed(&mut enumerator.items, seed),
+        PlaybackOrder::ShuffleInOrder | PlaybackOrder::MultiEpisodeShuffle => {
+            shuffle_with_group_distance(&mut enumerator.items, seed);
         }
-        PlaybackOrder::Random | PlaybackOrder::RandomRotation | PlaybackOrder::Marathon => {
+        PlaybackOrder::RandomRotation => {
+            shuffle_with_random_rotation(&mut enumerator.items, seed);
+        }
+        PlaybackOrder::Random | PlaybackOrder::Marathon => {
             shuffle_with_seed(&mut enumerator.items, seed);
         }
         PlaybackOrder::None => {}
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum ShuffleGroupKey {
+    Show(EntityId),
     Artist(EntityId),
     Item(EntityId),
 }
 
+/// Group items by show first (TV content), then artist (music videos), then
+/// fall back to a singleton group per item. Used by the grouped/balanced
+/// shuffle algorithms shared by `ShuffleInOrder`, `MultiEpisodeShuffle`, and
+/// `RandomRotation` so TV collections get the same even-spacing benefit music
+/// videos already had from artist grouping.
 fn shuffle_group_key(item: &SchedulingMediaItem) -> ShuffleGroupKey {
-    item.artist_id
-        .map_or(ShuffleGroupKey::Item(item.id), ShuffleGroupKey::Artist)
+    if let Some(show_id) = item.show_id {
+        ShuffleGroupKey::Show(show_id)
+    } else if let Some(artist_id) = item.artist_id {
+        ShuffleGroupKey::Artist(artist_id)
+    } else {
+        ShuffleGroupKey::Item(item.id)
+    }
 }
 
-fn shuffle_with_artist_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64) {
-    shuffle_with_seed(items, seed);
-
-    let mut seen_artists = BTreeSet::new();
-    if !items
+fn has_repeated_group(items: &[SchedulingMediaItem]) -> bool {
+    let mut seen = BTreeSet::new();
+    items
         .iter()
-        .filter_map(|item| item.artist_id)
-        .any(|artist_id| !seen_artists.insert(artist_id))
-    {
-        return;
-    }
+        .map(shuffle_group_key)
+        .any(|key| !seen.insert(key))
+}
 
+fn group_items_by_key(
+    items: Vec<SchedulingMediaItem>,
+) -> Vec<(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)> {
     let mut groups: Vec<(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)> = Vec::new();
-    for item in items.drain(..) {
+    for item in items {
         let key = shuffle_group_key(&item);
         if let Some((_, group_items)) = groups.iter_mut().find(|(group_key, _)| *group_key == key) {
             group_items.push_back(item);
@@ -1953,12 +1980,29 @@ fn shuffle_with_artist_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64)
             groups.push((key, VecDeque::from([item])));
         }
     }
+    groups
+}
 
+/// `ShuffleInOrder`/`MultiEpisodeShuffle`'s balanced-shuffle analog: a plain
+/// Fisher-Yates pass for tie-breaking, followed by a greedy interleave that
+/// always advances whichever group (show or artist) still has the most
+/// remaining items, skipping the group that was just used. This spreads a
+/// low-cardinality show/artist evenly across a mixed collection rather than
+/// letting a flat shuffle clump it, mirroring the spirit of ErsatzTV's
+/// `ShuffleInOrderCollectionEnumerator` balanced-shuffle interleaving.
+fn shuffle_with_group_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64) {
+    shuffle_with_seed(items, seed);
+
+    if !has_repeated_group(items) {
+        return;
+    }
+
+    let mut groups = group_items_by_key(std::mem::take(items));
     let total_len = groups.iter().map(|(_, group)| group.len()).sum();
     let mut arranged = Vec::with_capacity(total_len);
     let mut previous_key = None;
     while arranged.len() < total_len {
-        let candidate = artist_distance_candidate(&groups, previous_key);
+        let candidate = group_distance_candidate(&groups, previous_key);
         let Some(index) = candidate else {
             break;
         };
@@ -1972,7 +2016,71 @@ fn shuffle_with_artist_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64)
     *items = arranged;
 }
 
-fn artist_distance_candidate(
+/// `RandomRotation`'s algorithm: bucket items by group (show/artist), then
+/// materialize the cycle by repeatedly drawing a random remaining group,
+/// preferring a different group than the previous pick when more than one
+/// still has items. This is a materialize-then-walk adaptation of ErsatzTV's
+/// live `RandomizedRotatingMediaCollectionEnumerator` "bump to next group on
+/// repeat" behavior — ErsatzRS's `MediaEnumerator` materializes a full order
+/// per cycle rather than tracking per-draw group state the way the upstream
+/// live enumerator does.
+fn shuffle_with_random_rotation(items: &mut Vec<SchedulingMediaItem>, seed: u64) {
+    if items.len() <= 1 || !has_repeated_group(items) {
+        shuffle_with_seed(items, seed);
+        return;
+    }
+
+    let mut groups = group_items_by_key(std::mem::take(items));
+    let total_len: usize = groups.iter().map(|(_, group)| group.len()).sum();
+    let mut arranged = Vec::with_capacity(total_len);
+    let mut state = seed;
+    let mut previous_key = None;
+    while arranged.len() < total_len {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let Some(index) = random_rotation_candidate(&groups, previous_key, state) else {
+            break;
+        };
+        let key = groups[index].0;
+        if let Some(item) = groups[index].1.pop_front() {
+            arranged.push(item);
+            previous_key = Some(key);
+        }
+    }
+
+    *items = arranged;
+}
+
+fn random_rotation_candidate(
+    groups: &[(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)],
+    previous_key: Option<ShuffleGroupKey>,
+    state: u64,
+) -> Option<usize> {
+    let non_empty: Vec<usize> = groups
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, group_items))| !group_items.is_empty())
+        .map(|(index, _)| index)
+        .collect();
+    if non_empty.is_empty() {
+        return None;
+    }
+    let preferred: Vec<usize> = non_empty
+        .iter()
+        .copied()
+        .filter(|&index| Some(groups[index].0) != previous_key)
+        .collect();
+    let pool = if preferred.is_empty() {
+        &non_empty
+    } else {
+        &preferred
+    };
+    let pick = (state >> 33) as usize % pool.len();
+    Some(pool[pick])
+}
+
+fn group_distance_candidate(
     groups: &[(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)],
     previous_key: Option<ShuffleGroupKey>,
 ) -> Option<usize> {
@@ -2003,7 +2111,10 @@ fn prepare_next_cycle(
 
     if !matches!(
         playback_order,
-        PlaybackOrder::Shuffle | PlaybackOrder::ShuffleInOrder | PlaybackOrder::MultiEpisodeShuffle
+        PlaybackOrder::Shuffle
+            | PlaybackOrder::ShuffleInOrder
+            | PlaybackOrder::MultiEpisodeShuffle
+            | PlaybackOrder::RandomRotation
     ) || enumerator.len() <= 1
     {
         return seed;
@@ -3026,10 +3137,15 @@ mod tests {
     }
 
     #[test]
-    fn classic_shuffle_spreads_same_artist_music_videos() {
+    fn classic_shuffle_in_order_spreads_same_artist_music_videos() {
+        // The artist/group-distance algorithm moved from `Shuffle` to
+        // `ShuffleInOrder` (and `MultiEpisodeShuffle`) so `Shuffle` becomes a
+        // genuinely distinct, ungrouped shuffle. See
+        // classic_shuffle_in_order_and_shuffle_produce_different_orders for
+        // proof the two orders now diverge.
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
         let schedule_item = ProgramScheduleItem {
-            playback_order: PlaybackOrder::Shuffle,
+            playback_order: PlaybackOrder::ShuffleInOrder,
             ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
         };
         let key = item_key(&schedule_item);
@@ -3075,6 +3191,175 @@ mod tests {
         assert!(
             artists.windows(2).all(|window| window[0] != window[1]),
             "shuffled collection placed same-artist videos too closely: {artists:?}"
+        );
+    }
+
+    #[test]
+    fn classic_shuffle_in_order_and_shuffle_produce_different_orders() {
+        // Shuffle and ShuffleInOrder used to be byte-for-byte identical
+        // (both ran the artist/group-distance algorithm). Shuffle is now a
+        // plain flat shuffle while ShuffleInOrder keeps the group-distance
+        // spread, so for the same seed/items they must diverge.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let media_items = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(103, 1),
+            music_video(201, 2),
+            music_video(301, 3),
+            music_video(401, 4),
+        ];
+        let build_with_order = |playback_order: PlaybackOrder| {
+            let schedule_item = ProgramScheduleItem {
+                playback_order,
+                ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
+            };
+            let key = item_key(&schedule_item);
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(key, media_items.clone());
+
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed: 2,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(30),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                })
+                .expect("classic schedule should build")
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>()
+        };
+
+        assert_ne!(
+            build_with_order(PlaybackOrder::Shuffle),
+            build_with_order(PlaybackOrder::ShuffleInOrder),
+            "Shuffle and ShuffleInOrder must no longer produce identical orders"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_avoids_consecutive_same_group() {
+        // RandomRotation used to be identical to Random (both plain seeded
+        // shuffles); it now buckets by group and avoids drawing the same
+        // group twice in a row when more than one group still has items.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::RandomRotation,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
+        };
+        let key = item_key(&schedule_item);
+        let media_items = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(103, 1),
+            music_video(201, 2),
+            music_video(301, 3),
+            music_video(401, 4),
+        ];
+        let artists_by_id = media_items
+            .iter()
+            .map(|item| (item.id, item.artist_id))
+            .collect::<BTreeMap<_, _>>();
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(key, media_items);
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 2,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let artists = result
+            .added_items
+            .iter()
+            .map(|item| artists_by_id.get(&item.media_item_id).copied().flatten())
+            .collect::<Vec<_>>();
+        assert_eq!(artists.len(), 6);
+        assert!(
+            artists.windows(2).all(|window| window[0] != window[1]),
+            "RandomRotation placed same-group videos too closely: {artists:?}"
+        );
+    }
+
+    #[test]
+    fn classic_random_start_point_only_applies_to_chronological_season_episode_shuffle_in_order() {
+        // ErsatzTV scopes Random Start Point to Chronological/SeasonEpisode/
+        // ShuffleInOrder, since other orders are already randomized by
+        // construction. Applying it unconditionally (the old ErsatzRS
+        // behavior) was a no-op-in-spirit for Shuffle/Random but still wrong:
+        // it means those orders' first cycle silently used a different
+        // starting index than a fresh build without the flag.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let starting_index = |playback_order: PlaybackOrder, random_start_point: bool| {
+            let schedule_item = ProgramScheduleItem {
+                playback_order,
+                ..schedule_item(1, PlayoutMode::One, 1, None)
+            };
+            let key = item_key(&schedule_item);
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                classic_random_start_point: random_start_point,
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(
+                key,
+                vec![
+                    SchedulingMediaItem::new(101, Duration::minutes(10)),
+                    SchedulingMediaItem::new(102, Duration::minutes(10)),
+                    SchedulingMediaItem::new(103, Duration::minutes(10)),
+                ],
+            );
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed: 4,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(10),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                })
+                .expect("classic schedule should build")
+                .program_schedule_anchors
+                .first()
+                .map_or(0, |anchor| anchor.enumerator_state.index)
+        };
+
+        assert_ne!(
+            starting_index(PlaybackOrder::Chronological, false),
+            starting_index(PlaybackOrder::Chronological, true),
+            "Chronological should honor random_start_point"
+        );
+        assert_eq!(
+            starting_index(PlaybackOrder::Shuffle, false),
+            starting_index(PlaybackOrder::Shuffle, true),
+            "Shuffle should ignore random_start_point (already randomized)"
         );
     }
 

@@ -16,6 +16,8 @@ Shuffled collection fix (2026-06-14): Classic shuffled media collections now mir
 Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
 
 Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
+
+Frozen-shuffle fix (2026-07-27), from Windows MTV dogfood ("Music Videos - Pruned" looked unshuffled on every refresh): `Playout.seed` was never regenerated after creation, and `Refresh` could never retain shuffle state since it only wrote undated anchors while retention required a dated one. Reset now regenerates the seed (mirroring `ResetPlayout()`); Refresh now continues the prior shuffle. Also fixed: seed-to-`u64` conversions silently zeroed negative seeds; the schedule-item reshuffle gained the same anti-repeat guard collection shuffles had; `Shuffle`/`ShuffleInOrder`/`RandomRotation` are no longer aliases; `RandomStartPoint` is now scoped to `Chronological`/`SeasonEpisode`/`ShuffleInOrder`. See the `playback-order-shuffle-modes-aliased` debt and ADR 0010 for remaining gaps and the `RandomRotation` adaptation note.
 '''
 
 [[debt]]
@@ -51,4 +53,18 @@ id          = 'fixed-anchor-before-dynamic-gap'
 description = 'Classic schedules that mix dynamic all-day programming before a daily fixed item can start generated playout rows at the fixed item, leaving no active item before the anchor.'
 discovered  = '2026-06-27'
 evidence    = 'Resolved 2026-06-28: Classic start-state bootstrapping now mirrors ErsatzTV `FindStartAnchor` by starting from the first ordered schedule item instead of pre-seeking to the first fixed item. Regression `classic_dynamic_item_before_fixed_anchor_fills_pre_anchor_window` proves a dynamic Flood item before a strict 22:00 fixed item fills a pre-anchor build window instead of generating no rows until the fixed block.'
+resolved    = true
+
+[[debt]]
+id          = 'playout-seed-never-regenerated'
+description = 'Playout.seed was set once at playout creation and never regenerated on a later Reset build; Refresh could never retain per-collection or schedule-item shuffle state because the only anchors it ever wrote were undated while retained_refresh_anchors required a dated checkpoint. Reset and Refresh reproduced the identical shuffle order for a playout entire lifetime.'
+discovered  = '2026-07-27'
+evidence    = 'See the frozen-shuffle fix paragraph above. Regressions: reset_build_regenerates_playout_seed, refresh_and_continue_builds_preserve_playout_seed (ersatzrs-infra/tests/maintenance.rs), classic_refresh_continues_collection_shuffle_without_day_anchor, classic_refresh_continues_schedule_item_order_from_anchor (classic/mod.rs).'
+resolved    = true
+
+[[debt]]
+id          = 'playback-order-shuffle-modes-aliased'
+description = 'Shuffle, ShuffleInOrder, and MultiEpisodeShuffle were byte-for-byte identical (all ran the same artist-distance shuffle); Random, RandomRotation, and Marathon were also identical (all ran a plain seeded shuffle). Users picking different playback orders got no behavioral difference.'
+discovered  = '2026-07-27'
+evidence    = 'Resolved for Shuffle/ShuffleInOrder/RandomRotation: Shuffle is now a plain flat shuffle; ShuffleInOrder/MultiEpisodeShuffle keep the group-distance spread (now generalized to show_id, not just artist_id); RandomRotation has its own group-anti-repeat algorithm, a materialize-then-walk adaptation of ErsatzTV live `RandomizedRotatingMediaCollectionEnumerator` recorded in the ADR 0010 addendum. Regressions: classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_rotation_avoids_consecutive_same_group (classic/mod.rs). Remaining, deliberately unresolved by this pass and tracked as remaining work rather than a separate debt entry: Marathon stays aliased to Random pending marathon_group_by/marathon_shuffle_items wiring (fields exist, unread by ersatzrs-core/src/scheduling); MultiEpisodeShuffle keeps the group-distance placeholder pending real part-number metadata on SchedulingMediaItem; and the schedule-level keep_multi_part_episodes_together/treat_collections_as_shows flags are persisted and shown in the admin UI but never reach SchedulingReferenceData or the Classic engine (keep_multi_part_episodes_together defaults to true, so the shipped show_id-aware grouping already matches the common case; an explicit false still has no effect).'
 resolved    = true
