@@ -4,8 +4,12 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{
+    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::host::state::{AppState, IptvAccessTokenVerifier};
 
@@ -69,7 +73,13 @@ pub async fn require_iptv_access(
         .or_else(|| extract_access_token(request.uri()));
 
     match token {
-        Some(token) if state.iptv_access_token_verifier.verify(&token) => next.run(request).await,
+        Some(token)
+            if state
+                .iptv_access_token_verifier
+                .verify_for_path(&token, request.uri().path()) =>
+        {
+            next.run(request).await
+        }
         _ => StatusCode::UNAUTHORIZED.into_response(),
     }
 }
@@ -124,6 +134,7 @@ impl IptvAccessTokenVerifier {
         Self {
             validation: None,
             decoding_key: None,
+            encoding_key: None,
         }
     }
 
@@ -136,6 +147,7 @@ impl IptvAccessTokenVerifier {
         Self {
             validation: Some(validation),
             decoding_key: Some(DecodingKey::from_secret(secret.as_bytes())),
+            encoding_key: Some(EncodingKey::from_secret(secret.as_bytes())),
         }
     }
 
@@ -146,20 +158,76 @@ impl IptvAccessTokenVerifier {
 
     #[must_use]
     pub fn verify(&self, token: &str) -> bool {
-        let (Some(validation), Some(decoding_key)) = (&self.validation, &self.decoding_key) else {
+        self.verified_claims(token).is_some()
+    }
+
+    #[must_use]
+    pub fn verify_for_path(&self, token: &str, path: &str) -> bool {
+        let Some(claims) = self.verified_claims(token) else {
+            return false;
+        };
+        let Some(scope) = claims.get("scope").and_then(Value::as_str) else {
             return true;
+        };
+        if scope != "channel-preview" {
+            return false;
+        }
+        let Some(channel) = claims.get("channel").and_then(Value::as_str) else {
+            return false;
+        };
+        preview_path_channel(path).is_some_and(|path_channel| path_channel == channel)
+    }
+
+    /// Issue a short-lived JWT scoped to one channel preview.
+    pub fn issue_preview_token(
+        &self,
+        channel: &str,
+    ) -> Result<Option<String>, jsonwebtoken::errors::Error> {
+        let Some(encoding_key) = &self.encoding_key else {
+            return Ok(None);
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let claims = PreviewClaims {
+            exp: now.saturating_add(4 * 60 * 60),
+            scope: "channel-preview",
+            channel,
+        };
+        encode(&Header::new(Algorithm::HS256), &claims, encoding_key).map(Some)
+    }
+
+    fn verified_claims(&self, token: &str) -> Option<Value> {
+        let (Some(validation), Some(decoding_key)) = (&self.validation, &self.decoding_key) else {
+            return Some(Value::Object(serde_json::Map::default()));
         };
 
         let Ok(header) = decode_header(token) else {
-            return false;
+            return None;
         };
 
         if header.alg != Algorithm::HS256 {
-            return false;
+            return None;
         }
 
-        decode::<Value>(token, decoding_key, validation).is_ok()
+        decode::<Value>(token, decoding_key, validation)
+            .ok()
+            .map(|data| data.claims)
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PreviewClaims<'a> {
+    exp: u64,
+    scope: &'a str,
+    channel: &'a str,
+}
+
+fn preview_path_channel(path: &str) -> Option<&str> {
+    path.strip_prefix("/iptv/preview/")
+        .and_then(|remaining| remaining.split('/').next())
+        .filter(|channel| !channel.is_empty())
 }
 
 #[cfg(test)]
@@ -196,6 +264,15 @@ mod tests {
         let app = Router::new()
             .route("/iptv/channels.m3u", get(|| async { StatusCode::OK }))
             .route("/iptv/logos/gen", get(|| async { StatusCode::OK }))
+            .route("/iptv/channel/{file}", get(|| async { StatusCode::OK }))
+            .route(
+                "/iptv/session/{channel}/{file}",
+                get(|| async { StatusCode::OK }),
+            )
+            .route(
+                "/iptv/preview/{channel}/{file}",
+                get(|| async { StatusCode::OK }),
+            )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 require_iptv_access,
@@ -284,5 +361,40 @@ mod tests {
     async fn middleware_exempts_logo_paths() {
         let status = protected_status(test_state(Some("secret")), "/iptv/logos/gen").await;
         assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn preview_token_is_limited_to_its_channel_playlists_and_segments() {
+        let state = test_state(Some("secret"));
+        let token = state
+            .iptv_access_token_verifier
+            .issue_preview_token("12")
+            .unwrap()
+            .unwrap();
+
+        for path in [
+            "/iptv/preview/12/master.m3u8",
+            "/iptv/preview/12/hls.m3u8",
+            "/iptv/preview/12/segment-1.ts",
+        ] {
+            let status =
+                protected_status(state.clone(), &format!("{path}?access_token={token}")).await;
+            assert_eq!(status, StatusCode::OK, "{path}");
+        }
+        let other_channel = protected_status(
+            state.clone(),
+            &format!("/iptv/preview/13/master.m3u8?access_token={token}"),
+        )
+        .await;
+        assert_eq!(other_channel, StatusCode::UNAUTHORIZED);
+        let normal_channel = protected_status(
+            state.clone(),
+            &format!("/iptv/channel/12.m3u8?access_token={token}"),
+        )
+        .await;
+        assert_eq!(normal_channel, StatusCode::UNAUTHORIZED);
+        let channel_list =
+            protected_status(state, &format!("/iptv/channels.m3u?access_token={token}")).await;
+        assert_eq!(channel_list, StatusCode::UNAUTHORIZED);
     }
 }

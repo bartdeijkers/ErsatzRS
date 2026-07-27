@@ -51,6 +51,19 @@ fi
 log "binary: $SERVER_BIN"
 log "site:   $SITE_ROOT"
 
+# The channel preview bridge lazy-loads the pinned Hls.js ESM asset. Verify the
+# assembled site contains both files before booting so a release cannot ship a
+# player whose hydration succeeds but whose playback dependency 404s.
+for preview_asset in \
+  "channel-preview.js" \
+  "vendor/hls/hls.mjs" \
+  "vendor/hls/LICENSE"; do
+  [[ -f "$SITE_ROOT/$preview_asset" ]] || {
+    err "channel preview asset missing from assembled site: $preview_asset"
+    exit 1
+  }
+done
+
 # --- FFmpeg override so startup does not download a managed runtime in CI.
 FF_BIN="${ErsatzRS_FFMPEG__PATH:-}"
 if [[ -z "$FF_BIN" ]]; then

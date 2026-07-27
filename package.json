@@ -8,6 +8,7 @@
     "test": "tests"
   },
   "dependencies": {
+    "hls.js": "1.6.16",
     "playwright": "^1.59.1",
     "playwright-core": "^1.59.1"
   },
@@ -17,7 +18,10 @@
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1"
   },
-  "scripts": {},
+  "scripts": {
+    "sync:hls": "node scripts/web/sync-hls-vendor.mjs",
+    "check:hls": "node scripts/web/sync-hls-vendor.mjs --check"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bartdeijkers/ErsatzRS.git"

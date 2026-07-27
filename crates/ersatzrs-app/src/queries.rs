@@ -10,16 +10,17 @@ use ersatzrs_core::repositories::{
     ChannelSelectOption, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
     CollectionRepository, DecoAdminRecord, DecoAdminRow, DecoEditorOptionsAdmin, DecoGroupAdminRow,
     DecoRepository, DecoTemplateAdminRow, DecoTemplateGroupAdminRow, DecoTemplateItemAdmin,
-    FfmpegProfileRepository, FillerRepository, LibraryRepository, MediaItemSuggestionAdmin,
-    MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
-    PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow,
-    PlayoutAlternateSchedulesAdmin, PlayoutKindEditorAdmin, PlayoutListAdminRow, PlayoutRepository,
-    PlayoutTemplatesAdmin, ProgramScheduleRepository, RerunCollectionAdmin,
-    RerunCollectionAdminRow, RerunCollectionEditorOptions, ScheduleAdminForm, ScheduleAdminRow,
-    ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin, SettingsOptionKind,
-    SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow, TemplateBlockAdmin,
-    TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin, TemplateRepository,
-    TraktListAdminForm, TraktListAdminRow, TraktRepository, WatermarkRepository,
+    EpgPreviewChannelState, FfmpegProfileRepository, FillerRepository, LibraryRepository,
+    MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+    MultiCollectionEditorOptions, PlaylistEditorAdmin, PlaylistEditorOptions,
+    PlaylistGroupAdminRow, PlayoutAlternateSchedulesAdmin, PlayoutKindEditorAdmin,
+    PlayoutListAdminRow, PlayoutRepository, PlayoutTemplatesAdmin, ProgramScheduleRepository,
+    RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions, ScheduleAdminForm,
+    ScheduleAdminRow, ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin,
+    SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow,
+    TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin,
+    TemplateRepository, TraktListAdminForm, TraktListAdminRow, TraktRepository,
+    WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
@@ -1838,6 +1839,42 @@ pub struct GetChannelEditor {
     pub channel_id: EntityId,
 }
 
+/// Load the channel-watch projection for a bounded admin guide window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GetChannelWatch {
+    /// Channel identifier from the admin route.
+    pub channel_id: EntityId,
+    /// UTC instant used to select current and upcoming programming.
+    pub now: chrono::DateTime<chrono::Utc>,
+    /// Guide horizon in minutes.
+    pub horizon_minutes: i64,
+    /// Historical context before `now`, in minutes.
+    pub history_minutes: i64,
+}
+
+/// Aggregate query for the global EPG preview.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GetEpgPreview {
+    /// UTC instant that anchors the two-hour history and 24-hour future window.
+    pub now: chrono::DateTime<chrono::Utc>,
+}
+
+/// Storage-neutral aggregate projection for the global admin EPG.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EpgPreviewData {
+    pub generated_at: chrono::DateTime<chrono::Utc>,
+    pub window_start: chrono::DateTime<chrono::Utc>,
+    pub window_finish: chrono::DateTime<chrono::Utc>,
+    pub channels: Vec<EpgPreviewChannel>,
+}
+
+/// One channel lane in [`EpgPreviewData`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct EpgPreviewChannel {
+    pub state: EpgPreviewChannelState,
+    pub is_active: bool,
+}
+
 /// List channel rows without transport or storage dependencies.
 pub async fn list_channels(
     query: ListChannels,
@@ -1876,6 +1913,321 @@ pub async fn get_channel_editor(
         .get_editor_state((query.channel_id > 0).then_some(query.channel_id))
         .await
         .map_err(Into::into)
+}
+
+/// Load channel identity and programmes for the preview modal and watch route.
+pub async fn get_channel_watch(
+    query: GetChannelWatch,
+    repository: &dyn ChannelRepository,
+) -> Result<Option<ersatzrs_core::repositories::ChannelWatchState>> {
+    if query.channel_id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "channel_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    if !(1..=1_440).contains(&query.horizon_minutes) {
+        return Err(ApplicationError::Validation {
+            field: "horizon_minutes",
+            message: "must be between 1 and 1440".to_owned(),
+        });
+    }
+    if !(0..=120).contains(&query.history_minutes) {
+        return Err(ApplicationError::Validation {
+            field: "history_minutes",
+            message: "must be between 0 and 120".to_owned(),
+        });
+    }
+
+    repository
+        .get_watch_state(
+            query.channel_id,
+            query.now,
+            query.now - chrono::Duration::minutes(query.history_minutes),
+            query.now + chrono::Duration::minutes(query.horizon_minutes),
+        )
+        .await
+        .map_err(Into::into)
+}
+
+/// Load the complete 26-hour EPG preview and enrich lanes with active-session
+/// state without exposing runtime or storage adapters to the web transport.
+pub async fn get_epg_preview(
+    query: GetEpgPreview,
+    repository: &dyn ChannelRepository,
+    runtime: &dyn ChannelRuntime,
+) -> Result<EpgPreviewData> {
+    let window_start = query.now - chrono::Duration::hours(2);
+    let window_finish = query.now + chrono::Duration::hours(24);
+    let active = runtime
+        .active_channel_numbers()
+        .await
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "list active channel sessions",
+            message: error.to_string(),
+        })?
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
+    let channels = repository
+        .list_epg_preview_states(query.now, window_start, window_finish)
+        .await?
+        .into_iter()
+        .map(|state| EpgPreviewChannel {
+            is_active: active.contains(&state.number),
+            state,
+        })
+        .collect();
+
+    Ok(EpgPreviewData {
+        generated_at: query.now,
+        window_start,
+        window_finish,
+        channels,
+    })
+}
+
+#[cfg(test)]
+mod epg_preview_query_tests {
+    use async_trait::async_trait;
+    use chrono::{TimeZone as _, Utc};
+    use ersatzrs_core::repositories::{
+        ChannelAdminListRow, ChannelEditorForm, ChannelEditorState, ChannelNumberRow,
+        ChannelNumberSaveResult, ChannelNumberUpdate, ChannelRepository, ChannelSaveResult,
+        ChannelSaveSideEffects, ChannelSelectOption, ChannelValidationState, ChannelWatchState,
+        EpgPreviewChannelState, RepositoryError, Result as RepositoryResult,
+    };
+    use ersatzrs_domain::{Channel, EntityId};
+
+    use super::{
+        get_channel_watch, get_epg_preview, ApplicationError, GetChannelWatch, GetEpgPreview,
+    };
+    use crate::ports::{ChannelRuntime, ChannelRuntimeError};
+
+    struct EpgRepository {
+        fail: bool,
+        channels: Vec<EpgPreviewChannelState>,
+    }
+
+    #[async_trait]
+    impl ChannelRepository for EpgRepository {
+        async fn get_with_profile(&self, _id: EntityId) -> RepositoryResult<Channel> {
+            unimplemented!()
+        }
+        async fn get_by_number(&self, _number: &str) -> RepositoryResult<Channel> {
+            unimplemented!()
+        }
+        async fn list_enabled(&self) -> RepositoryResult<Vec<Channel>> {
+            unimplemented!()
+        }
+        async fn upsert(&self, _channel: &Channel) -> RepositoryResult<()> {
+            unimplemented!()
+        }
+        async fn delete(&self, _id: EntityId) -> RepositoryResult<()> {
+            unimplemented!()
+        }
+        async fn get_editor_state(
+            &self,
+            _id: Option<EntityId>,
+        ) -> RepositoryResult<Option<ChannelEditorState>> {
+            unimplemented!()
+        }
+        async fn save_editor_form(
+            &self,
+            _form: ChannelEditorForm,
+        ) -> RepositoryResult<ChannelSaveResult> {
+            unimplemented!()
+        }
+        async fn list_number_rows(&self) -> RepositoryResult<Vec<ChannelNumberRow>> {
+            unimplemented!()
+        }
+        async fn save_number_updates(
+            &self,
+            _updates: Vec<ChannelNumberUpdate>,
+        ) -> RepositoryResult<ChannelNumberSaveResult> {
+            unimplemented!()
+        }
+        async fn list_admin_rows(
+            &self,
+            _show_disabled: bool,
+            _page: u32,
+            _page_size: u32,
+        ) -> RepositoryResult<Vec<ChannelAdminListRow>> {
+            unimplemented!()
+        }
+        async fn count_admin_rows(&self, _show_disabled: bool) -> RepositoryResult<u64> {
+            unimplemented!()
+        }
+        async fn get_watch_state(
+            &self,
+            _id: EntityId,
+            _now: chrono::DateTime<Utc>,
+            _start: chrono::DateTime<Utc>,
+            _finish: chrono::DateTime<Utc>,
+        ) -> RepositoryResult<Option<ChannelWatchState>> {
+            unimplemented!()
+        }
+        async fn list_epg_preview_states(
+            &self,
+            _now: chrono::DateTime<Utc>,
+            _start: chrono::DateTime<Utc>,
+            _finish: chrono::DateTime<Utc>,
+        ) -> RepositoryResult<Vec<EpgPreviewChannelState>> {
+            if self.fail {
+                Err(RepositoryError::unavailable(
+                    "load aggregate EPG preview",
+                    "injected failure",
+                ))
+            } else {
+                Ok(self.channels.clone())
+            }
+        }
+        async fn list_ffmpeg_profile_options(&self) -> RepositoryResult<Vec<ChannelSelectOption>> {
+            unimplemented!()
+        }
+        async fn list_filler_preset_options(&self) -> RepositoryResult<Vec<ChannelSelectOption>> {
+            unimplemented!()
+        }
+        async fn validation_state(&self) -> RepositoryResult<ChannelValidationState> {
+            unimplemented!()
+        }
+        async fn save_side_effects(
+            &self,
+            _id: EntityId,
+        ) -> RepositoryResult<Option<ChannelSaveSideEffects>> {
+            unimplemented!()
+        }
+    }
+
+    struct Runtime {
+        active: Vec<String>,
+        fail: bool,
+    }
+
+    #[async_trait]
+    impl ChannelRuntime for Runtime {
+        async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError> {
+            if self.fail {
+                Err(ChannelRuntimeError::unavailable("injected failure"))
+            } else {
+                Ok(self.active.clone())
+            }
+        }
+
+        async fn stop_channel_session(&self, _number: &str) -> Result<bool, ChannelRuntimeError> {
+            unimplemented!()
+        }
+
+        fn request_subtitle_extraction(&self, _playout_ids: Vec<EntityId>) {
+            unimplemented!()
+        }
+    }
+
+    fn channel(number: &str) -> EpgPreviewChannelState {
+        EpgPreviewChannelState {
+            id: 1,
+            number: number.to_owned(),
+            sort_number: 1.0,
+            name: "Channel".to_owned(),
+            logo_path: None,
+            ffmpeg_profile_name: "Profile".to_owned(),
+            streaming_mode: 5,
+            playout_id: None,
+            programmes: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn aggregate_epg_uses_full_window_and_active_runtime_state() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 26, 12, 0, 0).unwrap();
+        let data = get_epg_preview(
+            GetEpgPreview { now },
+            &EpgRepository {
+                fail: false,
+                channels: vec![channel("10")],
+            },
+            &Runtime {
+                active: vec!["10".to_owned()],
+                fail: false,
+            },
+        )
+        .await
+        .expect("aggregate EPG");
+
+        assert_eq!(data.window_start, now - chrono::Duration::hours(2));
+        assert_eq!(data.window_finish, now + chrono::Duration::hours(24));
+        assert!(data.channels[0].is_active);
+    }
+
+    #[tokio::test]
+    async fn aggregate_epg_preserves_typed_repository_and_runtime_failures() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 26, 12, 0, 0).unwrap();
+        let repository_error = get_epg_preview(
+            GetEpgPreview { now },
+            &EpgRepository {
+                fail: true,
+                channels: Vec::new(),
+            },
+            &Runtime {
+                active: Vec::new(),
+                fail: false,
+            },
+        )
+        .await
+        .expect_err("typed repository failure");
+        assert!(matches!(
+            repository_error,
+            ApplicationError::Unavailable {
+                operation: "load aggregate EPG preview",
+                ..
+            }
+        ));
+
+        let runtime_error = get_epg_preview(
+            GetEpgPreview { now },
+            &EpgRepository {
+                fail: false,
+                channels: Vec::new(),
+            },
+            &Runtime {
+                active: Vec::new(),
+                fail: true,
+            },
+        )
+        .await
+        .expect_err("typed runtime failure");
+        assert!(matches!(
+            runtime_error,
+            ApplicationError::Unavailable {
+                operation: "list active channel sessions",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn channel_watch_rejects_invalid_history_before_storage() {
+        let error = get_channel_watch(
+            GetChannelWatch {
+                channel_id: 1,
+                now: Utc::now(),
+                horizon_minutes: 1_440,
+                history_minutes: 121,
+            },
+            &EpgRepository {
+                fail: false,
+                channels: Vec::new(),
+            },
+        )
+        .await
+        .expect_err("invalid history");
+        assert!(matches!(
+            error,
+            ApplicationError::Validation {
+                field: "history_minutes",
+                ..
+            }
+        ));
+    }
 }
 
 /// Load FFmpeg-profile channel select options.

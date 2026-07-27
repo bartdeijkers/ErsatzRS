@@ -102,6 +102,21 @@ ErsatzRS uses Leptos for the admin UI because the project is Rust-native.
 
 ADR: [0002](../adr/0002-ui-framework-leptos.md)
 
+## Aggregate EPG and browser-compatible channel preview
+
+ErsatzTV exposes channel preview only as a modal. ErsatzRS retains and improves
+that quick workflow while adding `/channels/:id/watch` for a bookmarkable full
+player and `/epg` for an aggregate, multi-channel lane guide. Both player
+surfaces remain click-to-play and share one browser lifecycle. Administration
+preview uses a separately registered H.264 eight-bit/AAC derivative so
+Chromium and Firefox can decode it while normal IPTV/HLS continues to use the
+persisted channel profile.
+
+ADR: [0053](../adr/0053-dedicated-channel-watch-route-and-reusable-preview-modal.md)
+
+Follow-up ADR:
+[0054](../adr/0054-aggregate-epg-preview-and-isolated-browser-preview-pipeline.md)
+
 ## Plain async handlers instead of MediatR
 
 ErsatzRS uses plain async use-case handlers and constructor-injected traits instead

@@ -9,7 +9,8 @@ use leptos_router::{
 use crate::admin::home::HomePage;
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::channels::{
-    editor::ChannelEditorPage, list::ChannelsListPage, numbers::ChannelNumbersPage,
+    editor::ChannelEditorPage, epg::EpgPreviewPage, list::ChannelsListPage,
+    numbers::ChannelNumbersPage, watch::ChannelWatchPage,
 };
 use crate::admin::pages::dev::ComponentsPage;
 use crate::admin::pages::ffmpeg_profiles::{
@@ -100,6 +101,7 @@ pub fn AdminRoutes() -> impl IntoView {
         }>
             <Route path=StaticSegment("") view=HomePage/>
             <Route path=StaticSegment("dev/components") view=ComponentsPage/>
+            <Route path=StaticSegment("epg") view=EpgPreviewPage/>
             <Route path=StaticSegment("channels") view=ChannelsListPage/>
             <Route
                 path=(StaticSegment("channels"), StaticSegment("add"))
@@ -108,6 +110,14 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("channels"), StaticSegment("numbers"))
                 view=ChannelNumbersPage
+            />
+            <Route
+                path=(
+                    StaticSegment("channels"),
+                    ParamSegment("id"),
+                    StaticSegment("watch"),
+                )
+                view=ChannelWatchPage
             />
             <Route path=(StaticSegment("channels"), ParamSegment("id")) view=ChannelEditorPage/>
 

@@ -387,6 +387,18 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
             "/iptv/logos/{filename}",
             get(api::channels::serve_channel_logo),
         )
+        .route(
+            "/iptv/preview/{channel_number}/master.m3u8",
+            get(iptv::hls::get_preview_master_playlist),
+        )
+        .route(
+            "/iptv/preview/{channel_number}/hls.m3u8",
+            get(iptv::hls::get_preview_session_playlist),
+        )
+        .route(
+            "/iptv/preview/{channel_number}/{filename}",
+            get(iptv::hls::get_preview_session_segment),
+        )
         .route("/iptv/channel/{file}", get(iptv::dispatch_channel_request))
         .route(
             "/iptv/session/{channel_number}/hls.m3u8",

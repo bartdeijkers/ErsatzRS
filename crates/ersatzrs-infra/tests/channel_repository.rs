@@ -4,7 +4,7 @@ mod common;
 use chrono::Duration;
 use ersatzrs_core::repositories::{
     ChannelEditorForm, ChannelLogoForm, ChannelNumberUpdate, ChannelRepository,
-    FfmpegProfileRepository,
+    FfmpegProfileRepository, PlayoutRepository,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
@@ -45,6 +45,318 @@ async fn channel_repository_round_trips_and_filters_enabled_channels() {
     assert_eq!(enabled_channels.len(), 1);
     assert_eq!(enabled_channels[0].id, 10);
     assert!(enabled_channels[0].artwork_ids.is_empty());
+}
+
+#[tokio::test]
+async fn channel_watch_state_selects_current_playout_and_two_hour_programmes() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "preview"))
+        .await
+        .unwrap();
+    repos
+        .channel
+        .upsert(&common::channel(10, "10", true))
+        .await
+        .unwrap();
+    common::seed_media_graph(&pool).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (1)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MovieMetadata"
+           ("Id", "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "Title")
+           VALUES (1, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 1, 'Preview Movie')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (19, 10, 'Classic', 0), (20, 10, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let now = common::fixed_time();
+    let mut historical = common::playout_item(29, 19, 1);
+    historical.start = now - Duration::hours(2) - Duration::minutes(10);
+    historical.finish = now - Duration::hours(2) + Duration::minutes(10);
+    repos.playout.upsert_item(&historical).await.unwrap();
+    let mut current = common::playout_item(30, 20, 1);
+    current.start = now - Duration::minutes(10);
+    current.finish = now + Duration::minutes(20);
+    repos.playout.upsert_item(&current).await.unwrap();
+    let mut next = common::playout_item(31, 20, 1);
+    next.start = current.finish;
+    next.finish = next.start + Duration::minutes(30);
+    next.filler_kind = ersatzrs_domain::FillerKind::PreRoll;
+    repos.playout.upsert_item(&next).await.unwrap();
+    sqlx::query(
+        r#"INSERT INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish")
+           VALUES (40, 20, ?, ?)"#,
+    )
+    .bind(
+        (next.finish)
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string(),
+    )
+    .bind(
+        (next.finish + Duration::minutes(10))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string(),
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let watch = repos
+        .channel
+        .get_watch_state(10, now, now - Duration::hours(2), now + Duration::hours(2))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(watch.playout_id, Some(20));
+    assert_eq!(watch.ffmpeg_profile_name, "preview");
+    assert_eq!(watch.programmes.len(), 3);
+    assert_eq!(watch.programmes[0].title, "Preview Movie");
+    assert_eq!(watch.programmes[1].filler_kind, 1);
+    assert!(watch.programmes[2].is_gap);
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn epg_preview_batches_visible_channels_programmes_fillers_and_gaps() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "preview"))
+        .await
+        .unwrap();
+
+    let mut later = common::channel(10, "10", true);
+    later.show_in_epg = true;
+    later.sort_number = 10.0;
+    let mut first = common::channel(11, "2", true);
+    first.show_in_epg = true;
+    first.sort_number = 2.0;
+    let mut hidden = common::channel(12, "1", true);
+    hidden.show_in_epg = false;
+    hidden.sort_number = 1.0;
+    let mut disabled = common::channel(13, "3", false);
+    disabled.show_in_epg = true;
+    disabled.sort_number = 3.0;
+    for channel in [&later, &first, &hidden, &disabled] {
+        repos.channel.upsert(channel).await.unwrap();
+    }
+
+    common::seed_media_graph(&pool).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (1)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MovieMetadata"
+           ("Id", "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "Title")
+           VALUES (1, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 1, 'EPG Movie')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES
+           (20, 10, 'Classic', 0),
+           (21, 11, 'Classic', 0),
+           (22, 12, 'Classic', 0),
+           (23, 13, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let now = common::fixed_time();
+    for (offset, filler_kind) in (0_i64..=7).zip(0_i32..=7) {
+        let mut item = common::playout_item(30 + offset, 21, 1);
+        item.start = now - Duration::hours(2) + Duration::minutes(offset * 15);
+        item.finish = item.start + Duration::minutes(15);
+        item.filler_kind = match filler_kind {
+            1 => ersatzrs_domain::FillerKind::PreRoll,
+            2 => ersatzrs_domain::FillerKind::MidRoll,
+            3 => ersatzrs_domain::FillerKind::PostRoll,
+            4 => ersatzrs_domain::FillerKind::Tail,
+            5 => ersatzrs_domain::FillerKind::Fallback,
+            6 => ersatzrs_domain::FillerKind::GuideMode,
+            7 => ersatzrs_domain::FillerKind::DecoDefault,
+            _ => ersatzrs_domain::FillerKind::None,
+        };
+        repos.playout.upsert_item(&item).await.unwrap();
+    }
+    sqlx::query(
+        r#"INSERT INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish")
+           VALUES (50, 21, ?, ?)"#,
+    )
+    .bind(
+        (now + Duration::hours(23))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string(),
+    )
+    .bind(
+        (now + Duration::hours(24))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string(),
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let channels = repos
+        .channel
+        .list_epg_preview_states(now, now - Duration::hours(2), now + Duration::hours(24))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        channels
+            .iter()
+            .map(|channel| channel.id)
+            .collect::<Vec<_>>(),
+        [11, 10]
+    );
+    assert_eq!(channels[0].playout_id, Some(21));
+    assert_eq!(channels[0].programmes.len(), 9);
+    assert_eq!(
+        channels[0]
+            .programmes
+            .iter()
+            .filter(|programme| !programme.is_gap)
+            .map(|programme| programme.filler_kind)
+            .collect::<Vec<_>>(),
+        [0, 1, 2, 3, 4, 5, 99, 100]
+    );
+    assert_eq!(channels[0].programmes[0].title, "EPG Movie");
+    assert!(channels[0].programmes.last().unwrap().is_gap);
+    assert_eq!(channels[1].playout_id, Some(20));
+    assert!(channels[1].programmes.is_empty());
+}
+
+#[tokio::test]
+async fn epg_preview_selects_latest_overlapping_item_like_live_playback() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "preview"))
+        .await
+        .unwrap();
+    let mut channel = common::channel(10, "10", true);
+    channel.show_in_epg = true;
+    repos.channel.upsert(&channel).await.unwrap();
+    common::seed_media_graph(&pool).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (1)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (20, 10, 'Classic', 0), (21, 10, 'Classic', 0), (22, 10, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let now = common::fixed_time();
+    let mut older = common::playout_item(30, 20, 1);
+    older.start = now - Duration::minutes(20);
+    older.finish = now + Duration::minutes(30);
+    repos.playout.upsert_item(&older).await.unwrap();
+    let mut latest = common::playout_item(31, 21, 1);
+    latest.start = now - Duration::minutes(5);
+    latest.finish = now + Duration::minutes(30);
+    repos.playout.upsert_item(&latest).await.unwrap();
+    let mut latest_tie_breaker = common::playout_item(32, 22, 1);
+    latest_tie_breaker.start = latest.start;
+    latest_tie_breaker.finish = latest.finish;
+    repos
+        .playout
+        .upsert_item(&latest_tie_breaker)
+        .await
+        .unwrap();
+
+    let channels = repos
+        .channel
+        .list_epg_preview_states(now, now - Duration::hours(2), now + Duration::hours(24))
+        .await
+        .unwrap();
+
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].playout_id, Some(22));
+    assert_eq!(channels[0].programmes[0].id, 32);
+}
+
+#[tokio::test]
+async fn epg_preview_chunks_title_enrichment_beyond_sqlite_parameter_limit() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "preview"))
+        .await
+        .unwrap();
+    let mut channel = common::channel(10, "10", true);
+    channel.show_in_epg = true;
+    repos.channel.upsert(&channel).await.unwrap();
+    common::seed_media_graph(&pool).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (1)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MovieMetadata"
+           ("Id", "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "Title")
+           VALUES (1, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 1, 'Batched Movie')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (20, 10, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"WITH RECURSIVE sequence(n) AS (
+               SELECT 0
+               UNION ALL
+               SELECT n + 1 FROM sequence WHERE n < 1099
+           )
+           INSERT INTO "PlayoutItem" (
+               "Id", "DisableWatermarks", "FillerKind", "Finish", "GuideGroup",
+               "InPoint", "MediaItemId", "OutPoint", "PlayoutId", "Start"
+           )
+           SELECT
+               10000 + n, 0, 0,
+               datetime('2026-04-15 09:00:00', '+' || (n + 1) || ' minutes'),
+               0, '00:00:00', 1, '00:01:00', 20,
+               datetime('2026-04-15 09:00:00', '+' || n || ' minutes')
+           FROM sequence"#,
+    )
+    .await
+    .unwrap();
+
+    let now = common::fixed_time();
+    let channels = repos
+        .channel
+        .list_epg_preview_states(now, now - Duration::hours(2), now + Duration::hours(24))
+        .await
+        .unwrap();
+
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].programmes.len(), 1_100);
+    assert!(channels[0]
+        .programmes
+        .iter()
+        .all(|programme| programme.title == "Batched Movie"));
 }
 
 #[tokio::test]

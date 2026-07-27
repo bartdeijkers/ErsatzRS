@@ -84,7 +84,19 @@ notes  = 'Closed 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` seeds art
 name   = 'ChannelsListPage'
 status = '✅'
 routes = ['/channels']
-notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Browser spot-check proved the row Delete Channel button opens and closes the Confirm Delete dialog without hydration/page errors.'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Browser spot-check proved the row Delete Channel button opens and closes the Confirm Delete dialog without hydration/page errors. ADRs 0053 and 0055 add a stable-DOM quick-preview modal backed by the shared muted-autoplay player, with viewport containment across desktop and mobile layouts.'
+
+[[page]]
+name   = 'ChannelWatchPage'
+status = '✅'
+routes = ['/channels/:id/watch']
+notes  = 'ADRs 0053 through 0055 dedicated channel-watch route: server-rendered no-JavaScript channel identity plus a hydrated Hls.js-first browser-compatible player, muted one-shot autoplay, viewport-bound desktop/mobile video, the shared five-hour lane viewport over two hours of history and 24 hours ahead, and explicit normal-plus-preview transcode-session stop confirmation. `tests/e2e/channel-watch.spec.ts` covers modal Escape handling, pending-request invalidation, localized 401/404/503 states, real H.264/AAC autoplay against a deliberately AC-3 normal profile, local Stop Preview cleanup, geometry containment, and the direct no-JavaScript route in Chromium and Firefox.'
+
+[[page]]
+name   = 'EpgPreviewPage'
+status = '✅'
+routes = ['/epg']
+notes  = 'ADR 0054 aggregate EPG route: a hydrated five-hour viewport over two hours of history plus 24 hours ahead, with sticky channel/time labels, complete filler and gap semantics, keyboard scrolling, clamped controls, and 30-second refresh that preserves scroll. `tests/e2e/channel-watch.spec.ts` covers navigation and the shared grid in Chromium and Firefox.'
 
 [[page]]
 name   = 'FfmpegProfilesListPage'

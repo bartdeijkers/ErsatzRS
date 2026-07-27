@@ -1,16 +1,18 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
-use ersatzrs_domain::{Channel, ChannelIdleBehavior, StreamingMode};
+use ersatzrs_domain::{
+    Channel, ChannelIdleBehavior, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode,
+};
 use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::{
     file_system_layout::{transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL},
-    hls_worker::HlsSessionWorker,
+    hls_worker::{HlsPlaybackProfileOverride, HlsSessionOptions, HlsSessionWorker},
 };
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -19,7 +21,9 @@ use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::stream;
 use crate::transport::iptv::streaming_specs;
-use crate::transport::iptv::variant::build_multi_variant_playlist;
+use crate::transport::iptv::variant::{
+    build_multi_variant_playlist, build_preview_variant_playlist,
+};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct HlsQuery {
@@ -235,6 +239,68 @@ fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
     std::env::temp_dir()
         .join("ersatzrs-hls")
         .join(channel_number)
+}
+
+fn preview_hls_working_dir(channel_number: &str) -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join("ersatzrs-hls-preview")
+        .join(channel_number)
+}
+
+fn is_safe_channel_number_path_component(value: &str) -> bool {
+    let mut parts = value.split('.');
+    let Some(main) = parts.next() else {
+        return false;
+    };
+    !main.is_empty()
+        && main.chars().all(|character| character.is_ascii_digit())
+        && parts.next().is_none_or(|subchannel| {
+            !subchannel.is_empty()
+                && subchannel
+                    .chars()
+                    .all(|character| character.is_ascii_digit())
+                && parts.next().is_none()
+        })
+}
+
+fn preview_hls_session_options(channel_number: &str) -> HlsSessionOptions {
+    HlsSessionOptions {
+        registry_key: channel_number.to_owned(),
+        capacity_key: format!("preview:{channel_number}"),
+        working_dir: preview_hls_working_dir(channel_number),
+        playback_profile_override: Some(HlsPlaybackProfileOverride::BrowserCompatible),
+    }
+}
+
+async fn ensure_preview_worker_running(
+    state: &AppState,
+    channel: &Channel,
+    path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+) {
+    if let Some(worker) = state.preview_hls_sessions.try_get(&channel.number).await {
+        worker.touch();
+        return;
+    }
+
+    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
+    let worker = HlsSessionWorker::new_with_options(
+        channel.number.clone(),
+        channel.id,
+        preview_hls_session_options(&channel.number),
+        OutputFormat::Hls,
+        path_replacements,
+        runtime_capabilities,
+    );
+    if state.preview_hls_sessions.try_insert(worker.clone()).await {
+        let idle_timeout = Some(load_segmenter_startup_timeout(state).await);
+        worker.start(
+            state.pool.clone(),
+            Arc::clone(&state.preview_hls_sessions),
+            idle_timeout,
+        );
+    } else if let Some(existing) = state.preview_hls_sessions.try_get(&channel.number).await {
+        existing.touch();
+    }
 }
 
 async fn serve_hls_direct_playlist(
@@ -571,6 +637,7 @@ async fn serve_hls_segmenter_playlist(
 pub async fn get_session_playlist(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
+    Query(query): Query<HlsQuery>,
 ) -> Response {
     if channel_number == TRANSCODE_TROUBLESHOOTING_CHANNEL {
         return serve_troubleshooting_hls_file("live.m3u8").await;
@@ -579,12 +646,17 @@ pub async fn get_session_playlist(
     if let Some(handle) = state.hls_sessions.try_get(&channel_number).await {
         handle.touch();
         let admission_status = handle.admission_status();
+        let access_token = AccessToken::new(query.access_token);
         return match handle.trim_playlist().await {
-            Some(playlist) => hls_response(playlist),
+            Some(playlist) => {
+                hls_response(propagate_playlist_access_token(&playlist, &access_token))
+            }
             None if admission_status == HlsAdmissionStatus::AtCapacity => {
                 let startup_timeout = load_segmenter_startup_timeout(&state).await;
                 match wait_for_capacity_playlist(handle, startup_timeout).await {
-                    Some(playlist) => hls_response(playlist),
+                    Some(playlist) => {
+                        hls_response(propagate_playlist_access_token(&playlist, &access_token))
+                    }
                     None => hls_at_capacity_response(),
                 }
             }
@@ -595,10 +667,166 @@ pub async fn get_session_playlist(
     (StatusCode::SERVICE_UNAVAILABLE, "hls session not running").into_response()
 }
 
+/// `GET /iptv/preview/{number}/master.m3u8` — isolated browser-preview master.
+pub async fn get_preview_master_playlist(
+    State(state): State<AppState>,
+    Path(channel_number): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<HlsQuery>,
+) -> Response {
+    let channel = match state
+        .repositories
+        .channel
+        .get_by_number(&channel_number)
+        .await
+    {
+        Ok(channel) if channel.is_enabled => channel,
+        Ok(_) | Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let access_token = AccessToken::new(query.access_token);
+    let mut spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
+        Ok(spec) => spec,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                channel_number = %channel.number,
+                "failed to load browser-preview streaming spec"
+            );
+            None
+        }
+    };
+    if let Some(spec) = &mut spec {
+        spec.video_format = FFmpegProfileVideoFormat::H264;
+        spec.audio_format = FFmpegProfileAudioFormat::Aac;
+    }
+    let path_replacements =
+        match stream::load_path_replacements(&state.repositories.media_source).await {
+            Ok(replacements) => replacements,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    "failed to load path replacements for browser preview"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+    ensure_preview_worker_running(&state, &channel, path_replacements).await;
+
+    let initial_segment_count = load_initial_segment_count(&state).await;
+    let startup_timeout = load_segmenter_startup_timeout(&state).await;
+    match wait_for_initial_segments(
+        &*state.preview_hls_sessions,
+        &channel.number,
+        initial_segment_count,
+        startup_timeout,
+    )
+    .await
+    {
+        InitialSegmentWaitResult::Ready => {}
+        InitialSegmentWaitResult::AtCapacity => return hls_at_capacity_response(),
+        InitialSegmentWaitResult::MissingSession | InitialSegmentWaitResult::Timeout => {
+            return (StatusCode::SERVICE_UNAVAILABLE, "no preview segments yet").into_response();
+        }
+    }
+
+    hls_response(build_preview_variant_playlist(
+        &request_scheme(&headers),
+        &request_host(&headers),
+        &channel.number,
+        spec.as_ref(),
+        &access_token,
+    ))
+}
+
+/// `GET /iptv/preview/{number}/hls.m3u8` — isolated preview variant playlist.
+pub async fn get_preview_session_playlist(
+    State(state): State<AppState>,
+    Path(channel_number): Path<String>,
+    Query(query): Query<HlsQuery>,
+) -> Response {
+    if let Some(handle) = state.preview_hls_sessions.try_get(&channel_number).await {
+        handle.touch();
+        let admission_status = handle.admission_status();
+        let access_token = AccessToken::new(query.access_token);
+        return match handle.trim_playlist().await {
+            Some(playlist) => {
+                hls_response(propagate_playlist_access_token(&playlist, &access_token))
+            }
+            None if admission_status == HlsAdmissionStatus::AtCapacity => {
+                let startup_timeout = load_segmenter_startup_timeout(&state).await;
+                match wait_for_capacity_playlist(handle, startup_timeout).await {
+                    Some(playlist) => {
+                        hls_response(propagate_playlist_access_token(&playlist, &access_token))
+                    }
+                    None => hls_at_capacity_response(),
+                }
+            }
+            None => (StatusCode::SERVICE_UNAVAILABLE, "no preview segments yet").into_response(),
+        };
+    }
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        "preview session not running",
+    )
+        .into_response()
+}
+
+/// `GET /iptv/preview/{number}/{segment}` — isolated preview segment.
+pub async fn get_preview_session_segment(
+    State(state): State<AppState>,
+    Path((channel_number, filename)): Path<(String, String)>,
+) -> Response {
+    if !is_safe_channel_number_path_component(&channel_number) {
+        return (StatusCode::BAD_REQUEST, "invalid channel number").into_response();
+    }
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "invalid segment filename").into_response();
+    }
+    touch_session_segment(&*state.preview_hls_sessions, &channel_number).await;
+    serve_hls_segment_file(
+        preview_hls_working_dir(&channel_number).join(&filename),
+        &channel_number,
+        &filename,
+    )
+    .await
+}
+
+fn propagate_playlist_access_token(playlist: &str, access_token: &AccessToken) -> String {
+    let query = access_token.query();
+    if query.is_empty() {
+        return playlist.to_owned();
+    }
+    let query_amp = access_token.query_amp();
+
+    let mut result = String::with_capacity(playlist.len() + 128);
+    for line in playlist.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            result.push_str(line);
+        } else {
+            result.push_str(line);
+            result.push_str(if line.contains('?') {
+                &query_amp
+            } else {
+                &query
+            });
+        }
+        result.push('\n');
+    }
+    result
+}
+
 pub async fn get_session_segment(
     State(state): State<AppState>,
     Path((channel_number, filename)): Path<(String, String)>,
 ) -> Response {
+    if channel_number != TRANSCODE_TROUBLESHOOTING_CHANNEL
+        && !is_safe_channel_number_path_component(&channel_number)
+    {
+        return (StatusCode::BAD_REQUEST, "invalid channel number").into_response();
+    }
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return (StatusCode::BAD_REQUEST, "invalid segment filename").into_response();
     }
@@ -614,6 +842,14 @@ pub async fn get_session_segment(
         .join(&channel_number)
         .join(&filename);
 
+    serve_hls_segment_file(path, &channel_number, &filename).await
+}
+
+async fn serve_hls_segment_file(
+    path: std::path::PathBuf,
+    channel_number: &str,
+    filename: &str,
+) -> Response {
     match tokio::fs::read(path).await {
         Ok(body) => {
             let mut response = body.into_response();
@@ -873,6 +1109,37 @@ mod tests {
     }
 
     #[test]
+    fn channel_session_paths_accept_numbers_and_reject_traversal_components() {
+        for valid in ["1", "001", "7.2", "0.540000"] {
+            assert!(is_safe_channel_number_path_component(valid), "{valid}");
+        }
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "/etc",
+            "/etc/passwd",
+            r"..\etc",
+            "1/../../etc",
+            "1.2.3",
+            "channel",
+        ] {
+            assert!(!is_safe_channel_number_path_component(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn preview_session_uses_distinct_capacity_identity() {
+        let standard = HlsSessionOptions::standard("42", hls_working_dir("42"));
+        let preview = preview_hls_session_options("42");
+
+        assert_eq!(standard.registry_key, preview.registry_key);
+        assert_eq!(standard.capacity_key, "42");
+        assert_eq!(preview.capacity_key, "preview:42");
+        assert_ne!(standard.working_dir, preview.working_dir);
+    }
+
+    #[test]
     fn troubleshooting_channel_is_reserved_session_number() {
         assert_eq!(TRANSCODE_TROUBLESHOOTING_CHANNEL, ".troubleshooting");
     }
@@ -952,5 +1219,17 @@ mod tests {
         let playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.000,\nsegment-1.ts\n#EXT-X-DISCONTINUITY\n  #EXTINF:3.500,\nsegment-2.ts\n";
 
         assert_eq!(count_playlist_segments(playlist), 2);
+    }
+
+    #[test]
+    fn session_playlist_propagates_access_token_to_segments() {
+        let playlist =
+            "#EXTM3U\n#EXTINF:4.000,\nsegment-1.ts\n#EXTINF:4.000,\nsegment-2.ts?part=1\n";
+        let propagated =
+            propagate_playlist_access_token(playlist, &AccessToken::new(Some("preview-token")));
+
+        assert!(propagated.contains("segment-1.ts?access_token=preview-token"));
+        assert!(propagated.contains("segment-2.ts?part=1&access_token=preview-token"));
+        assert!(!propagated.contains("#EXTM3U?"));
     }
 }

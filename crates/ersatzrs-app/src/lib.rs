@@ -90,6 +90,22 @@ impl ApplicationServices {
         queries::get_channel_editor(query, self.ports.channels()).await
     }
 
+    /// Load the bounded channel-watch projection used by admin preview surfaces.
+    pub async fn get_channel_watch(
+        &self,
+        query: queries::GetChannelWatch,
+    ) -> Result<Option<ersatzrs_core::repositories::ChannelWatchState>> {
+        queries::get_channel_watch(query, self.ports.channels()).await
+    }
+
+    /// Load the aggregate admin EPG preview.
+    pub async fn get_epg_preview(
+        &self,
+        query: queries::GetEpgPreview,
+    ) -> Result<queries::EpgPreviewData> {
+        queries::get_epg_preview(query, self.ports.channels(), self.ports.channel_runtime()).await
+    }
+
     /// Save a channel and preserve its asynchronous subtitle side effect.
     pub async fn save_channel(&self, command: commands::SaveChannel) -> Result<i64> {
         commands::save_channel(command, self.ports.channels(), self.ports.channel_runtime()).await

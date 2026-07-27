@@ -1,13 +1,13 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     ChannelAdminListRow, ChannelEditorForm, ChannelEditorOptions, ChannelEditorState,
     ChannelLogoForm, ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult,
     ChannelNumberUpdate, ChannelRepository, ChannelSaveResult, ChannelSaveSideEffects,
     ChannelSelectOption, ChannelValidationError, ChannelValidationRow, ChannelValidationState,
-    Result,
+    ChannelWatchProgramme, ChannelWatchState, EpgPreviewChannelState, Result,
 };
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::music_video_credits::list_music_video_credit_template_names;
 
 use super::common::{
-    decode_bool_column, decode_duration_text, decode_enum_column, decode_message, encode_datetime,
-    encode_duration, encode_enum, load_ids, not_found,
+    decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
+    encode_datetime, encode_duration, encode_enum, load_ids, not_found,
 };
 
 #[derive(Clone)]
@@ -381,6 +381,25 @@ impl ChannelRepository for SqliteChannelRepository {
         })
     }
 
+    async fn get_watch_state(
+        &self,
+        id: EntityId,
+        now: DateTime<Utc>,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+    ) -> Result<Option<ChannelWatchState>> {
+        load_watch_state(&self.0, id, now, start, finish).await
+    }
+
+    async fn list_epg_preview_states(
+        &self,
+        now: DateTime<Utc>,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+    ) -> Result<Vec<EpgPreviewChannelState>> {
+        load_epg_preview_states(&self.0, now, start, finish).await
+    }
+
     async fn list_ffmpeg_profile_options(&self) -> Result<Vec<ChannelSelectOption>> {
         select_options(
             &self.0,
@@ -460,6 +479,364 @@ impl ChannelRepository for SqliteChannelRepository {
             playout_ids,
         }))
     }
+}
+
+async fn load_watch_state(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+    now: DateTime<Utc>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Option<ChannelWatchState>> {
+    let Some(channel) = sqlx::query(
+        r#"SELECT c."Id", c."Number", c."Name", c."StreamingMode", c."IsEnabled",
+                  COALESCE(fp."Name", '') AS "ProfileName",
+                  (SELECT a."Path" FROM "Artwork" a
+                   WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+                   ORDER BY a."Id" LIMIT 1) AS "LogoPath"
+           FROM "Channel" c
+           LEFT JOIN "FFmpegProfile" fp ON fp."Id" = c."FFmpegProfileId"
+           WHERE c."Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    else {
+        return Ok(None);
+    };
+
+    let playout_id = select_watch_playout(pool, id, now).await?;
+    let programmes = match playout_id {
+        Some(playout_id) => load_watch_programmes(pool, playout_id, start, finish).await?,
+        None => Vec::new(),
+    };
+
+    Ok(Some(ChannelWatchState {
+        id: channel.try_get("Id").repository()?,
+        number: channel.try_get("Number").repository()?,
+        name: channel.try_get("Name").repository()?,
+        logo_path: channel.try_get("LogoPath").repository()?,
+        ffmpeg_profile_name: channel.try_get("ProfileName").repository()?,
+        streaming_mode: channel.try_get("StreamingMode").repository()?,
+        is_enabled: decode_bool_column(&channel, "IsEnabled")?,
+        playout_id,
+        programmes,
+    }))
+}
+
+async fn select_watch_playout(
+    pool: &Pool<crate::db::Db>,
+    channel_id: EntityId,
+    now: DateTime<Utc>,
+) -> Result<Option<EntityId>> {
+    let encoded_now = encode_datetime(now);
+    let current = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT p."Id"
+           FROM "Playout" p
+           JOIN "PlayoutItem" pi ON pi."PlayoutId" = p."Id"
+           WHERE p."ChannelId" = ? AND pi."Start" <= ? AND pi."Finish" > ?
+           ORDER BY pi."Start" DESC, pi."Id" DESC
+           LIMIT 1"#,
+    )
+    .bind(channel_id)
+    .bind(&encoded_now)
+    .bind(&encoded_now)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+
+    if current.is_some() {
+        return Ok(current);
+    }
+    let upcoming = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT p."Id"
+           FROM "Playout" p
+           JOIN "PlayoutItem" pi ON pi."PlayoutId" = p."Id"
+           WHERE p."ChannelId" = ? AND pi."Start" > ?
+           ORDER BY pi."Start", pi."Id"
+           LIMIT 1"#,
+    )
+    .bind(channel_id)
+    .bind(&encoded_now)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    if upcoming.is_some() {
+        return Ok(upcoming);
+    }
+    sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "Id" FROM "Playout" WHERE "ChannelId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await
+    .repository()
+}
+
+async fn load_watch_programmes(
+    pool: &Pool<crate::db::Db>,
+    playout_id: EntityId,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<ChannelWatchProgramme>> {
+    let encoded_start = encode_datetime(start);
+    let rows = sqlx::query(
+        r#"SELECT * FROM (
+                   SELECT 'item' AS "Kind", pi."Id" AS "Id", pi."Start" AS "Start",
+                          pi."Finish" AS "Finish", pi."FillerKind" AS "FillerKind"
+                   FROM "PlayoutItem" pi
+                   WHERE pi."PlayoutId" = ? AND pi."Finish" > ? AND pi."Start" < ?
+                   UNION ALL
+                   SELECT 'gap' AS "Kind", pg."Id" AS "Id", pg."Start" AS "Start",
+                          pg."Finish" AS "Finish", -1 AS "FillerKind"
+                   FROM "PlayoutGap" pg
+                   WHERE pg."PlayoutId" = ? AND pg."Finish" > ? AND pg."Start" < ?
+               ) AS combined
+               ORDER BY "Start", "Kind", "Id""#,
+    )
+    .bind(playout_id)
+    .bind(&encoded_start)
+    .bind(encode_datetime(finish))
+    .bind(playout_id)
+    .bind(&encoded_start)
+    .bind(encode_datetime(finish))
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let item_ids = rows
+        .iter()
+        .filter_map(|row| {
+            let kind = row.try_get::<String, _>("Kind").ok()?;
+            (kind == "item").then(|| row.try_get::<EntityId, _>("Id").ok())?
+        })
+        .collect::<Vec<_>>();
+    let titles = super::playout::load_item_titles_admin(pool, &item_ids).await?;
+    rows.iter()
+        .map(|row| {
+            let kind: String = row.try_get("Kind").repository()?;
+            let programme_id: EntityId = row.try_get("Id").repository()?;
+            let start_value: String = row.try_get("Start").repository()?;
+            let finish_value: String = row.try_get("Finish").repository()?;
+            Ok(ChannelWatchProgramme {
+                id: programme_id,
+                title: if kind == "gap" {
+                    String::new()
+                } else {
+                    titles.get(&programme_id).cloned().unwrap_or_default()
+                },
+                start: decode_datetime("channel watch programme start", &start_value)?,
+                finish: decode_datetime("channel watch programme finish", &finish_value)?,
+                filler_kind: row.try_get("FillerKind").repository()?,
+                is_gap: kind == "gap",
+            })
+        })
+        .collect()
+}
+
+#[derive(Debug)]
+struct EpgChannelRow {
+    id: EntityId,
+    number: String,
+    sort_number: f64,
+    name: String,
+    logo_path: Option<String>,
+    ffmpeg_profile_name: String,
+    streaming_mode: i32,
+}
+
+async fn load_epg_preview_states(
+    pool: &Pool<crate::db::Db>,
+    now: DateTime<Utc>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<EpgPreviewChannelState>> {
+    let channel_rows = sqlx::query(
+        r#"SELECT c."Id", c."Number", c."SortNumber", c."Name", c."StreamingMode",
+                  COALESCE(fp."Name", '') AS "ProfileName",
+                  (SELECT a."Path" FROM "Artwork" a
+                   WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+                   ORDER BY a."Id" LIMIT 1) AS "LogoPath"
+           FROM "Channel" c
+           LEFT JOIN "FFmpegProfile" fp ON fp."Id" = c."FFmpegProfileId"
+           WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
+           ORDER BY c."SortNumber", c."Number", c."Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let channels = channel_rows
+        .iter()
+        .map(|row| {
+            Ok(EpgChannelRow {
+                id: row.try_get("Id").repository()?,
+                number: row.try_get("Number").repository()?,
+                sort_number: row.try_get("SortNumber").repository()?,
+                name: row.try_get("Name").repository()?,
+                logo_path: row.try_get("LogoPath").repository()?,
+                ffmpeg_profile_name: row.try_get("ProfileName").repository()?,
+                streaming_mode: row.try_get("StreamingMode").repository()?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if channels.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let channel_ids = channels
+        .iter()
+        .map(|channel| channel.id)
+        .collect::<HashSet<_>>();
+    let playout_rows = sqlx::query(
+        r#"SELECT p."Id", p."ChannelId"
+           FROM "Playout" p
+           JOIN "Channel" c ON c."Id" = p."ChannelId"
+           WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
+           ORDER BY p."ChannelId", p."Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let mut playouts_by_channel = HashMap::<EntityId, Vec<EntityId>>::new();
+    for row in &playout_rows {
+        let channel_id: EntityId = row.try_get("ChannelId").repository()?;
+        if channel_ids.contains(&channel_id) {
+            playouts_by_channel
+                .entry(channel_id)
+                .or_default()
+                .push(row.try_get("Id").repository()?);
+        }
+    }
+
+    let mut rows_by_playout = load_epg_programmes(pool, start, finish).await?;
+
+    let mut output = Vec::with_capacity(channels.len());
+    for channel in channels {
+        let playout_ids = playouts_by_channel
+            .get(&channel.id)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let playout_id = select_epg_playout(playout_ids, &rows_by_playout, now);
+        let programmes = playout_id
+            .and_then(|id| rows_by_playout.remove(&id))
+            .unwrap_or_default();
+        output.push(EpgPreviewChannelState {
+            id: channel.id,
+            number: channel.number,
+            sort_number: channel.sort_number,
+            name: channel.name,
+            logo_path: channel.logo_path,
+            ffmpeg_profile_name: channel.ffmpeg_profile_name,
+            streaming_mode: channel.streaming_mode,
+            playout_id,
+            programmes,
+        });
+    }
+    Ok(output)
+}
+
+async fn load_epg_programmes(
+    pool: &Pool<crate::db::Db>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<HashMap<EntityId, Vec<ChannelWatchProgramme>>> {
+    let encoded_start = encode_datetime(start);
+    let encoded_finish = encode_datetime(finish);
+    let programme_rows = sqlx::query(
+        r#"SELECT * FROM (
+                   SELECT p."ChannelId" AS "ChannelId", pi."PlayoutId" AS "PlayoutId",
+                          'item' AS "Kind", pi."Id" AS "Id", pi."Start" AS "Start",
+                          pi."Finish" AS "Finish", pi."FillerKind" AS "FillerKind"
+                   FROM "PlayoutItem" pi
+                   JOIN "Playout" p ON p."Id" = pi."PlayoutId"
+                   JOIN "Channel" c ON c."Id" = p."ChannelId"
+                   WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
+                     AND pi."Finish" > ? AND pi."Start" < ?
+                   UNION ALL
+                   SELECT p."ChannelId" AS "ChannelId", pg."PlayoutId" AS "PlayoutId",
+                          'gap' AS "Kind", pg."Id" AS "Id", pg."Start" AS "Start",
+                          pg."Finish" AS "Finish", -1 AS "FillerKind"
+                   FROM "PlayoutGap" pg
+                   JOIN "Playout" p ON p."Id" = pg."PlayoutId"
+                   JOIN "Channel" c ON c."Id" = p."ChannelId"
+                   WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
+                     AND pg."Finish" > ? AND pg."Start" < ?
+               ) AS combined
+               ORDER BY "ChannelId", "PlayoutId", "Start", "Kind", "Id""#,
+    )
+    .bind(&encoded_start)
+    .bind(&encoded_finish)
+    .bind(&encoded_start)
+    .bind(&encoded_finish)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+
+    let mut rows_by_playout = HashMap::<EntityId, Vec<ChannelWatchProgramme>>::new();
+    let item_ids = programme_rows
+        .iter()
+        .filter_map(|row| {
+            (row.try_get::<String, _>("Kind").ok()?.as_str() == "item")
+                .then(|| row.try_get::<EntityId, _>("Id").ok())?
+        })
+        .collect::<Vec<_>>();
+    let titles = super::playout::load_item_titles_admin(pool, &item_ids).await?;
+    for row in &programme_rows {
+        let kind: String = row.try_get("Kind").repository()?;
+        let programme_id: EntityId = row.try_get("Id").repository()?;
+        let start_value: String = row.try_get("Start").repository()?;
+        let finish_value: String = row.try_get("Finish").repository()?;
+        rows_by_playout
+            .entry(row.try_get("PlayoutId").repository()?)
+            .or_default()
+            .push(ChannelWatchProgramme {
+                id: programme_id,
+                title: if kind == "gap" {
+                    String::new()
+                } else {
+                    titles.get(&programme_id).cloned().unwrap_or_default()
+                },
+                start: decode_datetime("EPG preview programme start", &start_value)?,
+                finish: decode_datetime("EPG preview programme finish", &finish_value)?,
+                filler_kind: row.try_get("FillerKind").repository()?,
+                is_gap: kind == "gap",
+            });
+    }
+    Ok(rows_by_playout)
+}
+
+fn select_epg_playout(
+    playout_ids: &[EntityId],
+    rows_by_playout: &HashMap<EntityId, Vec<ChannelWatchProgramme>>,
+    now: DateTime<Utc>,
+) -> Option<EntityId> {
+    playout_ids
+        .iter()
+        .filter_map(|id| {
+            rows_by_playout
+                .get(id)?
+                .iter()
+                .filter(|row| !row.is_gap && row.start <= now && row.finish > now)
+                .max_by_key(|row| (row.start, row.id))
+                .map(|row| (*id, row.start, row.id))
+        })
+        .max_by_key(|(_, start, item_id)| (*start, *item_id))
+        .map(|(id, _, _)| id)
+        .or_else(|| {
+            playout_ids
+                .iter()
+                .filter_map(|id| {
+                    rows_by_playout
+                        .get(id)?
+                        .iter()
+                        .filter(|row| !row.is_gap && row.start > now)
+                        .min_by_key(|row| (row.start, row.id))
+                        .map(|row| (*id, row.start, row.id))
+                })
+                .min_by_key(|(_, start, item_id)| (*start, *item_id))
+                .map(|(id, _, _)| id)
+        })
+        .or_else(|| playout_ids.first().copied())
 }
 
 async fn save_number_updates(

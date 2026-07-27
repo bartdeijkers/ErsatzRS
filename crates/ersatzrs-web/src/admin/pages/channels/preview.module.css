@@ -1,0 +1,136 @@
+.preview,
+.preview-compact {
+    display: grid;
+    gap: 0.875rem;
+    min-width: 0;
+}
+
+.video-slot {
+    display: grid;
+    place-items: center;
+    container-type: inline-size;
+    width: 100%;
+    min-width: 0;
+}
+
+.video-frame {
+    position: relative;
+    width: min(100cqw, 128dvh, calc(100dvw - 2rem));
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: #050505;
+    border: 1px solid var(--color-border);
+}
+
+.video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #050505;
+}
+
+.control-button {
+    min-height: 2.5rem;
+    border-radius: var(--radius);
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+}
+
+.control-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.control-button {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+}
+
+.status,
+.availability {
+    margin: 0;
+    color: var(--color-muted);
+    line-height: 1.45;
+}
+
+.derivative-note {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.availability {
+    color: #ffb4ab;
+}
+
+.current-programme {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.current-programme strong {
+    color: var(--color-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.eyebrow {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.preview-compact {
+    grid-template-rows: minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+}
+
+.preview-compact .video-slot {
+    container-type: size;
+    height: 100%;
+    min-height: 0;
+}
+
+.preview-compact .video-frame {
+    width: min(100cqw, 177.78cqh);
+}
+
+@media (max-height: 32rem) {
+    .preview-compact {
+        gap: 0.5rem;
+    }
+}
+
+@media (max-height: 32rem) and (min-width: 40rem) {
+    .preview-compact {
+        grid-template-columns: minmax(0, 3fr) minmax(14rem, 2fr);
+        grid-template-rows: auto auto auto 1fr auto;
+        column-gap: 0.75rem;
+    }
+
+    .preview-compact .video-slot {
+        grid-column: 1;
+        grid-row: 1 / 6;
+    }
+
+    .preview-compact .availability,
+    .preview-compact .status,
+    .preview-compact .derivative-note,
+    .preview-compact .controls,
+    .preview-compact .current-programme {
+        grid-column: 2;
+    }
+}

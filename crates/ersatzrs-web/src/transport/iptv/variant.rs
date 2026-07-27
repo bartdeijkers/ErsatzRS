@@ -22,7 +22,26 @@ pub fn build_multi_variant_playlist(
         "{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8{}",
         access_token.query()
     );
+    build_variant_playlist(&variant_url, spec)
+}
 
+/// Build the isolated browser-preview master playlist.
+#[must_use]
+pub fn build_preview_variant_playlist(
+    scheme: &str,
+    host: &str,
+    channel_number: &str,
+    spec: Option<&ChannelStreamingSpec>,
+    access_token: &AccessToken,
+) -> String {
+    let variant_url = format!(
+        "{scheme}://{host}/iptv/preview/{channel_number}/hls.m3u8{}",
+        access_token.query()
+    );
+    build_variant_playlist(&variant_url, spec)
+}
+
+fn build_variant_playlist(variant_url: &str, spec: Option<&ChannelStreamingSpec>) -> String {
     let (resolution, bitrate) = match spec {
         Some(spec) => {
             let codecs = codec_inf(spec);
@@ -40,7 +59,7 @@ pub fn build_multi_variant_playlist(
     out.push_str("#EXTM3U\n");
     out.push_str("#EXT-X-VERSION:3\n");
     let _ = writeln!(out, "#EXT-X-STREAM-INF:BANDWIDTH={bitrate}{resolution}");
-    out.push_str(&variant_url);
+    out.push_str(variant_url);
     out.push('\n');
     out
 }
@@ -142,5 +161,20 @@ mod tests {
             &AccessToken::default(),
         );
         insta::assert_snapshot!("variant_no_spec", output);
+    }
+
+    #[test]
+    fn browser_preview_playlist_uses_isolated_route_and_h264_aac_codecs() {
+        let output = build_preview_variant_playlist(
+            "https",
+            "example.test",
+            "42",
+            Some(&h264_aac_1080p()),
+            &AccessToken::new(Some("preview-token")),
+        );
+        assert!(output.contains("CODECS=\"avc1.4D4028,mp4a.40.2\""));
+        assert!(output
+            .contains("https://example.test/iptv/preview/42/hls.m3u8?access_token=preview-token"));
+        assert!(!output.contains("/iptv/session/"));
     }
 }

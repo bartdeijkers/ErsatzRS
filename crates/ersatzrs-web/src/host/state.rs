@@ -14,7 +14,7 @@ use ersatzrs_ffmpeg::FfmpegRuntimeReport;
 use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus, DbPool};
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
-use jsonwebtoken::{DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
@@ -70,6 +70,7 @@ pub struct AppState {
     pub device_uuid: Uuid,
     pub tuner_count: Arc<AtomicI32>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
+    pub preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
 }
@@ -78,6 +79,7 @@ pub struct AppState {
 pub struct IptvAccessTokenVerifier {
     pub(crate) validation: Option<Validation>,
     pub(crate) decoding_key: Option<DecodingKey>,
+    pub(crate) encoding_key: Option<EncodingKey>,
 }
 
 impl AppState {
@@ -125,6 +127,8 @@ impl AppState {
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
+        let preview_hls_sessions: Arc<dyn HlsSessionRegistry> =
+            Arc::new(InMemoryHlsSessionRegistry::new());
         let ffmpeg_runtime = Arc::new(RwLock::new(ffmpeg_runtime));
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
@@ -134,6 +138,7 @@ impl AppState {
                 Arc::new(NativeChannelRuntime::new(
                     pool.clone(),
                     Arc::clone(&hls_sessions),
+                    Arc::clone(&preview_hls_sessions),
                 )),
                 Arc::new(repositories.trakt.clone()),
                 Arc::new(repositories.admin_settings.clone()),
@@ -195,6 +200,7 @@ impl AppState {
             device_uuid,
             tuner_count,
             hls_sessions,
+            preview_hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,
         }
@@ -247,6 +253,7 @@ impl AppState {
 mod tests {
     use super::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_infra::db::DatabaseSchemaStatus;
+    use std::sync::Arc;
 
     #[test]
     fn startup_is_ready_when_database_and_schema_are_clean() {
@@ -286,6 +293,10 @@ mod tests {
         let locker = state.application.operations().entity_locker();
         assert!(locker.lock_playout(12));
         assert_eq!(state.application.operations().active_playout_builds(), [12]);
+        assert!(!Arc::ptr_eq(
+            &state.hls_sessions,
+            &state.preview_hls_sessions
+        ));
     }
 
     #[test]

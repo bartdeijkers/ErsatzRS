@@ -13,6 +13,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
         <aside class=style::drawer data-nav-drawer>
             <nav class=style::drawer_nav>
                 <NavLink href="/channels" label=tr(TextKey::Channels) icon=IconName::Play/>
+                <NavLink href="/epg" label=tr(TextKey::EpgPreview) icon=IconName::Calendar/>
                 <NavLink href="/ffmpeg" label=tr(TextKey::FfmpegProfiles) icon=IconName::Tune/>
                 <NavLink href="/watermarks" label=tr(TextKey::Watermarks) icon=IconName::Visibility/>
 

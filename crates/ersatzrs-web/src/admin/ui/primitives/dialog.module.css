@@ -29,6 +29,18 @@
     padding: 1.5rem;
 }
 
+.panel-wide {
+    max-width: 64rem;
+    height: min(calc(100dvh - 2rem), 42rem);
+    max-height: calc(100dvh - 2rem);
+    overflow: hidden;
+}
+
+.panel-wide .body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .title {
     font-size: 1rem;
     font-weight: 600;
@@ -37,6 +49,7 @@
 }
 
 .body {
+    min-width: 0;
     font-size: 0.875rem;
     color: var(--color-gray-300);
 }
@@ -52,4 +65,15 @@
     margin-top: 0.25rem;
     color: var(--color-muted);
     font-size: 0.75rem;
+}
+
+@media (max-height: 32rem) {
+    .panel-wide {
+        gap: 0.5rem;
+        padding: 1rem;
+    }
+
+    .panel-wide .footer {
+        padding-top: 0;
+    }
 }

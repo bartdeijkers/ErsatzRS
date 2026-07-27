@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{Channel, EntityId};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,45 @@ pub struct ChannelAdminListRow {
     pub ffmpeg_profile_name: String,
     pub playout_count: i64,
     pub logo_path: Option<String>,
+}
+
+/// Storage-neutral channel and programme projection for the admin previewer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelWatchState {
+    pub id: EntityId,
+    pub number: String,
+    pub name: String,
+    pub logo_path: Option<String>,
+    pub ffmpeg_profile_name: String,
+    pub streaming_mode: i32,
+    pub is_enabled: bool,
+    pub playout_id: Option<EntityId>,
+    pub programmes: Vec<ChannelWatchProgramme>,
+}
+
+/// One EPG-visible channel loaded as part of the aggregate admin guide query.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EpgPreviewChannelState {
+    pub id: EntityId,
+    pub number: String,
+    pub sort_number: f64,
+    pub name: String,
+    pub logo_path: Option<String>,
+    pub ffmpeg_profile_name: String,
+    pub streaming_mode: i32,
+    pub playout_id: Option<EntityId>,
+    pub programmes: Vec<ChannelWatchProgramme>,
+}
+
+/// One programme or explicit schedule gap shown by the channel previewer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelWatchProgramme {
+    pub id: EntityId,
+    pub title: String,
+    pub start: DateTime<Utc>,
+    pub finish: DateTime<Utc>,
+    pub filler_kind: i32,
+    pub is_gap: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -240,6 +279,22 @@ pub trait ChannelRepository: Send + Sync {
         page_size: u32,
     ) -> Result<Vec<ChannelAdminListRow>>;
     async fn count_admin_rows(&self, show_disabled: bool) -> Result<u64>;
+    /// Load a channel and its programmes overlapping the requested UTC window.
+    async fn get_watch_state(
+        &self,
+        id: EntityId,
+        now: DateTime<Utc>,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+    ) -> Result<Option<ChannelWatchState>>;
+    /// Load all enabled, EPG-visible channels and their selected playout rows
+    /// for one bounded UTC window using batched storage reads.
+    async fn list_epg_preview_states(
+        &self,
+        now: DateTime<Utc>,
+        start: DateTime<Utc>,
+        finish: DateTime<Utc>,
+    ) -> Result<Vec<EpgPreviewChannelState>>;
     async fn list_ffmpeg_profile_options(&self) -> Result<Vec<ChannelSelectOption>>;
     async fn list_filler_preset_options(&self) -> Result<Vec<ChannelSelectOption>>;
     async fn validation_state(&self) -> Result<ChannelValidationState>;

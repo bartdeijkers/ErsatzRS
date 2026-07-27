@@ -5,7 +5,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
-    atomic::{AtomicI32, AtomicI64, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering},
     Arc,
 };
 use std::time::Duration;
@@ -21,7 +21,8 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
-    FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
+    FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileVideoFormat, StreamingMode,
+    VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
@@ -169,15 +170,51 @@ enum HlsProcessOutcome {
 }
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HlsPlaybackProfileOverride {
+    /// Force browser-decodable H.264 8-bit video and AAC audio while retaining
+    /// resolution, frame rate, stream selection, overlays, and processing.
+    BrowserCompatible,
+}
+
+/// Per-session identity and output options for an HLS worker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HlsSessionOptions {
+    pub registry_key: String,
+    /// Identity used by the process-wide transcode-capacity registry.
+    ///
+    /// This may differ from the channel number for an isolated derivative
+    /// session such as an administrator browser preview.
+    pub capacity_key: String,
+    pub working_dir: PathBuf,
+    pub playback_profile_override: Option<HlsPlaybackProfileOverride>,
+}
+
+impl HlsSessionOptions {
+    #[must_use]
+    pub fn standard(channel_number: &str, working_dir: PathBuf) -> Self {
+        Self {
+            registry_key: channel_number.to_owned(),
+            capacity_key: channel_number.to_owned(),
+            working_dir,
+            playback_profile_override: None,
+        }
+    }
+}
+
 pub struct HlsSessionWorker {
     channel_number: String,
     channel_id: i64,
+    registry_key: String,
+    capacity_key: String,
     working_dir: PathBuf,
+    playback_profile_override: Option<HlsPlaybackProfileOverride>,
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
     runtime_capabilities: FfmpegCapabilityReport,
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
+    working_dir_ready: AtomicBool,
     state: AtomicI32,
     admission_status: AtomicI32,
     reclaim_requested_slot_id: Arc<AtomicU64>,
@@ -199,15 +236,39 @@ impl HlsSessionWorker {
         path_replacements: Vec<PathReplacement>,
         runtime_capabilities: FfmpegCapabilityReport,
     ) -> Arc<Self> {
+        let options = HlsSessionOptions::standard(&channel_number, working_dir);
+        Self::new_with_options(
+            channel_number,
+            channel_id,
+            options,
+            output_format,
+            path_replacements,
+            runtime_capabilities,
+        )
+    }
+
+    #[must_use]
+    pub fn new_with_options(
+        channel_number: String,
+        channel_id: i64,
+        options: HlsSessionOptions,
+        output_format: OutputFormat,
+        path_replacements: Vec<PathReplacement>,
+        runtime_capabilities: FfmpegCapabilityReport,
+    ) -> Arc<Self> {
         Arc::new(Self {
             channel_number,
             channel_id,
-            working_dir,
+            registry_key: options.registry_key,
+            capacity_key: options.capacity_key,
+            working_dir: options.working_dir,
+            playback_profile_override: options.playback_profile_override,
             output_format,
             path_replacements,
             runtime_capabilities,
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
+            working_dir_ready: AtomicBool::new(false),
             state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
             admission_status: AtomicI32::new(HlsAdmissionStatus::Waiting.as_i32()),
             reclaim_requested_slot_id: Arc::new(AtomicU64::new(0)),
@@ -233,6 +294,18 @@ impl HlsSessionWorker {
             .store(status.as_i32(), Ordering::Relaxed);
     }
 
+    async fn load_playback_profile(
+        &self,
+        pool: &DbPool,
+    ) -> RepositoryResult<Option<PlaybackProfile>> {
+        Ok(load_channel_playback_profile(pool, self.channel_id)
+            .await?
+            .map(|profile| match self.playback_profile_override {
+                Some(override_kind) => apply_playback_profile_override(profile, override_kind),
+                None => profile,
+            }))
+    }
+
     pub fn start(
         self: Arc<Self>,
         pool: DbPool,
@@ -253,9 +326,10 @@ impl HlsSessionWorker {
     ) {
         if let Err(error) = prepare_working_dir(&self.working_dir).await {
             tracing::warn!(%error, working_dir = %self.working_dir.display(), "failed to prepare hls working directory");
-            registry.remove(&self.channel_number).await;
+            registry.remove(&self.registry_key).await;
             return;
         }
+        self.working_dir_ready.store(true, Ordering::Release);
         self.touch();
 
         let mut is_first = true;
@@ -277,7 +351,7 @@ impl HlsSessionWorker {
                     "failed to load channel slug configuration; stopping hls worker"
                 );
                 let _ = cleanup_working_dir(&self.working_dir).await;
-                registry.remove(&self.channel_number).await;
+                registry.remove(&self.registry_key).await;
                 return;
             }
         };
@@ -301,7 +375,7 @@ impl HlsSessionWorker {
                     "failed to load HLS work-ahead limit; stopping hls worker"
                 );
                 let _ = cleanup_working_dir(&self.working_dir).await;
-                registry.remove(&self.channel_number).await;
+                registry.remove(&self.registry_key).await;
                 return;
             }
         };
@@ -387,8 +461,9 @@ impl HlsSessionWorker {
             };
             let active_transcode_reservation = try_reserve_active_transcode(
                 active_limit,
-                ActiveTranscodeSlot::new_hls(
+                ActiveTranscodeSlot::new_hls_with_capacity_key(
                     &self.channel_number,
+                    &self.capacity_key,
                     active_transcode_kind,
                     Arc::clone(&self.last_access_ms),
                     ActiveTranscodeReclaimHandle::new(
@@ -465,27 +540,26 @@ impl HlsSessionWorker {
                     self.set_session_state(next_hls_session_state(decision.state, true, false));
                     continue;
                 };
-                let playback_profile =
-                    match load_channel_playback_profile(&pool, self.channel_id).await {
-                        Ok(Some(profile)) => profile,
-                        Ok(None) => {
-                            tracing::warn!(
-                                channel_number = %self.channel_number,
-                                "channel has no playback ffmpeg profile; delaying hls slug"
-                            );
-                            tokio::time::sleep(Duration::from_secs(1)).await;
-                            continue;
-                        }
-                        Err(error) => {
-                            tracing::warn!(
-                                %error,
-                                channel_number = %self.channel_number,
-                                "failed to load playback ffmpeg profile; delaying hls slug"
-                            );
-                            tokio::time::sleep(Duration::from_secs(1)).await;
-                            continue;
-                        }
-                    };
+                let playback_profile = match self.load_playback_profile(&pool).await {
+                    Ok(Some(profile)) => profile,
+                    Ok(None) => {
+                        tracing::warn!(
+                            channel_number = %self.channel_number,
+                            "channel has no playback ffmpeg profile; delaying hls slug"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            channel_number = %self.channel_number,
+                            "failed to load playback ffmpeg profile; delaying hls slug"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
                 let channel_name = match load_channel_name(&pool, self.channel_id).await {
                     Ok(name) => name.unwrap_or_else(|| self.channel_number.clone()),
                     Err(error) => {
@@ -641,8 +715,7 @@ impl HlsSessionWorker {
                         continue;
                     }
                 };
-            let playback_profile = match load_channel_playback_profile(&pool, self.channel_id).await
-            {
+            let playback_profile = match self.load_playback_profile(&pool).await {
                 Ok(Some(profile)) => profile,
                 Ok(None) => {
                     tracing::warn!(
@@ -1064,7 +1137,7 @@ impl HlsSessionWorker {
 
         self.set_admission_status(HlsAdmissionStatus::Waiting);
         let _ = cleanup_working_dir(&self.working_dir).await;
-        registry.remove(&self.channel_number).await;
+        registry.remove(&self.registry_key).await;
     }
 
     async fn run_all_streams_in_use_slate(
@@ -1076,7 +1149,7 @@ impl HlsSessionWorker {
         next_mpegts_output_ts_offset: Option<Duration>,
         runtime_capabilities: FfmpegCapabilityReport,
     ) -> HlsProcessOutcome {
-        let playback_profile = match load_channel_playback_profile(pool, self.channel_id).await {
+        let playback_profile = match self.load_playback_profile(pool).await {
             Ok(Some(profile)) => profile,
             Ok(None) => {
                 return HlsProcessOutcome::Failed(
@@ -1584,10 +1657,31 @@ fn log_hls_av1_spawn_diagnostics(
     );
 }
 
+#[must_use]
+pub fn apply_playback_profile_override(
+    mut playback_profile: PlaybackProfile,
+    override_kind: HlsPlaybackProfileOverride,
+) -> PlaybackProfile {
+    match override_kind {
+        HlsPlaybackProfileOverride::BrowserCompatible => {
+            playback_profile.profile.transcode_video = true;
+            playback_profile.profile.transcode_audio = true;
+            playback_profile.profile.video_format = FFmpegProfileVideoFormat::H264;
+            playback_profile.profile.video_profile = Some("high".to_owned());
+            playback_profile.profile.bit_depth = FFmpegProfileBitDepth::EightBit;
+            playback_profile.profile.audio_format = FFmpegProfileAudioFormat::Aac;
+        }
+    }
+    playback_profile
+}
+
 #[async_trait]
 impl HlsSessionHandle for HlsSessionWorker {
+    // The port names this accessor `channel_number`, but explicit session
+    // options may deliberately use a distinct registry identity.
+    #[allow(clippy::misnamed_getters)]
     fn channel_number(&self) -> &str {
-        &self.channel_number
+        &self.registry_key
     }
 
     fn touch(&self) {
@@ -1600,6 +1694,9 @@ impl HlsSessionHandle for HlsSessionWorker {
     }
 
     async fn trim_playlist(&self) -> Option<String> {
+        if !self.working_dir_ready.load(Ordering::Acquire) {
+            return None;
+        }
         self.trim_playlist_inner()
             .await
             .map(|trimmed| trimmed.playlist)
@@ -4203,6 +4300,35 @@ mod tests {
         crate::transcode_capacity::reset_active_transcode_state_for_tests();
     }
 
+    #[test]
+    fn browser_preview_override_changes_only_codec_compatibility_fields() {
+        let mut configured = playback_profile();
+        configured.profile.transcode_video = false;
+        configured.profile.transcode_audio = false;
+        configured.profile.video_format = FFmpegProfileVideoFormat::Hevc;
+        configured.profile.video_profile = Some("main10".to_owned());
+        configured.profile.bit_depth = FFmpegProfileBitDepth::TenBit;
+        configured.profile.audio_format = FFmpegProfileAudioFormat::Ac3;
+        configured.profile.video_bitrate = 12_345;
+        configured.profile.normalize_colors = true;
+        let resolution = configured.resolution.clone();
+
+        let preview = apply_playback_profile_override(
+            configured,
+            HlsPlaybackProfileOverride::BrowserCompatible,
+        );
+
+        assert!(preview.profile.transcode_video);
+        assert!(preview.profile.transcode_audio);
+        assert_eq!(preview.profile.video_format, FFmpegProfileVideoFormat::H264);
+        assert_eq!(preview.profile.video_profile.as_deref(), Some("high"));
+        assert_eq!(preview.profile.bit_depth, FFmpegProfileBitDepth::EightBit);
+        assert_eq!(preview.profile.audio_format, FFmpegProfileAudioFormat::Aac);
+        assert_eq!(preview.profile.video_bitrate, 12_345);
+        assert!(preview.profile.normalize_colors);
+        assert_eq!(preview.resolution, resolution);
+    }
+
     fn test_active_slot(
         channel_number: &str,
         kind: ActiveTranscodeKind,
@@ -4242,6 +4368,35 @@ mod tests {
         timeout(Duration::from_millis(250), worker.cancel.notified())
             .await
             .expect("worker run loop observes the cancellation signal");
+    }
+
+    #[tokio::test]
+    async fn session_does_not_publish_stale_playlist_before_working_dir_is_prepared() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-stale-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create stale hls working dir");
+        tokio::fs::write(
+            working_dir.join("live.m3u8"),
+            "#EXTM3U\n#EXTINF:4.0,\nsegment00001.ts\n",
+        )
+        .await
+        .expect("write stale hls playlist");
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            working_dir.clone(),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+
+        assert!(HlsSessionHandle::trim_playlist(&*worker).await.is_none());
+
+        tokio::fs::remove_dir_all(working_dir)
+            .await
+            .expect("remove stale hls working dir");
     }
 
     #[cfg(unix)]

@@ -2,3 +2,4 @@
 *.rs diff=rust
 *.snap text eol=lf
 Cargo.lock text eol=lf linguist-generated=false
+crates/ersatzrs-web/public/vendor/** -whitespace linguist-vendored

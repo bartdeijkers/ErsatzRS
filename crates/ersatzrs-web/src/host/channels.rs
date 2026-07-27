@@ -11,23 +11,40 @@ use ersatzrs_infra::db::DbPool;
 pub struct NativeChannelRuntime {
     pool: DbPool,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
+    preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
 }
 
 impl NativeChannelRuntime {
     #[must_use]
-    pub fn new(pool: DbPool, hls_sessions: Arc<dyn HlsSessionRegistry>) -> Self {
-        Self { pool, hls_sessions }
+    pub fn new(
+        pool: DbPool,
+        hls_sessions: Arc<dyn HlsSessionRegistry>,
+        preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
+    ) -> Self {
+        Self {
+            pool,
+            hls_sessions,
+            preview_hls_sessions,
+        }
     }
 }
 
 #[async_trait]
 impl ChannelRuntime for NativeChannelRuntime {
     async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError> {
-        Ok(self.hls_sessions.active_channels().await)
+        let mut active = self.hls_sessions.active_channels().await;
+        active.extend(self.preview_hls_sessions.active_channels().await);
+        active.sort();
+        active.dedup();
+        Ok(active)
     }
 
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError> {
-        Ok(self.hls_sessions.stop_channel(number).await)
+        let (normal, preview) = tokio::join!(
+            self.hls_sessions.stop_channel(number),
+            self.preview_hls_sessions.stop_channel(number)
+        );
+        Ok(normal || preview)
     }
 
     fn request_subtitle_extraction(&self, playout_ids: Vec<EntityId>) {

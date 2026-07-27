@@ -1,14 +1,16 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use super::preview::ChannelPreviewPlayer;
 use crate::admin::i18n::{channel_language_label, channel_streaming_mode_label, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::channels::list_active_channel_numbers;
 use crate::admin::server_fns::channels::{
-    count_channels, delete_channel, list_channel_rows, stop_channel_session, ChannelListRow,
+    count_channels, delete_channel, get_channel_watch_data, list_channel_rows,
+    stop_channel_session, ChannelListRow, ChannelWatchAvailability, ChannelWatchData,
 };
 use crate::admin::ui::primitives::{
-    dialog::DeleteDialog,
+    dialog::{DeleteDialog, Modal},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast},
 };
@@ -49,6 +51,9 @@ fn ChannelsListIsland() -> impl IntoView {
     let delete_action = Action::new(|id: &i64| delete_channel(*id));
     let delete_target: RwSignal<Option<ChannelListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
+    let preview_data = RwSignal::new(ChannelWatchData::default());
+    let preview_open = RwSignal::new(false);
+    let preview_request_generation = RwSignal::new(0_u64);
 
     // Channel numbers with a live transcode session. Mirrors ErsatzTV's
     // `IFFmpegSegmenterService.IsActive` check in `Channels.razor`; ErsatzTV
@@ -163,6 +168,7 @@ fn ChannelsListIsland() -> impl IntoView {
         let id = ch.id;
         let number = ch.number.clone();
         let ch_clone = ch.clone();
+        let preview_row = ch.clone();
         let stop_number = number.clone();
         let active_number = number.clone();
         let is_active =
@@ -175,13 +181,33 @@ fn ChannelsListIsland() -> impl IntoView {
         };
         view! {
             <div class=style::row_actions>
-                <a
-                    href=format!("/iptv/channel/{number}.m3u8")
-                    target="_blank"
+                <button
+                    type="button"
                     class=style::row_btn_preview
                     title=tr(TextKey::PreviewChannel)
                     aria-label=tr(TextKey::PreviewChannel)
-                ></a>
+                    on:click=move |_| {
+                        let generation =
+                            preview_request_generation.get_untracked().wrapping_add(1);
+                        preview_request_generation.set(generation);
+                        preview_data.set(watch_data_from_row(&preview_row));
+                        preview_open.set(true);
+                        let channel_id = preview_row.id;
+                        leptos::task::spawn_local(async move {
+                            if let Ok(data) = get_channel_watch_data(channel_id).await {
+                                if preview_projection_is_current(
+                                    preview_open.get_untracked(),
+                                    channel_id,
+                                    preview_data.with_untracked(|current| current.id),
+                                    generation,
+                                    preview_request_generation.get_untracked(),
+                                ) {
+                                    preview_data.set(data);
+                                }
+                            }
+                        });
+                    }
+                ></button>
                 <button
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_stop)
                     style:visibility=move || if is_active() { "visible" } else { "hidden" }
@@ -280,9 +306,71 @@ fn ChannelsListIsland() -> impl IntoView {
                     }
                 })
             />
+            <Modal
+                open=preview_open
+                title=tr(TextKey::ChannelPreview).to_owned()
+                on_close=Callback::new(move |open_full: bool| {
+                    preview_request_generation
+                        .set(preview_request_generation.get_untracked().wrapping_add(1));
+                    if open_full {
+                        let id = preview_data.with_untracked(|data| data.id);
+                        set_browser_location(&format!("/channels/{id}/watch"));
+                    }
+                })
+                confirm_label=Some(tr(TextKey::OpenFullPlayer))
+                cancel_label=Some(tr(TextKey::Close))
+                wide=true
+            >
+                <ChannelPreviewPlayer
+                    data=preview_data
+                    compact=true
+                    active=Signal::derive(move || preview_open.get())
+                />
+            </Modal>
         </div>
     }
 }
+
+fn watch_data_from_row(row: &ChannelListRow) -> ChannelWatchData {
+    ChannelWatchData {
+        id: row.id,
+        number: row.number.clone(),
+        name: row.name.clone(),
+        logo_url: row.logo_url.clone(),
+        ffmpeg_profile_name: row.ffmpeg_profile_name.clone(),
+        streaming_mode: row.streaming_mode,
+        availability: if !row.is_enabled {
+            ChannelWatchAvailability::Disabled
+        } else if row.playout_count == 0 {
+            ChannelWatchAvailability::NoPlayout
+        } else {
+            ChannelWatchAvailability::NotCurrentlyAiring
+        },
+        ..ChannelWatchData::default()
+    }
+}
+
+const fn preview_projection_is_current(
+    is_open: bool,
+    requested_channel_id: i64,
+    current_channel_id: i64,
+    request_generation: u64,
+    current_generation: u64,
+) -> bool {
+    is_open
+        && requested_channel_id == current_channel_id
+        && request_generation == current_generation
+}
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 fn can_troubleshoot_channel(channel: &ChannelListRow) -> bool {
     channel.is_enabled && channel.playout_count > 0
@@ -305,5 +393,13 @@ mod tests {
         assert!(can_troubleshoot_channel(&row(true, 1)));
         assert!(!can_troubleshoot_channel(&row(true, 0)));
         assert!(!can_troubleshoot_channel(&row(false, 1)));
+    }
+
+    #[test]
+    fn stale_or_closed_preview_projections_are_rejected() {
+        assert!(preview_projection_is_current(true, 42, 42, 3, 3));
+        assert!(!preview_projection_is_current(false, 42, 42, 3, 3));
+        assert!(!preview_projection_is_current(true, 41, 42, 3, 3));
+        assert!(!preview_projection_is_current(true, 42, 42, 2, 3));
     }
 }

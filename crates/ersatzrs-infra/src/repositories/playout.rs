@@ -1475,16 +1475,32 @@ fn next_seed_admin() -> i32 {
     i32::try_from(hasher.finish() & i32::MAX as u64).unwrap_or_default()
 }
 
-#[allow(clippy::too_many_lines)]
-async fn load_item_titles_admin(
+const ITEM_TITLE_QUERY_BATCH_SIZE: usize = 500;
+
+pub(super) async fn load_item_titles_admin(
     pool: &crate::db::DbPool,
     item_ids: &[EntityId],
 ) -> Result<std::collections::HashMap<EntityId, String>> {
     use std::collections::HashMap;
 
-    if item_ids.is_empty() {
-        return Ok(HashMap::new());
+    let mut unique_ids = item_ids.to_vec();
+    unique_ids.sort_unstable();
+    unique_ids.dedup();
+
+    let mut titles = HashMap::new();
+    for batch in unique_ids.chunks(ITEM_TITLE_QUERY_BATCH_SIZE) {
+        titles.extend(load_item_title_batch_admin(pool, batch).await?);
     }
+    Ok(titles)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn load_item_title_batch_admin(
+    pool: &crate::db::DbPool,
+    item_ids: &[EntityId],
+) -> Result<std::collections::HashMap<EntityId, String>> {
+    use std::collections::HashMap;
+
     let placeholders = vec!["?"; item_ids.len()].join(", ");
     let sql = format!(
         r#"SELECT pi."Id" AS "Id", pi."ChapterTitle" AS "ChapterTitle",

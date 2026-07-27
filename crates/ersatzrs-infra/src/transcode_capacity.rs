@@ -86,10 +86,33 @@ impl ActiveTranscodeSlot {
         last_access_ms: Arc<AtomicI64>,
         reclaim: ActiveTranscodeReclaimHandle,
     ) -> Self {
+        Self::new_hls_with_capacity_key(
+            channel_number,
+            channel_number,
+            kind,
+            last_access_ms,
+            reclaim,
+        )
+    }
+
+    /// Create an HLS slot whose global admission identity is distinct from its
+    /// physical channel identity.
+    ///
+    /// Preview and normal HLS workers for the same channel use different
+    /// capacity keys so both may run when the shared limit has room. The
+    /// channel number remains unchanged for reporting and reclaim policy.
+    #[must_use]
+    pub fn new_hls_with_capacity_key(
+        channel_number: &str,
+        capacity_key: &str,
+        kind: ActiveTranscodeKind,
+        last_access_ms: Arc<AtomicI64>,
+        reclaim: ActiveTranscodeReclaimHandle,
+    ) -> Self {
         let slot_id = next_active_transcode_slot_id();
         Self {
             slot_id,
-            key: format!("hls:{channel_number}"),
+            key: format!("hls:{capacity_key}"),
             channel_number: channel_number.to_owned(),
             kind,
             last_access_ms,
@@ -349,6 +372,21 @@ pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static,
 mod tests {
     use super::*;
 
+    fn hls_slot(channel_number: &str, capacity_key: &str) -> ActiveTranscodeSlot {
+        ActiveTranscodeSlot::new_hls_with_capacity_key(
+            channel_number,
+            capacity_key,
+            ActiveTranscodeKind::HlsRealtime,
+            Arc::new(AtomicI64::new(Utc::now().timestamp_millis())),
+            ActiveTranscodeReclaimHandle::new(
+                Arc::new(Notify::new()),
+                Arc::new(AtomicU64::new(0)),
+                Arc::new(AtomicI64::new(0)),
+                true,
+            ),
+        )
+    }
+
     #[cfg(not(feature = "mysql"))]
     async fn config_pool(value: Option<&str>) -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -454,5 +492,22 @@ mod tests {
             Duration::from_millis(500),
         )
         .is_none());
+    }
+
+    #[test]
+    fn normal_and_preview_hls_sessions_share_limit_without_key_collision() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+
+        let normal =
+            try_reserve_active_transcode(2, hls_slot("42", "42")).expect("normal reservation");
+        let preview = try_reserve_active_transcode(2, hls_slot("42", "preview:42"))
+            .expect("preview reservation");
+
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        assert!(try_reserve_active_transcode(2, hls_slot("43", "43")).is_none());
+
+        drop(preview);
+        drop(normal);
     }
 }

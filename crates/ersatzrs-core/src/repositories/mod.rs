@@ -45,6 +45,7 @@ pub use channel::{
     ChannelLogoForm, ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult,
     ChannelNumberUpdate, ChannelRepository, ChannelSaveResult, ChannelSaveSideEffects,
     ChannelSelectOption, ChannelValidationError, ChannelValidationRow, ChannelValidationState,
+    ChannelWatchProgramme, ChannelWatchState, EpgPreviewChannelState,
 };
 pub use collection::{
     CollectionAdminRow, CollectionDetailAdmin, CollectionItemCardAdmin, CollectionMemberAdmin,

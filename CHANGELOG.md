@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- Added a top-level `/epg` preview and a muted-autoplay channel preview modal
+  plus dedicated `/channels/:id/watch` experience. The shared guide presents
+  two hours of history and 24 hours ahead in accessible, scrollable
+  multi-channel lanes; browser playback uses an isolated H.264 eight-bit/AAC
+  derivative with Hls.js-first selection, localized failures, scoped preview
+  tokens, responsive uncropped desktop/mobile sizing, and explicit local-preview
+  versus shared-session controls. Normal IPTV profiles and output remain
+  unchanged.
 - Added an exhaustive production-admin route contract for Playwright coverage,
   with seeded collection-detail interaction proof for custom playback order and
   item removal. The contract excludes only the feature-gated developer gallery
@@ -150,6 +158,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Hardened the EPG and browser-preview slice after correctness review. Preview
+  and normal HLS workers now use distinct admission identities while sharing
+  the same global capacity limit; guide labels use local time; aggregate
+  selection matches live playback when playouts overlap; large title lookups
+  are deduplicated and batched; and modal close, Stop Preview, and channel
+  changes invalidate pending asynchronous responses. New HLS workers also
+  withhold playlists until their session directory is prepared, preventing a
+  restart from briefly publishing stale segments.
 - Custom channel stream selectors are now read from one canonical folder,
   `<data>/scripts/channel-stream-selectors`, matching ErsatzTV's
   `ScriptsFolder/channel-stream-selectors`. Playback and playback
@@ -206,6 +222,13 @@ release section when tagging a release.
   raw paths, default capacity, or different audio, subtitle, deinterlace,
   tonemap, and frame-rate behavior after an operational failure; correlated
   logs and health reporting expose the cause.
+
+### Security
+
+- Preview and normal HLS segment routes now reject unsafe channel path
+  components before resolving session files, preventing percent-decoded route
+  captures from escaping their session-owned temporary directories when IPTV
+  token enforcement is disabled or an unscoped token is used.
 
 ## [1.0.15-beta.9] - 2026-07-19
 

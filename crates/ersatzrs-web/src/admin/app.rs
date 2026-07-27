@@ -47,6 +47,7 @@ pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
                 <title>"ErsatzRS"</title>
                 <NavStateHeadScript/>
                 <link rel="stylesheet" href="/public/bundle.css"/>
+                <script type="module" src="/public/channel-preview.js"></script>
                 {hydration_assets_available.then(|| {
                     view! { <HydrationScripts options=options.clone() islands=true/> }
                 })}

@@ -18,6 +18,131 @@ pub struct ChannelListRow {
     pub logo_url: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChannelWatchAvailability {
+    Ready,
+    Disabled,
+    NoPlayout,
+    NotCurrentlyAiring,
+    NotFound,
+    #[default]
+    Failed,
+}
+
+impl ChannelWatchAvailability {
+    #[must_use]
+    pub const fn can_play(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ChannelWatchProgramme {
+    pub id: i64,
+    pub title: String,
+    pub start: String,
+    pub finish: String,
+    pub filler_kind: i32,
+    pub is_gap: bool,
+    pub is_current: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ChannelWatchData {
+    pub id: i64,
+    pub number: String,
+    pub name: String,
+    pub logo_url: String,
+    pub ffmpeg_profile_name: String,
+    pub streaming_mode: i32,
+    pub generated_at: String,
+    pub window_start: String,
+    pub window_finish: String,
+    pub availability: ChannelWatchAvailability,
+    pub programmes: Vec<ChannelWatchProgramme>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EpgPreviewChannelData {
+    pub id: i64,
+    pub number: String,
+    pub name: String,
+    pub logo_url: String,
+    pub ffmpeg_profile_name: String,
+    pub streaming_mode: i32,
+    pub is_active: bool,
+    pub programmes: Vec<ChannelWatchProgramme>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EpgPreviewData {
+    pub generated_at: String,
+    pub window_start: String,
+    pub window_finish: String,
+    pub channels: Vec<EpgPreviewChannelData>,
+}
+
+#[cfg(feature = "ssr")]
+impl ChannelWatchData {
+    fn from_core(
+        state: ersatzrs_core::repositories::ChannelWatchState,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
+        let has_current = state
+            .programmes
+            .iter()
+            .any(|programme| !programme.is_gap && programme.start <= now && programme.finish > now);
+        let availability = if !state.is_enabled {
+            ChannelWatchAvailability::Disabled
+        } else if state.playout_id.is_none() {
+            ChannelWatchAvailability::NoPlayout
+        } else if !has_current {
+            ChannelWatchAvailability::NotCurrentlyAiring
+        } else {
+            ChannelWatchAvailability::Ready
+        };
+        let logo_url = channel_logo_url(&state.name, state.logo_path.as_deref());
+        Self {
+            id: state.id,
+            number: state.number,
+            name: state.name,
+            logo_url,
+            ffmpeg_profile_name: state.ffmpeg_profile_name,
+            streaming_mode: state.streaming_mode,
+            generated_at: now.to_rfc3339(),
+            window_start: (now - chrono::Duration::hours(2)).to_rfc3339(),
+            window_finish: (now + chrono::Duration::hours(24)).to_rfc3339(),
+            availability,
+            programmes: state
+                .programmes
+                .into_iter()
+                .map(|programme| ChannelWatchProgramme {
+                    id: programme.id,
+                    title: programme.title,
+                    start: programme.start.to_rfc3339(),
+                    finish: programme.finish.to_rfc3339(),
+                    filler_kind: programme.filler_kind,
+                    is_gap: programme.is_gap,
+                    is_current: !programme.is_gap
+                        && programme.start <= now
+                        && programme.finish > now,
+                })
+                .collect(),
+        }
+    }
+
+    fn not_found(id: i64, now: chrono::DateTime<chrono::Utc>) -> Self {
+        Self {
+            id,
+            generated_at: now.to_rfc3339(),
+            window_start: (now - chrono::Duration::hours(2)).to_rfc3339(),
+            window_finish: (now + chrono::Duration::hours(24)).to_rfc3339(),
+            availability: ChannelWatchAvailability::NotFound,
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ChannelNumberEditorRow {
     pub id: i64,
@@ -352,6 +477,106 @@ pub async fn get_channel_editor_data(id: i64) -> Result<ChannelEditorData, Serve
         .map_err(ServerFnError::new)?
         .ok_or_else(|| ServerFnError::new("Channel not found"))?;
     Ok(ChannelEditorData::from(state))
+}
+
+/// Loads channel identity plus two hours of guide history and 24 hours ahead.
+#[server]
+pub async fn get_channel_watch_data(id: i64) -> Result<ChannelWatchData, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_app::queries::GetChannelWatch;
+
+    let state = expect_context::<AppState>();
+    let now = chrono::Utc::now();
+    let data = state
+        .application
+        .get_channel_watch(GetChannelWatch {
+            channel_id: id,
+            now,
+            horizon_minutes: 1_440,
+            history_minutes: 120,
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(data.map_or_else(
+        || ChannelWatchData::not_found(id, now),
+        |watch| ChannelWatchData::from_core(watch, now),
+    ))
+}
+
+/// Loads the enabled, EPG-visible channel lanes for the global preview route.
+#[server]
+pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_app::queries::GetEpgPreview;
+
+    let state = expect_context::<AppState>();
+    let data = state
+        .application
+        .get_epg_preview(GetEpgPreview {
+            now: chrono::Utc::now(),
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(EpgPreviewData {
+        generated_at: data.generated_at.to_rfc3339(),
+        window_start: data.window_start.to_rfc3339(),
+        window_finish: data.window_finish.to_rfc3339(),
+        channels: data
+            .channels
+            .into_iter()
+            .map(|channel| {
+                let state = channel.state;
+                EpgPreviewChannelData {
+                    id: state.id,
+                    number: state.number,
+                    logo_url: channel_logo_url(&state.name, state.logo_path.as_deref()),
+                    name: state.name,
+                    ffmpeg_profile_name: state.ffmpeg_profile_name,
+                    streaming_mode: state.streaming_mode,
+                    is_active: channel.is_active,
+                    programmes: state
+                        .programmes
+                        .into_iter()
+                        .map(|programme| ChannelWatchProgramme {
+                            id: programme.id,
+                            title: programme.title,
+                            start: programme.start.to_rfc3339(),
+                            finish: programme.finish.to_rfc3339(),
+                            filler_kind: programme.filler_kind,
+                            is_gap: programme.is_gap,
+                            is_current: !programme.is_gap
+                                && programme.start <= data.generated_at
+                                && programme.finish > data.generated_at,
+                        })
+                        .collect(),
+                }
+            })
+            .collect(),
+    })
+}
+
+/// Returns an on-demand segmenter URL for a streamable channel.
+#[server]
+pub async fn get_channel_preview_url(id: i64) -> Result<String, ServerFnError> {
+    use crate::host::state::AppState;
+    use crate::transport::iptv::access_token::AccessToken;
+
+    let watch = get_channel_watch_data(id).await?;
+    if !watch.availability.can_play() {
+        return Err(ServerFnError::new("Channel is not currently streamable"));
+    }
+
+    let state = expect_context::<AppState>();
+    let token = state
+        .iptv_access_token_verifier
+        .issue_preview_token(&watch.number)
+        .map_err(|_| ServerFnError::new("Unable to authorize channel preview"))?;
+    let access_token = AccessToken::new(token);
+    Ok(format!(
+        "/iptv/preview/{}/master.m3u8{}",
+        urlencoding::encode(&watch.number),
+        access_token.query()
+    ))
 }
 
 /// Creates or updates a channel. Returns the channel id.

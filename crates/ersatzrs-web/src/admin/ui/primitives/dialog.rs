@@ -1,4 +1,7 @@
-use leptos::prelude::*;
+use leptos::{html, prelude::*};
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 
 use crate::admin::i18n::{tr, TextKey};
 
@@ -25,7 +28,10 @@ pub fn Modal(
     #[prop(default = None)] confirm_label: Option<&'static str>,
     #[prop(default = None)] cancel_label: Option<&'static str>,
     #[prop(default = false)] destructive: bool,
+    #[prop(default = false)] wide: bool,
 ) -> impl IntoView {
+    let panel_ref = NodeRef::<html::Div>::new();
+    let dialog_label = title.clone();
     let confirm_variant = if destructive {
         ButtonVariant::Danger
     } else {
@@ -41,6 +47,32 @@ pub fn Modal(
         on_close.run(true);
     };
 
+    #[cfg(target_arch = "wasm32")]
+    {
+        let was_open = StoredValue::new(false);
+        let previous_focus = StoredValue::new(None::<web_sys::HtmlElement>);
+        Effect::new(move |_| {
+            let is_open = open.get();
+            let previously_open = was_open.get_value();
+            if is_open && !previously_open {
+                let active = web_sys::window()
+                    .and_then(|window| window.document())
+                    .and_then(|document| document.active_element())
+                    .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok());
+                previous_focus.set_value(active);
+                if let Some(panel) = panel_ref.get() {
+                    let _ = panel.focus();
+                }
+            } else if !is_open && previously_open {
+                if let Some(element) = previous_focus.get_value() {
+                    let _ = element.focus();
+                }
+                previous_focus.set_value(None);
+            }
+            was_open.set_value(is_open);
+        });
+    }
+
     view! {
         // Backdrop is purely visual; it sits below the overlay
         // (z-index 40 vs 50) and never receives clicks because the
@@ -54,10 +86,25 @@ pub fn Modal(
         />
         <div
             class=style::overlay
+            role="dialog"
+            aria-modal="true"
+            aria-label=dialog_label
             style:display=move || if open.get() { "" } else { "none" }
             on:click=move |_| do_cancel()
+            on:keydown=move |event| {
+                if event.key() == "Escape" {
+                    event.prevent_default();
+                    do_cancel();
+                }
+            }
         >
-            <div class=style::panel on:click=|e| e.stop_propagation()>
+            <div
+                node_ref=panel_ref
+                data-modal-panel
+                tabindex="-1"
+                class=if wide { format!("{} {}", style::panel, style::panel_wide) } else { style::panel.to_owned() }
+                on:click=|e| e.stop_propagation()
+            >
                 <h2 class=style::title>{title}</h2>
                 <div class=style::body>{children()}</div>
                 <div class=style::footer>

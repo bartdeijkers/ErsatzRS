@@ -166,6 +166,9 @@
 
 .row-btn-preview {
     color: #ff6f83;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
 }
 
 .row-btn-preview::before { content: "▶"; }
