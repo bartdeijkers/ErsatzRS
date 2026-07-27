@@ -1280,6 +1280,24 @@ impl PlaylistEnumerator {
     }
 }
 
+/// Fresh, non-negative playout seed source, shared by playout creation and
+/// every place that needs to give a playout a brand-new shuffle: nanosecond
+/// time mixed through a `RandomState` hasher, masked into `i32`'s positive
+/// range so downstream seed arithmetic never has to reason about sign.
+#[must_use]
+pub fn next_playout_seed() -> i32 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let mut hasher = RandomState::new().build_hasher();
+    hasher.write_u128(nanos);
+    i32::try_from(hasher.finish() & i32::MAX as u64).unwrap_or_default()
+}
+
 /// Fisher-Yates shuffle with a simple LCG for deterministic ordering.
 pub(super) fn shuffle_with_seed<T>(items: &mut [T], seed: u64) {
     let len = items.len();

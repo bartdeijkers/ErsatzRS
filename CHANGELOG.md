@@ -165,6 +165,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Classic-scheduled playouts (Shuffle, Random, and other randomized playback
+  orders, plus the "Shuffle Schedule Items" checkbox) no longer freeze on the
+  same shuffle order for the playout's entire lifetime. `Reset` now
+  regenerates the playout's seed, matching ErsatzTV's `ResetPlayout()`, and
+  `Refresh` now genuinely continues the existing per-collection and
+  schedule-item shuffle sequence instead of silently rescrambling it from the
+  same unchanged seed every time.
 - Browser-preview E2E fixtures now preserve the channel-number and integer
   schedule-kind database contracts, so the shared Playwright database cannot
   invalidate later channel-number and playout coverage.

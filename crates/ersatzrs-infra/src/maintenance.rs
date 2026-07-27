@@ -414,7 +414,14 @@ async fn build_playout(
 ) -> Result<()> {
     let repository = SqlitePlayoutRepository(pool.clone());
     let scheduling = SqliteSchedulingContentRepository::new(pool.clone());
-    let playout = repository.get_with_anchor(playout_id).await?;
+    let mut playout = repository.get_with_anchor(playout_id).await?;
+    // Mirror ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`.
+    // Without this, a Reset reshuffles from the same seed the playout has had
+    // since creation, so every rebuild reproduces the identical schedule-item
+    // and collection shuffle order forever.
+    if mode == PlayoutBuildMode::Reset {
+        playout.seed = ersatzrs_core::scheduling::next_playout_seed();
+    }
     let days = load_playout_days_to_build(pool).await?;
     let window = Duration::days(days);
     let finish = now + window;

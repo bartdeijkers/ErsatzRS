@@ -13,7 +13,7 @@ use ersatzrs_core::repositories::{
     TemplateItemAdmin, TemplateRepository, TraktRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
-    PlayoutBuildMode, PlayoutBuildRequest, SchedulingSmartShufflePreset,
+    next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, SchedulingSmartShufflePreset,
 };
 use ersatzrs_domain::{
     BlockStopScheduling, ChannelWatermark, ChannelWatermarkImageSource, ChannelWatermarkMode,
@@ -4941,19 +4941,6 @@ fn normalize_i32_range(values: &mut Vec<i32>, minimum: i32, maximum: i32) {
     values.retain(|value| (minimum..=maximum).contains(value));
     values.sort_unstable();
     values.dedup();
-}
-
-fn next_playout_seed() -> i32 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    let mut hasher = RandomState::new().build_hasher();
-    hasher.write_u128(nanos);
-    i32::try_from(hasher.finish() & i32::MAX as u64).unwrap_or_default()
 }
 
 /// Request admission for one scheduler-owned playout build.

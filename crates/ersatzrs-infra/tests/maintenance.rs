@@ -343,6 +343,82 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
 }
 
 #[tokio::test]
+async fn reset_build_regenerates_playout_seed() {
+    // ErsatzTV's `ResetPlayout()` regenerates `playout.Seed` on every Reset.
+    // Before this fix, ErsatzRS never regenerated an existing playout's seed
+    // at all (only at initial creation), so Reset and Refresh reproduced the
+    // identical shuffle order forever.
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (79, 1, 20, 12345)"#,
+    )
+    .await
+    .unwrap();
+
+    let locker = EntityLocker::new();
+    let built = run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 79,
+            mode: PlayoutBuildMode::Reset,
+        },
+        Utc::now(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(built);
+
+    let seed: i64 = sqlx::query_scalar(r#"SELECT "Seed" FROM "Playout" WHERE "Id" = 79"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_ne!(seed, 12345, "Reset should regenerate the playout seed");
+}
+
+#[tokio::test]
+async fn refresh_and_continue_builds_preserve_playout_seed() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (80, 1, 20, 12345)"#,
+    )
+    .await
+    .unwrap();
+
+    let locker = EntityLocker::new();
+    for mode in [PlayoutBuildMode::Refresh, PlayoutBuildMode::Continue] {
+        run_requested_playout_build(
+            &pool,
+            &locker,
+            PlayoutBuildRequest {
+                playout_id: 80,
+                mode,
+            },
+            Utc::now(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        let seed: i64 = sqlx::query_scalar(r#"SELECT "Seed" FROM "Playout" WHERE "Id" = 80"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            seed, 12345,
+            "{mode:?} must not change the playout seed, only Reset should"
+        );
+    }
+}
+
+#[tokio::test]
 async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

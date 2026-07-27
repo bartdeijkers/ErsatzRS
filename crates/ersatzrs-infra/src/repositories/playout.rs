@@ -10,7 +10,7 @@ use ersatzrs_core::repositories::{
     PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin, RepositoryError, Result,
     SequentialPlayoutAdmin,
 };
-use ersatzrs_core::scheduling::SchedulingResult;
+use ersatzrs_core::scheduling::{next_playout_seed, SchedulingResult};
 use ersatzrs_domain::{
     EntityId, Playout, PlayoutAnchor, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
     PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
@@ -363,6 +363,18 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .await
             .repository()?;
         }
+
+        // Persist `playout.seed` unconditionally. It only actually changes on a
+        // Reset build (see `build_playout` in `maintenance.rs`, which mirrors
+        // ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`), but
+        // writing it every time keeps this function mode-agnostic and is a
+        // no-op for Continue/Refresh, where `playout.seed` is unchanged.
+        sqlx::query(r#"UPDATE "Playout" SET "Seed" = ? WHERE "Id" = ?"#)
+            .bind(playout.seed)
+            .bind(playout.id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
 
         // ── anchor, program-schedule anchors, fill-group indices, templates ───
         // Persist the anchor produced by *this* build (`result.anchor`), not the
@@ -1429,7 +1441,7 @@ async fn erase_items_and_history_admin(pool: &crate::db::DbPool, id: EntityId) -
                SET "Seed" = ?, "OnDemandCheckpoint" = NULL
                WHERE "Id" = ?"#,
         )
-        .bind(next_seed_admin())
+        .bind(next_playout_seed())
         .bind(id)
         .execute(&mut *tx)
         .await
@@ -1460,19 +1472,6 @@ async fn erase_items_and_history_admin(pool: &crate::db::DbPool, id: EntityId) -
     }
     tx.commit().await.repository()?;
     Ok(())
-}
-
-fn next_seed_admin() -> i32 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    let mut hasher = RandomState::new().build_hasher();
-    hasher.write_u128(nanos);
-    i32::try_from(hasher.finish() & i32::MAX as u64).unwrap_or_default()
 }
 
 const ITEM_TITLE_QUERY_BATCH_SIZE: usize = 500;

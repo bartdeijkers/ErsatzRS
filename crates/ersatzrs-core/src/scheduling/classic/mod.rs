@@ -1630,6 +1630,15 @@ fn state_for_mode(request: &SchedulingRequest, items: &[ProgramScheduleItem]) ->
 
 fn refresh_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
     let mut state = start_state(request, items);
+    // Carry forward the schedule-item shuffle order/position from the
+    // existing playout anchor, the same field `anchor_state()` uses for
+    // Continue builds. Without this, Refresh always rederived
+    // `schedule_state` from `start_state()` (seed = `playout.seed`, index 0),
+    // so the "Shuffle Schedule Items" order was rescrambled identically every
+    // refresh instead of continuing from wherever it left off.
+    if let Some(anchor) = request.playout.anchor.as_ref() {
+        state.schedule_state = anchor.schedule_items_enumerator_state;
+    }
     if let Some(anchor_date) = retained_refresh_anchors(request)
         .iter()
         .filter_map(|anchor| anchor.anchor_date)
@@ -1679,6 +1688,22 @@ fn retained_refresh_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramSc
     let start_day = midnight(request.start);
     let next_day = start_day + Duration::days(1);
     let mut by_key = BTreeMap::<String, PlayoutProgramScheduleAnchor>::new();
+
+    // Ordinary (undated) checkpoints: always retained, so Refresh continues
+    // the collection-enumerator sequence instead of rescrambling it from
+    // scratch. Production code never actually writes a day-anchored anchor
+    // for ordinary Classic schedule items (see `program_schedule_anchors`
+    // below, which always writes `anchor_date: None`), so without this pass
+    // every Refresh discarded all per-collection shuffle state and reseeded
+    // from the (until now immutable) `playout.seed`, making shuffle output
+    // identical across every refresh. A dated checkpoint for the same key,
+    // if one is ever written, still overrides this below.
+    for anchor in &request.reference_data.existing_program_schedule_anchors {
+        if anchor.anchor_date.is_none() {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            by_key.insert(key, anchor.clone());
+        }
+    }
 
     for anchor in &request.reference_data.existing_program_schedule_anchors {
         let Some(anchor_date) = anchor.anchor_date else {
@@ -2599,6 +2624,128 @@ mod tests {
                 .first()
                 .map(|anchor| anchor.enumerator_state.seed),
             Some(next_i32_seed(42))
+        );
+    }
+
+    #[test]
+    fn classic_refresh_continues_collection_shuffle_without_day_anchor() {
+        // Same fixture as classic_reuses_existing_anchor_seed_and_omits_collection_key,
+        // but built with Refresh instead of Continue. Production code never
+        // writes a day-anchored PlayoutProgramScheduleAnchor for ordinary
+        // Classic schedule items, so before the retained_refresh_anchors fix
+        // this anchor (undated) was silently dropped on Refresh and the
+        // collection reseeded from `playout.seed` (7) instead of continuing
+        // from the anchor's seed (42) — making every Refresh reproduce the
+        // identical shuffle order.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                id: 900,
+                playout_id: 50,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(10)),
+                SchedulingMediaItem::new(102, Duration::minutes(10)),
+            ],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("classic refresh should build");
+
+        let item = result.added_items.first().expect("scheduled item");
+        assert!(item
+            .scheduling_context
+            .as_deref()
+            .is_some_and(|context| context.contains("\"Seed\":42")));
+        assert_eq!(
+            result
+                .program_schedule_anchors
+                .first()
+                .map(|anchor| anchor.enumerator_state.seed),
+            Some(next_i32_seed(42))
+        );
+    }
+
+    #[test]
+    fn classic_refresh_continues_schedule_item_order_from_anchor() {
+        // With two schedule items and `classic_shuffle_schedule_items: false`
+        // (identity schedule_order), a Refresh build must resume at the
+        // schedule-item index carried on `playout.anchor`, not restart at
+        // index 0 the way `start_state()` would. Before the refresh_state fix,
+        // Refresh always rederived schedule_state from `playout.seed`/index 0,
+        // so a channel that had rotated to its second schedule item would
+        // silently jump back to the first one on every refresh.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let item_a = schedule_item(1, PlayoutMode::One, 1, None);
+        let item_b = schedule_item(2, PlayoutMode::One, 2, None);
+        let key_a = item_key(&item_a);
+        let key_b = item_key(&item_b);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![item_a, item_b],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key_a,
+            vec![SchedulingMediaItem::new(101, Duration::minutes(10))],
+        );
+        reference_data.media_by_key.insert(
+            key_b,
+            vec![SchedulingMediaItem::new(201, Duration::minutes(10))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    anchor: Some(PlayoutAnchor {
+                        schedule_items_enumerator_state: CollectionEnumeratorState {
+                            seed: 7,
+                            index: 1,
+                        },
+                        next_start: start,
+                        ..PlayoutAnchor::default()
+                    }),
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("classic refresh should continue schedule-item order");
+
+        let item = result.added_items.first().expect("scheduled item");
+        assert_eq!(
+            item.media_item_id, 201,
+            "refresh should resume at the anchored schedule-item index, not restart at index 0"
         );
     }
 
