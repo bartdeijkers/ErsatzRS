@@ -126,6 +126,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
         with:
+          # Without an explicit key, rust-cache's default (job id + OS/env
+          # hash) does not factor in the matrix value, so all three shards
+          # collided on one cache entry and raced to restore/save it.
+          key: test-hosted-${{ matrix.shard }}
           cache-bin: "true"
       - name: Install LLVM linker
         run: |
