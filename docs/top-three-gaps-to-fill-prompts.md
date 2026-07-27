@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-26
-last_processed_commit: 2fffbb3452127aa922f449d4c382cbec40dd0a90
+generated: 2026-07-27
+last_processed_commit: 817e0192e70219e66062bda9b8c26eec02455200
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,67 +9,81 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 7C state. p7c-02 (watermark preview) and p7c-03 (deferred search / See
-All) both completed and flipped to `Ported` with every targeted debt closed, so
-their prior prompts are retired. The only pinned-baseline parity gap left is the
-Phase 8 jukebox, which is blocked on p7c-04 and the p8a-01 product contract and
-is therefore not actionable today. The remaining actionable work is the runnable
-p7c-04 module split (phase focus) plus the highest-ranked spec chores: the two
-lowest-numbered unimplemented, maintainer-requested localization ADRs.
+and Phase 8A state. The prior `#1` (p7c-04 module split) landed across
+`2fffbb3..817e019` and its milestone is `Complete`, so the whole
+`application-use-case-layer` feature is now `Ported` with every debt resolved
+and its prompt is retired. That unblocks milestone **p8a-01**, the Phase 8A
+focus and the only remaining feature-complete gap's first actionable slice, so
+it takes the top slot. `cargo xtask progress gaps` reports a single remaining
+feature (`video-jukebox-addon-api`, Not started) with no pinned ErsatzTV
+equivalent; all other actionable spec work is the queue of `Proposed` /
+`Not implemented` localization ADRs. The two lowest-numbered,
+maintainer-requested ones (ADR 0022 de-de, ADR 0023 hi-in) were not touched in
+this window and carry over as `#2` and `#3`.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: split large modules after boundary extraction (slug `application-use-case-layer`)
+## 1. Build the next ErsatzRS spec chore: decide the video-jukebox product and add-on contract (slug `video-jukebox-addon-api`)
 
-This is the runnable Phase 7C milestone **p7c-04** and the phase-focus chore.
-Follow AGENTS.md and the P7C-04 contract in
-[`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md);
-this is an ErsatzRS structural refactor with no pinned ErsatzTV behavior to port,
-so do **not** force the parity-slice workflow. The goal is the complete,
-behavior-preserving module split the plan describes, with no public-behavior
-change and no weakened completeness gate. It unblocks p8a-01, so it ranks first.
+This is the runnable Phase 8A milestone **p8a-01** and the `phase.toml`
+`current_focus` chore. Follow AGENTS.md and the P8A-01 contract in
+[`plans/application-layer-and-video-jukebox.md`](../plans/application-layer-and-video-jukebox.md).
+This is a deliberate ErsatzRS product/architecture decision with **no** pinned
+ErsatzTV behavior to port, so do **not** force the parity-slice workflow. The
+goal is one **accepted** ADR that decides the whole Phase 8 jukebox contract so
+that schema, application, and transport work can start; the ADR must leave no
+listed decision undecided, and any deferral must be recorded as visible ADR
+implementation debt, not hidden in prose. It unblocks p8a-02, p8a-03, p8b-01,
+and p8b-02 — the entire remaining feature-complete port gap — so it ranks first.
 
 Before editing:
 
-1. Confirm `cargo xtask progress milestones --id p7c-04 --full` is runnable, then
-   refresh the measurements in
-   [`plans/module-split-survey.md`](../plans/module-split-survey.md) so the split
-   targets reflect current file sizes, not stale ones.
-2. Read the P7C-04 plan section and the
-   [`web-server-wasm-crate-split.md`](../plans/web-server-wasm-crate-split.md)
-   split plan, then inspect the reduced media-browser transport, the YAML and
-   scripted scheduling registries, and the provider adapters named by the survey.
-3. Build a Source Map of module ownership, dependency directions, exhaustive
-   dispatch/match arms, tests, and the public transport/DTO contracts each module
-   exposes.
+1. Confirm `cargo xtask progress milestones --id p8a-01 --full` is runnable and
+   read the `blocking_decision` note in
+   [`docs/progress/phase.toml`](progress/phase.toml). Do **not** begin schema,
+   public-API, or jukebox implementation in this slice — the deliverable is the
+   decision record only.
+2. Read the P8A-01 plan section (product and architecture decisions), the Phase
+   8B ingress/proof sections, and the four open `[[debt]]` items in
+   [`docs/progress/parity/video-jukebox-addon-api.toml`](progress/parity/video-jukebox-addon-api.toml)
+   (`jukebox-contract-is-undecided`,
+   `jukebox-has-no-durable-request-domain`,
+   `jukebox-has-no-application-scheduler-integration`,
+   `jukebox-has-no-public-addon-ingress-or-runtime-proof`).
+3. Review the accepted application-boundary decision (ADR 0051) and the existing
+   `ApplicationServices`/operation-coordinator seams so the add-on transport
+   choice is consistent with the composition root, and confirm the plan's
+   recommendation of an out-of-process HTTP/event boundary over a native
+   dynamic-plugin ABI.
 
-Implement the complete slice:
+Implement the complete slice (a decision record, not code):
 
-- Split the surveyed modules along application, infrastructure, scheduler, and
-  transport ownership boundaries, one file at a time, keeping each move
-  behavior-preserving.
-- Keep native application code out of the hydration/WASM path and preserve every
-  public DTO, route, server-function signature, persisted shape, dispatch
-  behavior, and provider semantic.
-- Retain or strengthen the exhaustive-dispatch / completeness gates so a file
-  move cannot silently drop a branch.
-- Update p7c-04 evidence in `docs/progress/milestones.toml`, the active plans,
-  `CHANGELOG.md`, `phase.toml`, this prompt file, and the session log.
+- Author a new ADR (next free number) that decides every P8A-01 item: channel
+  scope and eligible music-video sources; requester identity, moderation,
+  authorization, and privacy; FIFO/priority policy, duplicate and
+  artist/video cooldowns, expiry, and per-source rate limits; current-item
+  behavior, safe insertion boundaries, cancellation, retries, filler
+  interaction, and failure recovery; and the stable add-on transport/versioning
+  with an explicit out-of-process vs. in-binary adapter decision.
+- Register the ADR in the ADR index, set its `video-jukebox-addon-api` parity
+  linkage, and record the request lifecycle states the plan lists (Pending,
+  Accepted, Rejected, Queued, Playing, Played, Cancelled, Expired, Failed) as
+  the contract the durable domain (p8a-02) must implement.
+- Update `docs/progress/parity/video-jukebox-addon-api.toml` (add the `adr`
+  number; refine `jukebox-contract-is-undecided` toward resolved only when the
+  ADR is accepted), `docs/progress/milestones.toml` p8a-01 evidence,
+  `phase.toml`, `CHANGELOG.md`, this prompt file, and the session log.
 
 Verification:
 
-- `cargo fmt --all -- --check`
-- focused crate tests through `./run.sh`
-- `cargo xtask architecture-lint`
-- both workspace clippy configurations (`--all-targets`, and again `--features mysql`)
-- `./run.sh test-closeout`
-- `cargo xtask parity-check web`
+- `cargo xtask progress adr list` (new ADR shows with correct status)
 - `cargo xtask progress check`
 - `git diff --check`
 
-Report the refreshed survey measurements, the Source Map, the final module
-ownership, the preserved contracts, verification results, changed files, and the
-live next milestone. Do not commit or push unless explicitly requested.
+Report the decided contract summary, the open questions resolved vs. any
+deferred as visible debt, the transport decision and its rationale, the parity
+linkage, verification results, changed files, and the live next milestone. Do
+not commit or push unless explicitly requested.
 
 ---
 
