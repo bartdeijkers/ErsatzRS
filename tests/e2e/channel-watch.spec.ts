@@ -81,7 +81,7 @@ function seedChannel(
   const videoStreamId = id + 107;
   const audioStreamId = id + 108;
   const previewProfileId = id + 200;
-  const number = `0.${id}`;
+  const number = `${8_000 + projectOffset / 100 + ordinal}`;
   const name = `E2E Preview ${testInfo.project.name} ${ordinal}`;
   const mediaTitle = `E2E Preview Programme ${testInfo.project.name} ${ordinal}`;
   const sourceProfileId = sqlite('SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1;');
@@ -184,7 +184,7 @@ INSERT INTO "Channel" (
   0, 0, 0, 0, 0, 0, 0, 1, 1
 );
 INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
-VALUES (${playoutId}, ${id}, 'Classic', 0);
+VALUES (${playoutId}, ${id}, 1, 0);
 INSERT INTO "PlayoutItem" (
   "Id", "DisableWatermarks", "FillerKind", "Finish", "GuideGroup",
   "InPoint", "MediaItemId", "OutPoint", "PlayoutId", "Start"

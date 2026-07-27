@@ -158,6 +158,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Browser-preview E2E fixtures now preserve the channel-number and integer
+  schedule-kind database contracts, so the shared Playwright database cannot
+  invalidate later channel-number and playout coverage.
 - Manual CI runs on the default branch now lint the selected head commit
   instead of passing an empty range to commitlint, restoring the
   GitHub-hosted fallback when the self-hosted runner is unavailable.
