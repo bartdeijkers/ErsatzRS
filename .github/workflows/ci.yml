@@ -33,6 +33,11 @@ on:
         options:
           - self-hosted
           - github-hosted
+      reset_target_dir:
+        description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
+        type: boolean
+        required: false
+        default: false
 
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
@@ -46,6 +51,20 @@ concurrency:
 
 permissions:
   contents: read
+
+# The self-hosted runner is a single persistent machine: every job in this
+# workflow queues and runs serially on it, so there is no wall-clock
+# parallelism to lose by sharing build output across jobs. Point
+# CARGO_TARGET_DIR at github.workspace's parent, which the runner creates
+# once per repo and actions/checkout's default `git clean -ffdx` does not
+# touch (it only cleans inside the checkout itself) — so target/ now
+# persists across every job and run on that runner instead of being wiped
+# and restored through Swatinem/rust-cache's remote blob service every
+# time. Harmless on the GitHub-hosted fallback path: it just relocates
+# target/ within the same disposable VM disk. See BUILD.md "CI runner
+# selection" for the recovery step if this directory ever looks stale.
+env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
 
 jobs:
   fmt:
@@ -65,14 +84,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # Only needed on the GitHub-hosted fallback path: self-hosted jobs
+      # reuse the persistent CARGO_TARGET_DIR set at workflow level instead
+      # (see the comment above `env:`), so restoring a remote cache on top
+      # of it there would risk overwriting fresher local objects with a
+      # staler blob for no benefit.
       - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
           # shell, so don't let rust-cache prune cargo-leptos /
           # stylance-cli / wasm-bindgen between runs.
           cache-bin: "false"
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.2 --locked
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
       - name: Clippy (default / SQLite)
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Clippy (MySQL feature)
@@ -88,20 +119,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Self-hosted runner shares $CARGO_HOME/bin with the developer
-          # shell, so don't let rust-cache prune cargo-leptos /
-          # stylance-cli / wasm-bindgen between runs.
-          cache-bin: "false"
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # This job only ever runs self-hosted (see the `if:` above), so it
+      # relies solely on the persistent CARGO_TARGET_DIR set at workflow
+      # level (see the comment above `env:`) — no remote cache needed here.
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.2 --locked
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
       - name: Test (all features)
         run: cargo test --workspace --all-features --lib --bins --tests
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
         run: cargo xtask architecture-lint
+      - name: Check persistent target-dir size
+        run: cargo xtask target-size
 
   test_hosted:
     name: Test (${{ matrix.shard }})
@@ -126,6 +162,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
         with:
+          # Without an explicit key, rust-cache's default (job id + OS/env
+          # hash) does not factor in the matrix value, so all three shards
+          # collided on one cache entry and raced to restore/save it.
+          key: test-hosted-${{ matrix.shard }}
           cache-bin: "true"
       - name: Install LLVM linker
         run: |
@@ -163,15 +203,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # Only needed on the GitHub-hosted fallback path: self-hosted runs
+      # reuse the persistent CARGO_TARGET_DIR set at workflow level instead
+      # (see the comment above `env:`).
       - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
         with:
-          # Self-hosted runner shares $CARGO_HOME/bin with the developer
-          # shell, so don't let rust-cache prune cargo-leptos /
-          # stylance-cli / wasm-bindgen between runs. Hosted runners instead
-          # restore these pinned tools to avoid repeated cold installs.
-          cache-bin: ${{ inputs.runner == 'github-hosted' && 'true' || 'false' }}
+          # Hosted runners restore these pinned tools to avoid repeated
+          # cold installs.
+          cache-bin: "true"
       - name: Hydration lint
         run: cargo xtask hydration-lint -p ersatzrs-web
+      # Only needed on the GitHub-hosted fallback path: self-hosted runs
+      # already have a warm ~/.npm cache from the shared, persistent $HOME
+      # (npm's cache directory is not inside the git checkout, so it is
+      # never touched by actions/checkout's clean step).
+      - uses: actions/cache@v4
+        if: ${{ inputs.runner == 'github-hosted' }}
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - name: Install web E2E tools
         run: |
           set -euo pipefail
@@ -201,7 +257,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
       - name: Install cargo-deny
-        run: cargo install cargo-deny --version 0.19.6 --locked
+        run: |
+          if ! command -v cargo-deny >/dev/null 2>&1 || [ "$(cargo deny --version)" != "cargo-deny 0.19.6" ]; then
+            cargo install cargo-deny --version 0.19.6 --locked
+          fi
       - name: Cargo deny
         run: cargo deny --all-features check
 
@@ -236,6 +295,15 @@ jobs:
             echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
             echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           fi
+      # Only needed on the GitHub-hosted fallback path: self-hosted runs
+      # already have a warm ~/.npm cache from the shared, persistent $HOME.
+      - uses: actions/cache@v4
+        if: ${{ inputs.runner == 'github-hosted' }}
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - name: Install commit lint dependencies
         run: npm ci
       - name: Lint pull request commits

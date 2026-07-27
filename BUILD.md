@@ -86,6 +86,24 @@ untouched. The full test selection remains intact, and self-hosted CI retains
 the single canonical workspace Test job. This path remains an explicit
 fallback rather than the default.
 
+Because the self-hosted runner is a single physical machine, every job in
+`ci.yml` queues and runs serially on it — there is no wall-clock parallelism
+to lose by sharing build output across jobs. `ci.yml` sets a workflow-level
+`CARGO_TARGET_DIR` pointing at `github.workspace`'s parent directory, which
+the runner creates once per repo and `actions/checkout`'s default `git clean
+-ffdx` never touches (it only cleans inside the checkout itself). This lets
+`target/` persist across every self-hosted job and run instead of being wiped
+and restored through `Swatinem/rust-cache`'s remote cache service every time
+— the `clippy`, `test`, and `hydration` jobs on that path no longer restore a
+remote cache at all; only the GitHub-hosted fallback still does, since its
+VMs are ephemeral. If a self-hosted CI run ever looks inconsistent with its
+diff (a false pass or fail that doesn't match the change), suspect a stale
+persistent `target/` first: either dispatch the workflow with the
+`reset_target_dir` input set to `true`, or manually remove the directory on
+the runner. This is unrelated to the local interactive dev target-dir and its
+stale-binary trap below — this mechanism only sets `CARGO_TARGET_DIR` inside
+the GitHub Actions job environment and never touches `.cargo/config.toml`.
+
 ## Windows development
 
 Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
@@ -142,8 +160,11 @@ If the browser does not auto-refresh, check that nothing else is bound to port
 
 A single task often runs five *different* compilation graphs — and because Cargo
 keys its cache on `(features × targets × profile × check-vs-build)`, each one
-re-runs `rustc` over everything that differs, which is brutal on the `/mnt/f`
-(9p) scratch target:
+re-runs `rustc` over everything that differs. This is expensive on any disk,
+and was especially brutal during the period this project's `target-dir` was
+overridden to the `/mnt/f` (9p) scratch mount (see "Performance baseline"
+below) — no such override is committed today, so `target-dir` resolves to the
+default `./target` unless you add one yourself:
 
 1. `cargo run --bin ersatzrs-web` — native, default features, binary.
 2. `cargo clippy --workspace --all-targets` — adds test/example targets.
@@ -175,13 +196,16 @@ are blocked by the checked-in Codex/Claude hooks; use the wrappers so focused
 testing cannot drift back to Cargo. CI intentionally remains on its existing
 `cargo test --workspace --all-features --lib --bins --tests` selection.
 
-### Optional: sccache (recommended on the 9p-target setup)
+### Optional: sccache (recommended if your target-dir sits on a slow disk)
 
 [`sccache`](https://github.com/mozilla/sccache) caches *dependency*
 compilations on a fast disk, so the unavoidable config switches above read
-cached objects instead of recompiling `sqlx`/`leptos`/`mlua` on the slow scratch
-target. Local workspace crates keep incremental compilation; sccache only caches
-the cacheable (dependency) units.
+cached objects instead of recompiling `sqlx`/`leptos`/`mlua`. This matters most
+if your own `target-dir` override points at a slow mount (as `/mnt/f` (9p) did
+during the period referenced above) — with the current default `./target` on
+ordinary local disk, the win is smaller but still real for the config-switch
+cost described above. Local workspace crates keep incremental compilation;
+sccache only caches the cacheable (dependency) units.
 
 It is **opt-in and machine-local** — deliberately *not* added to the repo's
 committed `.cargo/config.toml`, so CI runners and other contributors are never

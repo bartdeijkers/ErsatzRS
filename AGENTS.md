@@ -102,9 +102,11 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
 # Inner-loop verification
 # Use focused commands while iterating; reserve the full parity gate for
-# closeout. The build target-dir is the 9p scratch disk (/mnt/f), where Rust's
-# many-small-files I/O is ~20-100x slower than ext4, so each recompile is
-# expensive. Cargo keys its cache on (features x targets x profile x
+# closeout. If your target-dir override points at a slow mount (this project
+# once used a 9p scratch disk at /mnt/f, where Rust's many-small-files I/O is
+# ~20-100x slower than ext4), each recompile is especially expensive; the
+# default ./target on ordinary local disk applies unless you've added your
+# own override. Cargo keys its cache on (features x targets x profile x
 # check-vs-build), so flipping --features / --all-features / --all-targets /
 # the wasm target between runs re-runs rustc over the whole tree. Keep the loop
 # in ONE configuration:
