@@ -17,7 +17,7 @@ Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the ch
 
 Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
 
-Frozen-shuffle fix (2026-07-27), from Windows MTV dogfood ("Music Videos - Pruned" looked unshuffled on every refresh): `Playout.seed` was never regenerated after creation, and `Refresh` could never retain shuffle state since it only wrote undated anchors while retention required a dated one. Reset now regenerates the seed (mirroring `ResetPlayout()`); Refresh now continues the prior shuffle. Also fixed: seed-to-`u64` conversions silently zeroed negative seeds; the schedule-item reshuffle gained the same anti-repeat guard collection shuffles had; `Shuffle`/`ShuffleInOrder`/`RandomRotation` are no longer aliases; `RandomStartPoint` is now scoped to `Chronological`/`SeasonEpisode`/`ShuffleInOrder`. See the `playback-order-shuffle-modes-aliased` debt and ADR 0010 for remaining gaps and the `RandomRotation` adaptation note.
+Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
 '''
 
 [[debt]]
@@ -57,14 +57,35 @@ resolved    = true
 
 [[debt]]
 id          = 'playout-seed-never-regenerated'
-description = 'Playout.seed was set once at playout creation and never regenerated on a later Reset build; Refresh could never retain per-collection or schedule-item shuffle state because the only anchors it ever wrote were undated while retained_refresh_anchors required a dated checkpoint. Reset and Refresh reproduced the identical shuffle order for a playout entire lifetime.'
+description = 'Playout.seed was set once at playout creation and never regenerated on a later Reset build, so Reset reproduced the identical randomized order for the playout entire lifetime.'
 discovered  = '2026-07-27'
-evidence    = 'See the frozen-shuffle fix paragraph above. Regressions: reset_build_regenerates_playout_seed, refresh_and_continue_builds_preserve_playout_seed (ersatzrs-infra/tests/maintenance.rs), classic_refresh_continues_collection_shuffle_without_day_anchor, classic_refresh_continues_schedule_item_order_from_anchor (classic/mod.rs).'
+evidence    = 'See the frozen-shuffle fix paragraph above. Regressions: reset_build_regenerates_playout_seed and refresh_and_continue_builds_preserve_playout_seed (ersatzrs-infra/tests/maintenance.rs).'
+resolved    = true
+
+[[debt]]
+id          = 'refresh-used-end-of-horizon-anchors'
+description = 'Classic Refresh copied schedule-item state and undated collection state from the end of the previously generated horizon while rebuilding from an earlier request start, selecting the wrong schedule item and skipping media.'
+discovered  = '2026-07-27'
+evidence    = 'Resolved by resetting schedule-item state and retaining only same-day dated collection checkpoints. Regressions: classic_refresh_discards_end_of_horizon_schedule_item_state, classic_refresh_discards_undated_collection_anchor, and classic_refresh_clears_and_rebuilds_from_checkpoint_anchor (classic/mod.rs).'
 resolved    = true
 
 [[debt]]
 id          = 'playback-order-shuffle-modes-aliased'
 description = 'Shuffle, ShuffleInOrder, and MultiEpisodeShuffle were byte-for-byte identical (all ran the same artist-distance shuffle); Random, RandomRotation, and Marathon were also identical (all ran a plain seeded shuffle). Users picking different playback orders got no behavioral difference.'
 discovered  = '2026-07-27'
-evidence    = 'Resolved for Shuffle/ShuffleInOrder/RandomRotation: Shuffle is now a plain flat shuffle; ShuffleInOrder/MultiEpisodeShuffle keep the group-distance spread (now generalized to show_id, not just artist_id); RandomRotation has its own group-anti-repeat algorithm, a materialize-then-walk adaptation of ErsatzTV live `RandomizedRotatingMediaCollectionEnumerator` recorded in the ADR 0010 addendum. Regressions: classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_rotation_avoids_consecutive_same_group (classic/mod.rs). Remaining, deliberately unresolved by this pass and tracked as remaining work rather than a separate debt entry: Marathon stays aliased to Random pending marathon_group_by/marathon_shuffle_items wiring (fields exist, unread by ersatzrs-core/src/scheduling); MultiEpisodeShuffle keeps the group-distance placeholder pending real part-number metadata on SchedulingMediaItem; and the schedule-level keep_multi_part_episodes_together/treat_collections_as_shows flags are persisted and shown in the admin UI but never reach SchedulingReferenceData or the Classic engine (keep_multi_part_episodes_together defaults to true, so the shipped show_id-aware grouping already matches the common case; an explicit false still has no effect).'
+evidence    = 'Resolved for Shuffle/ShuffleInOrder/Random/RandomRotation: Shuffle is a flat exhaustive permutation; ShuffleInOrder/MultiEpisodeShuffle keep show/artist distance; Random performs deterministic draws with replacement; and RandomRotation randomizes within groups while preserving group separation across cycles and persisted Continue seams. Regressions include classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_draws_with_replacement_and_differs_from_shuffle, classic_random_continue_matches_uninterrupted_draws, and the classic_random_rotation_* family (classic/mod.rs). Remaining: Marathon stays aliased to its existing seeded order pending marathon_group_by/marathon_shuffle_items wiring; MultiEpisodeShuffle awaits part-number metadata; and persisted schedule flags keep_multi_part_episodes_together/treat_collections_as_shows still do not reach SchedulingReferenceData.'
+resolved    = true
+
+[[debt]]
+id          = 'random-rotation-quadratic-group-selection'
+description = 'RandomRotation rebuilt and scanned active/preferred group vectors for every output item, making large singleton-group collections quadratic.'
+discovered  = '2026-07-27'
+evidence    = 'Resolved with an O(n log n) canonical sort followed by a direct singleton-group shuffle path, plus ordered bucketing and heap-backed O(n log g) repeated-group interleave. Regression classic_random_rotation_large_unique_group_fast_path covers 10,000 singleton groups.'
+resolved    = true
+
+[[debt]]
+id          = 'random-rotation-continue-seam-state'
+description = 'RandomRotation persisted seed and index without the predecessor group used to materialize the current cycle, so Continue could reconstruct a different order and repeat a group at the build seam.'
+discovered  = '2026-07-27'
+evidence    = 'Resolved by Classic anchor context version 2 storing each cycle predecessor media ID and by canonicalizing cycle source order with the full ADR 0048 scheduling-item identity. Regressions classic_random_rotation_continue_reconstructs_cycle_boundary and classic_random_rotation_continue_preserves_duplicate_override_identity match uninterrupted output, including duplicate media rows with different track overrides.'
 resolved    = true

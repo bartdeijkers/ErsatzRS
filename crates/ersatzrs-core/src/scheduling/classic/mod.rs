@@ -1,11 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
+};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
-    CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind, FillerMode,
-    FixedStartTimeBehavior, GuideMode, MultipleMode, PlaybackOrder, PlayoutAnchor, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
-    StartType, TailMode,
+    ChannelSubtitleMode, CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind,
+    FillerMode, FixedStartTimeBehavior, GuideMode, MultipleMode, PlaybackOrder, PlayoutAnchor,
+    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    ProgramScheduleItem, StartType, TailMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -62,10 +65,12 @@ struct ClassicAnchorContext {
     version: u32,
     #[serde(default, alias = "cooldown")]
     smart_shuffle: SchedulingSmartShuffleState,
+    #[serde(default)]
+    random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
 }
 
 fn classic_anchor_context_version() -> u32 {
-    1
+    2
 }
 
 impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
@@ -124,6 +129,8 @@ struct ClassicContext {
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
     smart_shuffle_state: SchedulingSmartShuffleState,
+    random_draw_states: BTreeMap<String, u64>,
+    random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
     result: SchedulingResult,
     next_anchor_id: EntityId,
     next_fill_group_id: EntityId,
@@ -139,19 +146,22 @@ impl ClassicContext {
         let mut media = BTreeMap::new();
         let mut playlists = BTreeMap::new();
         let mut media_states = BTreeMap::new();
+        let mut random_draw_states = BTreeMap::new();
         let collection_anchors = retained_collection_anchors(&request);
-        let smart_shuffle_state = if request.mode == PlayoutBuildMode::Continue {
+        let anchor_context = if request.mode == PlayoutBuildMode::Continue {
             request
                 .playout
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
                 .and_then(|context| serde_json::from_str::<ClassicAnchorContext>(context).ok())
-                .map(|context| context.smart_shuffle)
                 .unwrap_or_default()
         } else {
-            SchedulingSmartShuffleState::default()
+            ClassicAnchorContext::default()
         };
+        let smart_shuffle_state = anchor_context.smart_shuffle;
+        let mut random_rotation_cycle_predecessors =
+            anchor_context.random_rotation_cycle_predecessors;
         for item in &schedule_items {
             let key = item_key(item);
             let seed = request.playout.seed;
@@ -177,6 +187,7 @@ impl ClassicContext {
                     &mut enumerator,
                     item.playback_order,
                     seed_to_u64(request.playout.seed),
+                    None,
                 );
                 // Matching ErsatzTV: Random Start Point only affects orders
                 // that would otherwise always start from a fixed position
@@ -209,9 +220,18 @@ impl ClassicContext {
                 } else {
                     media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
                 }
+                if item.playback_order == PlaybackOrder::Random && !enumerator.is_empty() {
+                    let random_state = select_random_draw(&mut enumerator, seed_to_u64(seed), 0);
+                    random_draw_states.insert(key.clone(), random_state);
+                }
             }
             media.insert(key, enumerator);
         }
+        random_rotation_cycle_predecessors.retain(|key, _| {
+            media.get(key).is_some_and(|enumerator| {
+                enumerator.playback_order == PlaybackOrder::RandomRotation
+            })
+        });
         let filler_media = request
             .reference_data
             .classic_filler_presets
@@ -262,6 +282,8 @@ impl ClassicContext {
             filler_media,
             fill_group_states,
             smart_shuffle_state,
+            random_draw_states,
+            random_rotation_cycle_predecessors,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
@@ -317,8 +339,33 @@ impl ClassicContext {
             });
             if let Some(enumerator) = self.media.get_mut(&key) {
                 let seed = seed_to_u64(anchor.enumerator_state.seed);
-                prepare_enumerator_items(enumerator, enumerator.playback_order, seed);
-                enumerator.set_index(usize::try_from(anchor.enumerator_state.index).unwrap_or(0));
+                let index = usize::try_from(anchor.enumerator_state.index).unwrap_or(0);
+                match enumerator.playback_order {
+                    PlaybackOrder::Random => {
+                        let random_state = select_random_draw(enumerator, seed, index);
+                        self.random_draw_states.insert(key.clone(), random_state);
+                    }
+                    PlaybackOrder::RandomRotation => {
+                        let previous_key = self
+                            .random_rotation_cycle_predecessors
+                            .get(&key)
+                            .and_then(|media_id| {
+                                enumerator.items.iter().find(|item| item.id == *media_id)
+                            })
+                            .map(shuffle_group_key);
+                        prepare_enumerator_items(
+                            enumerator,
+                            enumerator.playback_order,
+                            seed,
+                            previous_key,
+                        );
+                        enumerator.set_index(index);
+                    }
+                    _ => {
+                        prepare_enumerator_items(enumerator, enumerator.playback_order, seed, None);
+                        enumerator.set_index(index);
+                    }
+                }
                 self.media_states.insert(key, anchor.enumerator_state);
             }
         }
@@ -805,11 +852,12 @@ impl ClassicContext {
                         .media_states
                         .get(&key)
                         .map_or_else(|| self.request.playout.seed, |state| state.seed);
-                    (
-                        enumerator.scheduling_context_name(),
-                        seed,
-                        i32::try_from(enumerator.current_index()).unwrap_or_default(),
-                    )
+                    let index = if enumerator.playback_order == PlaybackOrder::Random {
+                        self.media_states.get(&key).map_or(0, |state| state.index)
+                    } else {
+                        i32::try_from(enumerator.current_index()).unwrap_or_default()
+                    };
+                    (enumerator.scheduling_context_name(), seed, index)
                 });
         let scheduling_context = Self::scheduling_context(
             schedule_item,
@@ -1240,17 +1288,18 @@ impl ClassicContext {
             in_flood: self.state.in_flood,
             in_duration_filler: self.state.in_duration_filler,
             next_guide_group: self.state.next_guide_group,
-            context: self
-                .request
-                .reference_data
-                .has_active_smart_shuffle()
-                .then(|| {
-                    serde_json::to_string(&ClassicAnchorContext {
-                        version: classic_anchor_context_version(),
-                        smart_shuffle: self.smart_shuffle_state.clone(),
-                    })
-                    .unwrap_or_default()
-                }),
+            context: (self.request.reference_data.has_active_smart_shuffle()
+                || !self.random_rotation_cycle_predecessors.is_empty())
+            .then(|| {
+                serde_json::to_string(&ClassicAnchorContext {
+                    version: classic_anchor_context_version(),
+                    smart_shuffle: self.smart_shuffle_state.clone(),
+                    random_rotation_cycle_predecessors: self
+                        .random_rotation_cycle_predecessors
+                        .clone(),
+                })
+                .unwrap_or_default()
+            }),
             ..PlayoutAnchor::default()
         });
         self.result.program_schedule_anchors = self.program_schedule_anchors();
@@ -1302,7 +1351,13 @@ impl ClassicContext {
                         .media_states
                         .get(&key_string)
                         .map_or_else(|| self.request.playout.seed, |state| state.seed),
-                    index: i32::try_from(enumerator.current_index()).unwrap_or_default(),
+                    index: if enumerator.playback_order == PlaybackOrder::Random {
+                        self.media_states
+                            .get(&key_string)
+                            .map_or(0, |state| state.index)
+                    } else {
+                        i32::try_from(enumerator.current_index()).unwrap_or_default()
+                    },
                 },
             });
         }
@@ -1527,14 +1582,35 @@ impl ClassicContext {
             return;
         }
         if let Some(enumerator) = self.media.get_mut(&key) {
+            if enumerator.playback_order == PlaybackOrder::Random {
+                if enumerator.is_empty() {
+                    return;
+                }
+                let media_state =
+                    self.media_states
+                        .entry(key.clone())
+                        .or_insert(CollectionEnumeratorState {
+                            seed: self.request.playout.seed,
+                            index: 0,
+                        });
+                let draw_index = usize::try_from(media_state.index).unwrap_or_default();
+                let random_state = self.random_draw_states.entry(key).or_insert_with(|| {
+                    random_state_for_draw(seed_to_u64(media_state.seed), draw_index)
+                });
+                *random_state = next_random_state(*random_state);
+                enumerator.set_index(random_index(*random_state, enumerator.len()));
+                media_state.index = media_state.index.saturating_add(1);
+                return;
+            }
+
             let tail_media_id = enumerator.current().map(|item| item.id);
+            let tail_group_key = enumerator.current().map(shuffle_group_key);
             enumerator.advance();
             let index = i32::try_from(enumerator.current_index()).unwrap_or_default();
             let should_reshuffle = enumerator.current_index() == 0
                 && matches!(
                     enumerator.playback_order,
-                    PlaybackOrder::Random
-                        | PlaybackOrder::Shuffle
+                    PlaybackOrder::Shuffle
                         | PlaybackOrder::ShuffleInOrder
                         | PlaybackOrder::RandomRotation
                         | PlaybackOrder::Marathon
@@ -1550,7 +1626,19 @@ impl ClassicContext {
                 }
             }
             if let Some(seed) = next_seed {
-                let seed = prepare_next_cycle(enumerator, playback_order, seed, tail_media_id);
+                let seed = prepare_next_cycle(
+                    enumerator,
+                    playback_order,
+                    seed,
+                    tail_media_id,
+                    tail_group_key,
+                );
+                if playback_order == PlaybackOrder::RandomRotation {
+                    if let Some(tail_media_id) = tail_media_id {
+                        self.random_rotation_cycle_predecessors
+                            .insert(key.clone(), tail_media_id);
+                    }
+                }
                 if let Some(state) = self.media_states.get_mut(&key) {
                     state.seed = seed;
                 }
@@ -1663,15 +1751,10 @@ fn state_for_mode(request: &SchedulingRequest, items: &[ProgramScheduleItem]) ->
 
 fn refresh_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
     let mut state = start_state(request, items);
-    // Carry forward the schedule-item shuffle order/position from the
-    // existing playout anchor, the same field `anchor_state()` uses for
-    // Continue builds. Without this, Refresh always rederived
-    // `schedule_state` from `start_state()` (seed = `playout.seed`, index 0),
-    // so the "Shuffle Schedule Items" order was rescrambled identically every
-    // refresh instead of continuing from wherever it left off.
-    if let Some(anchor) = request.playout.anchor.as_ref() {
-        state.schedule_state = anchor.schedule_items_enumerator_state;
-    }
+    // A Refresh clears the generated window. The playout anchor belongs to
+    // the end of that old window, so only a dated collection checkpoint can
+    // move the rebuild start; schedule-item state must be derived afresh for
+    // that time-aligned start.
     if let Some(anchor_date) = retained_refresh_anchors(request)
         .iter()
         .filter_map(|anchor| anchor.anchor_date)
@@ -1721,22 +1804,6 @@ fn retained_refresh_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramSc
     let start_day = midnight(request.start);
     let next_day = start_day + Duration::days(1);
     let mut by_key = BTreeMap::<String, PlayoutProgramScheduleAnchor>::new();
-
-    // Ordinary (undated) checkpoints: always retained, so Refresh continues
-    // the collection-enumerator sequence instead of rescrambling it from
-    // scratch. Production code never actually writes a day-anchored anchor
-    // for ordinary Classic schedule items (see `program_schedule_anchors`
-    // below, which always writes `anchor_date: None`), so without this pass
-    // every Refresh discarded all per-collection shuffle state and reseeded
-    // from the (until now immutable) `playout.seed`, making shuffle output
-    // identical across every refresh. A dated checkpoint for the same key,
-    // if one is ever written, still overrides this below.
-    for anchor in &request.reference_data.existing_program_schedule_anchors {
-        if anchor.anchor_date.is_none() {
-            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
-            by_key.insert(key, anchor.clone());
-        }
-    }
 
     for anchor in &request.reference_data.existing_program_schedule_anchors {
         let Some(anchor_date) = anchor.anchor_date else {
@@ -1908,6 +1975,7 @@ fn prepare_enumerator_items(
     enumerator: &mut MediaEnumerator,
     playback_order: PlaybackOrder,
     seed: u64,
+    previous_group: Option<ShuffleGroupKey>,
 ) {
     match playback_order {
         PlaybackOrder::Chronological => enumerator.items.sort_by(|left, right| {
@@ -1929,12 +1997,12 @@ fn prepare_enumerator_items(
             shuffle_with_group_distance(&mut enumerator.items, seed);
         }
         PlaybackOrder::RandomRotation => {
-            shuffle_with_random_rotation(&mut enumerator.items, seed);
+            shuffle_with_random_rotation(&mut enumerator.items, seed, previous_group);
         }
-        PlaybackOrder::Random | PlaybackOrder::Marathon => {
+        PlaybackOrder::Marathon => {
             shuffle_with_seed(&mut enumerator.items, seed);
         }
-        PlaybackOrder::None => {}
+        PlaybackOrder::Random | PlaybackOrder::None => {}
     }
 }
 
@@ -1966,6 +2034,32 @@ fn has_repeated_group(items: &[SchedulingMediaItem]) -> bool {
         .iter()
         .map(shuffle_group_key)
         .any(|key| !seen.insert(key))
+}
+
+type RandomRotationItemKey<'a> = (
+    EntityId,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<u8>,
+);
+
+/// Stable identity for ADR 0048 scheduling rows. The same media item may
+/// appear more than once when playback overrides differ, so media ID alone
+/// cannot deterministically reconstruct a persisted Random Rotation cycle.
+fn random_rotation_item_key(item: &SchedulingMediaItem) -> RandomRotationItemKey<'_> {
+    (
+        item.id,
+        item.preferred_audio_language_code.as_deref(),
+        item.preferred_audio_title.as_deref(),
+        item.preferred_subtitle_language_code.as_deref(),
+        item.subtitle_mode.map(|mode| match mode {
+            ChannelSubtitleMode::None => 0,
+            ChannelSubtitleMode::Forced => 1,
+            ChannelSubtitleMode::Default => 2,
+            ChannelSubtitleMode::Any => 3,
+        }),
+    )
 }
 
 fn group_items_by_key(
@@ -2017,67 +2111,92 @@ fn shuffle_with_group_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64) 
 }
 
 /// `RandomRotation`'s algorithm: bucket items by group (show/artist), then
-/// materialize the cycle by repeatedly drawing a random remaining group,
-/// preferring a different group than the previous pick when more than one
-/// still has items. This is a materialize-then-walk adaptation of ErsatzTV's
-/// live `RandomizedRotatingMediaCollectionEnumerator` "bump to next group on
+/// materialize the cycle with a seeded tie order and a max-heap that advances
+/// the largest remaining group, preferring a different group than the
+/// previous pick when more than one still has items. This is a
+/// materialize-then-walk adaptation of ErsatzTV's live
+/// `RandomizedRotatingMediaCollectionEnumerator` "bump to next group on
 /// repeat" behavior — ErsatzRS's `MediaEnumerator` materializes a full order
 /// per cycle rather than tracking per-draw group state the way the upstream
 /// live enumerator does.
-fn shuffle_with_random_rotation(items: &mut Vec<SchedulingMediaItem>, seed: u64) {
-    if items.len() <= 1 || !has_repeated_group(items) {
+fn shuffle_with_random_rotation(
+    items: &mut Vec<SchedulingMediaItem>,
+    seed: u64,
+    previous_key: Option<ShuffleGroupKey>,
+) {
+    if items.len() <= 1 {
         shuffle_with_seed(items, seed);
         return;
     }
 
-    let mut groups = group_items_by_key(std::mem::take(items));
+    // Canonicalize the source before every cycle so persisted seed plus
+    // predecessor reconstructs the exact same materialized order, including
+    // duplicate media rows carrying distinct playback overrides.
+    items.sort_by(|left, right| {
+        random_rotation_item_key(left).cmp(&random_rotation_item_key(right))
+    });
+    let has_repeated_group = has_repeated_group(items);
+    shuffle_with_seed(items, seed);
+
+    // Movies and other ungrouped media are singleton groups. After the shared
+    // canonical sort and shuffle, keep this common path constant-time and only
+    // move the first item when a persisted predecessor would otherwise repeat
+    // across a cycle/build boundary.
+    if !has_repeated_group {
+        if previous_key.is_some_and(|key| {
+            items
+                .first()
+                .is_some_and(|item| shuffle_group_key(item) == key)
+        }) {
+            items.swap(0, 1);
+        }
+        return;
+    }
+
+    // RandomRotation chooses both a group and an item within that group.
+    // Bucketing through an ordered map avoids the quadratic Vec::find loop,
+    // while the pre-shuffle above randomizes the queue within every group.
+    let mut group_indices = BTreeMap::<ShuffleGroupKey, usize>::new();
+    let mut groups = Vec::<(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)>::new();
+    for item in std::mem::take(items) {
+        let key = shuffle_group_key(&item);
+        if let Some(index) = group_indices.get(&key).copied() {
+            groups[index].1.push_back(item);
+        } else {
+            group_indices.insert(key, groups.len());
+            groups.push((key, VecDeque::from([item])));
+        }
+    }
     let total_len: usize = groups.iter().map(|(_, group)| group.len()).sum();
     let mut arranged = Vec::with_capacity(total_len);
-    let mut state = seed;
-    let mut previous_key = None;
-    while arranged.len() < total_len {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        let Some(index) = random_rotation_candidate(&groups, previous_key, state) else {
-            break;
-        };
-        let key = groups[index].0;
-        if let Some(item) = groups[index].1.pop_front() {
+    let mut active = groups
+        .iter()
+        .enumerate()
+        .map(|(index, (_, items))| (items.len(), Reverse(index)))
+        .collect::<BinaryHeap<_>>();
+    let mut previous_key = previous_key;
+    while let Some(mut candidate) = active.pop() {
+        let mut group_index = candidate.1 .0;
+        if Some(groups[group_index].0) == previous_key {
+            if let Some(alternative) = active.pop() {
+                active.push(candidate);
+                candidate = alternative;
+                group_index = candidate.1 .0;
+            }
+        }
+
+        let key = groups[group_index].0;
+        if let Some(item) = groups[group_index].1.pop_front() {
             arranged.push(item);
             previous_key = Some(key);
+        }
+        candidate.0 = candidate.0.saturating_sub(1);
+        if candidate.0 > 0 {
+            active.push(candidate);
         }
     }
 
     *items = arranged;
-}
-
-fn random_rotation_candidate(
-    groups: &[(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)],
-    previous_key: Option<ShuffleGroupKey>,
-    state: u64,
-) -> Option<usize> {
-    let non_empty: Vec<usize> = groups
-        .iter()
-        .enumerate()
-        .filter(|(_, (_, group_items))| !group_items.is_empty())
-        .map(|(index, _)| index)
-        .collect();
-    if non_empty.is_empty() {
-        return None;
-    }
-    let preferred: Vec<usize> = non_empty
-        .iter()
-        .copied()
-        .filter(|&index| Some(groups[index].0) != previous_key)
-        .collect();
-    let pool = if preferred.is_empty() {
-        &non_empty
-    } else {
-        &preferred
-    };
-    let pick = (state >> 33) as usize % pool.len();
-    Some(pool[pick])
 }
 
 fn group_distance_candidate(
@@ -2106,15 +2225,18 @@ fn prepare_next_cycle(
     playback_order: PlaybackOrder,
     mut seed: i32,
     tail_media_id: Option<EntityId>,
+    tail_group_key: Option<ShuffleGroupKey>,
 ) -> i32 {
-    prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed));
+    if playback_order == PlaybackOrder::RandomRotation {
+        shuffle_with_random_rotation(&mut enumerator.items, seed_to_u64(seed), tail_group_key);
+        return seed;
+    }
+
+    prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed), None);
 
     if !matches!(
         playback_order,
-        PlaybackOrder::Shuffle
-            | PlaybackOrder::ShuffleInOrder
-            | PlaybackOrder::MultiEpisodeShuffle
-            | PlaybackOrder::RandomRotation
+        PlaybackOrder::Shuffle | PlaybackOrder::ShuffleInOrder | PlaybackOrder::MultiEpisodeShuffle
     ) || enumerator.len() <= 1
     {
         return seed;
@@ -2125,10 +2247,67 @@ fn prepare_next_cycle(
         .is_some_and(|item| Some(item.id) == tail_media_id)
     {
         seed = next_i32_seed(seed);
-        prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed));
+        prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed), None);
     }
 
     seed
+}
+
+const RANDOM_MULTIPLIER: u64 = 6_364_136_223_846_793_005;
+const RANDOM_INCREMENT: u64 = 1_442_695_040_888_963_407;
+
+fn next_random_state(state: u64) -> u64 {
+    state
+        .wrapping_mul(RANDOM_MULTIPLIER)
+        .wrapping_add(RANDOM_INCREMENT)
+}
+
+fn random_index(state: u64, len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        (state >> 33) as usize % len
+    }
+}
+
+/// Advance the scheduler LCG by `steps` in logarithmic time.
+fn advance_random_state(mut state: u64, mut steps: u64) -> u64 {
+    let mut accumulated_multiplier = 1_u64;
+    let mut accumulated_increment = 0_u64;
+    let mut current_multiplier = RANDOM_MULTIPLIER;
+    let mut current_increment = RANDOM_INCREMENT;
+
+    while steps > 0 {
+        if steps & 1 == 1 {
+            accumulated_multiplier = accumulated_multiplier.wrapping_mul(current_multiplier);
+            accumulated_increment = accumulated_increment
+                .wrapping_mul(current_multiplier)
+                .wrapping_add(current_increment);
+        }
+        current_increment = current_multiplier
+            .wrapping_add(1)
+            .wrapping_mul(current_increment);
+        current_multiplier = current_multiplier.wrapping_mul(current_multiplier);
+        steps >>= 1;
+    }
+
+    state = accumulated_multiplier
+        .wrapping_mul(state)
+        .wrapping_add(accumulated_increment);
+    state
+}
+
+fn random_state_for_draw(seed: u64, draw_index: usize) -> u64 {
+    let steps = u64::try_from(draw_index)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    advance_random_state(seed, steps)
+}
+
+fn select_random_draw(enumerator: &mut MediaEnumerator, seed: u64, draw_index: usize) -> u64 {
+    let state = random_state_for_draw(seed, draw_index);
+    enumerator.set_index(random_index(state, enumerator.len()));
+    state
 }
 
 /// Bit-reinterpret an `i32` playout/enumerator seed as `u64` for use as LCG
@@ -2142,9 +2321,7 @@ fn seed_to_u64(seed: i32) -> u64 {
 }
 
 fn next_i32_seed(seed: i32) -> i32 {
-    let next = seed_to_u64(seed)
-        .wrapping_mul(6_364_136_223_846_793_005)
-        .wrapping_add(1_442_695_040_888_963_407);
+    let next = next_random_state(seed_to_u64(seed));
     (next >> 33) as i32
 }
 
@@ -2178,6 +2355,15 @@ mod tests {
     use crate::scheduling::{
         PlayoutBuildMode, SchedulingFillerPreset, SchedulingPlaylistItem, SchedulingReferenceData,
     };
+
+    #[test]
+    fn classic_anchor_context_v1_defaults_random_rotation_state() {
+        let context: ClassicAnchorContext =
+            serde_json::from_str(r#"{"version":1}"#).expect("version 1 context should deserialize");
+
+        assert_eq!(context.version, 1);
+        assert!(context.random_rotation_cycle_predecessors.is_empty());
+    }
 
     #[test]
     fn classic_one_and_multiple_schedule_items_snapshot() {
@@ -2758,15 +2944,10 @@ mod tests {
     }
 
     #[test]
-    fn classic_refresh_continues_collection_shuffle_without_day_anchor() {
-        // Same fixture as classic_reuses_existing_anchor_seed_and_omits_collection_key,
-        // but built with Refresh instead of Continue. Production code never
-        // writes a day-anchored PlayoutProgramScheduleAnchor for ordinary
-        // Classic schedule items, so before the retained_refresh_anchors fix
-        // this anchor (undated) was silently dropped on Refresh and the
-        // collection reseeded from `playout.seed` (7) instead of continuing
-        // from the anchor's seed (42) — making every Refresh reproduce the
-        // identical shuffle order.
+    fn classic_refresh_discards_undated_collection_anchor() {
+        // An undated anchor is the Continue position at the end of the old
+        // generated window. Refresh clears that window, so applying this
+        // state at `start` would skip media that should be rebuilt.
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
         let schedule_item = ProgramScheduleItem {
             playback_order: PlaybackOrder::Shuffle,
@@ -2812,25 +2993,21 @@ mod tests {
         assert!(item
             .scheduling_context
             .as_deref()
-            .is_some_and(|context| context.contains("\"Seed\":42")));
+            .is_some_and(|context| context.contains("\"Seed\":7")));
         assert_eq!(
             result
                 .program_schedule_anchors
                 .first()
                 .map(|anchor| anchor.enumerator_state.seed),
-            Some(next_i32_seed(42))
+            Some(7)
         );
     }
 
     #[test]
-    fn classic_refresh_continues_schedule_item_order_from_anchor() {
-        // With two schedule items and `classic_shuffle_schedule_items: false`
-        // (identity schedule_order), a Refresh build must resume at the
-        // schedule-item index carried on `playout.anchor`, not restart at
-        // index 0 the way `start_state()` would. Before the refresh_state fix,
-        // Refresh always rederived schedule_state from `playout.seed`/index 0,
-        // so a channel that had rotated to its second schedule item would
-        // silently jump back to the first one on every refresh.
+    fn classic_refresh_discards_end_of_horizon_schedule_item_state() {
+        // The playout anchor points at the end of the old generated window.
+        // Refresh clears that window and rebuilds from `start`, so carrying
+        // index 1 back to `start` would incorrectly skip the first item.
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
         let item_a = schedule_item(1, PlayoutMode::One, 1, None);
         let item_b = schedule_item(2, PlayoutMode::One, 2, None);
@@ -2860,7 +3037,7 @@ mod tests {
                             seed: 7,
                             index: 1,
                         },
-                        next_start: start,
+                        next_start: start + Duration::days(2),
                         ..PlayoutAnchor::default()
                     }),
                     ..Playout::default()
@@ -2870,12 +3047,12 @@ mod tests {
                 mode: PlayoutBuildMode::Refresh,
                 reference_data,
             })
-            .expect("classic refresh should continue schedule-item order");
+            .expect("classic refresh should rebuild schedule-item order");
 
         let item = result.added_items.first().expect("scheduled item");
         assert_eq!(
-            item.media_item_id, 201,
-            "refresh should resume at the anchored schedule-item index, not restart at index 0"
+            item.media_item_id, 101,
+            "refresh must rebuild from a time-aligned schedule-item state"
         );
     }
 
@@ -2950,7 +3127,7 @@ mod tests {
         ];
         let mut expected = MediaEnumerator::new(key.clone(), media_items.clone())
             .with_playback_order(PlaybackOrder::Shuffle);
-        prepare_enumerator_items(&mut expected, PlaybackOrder::Shuffle, 42);
+        prepare_enumerator_items(&mut expected, PlaybackOrder::Shuffle, 42, None);
         expected.set_index(1);
         let expected_media_ids = (0..3)
             .filter_map(|_| {
@@ -3301,6 +3478,466 @@ mod tests {
         assert!(
             artists.windows(2).all(|window| window[0] != window[1]),
             "RandomRotation placed same-group videos too closely: {artists:?}"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_randomizes_items_within_a_single_group() {
+        let order_for_seed = |seed| {
+            let mut items = vec![
+                music_video(101, 1),
+                music_video(102, 1),
+                music_video(103, 1),
+                music_video(104, 1),
+            ];
+            shuffle_with_random_rotation(&mut items, seed, None);
+            items.into_iter().map(|item| item.id).collect::<Vec<_>>()
+        };
+
+        assert_ne!(
+            order_for_seed(1),
+            order_for_seed(2),
+            "RandomRotation seed must affect item order even when all items share one group"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_randomizes_items_within_each_group() {
+        let source = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(103, 1),
+            music_video(201, 2),
+            music_video(202, 2),
+            music_video(203, 2),
+        ];
+
+        for (artist_id, repository_order) in [(1, vec![101, 102, 103]), (2, vec![201, 202, 203])] {
+            let changes_order = (1..=16).any(|seed| {
+                let mut items = source.clone();
+                shuffle_with_random_rotation(&mut items, seed, None);
+                let group_order = items
+                    .into_iter()
+                    .filter(|item| item.artist_id == Some(artist_id))
+                    .map(|item| item.id)
+                    .collect::<Vec<_>>();
+                group_order != repository_order
+            });
+            assert!(
+                changes_order,
+                "RandomRotation retained repository order within artist group {artist_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn classic_random_rotation_separates_groups_across_cycle_boundaries() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::RandomRotation,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("12"))
+        };
+        let key = item_key(&schedule_item);
+        let media_items = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(201, 2),
+            music_video(202, 2),
+            music_video(301, 3),
+            music_video(302, 3),
+        ];
+        let artists_by_id = media_items
+            .iter()
+            .map(|item| (item.id, item.artist_id))
+            .collect::<BTreeMap<_, _>>();
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(key, media_items);
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 1,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(60),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let artists = result
+            .added_items
+            .iter()
+            .map(|item| artists_by_id.get(&item.media_item_id).copied().flatten())
+            .collect::<Vec<_>>();
+        assert_eq!(artists.len(), 12);
+        assert!(
+            artists.windows(2).all(|window| window[0] != window[1]),
+            "RandomRotation repeated a group across a cycle boundary: {artists:?}"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_large_unique_group_fast_path() {
+        let source = (1..=10_000)
+            .map(|id| SchedulingMediaItem::new(id, Duration::minutes(1)))
+            .collect::<Vec<_>>();
+        let mut plain_shuffle = source.clone();
+        shuffle_with_seed(&mut plain_shuffle, 7);
+        let predecessor = plain_shuffle.first().map(shuffle_group_key);
+
+        let mut rotated = source;
+        shuffle_with_random_rotation(&mut rotated, 7, predecessor);
+
+        assert_eq!(rotated.len(), 10_000);
+        assert_eq!(
+            rotated
+                .iter()
+                .map(|item| item.id)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            10_000
+        );
+        assert_ne!(
+            rotated.first().map(shuffle_group_key),
+            predecessor,
+            "the unique-group fast path must preserve boundary separation"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_continue_reconstructs_cycle_boundary() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::RandomRotation,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
+        };
+        let key = item_key(&schedule_item);
+        let media_items = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(201, 2),
+            music_video(202, 2),
+            music_video(301, 3),
+            music_video(302, 3),
+        ];
+        let artists_by_id = media_items
+            .iter()
+            .map(|item| (item.id, item.artist_id))
+            .collect::<BTreeMap<_, _>>();
+        let reference_data = {
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(key, media_items);
+            reference_data
+        };
+        let playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 1,
+            ..Playout::default()
+        };
+
+        let uninterrupted = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: start + Duration::minutes(35),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("uninterrupted RandomRotation schedule should build");
+        let first_build = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("first RandomRotation build should complete one cycle");
+        let first_anchor = first_build
+            .anchor
+            .clone()
+            .expect("persisted playout anchor");
+        assert!(first_anchor
+            .context
+            .as_deref()
+            .is_some_and(|context| context.contains("random_rotation_cycle_predecessors")));
+
+        let mut continued_reference_data = reference_data;
+        continued_reference_data.existing_program_schedule_anchors =
+            first_build.program_schedule_anchors;
+        let continued = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    anchor: Some(first_anchor.clone()),
+                    ..playout
+                },
+                start: first_anchor.next_start,
+                finish: first_anchor.next_start + Duration::minutes(5),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: continued_reference_data,
+            })
+            .expect("continued RandomRotation schedule should reconstruct the next cycle");
+
+        let uninterrupted_ids = uninterrupted
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>();
+        let continued_id = continued
+            .added_items
+            .first()
+            .map(|item| item.media_item_id)
+            .expect("continued item");
+        assert_eq!(continued_id, uninterrupted_ids[6]);
+        assert_ne!(
+            artists_by_id[&uninterrupted_ids[5]], artists_by_id[&continued_id],
+            "RandomRotation repeated a group at a persisted build seam"
+        );
+    }
+
+    #[test]
+    fn classic_random_rotation_continue_preserves_duplicate_override_identity() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::RandomRotation,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("8"))
+        };
+        let key = item_key(&schedule_item);
+        let default = music_video(101, 1);
+        let commentary = SchedulingMediaItem {
+            preferred_audio_language_code: Some("eng".to_owned()),
+            preferred_audio_title: Some("Director Commentary".to_owned()),
+            preferred_subtitle_language_code: Some("eng".to_owned()),
+            subtitle_mode: Some(ChannelSubtitleMode::Any),
+            ..music_video(101, 1)
+        };
+        let reference_data = {
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(
+                key,
+                vec![
+                    default,
+                    commentary,
+                    music_video(201, 2),
+                    music_video(301, 3),
+                ],
+            );
+            reference_data
+        };
+        let item_identity = |item: &PlayoutItem| {
+            (
+                item.media_item_id,
+                item.preferred_audio_language_code.clone(),
+                item.preferred_audio_title.clone(),
+                item.preferred_subtitle_language_code.clone(),
+                item.subtitle_mode,
+            )
+        };
+
+        for seed in 1..=32 {
+            let playout = Playout {
+                id: 50,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed,
+                ..Playout::default()
+            };
+            let uninterrupted = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: playout.clone(),
+                    start,
+                    finish: start + Duration::minutes(40),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference_data.clone(),
+                })
+                .expect("uninterrupted RandomRotation schedule should build");
+            let first_build = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: playout.clone(),
+                    start,
+                    finish: start + Duration::minutes(20),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference_data.clone(),
+                })
+                .expect("first RandomRotation build should complete one cycle");
+            let first_anchor = first_build
+                .anchor
+                .clone()
+                .expect("persisted playout anchor");
+            let mut continued_reference_data = reference_data.clone();
+            continued_reference_data.existing_program_schedule_anchors =
+                first_build.program_schedule_anchors;
+            let continued = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        anchor: Some(first_anchor.clone()),
+                        ..playout
+                    },
+                    start: first_anchor.next_start,
+                    finish: first_anchor.next_start + Duration::minutes(20),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: continued_reference_data,
+                })
+                .expect("continued RandomRotation schedule should reconstruct variant order");
+
+            let expected = uninterrupted
+                .added_items
+                .iter()
+                .skip(4)
+                .map(item_identity)
+                .collect::<Vec<_>>();
+            let actual = continued
+                .added_items
+                .iter()
+                .map(item_identity)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                actual, expected,
+                "RandomRotation changed a duplicate playback override at seed {seed}"
+            );
+        }
+    }
+
+    #[test]
+    fn classic_random_draws_with_replacement_and_differs_from_shuffle() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let build = |playback_order| {
+            let schedule_item = ProgramScheduleItem {
+                playback_order,
+                ..schedule_item(1, PlayoutMode::Multiple, 1, Some("4"))
+            };
+            let key = item_key(&schedule_item);
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(
+                key,
+                vec![
+                    SchedulingMediaItem::new(101, Duration::minutes(1)),
+                    SchedulingMediaItem::new(102, Duration::minutes(1)),
+                    SchedulingMediaItem::new(103, Duration::minutes(1)),
+                    SchedulingMediaItem::new(104, Duration::minutes(1)),
+                ],
+            );
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed: 1,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(4),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                })
+                .expect("classic schedule should build")
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>()
+        };
+
+        let random = build(PlaybackOrder::Random);
+        let shuffle = build(PlaybackOrder::Shuffle);
+        assert_eq!(random, vec![103, 102, 101, 103]);
+        assert_eq!(random.iter().copied().collect::<BTreeSet<_>>().len(), 3);
+        assert_ne!(random, shuffle);
+    }
+
+    #[test]
+    fn classic_random_continue_matches_uninterrupted_draws() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Random,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(1)),
+                SchedulingMediaItem::new(102, Duration::minutes(1)),
+                SchedulingMediaItem::new(103, Duration::minutes(1)),
+                SchedulingMediaItem::new(104, Duration::minutes(1)),
+            ],
+        );
+        let playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 1,
+            ..Playout::default()
+        };
+
+        let uninterrupted = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: start + Duration::minutes(6),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("uninterrupted Random schedule should build");
+        let first_build = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: start + Duration::minutes(3),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("first Random build should persist draw state");
+        let first_anchor = first_build
+            .anchor
+            .clone()
+            .expect("persisted playout anchor");
+        let mut continued_reference_data = reference_data;
+        continued_reference_data.existing_program_schedule_anchors =
+            first_build.program_schedule_anchors;
+        let continued = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    anchor: Some(first_anchor.clone()),
+                    ..playout
+                },
+                start: first_anchor.next_start,
+                finish: first_anchor.next_start + Duration::minutes(3),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: continued_reference_data,
+            })
+            .expect("continued Random schedule should resume draw count");
+
+        assert_eq!(
+            continued
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>(),
+            uninterrupted
+                .added_items
+                .iter()
+                .skip(3)
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>()
         );
     }
 

@@ -1,4 +1,7 @@
 {"agent":"ersatzrs-daily-progress","date":"2026-07-28","summary":"Daily reconcile 817e019..70b4be0: EPG /epg + browser channel-watch/preview landed (ADRs 0053-0055, Phase 7 parity, already reconciled in feat commit); added missing /epg nav route to routes.toml; remaining CI target-dir perf/docs commits are no-parity. Top-3 gap prompts unchanged in scope (p8a-01 jukebox contract, ADR 0022 de-de, ADR 0023 hi-in)."}
+{"agent":"Codex","date":"2026-07-27","summary":"Canonicalized Classic RandomRotation cycles by duplicate playback-override identity after review"}
+{"agent":"Codex","date":"2026-07-27","summary":"Fixed Classic Random draw-with-replacement parity and scalable persisted RandomRotation seams after review"}
+{"agent":"Codex","date":"2026-07-27","summary":"Corrected Classic Refresh checkpoint alignment and RandomRotation item/group cycle behavior after review"}
 {"agent":"Claude Sonnet 5","date":"2026-07-27","summary":"Fixed Classic scheduling shuffle freezing (seed never regenerated, Refresh never continued shuffle state) and differentiated Shuffle/ShuffleInOrder/RandomRotation playback orders"}
 {"agent":"Codex","date":"2026-07-27","summary":"Fixed browser-preview E2E fixtures to preserve valid channel-number and schedule-kind storage contracts after exact-SHA CI diagnostics."}
 {"agent":"Codex","date":"2026-07-27","summary":"Changed channel previews to one-shot muted autoplay and viewport-bound desktop/mobile sizing, with localized copy, ADR 0055, and 16/16 Chromium/Firefox proof."}

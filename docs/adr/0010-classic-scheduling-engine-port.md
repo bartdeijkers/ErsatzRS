@@ -50,15 +50,17 @@ final Slice 21 import verification.
 
 ### 2026-07-27 addendum: seed/anchor semantics fix and `RandomRotation`
 
-Reset and Refresh previously reproduced the identical shuffle order for a
-playout's entire life: `Playout.seed` was regenerated only at playout
-creation (never on a later Reset), and Refresh could never retain
-per-collection or schedule-item shuffle state because the only anchors the
-engine wrote were undated while retention required a dated checkpoint. This
-was a bug in the port, not an intended deviation — ErsatzTV's `ResetPlayout()`
-regenerates `playout.Seed` on every Reset, and its Refresh is designed to
-continue the existing shuffle sequence. Both are now fixed; see the
-`classic-scheduling` parity file for the full account and regression list.
+`Playout.seed` was regenerated only at playout creation, so every later Reset
+reproduced the same randomized order. Reset now mirrors ErsatzTV's
+`ResetPlayout()` by generating and persisting a new seed.
+
+Refresh continuation must be time-aligned. The playout anchor and undated
+collection anchors describe the end of the previously generated horizon;
+reusing them after clearing that horizon skips schedule items and media at the
+new rebuild start. Refresh therefore resets schedule-item state and accepts
+only same-day dated collection checkpoints. Without such a checkpoint it
+starts from the playout seed, matching ErsatzTV's anchor filtering rather than
+pretending an end-of-horizon position belongs at the rebuild start.
 
 `PlaybackOrder::RandomRotation` is a deliberate, spirit-preserving adaptation
 rather than a literal port of ErsatzTV's live
@@ -66,10 +68,28 @@ rather than a literal port of ErsatzTV's live
 state and bumps to a different group only when a live draw repeats the
 previous one; ErsatzRS's `MediaEnumerator` instead materializes a full
 arranged order once per cycle (the same pattern `Shuffle`/`ShuffleInOrder`
-already use), so `RandomRotation` bucket-and-walks a random remaining group at
-materialization time, preferring a group other than the previous pick. The
-observable property — no two adjacent items from the same show/artist when
-avoidable — matches upstream even though the mechanism differs.
+already use). The adaptation canonicalizes each cycle by ADR 0048 scheduling
+item identity — media ID plus audio/subtitle overrides — randomizes items
+within groups, and uses a max-heap to interleave repeated groups without
+adjacent matches when avoidable. Including the override tuple is necessary
+because one media item may appear multiple times with different track
+selection; media ID alone leaves their relative order dependent on the prior
+shuffle and cannot reconstruct the same persisted cycle. After O(n log n)
+canonicalization, singleton groups need only one linear shuffle and a
+constant-time seam adjustment; grouped collections add O(n log g) heap work,
+avoiding the prior quadratic scan.
+
+Classic anchor context version 2 stores the predecessor media ID used to
+materialize each active Random Rotation cycle. A Continue build resolves that
+ID back to its show/artist group before reconstructing the seeded cycle, so
+persisted build seams produce the same next item as an uninterrupted build.
+Older contexts default this additive map to empty.
+
+`PlaybackOrder::Random` now follows ErsatzTV's draw-with-replacement behavior
+instead of sharing Shuffle's exhaustive permutation. ErsatzRS retains its
+existing deterministic LCG rather than reproducing .NET `Random` byte-for-byte:
+the collection state persists the seed and draw count, runtime draws advance
+in O(1), and anchor restoration jumps to the required draw in O(log n).
 
 ## Alternatives Considered
 

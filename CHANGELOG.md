@@ -165,13 +165,12 @@ release section when tagging a release.
 
 ### Fixed
 
-- Classic-scheduled playouts (Shuffle, Random, and other randomized playback
-  orders, plus the "Shuffle Schedule Items" checkbox) no longer freeze on the
-  same shuffle order for the playout's entire lifetime. `Reset` now
-  regenerates the playout's seed, matching ErsatzTV's `ResetPlayout()`, and
-  `Refresh` now genuinely continues the existing per-collection and
-  schedule-item shuffle sequence instead of silently rescrambling it from the
-  same unchanged seed every time.
+- Classic-scheduled randomized playouts no longer freeze on the same order
+  after every `Reset`: the operation now regenerates the playout seed,
+  matching ErsatzTV's `ResetPlayout()`. `Refresh` now rejects the old
+  end-of-horizon schedule state and undated Continue collection anchors,
+  rebuilding only from a dated checkpoint aligned with the requested window
+  when one exists.
 - The Classic engine's shuffle seed arithmetic no longer silently collapses a
   negative seed to a constant `0`, and "Shuffle Schedule Items" reshuffling on
   a cycle wraparound now avoids repeating the same schedule item across the
@@ -186,8 +185,13 @@ release section when tagging a release.
   now a plain flat shuffle; `Shuffle In Order` (and the `Multi-Episode
   Shuffle` placeholder) keep the group-distance spread that previously
   applied to `Shuffle` too, now generalized to spread by show as well as
-  artist; `Random Rotation` gained its own algorithm that avoids drawing the
-  same show/artist group twice in a row.
+  artist; `Random` performs independent deterministic draws with replacement;
+  and `Random Rotation` randomizes within show/artist groups while preserving
+  group separation across cycle and persisted-build boundaries, including
+  collections that repeat one media item with distinct audio or subtitle
+  overrides. Rotation uses a direct singleton-group path and heap-backed
+  grouped interleave so large movie libraries no longer trigger quadratic
+  scheduling work.
 - Browser-preview E2E fixtures now preserve the channel-number and integer
   schedule-kind database contracts, so the shared Playwright database cannot
   invalidate later channel-number and playout coverage.
