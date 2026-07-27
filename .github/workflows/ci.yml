@@ -228,8 +228,13 @@ jobs:
             echo "head_sha=$PULL_REQUEST_HEAD_SHA" >> "$GITHUB_OUTPUT"
           else
             git fetch --no-tags origin main
-            echo "base_sha=$(git merge-base origin/main HEAD)" >> "$GITHUB_OUTPUT"
-            echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            head_sha=$(git rev-parse HEAD)
+            base_sha=$(git merge-base origin/main HEAD)
+            if [ "$base_sha" = "$head_sha" ]; then
+              base_sha=$(git rev-parse HEAD^)
+            fi
+            echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           fi
       - name: Install commit lint dependencies
         run: npm ci

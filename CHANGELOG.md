@@ -158,6 +158,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Manual CI runs on the default branch now lint the selected head commit
+  instead of passing an empty range to commitlint, restoring the
+  GitHub-hosted fallback when the self-hosted runner is unavailable.
 - Hardened the EPG and browser-preview slice after correctness review. Preview
   and normal HLS workers now use distinct admission identities while sharing
   the same global capacity limit; guide labels use local time; aggregate
