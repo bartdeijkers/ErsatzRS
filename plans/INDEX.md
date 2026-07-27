@@ -125,6 +125,11 @@ changelog, and git history for evidence. The authoritative live state is always
 - `web-server-wasm-crate-split.md` - structural refactor plan to separate the
   native SSR server binary from the WASM hydration library so native release
   builds never compile the web `cdylib`.
+- `ci-self-hosted-target-dir.md` - CI running-time plan to give the default
+  self-hosted `ci.yml` jobs a persistent, checkout-external `CARGO_TARGET_DIR`
+  instead of restoring `target/` through the remote `Swatinem/rust-cache`
+  round-trip every run, plus a `test_hosted` matrix cache-key fix and small
+  tool-install/npm caching wins.
 
 ## Deferred Contract Work
 
