@@ -33,6 +33,11 @@ on:
         options:
           - self-hosted
           - github-hosted
+      reset_target_dir:
+        description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
+        type: boolean
+        required: false
+        default: false
 
 # Bursty pushing is common here (44% of recent consecutive commits landed
 # <10 min apart). On the single self-hosted runner that queues full clippy+test
@@ -79,14 +84,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # Only needed on the GitHub-hosted fallback path: self-hosted jobs
+      # reuse the persistent CARGO_TARGET_DIR set at workflow level instead
+      # (see the comment above `env:`), so restoring a remote cache on top
+      # of it there would risk overwriting fresher local objects with a
+      # staler blob for no benefit.
       - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
         with:
           # Self-hosted runner shares $CARGO_HOME/bin with the developer
           # shell, so don't let rust-cache prune cargo-leptos /
           # stylance-cli / wasm-bindgen between runs.
           cache-bin: "false"
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.2 --locked
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
       - name: Clippy (default / SQLite)
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Clippy (MySQL feature)
@@ -102,14 +119,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Self-hosted runner shares $CARGO_HOME/bin with the developer
-          # shell, so don't let rust-cache prune cargo-leptos /
-          # stylance-cli / wasm-bindgen between runs.
-          cache-bin: "false"
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # This job only ever runs self-hosted (see the `if:` above), so it
+      # relies solely on the persistent CARGO_TARGET_DIR set at workflow
+      # level (see the comment above `env:`) — no remote cache needed here.
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.2 --locked
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
       - name: Test (all features)
         run: cargo test --workspace --all-features --lib --bins --tests
       - name: Validate progress index (docs/progress/)
@@ -183,13 +203,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      # Only needed on the GitHub-hosted fallback path: self-hosted runs
+      # reuse the persistent CARGO_TARGET_DIR set at workflow level instead
+      # (see the comment above `env:`).
       - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
         with:
-          # Self-hosted runner shares $CARGO_HOME/bin with the developer
-          # shell, so don't let rust-cache prune cargo-leptos /
-          # stylance-cli / wasm-bindgen between runs. Hosted runners instead
-          # restore these pinned tools to avoid repeated cold installs.
-          cache-bin: ${{ inputs.runner == 'github-hosted' && 'true' || 'false' }}
+          # Hosted runners restore these pinned tools to avoid repeated
+          # cold installs.
+          cache-bin: "true"
       - name: Hydration lint
         run: cargo xtask hydration-lint -p ersatzrs-web
       - name: Install web E2E tools
