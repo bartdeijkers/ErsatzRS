@@ -176,11 +176,13 @@ impl ClassicContext {
                 prepare_enumerator_items(
                     &mut enumerator,
                     item.playback_order,
-                    u64::try_from(request.playout.seed).unwrap_or_default(),
+                    seed_to_u64(request.playout.seed),
                 );
                 if request.reference_data.classic_random_start_point && !enumerator.is_empty() {
-                    let index = usize::try_from(request.playout.seed).unwrap_or_default()
-                        % enumerator.len();
+                    let index = usize::try_from(
+                        seed_to_u64(request.playout.seed) % enumerator.len() as u64,
+                    )
+                    .unwrap_or(0);
                     enumerator.set_index(index);
                     media_states.insert(
                         key.clone(),
@@ -299,7 +301,7 @@ impl ClassicContext {
                 fake_collection_key: anchor.fake_collection_key.clone(),
             });
             if let Some(enumerator) = self.media.get_mut(&key) {
-                let seed = u64::try_from(anchor.enumerator_state.seed).unwrap_or_default();
+                let seed = seed_to_u64(anchor.enumerator_state.seed);
                 prepare_enumerator_items(enumerator, enumerator.playback_order, seed);
                 enumerator.set_index(usize::try_from(anchor.enumerator_state.index).unwrap_or(0));
                 self.media_states.insert(key, anchor.enumerator_state);
@@ -1356,10 +1358,24 @@ impl ClassicContext {
         let len = i32::try_from(self.schedule_items.len()).unwrap_or(1).max(1);
         let next = self.state.schedule_state.index + 1;
         if next >= len {
+            // Capture which schedule item was just played (the last position
+            // of the outgoing schedule_order) before reshuffling, so the new
+            // cycle can avoid starting with the same item again.
+            let previous_last = self.schedule_order.last().copied();
             self.state.schedule_state.index = 0;
             if self.request.reference_data.classic_shuffle_schedule_items {
                 self.state.schedule_state.seed = next_i32_seed(self.state.schedule_state.seed);
                 self.refresh_schedule_order();
+                // Mirror prepare_next_cycle's anti-repeat guard for the
+                // per-collection shuffle, at the schedule-item level: reroll
+                // until the new first schedule item isn't the one that just
+                // finished playing.
+                while self.schedule_order.len() > 1
+                    && self.schedule_order.first().copied() == previous_last
+                {
+                    self.state.schedule_state.seed = next_i32_seed(self.state.schedule_state.seed);
+                    self.refresh_schedule_order();
+                }
             }
         } else {
             self.state.schedule_state.index = next;
@@ -1553,18 +1569,20 @@ impl ClassicContext {
     }
 
     fn media_seed(&self, schedule_item: &ProgramScheduleItem) -> u64 {
-        self.media_states
-            .get(&item_key(schedule_item))
-            .map_or_else(|| self.request.playout.seed, |state| state.seed)
-            .try_into()
-            .unwrap_or_default()
+        seed_to_u64(
+            self.media_states
+                .get(&item_key(schedule_item))
+                .map_or_else(|| self.request.playout.seed, |state| state.seed),
+        )
     }
 
     fn refresh_schedule_order(&mut self) {
         self.schedule_order = (0..self.schedule_items.len()).collect();
         if self.request.reference_data.classic_shuffle_schedule_items {
-            let seed = u64::try_from(self.state.schedule_state.seed).unwrap_or_default();
-            shuffle_with_seed(&mut self.schedule_order, seed);
+            shuffle_with_seed(
+                &mut self.schedule_order,
+                seed_to_u64(self.state.schedule_state.seed),
+            );
         }
     }
 
@@ -1981,11 +1999,7 @@ fn prepare_next_cycle(
     mut seed: i32,
     tail_media_id: Option<EntityId>,
 ) -> i32 {
-    prepare_enumerator_items(
-        enumerator,
-        playback_order,
-        u64::try_from(seed).unwrap_or_default(),
-    );
+    prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed));
 
     if !matches!(
         playback_order,
@@ -2000,19 +2014,24 @@ fn prepare_next_cycle(
         .is_some_and(|item| Some(item.id) == tail_media_id)
     {
         seed = next_i32_seed(seed);
-        prepare_enumerator_items(
-            enumerator,
-            playback_order,
-            u64::try_from(seed).unwrap_or_default(),
-        );
+        prepare_enumerator_items(enumerator, playback_order, seed_to_u64(seed));
     }
 
     seed
 }
 
+/// Bit-reinterpret an `i32` playout/enumerator seed as `u64` for use as LCG
+/// state. Deliberately not `u64::try_from(seed).unwrap_or_default()`: that
+/// silently collapses every negative seed to a constant `0`, destroying all
+/// its entropy, whereas `as` sign-extends the value into a distinct,
+/// deterministic `u64` for every possible `i32` input.
+#[allow(clippy::cast_sign_loss)]
+fn seed_to_u64(seed: i32) -> u64 {
+    seed as u64
+}
+
 fn next_i32_seed(seed: i32) -> i32 {
-    let next = u64::try_from(seed)
-        .unwrap_or_default()
+    let next = seed_to_u64(seed)
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     (next >> 33) as i32
@@ -2750,6 +2769,60 @@ mod tests {
     }
 
     #[test]
+    fn classic_shuffle_schedule_items_avoids_immediate_repeat_across_reshuffle_boundary() {
+        // Mirrors classic_shuffle_avoids_immediate_repeat_across_reshuffle_boundary,
+        // but for the "Shuffle Schedule Items" checkbox (schedule_order) rather
+        // than a single collection's media order. Before the anti-repeat guard,
+        // advance_schedule_item's reshuffle on cycle wraparound could pick a
+        // schedule_order whose first entry was the same schedule item that had
+        // just finished playing.
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let item_a = schedule_item(1, PlayoutMode::One, 1, None);
+        let item_b = schedule_item(2, PlayoutMode::One, 2, None);
+        let key_a = item_key(&item_a);
+        let key_b = item_key(&item_b);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![item_a, item_b],
+            classic_shuffle_schedule_items: true,
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key_a,
+            vec![SchedulingMediaItem::new(101, Duration::minutes(10))],
+        );
+        reference_data.media_by_key.insert(
+            key_b,
+            vec![SchedulingMediaItem::new(201, Duration::minutes(10))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 1,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(80),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let ids = result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids.len(), 8);
+        assert!(
+            ids.windows(2).all(|window| window[0] != window[1]),
+            "shuffled schedule item repeated across reshuffle boundary: {ids:?}"
+        );
+    }
+
+    #[test]
     fn classic_refresh_clears_and_rebuilds_from_checkpoint_anchor() {
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
         let schedule_item = ProgramScheduleItem {
@@ -2897,6 +2970,58 @@ mod tests {
         assert!(
             ids.windows(2).all(|window| window[0] != window[1]),
             "shuffled collection repeated across cycle boundary: {ids:?}"
+        );
+    }
+
+    #[test]
+    fn classic_negative_playout_seed_is_not_collapsed_to_zero() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let build_with_seed = |seed: i32| {
+            let schedule_item = ProgramScheduleItem {
+                playback_order: PlaybackOrder::Shuffle,
+                ..schedule_item(1, PlayoutMode::One, 1, None)
+            };
+            let key = item_key(&schedule_item);
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(
+                key,
+                vec![
+                    SchedulingMediaItem::new(101, Duration::minutes(10)),
+                    SchedulingMediaItem::new(102, Duration::minutes(10)),
+                    SchedulingMediaItem::new(103, Duration::minutes(10)),
+                    SchedulingMediaItem::new(104, Duration::minutes(10)),
+                ],
+            );
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(40),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                })
+                .expect("classic schedule should build")
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>()
+        };
+
+        // Before the seed_to_u64 fix, `u64::try_from(seed).unwrap_or_default()`
+        // silently collapsed every negative seed to 0, so a negative seed
+        // produced the exact same shuffle as an explicit seed of 0.
+        assert_ne!(
+            build_with_seed(-1),
+            build_with_seed(0),
+            "a negative seed must not silently collapse to the same shuffle as seed 0"
         );
     }
 

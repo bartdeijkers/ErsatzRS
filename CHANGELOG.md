@@ -172,6 +172,11 @@ release section when tagging a release.
   `Refresh` now genuinely continues the existing per-collection and
   schedule-item shuffle sequence instead of silently rescrambling it from the
   same unchanged seed every time.
+- The Classic engine's shuffle seed arithmetic no longer silently collapses a
+  negative seed to a constant `0`, and "Shuffle Schedule Items" reshuffling on
+  a cycle wraparound now avoids repeating the same schedule item across the
+  reshuffle boundary, matching the equivalent protection Classic collection
+  shuffles already had.
 - Browser-preview E2E fixtures now preserve the channel-number and integer
   schedule-kind database contracts, so the shared Playwright database cannot
   invalidate later channel-number and playout coverage.
