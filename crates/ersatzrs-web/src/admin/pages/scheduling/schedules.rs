@@ -947,6 +947,32 @@ fn schedule_item_hidden_fields_html(item: &ScheduleItemForm) -> String {
             item.subtitle_mode
                 .map_or_else(String::new, |value| value.to_string()),
         ),
+        (
+            "item_media_version_id",
+            item.pinned_stream_selection
+                .map_or_else(String::new, |selection| {
+                    selection.media_version_id.to_string()
+                }),
+        ),
+        (
+            "item_video_stream_index",
+            item.pinned_stream_selection
+                .map_or_else(String::new, |selection| {
+                    selection.video_stream_index.to_string()
+                }),
+        ),
+        (
+            "item_audio_stream_index",
+            item.pinned_stream_selection
+                .and_then(|selection| selection.audio_stream_index)
+                .map_or_else(String::new, |index| index.to_string()),
+        ),
+        (
+            "item_subtitle_stream_index",
+            item.pinned_stream_selection
+                .and_then(|selection| selection.subtitle_stream_index)
+                .map_or_else(String::new, |index| index.to_string()),
+        ),
     ] {
         fields.push_str(&hidden_input_html(name, &value));
     }

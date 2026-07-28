@@ -114,6 +114,7 @@ pub struct ProgramScheduleItem {
     pub preferred_audio_title: Option<String>,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<ChannelSubtitleMode>,
+    pub pinned_stream_selection: Option<crate::PinnedStreamSelection>,
     pub sort_order: i32,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,

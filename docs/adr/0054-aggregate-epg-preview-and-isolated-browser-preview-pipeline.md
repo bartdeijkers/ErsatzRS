@@ -13,7 +13,7 @@ The inherited click-to-play lifecycle is superseded by
 
 ## Implementation
 
-Implemented (2026-07-26). The aggregate repository/application query, shared
+Implemented (2026-07-26; zoom interaction refined 2026-07-27). The aggregate repository/application query, shared
 lane grid, `/epg` route, isolated preview registry and directories,
 browser-compatible profile override, preview-only routes and token scope, and
 Hls.js-first player are in place. Focused Rust and browser coverage exercise
@@ -48,9 +48,11 @@ items and gaps, and media titles. The projection spans two hours before
 generation time through 24 hours after it.
 
 The global route and `/channels/:id/watch` share one lane-grid component. It
-renders the complete loaded range at three pixels per minute, defaults to a
-five-hour viewport from one hour before now through four hours after now, and
-keeps channel labels and the time ruler sticky. Programme, complete filler-kind,
+renders the complete loaded range at six pixels per minute at 100% zoom,
+defaults to an approximately three-hour desktop viewport beginning one hour
+before now, and keeps channel labels and the time ruler sticky. A 50–200% Zoom
+control rescales the horizontal timeline while preserving its temporal center;
+the native horizontal scrollbar remains the navigation control. Programme, complete filler-kind,
 gap, active-session, current-time, scrolling, keyboard, and responsive
 semantics belong to this shared presentation. The global route refreshes its
 projection every 30 seconds without resetting the user's scroll position.

@@ -148,6 +148,14 @@ pub struct ScheduleItemsSaveForm {
     #[serde(default)]
     item_subtitle_mode: Vec<String>,
     #[serde(default)]
+    item_media_version_id: Vec<String>,
+    #[serde(default)]
+    item_video_stream_index: Vec<String>,
+    #[serde(default)]
+    item_audio_stream_index: Vec<String>,
+    #[serde(default)]
+    item_subtitle_stream_index: Vec<String>,
+    #[serde(default)]
     new_collection_type: String,
     #[serde(default)]
     new_collection_id: String,
@@ -366,6 +374,10 @@ impl ScheduleItemsSaveForm {
                     form.item_preferred_subtitle_language_code.push(value);
                 }
                 "item_subtitle_mode" => form.item_subtitle_mode.push(value),
+                "item_media_version_id" => form.item_media_version_id.push(value),
+                "item_video_stream_index" => form.item_video_stream_index.push(value),
+                "item_audio_stream_index" => form.item_audio_stream_index.push(value),
+                "item_subtitle_stream_index" => form.item_subtitle_stream_index.push(value),
                 "new_collection_type" => form.new_collection_type = value,
                 "new_collection_id" => form.new_collection_id = value,
                 "new_playback_order" => form.new_playback_order = value,
@@ -376,6 +388,7 @@ impl ScheduleItemsSaveForm {
         form
     }
 
+    #[allow(clippy::too_many_lines)]
     fn to_items(&self) -> Vec<ScheduleItemForm> {
         let marathon_shuffle_groups = parse_index_set(&self.item_marathon_shuffle_groups_index);
         let marathon_shuffle_items = parse_index_set(&self.item_marathon_shuffle_items_index);
@@ -471,6 +484,18 @@ impl ScheduleItemsSaveForm {
                     self.item_preferred_subtitle_language_code.get(pos),
                 ),
                 subtitle_mode: parse_i32(self.item_subtitle_mode.get(pos)),
+                pinned_stream_selection: parse_i64(self.item_media_version_id.get(pos))
+                    .zip(parse_i32(self.item_video_stream_index.get(pos)))
+                    .map(|(media_version_id, video_stream_index)| {
+                        crate::admin::server_fns::media_browser::PinnedStreamSelectionForm {
+                            media_version_id,
+                            video_stream_index,
+                            audio_stream_index: parse_i32(self.item_audio_stream_index.get(pos)),
+                            subtitle_stream_index: parse_i32(
+                                self.item_subtitle_stream_index.get(pos),
+                            ),
+                        }
+                    }),
             });
         }
         items

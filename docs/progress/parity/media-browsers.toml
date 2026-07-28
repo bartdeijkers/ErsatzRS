@@ -2,7 +2,7 @@ feature    = 'Media browsers (movies, shows, images, music, other videos, songs)
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
 status     = 'Ported'
-adr        = ['0048']
+adr        = ['0048', '0056']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
 
@@ -15,6 +15,11 @@ track cards appear near the top of `/media/movies/:id`, can seed Add To
 Collection/Add To Playlist dialogs with selected audio/subtitle preferences,
 and collection/playlist inspection surfaces display saved playback override
 summaries.
+
+ADR 0056 replaces Play links with linked
+Version/Video/Audio/Subtitle selectors. Exact combinations remain pinned from
+schedule/playlist insertion through editing and playback; subtitles default
+to Off.
 
 Closed 2026-07-03 for the stay-in-context add flows: every Add To Collection /
 Add To Playlist dialog (shared browser/detail modals and the search page's own
@@ -38,13 +43,10 @@ selection with that single row, matching browser-list item-menu behavior.
 Proven by the multi-select assertions in
 `tests/e2e/media-browser-actions.spec.ts`.
 
-Closed 2026-07-25 for the two deferred search/browser details. The shared
-artwork projection maps poster cards to provider height 440 and thumbnail
-cards to height 220 while replacing stale resize parameters. Search and list
-cards share that mapping. Pinned ErsatzTV search/list/card sources confirm
-query-preserving See All routes, season detail links, episode season anchors,
-nonclickable music-video cards, and no library-filter combobox. ErsatzRS
-implements those behaviors without inventing a filter.
+Closed 2026-07-25: shared search/list artwork maps posters to height 440 and
+thumbnails to 220 while replacing stale resize parameters. Pinned ErsatzTV
+sources confirm query-preserving See All routes, season/episode links,
+nonclickable music-video cards, and no library filter; ErsatzRS matches them.
 '''
 
 [[debt]]

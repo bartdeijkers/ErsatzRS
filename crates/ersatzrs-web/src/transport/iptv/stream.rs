@@ -42,12 +42,13 @@ use ersatzrs_infra::hls_worker::{
 };
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
-    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
+    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
     render_playback_graphics_overlays, select_channel_playback_subtitle,
-    select_custom_playback_streams, select_playback_audio_stream_index, select_playback_graphics,
-    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_inputs_for_stream, CustomStreamSelection, PlaybackGraphicsRenderContext,
-    PlaybackProfile, PlaybackSubtitle,
+    select_custom_playback_streams, select_pinned_playback_subtitle,
+    select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
+    subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
+    PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
@@ -262,7 +263,13 @@ async fn serve_channel_stream_with_channel(
         replace_path(&replacements, &active.media_path, PathPlatform::Unix)
     };
 
-    let source_stream = match load_source_video_stream(&state.pool, active.media_version_id).await {
+    let source_stream = match load_source_video_stream_by_index(
+        &state.pool,
+        active.media_version_id,
+        active.video_stream_index,
+    )
+    .await
+    {
         Ok(stream) => stream,
         Err(error) => {
             tracing::error!(
@@ -289,6 +296,22 @@ async fn serve_channel_stream_with_channel(
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         };
+    if let Some(stream_index) = active.audio_stream_index {
+        let pinned_index = usize::try_from(stream_index).ok();
+        if pinned_index.is_none_or(|index| {
+            !source_audio_streams
+                .iter()
+                .any(|stream| stream.index == index)
+        }) {
+            tracing::error!(
+                channel_id = channel.id,
+                media_version_id = active.media_version_id,
+                stream_index,
+                "pinned audio stream is unavailable; refusing fallback selection"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
     let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
         Ok(Some(profile)) => profile,
         Ok(None) => {
@@ -356,40 +379,86 @@ async fn serve_channel_stream_with_channel(
     let start_position = active.content_seek_position(now);
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
-    let custom_selection = match select_channel_custom_streams(
-        &state.pool,
-        active.media_version_id,
-        active.media_item_id,
-        &channel,
-        content_start_time,
-        effective_streaming_mode,
-    )
-    .await
-    {
-        Ok(selection) => selection,
-        Err(error) => {
-            tracing::error!(
-                %error,
-                channel_id = channel.id,
-                channel_number = %channel.number,
-                media_item_id = active.media_item_id,
-                media_version_id = active.media_version_id,
-                "failed to execute channel stream selector; refusing fallback stream selection"
-            );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    let custom_selection = if active.has_pinned_stream_selection {
+        None
+    } else {
+        match select_channel_custom_streams(
+            &state.pool,
+            active.media_version_id,
+            active.media_item_id,
+            &channel,
+            content_start_time,
+            effective_streaming_mode,
+        )
+        .await
+        {
+            Ok(selection) => selection,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    media_item_id = active.media_item_id,
+                    media_version_id = active.media_version_id,
+                    "failed to execute channel stream selector; refusing fallback stream selection"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         }
     };
-    let selected_audio_stream_index = custom_selection
-        .as_ref()
-        .and_then(|selection| selection.audio_stream_index)
-        .or_else(|| {
-            select_playback_audio_stream_index(
-                &source_audio_streams,
-                preferred_audio_language.as_deref(),
-                preferred_audio_title,
+    let audio_selection = if active.has_pinned_stream_selection {
+        active
+            .audio_stream_index
+            .map_or(PlaybackAudioSelection::Disabled, |index| {
+                usize::try_from(index).map_or(
+                    PlaybackAudioSelection::Disabled,
+                    PlaybackAudioSelection::Exact,
+                )
+            })
+    } else {
+        custom_selection
+            .as_ref()
+            .and_then(|selection| selection.audio_stream_index)
+            .or_else(|| {
+                select_playback_audio_stream_index(
+                    &source_audio_streams,
+                    preferred_audio_language.as_deref(),
+                    preferred_audio_title,
+                )
+            })
+            .map_or(
+                PlaybackAudioSelection::Automatic,
+                PlaybackAudioSelection::Exact,
             )
-        });
-    let subtitle = if let Some(selection) = custom_selection {
+    };
+    let subtitle = if active.has_pinned_stream_selection {
+        if let Some(stream_index) = active.subtitle_stream_index {
+            match select_pinned_playback_subtitle(
+                &state.pool,
+                active.media_item_id,
+                active.media_version_id,
+                stream_index,
+                effective_streaming_mode,
+            )
+            .await
+            {
+                Ok(subtitle) => Some(subtitle),
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        channel_id = channel.id,
+                        media_item_id = active.media_item_id,
+                        media_version_id = active.media_version_id,
+                        stream_index,
+                        "pinned subtitle stream is unavailable; refusing fallback selection"
+                    );
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        } else {
+            None
+        }
+    } else if let Some(selection) = custom_selection {
         selection.subtitle
     } else {
         match select_channel_playback_subtitle(
@@ -423,11 +492,20 @@ async fn serve_channel_stream_with_channel(
         preferred_audio_language.as_deref(),
         &source_audio_streams,
         subtitle.as_ref(),
-        selected_audio_stream_index,
+        audio_selection,
     );
     let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
         subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
     });
+    if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
+        tracing::error!(
+            channel_id = channel.id,
+            media_item_id = active.media_item_id,
+            stream_index = active.subtitle_stream_index,
+            "pinned subtitle cannot be mapped for this output; refusing subtitle-free playback"
+        );
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
     let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
     let watermark_inputs = match select_playback_watermarks(
         &state.pool,
@@ -525,7 +603,7 @@ async fn serve_channel_stream_with_channel(
         runtime_capabilities.clone(),
         source_stream.clone(),
         source_audio_streams.clone(),
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input.clone(),
         watermark_inputs.clone(),
         graphics_overlays.clone(),
@@ -568,7 +646,7 @@ async fn serve_channel_stream_with_channel(
                     capabilities,
                     source_stream,
                     source_audio_streams,
-                    selected_audio_stream_index,
+                    audio_selection,
                     subtitle_input,
                     watermark_inputs,
                     graphics_overlays,
@@ -1329,6 +1407,10 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) preferred_audio_title: Option<String>,
     pub(crate) preferred_subtitle_language_code: Option<String>,
     pub(crate) subtitle_mode: Option<ChannelSubtitleMode>,
+    pub(crate) has_pinned_stream_selection: bool,
+    pub(crate) video_stream_index: Option<i32>,
+    pub(crate) audio_stream_index: Option<i32>,
+    pub(crate) subtitle_stream_index: Option<i32>,
 }
 
 impl ActivePlayoutItem {
@@ -1366,6 +1448,7 @@ impl ActivePlayoutItem {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn load_active_media_path(
     pool: &DbPool,
     channel_id: i64,
@@ -1386,23 +1469,28 @@ pub(crate) async fn load_active_media_path(
                   pi."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                   pi."PreferredAudioTitle" AS "PreferredAudioTitle",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
-                  pi."SubtitleMode" AS "SubtitleMode"
+                  pi."SubtitleMode" AS "SubtitleMode",
+                  pi."MediaVersionId" AS "PinnedMediaVersionId",
+                  pi."VideoStreamIndex" AS "VideoStreamIndex",
+                  pi."AudioStreamIndex" AS "AudioStreamIndex",
+                  pi."SubtitleStreamIndex" AS "SubtitleStreamIndex"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
-           JOIN "MediaVersion" mv
-               ON mv."MovieId" = pi."MediaItemId"
+           JOIN "MediaVersion" mv ON (
+                  mv."MovieId" = pi."MediaItemId"
                OR mv."EpisodeId" = pi."MediaItemId"
                OR mv."MusicVideoId" = pi."MediaItemId"
                OR mv."OtherVideoId" = pi."MediaItemId"
                OR mv."RemoteStreamId" = pi."MediaItemId"
                OR mv."SongId" = pi."MediaItemId"
                OR mv."ImageId" = pi."MediaItemId"
+           ) AND (pi."MediaVersionId" IS NULL OR mv."Id" = pi."MediaVersionId")
            JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
            WHERE p."ChannelId" = ?
              AND pi."Start" <= ?
              AND pi."Finish" > ?
              AND mf."Path" IS NOT NULL
-           ORDER BY pi."Start" DESC, pi."Id" DESC
+           ORDER BY pi."Start" DESC, pi."Id" DESC, mv."Id"
            LIMIT 1"#,
     )
     .bind(channel_id)
@@ -1463,6 +1551,14 @@ pub(crate) async fn load_active_media_path(
             "PreferredSubtitleLanguageCode",
         )?,
         subtitle_mode,
+        has_pinned_stream_selection: decode_active_item_column::<Option<i64>>(
+            &row,
+            "PinnedMediaVersionId",
+        )?
+        .is_some(),
+        video_stream_index: decode_active_item_column(&row, "VideoStreamIndex")?,
+        audio_stream_index: decode_active_item_column(&row, "AudioStreamIndex")?,
+        subtitle_stream_index: decode_active_item_column(&row, "SubtitleStreamIndex")?,
     }))
 }
 
@@ -1622,11 +1718,12 @@ fn build_stream_command(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
+    let audio_selection = audio_selection.into();
     build_stream_command_with_opacity_clock(
         path,
         output_format,
@@ -1639,7 +1736,7 @@ fn build_stream_command(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -1660,7 +1757,7 @@ fn build_stream_command_with_opacity_clock(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: PlaybackAudioSelection,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -1672,7 +1769,7 @@ fn build_stream_command_with_opacity_clock(
         streaming_mode,
         source_stream.as_ref(),
         &source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
     );
     let desired_streaming_mode = if needs_hls_direct_mpegts_transcode {
         StreamingMode::TransportStream
@@ -1706,16 +1803,20 @@ fn build_stream_command_with_opacity_clock(
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
-    if let Some(stream_index) = selected_audio_stream_index {
-        if let Some(audio_input) = request
-            .inputs
-            .iter_mut()
-            .find(|input| input.kind == ersatzrs_ffmpeg::InputKind::Audio)
-        {
-            *audio_input = audio_input.clone().with_stream_index(stream_index);
-        }
-    }
     request = request.with_source_audio_streams(source_audio_streams);
+    match audio_selection {
+        PlaybackAudioSelection::Exact(stream_index) => {
+            if let Some(audio_input) = request
+                .inputs
+                .iter_mut()
+                .find(|input| input.kind == ersatzrs_ffmpeg::InputKind::Audio)
+            {
+                *audio_input = audio_input.clone().with_stream_index(stream_index);
+            }
+        }
+        PlaybackAudioSelection::Disabled => request = request.without_audio(),
+        PlaybackAudioSelection::Automatic => {}
+    }
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
@@ -1753,7 +1854,7 @@ fn hls_direct_mpegts_needs_transcode(
     streaming_mode: StreamingMode,
     source_stream: Option<&SourceVideoStream>,
     source_audio_streams: &[SourceAudioStream],
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: PlaybackAudioSelection,
 ) -> bool {
     if output_format != OutputFormat::MpegTs
         || streaming_mode != StreamingMode::HttpLiveStreamingDirect
@@ -1762,7 +1863,7 @@ fn hls_direct_mpegts_needs_transcode(
     }
 
     !hls_direct_mpegts_video_copy_safe(source_stream)
-        || !hls_direct_mpegts_audio_copy_safe(source_audio_streams, selected_audio_stream_index)
+        || !hls_direct_mpegts_audio_copy_safe(source_audio_streams, audio_selection)
 }
 
 fn hls_direct_mpegts_video_copy_safe(source_stream: Option<&SourceVideoStream>) -> bool {
@@ -1771,15 +1872,23 @@ fn hls_direct_mpegts_video_copy_safe(source_stream: Option<&SourceVideoStream>) 
 
 fn hls_direct_mpegts_audio_copy_safe(
     source_audio_streams: &[SourceAudioStream],
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: PlaybackAudioSelection,
 ) -> bool {
-    let Some(stream) = selected_audio_stream_index
+    if audio_selection.is_disabled() {
+        return true;
+    }
+    let Some(stream) = audio_selection
+        .stream_index()
         .and_then(|index| {
             source_audio_streams
                 .iter()
                 .find(|stream| stream.index == index)
         })
-        .or_else(|| source_audio_streams.first())
+        .or_else(|| {
+            matches!(audio_selection, PlaybackAudioSelection::Automatic)
+                .then(|| source_audio_streams.first())
+                .flatten()
+        })
     else {
         return true;
     };
@@ -1860,18 +1969,23 @@ pub(crate) fn playback_output_metadata(
     preferred_audio_language: Option<&str>,
     source_audio_streams: &[SourceAudioStream],
     subtitle: Option<&PlaybackSubtitle>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
 ) -> OutputMetadata {
-    let audio_language = selected_audio_stream_index
-        .and_then(|index| {
-            source_audio_streams
-                .iter()
-                .find(|stream| stream.index == index)
-                .and_then(|stream| stream.language.as_deref())
-                .and_then(trimmed_string)
-        })
-        .or_else(|| preferred_audio_language.and_then(trimmed_string))
-        .or_else(|| first_audio_language(source_audio_streams));
+    let audio_selection = audio_selection.into();
+    let selected_language = audio_selection.stream_index().and_then(|index| {
+        source_audio_streams
+            .iter()
+            .find(|stream| stream.index == index)
+            .and_then(|stream| stream.language.as_deref())
+            .and_then(trimmed_string)
+    });
+    let audio_language = match audio_selection {
+        PlaybackAudioSelection::Disabled => None,
+        PlaybackAudioSelection::Exact(_) => selected_language,
+        PlaybackAudioSelection::Automatic => selected_language
+            .or_else(|| preferred_audio_language.and_then(trimmed_string))
+            .or_else(|| first_audio_language(source_audio_streams)),
+    };
 
     OutputMetadata {
         service_provider: service_provider.and_then(trimmed_string),
@@ -2551,6 +2665,25 @@ mod tests {
             .await
             .expect("load absent active playback item")
             .is_none());
+        sqlx::query(
+            r#"UPDATE "PlayoutItem"
+               SET "SubtitleMode" = 0,
+                   "MediaVersionId" = 21,
+                   "VideoStreamIndex" = 0,
+                   "AudioStreamIndex" = NULL,
+                   "SubtitleStreamIndex" = NULL
+               WHERE "Id" = 12"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("pin silent subtitle-off playback item");
+        let active = load_active_media_path(&pool, 7, now)
+            .await
+            .expect("load pinned active playback item")
+            .expect("active playback item");
+        assert!(active.has_pinned_stream_selection);
+        assert_eq!(active.audio_stream_index, None);
+        assert_eq!(active.subtitle_stream_index, None);
     }
 
     #[test]
@@ -2593,7 +2726,11 @@ mod tests {
                 "PreferredAudioLanguageCode" TEXT NULL,
                 "PreferredAudioTitle" TEXT NULL,
                 "PreferredSubtitleLanguageCode" TEXT NULL,
-                "SubtitleMode" INTEGER NULL
+                "SubtitleMode" INTEGER NULL,
+                "MediaVersionId" INTEGER NULL,
+                "VideoStreamIndex" INTEGER NULL,
+                "AudioStreamIndex" INTEGER NULL,
+                "SubtitleStreamIndex" INTEGER NULL
             )"#,
             r#"CREATE TABLE "MediaVersion" (
                 "Id" INTEGER PRIMARY KEY,
@@ -2652,7 +2789,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             Vec::new(),
             Vec::new(),
@@ -2824,7 +2961,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             Vec::new(),
             Vec::new(),
@@ -2895,6 +3032,31 @@ mod tests {
         assert!(arguments.contains("-codec:v copy"), "{arguments}");
         assert!(arguments.contains("-codec:a copy"), "{arguments}");
         assert!(arguments.contains("-f mpegts"), "{arguments}");
+    }
+
+    #[test]
+    fn pinned_silent_stream_command_has_no_audio_mapping_or_encoder() {
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            vec![SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1)],
+            PlaybackAudioSelection::Disabled,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(!arguments.contains("-map 0:1"), "{arguments}");
+        assert!(!arguments.contains("-map 0:a"), "{arguments}");
+        assert!(!arguments.contains("-codec:a"), "{arguments}");
     }
 
     #[test]
@@ -3071,6 +3233,10 @@ mod tests {
             preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            has_pinned_stream_selection: false,
+            video_stream_index: None,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
         }
     }
 
@@ -3125,7 +3291,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             Vec::new(),
             Vec::new(),
@@ -4026,7 +4192,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             Some(source_320p()),
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             vec![(
                 InputFile::watermark_looped(logo.to_string_lossy().into_owned()),

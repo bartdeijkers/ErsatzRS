@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ersatzrs_domain::{Collection, EntityId, Playlist, SmartCollection};
+use ersatzrs_domain::{Collection, EntityId, PinnedStreamSelection, Playlist, SmartCollection};
 
 use super::Result;
 
@@ -127,6 +127,7 @@ pub struct PlaylistItemAdmin {
     pub preferred_audio_title: Option<String>,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<i32>,
+    pub pinned_stream_selection: Option<PinnedStreamSelection>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,6 +175,7 @@ pub struct PlaylistItemInsert {
     pub collection_type: i32,
     pub media_item_id: EntityId,
     pub playback: PlaybackOverrides,
+    pub pinned_stream_selection: Option<PinnedStreamSelection>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -9,8 +9,9 @@ use super::preview::{programme_time, programme_title};
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/guide.module.css");
 
-const PIXELS_PER_MINUTE: i64 = 3;
-const VIEWPORT_MINUTES: i64 = 5 * 60;
+const BASE_PIXELS_PER_MINUTE: i64 = 6;
+const DEFAULT_VIEWPORT_MINUTES: i64 = 3 * 60;
+const DEFAULT_ZOOM_PERCENT: i64 = 100;
 const CHANNEL_COLUMN_PIXELS: i64 = 352;
 
 #[derive(Clone, Debug, Default)]
@@ -36,6 +37,7 @@ pub struct GuideSnapshot {
 pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
     let scroll_ref = NodeRef::<html::Div>::new();
     let visible_start_minutes = RwSignal::new(0_i64);
+    let zoom_percent = RwSignal::new(DEFAULT_ZOOM_PERCENT);
     let positioned = RwSignal::new(false);
 
     Effect::new(move |_| {
@@ -43,7 +45,7 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
         if !positioned.get() && snapshot.with(|data| !data.window_start.is_empty()) {
             positioned.set(true);
             visible_start_minutes.set(default);
-            scroll_to_minutes(scroll_ref, default);
+            scroll_to_minutes(scroll_ref, default, zoom_percent.get_untracked());
         }
     });
 
@@ -51,44 +53,34 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
         let max = snapshot.with(max_visible_start_minutes);
         let next = (visible_start_minutes.get_untracked() + delta).clamp(0, max);
         visible_start_minutes.set(next);
-        scroll_to_minutes(scroll_ref, next);
+        scroll_to_minutes(scroll_ref, next, zoom_percent.get_untracked());
     };
     let move_now = move || {
         let next = snapshot.with(default_visible_start_minutes);
         visible_start_minutes.set(next);
-        scroll_to_minutes(scroll_ref, next);
-    };
-    let scrub = move |value: i64| {
-        let next = value.clamp(0, snapshot.with(max_visible_start_minutes));
-        visible_start_minutes.set(next);
-        scroll_to_minutes(scroll_ref, next);
+        scroll_to_minutes(scroll_ref, next, zoom_percent.get_untracked());
     };
 
     view! {
         <section class=style::guide data-epg-grid>
             <div class=style::controls>
-                <span class=style::visible_label>{tr(TextKey::EpgVisibleWindow)}</span>
-                <span class=style::visible_time data-visible-start>
-                    {move || snapshot.with(|data| visible_time(data, visible_start_minutes.get()))}
-                </span>
+                <span class=style::visible_label>{tr(TextKey::EpgZoom)}</span>
                 <input
                     class=style::scrubber
                     type="range"
-                    min="0"
-                    max=move || snapshot.with(max_visible_start_minutes)
-                    step="15"
-                    prop:value=move || visible_start_minutes.get()
-                    aria-label=tr(TextKey::EpgVisibleWindow)
+                    min="50"
+                    max="200"
+                    step="10"
+                    prop:value=move || zoom_percent.get()
+                    aria-label=tr(TextKey::EpgZoom)
                     on:input=move |event| {
                         if let Ok(value) = event_target_value(&event).parse::<i64>() {
-                            scrub(value);
+                            update_zoom(scroll_ref, zoom_percent, value.clamp(50, 200));
                         }
                     }
                 />
-                <span class=style::visible_time data-visible-finish>
-                    {move || snapshot.with(|data| {
-                        visible_time(data, visible_start_minutes.get() + VIEWPORT_MINUTES)
-                    })}
+                <span class=style::visible_time data-zoom-value>
+                    {move || format!("{}%", zoom_percent.get())}
                 </span>
                 <div class=style::step_controls>
                     <button type="button" on:click=move |_| move_viewport(-120)>"-2h"</button>
@@ -107,13 +99,20 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                 role="grid"
                 tabindex="0"
                 aria-label=tr(TextKey::ProgrammeGuide)
-                on:scroll=move |_| update_visible_start(scroll_ref, visible_start_minutes, snapshot)
+                on:scroll=move |_| {
+                    update_visible_start(
+                        scroll_ref,
+                        visible_start_minutes,
+                        snapshot,
+                        zoom_percent.get_untracked(),
+                    );
+                }
                 on:keydown=move |event| {
                     match event.key().as_str() {
                         "ArrowLeft" => move_viewport(-15),
                         "ArrowRight" => move_viewport(15),
-                        "PageUp" => move_viewport(-VIEWPORT_MINUTES),
-                        "PageDown" => move_viewport(VIEWPORT_MINUTES),
+                        "PageUp" => move_viewport(-DEFAULT_VIEWPORT_MINUTES),
+                        "PageDown" => move_viewport(DEFAULT_VIEWPORT_MINUTES),
                         "Home" => move_viewport(-i64::MAX),
                         "End" => move_viewport(i64::MAX),
                         _ => {}
@@ -124,19 +123,23 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                     class=style::track
                     style=move || format!(
                         "width:{}px",
-                        CHANNEL_COLUMN_PIXELS + snapshot.with(window_minutes) * PIXELS_PER_MINUTE
+                        CHANNEL_COLUMN_PIXELS
+                            + scaled_minutes(snapshot.with(window_minutes), zoom_percent.get())
                     )
                 >
                     <div class=style::ruler role="row">
                         <div class=style::corner role="columnheader">{tr(TextKey::Channels)}</div>
                         <div
                             class=style::time_track
+                            data-epg-time-track
                             style=move || format!(
-                                "width:{}px",
-                                snapshot.with(window_minutes) * PIXELS_PER_MINUTE
+                                "--quarter-hour-width:{}px;width:{}px",
+                                scaled_minutes(15, zoom_percent.get()),
+                                scaled_minutes(snapshot.with(window_minutes), zoom_percent.get())
                             )
                         >
-                            {move || snapshot.with(hour_ticks).into_iter().map(|(left, label)| {
+                            {move || snapshot.with(|data| hour_ticks(data, zoom_percent.get()))
+                                .into_iter().map(|(left, label)| {
                                 view! {
                                     <span class=style::hour_tick style=format!("left:{left}px")>
                                         {label}
@@ -147,7 +150,9 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                                 class=style::now_line
                                 style=move || format!(
                                     "left:{}px",
-                                    snapshot.with(now_line_left_pixels)
+                                    snapshot.with(|data| {
+                                        now_line_left_pixels(data, zoom_percent.get())
+                                    })
                                 )
                                 aria-hidden="true"
                             ></span>
@@ -165,7 +170,6 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
 
                     {move || snapshot.with(|data| data.channels.clone()).into_iter().enumerate().map(
                         |(palette, channel)| {
-                            let lane_width = snapshot.with(window_minutes) * PIXELS_PER_MINUTE;
                             let channel_href = format!("/channels/{}/watch", channel.id);
                             let channel_label = format!("{} · {}", channel.number, channel.name);
                             let programmes = channel.programmes.clone();
@@ -188,11 +192,20 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                                             </small>
                                         </span>
                                     </a>
-                                    <div class=style::lane_track style=format!("width:{lane_width}px")>
+                                    <div
+                                        class=style::lane_track
+                                        style=move || {
+                                            let zoom = zoom_percent.get();
+                                            format!(
+                                                "--quarter-hour-width:{}px;width:{}px",
+                                                scaled_minutes(15, zoom),
+                                                scaled_minutes(snapshot.with(window_minutes), zoom),
+                                            )
+                                        }
+                                    >
                                         {programmes.into_iter().map(|programme| {
-                                            let geometry = snapshot.with(|data| {
-                                                programme_geometry(data, &programme)
-                                            });
+                                            let geometry_programme =
+                                                StoredValue::new(programme.clone());
                                             let title = programme_title(&programme);
                                             let time = format!(
                                                 "{}–{}",
@@ -209,20 +222,42 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                                                     data-gap=programme.is_gap
                                                     data-filler-kind=programme.filler_kind
                                                     data-palette=palette % 6
-                                                    style=format!(
-                                                        "left:{}px;width:{}px",
-                                                        geometry.0,
-                                                        geometry.1
-                                                    )
+                                                    style=move || {
+                                                        let geometry = snapshot.with(|data| {
+                                                            geometry_programme.with_value(|programme| {
+                                                                programme_geometry(
+                                                                    data,
+                                                                    programme,
+                                                                    zoom_percent.get(),
+                                                                )
+                                                            })
+                                                        });
+                                                        format!(
+                                                            "left:{}px;width:{}px",
+                                                            geometry.0,
+                                                            geometry.1
+                                                        )
+                                                    }
                                                     title=format!("{title} · {time}")
                                                 >
                                                     <span
                                                         class=style::filler_label
-                                                        style:display={if !label.is_empty() && geometry.1 >= 48 {
-                                                            ""
-                                                        } else {
-                                                            "none"
-                                                        }}
+                                                        style:display=move || {
+                                                            let width = snapshot.with(|data| {
+                                                                geometry_programme.with_value(|programme| {
+                                                                    programme_geometry(
+                                                                        data,
+                                                                        programme,
+                                                                        zoom_percent.get(),
+                                                                    ).1
+                                                                })
+                                                            });
+                                                            if !label.is_empty() && width >= 48 {
+                                                                ""
+                                                            } else {
+                                                                "none"
+                                                            }
+                                                        }
                                                     >
                                                         {label}
                                                     </span>
@@ -235,7 +270,9 @@ pub fn EpgGuideGrid(snapshot: RwSignal<GuideSnapshot>) -> impl IntoView {
                                             class=style::now_line
                                             style=move || format!(
                                                 "left:{}px",
-                                                snapshot.with(now_line_left_pixels)
+                                                snapshot.with(|data| {
+                                                    now_line_left_pixels(data, zoom_percent.get())
+                                                })
                                             )
                                             aria-hidden="true"
                                         ></span>
@@ -261,11 +298,11 @@ fn window_minutes(snapshot: &GuideSnapshot) -> i64 {
     ) else {
         return 26 * 60;
     };
-    (finish - start).num_minutes().max(VIEWPORT_MINUTES)
+    (finish - start).num_minutes().max(DEFAULT_VIEWPORT_MINUTES)
 }
 
 fn max_visible_start_minutes(snapshot: &GuideSnapshot) -> i64 {
-    window_minutes(snapshot).saturating_sub(VIEWPORT_MINUTES)
+    window_minutes(snapshot).saturating_sub(DEFAULT_VIEWPORT_MINUTES)
 }
 
 fn default_visible_start_minutes(snapshot: &GuideSnapshot) -> i64 {
@@ -278,10 +315,7 @@ fn default_visible_start_minutes(snapshot: &GuideSnapshot) -> i64 {
     ((now - start).num_minutes() - 60).clamp(0, max_visible_start_minutes(snapshot))
 }
 
-fn visible_time(snapshot: &GuideSnapshot, offset_minutes: i64) -> String {
-    visible_time_in_timezone(snapshot, offset_minutes, &chrono::Local)
-}
-
+#[cfg(test)]
 fn visible_time_in_timezone<Tz>(
     snapshot: &GuideSnapshot,
     offset_minutes: i64,
@@ -299,11 +333,15 @@ where
     })
 }
 
-fn hour_ticks(snapshot: &GuideSnapshot) -> Vec<(i64, String)> {
-    hour_ticks_in_timezone(snapshot, &chrono::Local)
+fn hour_ticks(snapshot: &GuideSnapshot, zoom_percent: i64) -> Vec<(i64, String)> {
+    hour_ticks_in_timezone(snapshot, zoom_percent, &chrono::Local)
 }
 
-fn hour_ticks_in_timezone<Tz>(snapshot: &GuideSnapshot, timezone: &Tz) -> Vec<(i64, String)>
+fn hour_ticks_in_timezone<Tz>(
+    snapshot: &GuideSnapshot,
+    zoom_percent: i64,
+    timezone: &Tz,
+) -> Vec<(i64, String)>
 where
     Tz: chrono::TimeZone,
     Tz::Offset: std::fmt::Display,
@@ -317,7 +355,7 @@ where
         .step_by(60)
         .map(|minute| {
             (
-                minute * PIXELS_PER_MINUTE,
+                scaled_minutes(minute, zoom_percent),
                 (start + chrono::Duration::minutes(minute))
                     .with_timezone(timezone)
                     .format("%H:%M")
@@ -327,30 +365,48 @@ where
         .collect()
 }
 
-fn now_line_left_pixels(snapshot: &GuideSnapshot) -> i64 {
+fn now_line_left_pixels(snapshot: &GuideSnapshot, zoom_percent: i64) -> i64 {
     let (Some(start), Some(now)) = (
         parse_time(&snapshot.window_start),
         parse_time(&snapshot.generated_at),
     ) else {
         return 0;
     };
-    (now - start).num_minutes().max(0) * PIXELS_PER_MINUTE
+    scaled_minutes((now - start).num_minutes().max(0), zoom_percent)
 }
 
-fn programme_geometry(snapshot: &GuideSnapshot, programme: &ChannelWatchProgramme) -> (i64, i64) {
+fn programme_geometry(
+    snapshot: &GuideSnapshot,
+    programme: &ChannelWatchProgramme,
+    zoom_percent: i64,
+) -> (i64, i64) {
     let (Some(window_start), Some(window_finish), Some(start), Some(finish)) = (
         parse_time(&snapshot.window_start),
         parse_time(&snapshot.window_finish),
         parse_time(&programme.start),
         parse_time(&programme.finish),
     ) else {
-        return (0, PIXELS_PER_MINUTE);
+        return (0, pixels_per_minute(zoom_percent));
     };
     let clipped_start = start.max(window_start);
     let clipped_finish = finish.min(window_finish);
-    let left = (clipped_start - window_start).num_minutes().max(0) * PIXELS_PER_MINUTE;
-    let width = (clipped_finish - clipped_start).num_seconds().max(20) * PIXELS_PER_MINUTE / 60;
+    let left = scaled_minutes(
+        (clipped_start - window_start).num_minutes().max(0),
+        zoom_percent,
+    );
+    let width = (clipped_finish - clipped_start).num_seconds().max(20)
+        * BASE_PIXELS_PER_MINUTE
+        * zoom_percent
+        / 6_000;
     (left, width.max(1))
+}
+
+const fn pixels_per_minute(zoom_percent: i64) -> i64 {
+    BASE_PIXELS_PER_MINUTE * zoom_percent / 100
+}
+
+const fn scaled_minutes(minutes: i64, zoom_percent: i64) -> i64 {
+    minutes * BASE_PIXELS_PER_MINUTE * zoom_percent / 100
 }
 
 const fn filler_label(kind: i32) -> &'static str {
@@ -366,29 +422,77 @@ const fn filler_label(kind: i32) -> &'static str {
     }
 }
 
-fn scroll_to_minutes(node_ref: NodeRef<html::Div>, minutes: i64) {
+fn scroll_to_minutes(node_ref: NodeRef<html::Div>, minutes: i64, zoom_percent: i64) {
     #[cfg(target_arch = "wasm32")]
     if let Some(element) = node_ref.get() {
         element.set_scroll_left(
-            i32::try_from(minutes.saturating_mul(PIXELS_PER_MINUTE)).unwrap_or(i32::MAX),
+            i32::try_from(scaled_minutes(minutes, zoom_percent)).unwrap_or(i32::MAX),
         );
     }
     #[cfg(not(target_arch = "wasm32"))]
-    let _ = (node_ref, minutes);
+    let _ = (node_ref, minutes, zoom_percent);
+}
+
+fn update_zoom(node_ref: NodeRef<html::Div>, zoom: RwSignal<i64>, next_zoom: i64) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(element) = node_ref.get() {
+        let old_zoom = zoom.get_untracked();
+        let timeline_viewport =
+            i64::from(element.client_width()).saturating_sub(CHANNEL_COLUMN_PIXELS);
+        let next_scroll = zoomed_scroll_left(
+            i64::from(element.scroll_left()),
+            timeline_viewport,
+            old_zoom,
+            next_zoom,
+        );
+        zoom.set(next_zoom);
+        leptos::leptos_dom::helpers::request_animation_frame(move || {
+            let max_scroll =
+                i64::from(element.scroll_width()).saturating_sub(i64::from(element.client_width()));
+            let next_scroll = next_scroll.clamp(0, max_scroll.max(0));
+            element.set_scroll_left(i32::try_from(next_scroll).unwrap_or(i32::MAX));
+        });
+    } else {
+        zoom.set(next_zoom);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = node_ref;
+        zoom.set(next_zoom);
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn zoomed_scroll_left(
+    scroll_left: i64,
+    timeline_viewport: i64,
+    old_zoom: i64,
+    new_zoom: i64,
+) -> i64 {
+    let viewport = timeline_viewport.max(0);
+    let old_zoom = old_zoom.max(1);
+    let center_pixels = scroll_left.max(0).saturating_add(viewport / 2);
+    center_pixels
+        .saturating_mul(new_zoom.max(1))
+        .saturating_div(old_zoom)
+        .saturating_sub(viewport / 2)
+        .max(0)
 }
 
 fn update_visible_start(
     node_ref: NodeRef<html::Div>,
     visible_start: RwSignal<i64>,
     snapshot: RwSignal<GuideSnapshot>,
+    zoom_percent: i64,
 ) {
     #[cfg(target_arch = "wasm32")]
     if let Some(element) = node_ref.get() {
-        let minutes = i64::from(element.scroll_left()).max(0) / PIXELS_PER_MINUTE;
+        let minutes = i64::from(element.scroll_left()).max(0) * 100
+            / (BASE_PIXELS_PER_MINUTE * zoom_percent).max(1);
         visible_start.set(minutes.clamp(0, snapshot.with(max_visible_start_minutes)));
     }
     #[cfg(not(target_arch = "wasm32"))]
-    let _ = (node_ref, visible_start, snapshot);
+    let _ = (node_ref, visible_start, snapshot, zoom_percent);
 }
 
 #[cfg(test)]
@@ -405,31 +509,47 @@ mod tests {
     }
 
     #[test]
-    fn five_hour_viewport_defaults_to_one_hour_before_now_and_clamps() {
+    fn three_hour_default_viewport_starts_one_hour_before_now_and_clamps() {
         let data = snapshot();
         assert_eq!(window_minutes(&data), 1_560);
         assert_eq!(default_visible_start_minutes(&data), 60);
-        assert_eq!(max_visible_start_minutes(&data), 1_260);
+        assert_eq!(max_visible_start_minutes(&data), 1_380);
     }
 
     #[test]
-    fn programme_geometry_clips_to_loaded_window_at_three_pixels_per_minute() {
+    fn programme_geometry_scales_with_zoom() {
         let programme = ChannelWatchProgramme {
             start: "2026-07-26T07:30:00+00:00".to_owned(),
             finish: "2026-07-26T09:00:00+00:00".to_owned(),
             ..ChannelWatchProgramme::default()
         };
-        assert_eq!(programme_geometry(&snapshot(), &programme), (0, 180));
+        assert_eq!(
+            programme_geometry(&snapshot(), &programme, DEFAULT_ZOOM_PERCENT),
+            (0, 360)
+        );
+        assert_eq!(programme_geometry(&snapshot(), &programme, 50), (0, 180));
+    }
+
+    #[test]
+    fn zoom_preserves_the_temporal_viewport_center() {
+        assert_eq!(zoomed_scroll_left(360, 720, 100, 150), 720);
+        assert_eq!(zoomed_scroll_left(720, 720, 150, 50), 0);
+        assert_eq!(zoomed_scroll_left(1_800, 720, 200, 50), 180);
+    }
+
+    #[test]
+    fn zoom_at_the_start_clamps_negative_scroll_to_zero() {
+        assert_eq!(zoomed_scroll_left(0, 720, 100, 50), 0);
     }
 
     #[test]
     fn hour_ticks_and_now_line_use_loaded_window() {
         let data = snapshot();
         assert_eq!(
-            hour_ticks_in_timezone(&data, &chrono::Utc)[0],
-            (180, "09:00".to_owned())
+            hour_ticks_in_timezone(&data, DEFAULT_ZOOM_PERCENT, &chrono::Utc)[0],
+            (360, "09:00".to_owned())
         );
-        assert_eq!(now_line_left_pixels(&data), 360);
+        assert_eq!(now_line_left_pixels(&data, DEFAULT_ZOOM_PERCENT), 720);
     }
 
     #[test]
@@ -439,8 +559,8 @@ mod tests {
 
         assert_eq!(visible_time_in_timezone(&data, 60, &timezone), "14:30");
         assert_eq!(
-            hour_ticks_in_timezone(&data, &timezone)[0],
-            (90, "14:00".to_owned())
+            hour_ticks_in_timezone(&data, DEFAULT_ZOOM_PERCENT, &timezone)[0],
+            (180, "14:00".to_owned())
         );
     }
 

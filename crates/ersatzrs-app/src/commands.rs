@@ -514,6 +514,7 @@ pub struct AppendScheduleMediaItem {
     pub schedule_id: EntityId,
     pub collection_type: i32,
     pub media_item_id: EntityId,
+    pub pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2828,6 +2829,17 @@ pub async fn add_playlist_items(
             return validation_error("collection_type", "collection type is invalid");
         }
         item.playback = normalize_playback_overrides(std::mem::take(&mut item.playback));
+        if let Some(selection) = item.pinned_stream_selection {
+            validate_positive_id(selection.media_version_id, "media_version_id")?;
+            if selection.video_stream_index < 0
+                || selection.audio_stream_index.is_some_and(|index| index < 0)
+                || selection
+                    .subtitle_stream_index
+                    .is_some_and(|index| index < 0)
+            {
+                return validation_error("stream_index", "stream index is invalid");
+            }
+        }
     }
     repository
         .add_playlist_items_admin(command.playlist_id, &command.items)
@@ -3099,6 +3111,7 @@ pub async fn append_schedule_media_item(
             command.schedule_id,
             command.collection_type,
             command.media_item_id,
+            command.pinned_stream_selection,
         )
         .await?;
     refresh_schedule_playouts(command.schedule_id, schedules, queue, operations).await
@@ -6978,6 +6991,7 @@ mod tests {
             preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            pinned_stream_selection: None,
         });
 
         let error = save_playlist(SavePlaylist { form: invalid }, &repository)
@@ -7824,6 +7838,7 @@ mod tests {
             preferred_audio_title: String::new(),
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            pinned_stream_selection: None,
         }
     }
 }

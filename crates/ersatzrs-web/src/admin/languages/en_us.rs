@@ -1183,6 +1183,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddAll => "Add All",
         TextKey::AddedItemToPlaylist => "Added item to playlist.",
         TextKey::AddedArtistToSchedule => "Added artist to schedule",
+        TextKey::AddedMovieToSchedule => "Added movie to schedule",
         TextKey::AddedSeasonToSchedule => "Added season to schedule",
         TextKey::AddedShowToSchedule => "Added show to schedule",
         TextKey::AddingItem => "Adding item...",
@@ -1399,7 +1400,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EpgPreviewDescription => {
             "Browse the published guide with two hours of history and 24 hours ahead."
         }
-        TextKey::EpgVisibleWindow => "Visible window",
+        TextKey::EpgZoom => "Zoom",
         TextKey::EpgNow => "Now",
         TextKey::NoEpgChannels => "No enabled channels are visible in the EPG.",
         TextKey::ScheduleGap => "Schedule gap",
@@ -2074,6 +2075,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    if trimmed == "Pinned stream selection is invalid or no longer available." {
+        return trimmed.to_owned();
+    }
+    if trimmed == "Movie was not found." {
+        return trimmed.to_owned();
+    }
     if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
         return "Collection is already present.".to_owned();
     }
@@ -2425,6 +2432,31 @@ mod tests {
         assert_eq!(
             upload_error_text(UiLanguage::English, "Upload exceeds maximum allowed size"),
             "Upload exceeds maximum allowed size."
+        );
+    }
+
+    #[test]
+    fn movie_not_found_error_is_localized_for_every_culture() {
+        let error = "Movie was not found.";
+        assert_eq!(
+            media_browser_error_text(UiLanguage::English, error),
+            "Movie was not found."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Dutch, error),
+            "Film is niet gevonden."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::French, error),
+            "Le film est introuvable."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Polish, error),
+            "Nie znaleziono filmu."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::PortugueseBrazil, error),
+            "O filme não foi encontrado."
         );
     }
 }

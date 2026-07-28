@@ -3,7 +3,8 @@ use super::super::{
     expect_context, list_media_cards_from_application, media_card_from_admin, season_name,
     short_date, ActorCardRow, AudioTrackRow, CommentarySubtitleRow, EpisodeCardRow, MediaCardRow,
     MediaItemInfoChapterJson, MediaItemInfoJson, MediaItemInfoStreamJson, MovieDetailRow,
-    SeasonCardRow, SeasonDetailRow, ServerFnError, ShowDetailRow,
+    MoviePlaybackSourceRow, MoviePlaybackStreamRow, SeasonCardRow, SeasonDetailRow, ServerFnError,
+    ShowDetailRow,
 };
 #[cfg(all(test, feature = "ssr"))]
 use super::super::{
@@ -126,6 +127,33 @@ pub(in crate::admin::server_fns::media_browser) async fn get_movie_details_impl(
                     title: subtitle.title,
                     language: subtitle.language,
                     codec: subtitle.codec,
+                })
+                .collect(),
+            playback_sources: movie
+                .playback_sources
+                .into_iter()
+                .map(|source| MoviePlaybackSourceRow {
+                    media_version_id: source.media_version_id,
+                    name: source.name,
+                    width: source.width,
+                    height: source.height,
+                    streams: source
+                        .streams
+                        .into_iter()
+                        .map(|stream| MoviePlaybackStreamRow {
+                            index: stream.index,
+                            kind: stream.kind,
+                            title: stream.title,
+                            language: stream.language,
+                            codec: stream.codec,
+                            channels: stream.channels,
+                            width: stream.width,
+                            height: stream.height,
+                            is_default: stream.is_default,
+                            is_forced: stream.is_forced,
+                            is_external: stream.is_external,
+                        })
+                        .collect(),
                 })
                 .collect(),
         }))
@@ -282,6 +310,7 @@ pub async fn get_movie_details_with_pool(
         alternate_versions,
         audio_tracks,
         commentary_subtitles,
+        playback_sources: Vec::new(),
     }))
 }
 

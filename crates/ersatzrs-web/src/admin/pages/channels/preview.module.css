@@ -13,6 +13,10 @@
     min-width: 0;
 }
 
+.preview[data-align-start] .video-slot {
+    place-items: start;
+}
+
 .video-frame {
     position: relative;
     width: min(100cqw, 128dvh, calc(100dvw - 2rem));

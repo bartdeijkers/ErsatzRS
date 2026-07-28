@@ -87,6 +87,39 @@ pub struct CustomStreamSelection {
     pub subtitle: Option<PlaybackSubtitle>,
 }
 
+/// Runtime audio-selection state after applying an optional pinned tuple.
+///
+/// `Automatic` preserves normal channel and profile behavior, while
+/// `Disabled` represents the explicit silence encoded by a pinned tuple whose
+/// audio stream index is absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackAudioSelection {
+    Automatic,
+    Exact(usize),
+    Disabled,
+}
+
+impl PlaybackAudioSelection {
+    #[must_use]
+    pub const fn stream_index(self) -> Option<usize> {
+        match self {
+            Self::Exact(index) => Some(index),
+            Self::Automatic | Self::Disabled => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_disabled(self) -> bool {
+        matches!(self, Self::Disabled)
+    }
+}
+
+impl From<Option<usize>> for PlaybackAudioSelection {
+    fn from(stream_index: Option<usize>) -> Self {
+        stream_index.map_or(Self::Automatic, Self::Exact)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlaybackProfile {
     pub profile: FFmpegProfile,
@@ -156,6 +189,23 @@ pub async fn load_source_video_stream(
     pool: &DbPool,
     media_version_id: i64,
 ) -> Result<Option<SourceVideoStream>> {
+    load_source_video_stream_by_index(pool, media_version_id, None).await
+}
+
+/// Load one exact persisted source video stream when `stream_index` is set.
+///
+/// A pinned stream that no longer exists is reported as a decode error so
+/// playback cannot silently drift to another stream.
+///
+/// # Errors
+///
+/// Returns a database error when the query fails, or a decode error when the
+/// requested pinned stream is missing or cannot be projected safely.
+pub async fn load_source_video_stream_by_index(
+    pool: &DbPool,
+    media_version_id: i64,
+    stream_index: Option<i32>,
+) -> Result<Option<SourceVideoStream>> {
     let row = sqlx::query(
         r#"SELECT ms."Index" AS "Index",
                   ms."Codec" AS "Codec",
@@ -175,18 +225,37 @@ pub async fn load_source_video_stream(
            JOIN "MediaStream" ms
                ON ms."MediaVersionId" = mv."Id" AND ms."MediaStreamKind" = 1
            WHERE mv."Id" = ?
+             AND (? IS NULL OR ms."Index" = ?)
            ORDER BY ms."Index"
            LIMIT 1"#,
     )
     .bind(media_version_id)
+    .bind(stream_index)
+    .bind(stream_index)
     .fetch_optional(pool)
     .await
     .repository()?;
     let Some(row) = row else {
+        if let Some(stream_index) = stream_index {
+            return Err(RepositoryError::Decode {
+                kind: "pinned source video stream",
+                value: format!(
+                    "media version {media_version_id} no longer has video stream {stream_index}"
+                ),
+            });
+        }
         return Ok(None);
     };
 
     let Some(codec) = decode_playback_column::<Option<String>>(&row, "Codec")? else {
+        if let Some(stream_index) = stream_index {
+            return Err(RepositoryError::Decode {
+                kind: "pinned source video stream",
+                value: format!(
+                    "video stream {stream_index} on media version {media_version_id} has no codec"
+                ),
+            });
+        }
         return Ok(None);
     };
     let index = decode_playback_column::<i64>(&row, "Index")?;
@@ -1272,6 +1341,114 @@ pub async fn select_playback_subtitle(
     }
 
     Ok(None)
+}
+
+/// Resolve an exact persisted subtitle stream without preference fallback.
+///
+/// # Errors
+///
+/// Returns a decode error if the pinned row is stale or unusable for the
+/// requested streaming mode.
+pub async fn select_pinned_playback_subtitle(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    stream_index: i32,
+    streaming_mode: StreamingMode,
+) -> Result<PlaybackSubtitle> {
+    let candidates = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let source_stream = sqlx::query(
+        r#"SELECT "Title", "Language", "Codec", "Default", "Forced"
+           FROM "MediaStream"
+           WHERE "MediaVersionId" = ?
+             AND "MediaStreamKind" = 3
+             AND "Index" = ?
+           ORDER BY "Id"
+           LIMIT 1"#,
+    )
+    .bind(media_version_id)
+    .bind(stream_index)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+
+    let mut matching = if let Some(source_stream) = source_stream {
+        let title = source_stream
+            .try_get::<Option<String>, _>("Title")
+            .repository()?;
+        let language = source_stream
+            .try_get::<Option<String>, _>("Language")
+            .repository()?;
+        let codec = source_stream
+            .try_get::<Option<String>, _>("Codec")
+            .repository()?;
+        let is_default = source_stream.try_get::<i64, _>("Default").repository()? != 0;
+        let is_forced = source_stream.try_get::<i64, _>("Forced").repository()? != 0;
+        candidates
+            .into_iter()
+            .filter(|subtitle| {
+                subtitle.stream_index == stream_index
+                    && subtitle.subtitle_kind == subtitle_kind::EMBEDDED
+                    && subtitle.default == is_default
+                    && subtitle.forced == is_forced
+                    && optional_stream_text_matches(title.as_deref(), subtitle.title.as_deref())
+                    && optional_stream_text_matches(
+                        language.as_deref(),
+                        subtitle.language.as_deref(),
+                    )
+                    && optional_stream_text_matches(codec.as_deref(), subtitle.codec.as_deref())
+            })
+            .collect::<Vec<_>>()
+    } else {
+        candidates
+            .into_iter()
+            .filter(|subtitle| {
+                subtitle.stream_index == stream_index
+                    && subtitle.subtitle_kind != subtitle_kind::EMBEDDED
+            })
+            .collect::<Vec<_>>()
+    };
+    if matching.len() != 1 {
+        return Err(RepositoryError::Decode {
+            kind: "pinned subtitle stream",
+            value: format!(
+                "media version {media_version_id} has {} compatible subtitle rows for stream {stream_index}",
+                matching.len()
+            ),
+        });
+    }
+    let subtitle = matching.pop().ok_or_else(|| RepositoryError::Decode {
+        kind: "pinned subtitle stream",
+        value: format!(
+            "media version {media_version_id} has no compatible subtitle row for stream {stream_index}"
+        ),
+    })?;
+    if streaming_mode != StreamingMode::HttpLiveStreamingDirect
+        && subtitle.subtitle_kind == subtitle_kind::EMBEDDED
+        && !subtitle.is_image()
+        && (!subtitle.is_extracted
+            || subtitle
+                .path
+                .as_deref()
+                .is_none_or(|path| path.trim().is_empty()))
+    {
+        return Err(RepositoryError::Decode {
+            kind: "pinned subtitle stream",
+            value: format!(
+                "embedded text subtitle stream {stream_index} is not extracted for transcoding"
+            ),
+        });
+    }
+    Ok(subtitle)
+}
+
+fn optional_stream_text_matches(expected: Option<&str>, actual: Option<&str>) -> bool {
+    match expected.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(expected) => actual
+            .map(str::trim)
+            .is_some_and(|actual| actual.eq_ignore_ascii_case(expected)),
+        None => true,
+    }
 }
 
 fn select_subtitle_by_mode<'a>(
@@ -2620,6 +2797,14 @@ mod tests {
                 .expect("load source video without codec metadata"),
             None
         );
+        assert!(matches!(
+            load_source_video_stream_by_index(&pool, 12, Some(0)).await,
+            Err(RepositoryError::Decode { .. })
+        ));
+        assert!(matches!(
+            load_source_video_stream_by_index(&pool, 12, Some(9)).await,
+            Err(RepositoryError::Decode { .. })
+        ));
     }
 
     #[cfg(not(feature = "mysql"))]

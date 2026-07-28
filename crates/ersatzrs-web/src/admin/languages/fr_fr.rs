@@ -1205,6 +1205,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddAll => "Tout ajouter",
         TextKey::AddedItemToPlaylist => "Élément ajouté à la liste de lecture.",
         TextKey::AddedArtistToSchedule => "Artiste ajouté à la grille",
+        TextKey::AddedMovieToSchedule => "Film ajouté à la grille",
         TextKey::AddedSeasonToSchedule => "Saison ajoutée à la grille",
         TextKey::AddedShowToSchedule => "Série ajoutée à la grille",
         TextKey::AddingItem => "Ajout de l'élément...",
@@ -1449,7 +1450,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EpgPreviewDescription => {
             "Parcourez le guide publié avec deux heures d'historique et 24 heures à venir."
         }
-        TextKey::EpgVisibleWindow => "Fenêtre visible",
+        TextKey::EpgZoom => "Zoom",
         TextKey::EpgNow => "Maintenant",
         TextKey::NoEpgChannels => "Aucune chaîne activée n'est visible dans l'EPG.",
         TextKey::ScheduleGap => "Intervalle de programmation",
@@ -2185,6 +2186,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    if trimmed == "Pinned stream selection is invalid or no longer available." {
+        return "La sélection de flux épinglée est invalide ou n’est plus disponible.".to_owned();
+    }
+    if trimmed == "Movie was not found." {
+        return "Le film est introuvable.".to_owned();
+    }
     if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
         return "La collection est déjà présente.".to_owned();
     }

@@ -840,6 +840,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    if trimmed == "Pinned stream selection is invalid or no longer available." {
+        return "Przypięty wybór strumienia jest nieprawidłowy lub niedostępny.".to_owned();
+    }
+    if trimmed == "Movie was not found." {
+        return "Nie znaleziono filmu.".to_owned();
+    }
     if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
         return "Kolekcja jest już obecna.".to_owned();
     }
@@ -1847,6 +1853,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddAll => "Dodaj wszystko",
         TextKey::AddedItemToPlaylist => "Dodano element do playlisty.",
         TextKey::AddedArtistToSchedule => "Dodano artystę do harmonogramu",
+        TextKey::AddedMovieToSchedule => "Dodano film do harmonogramu",
         TextKey::AddedSeasonToSchedule => "Dodano sezon do harmonogramu",
         TextKey::AddedShowToSchedule => "Dodano serial do harmonogramu",
         TextKey::AddingItem => "Dodawanie elementu...",
@@ -2067,7 +2074,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EpgPreviewDescription => {
             "Przeglądaj opublikowany program z dwiema godzinami historii i 24 godzinami do przodu."
         }
-        TextKey::EpgVisibleWindow => "Widoczne okno",
+        TextKey::EpgZoom => "Powiększenie",
         TextKey::EpgNow => "Teraz",
         TextKey::NoEpgChannels => "Brak włączonych kanałów widocznych w EPG.",
         TextKey::ScheduleGap => "Przerwa w harmonogramie",

@@ -371,6 +371,38 @@ pub struct CommentarySubtitleRow {
     pub codec: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoviePlaybackStreamRow {
+    pub index: i64,
+    pub kind: i32,
+    pub title: Option<String>,
+    pub language: Option<String>,
+    pub codec: Option<String>,
+    pub channels: Option<i64>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub is_default: bool,
+    pub is_forced: bool,
+    pub is_external: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoviePlaybackSourceRow {
+    pub media_version_id: i64,
+    pub name: String,
+    pub width: i64,
+    pub height: i64,
+    pub streams: Vec<MoviePlaybackStreamRow>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PinnedStreamSelectionForm {
+    pub media_version_id: i64,
+    pub video_stream_index: i32,
+    pub audio_stream_index: Option<i32>,
+    pub subtitle_stream_index: Option<i32>,
+}
+
 /// Page-map for the alphabetic jump-bar. Mirrors `ErsatzTV`'s
 /// `SearchPageMap.PageMap`: for each bucket ('#' or 'a'..='z'), the 1-based
 /// page number that contains the first item starting with that letter.
@@ -423,6 +455,7 @@ pub struct MovieDetailRow {
     pub alternate_versions: Vec<MediaCardRow>,
     pub audio_tracks: Vec<AudioTrackRow>,
     pub commentary_subtitles: Vec<CommentarySubtitleRow>,
+    pub playback_sources: Vec<MoviePlaybackSourceRow>,
 }
 
 /// Detailed projection for the other-video details page. ErsatzTV only ships
@@ -799,6 +832,7 @@ pub struct PlaylistItemForm {
     pub preferred_audio_title: Option<String>,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<i32>,
+    pub pinned_stream_selection: Option<PinnedStreamSelectionForm>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -910,6 +944,14 @@ fn playlist_item_from_admin(
         preferred_audio_title: item.preferred_audio_title,
         preferred_subtitle_language_code: item.preferred_subtitle_language_code,
         subtitle_mode: item.subtitle_mode,
+        pinned_stream_selection: item.pinned_stream_selection.map(|selection| {
+            PinnedStreamSelectionForm {
+                media_version_id: selection.media_version_id,
+                video_stream_index: selection.video_stream_index,
+                audio_stream_index: selection.audio_stream_index,
+                subtitle_stream_index: selection.subtitle_stream_index,
+            }
+        }),
     }
 }
 
@@ -959,6 +1001,14 @@ pub(crate) fn playlist_editor_into_admin(
                 preferred_audio_title: item.preferred_audio_title,
                 preferred_subtitle_language_code: item.preferred_subtitle_language_code,
                 subtitle_mode: item.subtitle_mode,
+                pinned_stream_selection: item.pinned_stream_selection.map(|selection| {
+                    ersatzrs_domain::PinnedStreamSelection {
+                        media_version_id: selection.media_version_id,
+                        video_stream_index: selection.video_stream_index,
+                        audio_stream_index: selection.audio_stream_index,
+                        subtitle_stream_index: selection.subtitle_stream_index,
+                    }
+                }),
             })
             .collect(),
     }
@@ -1618,6 +1668,22 @@ pub async fn add_media_item_to_schedule(
 }
 
 #[server]
+pub async fn add_media_item_to_schedule_with_stream_selection(
+    schedule_id: i64,
+    collection_type: i64,
+    media_item_id: i64,
+    selection: PinnedStreamSelectionForm,
+) -> Result<(), ServerFnError> {
+    autocomplete::add_media_item_to_schedule_with_stream_selection_impl(
+        schedule_id,
+        collection_type,
+        media_item_id,
+        selection,
+    )
+    .await
+}
+
+#[server]
 pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnError> {
     autocomplete::list_all_collections_impl().await
 }
@@ -1961,11 +2027,48 @@ pub async fn add_media_items_to_playlist_with_playback(
     media_item_ids: Vec<i64>,
     playback: Option<PlaybackOverrideForm>,
 ) -> Result<u64, ServerFnError> {
+    add_media_items_to_playlist_with_selection(kind, playlist_id, media_item_ids, playback, None)
+        .await
+}
+
+#[server]
+pub async fn add_media_items_to_playlist_with_stream_selection(
+    kind: MediaBrowserKind,
+    playlist_id: i64,
+    media_item_ids: Vec<i64>,
+    selection: PinnedStreamSelectionForm,
+) -> Result<u64, ServerFnError> {
+    add_media_items_to_playlist_with_selection(
+        kind,
+        playlist_id,
+        media_item_ids,
+        None,
+        Some(selection),
+    )
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn add_media_items_to_playlist_with_selection(
+    kind: MediaBrowserKind,
+    playlist_id: i64,
+    media_item_ids: Vec<i64>,
+    playback: Option<PlaybackOverrideForm>,
+    selection: Option<PinnedStreamSelectionForm>,
+) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
     let collection_type = kind.collection_type();
     let playback = playback_overrides(playback);
+    let pinned_stream_selection = selection
+        .map(validate_pinned_stream_selection)
+        .transpose()?;
+    if let Some(selection) = pinned_stream_selection {
+        for media_item_id in &media_item_ids {
+            validate_pinned_stream_selection_for_movie(*media_item_id, selection).await?;
+        }
+    }
     state
         .application
         .add_playlist_items(ersatzrs_app::commands::AddPlaylistItems {
@@ -1977,12 +2080,129 @@ pub async fn add_media_items_to_playlist_with_playback(
                         collection_type,
                         media_item_id,
                         playback: playback.clone(),
+                        pinned_stream_selection,
                     },
                 )
                 .collect(),
         })
         .await
         .map_err(ServerFnError::new)
+}
+
+fn validate_pinned_stream_selection(
+    selection: PinnedStreamSelectionForm,
+) -> Result<ersatzrs_domain::PinnedStreamSelection, ServerFnError> {
+    if selection.media_version_id <= 0 || selection.video_stream_index < 0 {
+        return Err(ServerFnError::new(
+            "Pinned stream selection is invalid or no longer available.",
+        ));
+    }
+    if selection.audio_stream_index.is_some_and(|index| index < 0)
+        || selection
+            .subtitle_stream_index
+            .is_some_and(|index| index < 0)
+    {
+        return Err(ServerFnError::new(
+            "Pinned stream selection is invalid or no longer available.",
+        ));
+    }
+    Ok(ersatzrs_domain::PinnedStreamSelection {
+        media_version_id: selection.media_version_id,
+        video_stream_index: selection.video_stream_index,
+        audio_stream_index: selection.audio_stream_index,
+        subtitle_stream_index: selection.subtitle_stream_index,
+    })
+}
+
+#[cfg(test)]
+mod pinned_stream_selection_tests {
+    use super::{validate_pinned_stream_selection, PinnedStreamSelectionForm};
+
+    #[test]
+    fn exact_selection_requires_positive_version_and_nonnegative_stream_indexes() {
+        let valid = PinnedStreamSelectionForm {
+            media_version_id: 42,
+            video_stream_index: 0,
+            audio_stream_index: Some(2),
+            subtitle_stream_index: None,
+        };
+        let mapped = validate_pinned_stream_selection(valid).expect("valid exact selection");
+        assert_eq!(mapped.media_version_id, 42);
+        assert_eq!(mapped.video_stream_index, 0);
+        assert_eq!(mapped.audio_stream_index, Some(2));
+        assert_eq!(mapped.subtitle_stream_index, None);
+
+        for invalid in [
+            PinnedStreamSelectionForm {
+                media_version_id: 0,
+                ..valid
+            },
+            PinnedStreamSelectionForm {
+                video_stream_index: -1,
+                ..valid
+            },
+            PinnedStreamSelectionForm {
+                audio_stream_index: Some(-1),
+                ..valid
+            },
+            PinnedStreamSelectionForm {
+                subtitle_stream_index: Some(-1),
+                ..valid
+            },
+        ] {
+            assert!(validate_pinned_stream_selection(invalid).is_err());
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_pinned_stream_selection_for_movie(
+    media_item_id: i64,
+    selection: ersatzrs_domain::PinnedStreamSelection,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let movie = state
+        .application
+        .get_movie_detail(media_item_id)
+        .await?
+        .ok_or_else(|| ServerFnError::new("Movie was not found."))?;
+    let source = movie
+        .playback_sources
+        .iter()
+        .find(|source| source.media_version_id == selection.media_version_id)
+        .ok_or_else(|| {
+            ServerFnError::new("Pinned stream selection is invalid or no longer available.")
+        })?;
+    let has_stream = |kind: i32, index: i32| {
+        source
+            .streams
+            .iter()
+            .any(|stream| stream.kind == kind && stream.index == i64::from(index))
+    };
+    if !has_stream(1, selection.video_stream_index) {
+        return Err(ServerFnError::new(
+            "Pinned stream selection is invalid or no longer available.",
+        ));
+    }
+    if selection
+        .audio_stream_index
+        .is_some_and(|index| !has_stream(2, index))
+    {
+        return Err(ServerFnError::new(
+            "Pinned stream selection is invalid or no longer available.",
+        ));
+    }
+    if selection
+        .subtitle_stream_index
+        .is_some_and(|index| !has_stream(3, index))
+    {
+        return Err(ServerFnError::new(
+            "Pinned stream selection is invalid or no longer available.",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(feature = "ssr")]
@@ -2090,6 +2310,7 @@ pub async fn add_media_items_to_playlist_mixed(
                     collection_type: row.collection_type,
                     media_item_id: row.media_item_id,
                     playback: ersatzrs_core::repositories::PlaybackOverrides::default(),
+                    pinned_stream_selection: None,
                 })
                 .collect(),
         })
@@ -2114,7 +2335,7 @@ mod server_fn_path_stability {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_media_browser_server_fn_routes_remain_stable() {
-        let routes: [(&str, &str); 71] = [
+        let routes: [(&str, &str); 73] = [
             (super::ListMovies::PATH, "list_movies"),
             (super::GetMovieDetails::PATH, "get_movie_details"),
             (super::GetShowDetails::PATH, "get_show_details"),
@@ -2194,6 +2415,10 @@ mod server_fn_path_stability {
                 super::AddMediaItemToSchedule::PATH,
                 "add_media_item_to_schedule",
             ),
+            (
+                super::AddMediaItemToScheduleWithStreamSelection::PATH,
+                "add_media_item_to_schedule_with_stream_selection",
+            ),
             (super::ListAllCollections::PATH, "list_all_collections"),
             (
                 super::ListSmartCollectionsForSelect::PATH,
@@ -2253,6 +2478,10 @@ mod server_fn_path_stability {
             (
                 super::AddMediaItemsToPlaylistWithPlayback::PATH,
                 "add_media_items_to_playlist_with_playback",
+            ),
+            (
+                super::AddMediaItemsToPlaylistWithStreamSelection::PATH,
+                "add_media_items_to_playlist_with_stream_selection",
             ),
             (
                 super::AddMediaItemsToPlaylistMixed::PATH,

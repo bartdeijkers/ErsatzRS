@@ -111,6 +111,17 @@ pub enum MediaStreamKind {
     ExternalSubtitle,
 }
 
+/// Exact media-version and stream tuple selected for one reusable playback
+/// entry. A present selection pins the video stream; absent audio means the
+/// source is silent and absent subtitle means subtitles are explicitly off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct PinnedStreamSelection {
+    pub media_version_id: EntityId,
+    pub video_stream_index: i32,
+    pub audio_stream_index: Option<i32>,
+    pub subtitle_stream_index: Option<i32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum VideoScanKind {
     #[default]

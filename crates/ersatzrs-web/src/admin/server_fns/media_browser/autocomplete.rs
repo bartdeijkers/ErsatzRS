@@ -128,7 +128,7 @@ pub(in crate::admin::server_fns::media_browser) async fn add_show_to_schedule_im
 ) -> Result<(), ServerFnError> {
     const COLLECTION_TYPE_TELEVISION_SHOW: i64 = 1;
 
-    append_media_item_to_schedule(schedule_id, COLLECTION_TYPE_TELEVISION_SHOW, show_id).await
+    append_media_item_to_schedule(schedule_id, COLLECTION_TYPE_TELEVISION_SHOW, show_id, None).await
 }
 
 /// Adds any media item to a program schedule as a single `PlayoutMode.One`
@@ -139,7 +139,20 @@ pub(in crate::admin::server_fns::media_browser) async fn add_media_item_to_sched
     collection_type: i64,
     media_item_id: i64,
 ) -> Result<(), ServerFnError> {
-    append_media_item_to_schedule(schedule_id, collection_type, media_item_id).await
+    append_media_item_to_schedule(schedule_id, collection_type, media_item_id, None).await
+}
+
+#[cfg(feature = "ssr")]
+pub(in crate::admin::server_fns::media_browser) async fn add_media_item_to_schedule_with_stream_selection_impl(
+    schedule_id: i64,
+    collection_type: i64,
+    media_item_id: i64,
+    selection: super::PinnedStreamSelectionForm,
+) -> Result<(), ServerFnError> {
+    let selection = super::validate_pinned_stream_selection(selection)?;
+    super::validate_pinned_stream_selection_for_movie(media_item_id, selection).await?;
+    append_media_item_to_schedule(schedule_id, collection_type, media_item_id, Some(selection))
+        .await
 }
 
 #[cfg(feature = "ssr")]
@@ -147,6 +160,7 @@ pub(in crate::admin::server_fns::media_browser) async fn append_media_item_to_sc
     schedule_id: i64,
     collection_type: i64,
     media_item_id: i64,
+    pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -158,6 +172,7 @@ pub(in crate::admin::server_fns::media_browser) async fn append_media_item_to_sc
             collection_type: i32::try_from(collection_type)
                 .map_err(|error| ServerFnError::new(error.to_string()))?,
             media_item_id,
+            pinned_stream_selection,
         })
         .await?)
 }

@@ -46,6 +46,30 @@ pub struct AdminCommentarySubtitle {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdminMoviePlaybackStream {
+    pub index: i64,
+    pub kind: i32,
+    pub title: Option<String>,
+    pub language: Option<String>,
+    pub codec: Option<String>,
+    pub channels: Option<i64>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub is_default: bool,
+    pub is_forced: bool,
+    pub is_external: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdminMoviePlaybackSource {
+    pub media_version_id: EntityId,
+    pub name: String,
+    pub width: i64,
+    pub height: i64,
+    pub streams: Vec<AdminMoviePlaybackStream>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AdminMovieDetail {
     pub id: EntityId,
     pub title: String,
@@ -70,6 +94,7 @@ pub struct AdminMovieDetail {
     pub alternate_versions: Vec<AdminMediaCard>,
     pub audio_tracks: Vec<AdminAudioTrack>,
     pub commentary_subtitles: Vec<AdminCommentarySubtitle>,
+    pub playback_sources: Vec<AdminMoviePlaybackSource>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

@@ -45,6 +45,7 @@ fn destroy_browser_player(_video_ref: NodeRef<html::Video>) {}
 pub fn ChannelPreviewPlayer(
     data: RwSignal<ChannelWatchData>,
     #[prop(default = false)] compact: bool,
+    #[prop(default = false)] align_start: bool,
     #[prop(optional)] active: Option<Signal<bool>>,
 ) -> impl IntoView {
     let video_ref = NodeRef::<html::Video>::new();
@@ -132,6 +133,7 @@ pub fn ChannelPreviewPlayer(
         <section
             class=if compact { style::preview_compact } else { style::preview }
             data-channel-preview
+            data-align-start=align_start
             data-preview-state="idle"
             data-message-idle=tr(TextKey::PreviewIdle)
             data-message-connecting=tr(TextKey::PreviewConnecting)

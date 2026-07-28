@@ -288,12 +288,14 @@ impl<'a> ComplexFilterBuilder<'a> {
         if let Some(graph) = &filter_graph {
             options.extend(["-filter_complex".to_owned(), graph.clone()]);
         }
-        options.extend([
-            "-map".to_owned(),
-            video_label.clone(),
-            "-map".to_owned(),
-            audio_label.clone(),
-        ]);
+        options.extend(["-map".to_owned(), video_label.clone()]);
+        if self
+            .inputs
+            .iter()
+            .any(|input| input.kind == InputKind::Audio)
+        {
+            options.extend(["-map".to_owned(), audio_label.clone()]);
+        }
 
         for subtitle in self.inputs.iter().filter(|input| {
             input.kind == InputKind::Subtitle

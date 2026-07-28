@@ -899,6 +899,9 @@ impl ClassicContext {
         if schedule_item.subtitle_mode.is_some() {
             item.subtitle_mode = schedule_item.subtitle_mode;
         }
+        if schedule_item.pinned_stream_selection.is_some() {
+            item.pinned_stream_selection = schedule_item.pinned_stream_selection;
+        }
         item
     }
 

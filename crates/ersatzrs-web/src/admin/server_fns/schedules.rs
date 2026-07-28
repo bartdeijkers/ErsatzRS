@@ -165,6 +165,8 @@ pub struct ScheduleItemForm {
     pub preferred_audio_title: String,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<i32>,
+    pub pinned_stream_selection:
+        Option<crate::admin::server_fns::media_browser::PinnedStreamSelectionForm>,
 }
 
 impl Default for ScheduleItemForm {
@@ -212,6 +214,7 @@ impl Default for ScheduleItemForm {
             preferred_audio_title: String::new(),
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            pinned_stream_selection: None,
         }
     }
 }
@@ -389,6 +392,14 @@ pub(crate) fn schedule_item_from_admin(
         preferred_audio_title: item.preferred_audio_title,
         preferred_subtitle_language_code: item.preferred_subtitle_language_code,
         subtitle_mode: item.subtitle_mode,
+        pinned_stream_selection: item.pinned_stream_selection.map(|selection| {
+            crate::admin::server_fns::media_browser::PinnedStreamSelectionForm {
+                media_version_id: selection.media_version_id,
+                video_stream_index: selection.video_stream_index,
+                audio_stream_index: selection.audio_stream_index,
+                subtitle_stream_index: selection.subtitle_stream_index,
+            }
+        }),
     }
 }
 
@@ -440,6 +451,14 @@ pub(crate) fn schedule_item_into_admin(
         preferred_audio_title: item.preferred_audio_title,
         preferred_subtitle_language_code: item.preferred_subtitle_language_code,
         subtitle_mode: item.subtitle_mode,
+        pinned_stream_selection: item.pinned_stream_selection.map(|selection| {
+            ersatzrs_domain::PinnedStreamSelection {
+                media_version_id: selection.media_version_id,
+                video_stream_index: selection.video_stream_index,
+                audio_stream_index: selection.audio_stream_index,
+                subtitle_stream_index: selection.subtitle_stream_index,
+            }
+        }),
     }
 }
 
@@ -1292,6 +1311,8 @@ pub async fn list_schedule_items_with_pool(
                   psi."PostRollFillerId", psi."TailFillerId", psi."FallbackFillerId",
                   psi."PreferredAudioLanguageCode", psi."PreferredAudioTitle",
                   psi."PreferredSubtitleLanguageCode", psi."SubtitleMode",
+                  psi."MediaVersionId", psi."VideoStreamIndex",
+                  psi."AudioStreamIndex", psi."SubtitleStreamIndex",
                   psi."CollectionId", psi."MediaItemId", psi."MultiCollectionId",
                   psi."SmartCollectionId", psi."RerunCollectionId", psi."PlaylistId",
                   psi."SearchQuery", psi."SearchTitle",
@@ -1417,6 +1438,26 @@ pub async fn list_schedule_items_with_pool(
                     .ok()
                     .flatten(),
                 subtitle_mode: row.try_get("SubtitleMode").ok().flatten(),
+                pinned_stream_selection: row
+                    .try_get::<Option<i64>, _>("MediaVersionId")
+                    .ok()
+                    .flatten()
+                    .zip(
+                        row.try_get::<Option<i32>, _>("VideoStreamIndex")
+                            .ok()
+                            .flatten(),
+                    )
+                    .map(|(media_version_id, video_stream_index)| {
+                        crate::admin::server_fns::media_browser::PinnedStreamSelectionForm {
+                            media_version_id,
+                            video_stream_index,
+                            audio_stream_index: row.try_get("AudioStreamIndex").ok().flatten(),
+                            subtitle_stream_index: row
+                                .try_get("SubtitleStreamIndex")
+                                .ok()
+                                .flatten(),
+                        }
+                    }),
             }
         })
         .collect::<Vec<_>>();

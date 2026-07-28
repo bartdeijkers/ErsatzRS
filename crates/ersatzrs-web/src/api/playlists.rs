@@ -60,6 +60,14 @@ pub struct PlaylistSaveForm {
     #[serde(default)]
     item_subtitle_mode: Vec<String>,
     #[serde(default)]
+    item_media_version_id: Vec<String>,
+    #[serde(default)]
+    item_video_stream_index: Vec<String>,
+    #[serde(default)]
+    item_audio_stream_index: Vec<String>,
+    #[serde(default)]
+    item_subtitle_stream_index: Vec<String>,
+    #[serde(default)]
     item_play_all_index: Vec<String>,
     #[serde(default)]
     item_include_in_program_guide_index: Vec<String>,
@@ -183,6 +191,10 @@ impl PlaylistSaveForm {
                     form.item_preferred_subtitle_language_code.push(value);
                 }
                 "item_subtitle_mode" => form.item_subtitle_mode.push(value),
+                "item_media_version_id" => form.item_media_version_id.push(value),
+                "item_video_stream_index" => form.item_video_stream_index.push(value),
+                "item_audio_stream_index" => form.item_audio_stream_index.push(value),
+                "item_subtitle_stream_index" => form.item_subtitle_stream_index.push(value),
                 "item_play_all_index" => form.item_play_all_index.push(value),
                 "item_include_in_program_guide_index" => {
                     form.item_include_in_program_guide_index.push(value);
@@ -223,6 +235,20 @@ impl PlaylistSaveForm {
                     self.item_preferred_subtitle_language_code.get(pos).cloned(),
                 ),
                 subtitle_mode: parse_i32(self.item_subtitle_mode.get(pos).cloned()),
+                pinned_stream_selection: parse_i64(self.item_media_version_id.get(pos).cloned())
+                    .zip(parse_i32(self.item_video_stream_index.get(pos).cloned()))
+                    .map(|(media_version_id, video_stream_index)| {
+                        crate::admin::server_fns::media_browser::PinnedStreamSelectionForm {
+                            media_version_id,
+                            video_stream_index,
+                            audio_stream_index: parse_i32(
+                                self.item_audio_stream_index.get(pos).cloned(),
+                            ),
+                            subtitle_stream_index: parse_i32(
+                                self.item_subtitle_stream_index.get(pos).cloned(),
+                            ),
+                        }
+                    }),
             });
         }
 

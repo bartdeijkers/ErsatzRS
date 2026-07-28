@@ -74,6 +74,7 @@ pub struct SchedulingMediaItem {
     pub preferred_audio_title: Option<String>,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<ersatzrs_domain::ChannelSubtitleMode>,
+    pub pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
 }
 
 impl SchedulingMediaItem {
@@ -93,6 +94,7 @@ impl SchedulingMediaItem {
             preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            pinned_stream_selection: None,
         }
     }
 }
@@ -954,6 +956,7 @@ fn playout_item(
         preferred_audio_title: media_item.preferred_audio_title.clone(),
         preferred_subtitle_language_code: media_item.preferred_subtitle_language_code.clone(),
         subtitle_mode: media_item.subtitle_mode,
+        pinned_stream_selection: media_item.pinned_stream_selection,
         graphics_element_ids,
         graphics_elements,
         scheduling_context,

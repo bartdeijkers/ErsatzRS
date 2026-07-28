@@ -414,6 +414,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         schedule_id: EntityId,
         collection_type: i32,
         media_item_id: EntityId,
+        pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
     ) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
         let next_index = sqlx::query_scalar::<_, i64>(
@@ -429,13 +430,18 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
                    "ProgramScheduleId", "CollectionType", "MediaItemId",
                    "PlaybackOrder", "FillWithGroupMode", "GuideMode",
                    "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
-                   "Index"
-               ) VALUES (?, ?, ?, 3, 0, 0, 0, 0, 0, ?)"#,
+                   "Index", "MediaVersionId", "VideoStreamIndex",
+                   "AudioStreamIndex", "SubtitleStreamIndex"
+               ) VALUES (?, ?, ?, 3, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?)"#,
         )
         .bind(schedule_id)
         .bind(collection_type)
         .bind(media_item_id)
         .bind(next_index)
+        .bind(pinned_stream_selection.map(|selection| selection.media_version_id))
+        .bind(pinned_stream_selection.map(|selection| selection.video_stream_index))
+        .bind(pinned_stream_selection.and_then(|selection| selection.audio_stream_index))
+        .bind(pinned_stream_selection.and_then(|selection| selection.subtitle_stream_index))
         .execute(&mut *tx)
         .await
         .repository()?;
@@ -497,7 +503,8 @@ async fn copy_schedule_admin(pool: &Pool<Db>, id: EntityId, name: &str) -> Resul
                    "PostRollFillerId", "PreRollFillerId", "PreferredAudioLanguageCode",
                    "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "ProgramScheduleId",
                    "RerunCollectionId", "SmartCollectionId", "StartTime", "SubtitleMode",
-                   "TailFillerId", "SearchQuery", "SearchTitle"
+                   "TailFillerId", "SearchQuery", "SearchTitle", "MediaVersionId",
+                   "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex"
                )
                SELECT "CollectionId", "CollectionType", "CustomTitle", "FakeCollectionKey",
                       "FallbackFillerId", "FillWithGroupMode", "FixedStartTimeBehavior",
@@ -507,7 +514,8 @@ async fn copy_schedule_admin(pool: &Pool<Db>, id: EntityId, name: &str) -> Resul
                       "PostRollFillerId", "PreRollFillerId", "PreferredAudioLanguageCode",
                       "PreferredAudioTitle", "PreferredSubtitleLanguageCode", ?,
                       "RerunCollectionId", "SmartCollectionId", "StartTime", "SubtitleMode",
-                      "TailFillerId", "SearchQuery", "SearchTitle"
+                      "TailFillerId", "SearchQuery", "SearchTitle", "MediaVersionId",
+                      "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex"
                FROM "ProgramScheduleItem" WHERE "Id" = ?"#,
         )
         .bind(new_schedule_id)
@@ -590,6 +598,8 @@ async fn list_schedule_items_admin(
                   "psi"."TailFillerId", "psi"."FallbackFillerId",
                   "psi"."PreferredAudioLanguageCode", "psi"."PreferredAudioTitle",
                   "psi"."PreferredSubtitleLanguageCode", "psi"."SubtitleMode",
+                  "psi"."MediaVersionId", "psi"."VideoStreamIndex",
+                  "psi"."AudioStreamIndex", "psi"."SubtitleStreamIndex",
                   "psi"."CollectionId", "psi"."MediaItemId", "psi"."MultiCollectionId",
                   "psi"."SmartCollectionId", "psi"."RerunCollectionId",
                   "psi"."PlaylistId", "psi"."SearchQuery", "psi"."SearchTitle",
@@ -763,7 +773,30 @@ fn map_schedule_item_admin(
             .try_get("PreferredSubtitleLanguageCode")
             .repository()?,
         subtitle_mode: row.try_get("SubtitleMode").repository()?,
+        pinned_stream_selection: decode_schedule_pinned_stream_selection(row)?,
     })
+}
+
+fn decode_schedule_pinned_stream_selection(
+    row: &DbRow,
+) -> Result<Option<ersatzrs_domain::PinnedStreamSelection>> {
+    let media_version_id: Option<EntityId> = row.try_get("MediaVersionId").repository()?;
+    let video_stream_index: Option<i32> = row.try_get("VideoStreamIndex").repository()?;
+    match (media_version_id, video_stream_index) {
+        (None, None) => Ok(None),
+        (Some(media_version_id), Some(video_stream_index)) => {
+            Ok(Some(ersatzrs_domain::PinnedStreamSelection {
+                media_version_id,
+                video_stream_index,
+                audio_stream_index: row.try_get("AudioStreamIndex").repository()?,
+                subtitle_stream_index: row.try_get("SubtitleStreamIndex").repository()?,
+            }))
+        }
+        _ => Err(ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "program schedule pinned stream selection",
+            value: "media version and video stream must both be set".to_owned(),
+        }),
+    }
 }
 
 async fn load_schedule_policy(
@@ -1080,8 +1113,9 @@ async fn replace_schedule_items_admin(
                    "PostRollFillerId", "PreRollFillerId", "PreferredAudioLanguageCode",
                    "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "ProgramScheduleId",
                    "RerunCollectionId", "SmartCollectionId", "StartTime", "SubtitleMode",
-                   "TailFillerId", "SearchQuery", "SearchTitle"
-               ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   "TailFillerId", "SearchQuery", "SearchTitle", "MediaVersionId",
+                   "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex"
+               ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.collection_id)
         .bind(item.collection_type)
@@ -1117,6 +1151,22 @@ async fn replace_schedule_items_admin(
         .bind(item.tail_filler_id)
         .bind(item.search_query.as_deref())
         .bind(item.search_title.as_deref())
+        .bind(
+            item.pinned_stream_selection
+                .map(|selection| selection.media_version_id),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .map(|selection| selection.video_stream_index),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .and_then(|selection| selection.audio_stream_index),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .and_then(|selection| selection.subtitle_stream_index),
+        )
         .execute(&mut *tx)
         .await
         .repository()?;
@@ -1325,6 +1375,10 @@ async fn upsert_program_schedule_item(
                "PreferredAudioTitle" = ?,
                "PreferredSubtitleLanguageCode" = ?,
                "SubtitleMode" = ?,
+               "MediaVersionId" = ?,
+               "VideoStreamIndex" = ?,
+               "AudioStreamIndex" = ?,
+               "SubtitleStreamIndex" = ?,
                "SearchTitle" = NULL,
                "FakeCollectionKey" = NULL,
                "MarathonBatchSize" = NULL,
@@ -1358,6 +1412,22 @@ async fn upsert_program_schedule_item(
     .bind(item.preferred_audio_title.as_deref())
     .bind(item.preferred_subtitle_language_code.as_deref())
     .bind(item.subtitle_mode.map(encode_enum))
+    .bind(
+        item.pinned_stream_selection
+            .map(|selection| selection.media_version_id),
+    )
+    .bind(
+        item.pinned_stream_selection
+            .map(|selection| selection.video_stream_index),
+    )
+    .bind(
+        item.pinned_stream_selection
+            .and_then(|selection| selection.audio_stream_index),
+    )
+    .bind(
+        item.pinned_stream_selection
+            .and_then(|selection| selection.subtitle_stream_index),
+    )
     .bind(item.pre_roll_filler_id)
     .bind(item.mid_roll_filler_id)
     .bind(item.post_roll_filler_id)
@@ -1379,8 +1449,10 @@ async fn upsert_program_schedule_item(
                 "Index", "StartTime", "FixedStartTimeBehavior", "CustomTitle",
                 "PreferredAudioLanguageCode", "PreferredAudioTitle",
                 "PreferredSubtitleLanguageCode", "SubtitleMode", "PreRollFillerId",
-                "MidRollFillerId", "PostRollFillerId", "TailFillerId", "FallbackFillerId"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "MidRollFillerId", "PostRollFillerId", "TailFillerId", "FallbackFillerId",
+                "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
+                "SubtitleStreamIndex"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.program_schedule_id)
@@ -1411,6 +1483,22 @@ async fn upsert_program_schedule_item(
         .bind(item.post_roll_filler_id)
         .bind(item.tail_filler_id)
         .bind(item.fallback_filler_id)
+        .bind(
+            item.pinned_stream_selection
+                .map(|selection| selection.media_version_id),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .map(|selection| selection.video_stream_index),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .and_then(|selection| selection.audio_stream_index),
+        )
+        .bind(
+            item.pinned_stream_selection
+                .and_then(|selection| selection.subtitle_stream_index),
+        )
         .execute(&mut **tx)
         .await.repository()?;
     }
@@ -1634,6 +1722,7 @@ async fn map_program_schedule_item(
         preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
         preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode").repository()?,
         subtitle_mode: decode_optional_enum_column("program schedule item subtitle_mode", row, "SubtitleMode")?,
+        pinned_stream_selection: decode_schedule_pinned_stream_selection(row)?,
         sort_order: row.try_get("Index").repository()?,
         watermark_ids: load_ids(
             pool,

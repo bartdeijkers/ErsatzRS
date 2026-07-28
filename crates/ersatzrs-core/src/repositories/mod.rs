@@ -28,7 +28,8 @@ pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,
     AdminCommentarySubtitle, AdminMediaCard, AdminMediaInfoChapter, AdminMediaInfoKind,
     AdminMediaInfoStream, AdminMediaItemInfo, AdminMediaRepository, AdminMovieDetail,
-    AdminOtherVideoDetail, AdminSeasonCard, AdminShowDetail,
+    AdminMoviePlaybackSource, AdminMoviePlaybackStream, AdminOtherVideoDetail, AdminSeasonCard,
+    AdminShowDetail,
 };
 pub use admin_search::{
     AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,

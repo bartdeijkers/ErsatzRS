@@ -276,6 +276,7 @@ pub(in crate::admin::server_fns::media_browser) async fn preview_playlist_playou
 }
 
 #[cfg(all(test, feature = "ssr"))]
+#[allow(clippy::too_many_lines)]
 pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_reference_data(
     pool: &ersatzrs_infra::db::DbPool,
     form: &PlaylistEditorForm,
@@ -355,6 +356,14 @@ pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_refere
                     preferred_audio_title: preferred_audio_title.clone(),
                     preferred_subtitle_language_code: preferred_subtitle_language_code.clone(),
                     subtitle_mode,
+                    pinned_stream_selection: item.pinned_stream_selection.map(|selection| {
+                        ersatzrs_domain::PinnedStreamSelection {
+                            media_version_id: selection.media_version_id,
+                            video_stream_index: selection.video_stream_index,
+                            audio_stream_index: selection.audio_stream_index,
+                            subtitle_stream_index: selection.subtitle_stream_index,
+                        }
+                    }),
                 })
                 .collect(),
         });

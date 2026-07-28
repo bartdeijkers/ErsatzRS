@@ -3417,6 +3417,7 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
         preferred_audio_title: None,
         preferred_subtitle_language_code: None,
         subtitle_mode: None,
+        pinned_stream_selection: None,
     })
 }
 
@@ -3459,6 +3460,7 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
             row,
             "SubtitleMode",
         )?,
+        pinned_stream_selection: pinned_stream_selection_from_row(row)?,
         block_key: row.try_get("BlockKey").repository()?,
         collection_key: row.try_get("CollectionKey").repository()?,
         collection_etag: row.try_get("CollectionEtag").repository()?,
@@ -3668,6 +3670,7 @@ type SchedulingItemKey = (
     Option<String>,
     Option<String>,
     Option<u8>,
+    Option<ersatzrs_domain::PinnedStreamSelection>,
 );
 
 fn scheduling_item_key(item: &SchedulingMediaItem) -> SchedulingItemKey {
@@ -3682,6 +3685,7 @@ fn scheduling_item_key(item: &SchedulingMediaItem) -> SchedulingItemKey {
             ChannelSubtitleMode::Default => 2,
             ChannelSubtitleMode::Any => 3,
         }),
+        item.pinned_stream_selection,
     )
 }
 
@@ -3703,6 +3707,7 @@ struct PlaybackOverride {
     preferred_audio_title: Option<String>,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
+    pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
 }
 
 fn playback_override_from_row(row: &DbRow) -> Result<PlaybackOverride> {
@@ -3714,6 +3719,7 @@ fn playback_override_from_row(row: &DbRow) -> Result<PlaybackOverride> {
             "PreferredSubtitleLanguageCode",
         )?,
         subtitle_mode: optional_subtitle_mode_column(row, "SubtitleMode")?,
+        pinned_stream_selection: pinned_stream_selection_from_row(row)?,
     })
 }
 
@@ -3723,6 +3729,31 @@ fn optional_string_column(row: &DbRow, column: &'static str) -> Result<Option<St
         Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
         Err(error) => Err(super::common::map_data_access_error(column, &error)),
     }
+}
+
+fn optional_i32_column(row: &DbRow, column: &'static str) -> Result<Option<i32>> {
+    match row.try_get::<Option<i32>, _>(column) {
+        Ok(value) => Ok(value),
+        Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
+        Err(error) => Err(super::common::map_data_access_error(column, &error)),
+    }
+}
+
+fn pinned_stream_selection_from_row(
+    row: &DbRow,
+) -> Result<Option<ersatzrs_domain::PinnedStreamSelection>> {
+    let Some(media_version_id) = optional_id(row, "MediaVersionId")? else {
+        return Ok(None);
+    };
+    let Some(video_stream_index) = optional_i32_column(row, "VideoStreamIndex")? else {
+        return Ok(None);
+    };
+    Ok(Some(ersatzrs_domain::PinnedStreamSelection {
+        media_version_id,
+        video_stream_index,
+        audio_stream_index: optional_i32_column(row, "AudioStreamIndex")?,
+        subtitle_stream_index: optional_i32_column(row, "SubtitleStreamIndex")?,
+    }))
 }
 
 fn optional_subtitle_mode_column(
@@ -3747,6 +3778,7 @@ fn apply_playback_override(items: &mut [SchedulingMediaItem], playback: &Playbac
         && playback.preferred_audio_title.is_none()
         && playback.preferred_subtitle_language_code.is_none()
         && playback.subtitle_mode.is_none()
+        && playback.pinned_stream_selection.is_none()
     {
         return;
     }
@@ -3759,6 +3791,7 @@ fn apply_playback_override(items: &mut [SchedulingMediaItem], playback: &Playbac
         item.preferred_subtitle_language_code
             .clone_from(&playback.preferred_subtitle_language_code);
         item.subtitle_mode = playback.subtitle_mode;
+        item.pinned_stream_selection = playback.pinned_stream_selection;
     }
 }
 

@@ -181,7 +181,9 @@ fn ChannelWatchContent(data: RwSignal<ChannelWatchData>) -> impl IntoView {
             </header>
 
             <main class=style::content>
-                <ChannelPreviewPlayer data=data/>
+                <div class=style::preview_region data-watch-preview-region>
+                    <ChannelPreviewPlayer data=data align_start=true/>
+                </div>
 
                 <section class=style::now_next>
                     <article class=style::programme_card>

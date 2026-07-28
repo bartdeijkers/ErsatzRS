@@ -14,6 +14,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{content_variant_badge_label, tr, TextKey};
+use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, BrowserKindConfig, MediaInfoModal,
     MultiSelectBrowserPage,
@@ -21,7 +22,8 @@ use crate::admin::pages::media::multi_select_browser::{
 use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::media_browser::{
     get_media_item_info_json, AudioTrackRow, CommentarySubtitleRow, MediaBrowserKind, MediaCardRow,
-    MovieDetailRow, PlaybackOverrideForm,
+    MovieDetailRow, MoviePlaybackSourceRow, MoviePlaybackStreamRow, PinnedStreamSelectionForm,
+    PlaybackOverrideForm,
 };
 use crate::admin::ui::primitives::card::{first_letter_placeholder, MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -115,16 +117,19 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         alternate_versions,
         audio_tracks,
         commentary_subtitles,
+        playback_sources,
     } = movie;
 
     let movie_collection_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
     let movie_playlist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
     let movie_collection_playback: RwSignal<Option<PlaybackOverrideForm>> = RwSignal::new(None);
     let movie_playlist_playback: RwSignal<Option<PlaybackOverrideForm>> = RwSignal::new(None);
+    let movie_pinned_streams: RwSignal<Option<PinnedStreamSelectionForm>> = RwSignal::new(None);
     let extra_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
 
     let movie_collection_open = RwSignal::new(false);
     let movie_playlist_open = RwSignal::new(false);
+    let movie_schedule_open = RwSignal::new(false);
     let extra_collection_open = RwSignal::new(false);
     let extra_playlist_open = RwSignal::new(false);
 
@@ -232,7 +237,10 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
     } else {
         ""
     };
-    let playback_style = if audio_tracks.is_empty() && commentary_subtitles.is_empty() {
+    let playback_style = if audio_tracks.is_empty()
+        && commentary_subtitles.is_empty()
+        && playback_sources.is_empty()
+    {
         "display:none"
     } else {
         ""
@@ -241,11 +249,13 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
     let add_playback_to_collection = Callback::new(move |playback: PlaybackOverrideForm| {
         movie_collection_selected.set(HashSet::from([id]));
         movie_collection_playback.set(Some(playback));
+        movie_pinned_streams.set(None);
         movie_collection_open.set(true);
     });
     let add_playback_to_playlist = Callback::new(move |playback: PlaybackOverrideForm| {
         movie_playlist_selected.set(HashSet::from([id]));
         movie_playlist_playback.set(Some(playback));
+        movie_pinned_streams.set(None);
         movie_playlist_open.set(true);
     });
 
@@ -301,6 +311,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                         on:click=move |_| {
                             movie_playlist_selected.set(HashSet::from([id]));
                             movie_playlist_playback.set(None);
+                            movie_pinned_streams.set(None);
                             movie_playlist_open.set(true);
                         }
                     >
@@ -337,6 +348,19 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
 
                 <section class=detail_style::actors_section style=playback_style>
                     <h2 class=detail_style::section_title>{tr(TextKey::Playback)}</h2>
+                    <MovieStreamSelectionPanel
+                        sources=playback_sources
+                        on_add_schedule=Callback::new(move |selection| {
+                            movie_pinned_streams.set(Some(selection));
+                            movie_schedule_open.set(true);
+                        })
+                        on_add_playlist=Callback::new(move |selection| {
+                            movie_playlist_selected.set(HashSet::from([id]));
+                            movie_playlist_playback.set(None);
+                            movie_pinned_streams.set(Some(selection));
+                            movie_playlist_open.set(true);
+                        })
+                    />
                     <div class=detail_style::commentary_grid>
                         {audio_tracks.into_iter().map(|track| {
                             let subtitle = best_commentary_subtitle_for_track(
@@ -345,7 +369,6 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                             );
                             view! {
                                 <AudioTrackCard
-                                    movie_id=id
                                     track=track
                                     subtitle=subtitle
                                     on_add_collection=add_playback_to_collection
@@ -356,7 +379,6 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                         {commentary_subtitles.iter().cloned().map(|subtitle| {
                             view! {
                                 <CommentarySubtitleCard
-                                    movie_id=id
                                     subtitle=subtitle
                                     on_add_collection=add_playback_to_collection
                                     on_add_playlist=add_playback_to_playlist
@@ -430,6 +452,14 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                 selected=movie_playlist_selected
                 kind=MediaBrowserKind::Movie
                 playback=movie_playlist_playback
+                pinned_streams=movie_pinned_streams
+            />
+            <AddToScheduleModal
+                open=movie_schedule_open
+                media_item_id=id
+                collection_type=10
+                success_label=tr(TextKey::AddedMovieToSchedule)
+                pinned_streams=movie_pinned_streams
             />
             <AddToCollectionModal open=extra_collection_open selected=extra_selected/>
             <AddToPlaylistModal
@@ -440,6 +470,251 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
             <MediaInfoModal open=media_info_open title=media_info_title body=media_info_body/>
         </div>
     }
+}
+
+#[component]
+fn MovieStreamSelectionPanel(
+    sources: Vec<MoviePlaybackSourceRow>,
+    on_add_schedule: Callback<PinnedStreamSelectionForm>,
+    on_add_playlist: Callback<PinnedStreamSelectionForm>,
+) -> impl IntoView {
+    let sources = sources
+        .into_iter()
+        .filter(|source| source.streams.iter().any(|stream| stream.kind == 1))
+        .collect::<Vec<_>>();
+    let panel_style = if sources.is_empty() {
+        "display:none"
+    } else {
+        ""
+    };
+    let initial_source = sources.first();
+    let selected_version = RwSignal::new(
+        initial_source
+            .map(|source| source.media_version_id)
+            .unwrap_or_default(),
+    );
+    let selected_video = RwSignal::new(
+        initial_source
+            .and_then(|source| default_stream_index(source, 1))
+            .unwrap_or(-1),
+    );
+    let selected_audio = RwSignal::new(
+        initial_source
+            .and_then(|source| default_stream_index(source, 2))
+            .unwrap_or(-1),
+    );
+    let selected_subtitle = RwSignal::new(-1_i64);
+    let source_count = sources.len();
+    let version_style = if source_count > 1 { "" } else { "display:none" };
+    let sources = StoredValue::new(sources);
+
+    let current_streams = Memo::new(move |_| {
+        sources.with_value(|sources| {
+            sources
+                .iter()
+                .find(|source| source.media_version_id == selected_version.get())
+                .map(|source| source.streams.clone())
+                .unwrap_or_default()
+        })
+    });
+    let make_selection = move || PinnedStreamSelectionForm {
+        media_version_id: selected_version.get_untracked(),
+        video_stream_index: i32::try_from(selected_video.get_untracked()).unwrap_or_default(),
+        audio_stream_index: i32::try_from(selected_audio.get_untracked())
+            .ok()
+            .filter(|index| *index >= 0),
+        subtitle_stream_index: i32::try_from(selected_subtitle.get_untracked())
+            .ok()
+            .filter(|index| *index >= 0),
+    };
+
+    view! {
+        <div class=detail_style::stream_panel style=panel_style data-stream-selection-panel="true">
+            <div class=detail_style::stream_selectors>
+                <label style=version_style>
+                    <span>{tr(TextKey::ContentVariantAlternateVersion)}</span>
+                    <select
+                        prop:value=move || selected_version.get().to_string()
+                        on:change=move |event| {
+                            let Ok(version_id) = event_target_value(&event).parse::<i64>() else {
+                                return;
+                            };
+                            selected_version.set(version_id);
+                            sources.with_value(|sources| {
+                                if let Some(source) = sources
+                                    .iter()
+                                    .find(|source| source.media_version_id == version_id)
+                                {
+                                    selected_video.set(default_stream_index(source, 1).unwrap_or(-1));
+                                    selected_audio.set(default_stream_index(source, 2).unwrap_or(-1));
+                                    selected_subtitle.set(-1);
+                                }
+                            });
+                        }
+                    >
+                        <For
+                            each=move || sources.get_value()
+                            key=|source| source.media_version_id
+                            children=move |source| {
+                                let label = playback_source_label(&source);
+                                view! {
+                                    <option value=source.media_version_id.to_string()>{label}</option>
+                                }
+                            }
+                        />
+                    </select>
+                </label>
+                <label>
+                    <span>{tr(TextKey::Video)}</span>
+                    <select
+                        prop:value=move || selected_video.get().to_string()
+                        disabled=move || current_streams.get().iter().filter(|stream| stream.kind == 1).count() <= 1
+                        on:change=move |event| {
+                            if let Ok(index) = event_target_value(&event).parse::<i64>() {
+                                selected_video.set(index);
+                            }
+                        }
+                    >
+                        <For
+                            each=move || streams_for_kind(current_streams.get(), 1)
+                            key=|stream| stream.index
+                            children=move |stream| {
+                                view! {
+                                    <option value=stream.index.to_string()>
+                                        {playback_stream_label(&stream)}
+                                    </option>
+                                }
+                            }
+                        />
+                    </select>
+                </label>
+                <label>
+                    <span>{tr(TextKey::Audio)}</span>
+                    <select
+                        prop:value=move || selected_audio.get().to_string()
+                        on:change=move |event| {
+                            if let Ok(index) = event_target_value(&event).parse::<i64>() {
+                                selected_audio.set(index);
+                            }
+                        }
+                    >
+                        <For
+                            each=move || streams_for_kind(current_streams.get(), 2)
+                            key=|stream| stream.index
+                            children=move |stream| {
+                                view! {
+                                    <option value=stream.index.to_string()>
+                                        {playback_stream_label(&stream)}
+                                    </option>
+                                }
+                            }
+                        />
+                    </select>
+                </label>
+                <label>
+                    <span>{tr(TextKey::Subtitle)}</span>
+                    <select
+                        prop:value=move || selected_subtitle.get().to_string()
+                        on:change=move |event| {
+                            if let Ok(index) = event_target_value(&event).parse::<i64>() {
+                                selected_subtitle.set(index);
+                            }
+                        }
+                    >
+                        <option value="-1">{tr(TextKey::Off)}</option>
+                        <For
+                            each=move || streams_for_kind(current_streams.get(), 3)
+                            key=|stream| stream.index
+                            children=move |stream| {
+                                view! {
+                                    <option value=stream.index.to_string()>
+                                        {playback_stream_label(&stream)}
+                                    </option>
+                                }
+                            }
+                        />
+                    </select>
+                </label>
+            </div>
+            <div class=detail_style::variant_actions>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_schedule.run(make_selection())
+                >
+                    {tr(TextKey::AddToSchedule)}
+                </button>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_playlist.run(make_selection())
+                >
+                    {tr(TextKey::AddToPlaylist)}
+                </button>
+            </div>
+        </div>
+    }
+}
+
+fn default_stream_index(source: &MoviePlaybackSourceRow, kind: i32) -> Option<i64> {
+    source
+        .streams
+        .iter()
+        .filter(|stream| stream.kind == kind)
+        .min_by_key(|stream| (!stream.is_default, stream.index))
+        .map(|stream| stream.index)
+}
+
+fn streams_for_kind(
+    streams: Vec<MoviePlaybackStreamRow>,
+    kind: i32,
+) -> Vec<MoviePlaybackStreamRow> {
+    streams
+        .into_iter()
+        .filter(|stream| stream.kind == kind)
+        .collect()
+}
+
+fn playback_source_label(source: &MoviePlaybackSourceRow) -> String {
+    let resolution = match (source.width, source.height) {
+        (width, height) if width > 0 && height > 0 => format!("{width}×{height}"),
+        _ => String::new(),
+    };
+    let name = if source.name.trim().is_empty() {
+        tr(TextKey::DefaultOption)
+    } else {
+        source.name.trim()
+    };
+    [name, resolution.as_str()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn playback_stream_label(stream: &MoviePlaybackStreamRow) -> String {
+    let mut parts = vec![format!("#{}", stream.index)];
+    parts.extend(
+        [
+            stream.title.clone(),
+            stream.language.clone(),
+            stream.codec.clone(),
+            stream
+                .channels
+                .filter(|channels| *channels > 0)
+                .map(|channels| format!("{channels}ch")),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|value| !value.trim().is_empty()),
+    );
+    if stream.is_default {
+        parts.push(tr(TextKey::DefaultOption).to_owned());
+    }
+    if stream.is_forced {
+        parts.push(tr(TextKey::Forced).to_owned());
+    }
+    parts.join(" · ")
 }
 
 #[component]
@@ -499,7 +774,6 @@ fn MovieVersionCard(version: MediaCardRow) -> impl IntoView {
 
 #[component]
 fn AudioTrackCard(
-    movie_id: i64,
     track: AudioTrackRow,
     subtitle: Option<CommentarySubtitleRow>,
     on_add_collection: Callback<PlaybackOverrideForm>,
@@ -518,12 +792,10 @@ fn AudioTrackCard(
     } else {
         "display:none"
     };
-    let subtitle_id = subtitle.as_ref().map(|subtitle| subtitle.id);
     let subtitle_label = subtitle
         .as_ref()
         .map(commentary_subtitle_label)
         .filter(|value| !value.trim().is_empty());
-    let preview_href = playback_troubleshooting_href(movie_id, Some(&title), subtitle_id);
     let card_label = title.clone();
 
     view! {
@@ -569,10 +841,6 @@ fn AudioTrackCard(
                     <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
                     <span>{tr(TextKey::AddToPlaylist)}</span>
                 </button>
-                <a class=detail_style::btn_secondary href=preview_href>
-                    <span style=icon_style(IconName::Play, "0.95rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::Play)}</span>
-                </a>
             </div>
         </article>
     }
@@ -580,7 +848,6 @@ fn AudioTrackCard(
 
 #[component]
 fn CommentarySubtitleCard(
-    movie_id: i64,
     subtitle: CommentarySubtitleRow,
     on_add_collection: Callback<PlaybackOverrideForm>,
     on_add_playlist: Callback<PlaybackOverrideForm>,
@@ -589,7 +856,6 @@ fn CommentarySubtitleCard(
     let collection_override = override_form.clone();
     let playlist_override = override_form;
     let title = commentary_subtitle_label(&subtitle);
-    let href = playback_troubleshooting_href(movie_id, None, Some(subtitle.id));
     let card_label = title.clone();
 
     view! {
@@ -619,10 +885,6 @@ fn CommentarySubtitleCard(
                     <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
                     <span>{tr(TextKey::AddToPlaylist)}</span>
                 </button>
-                <a class=detail_style::btn_secondary href=href>
-                    <span style=icon_style(IconName::Play, "0.95rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::Play)}</span>
-                </a>
             </div>
         </article>
     }

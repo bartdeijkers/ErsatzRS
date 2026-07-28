@@ -88,9 +88,14 @@
 .content {
     display: grid;
     gap: 1.5rem;
-    width: min(100%, 90rem);
-    margin: 0 auto;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
     padding: 1.5rem;
+}
+
+.preview-region {
+    width: min(100%, 72rem);
 }
 
 .now-next {

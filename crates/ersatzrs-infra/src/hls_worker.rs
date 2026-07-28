@@ -35,12 +35,13 @@ use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
-    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
+    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
     render_playback_graphics_overlays, select_channel_playback_subtitle,
-    select_custom_playback_streams, select_playback_audio_stream_index, select_playback_graphics,
-    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_inputs_for_stream, CustomStreamSelection, PlaybackGraphicsRenderContext,
-    PlaybackProfile, PlaybackSubtitle,
+    select_custom_playback_streams, select_pinned_playback_subtitle,
+    select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
+    subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
+    PlaybackSubtitle,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -685,7 +686,12 @@ impl HlsSessionWorker {
                 continue;
             }
 
-            let source_stream = match load_source_video_stream(&pool, active.media_version_id).await
+            let source_stream = match load_source_video_stream_by_index(
+                &pool,
+                active.media_version_id,
+                active.video_stream_index,
+            )
+            .await
             {
                 Ok(stream) => stream,
                 Err(error) => {
@@ -715,6 +721,23 @@ impl HlsSessionWorker {
                         continue;
                     }
                 };
+            if let Some(stream_index) = active.audio_stream_index {
+                let pinned_index = usize::try_from(stream_index).ok();
+                if pinned_index.is_none_or(|index| {
+                    !source_audio_streams
+                        .iter()
+                        .any(|stream| stream.index == index)
+                }) {
+                    tracing::error!(
+                        channel_id = self.channel_id,
+                        media_version_id = active.media_version_id,
+                        stream_index,
+                        "pinned HLS audio stream is unavailable; delaying worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            }
             let playback_profile = match self.load_playback_profile(&pool).await {
                 Ok(Some(profile)) => profile,
                 Ok(None) => {
@@ -776,41 +799,88 @@ impl HlsSessionWorker {
             );
             let channel_for_streams =
                 active.channel_for_runtime_streams(self.channel_id, self.channel_number.clone());
-            let custom_selection = match select_channel_custom_streams(
-                &pool,
-                active.media_version_id,
-                active.media_item_id,
-                &channel_for_streams,
-                active.playout_start,
-                StreamingMode::HttpLiveStreamingSegmenter,
-            )
-            .await
-            {
-                Ok(selection) => selection,
-                Err(error) => {
-                    tracing::error!(
-                        %error,
-                        channel_id = self.channel_id,
-                        channel_number = %self.channel_number,
-                        media_item_id = active.media_item_id,
-                        media_version_id = active.media_version_id,
-                        "failed to execute HLS channel stream selector; delaying hls worker"
-                    );
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
+            let custom_selection = if active.has_pinned_stream_selection {
+                None
+            } else {
+                match select_channel_custom_streams(
+                    &pool,
+                    active.media_version_id,
+                    active.media_item_id,
+                    &channel_for_streams,
+                    active.playout_start,
+                    StreamingMode::HttpLiveStreamingSegmenter,
+                )
+                .await
+                {
+                    Ok(selection) => selection,
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            media_item_id = active.media_item_id,
+                            media_version_id = active.media_version_id,
+                            "failed to execute HLS channel stream selector; delaying hls worker"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
                 }
             };
-            let selected_audio_stream_index = custom_selection
-                .as_ref()
-                .and_then(|selection| selection.audio_stream_index)
-                .or_else(|| {
-                    select_playback_audio_stream_index(
-                        &source_audio_streams,
-                        preferred_audio_language.as_deref(),
-                        preferred_audio_title,
+            let audio_selection = if active.has_pinned_stream_selection {
+                active
+                    .audio_stream_index
+                    .map_or(PlaybackAudioSelection::Disabled, |index| {
+                        usize::try_from(index).map_or(
+                            PlaybackAudioSelection::Disabled,
+                            PlaybackAudioSelection::Exact,
+                        )
+                    })
+            } else {
+                custom_selection
+                    .as_ref()
+                    .and_then(|selection| selection.audio_stream_index)
+                    .or_else(|| {
+                        select_playback_audio_stream_index(
+                            &source_audio_streams,
+                            preferred_audio_language.as_deref(),
+                            preferred_audio_title,
+                        )
+                    })
+                    .map_or(
+                        PlaybackAudioSelection::Automatic,
+                        PlaybackAudioSelection::Exact,
                     )
-                });
-            let subtitle = if let Some(selection) = custom_selection {
+            };
+            let subtitle = if active.has_pinned_stream_selection {
+                if let Some(stream_index) = active.subtitle_stream_index {
+                    match select_pinned_playback_subtitle(
+                        &pool,
+                        active.media_item_id,
+                        active.media_version_id,
+                        stream_index,
+                        StreamingMode::HttpLiveStreamingSegmenter,
+                    )
+                    .await
+                    {
+                        Ok(subtitle) => Some(subtitle),
+                        Err(error) => {
+                            tracing::error!(
+                                %error,
+                                channel_id = self.channel_id,
+                                media_item_id = active.media_item_id,
+                                media_version_id = active.media_version_id,
+                                stream_index,
+                                "pinned HLS subtitle stream is unavailable; delaying worker"
+                            );
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else if let Some(selection) = custom_selection {
                 selection.subtitle
             } else {
                 match select_channel_playback_subtitle(
@@ -847,13 +917,23 @@ impl HlsSessionWorker {
                     StreamingMode::HttpLiveStreamingSegmenter,
                 )
             });
+            if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
+                tracing::error!(
+                    channel_id = self.channel_id,
+                    media_item_id = active.media_item_id,
+                    stream_index = active.subtitle_stream_index,
+                    "pinned HLS subtitle cannot be mapped; delaying worker"
+                );
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
             let metadata = playback_output_metadata(
                 Some("ErsatzTV"),
                 Some(&active.channel_name),
                 preferred_audio_language.as_deref(),
                 &source_audio_streams,
                 subtitle.as_ref(),
-                selected_audio_stream_index,
+                audio_selection,
             );
             let subtitle_input =
                 rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
@@ -974,7 +1054,7 @@ impl HlsSessionWorker {
                 runtime_capabilities.clone(),
                 source_stream,
                 source_audio_streams,
-                selected_audio_stream_index,
+                audio_selection,
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
@@ -1733,11 +1813,12 @@ pub fn build_hls_command(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
+    let audio_selection = audio_selection.into();
     build_hls_command_with_opacity_clock(
         media_path,
         working_dir,
@@ -1754,7 +1835,7 @@ pub fn build_hls_command(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -1780,12 +1861,13 @@ pub fn build_hls_command_with_opacity_clock(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> FfmpegCommand {
+    let audio_selection = audio_selection.into();
     build_hls_command_with_explicit_discontinuity(
         media_path,
         working_dir,
@@ -1802,7 +1884,7 @@ pub fn build_hls_command_with_opacity_clock(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -1856,7 +1938,7 @@ fn build_hls_command_with_explicit_discontinuity(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: PlaybackAudioSelection,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -1879,19 +1961,23 @@ fn build_hls_command_with_explicit_discontinuity(
     if let Some(clock) = opacity_clock {
         request = request.with_watermark_opacity_clock(clock);
     }
-    if let Some(stream_index) = selected_audio_stream_index {
-        if let Some(audio_input) = request
-            .inputs
-            .iter_mut()
-            .find(|input| input.kind == InputKind::Audio)
-        {
-            *audio_input = audio_input.clone().with_stream_index(stream_index);
+    request = request.with_source_audio_streams(source_audio_streams);
+    match audio_selection {
+        PlaybackAudioSelection::Exact(stream_index) => {
+            if let Some(audio_input) = request
+                .inputs
+                .iter_mut()
+                .find(|input| input.kind == InputKind::Audio)
+            {
+                *audio_input = audio_input.clone().with_stream_index(stream_index);
+            }
         }
+        PlaybackAudioSelection::Disabled => request = request.without_audio(),
+        PlaybackAudioSelection::Automatic => {}
     }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
-    request = request.with_source_audio_streams(source_audio_streams);
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
@@ -3260,18 +3346,23 @@ fn playback_output_metadata(
     preferred_audio_language: Option<&str>,
     source_audio_streams: &[SourceAudioStream],
     subtitle: Option<&PlaybackSubtitle>,
-    selected_audio_stream_index: Option<usize>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
 ) -> OutputMetadata {
-    let audio_language = selected_audio_stream_index
-        .and_then(|index| {
-            source_audio_streams
-                .iter()
-                .find(|stream| stream.index == index)
-                .and_then(|stream| stream.language.as_deref())
-                .and_then(trimmed_string)
-        })
-        .or_else(|| preferred_audio_language.and_then(trimmed_string))
-        .or_else(|| first_audio_language(source_audio_streams));
+    let audio_selection = audio_selection.into();
+    let selected_language = audio_selection.stream_index().and_then(|index| {
+        source_audio_streams
+            .iter()
+            .find(|stream| stream.index == index)
+            .and_then(|stream| stream.language.as_deref())
+            .and_then(trimmed_string)
+    });
+    let audio_language = match audio_selection {
+        PlaybackAudioSelection::Disabled => None,
+        PlaybackAudioSelection::Exact(_) => selected_language,
+        PlaybackAudioSelection::Automatic => selected_language
+            .or_else(|| preferred_audio_language.and_then(trimmed_string))
+            .or_else(|| first_audio_language(source_audio_streams)),
+    };
 
     OutputMetadata {
         service_provider: service_provider.and_then(trimmed_string),
@@ -3352,6 +3443,10 @@ async fn load_active_hls_item(
                   pi."PreferredAudioTitle" AS "PreferredAudioTitle",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode",
+                  pi."MediaVersionId" AS "PinnedMediaVersionId",
+                  pi."VideoStreamIndex" AS "VideoStreamIndex",
+                  pi."AudioStreamIndex" AS "AudioStreamIndex",
+                  pi."SubtitleStreamIndex" AS "SubtitleStreamIndex",
                   c."Name" AS "ChannelName",
                   c."WatermarkId" AS "ChannelWatermarkId",
                   c."StreamSelectorMode" AS "ChannelStreamSelectorMode",
@@ -3365,20 +3460,21 @@ async fn load_active_hls_item(
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "Channel" c ON c."Id" = p."ChannelId"
-           JOIN "MediaVersion" mv
-               ON mv."MovieId" = pi."MediaItemId"
+           JOIN "MediaVersion" mv ON (
+                  mv."MovieId" = pi."MediaItemId"
                OR mv."EpisodeId" = pi."MediaItemId"
                OR mv."MusicVideoId" = pi."MediaItemId"
                OR mv."OtherVideoId" = pi."MediaItemId"
                OR mv."RemoteStreamId" = pi."MediaItemId"
                OR mv."SongId" = pi."MediaItemId"
                OR mv."ImageId" = pi."MediaItemId"
+           ) AND (pi."MediaVersionId" IS NULL OR mv."Id" = pi."MediaVersionId")
            JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
            WHERE p."ChannelId" = ?
              AND pi."Start" <= ?
              AND pi."Finish" > ?
              AND mf."Path" IS NOT NULL
-           ORDER BY pi."Start" DESC, pi."Id" DESC
+           ORDER BY pi."Start" DESC, pi."Id" DESC, mv."Id"
            LIMIT 1"#,
     )
     .bind(channel_id)
@@ -3481,6 +3577,14 @@ async fn load_active_hls_item(
         preferred_audio_title: decode_hls_column(&row, "PreferredAudioTitle")?,
         preferred_subtitle_language_code: decode_hls_column(&row, "PreferredSubtitleLanguageCode")?,
         subtitle_mode,
+        has_pinned_stream_selection: decode_hls_column::<Option<i64>>(
+            &row,
+            "PinnedMediaVersionId",
+        )?
+        .is_some(),
+        video_stream_index: decode_hls_column(&row, "VideoStreamIndex")?,
+        audio_stream_index: decode_hls_column(&row, "AudioStreamIndex")?,
+        subtitle_stream_index: decode_hls_column(&row, "SubtitleStreamIndex")?,
         channel_name: decode_hls_column::<Option<String>>(&row, "ChannelName")?.unwrap_or_default(),
         channel_preferred_audio_language_code: decode_hls_column(
             &row,
@@ -3542,6 +3646,10 @@ struct ActiveHlsItem {
     preferred_audio_title: Option<String>,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
+    has_pinned_stream_selection: bool,
+    video_stream_index: Option<i32>,
+    audio_stream_index: Option<i32>,
+    subtitle_stream_index: Option<i32>,
     channel_name: String,
     channel_preferred_audio_language_code: Option<String>,
     channel_preferred_audio_title: Option<String>,
@@ -5064,6 +5172,25 @@ mod tests {
             load_active_hls_item(&pool, 7, &[], now).await,
             Err(RepositoryError::Decode { .. })
         ));
+        sqlx::query(
+            r#"UPDATE "PlayoutItem"
+               SET "SubtitleMode" = 0,
+                   "MediaVersionId" = 21,
+                   "VideoStreamIndex" = 0,
+                   "AudioStreamIndex" = NULL,
+                   "SubtitleStreamIndex" = NULL
+               WHERE "Id" = 12"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("pin silent subtitle-off HLS item");
+        let active = load_active_hls_item(&pool, 7, &[], now)
+            .await
+            .expect("load pinned HLS item")
+            .expect("active HLS item");
+        assert!(active.has_pinned_stream_selection);
+        assert_eq!(active.audio_stream_index, None);
+        assert_eq!(active.subtitle_stream_index, None);
 
         pool.close().await;
         assert!(matches!(
@@ -5108,7 +5235,11 @@ mod tests {
                 "PreferredAudioLanguageCode" TEXT NULL,
                 "PreferredAudioTitle" TEXT NULL,
                 "PreferredSubtitleLanguageCode" TEXT NULL,
-                "SubtitleMode" INTEGER NULL
+                "SubtitleMode" INTEGER NULL,
+                "MediaVersionId" INTEGER NULL,
+                "VideoStreamIndex" INTEGER NULL,
+                "AudioStreamIndex" INTEGER NULL,
+                "SubtitleStreamIndex" INTEGER NULL
             )"#,
             r#"CREATE TABLE "MediaVersion" (
                 "Id" INTEGER PRIMARY KEY,
@@ -5344,7 +5475,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             Vec::new(),
             Vec::new(),
@@ -5576,7 +5707,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
-            None,
+            PlaybackAudioSelection::Automatic,
             None,
             Vec::new(),
             Vec::new(),
@@ -5923,6 +6054,36 @@ mod tests {
             "{arguments}"
         );
         assert!(arguments.contains("-map [a]"), "{arguments}");
+    }
+
+    #[test]
+    fn pinned_silent_hls_command_has_no_audio_mapping_or_encoder() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            true,
+            false,
+            Duration::ZERO,
+            None,
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            vec![SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1)],
+            PlaybackAudioSelection::Disabled,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(!arguments.contains("-map 0:1"), "{arguments}");
+        assert!(!arguments.contains("-map 0:a"), "{arguments}");
+        assert!(!arguments.contains("-codec:a"), "{arguments}");
     }
 
     #[test]
@@ -7199,6 +7360,10 @@ mod tests {
             preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
+            has_pinned_stream_selection: false,
+            video_stream_index: None,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
             channel_name: "Channel One".to_owned(),
             channel_preferred_audio_language_code: None,
             channel_preferred_audio_title: None,

@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Added Jellyfin-inspired Version, Video, Audio, and Subtitle selection to
+  movie details for exact Add To Schedule and Add To Playlist entries. The
+  selected media version and stream indexes persist through editors and
+  scheduling into MPEG-TS/HLS playback; stale selections block playback and
+  appear in health reporting instead of silently falling back.
 - Added a top-level `/epg` preview and a muted-autoplay channel preview modal
   plus dedicated `/channels/:id/watch` experience. The shared guide presents
   two hours of history and 24 hours ahead in accessible, scrollable
@@ -40,6 +45,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Replaced the EPG Visible window scrubber with a 50–200% Zoom control that
+  rescales the horizontal timeline and preserves its temporal center. The
+  default desktop scale shows about three hours, and the channel-watch layout
+  now left-aligns its bounded video while giving the guide full width.
 - Self-hosted CI jobs now share a persistent `CARGO_TARGET_DIR` outside the
   auto-cleaned checkout instead of restoring `target/` through a remote cache
   round-trip on every run; `clippy`, `test`, and `hydration` no longer pay
@@ -165,6 +174,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Exact movie stream selections now preserve an explicitly silent audio choice
+  and Subtitle Off instead of falling through to channel selectors, resolve
+  pinned subtitles against the selected media version, and fail closed on
+  ambiguous subtitle metadata. EPG zoom also keeps the temporal viewport
+  center instead of jumping to the start, and disappearing movies report a
+  localized error in every supported culture.
 - Classic-scheduled randomized playouts no longer freeze on the same order
   after every `Reset`: the operation now regenerates the playout seed,
   matching ErsatzTV's `ResetPlayout()`. `Refresh` now rejects the old

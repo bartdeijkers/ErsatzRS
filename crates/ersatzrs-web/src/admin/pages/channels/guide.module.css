@@ -7,6 +7,7 @@
 
 .controls {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.65rem;
     min-height: 2.75rem;
@@ -28,7 +29,7 @@
 
 .scrubber {
     min-width: 8rem;
-    flex: 1;
+    flex: 1 1 14rem;
     accent-color: var(--color-action-default);
 }
 
@@ -113,14 +114,15 @@
 .lane-track {
     position: relative;
     flex: none;
-    background-image:
-        repeating-linear-gradient(
-            to right,
-            transparent 0,
-            transparent 44px,
-            color-mix(in srgb, var(--color-border) 55%, transparent) 44px,
-            color-mix(in srgb, var(--color-border) 55%, transparent) 45px
-        );
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(var(--quarter-hour-width, 90px) - 1px),
+        color-mix(in srgb, var(--color-border) 55%, transparent)
+            calc(var(--quarter-hour-width, 90px) - 1px),
+        color-mix(in srgb, var(--color-border) 55%, transparent)
+            var(--quarter-hour-width, 90px)
+    );
 }
 
 .hour-tick {

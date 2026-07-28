@@ -854,6 +854,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    if trimmed == "Pinned stream selection is invalid or no longer available." {
+        return "A seleção de fluxo fixada é inválida ou não está mais disponível.".to_owned();
+    }
+    if trimmed == "Movie was not found." {
+        return "O filme não foi encontrado.".to_owned();
+    }
     if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
         return "A coleção já está presente.".to_owned();
     }
@@ -1863,6 +1869,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddAll => "Adicionar tudo",
         TextKey::AddedItemToPlaylist => "Item adicionado à playlist.",
         TextKey::AddedArtistToSchedule => "Artista adicionado ao horário",
+        TextKey::AddedMovieToSchedule => "Filme adicionado ao horário",
         TextKey::AddedSeasonToSchedule => "Temporada adicionada ao horário",
         TextKey::AddedShowToSchedule => "Série adicionada ao horário",
         TextKey::AddingItem => "Adicionando item...",
@@ -2085,7 +2092,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EpgPreviewDescription => {
             "Consulte o guia publicado com duas horas de histórico e 24 horas à frente."
         }
-        TextKey::EpgVisibleWindow => "Janela visível",
+        TextKey::EpgZoom => "Zoom",
         TextKey::EpgNow => "Agora",
         TextKey::NoEpgChannels => "Nenhum canal habilitado está visível no EPG.",
         TextKey::ScheduleGap => "Lacuna na programação",

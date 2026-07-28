@@ -23,10 +23,10 @@ use ersatzrs_infra::graphics_template::{
     GraphicsTemplateContext,
 };
 use ersatzrs_infra::playback::{
-    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
-    select_playback_subtitle, select_playback_watermarks, subtitle_input_for_stream,
-    watermark_fade_points_for_program, PlaybackGraphicsRenderContext,
-    ResolvedPlaybackGraphicsElement,
+    render_playback_graphics_overlays, select_channel_playback_subtitle,
+    select_pinned_playback_subtitle, select_playback_graphics, select_playback_subtitle,
+    select_playback_watermarks, subtitle_input_for_stream, watermark_fade_points_for_program,
+    PlaybackGraphicsRenderContext, ResolvedPlaybackGraphicsElement,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::SqlitePool;
@@ -216,6 +216,113 @@ async fn unset_subtitle_languages_preserve_unfiltered_mode_ranking() {
     .expect("default subtitle");
 
     assert_eq!(selected.id, 1);
+}
+
+#[tokio::test]
+async fn pinned_subtitle_is_resolved_for_the_selected_media_version() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "MediaVersion" (
+               "Id", "DateAdded", "DateUpdated", "Duration", "MovieId",
+               "Height", "Width", "VideoScanKind"
+           ) VALUES
+               (101, '2026-07-28 00:00:00', '2026-07-28 00:00:00',
+                '02:00:00', 10, 1080, 1920, 0),
+               (102, '2026-07-28 00:00:00', '2026-07-28 00:00:00',
+                '02:01:00', 10, 2160, 3840, 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MediaStream" (
+               "Id", "Index", "Codec", "MediaStreamKind", "Language",
+               "Channels", "Title", "Default", "Forced", "MediaVersionId"
+           ) VALUES
+               (201, 7, 'subrip', 3, 'eng', 0, 'Version A subtitles', 0, 0, 101),
+               (202, 7, 'ass', 3, 'nld', 0, 'Version B subtitles', 0, 0, 102)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Subtitle" (
+               "Id", "MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
+               "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted",
+               "Path", "DateAdded", "DateUpdated"
+           ) VALUES
+               (11, 20, 0, 'Version A subtitles', 7, 'subrip', 0, 0, 0, 'eng', 1,
+                'AA/BB/version-a.srt', '2026-07-28 00:00:00', '2026-07-28 00:00:00'),
+               (12, 20, 0, 'Version B subtitles', 7, 'ass', 0, 0, 0, 'nld', 1,
+                'AA/BB/version-b.ass', '2026-07-28 00:00:00', '2026-07-28 00:00:00'),
+               (13, 20, 1, 'Sidecar with reused index', 7, 'subrip', 0, 0, 0, 'eng', 1,
+                'movie.external.srt', '2026-07-28 00:00:00', '2026-07-28 00:00:00')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let selected =
+        select_pinned_playback_subtitle(&pool, 10, 102, 7, StreamingMode::HttpLiveStreamingDirect)
+            .await
+            .unwrap();
+
+    assert_eq!(selected.id, 12);
+    assert_eq!(selected.path.as_deref(), Some("AA/BB/version-b.ass"));
+}
+
+#[tokio::test]
+async fn ambiguous_pinned_subtitle_rows_fail_closed() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "MediaVersion" (
+               "Id", "DateAdded", "DateUpdated", "Duration", "MovieId",
+               "Height", "Width", "VideoScanKind"
+           ) VALUES (
+               102, '2026-07-28 00:00:00', '2026-07-28 00:00:00',
+               '02:01:00', 10, 2160, 3840, 0
+           )"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MediaStream" (
+               "Id", "Index", "Codec", "MediaStreamKind", "Language",
+               "Channels", "Title", "Default", "Forced", "MediaVersionId"
+           ) VALUES (
+               202, 7, 'ass', 3, 'nld', 0, 'Version B subtitles', 0, 0, 102
+           )"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Subtitle" (
+               "Id", "MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
+               "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted",
+               "Path", "DateAdded", "DateUpdated"
+           ) VALUES
+               (11, 20, 0, 'Version B subtitles', 7, 'ass', 0, 0, 0, 'nld', 1,
+                'AA/BB/version-b-1.ass', '2026-07-28 00:00:00', '2026-07-28 00:00:00'),
+               (12, 20, 0, 'Version B subtitles', 7, 'ass', 0, 0, 0, 'nld', 1,
+                'AA/BB/version-b-2.ass', '2026-07-28 00:00:00', '2026-07-28 00:00:00')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert!(select_pinned_playback_subtitle(
+        &pool,
+        10,
+        102,
+        7,
+        StreamingMode::HttpLiveStreamingDirect,
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]

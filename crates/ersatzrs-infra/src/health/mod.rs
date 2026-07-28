@@ -22,7 +22,8 @@ use checks::{
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
     HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MovieMetadataHealthCheck,
-    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
+    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
     SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
     VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
@@ -48,7 +49,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 21] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 22] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -60,6 +61,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 21] = [
     "FFmpeg Reports",
     "Hardware Acceleration",
     "Playback Data Access",
+    "Pinned Stream Selection",
     "Movie Metadata",
     "Episode Metadata",
     "Zero Duration",
@@ -179,6 +181,7 @@ fn registered_health_checks(
             ffmpeg_runtime.clone(),
         )),
         Box::new(PlaybackDataAccessHealthCheck::new(pool.clone())),
+        Box::new(PinnedStreamSelectionHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),
         Box::new(EpisodeMetadataHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
@@ -516,6 +519,52 @@ mod tests {
         let titles = service.titles();
         assert!(titles.iter().all(|title| !title.trim().is_empty()));
         assert_eq!(titles, REGISTERED_HEALTH_CHECK_TITLES);
+    }
+
+    #[tokio::test]
+    async fn pinned_stream_health_check_fails_when_a_saved_stream_disappears() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        for statement in [
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+               VALUES (70, 10, 0)"#,
+            r#"INSERT INTO "Movie" ("Id") VALUES (70)"#,
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "Height",
+                   "MovieId", "VideoScanKind", "Width"
+               ) VALUES (
+                   71, '2026-07-27T00:00:00Z', '2026-07-27T00:00:00Z',
+                   '01:00:00', 1080, 70, 1, 1920
+               )"#,
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "MediaStreamKind", "Channels",
+                   "Default", "Forced", "MediaVersionId"
+               ) VALUES (72, 0, 'h264', 1, 0, 1, 0, 71)"#,
+            r#"INSERT INTO "PlaylistGroup" ("Id", "Name") VALUES (70, 'Health')"#,
+            r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
+               VALUES (70, 0, 'Health', 70)"#,
+            r#"INSERT INTO "PlaylistItem" (
+                   "Id", "Index", "PlaylistId", "CollectionType", "MediaItemId",
+                   "MediaVersionId", "VideoStreamIndex"
+               ) VALUES (70, 0, 70, 10, 70, 71, 0)"#,
+        ] {
+            pool.execute(statement)
+                .await
+                .expect("seed pinned stream health row");
+        }
+
+        let check = PinnedStreamSelectionHealthCheck::new(pool.clone());
+        assert_eq!(
+            check.check().await.expect("check valid pin").status,
+            HealthCheckStatus::Pass
+        );
+
+        pool.execute(r#"UPDATE "PlaylistItem" SET "VideoStreamIndex" = 9 WHERE "Id" = 70"#)
+            .await
+            .expect("stale pinned video stream");
+        let result = check.check().await.expect("check stale pin");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(result.brief_message, "1 stale pinned stream selection(s)");
     }
 
     #[tokio::test]

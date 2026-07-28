@@ -287,6 +287,15 @@ async fn program_schedule_repository_replaces_and_copies_complete_admin_items() 
     assert_eq!(loaded[0].duration_minutes, 15);
     assert_eq!(loaded[0].watermark_ids, Vec::<i64>::new());
     assert_eq!(loaded[0].smart_shuffle, policy);
+    assert_eq!(
+        loaded[0].pinned_stream_selection,
+        Some(ersatzrs_domain::PinnedStreamSelection {
+            media_version_id: 901,
+            video_stream_index: 0,
+            audio_stream_index: Some(1),
+            subtitle_stream_index: Some(2),
+        })
+    );
 
     let copy_id = repos
         .program_schedule
@@ -301,6 +310,10 @@ async fn program_schedule_repository_replaces_and_copies_complete_admin_items() 
     assert_eq!(copied.len(), 1);
     assert_eq!(copied[0].search_query, loaded[0].search_query);
     assert_eq!(copied[0].smart_shuffle, loaded[0].smart_shuffle);
+    assert_eq!(
+        copied[0].pinned_stream_selection,
+        loaded[0].pinned_stream_selection
+    );
 }
 
 #[tokio::test]
@@ -363,6 +376,12 @@ fn admin_search_item(smart_shuffle: SchedulingSmartShufflePolicy) -> ScheduleIte
         preferred_audio_title: String::new(),
         preferred_subtitle_language_code: None,
         subtitle_mode: None,
+        pinned_stream_selection: Some(ersatzrs_domain::PinnedStreamSelection {
+            media_version_id: 901,
+            video_stream_index: 0,
+            audio_stream_index: Some(1),
+            subtitle_stream_index: Some(2),
+        }),
     }
 }
 

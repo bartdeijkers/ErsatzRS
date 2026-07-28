@@ -1027,6 +1027,32 @@ fn playlist_item_hidden_fields(items: Vec<PlaylistItemForm>) -> impl IntoView {
                     name="item_subtitle_mode"
                     value=item.subtitle_mode.map_or_else(String::new, |mode| mode.to_string())
                 />
+                <input
+                    type="hidden"
+                    name="item_media_version_id"
+                    value=item.pinned_stream_selection
+                        .map_or_else(String::new, |selection| selection.media_version_id.to_string())
+                />
+                <input
+                    type="hidden"
+                    name="item_video_stream_index"
+                    value=item.pinned_stream_selection
+                        .map_or_else(String::new, |selection| selection.video_stream_index.to_string())
+                />
+                <input
+                    type="hidden"
+                    name="item_audio_stream_index"
+                    value=item.pinned_stream_selection
+                        .and_then(|selection| selection.audio_stream_index)
+                        .map_or_else(String::new, |index| index.to_string())
+                />
+                <input
+                    type="hidden"
+                    name="item_subtitle_stream_index"
+                    value=item.pinned_stream_selection
+                        .and_then(|selection| selection.subtitle_stream_index)
+                        .map_or_else(String::new, |index| index.to_string())
+                />
             }
         })
         .collect_view()

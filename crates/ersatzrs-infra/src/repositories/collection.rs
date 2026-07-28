@@ -10,7 +10,7 @@ use ersatzrs_core::repositories::{
     RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions,
     RerunCollectionReferenceKind, RerunCollectionSelectOption, Result, SmartCollectionAdminRow,
 };
-use ersatzrs_domain::{Collection, EntityId, Playlist, SmartCollection};
+use ersatzrs_domain::{Collection, EntityId, PinnedStreamSelection, Playlist, SmartCollection};
 use sqlx::{Pool, Row};
 
 use super::common::{decode_bool_column, load_ids, not_found};
@@ -1278,8 +1278,10 @@ impl CollectionRepository for SqliteCollectionRepository {
                        "MediaItemId", "MultiCollectionId", "SmartCollectionId",
                        "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide",
                        "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                       "PreferredSubtitleLanguageCode", "SubtitleMode"
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                       "PreferredSubtitleLanguageCode", "SubtitleMode",
+                       "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
+                       "SubtitleStreamIndex"
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(item.index)
             .bind(form.id)
@@ -1296,6 +1298,22 @@ impl CollectionRepository for SqliteCollectionRepository {
             .bind(&item.preferred_audio_title)
             .bind(&item.preferred_subtitle_language_code)
             .bind(item.subtitle_mode)
+            .bind(
+                item.pinned_stream_selection
+                    .map(|selection| selection.media_version_id),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .map(|selection| selection.video_stream_index),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .and_then(|selection| selection.audio_stream_index),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .and_then(|selection| selection.subtitle_stream_index),
+            )
             .execute(&mut *tx)
             .await
             .repository()?;
@@ -1444,8 +1462,10 @@ impl CollectionRepository for SqliteCollectionRepository {
                        "Index", "PlaylistId", "CollectionType", "MediaItemId",
                        "IncludeInProgramGuide", "PlaybackOrder", "PlayAll",
                        "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                       "PreferredSubtitleLanguageCode", "SubtitleMode"
-                   ) VALUES (?, ?, ?, ?, 1, 1, 0, ?, ?, ?, ?)"#,
+                       "PreferredSubtitleLanguageCode", "SubtitleMode",
+                       "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
+                       "SubtitleStreamIndex"
+                   ) VALUES (?, ?, ?, ?, 1, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(next_index)
             .bind(playlist_id)
@@ -1455,6 +1475,22 @@ impl CollectionRepository for SqliteCollectionRepository {
             .bind(&item.playback.preferred_audio_title)
             .bind(&item.playback.preferred_subtitle_language_code)
             .bind(item.playback.subtitle_mode)
+            .bind(
+                item.pinned_stream_selection
+                    .map(|selection| selection.media_version_id),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .map(|selection| selection.video_stream_index),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .and_then(|selection| selection.audio_stream_index),
+            )
+            .bind(
+                item.pinned_stream_selection
+                    .and_then(|selection| selection.subtitle_stream_index),
+            )
             .execute(&mut *tx)
             .await
             .repository()?;
@@ -1818,6 +1854,8 @@ async fn load_playlist_items(
                   "pi"."PlayAll", "pi"."IncludeInProgramGuide",
                   "pi"."PreferredAudioLanguageCode", "pi"."PreferredAudioTitle",
                   "pi"."PreferredSubtitleLanguageCode", "pi"."SubtitleMode",
+                  "pi"."MediaVersionId", "pi"."VideoStreamIndex",
+                  "pi"."AudioStreamIndex", "pi"."SubtitleStreamIndex",
                   "c"."Name" AS "CollectionName",
                   "mc"."Name" AS "MultiCollectionName",
                   "sc"."Name" AS "SmartCollectionName",
@@ -1915,9 +1953,49 @@ async fn load_playlist_items(
                         kind: "playlist subtitle mode",
                         value: "outside i32 range".to_owned(),
                     })?,
+                pinned_stream_selection: decode_pinned_stream_selection(row)?,
             })
         })
         .collect()
+}
+
+fn decode_pinned_stream_selection(row: &DbRow) -> Result<Option<PinnedStreamSelection>> {
+    let media_version_id: Option<EntityId> = row.try_get("MediaVersionId").repository()?;
+    let video_stream_index: Option<i64> = row.try_get("VideoStreamIndex").repository()?;
+    match (media_version_id, video_stream_index) {
+        (None, None) => Ok(None),
+        (Some(media_version_id), Some(video_stream_index)) => Ok(Some(PinnedStreamSelection {
+            media_version_id,
+            video_stream_index: i32::try_from(video_stream_index).map_err(|_| {
+                ersatzrs_core::repositories::RepositoryError::Decode {
+                    kind: "playlist video stream index",
+                    value: "outside i32 range".to_owned(),
+                }
+            })?,
+            audio_stream_index: row
+                .try_get::<Option<i64>, _>("AudioStreamIndex")
+                .repository()?
+                .map(i32::try_from)
+                .transpose()
+                .map_err(|_| ersatzrs_core::repositories::RepositoryError::Decode {
+                    kind: "playlist audio stream index",
+                    value: "outside i32 range".to_owned(),
+                })?,
+            subtitle_stream_index: row
+                .try_get::<Option<i64>, _>("SubtitleStreamIndex")
+                .repository()?
+                .map(i32::try_from)
+                .transpose()
+                .map_err(|_| ersatzrs_core::repositories::RepositoryError::Decode {
+                    kind: "playlist subtitle stream index",
+                    value: "outside i32 range".to_owned(),
+                })?,
+        })),
+        _ => Err(ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "playlist pinned stream selection",
+            value: "media version and video stream must both be set".to_owned(),
+        }),
+    }
 }
 
 fn playlist_item_name(row: &DbRow, collection_type: i32) -> Result<String> {

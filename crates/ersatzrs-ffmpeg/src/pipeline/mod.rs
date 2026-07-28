@@ -136,6 +136,17 @@ impl PipelineRequest {
         self
     }
 
+    /// Disable audio mapping for an explicitly silent playback request.
+    ///
+    /// The source video input may still contain audio streams, so removing the
+    /// logical audio input is required to keep `FFmpeg` from selecting one.
+    #[must_use]
+    pub fn without_audio(mut self) -> Self {
+        self.inputs.retain(|input| input.kind != InputKind::Audio);
+        self.source_audio_streams.clear();
+        self
+    }
+
     #[must_use]
     pub fn with_runtime_capabilities(mut self, report: FfmpegCapabilityReport) -> Self {
         self.runtime_capabilities = Some(report);
@@ -1423,13 +1434,19 @@ fn build_transcode_pipeline(
     }
 
     steps.push(PipelineStep::complex_filter(complex.options));
-    steps.push(audio_encoder(
-        &request.desired,
-        selected_source_audio_stream(
-            request.inputs.as_slice(),
-            request.source_audio_streams.as_slice(),
-        ),
-    ));
+    if request
+        .inputs
+        .iter()
+        .any(|input| input.kind == InputKind::Audio)
+    {
+        steps.push(audio_encoder(
+            &request.desired,
+            selected_source_audio_stream(
+                request.inputs.as_slice(),
+                request.source_audio_streams.as_slice(),
+            ),
+        ));
+    }
     if let Some(encoder) = subtitle_encoder(&request.inputs) {
         steps.push(encoder);
     }

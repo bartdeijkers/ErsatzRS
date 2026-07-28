@@ -3,8 +3,8 @@ use ersatzrs_core::path_replacement::{PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{
     AdminActorCard, AdminArtistDetail, AdminAudioTrack, AdminCommentarySubtitle, AdminMediaCard,
     AdminMediaInfoChapter, AdminMediaInfoKind, AdminMediaInfoStream, AdminMediaItemInfo,
-    AdminMediaRepository, AdminMovieDetail, AdminOtherVideoDetail, AdminShowDetail,
-    RepositoryError, Result, TelevisionRepository,
+    AdminMediaRepository, AdminMovieDetail, AdminMoviePlaybackSource, AdminMoviePlaybackStream,
+    AdminOtherVideoDetail, AdminShowDetail, RepositoryError, Result, TelevisionRepository,
 };
 use ersatzrs_domain::{ContentKind, EntityId};
 use sqlx::{Pool, Row};
@@ -37,6 +37,108 @@ fn split_content_ratings(value: Option<String>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+async fn load_movie_playback_sources(
+    pool: &Pool<crate::db::Db>,
+    movie_id: EntityId,
+    metadata_id: EntityId,
+) -> Result<Vec<AdminMoviePlaybackSource>> {
+    let version_rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name",
+                  "Width", "Height"
+           FROM "MediaVersion"
+           WHERE "MovieId" = ?
+           ORDER BY "Id""#,
+    )
+    .bind(movie_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let subtitle_rows = sqlx::query(
+        r#"SELECT "StreamIndex", "Title", "Language", "Codec", "Default", "Forced"
+           FROM "Subtitle"
+           WHERE "MovieMetadataId" = ?
+           ORDER BY "StreamIndex", "Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+
+    let mut sources = Vec::with_capacity(version_rows.len());
+    for version in version_rows {
+        let media_version_id = version.try_get("Id").repository()?;
+        let stream_rows = sqlx::query(
+            r#"SELECT "Index", "MediaStreamKind", "Title", "Language", "Codec",
+                      "Channels", "Default", "Forced"
+               FROM "MediaStream"
+               WHERE "MediaVersionId" = ?
+                 AND "MediaStreamKind" IN (1, 2, 3)
+               ORDER BY "MediaStreamKind", "Index", "Id""#,
+        )
+        .bind(media_version_id)
+        .fetch_all(pool)
+        .await
+        .repository()?;
+        let mut streams = stream_rows
+            .iter()
+            .map(|stream| {
+                let kind: i32 = stream.try_get("MediaStreamKind").repository()?;
+                Ok(AdminMoviePlaybackStream {
+                    index: stream.try_get("Index").repository()?,
+                    kind,
+                    title: stream.try_get("Title").repository()?,
+                    language: stream.try_get("Language").repository()?,
+                    codec: stream.try_get("Codec").repository()?,
+                    channels: stream
+                        .try_get::<i64, _>("Channels")
+                        .repository()
+                        .map(|value| (value > 0).then_some(value))?,
+                    width: (kind == 1)
+                        .then(|| version.try_get("Width").repository())
+                        .transpose()?,
+                    height: (kind == 1)
+                        .then(|| version.try_get("Height").repository())
+                        .transpose()?,
+                    is_default: stream.try_get::<i64, _>("Default").repository()? != 0,
+                    is_forced: stream.try_get::<i64, _>("Forced").repository()? != 0,
+                    is_external: false,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for subtitle in &subtitle_rows {
+            let index = subtitle.try_get("StreamIndex").repository()?;
+            if streams
+                .iter()
+                .any(|stream| stream.kind == 3 && stream.index == index)
+            {
+                continue;
+            }
+            streams.push(AdminMoviePlaybackStream {
+                index,
+                kind: 3,
+                title: subtitle.try_get("Title").repository()?,
+                language: subtitle.try_get("Language").repository()?,
+                codec: subtitle.try_get("Codec").repository()?,
+                channels: None,
+                width: None,
+                height: None,
+                is_default: subtitle.try_get::<i64, _>("Default").repository()? != 0,
+                is_forced: subtitle.try_get::<i64, _>("Forced").repository()? != 0,
+                is_external: true,
+            });
+        }
+        streams.sort_by_key(|stream| (stream.kind, stream.index, stream.is_external));
+        sources.push(AdminMoviePlaybackSource {
+            media_version_id,
+            name: version.try_get("Name").repository()?,
+            width: version.try_get("Width").repository()?,
+            height: version.try_get("Height").repository()?,
+            streams,
+        });
+    }
+    Ok(sources)
 }
 
 async fn load_strings(
@@ -691,6 +793,7 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let playback_sources = load_movie_playback_sources(&self.0, id, metadata_id).await?;
         Ok(Some(AdminMovieDetail {
             id: row.try_get("Id").repository()?,
             title: row.try_get("Title").repository()?,
@@ -716,6 +819,7 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             alternate_versions: load_extras(&self.0, id, 2, true).await?,
             audio_tracks,
             commentary_subtitles,
+            playback_sources,
         }))
     }
 

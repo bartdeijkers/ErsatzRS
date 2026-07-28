@@ -32,10 +32,11 @@ use crate::admin::i18n::{
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection_with_playback, add_media_items_to_playlist_with_playback,
-    create_collection, get_media_item_info_json, list_artists, list_episodes, list_images,
-    list_movies, list_music_videos, list_other_videos, list_remote_streams, list_seasons,
-    list_shows, list_songs, media_page_map, CollectionOption, LetterPageMap, MediaBrowserKind,
-    MediaCardRow, PlaybackOverrideForm, PlaylistGroupOption, PlaylistOption,
+    add_media_items_to_playlist_with_stream_selection, create_collection, get_media_item_info_json,
+    list_artists, list_episodes, list_images, list_movies, list_music_videos, list_other_videos,
+    list_remote_streams, list_seasons, list_shows, list_songs, media_page_map, CollectionOption,
+    LetterPageMap, MediaBrowserKind, MediaCardRow, PinnedStreamSelectionForm, PlaybackOverrideForm,
+    PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -1040,6 +1041,7 @@ pub(crate) fn AddToPlaylistModal(
     selected: RwSignal<HashSet<i64>>,
     kind: MediaBrowserKind,
     #[prop(optional)] playback: Option<RwSignal<Option<PlaybackOverrideForm>>>,
+    #[prop(optional)] pinned_streams: Option<RwSignal<Option<PinnedStreamSelectionForm>>>,
 ) -> impl IntoView {
     let group_id: RwSignal<i64> = RwSignal::new(0);
     let playlist_id: RwSignal<i64> = RwSignal::new(0);
@@ -1097,12 +1099,17 @@ pub(crate) fn AddToPlaylistModal(
         let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());
         let pid = playlist_id.get_untracked();
         let playback = playback.and_then(|signal| signal.get_untracked());
+        let pinned_streams = pinned_streams.and_then(|signal| signal.get_untracked());
         async move {
             if pid == 0 {
                 return Err(ServerFnError::new(tr(TextKey::PleaseChoosePlaylist)));
             }
-            let added =
-                add_media_items_to_playlist_with_playback(kind, pid, ids.clone(), playback).await?;
+            let added = if let Some(selection) = pinned_streams {
+                add_media_items_to_playlist_with_stream_selection(kind, pid, ids.clone(), selection)
+                    .await?
+            } else {
+                add_media_items_to_playlist_with_playback(kind, pid, ids.clone(), playback).await?
+            };
             Ok::<(usize, u64, i64), ServerFnError>((ids.len(), added, pid))
         }
     });

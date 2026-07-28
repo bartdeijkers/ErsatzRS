@@ -176,8 +176,9 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                 "CustomTitle", "GuideGroup", "FillerKind", "InPoint", "OutPoint",
                 "ChapterTitle", "DisableWatermarks", "PreferredAudioLanguageCode",
                 "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode",
+                "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex",
                 "BlockKey", "CollectionKey", "CollectionEtag", "SchedulingContext"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.playout_id)
@@ -197,6 +198,10 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .bind(&item.preferred_audio_title)
         .bind(&item.preferred_subtitle_language_code)
         .bind(item.subtitle_mode.map(encode_enum))
+        .bind(item.pinned_stream_selection.map(|selection| selection.media_version_id))
+        .bind(item.pinned_stream_selection.map(|selection| selection.video_stream_index))
+        .bind(item.pinned_stream_selection.and_then(|selection| selection.audio_stream_index))
+        .bind(item.pinned_stream_selection.and_then(|selection| selection.subtitle_stream_index))
         .bind(&item.block_key)
         .bind(&item.collection_key)
         .bind(&item.collection_etag)
@@ -264,9 +269,10 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                     "FillerKind", "InPoint", "OutPoint", "ChapterTitle",
                     "DisableWatermarks", "PreferredAudioLanguageCode",
                     "PreferredAudioTitle", "PreferredSubtitleLanguageCode",
-                    "SubtitleMode", "BlockKey", "CollectionKey",
+                    "SubtitleMode", "MediaVersionId", "VideoStreamIndex",
+                    "AudioStreamIndex", "SubtitleStreamIndex", "BlockKey", "CollectionKey",
                     "CollectionEtag", "SchedulingContext"
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(item.playout_id)
             .bind(item.media_item_id)
@@ -285,6 +291,10 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .bind(&item.preferred_audio_title)
             .bind(&item.preferred_subtitle_language_code)
             .bind(item.subtitle_mode.map(encode_enum))
+            .bind(item.pinned_stream_selection.map(|selection| selection.media_version_id))
+            .bind(item.pinned_stream_selection.map(|selection| selection.video_stream_index))
+            .bind(item.pinned_stream_selection.and_then(|selection| selection.audio_stream_index))
+            .bind(item.pinned_stream_selection.and_then(|selection| selection.subtitle_stream_index))
             .bind(&item.block_key)
             .bind(&item.collection_key)
             .bind(&item.collection_etag)
@@ -2060,6 +2070,22 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
             row,
             "SubtitleMode",
         )?,
+        pinned_stream_selection: match (
+            row.try_get::<Option<i64>, _>("MediaVersionId")
+                .repository()?,
+            row.try_get::<Option<i32>, _>("VideoStreamIndex")
+                .repository()?,
+        ) {
+            (Some(media_version_id), Some(video_stream_index)) => {
+                Some(ersatzrs_domain::PinnedStreamSelection {
+                    media_version_id,
+                    video_stream_index,
+                    audio_stream_index: row.try_get("AudioStreamIndex").repository()?,
+                    subtitle_stream_index: row.try_get("SubtitleStreamIndex").repository()?,
+                })
+            }
+            _ => None,
+        },
         block_key: row.try_get("BlockKey").repository()?,
         collection_key: row.try_get("CollectionKey").repository()?,
         collection_etag: row.try_get("CollectionEtag").repository()?,

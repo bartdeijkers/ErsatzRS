@@ -1,6 +1,8 @@
 use crate::scheduling::SchedulingSmartShufflePolicy;
 use async_trait::async_trait;
-use ersatzrs_domain::{EntityId, ProgramSchedule, ProgramScheduleAlternate, ProgramScheduleItem};
+use ersatzrs_domain::{
+    EntityId, PinnedStreamSelection, ProgramSchedule, ProgramScheduleAlternate, ProgramScheduleItem,
+};
 
 use super::Result;
 
@@ -68,6 +70,7 @@ pub struct ScheduleItemAdmin {
     pub preferred_audio_title: String,
     pub preferred_subtitle_language_code: Option<String>,
     pub subtitle_mode: Option<i32>,
+    pub pinned_stream_selection: Option<PinnedStreamSelection>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,5 +154,6 @@ pub trait ProgramScheduleRepository: Send + Sync {
         schedule_id: EntityId,
         collection_type: i32,
         media_item_id: EntityId,
+        pinned_stream_selection: Option<PinnedStreamSelection>,
     ) -> Result<()>;
 }

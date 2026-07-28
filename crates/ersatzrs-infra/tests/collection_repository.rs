@@ -231,6 +231,12 @@ async fn collection_admin_repository_preserves_crud_and_default_item_idempotence
                 preferred_audio_title: None,
                 preferred_subtitle_language_code: Some("nld".to_owned()),
                 subtitle_mode: Some(1),
+                pinned_stream_selection: Some(ersatzrs_domain::PinnedStreamSelection {
+                    media_version_id: 101,
+                    video_stream_index: 0,
+                    audio_stream_index: Some(1),
+                    subtitle_stream_index: Some(2),
+                }),
             }],
         })
         .await
@@ -247,6 +253,15 @@ async fn collection_admin_repository_preserves_crud_and_default_item_idempotence
     assert_eq!(
         editor.items[0].preferred_audio_language_code.as_deref(),
         Some("eng")
+    );
+    assert_eq!(
+        editor.items[0].pinned_stream_selection,
+        Some(ersatzrs_domain::PinnedStreamSelection {
+            media_version_id: 101,
+            video_stream_index: 0,
+            audio_stream_index: Some(1),
+            subtitle_stream_index: Some(2),
+        })
     );
 
     let groups = repos

@@ -148,6 +148,7 @@ pub struct PlaylistItem {
     pub smart_collection_id: Option<EntityId>,
     pub playback_order: PlaybackOrder,
     pub sort_order: i32,
+    pub pinned_stream_selection: Option<crate::PinnedStreamSelection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

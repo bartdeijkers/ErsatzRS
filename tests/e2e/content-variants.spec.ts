@@ -45,6 +45,13 @@ function sqlite(sql: string): string {
   }).trim();
 }
 
+function dialogWithHeading(page: Page, heading: RegExp) {
+  return page
+    .locator('div[class*="panel"]')
+    .filter({ has: page.getByRole('heading', { name: heading }) })
+    .last();
+}
+
 function seedForProject(testInfo: TestInfo): Seed {
   const projectOffset = Array.from(testInfo.project.name).reduce(
     (total, char) => total + char.charCodeAt(0),
@@ -355,6 +362,13 @@ test.describe('content variants UI surfacing', () => {
       `/media/movies/${seed.movieVersionId}`,
     );
     await expect(page.getByRole('heading', { name: 'Playback' })).toBeVisible();
+    const streamPanel = page.locator('[data-stream-selection-panel]');
+    await expect(streamPanel).toBeVisible();
+    await expect(streamPanel.getByLabel('Video')).toHaveValue('0');
+    await expect(streamPanel.getByLabel('Audio')).toHaveValue('1');
+    await expect(streamPanel.getByLabel('Subtitle')).toHaveValue('-1');
+    await expect(streamPanel.getByRole('button', { name: 'Add To Schedule' })).toBeVisible();
+    await expect(streamPanel.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
     const commentaryCard = page.locator('[data-commentary-track-card]', {
       hasText: 'Director Commentary',
     });
@@ -362,23 +376,40 @@ test.describe('content variants UI surfacing', () => {
     await expect(commentaryCard.getByText('Subtitle: Director Commentary Subtitles')).toBeVisible();
     await expect(commentaryCard.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
     await expect(commentaryCard.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
-    await expect(commentaryCard.getByRole('link', { name: 'Play' })).toHaveAttribute(
-      'href',
-      new RegExp(`/system/troubleshooting/playback\\?mediaItem=${seed.movieId}&preferredAudioTitle=Director%20Commentary&subtitleId=${seed.movieCommentarySubtitleId}`),
-    );
+    await expect(commentaryCard.getByRole('link', { name: 'Play' })).toHaveCount(0);
     const commentarySubtitleCard = page.locator('[data-commentary-subtitle-card]', {
       hasText: 'Director Commentary Subtitles',
     });
     await expect(commentarySubtitleCard).toBeVisible();
-    await expect(commentarySubtitleCard.getByRole('link', { name: 'Play' })).toHaveAttribute(
-      'href',
-      `/system/troubleshooting/playback?mediaItem=${seed.movieId}&subtitleId=${seed.movieCommentarySubtitleId}`,
+    await expect(commentarySubtitleCard.getByRole('link', { name: 'Play' })).toHaveCount(0);
+
+    await streamPanel.getByLabel('Subtitle').selectOption('3');
+    await streamPanel.getByRole('button', { name: 'Add To Playlist' }).click();
+    const playlistDialog = dialogWithHeading(page, /^add to playlist$/i);
+    await expect(playlistDialog).toBeVisible();
+    await playlistDialog
+      .locator('select')
+      .first()
+      .selectOption({ label: `E2E Variant Playlists ${seed.playlistGroupId}` });
+    await expect(playlistDialog.locator('select').nth(1)).toContainText(
+      `E2E Variant Playlist ${seed.playlistId}`,
     );
-    await commentaryCard.getByRole('link', { name: 'Play' }).click();
-    await expect(page.locator('input[name="preferredAudioTitle"]')).toHaveValue('Director Commentary');
-    await expect(page.locator('select[name="subtitleId"]')).toHaveValue(
-      String(seed.movieCommentarySubtitleId),
-    );
+    await playlistDialog
+      .locator('select')
+      .nth(1)
+      .selectOption({ label: `E2E Variant Playlist ${seed.playlistId}` });
+    await playlistDialog.getByRole('button', { name: /^add to playlist$/i }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT "MediaVersionId" || ',' || "VideoStreamIndex" || ',' ||
+       "AudioStreamIndex" || ',' || "SubtitleStreamIndex"
+FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId} AND "MediaItemId" = ${seed.movieId}
+ORDER BY "Id" DESC LIMIT 1;
+`),
+      )
+      .toBe(`${seed.movieMediaVersionId},0,1,3`);
 
     await gotoHydrated(page, `/media/tv/shows/${seed.showId}`);
     await expect(page.getByRole('button', { name: 'Add To Collection' }).first()).toBeVisible();

@@ -155,6 +155,7 @@ pub async fn add_to_playlist(
                 collection_type: MOVIE_COLLECTION_TYPE,
                 media_item_id: input.media_item_id,
                 playback: ersatzrs_core::repositories::PlaybackOverrides::default(),
+                pinned_stream_selection: None,
             }],
         })
         .await

@@ -19,6 +19,21 @@ function sqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+async function setTimelineScroll(page: Page, scrollLeft: number): Promise<void> {
+  await page.locator('[role="grid"]').evaluate((element, requested) => {
+    (element as HTMLElement).scrollLeft = requested;
+  }, scrollLeft);
+}
+
+async function timelineCenterMinutes(page: Page, zoomPercent: number): Promise<number> {
+  return page.locator('[role="grid"]').evaluate((element, zoom) => {
+    const timeline = element as HTMLElement;
+    const timelineViewport = Math.max(timeline.clientWidth - 352, 0);
+    const pixelsPerMinute = (6 * zoom) / 100;
+    return (timeline.scrollLeft + timelineViewport / 2) / pixelsPerMinute;
+  }, zoomPercent);
+}
+
 function makeCalibrationClip(testInfo: TestInfo): string {
   const clipPath = testInfo.outputPath('channel-preview-calibration.mp4');
   const ffmpegPath =
@@ -263,7 +278,17 @@ test.describe('channel preview modal and watch route', () => {
     await expect(page.getByRole('heading', { name: new RegExp(channel.name) })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Programme Guide' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Now', exact: true })).toBeVisible();
-    await expect(page.getByRole('slider', { name: 'Visible window' })).toBeVisible();
+    const zoom = page.getByRole('slider', { name: 'Zoom' });
+    await expect(zoom).toBeVisible();
+    await expect(zoom).toHaveValue('100');
+    await setTimelineScroll(page, 360);
+    const watchCenterBefore = await timelineCenterMinutes(page, 100);
+    await zoom.fill('150');
+    await expect
+      .poll(async () =>
+        Math.abs((await timelineCenterMinutes(page, 150)) - watchCenterBefore),
+      )
+      .toBeLessThan(1);
     await expect(page.getByText('Now Playing').first()).toBeVisible();
     await expect.poll(() => playlistRequests).toBeGreaterThan(modalPlaylistRequests);
     const watchVideo = page.locator('.channel-watch-js [data-channel-preview] video');
@@ -410,7 +435,35 @@ test.describe('channel preview modal and watch route', () => {
     ).toBeVisible();
     await expect(page.getByRole('button', { name: '-2h' })).toBeVisible();
     await expect(page.getByRole('button', { name: '+4h' })).toBeVisible();
-    await expect(page.getByRole('slider', { name: 'Visible window' })).toBeVisible();
+    const zoom = page.getByRole('slider', { name: 'Zoom' });
+    await expect(zoom).toBeVisible();
+    await expect(zoom).toHaveValue('100');
+    const firstProgramme = page.locator('[role="gridcell"]').first();
+    const timeline = page.locator('[data-epg-time-track]');
+    const widthBefore = await firstProgramme.evaluate((element) =>
+      Number.parseFloat((element as HTMLElement).style.width),
+    );
+    const timelineWidthBefore = await timeline.evaluate(
+      (element) => element.getBoundingClientRect().width,
+    );
+    await setTimelineScroll(page, 360);
+    const centerBefore = await timelineCenterMinutes(page, 100);
+    await zoom.fill('150');
+    await expect(zoom).toHaveValue('150');
+    await expect(page.locator('[data-zoom-value]')).toHaveText('150%');
+    await expect
+      .poll(() =>
+        firstProgramme.evaluate((element) =>
+          Number.parseFloat((element as HTMLElement).style.width),
+        ),
+      )
+      .toBeGreaterThan(widthBefore);
+    await expect
+      .poll(() => timeline.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(timelineWidthBefore);
+    await expect
+      .poll(async () => Math.abs((await timelineCenterMinutes(page, 150)) - centerBefore))
+      .toBeLessThan(1);
   });
 
   test('preview video and modal stay contained on desktop and mobile screens', async ({
@@ -477,7 +530,11 @@ test.describe('channel preview modal and watch route', () => {
       await page.setViewportSize(viewport);
       const frame = page.locator('.channel-watch-js [data-channel-preview] video').locator('..');
       const bounds = await frame.boundingBox();
+      const regionBounds = await page.locator('[data-watch-preview-region]').boundingBox();
       expect(bounds).not.toBeNull();
+      expect(regionBounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(bounds!.x - regionBounds!.x)).toBeLessThanOrEqual(1);
       expect(bounds!.width).toBeLessThanOrEqual(viewport.width);
       expect(bounds!.height).toBeLessThanOrEqual(viewport.height * 0.72 + 1);
       expect(bounds!.width / bounds!.height).toBeCloseTo(16 / 9, 1);
