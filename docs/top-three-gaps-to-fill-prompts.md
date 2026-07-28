@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-27
-last_processed_commit: 817e0192e70219e66062bda9b8c26eec02455200
+generated: 2026-07-28
+last_processed_commit: 70b4be03ed34fc3b1b969c97025bde05b3587c84
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,17 +9,24 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The prior `#1` (p7c-04 module split) landed across
-`2fffbb3..817e019` and its milestone is `Complete`, so the whole
-`application-use-case-layer` feature is now `Ported` with every debt resolved
-and its prompt is retired. That unblocks milestone **p8a-01**, the Phase 8A
-focus and the only remaining feature-complete gap's first actionable slice, so
-it takes the top slot. `cargo xtask progress gaps` reports a single remaining
-feature (`video-jukebox-addon-api`, Not started) with no pinned ErsatzTV
-equivalent; all other actionable spec work is the queue of `Proposed` /
-`Not implemented` localization ADRs. The two lowest-numbered,
-maintainer-requested ones (ADR 0022 de-de, ADR 0023 hi-in) were not touched in
-this window and carry over as `#2` and `#3`.
+and Phase 8A state. The `817e019..70b4be0` window landed one feature commit —
+`feat(web): add EPG and browser channel previews` — plus CI target-dir
+perf/docs work with no parity impact. The feature is Phase 7 admin-UI hardening
+(the `/epg` grid and the `/channels/:id/watch` browser player under ADRs
+0053–0055); it was reconciled in its own commit (`channels-admin-ui` stays
+`Ported`, `hydration.toml` gained `EpgPreviewPage`/`ChannelWatchPage`), and this
+run only added the missing `/epg` nav route to `routes.toml`. It did **not**
+touch any of the top three chores.
+
+`cargo xtask progress gaps` still reports a single remaining feature
+(`video-jukebox-addon-api`, Not started, four open debt items) — the only file
+with unresolved `[[debt]]`. Its first slice is milestone **p8a-01**, the
+`phase.toml` `current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02,
+so it holds the top slot. Every other actionable spec source is the queue of
+`Proposed` / `Not implemented` localization ADRs (0022–0047+); no ADR-backed
+FFmpeg/HLS hardening or blocking runtime debt is open to outrank them. The two
+lowest-numbered, maintainer-requested ones (ADR 0022 de-de, ADR 0023 hi-in) saw
+no commits this window and carry over unchanged as `#2` and `#3`.
 
 ---
 

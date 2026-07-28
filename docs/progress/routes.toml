@@ -2,7 +2,12 @@
 
 [[route]]
 nav     = '/channels'
-backing = '`ChannelsListPage` + add/`:id` editor'
+backing = '`ChannelsListPage` + add/`:id` editor + `:id/watch` browser player'
+routed  = true
+
+[[route]]
+nav     = '/epg'
+backing = '`EpgPreviewPage` aggregate five-hour EPG grid (ADR 0054)'
 routed  = true
 
 [[route]]
