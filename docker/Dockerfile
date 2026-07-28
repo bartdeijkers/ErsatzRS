@@ -53,7 +53,8 @@ RUN set -eux; \
         find /build -maxdepth 5 -type d \( -name site -o -name pkg \); \
         exit 1; \
     }; \
-    test -f /build/crates/ersatzrs-web/public/bundle.css
+    test -f /build/crates/ersatzrs-web/public/bundle.css; \
+    test -f /build/target/site/bundle.css
 
 FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS rust-build
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -140,7 +141,9 @@ RUN set -eux; \
 FROM runtime-base AS runtime-release
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
-COPY release-web-assets/public /build/crates/ersatzrs-web/public
+# release-web-assets/site is already the single merged admin-UI directory
+# (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
+# it); no separate public/ copy is needed.
 COPY release-web-assets/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets
 COPY --from=rust-build /build/migrations /app/migrations
@@ -155,7 +158,9 @@ ENTRYPOINT [ "ersatzrs-web" ]
 FROM runtime-base AS runtime
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
-COPY --from=web-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public
+# /build/target/site is already the single merged admin-UI directory (pkg/
+# plus the assets-dir/public contents cargo-leptos copies alongside it); no
+# separate public/ copy is needed.
 COPY --from=web-build /build/target/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets
 COPY --from=rust-build /build/migrations /app/migrations

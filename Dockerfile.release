@@ -87,7 +87,7 @@ COPY . .
 RUN set -eux; \
     sed -i 's/crate-type = \["cdylib", "rlib"\]/crate-type = ["rlib"]/' crates/ersatzrs-web/Cargo.toml; \
     grep -F 'crate-type = ["rlib"]' crates/ersatzrs-web/Cargo.toml; \
-    test -f release-web-assets/public/bundle.css; \
+    test -f release-web-assets/site/bundle.css; \
     test -d release-web-assets/site/pkg
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -110,7 +110,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
-COPY release-web-assets/public /usr/local/bin/public
+# release-web-assets/site is already the single merged admin-UI directory
+# (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
+# it); ship only that, not a separate public/ copy.
 COPY release-web-assets/site /usr/local/bin/site
 COPY --from=builder /workspace/assets /usr/local/bin/assets
 

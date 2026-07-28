@@ -64,20 +64,27 @@ jobs:
           Copy-Item "$bin/ersatzrs-scanner.exe" $stage
           Copy-Item "$bin/ersatzrs-healthcheck.exe" $stage
           Copy-Item "$bin/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-          New-Item -ItemType Directory "$stage/site" | Out-Null
-          Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site/pkg" "$stage/site/pkg"
-          Copy-Item -Recurse crates/ersatzrs-web/public "$stage/public"
+          # `cargo leptos build` already copies the assets-dir (public/)
+          # contents into the top level of the site root alongside pkg/ (see
+          # [package.metadata.leptos] assets-dir = "public" in
+          # crates/ersatzrs-web/Cargo.toml), so target/site is already the
+          # single merged admin-UI directory. Ship it as-is instead of
+          # re-splitting it into separate site/ and public/ folders.
+          Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site" "$stage/site"
           Copy-Item -Recurse assets "$stage/assets"
           Copy-Item LICENSE, README.md $stage
-          $css = Get-Item "$stage/public/bundle.css" -ErrorAction Stop
+          $css = Get-Item "$stage/site/bundle.css" -ErrorAction Stop
           if ($css.Length -eq 0) {
-            throw 'release archive must contain a non-empty public/bundle.css'
+            throw 'release archive must contain a non-empty site/bundle.css'
           }
           if (-not (Test-Path "$stage/site/pkg/ersatzrs-web.js") -or -not (Test-Path "$stage/site/pkg/ersatzrs-web.wasm")) {
             throw 'release archive must contain Leptos JavaScript and WASM assets under site/pkg'
           }
-          if (Test-Path "$stage/site/fonts") {
-            throw 'release archive must stage public assets only under public, not site'
+          if (-not (Test-Path "$stage/site/fonts")) {
+            throw 'release archive must stage merged public assets (fonts, images, css) under site/'
+          }
+          if (Test-Path "$stage/public") {
+            throw 'release archive must not ship a separate public/ folder; admin-UI assets belong under site/'
           }
           if (Get-ChildItem -Path $stage -Recurse -File -Include 'ffmpeg*', 'ffprobe*' | Select-Object -First 1) {
             throw 'release archives must not bundle ffmpeg or ffprobe'
@@ -142,9 +149,13 @@ jobs:
       - name: Stage web assets
         run: |
           set -euo pipefail
+          # `cargo leptos build` already copies the assets-dir (public/)
+          # contents into the top level of the site root alongside pkg/, so
+          # target/site is already the single merged admin-UI directory —
+          # stage only that, not a separate public/ copy.
           mkdir -p release-web-assets
-          cp -R crates/ersatzrs-web/public release-web-assets/public
           cp -R target/site release-web-assets/site
+          test -f release-web-assets/site/bundle.css
       - name: Upload web assets
         uses: actions/upload-artifact@v7
         with:
@@ -331,7 +342,6 @@ jobs:
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-healthcheck" "$stage/"
           fi
-          cp -R release-web-assets/public "$stage/public"
           cp -R release-web-assets/site "$stage/site"
           cp -R assets "$stage/assets"
           cp LICENSE "$stage/"

@@ -27,7 +27,7 @@ pub fn build_app(app_state: AppState) -> Router {
     let leptos_options = conf.leptos_options;
     let routes = web_routes(super::config::development_routes_enabled());
     let pkg_dir = resolve_pkg_dir(&leptos_options);
-    let public_dir = resolve_public_dir();
+    let public_dir = resolve_public_dir(&leptos_options);
     let output_name = leptos_options.output_name.clone();
 
     let leptos_options_clone = leptos_options.clone();

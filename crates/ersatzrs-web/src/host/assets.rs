@@ -6,13 +6,41 @@ pub(crate) const DEFAULT_OUTPUT_NAME: &str = "ersatzrs-web";
 const DEFAULT_SITE_ROOT: &str = "target/site";
 const BUNDLED_SITE_ROOT: &str = "site";
 const DEFAULT_SITE_PKG_DIR: &str = "pkg";
+const PUBLIC_MARKER_FILE: &str = "bundle.css";
 
-pub fn resolve_public_dir() -> Option<PathBuf> {
-    candidate_runtime_dirs()
+/// Resolve the directory serving static admin-UI assets (CSS, fonts, images,
+/// hand-written JS) under `/public`.
+///
+/// `cargo-leptos` copies the `assets-dir` (`public/`) contents into the top
+/// level of the site root alongside `pkg/` at build time, so a built site
+/// root is already the merged directory releases and the Docker image ship
+/// as the single `site/` folder — check there first. Fall back to the crate's
+/// own `public/` source directory (and a legacy standalone `public/` sibling)
+/// for `cargo run` without a prior `cargo leptos build`.
+pub fn resolve_public_dir(options: &LeptosOptions) -> Option<PathBuf> {
+    let site_root = options.site_root.to_string();
+    resolve_public_dir_from_dirs(
+        candidate_site_roots(site_root),
+        &candidate_runtime_dirs(),
+        Path::new(WEB_CRATE_DIR),
+    )
+}
+
+fn resolve_public_dir_from_dirs(
+    site_roots: Vec<PathBuf>,
+    runtime_dirs: &[PathBuf],
+    crate_dir: &Path,
+) -> Option<PathBuf> {
+    site_roots
         .into_iter()
-        .map(|root| root.join("public"))
-        .chain(std::iter::once(Path::new(WEB_CRATE_DIR).join("public")))
-        .find(|candidate| candidate.join("bundle.css").is_file())
+        .find(|candidate| candidate.join(PUBLIC_MARKER_FILE).is_file())
+        .or_else(|| {
+            runtime_dirs
+                .iter()
+                .map(|root| root.join("public"))
+                .chain(std::iter::once(crate_dir.join("public")))
+                .find(|candidate| candidate.join(PUBLIC_MARKER_FILE).is_file())
+        })
 }
 
 pub fn resolve_pkg_dir(options: &LeptosOptions) -> Option<PathBuf> {
@@ -161,6 +189,56 @@ mod tests {
         assert_eq!(
             resolve_hydration_pkg_dir_from_site_roots(&options, site_roots).as_deref(),
             Some(pkg.as_path())
+        );
+    }
+
+    #[test]
+    fn public_dir_resolves_to_merged_site_root_when_present() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let site = temp.path().join(BUNDLED_SITE_ROOT);
+        std::fs::create_dir_all(&site).expect("create site dir");
+        std::fs::write(site.join(PUBLIC_MARKER_FILE), "").expect("write bundle.css");
+
+        let site_roots = candidate_site_roots_from_dirs(
+            DEFAULT_SITE_ROOT,
+            &[temp.path().into()],
+            Path::new("/src/crate"),
+        );
+
+        assert_eq!(
+            resolve_public_dir_from_dirs(
+                site_roots,
+                &[temp.path().into()],
+                Path::new("/src/crate")
+            )
+            .as_deref(),
+            Some(site.as_path())
+        );
+    }
+
+    #[test]
+    fn public_dir_falls_back_to_legacy_sibling_when_site_root_has_no_assets() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let public = temp.path().join("public");
+        std::fs::create_dir_all(&public).expect("create public dir");
+        std::fs::write(public.join(PUBLIC_MARKER_FILE), "").expect("write bundle.css");
+
+        // No bundle.css under any site-root candidate, so this must fall back
+        // to the legacy standalone `public/` sibling next to the binary.
+        let site_roots = candidate_site_roots_from_dirs(
+            DEFAULT_SITE_ROOT,
+            &[temp.path().into()],
+            Path::new("/src/crate"),
+        );
+
+        assert_eq!(
+            resolve_public_dir_from_dirs(
+                site_roots,
+                &[temp.path().into()],
+                Path::new("/src/crate")
+            )
+            .as_deref(),
+            Some(public.as_path())
         );
     }
 }

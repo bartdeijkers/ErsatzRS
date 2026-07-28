@@ -102,7 +102,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     SQLX_OFFLINE=true cargo leptos build --release --frontend-only --lib-features hydrate; \
     cd /workspace; \
     test -f crates/ersatzrs-web/public/bundle.css; \
-    test -d target/site/pkg
+    test -d target/site/pkg; \
+    test -f target/site/bundle.css
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
@@ -116,7 +117,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
-COPY --from=builder /workspace/crates/ersatzrs-web/public /usr/local/bin/public
+# cargo-leptos already copies the assets-dir (public/) contents into the top
+# level of target/site alongside pkg/, so target/site is the single merged
+# admin-UI directory; ship only that, not a separate public/ copy.
 COPY --from=builder /workspace/target/site /usr/local/bin/site
 COPY --from=builder /workspace/assets /usr/local/bin/assets
 

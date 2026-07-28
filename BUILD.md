@@ -348,8 +348,12 @@ three build steps:
 Do not commit host-local Cargo cache paths or sccache settings into the
 Dockerfile. The image build keeps `SQLX_OFFLINE=true` through
 `.cargo/config.toml`, preserves the release profile, and copies
-`ersatzrs-web`, `ersatzrs-healthcheck`, `public/`, `site/`, and `assets/` into
-the runtime stage. The Leptos runtime environment is set to
+`ersatzrs-web`, `ersatzrs-healthcheck`, `site/`, and `assets/` into the runtime
+stage. `cargo-leptos` already copies the `assets-dir` (`public/`) contents into
+the top level of the site root alongside `pkg/` (`[package.metadata.leptos]
+assets-dir = "public"` in `crates/ersatzrs-web/Cargo.toml`), so `site/` is
+already the single merged admin-UI directory — the image does not ship a
+separate `public/` copy. The Leptos runtime environment is set to
 `LEPTOS_SITE_ROOT=/usr/local/bin/site`, `LEPTOS_SITE_PKG_DIR=pkg`, and
 `LEPTOS_OUTPUT_NAME=ersatzrs-web` so the SSR binary references the bundled
 hydration scripts. Managed FFmpeg is not bundled in the image; startup uses the
