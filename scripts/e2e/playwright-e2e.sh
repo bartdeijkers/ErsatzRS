@@ -89,6 +89,29 @@ if [[ -z "$PKG_JS" ]]; then
 fi
 SITE_ROOT="$(cd "$(dirname "$(dirname "$PKG_JS")")" && pwd)"
 
+# cargo-leptos can preserve a warm site/pkg output while omitting the configured
+# assets-dir from the site root. Copy the authoritative public assets after
+# every build so a persistent target directory cannot produce a styled/hydrated
+# bundle whose /public routes all return 404.
+PUBLIC_SOURCE="$REPO_ROOT/$WEB_CRATE/public"
+if [[ ! -d "$PUBLIC_SOURCE" ]]; then
+  err "web public asset source not found at $PUBLIC_SOURCE"
+  exit 1
+fi
+log "synchronizing web public assets into $SITE_ROOT"
+cp -R "$PUBLIC_SOURCE/." "$SITE_ROOT/"
+
+for required_asset in \
+  "bundle.css" \
+  "channel-preview.js" \
+  "vendor/hls/hls.mjs" \
+  "vendor/hls/LICENSE"; do
+  if [[ ! -f "$SITE_ROOT/$required_asset" ]]; then
+    err "required web public asset missing after synchronization: $required_asset"
+    exit 1
+  fi
+done
+
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-playwright-e2e.XXXXXX")"
 mkdir -p "$TMP_ROOT/home"
 DB_PATH="$TMP_ROOT/ErsatzRS.db"

@@ -186,6 +186,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Playwright E2E now synchronizes the authoritative web `public/` assets into
+  the built Leptos site root before booting the server, preventing persistent
+  Cargo targets from producing broad 404, MIME-type, hydration, and geometry
+  failures when cargo-leptos reuses `site/pkg` without repopulating assets.
 - HLS work-ahead now evaluates Remote Stream liveness at the actual transcode
   cursor, preventing a following live item from being opened before its
   scheduled start. Script producers are cancelled and reaped whenever IPTV,
