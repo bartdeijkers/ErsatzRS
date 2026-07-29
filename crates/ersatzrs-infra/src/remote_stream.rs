@@ -611,13 +611,17 @@ fn platform_script_process(command: &RemoteStreamCommand) -> Command {
 
 #[cfg(windows)]
 fn platform_script_process(command: &RemoteStreamCommand) -> Command {
+    use std::os::windows::process::CommandExt as _;
+
     let extension = Path::new(&command.program)
         .extension()
         .and_then(|extension| extension.to_str())
         .unwrap_or_default();
     if extension.eq_ignore_ascii_case("bat") || extension.eq_ignore_ascii_case("cmd") {
         let mut process = Command::new("cmd.exe");
-        process.args(["/D", "/S", "/C", &quote_windows_batch_command(command)]);
+        process
+            .as_std_mut()
+            .raw_arg(windows_batch_raw_arguments(command));
         process
     } else {
         let mut process = Command::new(&command.program);
@@ -626,7 +630,12 @@ fn platform_script_process(command: &RemoteStreamCommand) -> Command {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
+fn windows_batch_raw_arguments(command: &RemoteStreamCommand) -> String {
+    format!("/D /S /C \"{}\"", quote_windows_batch_command(command))
+}
+
+#[cfg(any(windows, test))]
 fn quote_windows_batch_command(command: &RemoteStreamCommand) -> String {
     std::iter::once(&command.program)
         .chain(command.args.iter())
@@ -881,6 +890,57 @@ content_rating: PG
         let empty_argument =
             parse_script_command(r#""producer" """#, Path::new("streams")).expect("empty argument");
         assert_eq!(empty_argument.args, [""]);
+    }
+
+    #[test]
+    fn formats_windows_batch_command_as_raw_cmd_arguments() {
+        let command = RemoteStreamCommand {
+            program: r"C:\Program Files\ErsatzRS\Remote Producer.bat".to_owned(),
+            args: vec![
+                "https://example.test/watch?id=1&x=2".to_owned(),
+                String::new(),
+            ],
+            working_directory: PathBuf::from("."),
+        };
+
+        assert_eq!(
+            windows_batch_raw_arguments(&command),
+            "/D /S /C \"\"C:\\Program Files\\ErsatzRS\\Remote Producer.bat\" \
+             \"https://example.test/watch?id=1&x=2\" \"\"\""
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launches_windows_batch_producer_with_raw_cmd_arguments() {
+        let root = tempfile::Builder::new()
+            .prefix("remote stream producer ")
+            .tempdir()
+            .expect("temp directory");
+        let batch = root.path().join("emit arguments.bat");
+        std::fs::write(&batch, "@echo off\r\n<nul set /p=\"%~1|%~2\"\r\n")
+            .expect("write batch producer");
+        let command = RemoteStreamCommand {
+            program: batch.to_string_lossy().into_owned(),
+            args: vec![
+                "https://example.test/watch?id=1&x=2".to_owned(),
+                String::new(),
+            ],
+            working_directory: root.path().to_path_buf(),
+        };
+
+        let mut child = spawn_remote_stream_producer(&command, "unused-ffmpeg.exe", None)
+            .expect("spawn batch producer");
+        let mut stdout = child.stdout.take().expect("producer stdout");
+        let mut output = String::new();
+        stdout
+            .read_to_string(&mut output)
+            .await
+            .expect("read producer output");
+        let status = child.wait().await.expect("producer status");
+
+        assert!(status.success());
+        assert_eq!(output, "https://example.test/watch?id=1&x=2|");
     }
 
     #[test]

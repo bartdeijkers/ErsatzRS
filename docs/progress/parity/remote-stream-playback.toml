@@ -9,11 +9,13 @@ Remote Stream playout resolves the persisted URL/script definition instead of
 opening its YAML `MediaFile`. URL input uses bounded network reads and HTTP
 reconnect options. Script commands are tokenized without shell expansion,
 receive the managed FFmpeg/ffprobe paths, run from the definition directory,
-and pipe MPEG-TS stdout directly into the managed consumer process. IPTV and
-HLS share this resolver and cancellation ownership; producer stderr and signed
-URL details are redacted from normal diagnostics. Consumer exit and ffprobe
-timeouts cancel and reap producers even when stdout is stalled, while stderr
-is retained as a bounded rolling tail.
+and pipe MPEG-TS stdout directly into the managed consumer process. Windows
+batch producers use an exact raw `cmd.exe` command line so quoted executable
+paths and URL arguments survive the platform process boundary. IPTV and HLS
+share this resolver and cancellation ownership; producer stderr and signed URL
+details are redacted from normal diagnostics. Consumer exit and ffprobe timeouts
+cancel and reap producers even when stdout is stalled, while stderr is retained
+as a bounded rolling tail.
 
 Live and finite sources have distinct timing behavior. RTSP is forced live,
 live inputs start at zero without read-rate pacing, and current live Remote
@@ -30,7 +32,8 @@ sources, and warns when a finite source has no usable duration.
 
 Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
-  stalled-producer cancellation, and bounded-stderr tests:
+  Windows batch quoting, stalled-producer cancellation, and bounded-stderr
+  tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
 - ffprobe timeout cancellation:
   `./run.sh test -p ersatzrs-infra remote_probe_timeout_cancels_stalled_producer`.
