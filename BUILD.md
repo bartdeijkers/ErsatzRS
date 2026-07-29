@@ -431,9 +431,12 @@ ERSATZRS_SITE_ROOT=target/site \
 
 For a deeper, browser-level check, normal CI runs the full Playwright admin E2E
 suite by default through `scripts/e2e/playwright-e2e.sh` (see
-[TEST.md](TEST.md)). After `cargo leptos build`, that wrapper synchronizes the
-authoritative `crates/ersatzrs-web/public/` tree into the discovered site root
-and verifies the CSS, preview bridge, and vendored Hls.js assets. This keeps a
+[TEST.md](TEST.md)). The wrapper first regenerates `public/bundle.css` with the
+pinned Stylance CLI, because a clean checkout paired with a persistent Cargo
+target can reuse the web build-script result without recreating that generated
+file. After `cargo leptos build`, it synchronizes the complete authoritative
+`crates/ersatzrs-web/public/` tree into the discovered site root and verifies
+the CSS, preview bridge, and vendored Hls.js assets. This also keeps a
 persistent Cargo target from reusing `site/pkg` without the configured
 `assets-dir`. For a narrower island-only local smoke, use
 `scripts/e2e/hydration-smoke.sh`. Release CI always keeps the structural web
