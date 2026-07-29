@@ -15,7 +15,8 @@ macOS archives are intentionally omitted for now. Keep this release line focused
 on Linux and Windows archives plus GHCR Docker images; restore the two `osx-*`
 matrix entries only in a future macOS-targeted release.
 
-Beta tags (`v*.*.*-beta.*`) intentionally take a separate Windows-only path.
+Beta tags (`v*.*.*-beta` or `v*.*.*-beta.*`) intentionally take a separate
+Windows-only path.
 They run only on `[self-hosted, ersatzrs-windows-release]`, publish the
 `ersatzrs-<tag>-win-x64.zip` prerelease, and do not create Linux archives or a
 Docker/GHCR image. This keeps beta validation tied to the active Windows runner.

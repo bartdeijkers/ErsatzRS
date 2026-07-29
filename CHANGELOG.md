@@ -50,6 +50,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Windows beta tags may now use either the terminal `-beta` form or a numbered
+  `-beta.N` suffix; both publish only the win-x64 prerelease archive and skip
+  the normal multi-platform and Docker release jobs.
 - Release archives and the Docker image now ship a single merged `site/`
   directory for admin-UI assets instead of duplicating them across separate
   `site/` and `public/` folders. Release packaging explicitly merges the
