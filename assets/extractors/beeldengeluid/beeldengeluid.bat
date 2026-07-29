@@ -145,7 +145,7 @@ if errorlevel 1 (
 set "STREAM_COUNT=0"
 for /f "usebackq tokens=1,* delims=	" %%A in ("%STREAMS_FILE%") do (
     set /a STREAM_COUNT+=1 >nul
-    "%FFMPEG_BIN%" -nostdin -hide_banner -loglevel error -headers "Cookie: %%B" -i "%%A" -map 0:v? -map 0:a? -c copy -f mpegts pipe:1
+    "%FFMPEG_BIN%" -nostdin -hide_banner -loglevel error -headers "Cookie: %%B" -i "%%A" -map 0:v:0? -map 0:a:0? -c copy -f mpegts pipe:1
     if errorlevel 1 goto :ffmpeg_failed
 )
 

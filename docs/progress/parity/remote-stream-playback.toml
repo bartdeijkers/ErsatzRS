@@ -11,7 +11,11 @@ reconnect options. Script commands are tokenized without shell expansion,
 receive the managed FFmpeg/ffprobe paths, run from the definition directory,
 and pipe MPEG-TS stdout directly into the managed consumer process. Windows
 batch producers use an exact raw `cmd.exe` command line so quoted executable
-paths and URL arguments survive the platform process boundary. IPTV and HLS
+paths and URL arguments survive the platform process boundary. The standalone
+Beeld & Geluid wrappers follow the pinned yt-dlp extractor's fresh Server
+Action and CloudFront-cookie flow, then select one HLS video/audio rendition
+pair so their MPEG-TS output has the stable video-then-audio stream order.
+IPTV and HLS
 share this resolver and cancellation ownership; producer stderr and signed URL
 details are redacted from normal diagnostics. Consumer exit and ffprobe timeouts
 cancel and reap producers even when stdout is stalled, while stderr is retained
@@ -32,7 +36,8 @@ sources, and warns when a finite source has no usable duration.
 
 Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
-  Windows batch quoting, stalled-producer cancellation, and bounded-stderr
+  Windows batch quoting, single-pair Beeld & Geluid mapping,
+  stalled-producer cancellation, and bounded-stderr
   tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
 - ffprobe timeout cancellation:

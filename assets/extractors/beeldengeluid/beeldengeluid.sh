@@ -246,8 +246,8 @@ while IFS= read -r signed_url; do
         -loglevel error \
         -headers "$cookie_header" \
         -i "$base_url" \
-        -map 0:v? \
-        -map 0:a? \
+        -map 0:v:0? \
+        -map 0:a:0? \
         -c copy \
         -f mpegts \
         pipe:1 \

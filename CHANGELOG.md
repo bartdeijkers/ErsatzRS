@@ -189,6 +189,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Beeld & Geluid Remote Stream extractors now select one video/audio rendition
+  pair instead of mapping every HLS rendition into the MPEG-TS pipe, preserving
+  the stream order required by channel HLS transcoding.
 - Windows Remote Stream batch producers now receive their quoted script path
   and arguments through the exact `cmd.exe` command line, so paths containing
   spaces and URL arguments no longer become literal quoted executable names

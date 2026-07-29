@@ -910,6 +910,19 @@ content_rating: PG
         );
     }
 
+    #[test]
+    fn beeldengeluid_extractors_emit_one_video_audio_pair() {
+        let shell = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.sh");
+        let batch = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.bat");
+
+        assert!(shell.contains("-map 0:v:0?"));
+        assert!(shell.contains("-map 0:a:0?"));
+        assert!(!shell.contains("-map 0:v?"));
+        assert!(!shell.contains("-map 0:a?"));
+        assert!(batch.contains("-map 0:v:0? -map 0:a:0?"));
+        assert!(!batch.contains("-map 0:v? -map 0:a?"));
+    }
+
     #[cfg(windows)]
     #[tokio::test]
     async fn launches_windows_batch_producer_with_raw_cmd_arguments() {

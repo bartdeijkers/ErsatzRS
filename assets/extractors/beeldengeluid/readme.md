@@ -15,7 +15,8 @@ Each wrapper implements the complete site-specific flow itself:
 4. Parse the exact-length React Server Component response chunks.
 5. Move the signed CloudFront parameters from the HLS query string into
    request cookies.
-6. Remux every returned HLS stream to MPEG-TS on standard output.
+6. Remux every returned HLS asset's first video/audio rendition pair to
+   MPEG-TS on standard output.
 
 No yt-dlp installation, Python runtime, browser cookies, or manually copied
 `.m3u8` URL is required.
@@ -72,7 +73,8 @@ beeldengeluid.bat "<episode-url>" > episode.ts
 
 Open `episode.ts` with a media player or inspect it with `ffprobe`. Diagnostics
 and failures are written to standard error; standard output contains only
-media bytes.
+media bytes. Selecting one rendition pair keeps the output stream order stable
+as video then audio, which is the layout ErsatzRS channel playback expects.
 
 ## Add the episode to ErsatzRS
 
