@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-07-29","summary":"Stabilized the Chromium EPG zoom-center CI proof by making its calibration scroll instant before the zoom transition."}
 {"agent":"Codex","date":"2026-07-29","summary":"Fixed Windows Remote Stream batch launching and restored the localized scanner interval hours adornment before the v1.0.16-beta release."}
 {"agent":"Codex","date":"2026-07-29","summary":"Fixed frontend-only release staging to merge generated public assets into the single site tree after beta.12 exposed missing bundle.css."}
 {"agent":"Codex","date":"2026-07-29","summary":"Restored the shared admin toast to pinned ErsatzTV/MudBlazor 8.15 lifecycle, queueing, styling, accessibility, and action-link parity with focused Rust and Chromium/Firefox workflow proof."}
