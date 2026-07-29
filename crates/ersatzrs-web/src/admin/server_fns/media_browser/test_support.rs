@@ -6,7 +6,9 @@ use super::{
 
 #[cfg(all(test, feature = "ssr"))]
 mod remote_stream_tests {
-    use super::{list_remote_streams, remote_stream_page_map};
+    use super::{
+        add_media_items_to_playlist, list_remote_streams, remote_stream_page_map, MediaBrowserKind,
+    };
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
@@ -56,6 +58,60 @@ mod remote_stream_tests {
             .unwrap();
         assert_eq!(page_map.pages[14], 1); // n
 
+        owner.cleanup();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn remote_stream_can_be_added_to_playlist_with_remote_stream_type() {
+        let (_db_file, pool) = test_pool().await;
+        seed_remote_stream_fixture(&pool).await;
+        sqlx::query(
+            r#"INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+               VALUES (90, 'Remote Streams', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("playlist group");
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("Id", "Name", "IsSystem", "PlaylistGroupId")
+               VALUES (91, 'Live Sources', 0, 90)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("playlist");
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
+        let state = AppState::new(
+            pool.clone(),
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let added = add_media_items_to_playlist(MediaBrowserKind::RemoteStream, 91, vec![701])
+            .await
+            .expect("add remote stream");
+        let collection_type = sqlx::query_scalar::<_, i64>(
+            r#"SELECT "CollectionType" FROM "PlaylistItem"
+               WHERE "PlaylistId" = 91 AND "MediaItemId" = 701"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("playlist item");
+
+        assert_eq!(added, 1);
+        assert_eq!(collection_type, 70);
         owner.cleanup();
     }
 

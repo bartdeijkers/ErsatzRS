@@ -8,12 +8,12 @@ use std::time::Duration;
 use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
-    graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
-    hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_muxrate, mpegts_output,
-    mpegts_pcr_period, no_autoscale, no_b_frames, no_demux_decode_delay, no_scene_detect,
-    no_standard_input, no_stats, normalize_loudness_filter, pad_filter, pad_vaapi_filter,
-    pipe_output, progress_to_stdout, realtime_filter, reset_pts_filter,
-    scale_subtitle_image_filter, select_forced_software_video_decoder,
+    format_time_limit, graphics_overlay_vaapi_filter, hardware_download_filter,
+    hardware_upload_filter, hardware_upload_vaapi_filter, hide_banner, loglevel_error,
+    mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
+    no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats, normalize_loudness_filter,
+    pad_filter, pad_vaapi_filter, pipe_output, progress_to_stdout, realtime_filter,
+    reset_pts_filter, scale_subtitle_image_filter, select_forced_software_video_decoder,
     select_software_video_decoder, select_video_decoder, standard_format_flags,
     still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
@@ -63,6 +63,7 @@ pub struct OutputMetadata {
 pub struct FfmpegState {
     pub output_format: OutputFormat,
     pub start: Option<Duration>,
+    pub output_start: Option<Duration>,
     pub duration: Option<Duration>,
     pub output_ts_offset: Option<Duration>,
     pub thread_count: Option<u32>,
@@ -77,6 +78,7 @@ impl Default for FfmpegState {
         Self {
             output_format: OutputFormat::MpegTs,
             start: None,
+            output_start: None,
             duration: None,
             output_ts_offset: None,
             thread_count: None,
@@ -108,8 +110,11 @@ impl PipelineRequest {
     #[must_use]
     pub fn new(input: InputFile, desired: DesiredVideoState) -> Self {
         let path = input.path.clone();
+        let mut audio_input = InputFile::audio(path);
+        audio_input.allow_readrate = input.allow_readrate;
+        audio_input.seek_after_input = input.seek_after_input;
         Self {
-            inputs: vec![input, InputFile::audio(path)],
+            inputs: vec![input, audio_input],
             state: FfmpegState::default(),
             desired,
             source_video_stream: None,
@@ -975,6 +980,12 @@ fn build_transcode_pipeline(
 
     if let Some(start) = request.state.start {
         steps.push(PipelineStep::stream_seek(start));
+    }
+    if let Some(start) = request.state.output_start {
+        steps.push(PipelineStep::generic(
+            "output_seek",
+            ["-ss".to_owned(), format_time_limit(start)],
+        ));
     }
 
     let is_video_copy = request.desired.video_format == FFmpegProfileVideoFormat::Copy;
@@ -2254,8 +2265,10 @@ fn add_realtime_input_options(request: &mut PipelineRequest) {
 
     for input in &mut request.inputs {
         match input.kind {
-            InputKind::Video if !source_is_still_image => input.add_readrate(readrate),
-            InputKind::Audio => input.add_readrate(readrate),
+            InputKind::Video if !source_is_still_image && input.allow_readrate => {
+                input.add_readrate(readrate);
+            }
+            InputKind::Audio if input.allow_readrate => input.add_readrate(readrate),
             _ => {}
         }
     }

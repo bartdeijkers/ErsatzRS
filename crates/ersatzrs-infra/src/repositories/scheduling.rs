@@ -2412,11 +2412,13 @@ impl SqliteSchedulingContentRepository {
             r#"SELECT
                 "mi"."Id",
                 COALESCE(
-                    (SELECT MAX("mv"."Duration") FROM "MediaVersion" AS "mv" WHERE
+                    NULLIF((SELECT MAX("mv"."Duration") FROM "MediaVersion" AS "mv" WHERE
                         "mv"."MovieId" = "mi"."Id" OR "mv"."EpisodeId" = "mi"."Id" OR
                         "mv"."MusicVideoId" = "mi"."Id" OR "mv"."OtherVideoId" = "mi"."Id" OR
                         "mv"."SongId" = "mi"."Id" OR "mv"."ImageId" = "mi"."Id" OR
-                        "mv"."RemoteStreamId" = "mi"."Id"),
+                        "mv"."RemoteStreamId" = "mi"."Id"), '00:00:00'),
+                    (SELECT "rs"."Duration" FROM "RemoteStream" AS "rs"
+                     WHERE "rs"."Id" = "mi"."Id" LIMIT 1),
                     '00:00:00'
                 ) AS "duration_text",
                 COALESCE(
@@ -2427,7 +2429,9 @@ impl SqliteSchedulingContentRepository {
                     (SELECT "som"."Title" FROM "SongMetadata" AS "som" WHERE "som"."SongId" = "mi"."Id" LIMIT 1),
                     (SELECT "shm"."Title" FROM "ShowMetadata" AS "shm" WHERE "shm"."ShowId" = "mi"."Id" LIMIT 1),
                     (SELECT "sem"."Title" FROM "SeasonMetadata" AS "sem" WHERE "sem"."SeasonId" = "mi"."Id" LIMIT 1),
-                    (SELECT "am"."Title" FROM "ArtistMetadata" AS "am" WHERE "am"."ArtistId" = "mi"."Id" LIMIT 1)
+                    (SELECT "am"."Title" FROM "ArtistMetadata" AS "am" WHERE "am"."ArtistId" = "mi"."Id" LIMIT 1),
+                    (SELECT "rsm"."Title" FROM "RemoteStreamMetadata" AS "rsm"
+                     WHERE "rsm"."RemoteStreamId" = "mi"."Id" LIMIT 1)
                 ) AS "title",
                 (SELECT "s"."ShowId" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "show_id",
                 (SELECT "e"."SeasonId" FROM "Episode" AS "e" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_id",

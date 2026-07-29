@@ -96,6 +96,19 @@ named audio track, such as commentary.
 
 ADR: [0048](../adr/0048-collection-item-playback-overrides.md)
 
+## Direct Remote Stream pipelines and per-card playlist actions
+
+ErsatzTV exposes script producers through an internal loopback HTTP endpoint.
+ErsatzRS connects producer stdout directly to the managed FFmpeg or ffprobe
+stdin so producer ownership, cancellation, and error handling remain in one
+process lifecycle.
+
+The Remote Streams card menu also exposes Add To Playlist directly. ErsatzTV's
+pinned list offers only the per-card Add To Collection action even though its
+shared collection type already defines Remote Stream playlist entries.
+
+ADR: [0057](../adr/0057-direct-remote-stream-pipelines-and-playlist-actions.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

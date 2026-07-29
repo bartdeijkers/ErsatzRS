@@ -1,0 +1,40 @@
+feature    = 'Remote Stream playback'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
+rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
+status     = 'Ported'
+adr        = ['0057']
+
+summary    = '''
+Remote Stream playout resolves the persisted URL/script definition instead of
+opening its YAML `MediaFile`. URL input uses bounded network reads and HTTP
+reconnect options. Script commands are tokenized without shell expansion,
+receive the managed FFmpeg/ffprobe paths, run from the definition directory,
+and pipe MPEG-TS stdout directly into the managed consumer process. IPTV and
+HLS share this resolver and cancellation ownership; producer stderr and signed
+URL details are redacted from normal diagnostics. Consumer exit and ffprobe
+timeouts cancel and reap producers even when stdout is stalled, while stderr
+is retained as a bounded rolling tail.
+
+Live and finite sources have distinct timing behavior. RTSP is forced live,
+live inputs start at zero without read-rate pacing, and current live Remote
+Streams force HLS realtime admission instead of work-ahead. Liveness is
+evaluated at the actual HLS transcode cursor so a future live item is not
+captured before its scheduled start. Script-backed VOD uses post-input seeking
+for its non-seekable pipe. Configured or probed duration feeds scheduling.
+Classic Flood expands a zero-duration Remote Stream to the next fixed boundary
+or hard stop and persists the expanded duration on the PlayoutItem.
+
+The Remote Stream health check is side-effect-free: it validates persisted
+definitions without contacting URLs or executing scripts, fails malformed
+sources, and warns when a finite source has no usable duration.
+
+Evidence:
+- Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
+  stalled-producer cancellation, and bounded-stderr tests:
+  `./run.sh test -p ersatzrs-infra remote_stream`.
+- ffprobe timeout cancellation:
+  `./run.sh test -p ersatzrs-infra remote_probe_timeout_cancels_stalled_producer`.
+- Scanner persistence and invalid-sibling isolation: `./run.sh test -p ersatzrs-scanner remote_stream_scan_persists_definition_metadata_and_continues_after_invalid_yaml`.
+- Flood duration regression: `./run.sh test -p ersatzrs-core classic_flood_expands_zero_duration_remote_stream_to_hard_stop`.
+- Playlist type and UI proof are tracked by `remote-streams-browser.toml`.
+'''

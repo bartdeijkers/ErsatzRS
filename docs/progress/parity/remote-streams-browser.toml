@@ -2,18 +2,19 @@ feature    = 'Remote streams browser'
 etv_source = '`ErsatzTV/Pages/RemoteStreamList.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/remote_streams.rs`'
 status     = 'Ported'
-adr        = []
+adr        = ['0057']
 summary    = '''
-Ported: `/media/remote/streams` and `/media/remote/streams/page/{page}` now use an ErsatzTV-style 100-card remote-stream browser backed by the search index query `type:remote_stream AND (...)`, alphabetic page-map jumps, media-card thumbnails/placeholders, selection actions, per-card Add To Collection, Add To Playlist, SSR/no-JS list HTML, and browser coverage. Source audit at pinned ErsatzTV commit `0d301df5e8512fdfccf3a611188d27ab1690ee31` found no route-local remote-stream create/edit/delete editor; remote-stream rows remain scanner/YAML-owned as upstream.
+Ported: `/media/remote/streams` and `/media/remote/streams/page/{page}` now use an ErsatzTV-style 100-card remote-stream browser backed by the search index query `type:remote_stream AND (...)`, alphabetic page-map jumps, media-card thumbnails/placeholders, selection actions, per-card Add To Collection, SSR/no-JS list HTML, and browser coverage. ADR 0057 improves the pinned upstream card workflow with a per-card Add To Playlist action; it uses the shared localized modal and persists ErsatzTV `CollectionType::RemoteStream` value 70. Source audit at pinned ErsatzTV commit `0d301df5e8512fdfccf3a611188d27ab1690ee31` found no route-local remote-stream create/edit/delete editor; remote-stream rows remain scanner/YAML-owned as upstream.
 
 ParityDebt:
 - Prompt-requested route-local remote-stream editor: intentionally not implemented because pinned ErsatzTV exposes `RemoteStreamList.razor` only and has no admin editor/validator for remote stream URL/script save/delete. Add only if the ErsatzTV baseline advances to include such a route.
 
 Evidence:
 - Source/visual map: pruned with completed plan docs; current proof is this tracker plus `tests/e2e/remote-streams.spec.ts`.
-- Focused tests: `cargo test -p ersatzrs-web --features ssr remote_stream`.
+- Focused tests: `./run.sh test -p ersatzrs-web remote_stream`.
 - Hydration lint: `cargo xtask hydration-lint -p ersatzrs-web`.
 - Browser spec: `E2E_DB_PATH=.tmp/remote-streams-e2e.db npx playwright test tests/e2e/remote-streams.spec.ts --project=chromium`.
+- Playlist proof: `remote_stream_can_be_added_to_playlist_with_remote_stream_type` plus the browser spec's per-card playlist workflow assert `CollectionType = 70`.
 '''
 
 [[debt]]

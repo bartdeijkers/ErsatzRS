@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::{
     atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering},
     Arc,
@@ -43,6 +42,11 @@ use crate::playback::{
     CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
     PlaybackSubtitle,
 };
+use crate::remote_stream::{
+    redact_remote_stream_output, redacted_source_label, remote_stream_input_file,
+    remote_stream_producer, resolve_remote_stream, spawn_ffmpeg_with_remote_input,
+    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+};
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
@@ -51,7 +55,7 @@ use crate::transcode_capacity::{
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::sync::{Mutex, Notify};
 use tokio::time::MissedTickBehavior;
 
@@ -406,6 +410,24 @@ impl HlsSessionWorker {
             }
 
             let realtime_by_buffer = should_use_realtime(transcoded_until, now);
+            let transcode_state = self.session_state();
+            let transcode_cursor =
+                hls_transcode_request_time(transcode_state, transcoded_until, now);
+            let live_remote_stream =
+                match current_remote_stream_is_live(&pool, self.channel_id, transcode_cursor).await
+                {
+                    Ok(is_live) => is_live,
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            channel_id = self.channel_id,
+                            channel_number = %self.channel_number,
+                            "failed to determine live Remote Stream state; stopping hls worker"
+                        );
+                        break;
+                    }
+                };
+            let force_realtime = realtime_by_buffer || live_remote_stream;
             let recently_accessed = self.was_recently_accessed();
             if idle_timeout.is_some() && !recently_accessed {
                 self.set_admission_status(HlsAdmissionStatus::Waiting);
@@ -423,7 +445,7 @@ impl HlsSessionWorker {
                 continue;
             }
 
-            let work_ahead_reservation = if realtime_by_buffer {
+            let work_ahead_reservation = if force_realtime {
                 None
             } else {
                 let work_ahead_limit = match load_hls_work_ahead_limit(&pool).await {
@@ -440,7 +462,7 @@ impl HlsSessionWorker {
                 };
                 try_reserve_work_ahead(work_ahead_limit)
             };
-            let realtime = realtime_by_buffer || work_ahead_reservation.is_none();
+            let realtime = force_realtime || work_ahead_reservation.is_none();
             let active_transcode_kind = if realtime {
                 ActiveTranscodeKind::HlsRealtime
             } else {
@@ -532,8 +554,7 @@ impl HlsSessionWorker {
             let _admission_status_guard = AdmissionStatusGuard::new(&self);
             let active_transcode_slot_id = active_transcode_reservation.slot_id();
             let watch_idle_timeout = transcode_watch_idle_timeout(idle_timeout);
-            let decision =
-                hls_transcode_decision(self.session_state(), transcoded_until, now, realtime);
+            let decision = hls_transcode_decision(transcode_state, transcoded_until, now, realtime);
             self.set_session_state(decision.state);
 
             if decision.state.is_slug() {
@@ -673,7 +694,15 @@ impl HlsSessionWorker {
             } else {
                 playout_start_duration(decision.request_time, active.playout_start)
             };
-            let start_position = active.content_seek_position(elapsed);
+            let is_live_remote = active
+                .remote_stream
+                .as_ref()
+                .is_some_and(|stream| stream.is_live);
+            let start_position = if is_live_remote {
+                Duration::ZERO
+            } else {
+                active.content_seek_position(elapsed)
+            };
             let start_seconds = duration_as_i64_seconds(start_position);
             let duration = hls_playout_item_duration(
                 &active,
@@ -1038,13 +1067,17 @@ impl HlsSessionWorker {
                 active.content_duration,
                 active.playout_start,
             );
-            let command = build_hls_command_with_explicit_discontinuity(
-                &active.media_path,
-                &self.working_dir,
+            let media_input = active.remote_stream.as_ref().map_or_else(
+                || InputFile::video(active.media_path.clone()),
+                remote_stream_input_file,
+            );
+            let remote_stream = active.remote_stream.clone();
+            let command = build_hls_command_with_input_explicit_discontinuity(
+                media_input,
                 self.output_format,
                 is_first,
                 false,
-                decision.realtime,
+                decision.realtime || is_live_remote,
                 start_position,
                 duration,
                 output_ts_offset,
@@ -1066,15 +1099,17 @@ impl HlsSessionWorker {
                 &command,
                 &runtime_capabilities,
                 source_stream_for_denial.as_ref(),
+                active.remote_stream.as_ref(),
             );
             let _ = self.trim_playlist_for_append(discontinuity).await;
             let outcome = self
-                .run_hls_process(
+                .run_hls_process_with_remote(
                     command,
                     &mut cleanup_interval,
                     idle_timeout,
                     watch_idle_timeout,
                     Some(active_transcode_slot_id),
+                    remote_stream,
                 )
                 .await;
             if let Some(path) = graphics_cleanup_dir {
@@ -1316,14 +1351,40 @@ impl HlsSessionWorker {
         watch_idle_timeout: Option<Duration>,
         active_transcode_slot_id: Option<u64>,
     ) -> HlsProcessOutcome {
-        let Ok(mut child) = self.spawn_hls_child(command) else {
+        self.run_hls_process_with_remote(
+            command,
+            cleanup_interval,
+            idle_timeout,
+            watch_idle_timeout,
+            active_transcode_slot_id,
+            None,
+        )
+        .await
+    }
+
+    async fn run_hls_process_with_remote(
+        &self,
+        command: FfmpegCommand,
+        cleanup_interval: &mut tokio::time::Interval,
+        idle_timeout: Option<Duration>,
+        watch_idle_timeout: Option<Duration>,
+        active_transcode_slot_id: Option<u64>,
+        remote_stream: Option<ResolvedRemoteStream>,
+    ) -> HlsProcessOutcome {
+        let producer = remote_stream.as_ref().and_then(remote_stream_producer);
+        let Ok(mut child) = self.spawn_hls_child_with_remote(&command, producer) else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
             return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
         };
-        let mut stderr_task = child
-            .stderr
-            .take()
-            .map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
+        let stderr_remote_stream = remote_stream.clone();
+        let mut stderr_task = child.stderr.take().map(|stderr| {
+            tokio::spawn(async move {
+                redact_remote_stderr(
+                    read_ffmpeg_stderr_tail(stderr).await,
+                    stderr_remote_stream.as_ref(),
+                )
+            })
+        });
 
         loop {
             tokio::select! {
@@ -1410,27 +1471,19 @@ impl HlsSessionWorker {
         }
     }
 
-    fn spawn_hls_child(&self, command: FfmpegCommand) -> std::io::Result<Child> {
-        let mut process = Command::new(&command.executable);
-        process
-            .args(&command.arguments)
-            .current_dir(&self.working_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-
-        for variable in command.environment {
-            process.env(variable.name, variable.value);
-        }
-
-        process.spawn()
+    fn spawn_hls_child_with_remote(
+        &self,
+        command: &FfmpegCommand,
+        remote_producer: Option<&RemoteStreamCommand>,
+    ) -> std::io::Result<RemoteStreamProcess> {
+        spawn_ffmpeg_with_remote_input(command, Some(&self.working_dir), remote_producer)
+            .map_err(std::io::Error::other)
     }
 
     async fn reclaim_hls_child_for_admission(
         &self,
         active_transcode_slot_id: Option<u64>,
-        child: &mut Child,
+        child: &mut RemoteStreamProcess,
         stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
     ) -> Option<HlsProcessOutcome> {
         let slot_id = active_transcode_slot_id?;
@@ -1509,7 +1562,7 @@ impl HlsSessionWorker {
 
     async fn terminate_hls_child(
         &self,
-        child: &mut Child,
+        child: &mut RemoteStreamProcess,
         stderr_task: Option<tokio::task::JoinHandle<String>>,
         reason: &str,
     ) {
@@ -1690,6 +1743,13 @@ async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> Str
     String::from_utf8_lossy(&tail).trim().to_owned()
 }
 
+fn redact_remote_stderr(stderr: String, remote_stream: Option<&ResolvedRemoteStream>) -> String {
+    match remote_stream {
+        Some(stream) => redact_remote_stream_output(&stderr, stream),
+        None => stderr,
+    }
+}
+
 async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>) -> String {
     match stderr_task {
         Some(task) => task
@@ -1704,6 +1764,7 @@ fn log_hls_av1_spawn_diagnostics(
     command: &FfmpegCommand,
     runtime_capabilities: &FfmpegCapabilityReport,
     source: Option<&SourceVideoStream>,
+    remote_stream: Option<&ResolvedRemoteStream>,
 ) {
     if !source.is_some_and(|source| source.codec == SourceVideoCodec::Av1) {
         return;
@@ -1727,14 +1788,25 @@ fn log_hls_av1_spawn_diagnostics(
         })
         .collect();
 
-    tracing::debug!(
-        channel_number = %channel_number,
-        executable = %command.executable,
-        arguments = ?command.arguments,
-        nvidia_av1_decoders = ?av1_decoders,
-        hardware_decode_denials = ?av1_denials,
-        "spawning hls segmenter for av1 source with runtime capability rows"
-    );
+    if let Some(remote_stream) = remote_stream {
+        tracing::debug!(
+            channel_number = %channel_number,
+            executable = %command.executable,
+            remote_source = %redacted_source_label(&remote_stream.source),
+            nvidia_av1_decoders = ?av1_decoders,
+            hardware_decode_denials = ?av1_denials,
+            "spawning hls segmenter for remote av1 source with runtime capability rows"
+        );
+    } else {
+        tracing::debug!(
+            channel_number = %channel_number,
+            executable = %command.executable,
+            arguments = ?command.arguments,
+            nvidia_av1_decoders = ?av1_decoders,
+            hardware_decode_denials = ?av1_denials,
+            "spawning hls segmenter for av1 source with runtime capability rows"
+        );
+    }
 }
 
 #[must_use]
@@ -1945,7 +2017,54 @@ fn build_hls_command_with_explicit_discontinuity(
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> FfmpegCommand {
-    let input = InputFile::video(media_path.to_string());
+    build_hls_command_with_input_explicit_discontinuity(
+        InputFile::video(media_path.to_string()),
+        output_format,
+        is_first_transcode,
+        troubleshooting,
+        hls_realtime,
+        start_position,
+        duration,
+        output_ts_offset,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        hls_discontinuity,
+        opacity_clock,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_hls_command_with_input_explicit_discontinuity(
+    input: InputFile,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    troubleshooting: bool,
+    hls_realtime: bool,
+    start_position: Duration,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    audio_selection: PlaybackAudioSelection,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    hls_discontinuity: HlsDiscontinuity,
+    opacity_clock: Option<WatermarkOpacityClock>,
+) -> FfmpegCommand {
+    let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
         &playback_profile.resolution,
@@ -1989,7 +2108,11 @@ fn build_hls_command_with_explicit_discontinuity(
     request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
     if !start_position.is_zero() {
-        request.state.start = Some(start_position);
+        if seek_after_input {
+            request.state.output_start = Some(start_position);
+        } else {
+            request.state.start = Some(start_position);
+        }
     }
     request.state.duration = duration;
     request.state.output_ts_offset = output_ts_offset;
@@ -2596,19 +2719,11 @@ fn hls_transcode_decision(
     wall_clock_now: DateTime<Utc>,
     realtime: bool,
 ) -> HlsTranscodeDecision {
-    let uses_wall_clock_request_time = matches!(
-        state,
-        HlsSessionState::SeekAndWorkAhead | HlsSessionState::PlayoutUpdated
-    );
+    let request_time = hls_transcode_request_time(state, transcoded_until, wall_clock_now);
     let state = if realtime {
         state.throttle()
     } else {
         state.accelerate()
-    };
-    let request_time = if uses_wall_clock_request_time {
-        wall_clock_now
-    } else {
-        transcoded_until
     };
 
     HlsTranscodeDecision {
@@ -2617,6 +2732,21 @@ fn hls_transcode_decision(
         working_ahead: !realtime,
         request_time,
         start_at_zero: state.start_at_zero(),
+    }
+}
+
+fn hls_transcode_request_time(
+    state: HlsSessionState,
+    transcoded_until: DateTime<Utc>,
+    wall_clock_now: DateTime<Utc>,
+) -> DateTime<Utc> {
+    if matches!(
+        state,
+        HlsSessionState::SeekAndWorkAhead | HlsSessionState::PlayoutUpdated
+    ) {
+        wall_clock_now
+    } else {
+        transcoded_until
     }
 }
 
@@ -3456,7 +3586,12 @@ async fn load_active_hls_item(
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
                   c."SubtitleMode" AS "ChannelSubtitleMode",
                   c."MusicVideoCreditsMode" AS "ChannelMusicVideoCreditsMode",
-                  c."MusicVideoCreditsTemplate" AS "ChannelMusicVideoCreditsTemplate"
+                  c."MusicVideoCreditsTemplate" AS "ChannelMusicVideoCreditsTemplate",
+                  rs."Url" AS "RemoteUrl",
+                  rs."Script" AS "RemoteScript",
+                  rs."Duration" AS "RemoteDuration",
+                  rs."FallbackQuery" AS "RemoteFallbackQuery",
+                  rs."IsLive" AS "RemoteIsLive"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "Channel" c ON c."Id" = p."ChannelId"
@@ -3470,6 +3605,7 @@ async fn load_active_hls_item(
                OR mv."ImageId" = pi."MediaItemId"
            ) AND (pi."MediaVersionId" IS NULL OR mv."Id" = pi."MediaVersionId")
            JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
+           LEFT JOIN "RemoteStream" rs ON rs."Id" = mv."RemoteStreamId"
            WHERE p."ChannelId" = ?
              AND pi."Start" <= ?
              AND pi."Finish" > ?
@@ -3488,7 +3624,33 @@ async fn load_active_hls_item(
     };
 
     let media_path = decode_hls_column::<String>(&row, "MediaPath")?;
-    let resolved = if path_replacements.is_empty() {
+    let remote_url = decode_hls_column::<Option<String>>(&row, "RemoteUrl")?;
+    let remote_script = decode_hls_column::<Option<String>>(&row, "RemoteScript")?;
+    let remote_stream = if remote_url.is_some() || remote_script.is_some() {
+        let definition = RemoteStreamDefinition {
+            url: remote_url,
+            script: remote_script,
+            duration: decode_hls_column(&row, "RemoteDuration")?,
+            fallback_query: decode_hls_column(&row, "RemoteFallbackQuery")?,
+            is_live: decode_hls_column::<Option<i64>>(&row, "RemoteIsLive")?
+                .is_some_and(|value| value != 0),
+            title: None,
+            plot: None,
+            year: None,
+            content_rating: None,
+        };
+        Some(
+            resolve_remote_stream(&definition, Path::new(&media_path)).map_err(|error| {
+                RepositoryError::Decode {
+                    kind: "active HLS remote stream",
+                    value: error.to_string(),
+                }
+            })?,
+        )
+    } else {
+        None
+    };
+    let resolved = if remote_stream.is_some() || path_replacements.is_empty() {
         media_path
     } else {
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
@@ -3604,7 +3766,37 @@ async fn load_active_hls_item(
             &row,
             "ChannelMusicVideoCreditsTemplate",
         )?,
+        remote_stream,
     }))
+}
+
+async fn current_remote_stream_is_live(
+    pool: &DbPool,
+    channel_id: i64,
+    transcode_at: DateTime<Utc>,
+) -> RepositoryResult<bool> {
+    let transcode_at_text = encode_datetime(transcode_at);
+    let is_live = sqlx::query_scalar::<_, i64>(
+        r#"SELECT CASE
+                       WHEN rs."IsLive" <> 0 OR LOWER(rs."Url") LIKE 'rtsp:%' THEN 1
+                       ELSE 0
+                   END
+           FROM "PlayoutItem" pi
+           JOIN "Playout" p ON p."Id" = pi."PlayoutId"
+           JOIN "RemoteStream" rs ON rs."Id" = pi."MediaItemId"
+           WHERE p."ChannelId" = ?
+             AND pi."Start" <= ?
+             AND pi."Finish" > ?
+           ORDER BY pi."Start" DESC, pi."Id" DESC
+           LIMIT 1"#,
+    )
+    .bind(channel_id)
+    .bind(&transcode_at_text)
+    .bind(&transcode_at_text)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    Ok(is_live.is_some_and(|value| value != 0))
 }
 
 fn decode_hls_column<T>(row: &crate::db::DbRow, column: &'static str) -> RepositoryResult<T>
@@ -3660,6 +3852,7 @@ struct ActiveHlsItem {
     channel_watermark_id: Option<i64>,
     channel_music_video_credits_mode: ChannelMusicVideoCreditsMode,
     channel_music_video_credits_template: Option<String>,
+    remote_stream: Option<ResolvedRemoteStream>,
 }
 
 impl ActiveHlsItem {
@@ -4389,6 +4582,8 @@ async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Stdio;
+
     use super::*;
     use crate::transcode_capacity::ActiveTranscodeReclaimReason;
     use ersatzrs_domain::{
@@ -4396,7 +4591,6 @@ mod tests {
         HardwareAccelerationKind, Resolution, WatermarkLocation, WatermarkSize,
     };
     use ersatzrs_ffmpeg::{PixelFormat, WatermarkOverlay};
-    use std::process::Stdio;
     use tokio::time::timeout;
     use uuid::Uuid;
 
@@ -4688,6 +4882,10 @@ mod tests {
         assert!(!throttled.working_ahead);
         assert_eq!(throttled.request_time, transcoded_until);
         assert!(throttled.start_at_zero);
+        assert_eq!(
+            hls_transcode_request_time(HlsSessionState::ZeroAndWorkAhead, transcoded_until, now),
+            transcoded_until
+        );
     }
 
     #[test]
@@ -5159,6 +5357,45 @@ mod tests {
 
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
+    async fn live_remote_stream_lookup_uses_transcode_cursor_not_wall_clock() {
+        let pool = active_hls_item_test_pool().await;
+        let wall_clock_now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("wall clock")
+            .with_timezone(&Utc);
+        let transcode_cursor = DateTime::parse_from_rfc3339("2026-06-08T12:01:30Z")
+            .expect("transcode cursor")
+            .with_timezone(&Utc);
+        sqlx::query(
+            r#"INSERT INTO "RemoteStream" (
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
+               ) VALUES (30, 'https://example.test/live.m3u8', NULL, NULL, NULL, 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote stream");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutItem" (
+                   "Id", "MediaItemId", "PlayoutId", "InPoint", "Start", "Finish",
+                   "DisableWatermarks", "SubtitleMode"
+               ) VALUES (
+                   13, 30, 11, '00:00:00', '2026-06-08 12:01:00',
+                   '2026-06-08 12:03:00', 0, 0
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("next live playout item");
+
+        assert!(!current_remote_stream_is_live(&pool, 7, wall_clock_now)
+            .await
+            .expect("wall-clock liveness"));
+        assert!(current_remote_stream_is_live(&pool, 7, transcode_cursor)
+            .await
+            .expect("cursor liveness"));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
     async fn active_hls_item_loader_preserves_absence_decode_and_database_failure() {
         let pool = active_hls_item_test_pool().await;
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
@@ -5191,6 +5428,53 @@ mod tests {
         assert!(active.has_pinned_stream_selection);
         assert_eq!(active.audio_stream_index, None);
         assert_eq!(active.subtitle_stream_index, None);
+
+        sqlx::query(
+            r#"INSERT INTO "RemoteStream" (
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
+               ) VALUES (
+                   30, NULL, '"tools/live producer.sh"', NULL, NULL, 1
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote stream");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" ("Id", "Duration", "RemoteStreamId")
+               VALUES (31, '00:00:00', 30)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path")
+               VALUES (31, '/media/streams/live.yml')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote definition file");
+        sqlx::query(
+            r#"UPDATE "PlayoutItem"
+               SET "MediaItemId" = 30, "MediaVersionId" = 31
+               WHERE "Id" = 12"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("select remote stream");
+
+        assert!(current_remote_stream_is_live(&pool, 7, now)
+            .await
+            .expect("load current live state"));
+        let active = load_active_hls_item(&pool, 7, &[], now)
+            .await
+            .expect("load active remote HLS item")
+            .expect("active remote HLS item");
+        let remote = active.remote_stream.expect("resolved remote stream");
+        assert!(remote.is_live);
+        assert!(matches!(
+            remote.source,
+            crate::remote_stream::RemoteStreamSource::Script(_)
+        ));
 
         pool.close().await;
         assert!(matches!(
@@ -5255,6 +5539,14 @@ mod tests {
             r#"CREATE TABLE "MediaFile" (
                 "MediaVersionId" INTEGER NOT NULL,
                 "Path" TEXT NULL
+            )"#,
+            r#"CREATE TABLE "RemoteStream" (
+                "Id" INTEGER PRIMARY KEY,
+                "Url" TEXT NULL,
+                "Script" TEXT NULL,
+                "Duration" TEXT NULL,
+                "FallbackQuery" TEXT NULL,
+                "IsLive" INTEGER NOT NULL
             )"#,
         ] {
             sqlx::query(statement)
@@ -7374,6 +7666,7 @@ mod tests {
             channel_watermark_id: None,
             channel_music_video_credits_mode: ChannelMusicVideoCreditsMode::None,
             channel_music_video_credits_template: None,
+            remote_stream: None,
         }
     }
 

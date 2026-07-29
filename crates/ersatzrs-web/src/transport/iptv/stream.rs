@@ -1,6 +1,7 @@
+#[cfg(test)]
+use std::process::Stdio;
 use std::{
     path::PathBuf,
-    process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -50,6 +51,11 @@ use ersatzrs_infra::playback::{
     CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
     PlaybackSubtitle,
 };
+use ersatzrs_infra::remote_stream::{
+    redact_remote_stream_output, remote_stream_input_file, remote_stream_producer,
+    resolve_remote_stream, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
+    RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+};
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
@@ -58,6 +64,7 @@ use ersatzrs_infra::transcode_capacity::{
 use serde::Deserialize;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
+#[cfg(test)]
 use tokio::process::Command;
 use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
@@ -257,7 +264,7 @@ async fn serve_channel_stream_with_channel(
             Err(response) => return response,
         };
 
-    let resolved = if replacements.is_empty() {
+    let resolved = if active.remote_stream.is_some() || replacements.is_empty() {
         active.media_path.clone()
     } else {
         replace_path(&replacements, &active.media_path, PathPlatform::Unix)
@@ -376,7 +383,15 @@ async fn serve_channel_stream_with_channel(
         preferred_audio_title,
         effective_streaming_mode,
     );
-    let start_position = active.content_seek_position(now);
+    let start_position = if active
+        .remote_stream
+        .as_ref()
+        .is_some_and(|stream| stream.is_live)
+    {
+        Duration::ZERO
+    } else {
+        active.content_seek_position(now)
+    };
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
     let custom_selection = if active.has_pinned_stream_selection {
@@ -591,8 +606,13 @@ async fn serve_channel_stream_with_channel(
         active.content_duration,
         channel_start_time,
     );
-    let command = build_stream_command_with_opacity_clock(
-        &resolved,
+    let media_input = active.remote_stream.as_ref().map_or_else(
+        || InputFile::video(resolved.clone()),
+        remote_stream_input_file,
+    );
+    let remote_stream = active.remote_stream.clone();
+    let command = build_stream_command_with_input_and_opacity_clock(
+        media_input.clone(),
         output_format,
         start_position,
         stream_duration,
@@ -618,7 +638,7 @@ async fn serve_channel_stream_with_channel(
         acceleration: effective_acceleration,
         source_stream: source_stream.clone(),
         rebuild: {
-            let resolved = resolved.clone();
+            let media_input = media_input.clone();
             let channel_number = channel.number.clone();
             Box::new(move |mode| {
                 let (capabilities, force_software_encode) = match mode {
@@ -634,8 +654,8 @@ async fn serve_channel_stream_with_channel(
                     force_software_encode,
                     "rebuilding channel stream command after runtime hardware rejection"
                 );
-                build_stream_command_with_opacity_clock(
-                    &resolved,
+                build_stream_command_with_input_and_opacity_clock(
+                    media_input,
                     output_format,
                     start_position,
                     stream_duration,
@@ -670,6 +690,7 @@ async fn serve_channel_stream_with_channel(
                         slate_metadata,
                         slate_runtime_capabilities,
                         Some(retry),
+                        remote_stream.clone(),
                     )
                     .await;
                 }
@@ -694,6 +715,7 @@ async fn serve_channel_stream_with_channel(
         state.hls_sessions.clone(),
         capacity_reservation,
         Some(retry),
+        remote_stream,
     ) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -817,6 +839,7 @@ async fn serve_segmenter_wrapper_stream(
                 metadata,
                 runtime_capabilities,
                 None,
+                None,
             )
             .await;
         }
@@ -837,6 +860,7 @@ async fn serve_segmenter_wrapper_stream(
         channel.number.clone(),
         state.hls_sessions.clone(),
         capacity_reservation,
+        None,
         None,
     ) {
         Ok(body) => {
@@ -945,6 +969,7 @@ async fn serve_legacy_concat_stream(
                 metadata,
                 runtime_capabilities,
                 None,
+                None,
             )
             .await;
         }
@@ -965,6 +990,7 @@ async fn serve_legacy_concat_stream(
         channel.number.clone(),
         state.hls_sessions.clone(),
         capacity_reservation,
+        None,
         None,
     ) {
         Ok(body) => {
@@ -1087,6 +1113,7 @@ async fn mpeg_ts_capacity_wait_response(
     metadata: OutputMetadata,
     runtime_capabilities: FfmpegCapabilityReport,
     retry: Option<StreamDenialRetry>,
+    remote_stream: Option<ResolvedRemoteStream>,
 ) -> Response {
     let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
     let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
@@ -1124,6 +1151,7 @@ async fn mpeg_ts_capacity_wait_response(
         state.hls_sessions.clone(),
         state.pool.clone(),
         retry,
+        remote_stream,
     );
     let mut response = body.into_response();
     response
@@ -1411,6 +1439,7 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) video_stream_index: Option<i32>,
     pub(crate) audio_stream_index: Option<i32>,
     pub(crate) subtitle_stream_index: Option<i32>,
+    pub(crate) remote_stream: Option<ResolvedRemoteStream>,
 }
 
 impl ActivePlayoutItem {
@@ -1473,7 +1502,12 @@ pub(crate) async fn load_active_media_path(
                   pi."MediaVersionId" AS "PinnedMediaVersionId",
                   pi."VideoStreamIndex" AS "VideoStreamIndex",
                   pi."AudioStreamIndex" AS "AudioStreamIndex",
-                  pi."SubtitleStreamIndex" AS "SubtitleStreamIndex"
+                  pi."SubtitleStreamIndex" AS "SubtitleStreamIndex",
+                  rs."Url" AS "RemoteUrl",
+                  rs."Script" AS "RemoteScript",
+                  rs."Duration" AS "RemoteDuration",
+                  rs."FallbackQuery" AS "RemoteFallbackQuery",
+                  rs."IsLive" AS "RemoteIsLive"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "MediaVersion" mv ON (
@@ -1486,6 +1520,7 @@ pub(crate) async fn load_active_media_path(
                OR mv."ImageId" = pi."MediaItemId"
            ) AND (pi."MediaVersionId" IS NULL OR mv."Id" = pi."MediaVersionId")
            JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
+           LEFT JOIN "RemoteStream" rs ON rs."Id" = mv."RemoteStreamId"
            WHERE p."ChannelId" = ?
              AND pi."Start" <= ?
              AND pi."Finish" > ?
@@ -1529,10 +1564,38 @@ pub(crate) async fn load_active_media_path(
             })
         })
         .transpose()?;
+    let media_path = decode_active_item_column::<String>(&row, "MediaPath")?;
+    let remote_url = decode_active_item_column::<Option<String>>(&row, "RemoteUrl")?;
+    let remote_script = decode_active_item_column::<Option<String>>(&row, "RemoteScript")?;
+    let remote_stream = if remote_url.is_some() || remote_script.is_some() {
+        let is_live = decode_active_item_column::<Option<i64>>(&row, "RemoteIsLive")?
+            .is_some_and(|value| value != 0);
+        let definition = RemoteStreamDefinition {
+            url: remote_url,
+            script: remote_script,
+            duration: decode_active_item_column(&row, "RemoteDuration")?,
+            fallback_query: decode_active_item_column(&row, "RemoteFallbackQuery")?,
+            is_live,
+            title: None,
+            plot: None,
+            year: None,
+            content_rating: None,
+        };
+        Some(
+            resolve_remote_stream(&definition, std::path::Path::new(&media_path)).map_err(
+                |error| RepositoryError::Decode {
+                    kind: "active remote stream",
+                    value: error.to_string(),
+                },
+            )?,
+        )
+    } else {
+        None
+    };
 
     Ok(Some(ActivePlayoutItem {
         playout_item_id: decode_active_item_column(&row, "PlayoutItemId")?,
-        media_path: decode_active_item_column(&row, "MediaPath")?,
+        media_path,
         media_item_id: decode_active_item_column(&row, "MediaItemId")?,
         media_version_id: decode_active_item_column(&row, "MediaVersionId")?,
         content_duration: Some(content_duration),
@@ -1559,6 +1622,7 @@ pub(crate) async fn load_active_media_path(
         video_stream_index: decode_active_item_column(&row, "VideoStreamIndex")?,
         audio_stream_index: decode_active_item_column(&row, "AudioStreamIndex")?,
         subtitle_stream_index: decode_active_item_column(&row, "SubtitleStreamIndex")?,
+        remote_stream,
     }))
 }
 
@@ -1745,6 +1809,7 @@ fn build_stream_command(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn build_stream_command_with_opacity_clock(
     path: &str,
     output_format: OutputFormat,
@@ -1763,7 +1828,46 @@ fn build_stream_command_with_opacity_clock(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> FfmpegCommand {
-    let input = InputFile::video(path.to_string());
+    build_stream_command_with_input_and_opacity_clock(
+        InputFile::video(path.to_string()),
+        output_format,
+        start_position,
+        duration,
+        playback_profile,
+        target_frame_rate,
+        streaming_mode,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        opacity_clock,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_stream_command_with_input_and_opacity_clock(
+    input: InputFile,
+    output_format: OutputFormat,
+    start_position: Duration,
+    duration: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    streaming_mode: ersatzrs_domain::StreamingMode,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    audio_selection: PlaybackAudioSelection,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+) -> FfmpegCommand {
+    let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
         output_format,
         streaming_mode,
@@ -1828,7 +1932,11 @@ fn build_stream_command_with_opacity_clock(
     request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
     if !start_position.is_zero() {
-        request.state.start = Some(start_position);
+        if seek_after_input {
+            request.state.output_start = Some(start_position);
+        } else {
+            request.state.start = Some(start_position);
+        }
     }
     request.state.duration = duration;
     request.state.metadata = metadata;
@@ -2194,20 +2302,9 @@ enum DirectStreamOutcome {
 
 fn spawn_stream_process(
     command: &FfmpegCommand,
-) -> Result<tokio::process::Child, StreamSpawnError> {
-    let mut process = Command::new(&command.executable);
-    process
-        .args(&command.arguments)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-
-    for variable in &command.environment {
-        process.env(&variable.name, &variable.value);
-    }
-
-    process
-        .spawn()
+    remote_producer: Option<&RemoteStreamCommand>,
+) -> Result<RemoteStreamProcess, StreamSpawnError> {
+    spawn_ffmpeg_with_remote_input(command, None, remote_producer)
         .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
 }
 
@@ -2218,8 +2315,12 @@ fn spawn_stream_body(
     session_registry: Arc<dyn HlsSessionRegistry>,
     capacity_reservation: Option<ActiveTranscodeReservation>,
     retry: Option<StreamDenialRetry>,
+    remote_stream: Option<ResolvedRemoteStream>,
 ) -> Result<Body, StreamSpawnError> {
-    let child = spawn_stream_process(command)?;
+    let child = spawn_stream_process(
+        command,
+        remote_stream.as_ref().and_then(remote_stream_producer),
+    )?;
     if child.stdout.is_none() {
         return Err(StreamSpawnError::MissingStdout);
     }
@@ -2238,6 +2339,7 @@ fn spawn_stream_body(
             &cancel,
             &channel_number,
             &mut retry,
+            remote_stream.as_ref(),
         )
         .await;
         if registered {
@@ -2251,6 +2353,7 @@ fn spawn_stream_body(
     Ok(guarded_stream_body(reader, handle_cancel))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_stream_body_waiting_for_mpegts_capacity(
     command: FfmpegCommand,
     slate_command: FfmpegCommand,
@@ -2259,6 +2362,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     session_registry: Arc<dyn HlsSessionRegistry>,
     pool: DbPool,
     retry: Option<StreamDenialRetry>,
+    remote_stream: Option<ResolvedRemoteStream>,
 ) -> Body {
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
@@ -2285,7 +2389,10 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
             ) {
                 let _capacity_reservation = reservation;
-                match spawn_stream_process(&command) {
+                match spawn_stream_process(
+                    &command,
+                    remote_stream.as_ref().and_then(remote_stream_producer),
+                ) {
                     Ok(child) => {
                         let _ = supervise_stream_command_with_retry(
                             child,
@@ -2293,6 +2400,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                             &cancel,
                             &channel_number,
                             &mut retry,
+                            remote_stream.as_ref(),
                         )
                         .await;
                     }
@@ -2317,7 +2425,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 limit,
                 "serving MPEG-TS all-streams-in-use slate without reserving transcode capacity"
             );
-            let mut slate_child = match spawn_stream_process(&slate_command) {
+            let mut slate_child = match spawn_stream_process(&slate_command, None) {
                 Ok(child) => child,
                 Err(error) => {
                     tracing::warn!(
@@ -2328,8 +2436,14 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                     break;
                 }
             };
-            match supervise_stream_process(&mut slate_child, &mut writer, &cancel, &channel_number)
-                .await
+            match supervise_stream_process(
+                &mut slate_child,
+                &mut writer,
+                &cancel,
+                &channel_number,
+                None,
+            )
+            .await
             {
                 DirectStreamOutcome::Completed => {
                     tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
@@ -2357,14 +2471,17 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
 }
 
 async fn supervise_stream_command_with_retry(
-    mut child: tokio::process::Child,
+    mut child: RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
     cancel: &Arc<Notify>,
     channel_number: &str,
     retry: &mut Option<StreamDenialRetry>,
+    remote_stream: Option<&ResolvedRemoteStream>,
 ) -> DirectStreamOutcome {
     loop {
-        let outcome = supervise_stream_process(&mut child, writer, cancel, channel_number).await;
+        let outcome =
+            supervise_stream_process(&mut child, writer, cancel, channel_number, remote_stream)
+                .await;
         let DirectStreamOutcome::Failed(stderr) = outcome else {
             return outcome;
         };
@@ -2399,9 +2516,10 @@ async fn supervise_stream_command_with_retry(
                     "failed to persist runtime-learned hardware decode denial"
                 );
             }
-            match spawn_stream_process(&rebuild(StreamRetryMode::HardwareDecodeDenied(
-                capabilities,
-            ))) {
+            match spawn_stream_process(
+                &rebuild(StreamRetryMode::HardwareDecodeDenied(capabilities)),
+                remote_stream.and_then(remote_stream_producer),
+            ) {
                 Ok(next) => child = next,
                 Err(error) => {
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
@@ -2422,9 +2540,10 @@ async fn supervise_stream_command_with_retry(
             acceleration = ?acceleration,
             "retrying channel stream once with software video encode after runtime hardware encoder rejection"
         );
-        match spawn_stream_process(&rebuild(StreamRetryMode::HardwareEncodeDenied(
-            runtime_capabilities,
-        ))) {
+        match spawn_stream_process(
+            &rebuild(StreamRetryMode::HardwareEncodeDenied(runtime_capabilities)),
+            remote_stream.and_then(remote_stream_producer),
+        ) {
             Ok(next) => child = next,
             Err(error) => {
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
@@ -2448,16 +2567,23 @@ fn guarded_stream_body(reader: tokio::io::DuplexStream, cancel: Arc<Notify>) -> 
 }
 
 async fn supervise_stream_process(
-    child: &mut tokio::process::Child,
+    child: &mut RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
     cancel: &Arc<Notify>,
     channel_number: &str,
+    remote_stream: Option<&ResolvedRemoteStream>,
 ) -> DirectStreamOutcome {
     let mut stdout = child.stdout.take();
-    let stderr_task = child
-        .stderr
-        .take()
-        .map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
+    let stderr_remote_stream = remote_stream.cloned();
+    let stderr_task = child.stderr.take().map(|stderr| {
+        tokio::spawn(async move {
+            let stderr = read_ffmpeg_stderr_tail(stderr).await;
+            match stderr_remote_stream {
+                Some(stream) => redact_remote_stream_output(&stderr, &stream),
+                None => stderr,
+            }
+        })
+    });
 
     // Pump stdout into the response body until EOF (process exit), a body
     // write failure (client gone), or session cancellation.
@@ -2684,6 +2810,53 @@ mod tests {
         assert!(active.has_pinned_stream_selection);
         assert_eq!(active.audio_stream_index, None);
         assert_eq!(active.subtitle_stream_index, None);
+
+        sqlx::query(
+            r#"INSERT INTO "RemoteStream" (
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
+               ) VALUES (
+                   30, 'https://user:secret@example.test/live.m3u8?token=hidden',
+                   NULL, NULL, 'tag:backup', 1
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote stream");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" ("Id", "Duration", "RemoteStreamId")
+               VALUES (31, '00:00:00', 30)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path")
+               VALUES (31, '/media/streams/live.yml')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("remote definition file");
+        sqlx::query(
+            r#"UPDATE "PlayoutItem"
+               SET "MediaItemId" = 30, "MediaVersionId" = 31
+               WHERE "Id" = 12"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("select remote stream");
+
+        let active = load_active_media_path(&pool, 7, now)
+            .await
+            .expect("load active remote stream")
+            .expect("active remote stream");
+        let remote = active.remote_stream.expect("resolved remote stream");
+        assert!(remote.is_live);
+        assert!(matches!(
+            remote.source,
+            ersatzrs_infra::remote_stream::RemoteStreamSource::Url(ref url)
+                if url.contains("live.m3u8")
+        ));
+        assert_eq!(active.media_path, "/media/streams/live.yml");
     }
 
     #[test]
@@ -2746,6 +2919,14 @@ mod tests {
             r#"CREATE TABLE "MediaFile" (
                 "MediaVersionId" INTEGER NOT NULL,
                 "Path" TEXT NULL
+            )"#,
+            r#"CREATE TABLE "RemoteStream" (
+                "Id" INTEGER PRIMARY KEY,
+                "Url" TEXT NULL,
+                "Script" TEXT NULL,
+                "Duration" TEXT NULL,
+                "FallbackQuery" TEXT NULL,
+                "IsLive" INTEGER NOT NULL
             )"#,
         ] {
             sqlx::query(statement)
@@ -3237,6 +3418,7 @@ mod tests {
             video_stream_index: None,
             audio_stream_index: None,
             subtitle_stream_index: None,
+            remote_stream: None,
         }
     }
 
@@ -3631,6 +3813,7 @@ mod tests {
             Arc::clone(&registry),
             None,
             None,
+            None,
         )
         .expect("spawn stream body");
         let grandchild_running = || async {
@@ -3697,6 +3880,7 @@ mod tests {
             registry,
             Some(reservation),
             None,
+            None,
         )
         .expect("spawn stream body");
 
@@ -3722,6 +3906,7 @@ mod tests {
             "92".to_owned(),
             registry,
             Some(reservation),
+            None,
             None,
         )
         .expect("spawn stream body");
@@ -3751,6 +3936,7 @@ mod tests {
             "93".to_owned(),
             registry,
             pool,
+            None,
             None,
         );
         let release = tokio::spawn(async move {
@@ -3824,6 +4010,7 @@ mod tests {
             registry,
             pool,
             None,
+            None,
         );
 
         let bytes = axum::body::to_bytes(body, 64 * 1024)
@@ -3879,6 +4066,7 @@ mod tests {
             Vec::new(),
             "97".to_owned(),
             Arc::clone(&registry),
+            None,
             None,
             None,
         )

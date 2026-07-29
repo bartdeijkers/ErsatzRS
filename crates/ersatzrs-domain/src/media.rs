@@ -226,7 +226,11 @@ pub struct Image {
 pub struct RemoteStream {
     pub item: MediaItem,
     pub metadata_id: Option<EntityId>,
-    pub url: String,
+    pub duration: Option<Duration>,
+    pub fallback_query: Option<String>,
+    pub script: Option<String>,
+    pub url: Option<String>,
+    pub is_live: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

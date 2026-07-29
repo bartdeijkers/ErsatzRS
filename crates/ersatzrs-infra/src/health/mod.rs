@@ -23,7 +23,7 @@ use checks::{
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
     HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MovieMetadataHealthCheck,
     PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, SearchProjectionHealthCheck,
+    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
     SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
     VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
@@ -49,7 +49,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 22] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 23] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -65,6 +65,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 22] = [
     "Movie Metadata",
     "Episode Metadata",
     "Zero Duration",
+    "Remote Streams",
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
@@ -185,6 +186,7 @@ fn registered_health_checks(
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),
         Box::new(EpisodeMetadataHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
+        Box::new(RemoteStreamHealthCheck::new(pool.clone())),
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
@@ -845,6 +847,28 @@ mod tests {
         let result = check.check().await.expect("zero duration check");
 
         assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn remote_stream_check_is_structural_and_does_not_contact_source() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_remote_stream_with_zero_duration(&pool).await;
+
+        let check = RemoteStreamHealthCheck::new(pool.clone());
+        let result = check.check().await.expect("remote stream check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+
+        sqlx::query(r#"UPDATE "RemoteStream" SET "Url" = NULL, "Script" = NULL WHERE "Id" = 22"#)
+            .execute(&pool)
+            .await
+            .expect("invalidate remote stream");
+        let result = check.check().await.expect("invalid remote stream check");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            result.brief_message,
+            "One or more Remote Stream definitions are invalid"
+        );
     }
 
     #[tokio::test]

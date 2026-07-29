@@ -27,6 +27,7 @@ and [release bundle reference](reference/release-bundle.md).
 ## Add media
 
 - [Add and scan a local library](how-to/add-and-scan-a-local-library.md)
+- [Add Remote Streams](how-to/add-remote-streams.md)
 - [Connect a Jellyfin server](how-to/connect-a-jellyfin-server.md)
 - [Media source support](reference/media-source-support.md)
 

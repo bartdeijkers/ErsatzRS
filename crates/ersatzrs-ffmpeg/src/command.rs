@@ -357,4 +357,26 @@ mod tests {
 
         insta::assert_snapshot!("mpegts_concat_default", command.arguments.join(" "));
     }
+
+    #[test]
+    fn output_seek_is_rendered_after_non_seekable_input() {
+        let arguments = CommandGenerator::generate_arguments(
+            &[InputFile::video("pipe:0").with_input_options(["-f", "mpegts"])],
+            &[
+                PipelineStep::generic("output_seek", ["-ss", "00:02:03.000"]),
+                pipe_output(),
+            ],
+            false,
+        );
+        let input_index = arguments
+            .windows(2)
+            .position(|pair| pair == ["-i", "pipe:0"])
+            .expect("input");
+        let seek_index = arguments
+            .windows(2)
+            .position(|pair| pair == ["-ss", "00:02:03.000"])
+            .expect("seek");
+
+        assert!(seek_index > input_index, "{arguments:?}");
+    }
 }

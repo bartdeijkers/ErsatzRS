@@ -19,6 +19,9 @@ use ersatzrs_infra::metadata::{
     artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
     update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
+use ersatzrs_infra::remote_stream::{
+    parse_remote_stream_definition, resolve_remote_stream, RemoteStreamError,
+};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
@@ -45,6 +48,13 @@ pub enum ScannerError {
     UnsupportedLibraryMediaKind(LibraryMediaKind),
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+    #[error(transparent)]
+    RemoteStream(#[from] RemoteStreamError),
+    #[error("failed to read remote stream definition {path}: {source}")]
+    RemoteStreamRead {
+        path: String,
+        source: std::io::Error,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, ScannerError>;
@@ -58,6 +68,8 @@ pub struct LocalScanConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocalScanReport {
     pub scanned_files: usize,
+    pub failed_files: usize,
+    pub issues: Vec<String>,
 }
 
 /// One pre-enumerated unit of work for the local scanner. Materializing the
@@ -214,6 +226,7 @@ async fn scan_local_library_with_progress_once(
         match bucket.kind {
             LocalScanBucketKind::Items(items) => {
                 for work in items {
+                    let is_remote_stream = matches!(&work, LocalScanWork::RemoteStream { .. });
                     match work {
                         LocalScanWork::ExtraVideo { path, extra } => {
                             let parent_media_item_id =
@@ -272,13 +285,73 @@ async fn scan_local_library_with_progress_once(
                             .await?;
                         }
                         LocalScanWork::RemoteStream { path } => {
-                            retry_sqlite_busy(|| async {
-                                upsert_local_remote_stream(pool, &library_path, &path).await
-                            })
-                            .await?;
+                            let result = match load_remote_stream_definition(&path) {
+                                Ok((definition, resolved)) => {
+                                    let ffmpeg_path = paired_ffmpeg_path(&config.ffprobe_path);
+                                    let probed = match extractor
+                                        .extract_remote(&resolved, &ffmpeg_path)
+                                        .await
+                                    {
+                                        Ok(probed) => Some(probed),
+                                        Err(error) => {
+                                            warn!(
+                                                error = %error,
+                                                definition = %path
+                                                    .strip_prefix(&library_path.path)
+                                                    .unwrap_or(&path)
+                                                    .display(),
+                                                "remote stream probe failed; persisting definition with configured duration"
+                                            );
+                                            None
+                                        }
+                                    };
+                                    retry_sqlite_busy(|| {
+                                        let definition = definition.clone();
+                                        let resolved = resolved.clone();
+                                        let probed = probed.clone();
+                                        let library_path = &library_path;
+                                        let path = &path;
+                                        async move {
+                                            upsert_local_remote_stream(
+                                                pool,
+                                                library_path,
+                                                path,
+                                                &definition,
+                                                &resolved,
+                                                probed.as_ref(),
+                                            )
+                                            .await
+                                        }
+                                    })
+                                    .await
+                                }
+                                Err(error) => Err(error),
+                            };
+                            if let Err(error) = result {
+                                retry_sqlite_busy(|| async {
+                                    flag_invalid_remote_stream(pool, &path).await
+                                })
+                                .await?;
+                                report.failed_files += 1;
+                                let display_path = path
+                                    .strip_prefix(&library_path.path)
+                                    .unwrap_or(&path)
+                                    .display()
+                                    .to_string();
+                                report.issues.push(format!("{display_path}: {error}"));
+                                warn!(
+                                    error = %error,
+                                    definition = %display_path,
+                                    "remote stream definition scan failed; continuing"
+                                );
+                            } else {
+                                report.scanned_files += 1;
+                            }
                         }
                     }
-                    report.scanned_files += 1;
+                    if !is_remote_stream {
+                        report.scanned_files += 1;
+                    }
                     processed += 1;
                     if let Some(sink) = progress {
                         if total_items > 0 {
@@ -436,7 +509,11 @@ fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
                 .extension()
                 .and_then(|extension| extension.to_str())
                 .map(str::to_ascii_lowercase);
-            if matches!(extension.as_deref(), Some("yml" | "yaml")) {
+            let is_dot_underscore = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("._"));
+            if !is_dot_underscore && matches!(extension.as_deref(), Some("yml" | "yaml")) {
                 files.push(path);
             }
         }
@@ -1367,10 +1444,14 @@ fn locate_music_video_artwork(
     None
 }
 
+#[allow(clippy::too_many_lines)]
 async fn upsert_local_remote_stream(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     path: &Path,
+    definition: &ersatzrs_infra::remote_stream::RemoteStreamDefinition,
+    resolved: &ersatzrs_infra::remote_stream::ResolvedRemoteStream,
+    probed: Option<&FfprobeMediaVersion>,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     let path_text = path.display().to_string();
@@ -1378,59 +1459,97 @@ async fn upsert_local_remote_stream(
 
     let maybe_existing = sqlx::query(
         r#"SELECT "mf"."MediaVersionId",
-                  "mv"."RemoteStreamId" AS "MediaItemId"
+                  "mv"."RemoteStreamId" AS "MediaItemId",
+                  "rsm"."Id" AS "MetadataId"
            FROM "MediaFile" AS "mf"
            JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
+           JOIN "RemoteStreamMetadata" AS "rsm"
+             ON "rsm"."RemoteStreamId" = "mv"."RemoteStreamId"
            WHERE "mf"."PathHash" = ?"#,
     )
     .bind(&path_hash)
     .fetch_optional(&mut *tx)
     .await?;
 
-    let title = path
+    let fallback_title = path
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or_default()
         .to_owned();
+    let title = definition
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .unwrap_or(&fallback_title)
+        .to_owned();
+    let original_title = path
+        .strip_prefix(&library_path.path)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/");
     let now = Utc::now();
 
-    let item_id = if let Some(row) = maybe_existing {
+    let (item_id, metadata_id, version_id, existed) = if let Some(row) = maybe_existing {
         let item_id: i64 = row.get::<Option<i64>, _>("MediaItemId").unwrap_or_default();
+        let metadata_id: i64 = row.get("MetadataId");
+        let version_id: i64 = row.get("MediaVersionId");
         sqlx::query(
-            r#"UPDATE "RemoteStreamMetadata" SET "DateUpdated" = ?, "Title" = ?
-               WHERE "RemoteStreamId" = ?"#,
+            r#"UPDATE "RemoteStreamMetadata"
+               SET "DateUpdated" = ?, "MetadataKind" = 1, "Title" = ?,
+                   "OriginalTitle" = ?, "SortTitle" = ?, "Year" = ?,
+                   "ContentRating" = ?, "Plot" = ?
+               WHERE "Id" = ?"#,
         )
         .bind(encode_datetime(now))
         .bind(&title)
-        .bind(item_id)
+        .bind(&original_title)
+        .bind(&title)
+        .bind(definition.year)
+        .bind(definition.content_rating.as_deref())
+        .bind(definition.plot.as_deref())
+        .bind(metadata_id)
         .execute(&mut *tx)
         .await?;
-        item_id
+        (item_id, metadata_id, version_id, true)
     } else {
         let item_id = insert_media_item(&mut tx, library_path.id).await?;
         sqlx::query(r#"INSERT INTO "RemoteStream" ("Id") VALUES (?)"#)
             .bind(item_id)
             .execute(&mut *tx)
             .await?;
-        sqlx::query(
+        let metadata_result = sqlx::query(
             r#"INSERT INTO "RemoteStreamMetadata" (
-                "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind", "Title"
-            ) VALUES (?, ?, ?, 1, ?)"#,
+                "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind",
+                "Title", "OriginalTitle", "SortTitle", "Year", "ContentRating", "Plot"
+            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item_id)
         .bind(encode_datetime(now))
         .bind(encode_datetime(now))
         .bind(&title)
+        .bind(&original_title)
+        .bind(&title)
+        .bind(definition.year)
+        .bind(definition.content_rating.as_deref())
+        .bind(definition.plot.as_deref())
         .execute(&mut *tx)
         .await?;
+        let metadata_id = ersatzrs_infra::db::last_insert_id(metadata_result);
         let result = sqlx::query(
             r#"INSERT INTO "MediaVersion" (
                 "DateAdded", "DateUpdated", "Duration", "Height", "Name",
                 "RemoteStreamId", "VideoScanKind", "Width"
-            ) VALUES (?, ?, '00:00:00', 0, 'Main', ?, 0, 0)"#,
+            ) VALUES (?, ?, ?, 0, 'Main', ?, 0, 0)"#,
         )
         .bind(encode_datetime(now))
         .bind(encode_datetime(now))
+        .bind(
+            resolved
+                .configured_duration
+                .as_deref()
+                .unwrap_or("00:00:00"),
+        )
         .bind(item_id)
         .execute(&mut *tx)
         .await?;
@@ -1444,8 +1563,53 @@ async fn upsert_local_remote_stream(
         .bind(&path_hash)
         .execute(&mut *tx)
         .await?;
-        item_id
+        (item_id, metadata_id, version_id, false)
     };
+
+    sqlx::query(
+        r#"UPDATE "RemoteStream"
+           SET "Duration" = ?, "FallbackQuery" = ?, "Script" = ?, "Url" = ?, "IsLive" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(definition.duration.as_deref())
+    .bind(definition.fallback_query.as_deref())
+    .bind(definition.script.as_deref())
+    .bind(definition.url.as_deref())
+    .bind(i32::from(resolved.is_live))
+    .bind(item_id)
+    .execute(&mut *tx)
+    .await?;
+    if let Some(probed) = probed {
+        update_media_version(&mut tx, version_id, probed).await?;
+        replace_streams(&mut tx, version_id, &probed.streams).await?;
+        replace_chapters(&mut tx, version_id, &probed.chapters).await?;
+        if probed.version.duration <= Duration::zero() {
+            sqlx::query(r#"UPDATE "MediaVersion" SET "Duration" = ? WHERE "Id" = ?"#)
+                .bind(
+                    resolved
+                        .configured_duration
+                        .as_deref()
+                        .unwrap_or("00:00:00"),
+                )
+                .bind(version_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    } else if resolved.configured_duration.is_some() || !existed {
+        sqlx::query(
+            r#"UPDATE "MediaVersion" SET "DateUpdated" = ?, "Duration" = ? WHERE "Id" = ?"#,
+        )
+        .bind(encode_datetime(now))
+        .bind(
+            resolved
+                .configured_duration
+                .as_deref()
+                .unwrap_or("00:00:00"),
+        )
+        .bind(version_id)
+        .execute(&mut *tx)
+        .await?;
+    }
 
     sqlx::query(
         r#"UPDATE "MediaItem"
@@ -1459,8 +1623,96 @@ async fn upsert_local_remote_stream(
     .execute(&mut *tx)
     .await?;
 
+    let tags = remote_stream_folder_tags(Path::new(&library_path.path), path);
+    replace_strings(&mut tx, "Tag", "RemoteStreamMetadataId", metadata_id, &tags).await?;
+    let artwork = locate_remote_stream_artwork(path)
+        .map(|path| vec![artwork_ref(&path, artwork_kind::THUMBNAIL)])
+        .unwrap_or_default();
+    replace_artwork(
+        &mut tx,
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &[artwork_kind::THUMBNAIL],
+        &artwork,
+    )
+    .await?;
+
     tx.commit().await?;
     Ok(())
+}
+
+async fn flag_invalid_remote_stream(pool: &DbPool, path: &Path) -> Result<()> {
+    let path_hash = path_hash(&path.display().to_string());
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "State" = 1
+           WHERE "Id" IN (
+               SELECT "mv"."RemoteStreamId"
+               FROM "MediaFile" AS "mf"
+               JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
+               WHERE "mf"."PathHash" = ?
+                 AND "mv"."RemoteStreamId" IS NOT NULL
+           )"#,
+    )
+    .bind(path_hash)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+fn load_remote_stream_definition(
+    path: &Path,
+) -> Result<(
+    ersatzrs_infra::remote_stream::RemoteStreamDefinition,
+    ersatzrs_infra::remote_stream::ResolvedRemoteStream,
+)> {
+    let yaml = std::fs::read_to_string(path).map_err(|source| ScannerError::RemoteStreamRead {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let definition = parse_remote_stream_definition(&yaml)?;
+    let resolved = resolve_remote_stream(&definition, path)?;
+    Ok((definition, resolved))
+}
+
+fn paired_ffmpeg_path(ffprobe_path: &str) -> String {
+    let path = Path::new(ffprobe_path);
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("ffprobe");
+    let ffmpeg_name = if filename.to_ascii_lowercase().ends_with(".exe") {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    };
+    path.with_file_name(ffmpeg_name).display().to_string()
+}
+
+fn remote_stream_folder_tags(root: &Path, definition: &Path) -> Vec<String> {
+    let mut tags = Vec::new();
+    if let Some(root_name) = root.file_name().and_then(|name| name.to_str()) {
+        tags.push(root_name.to_owned());
+    }
+    if let Some(parent) = definition.parent() {
+        if let Ok(relative) = parent.strip_prefix(root) {
+            tags.extend(relative.components().filter_map(|component| {
+                let value = component.as_os_str().to_str()?.trim();
+                (!value.is_empty()).then(|| value.to_owned())
+            }));
+        }
+    }
+    tags
+}
+
+fn locate_remote_stream_artwork(definition: &Path) -> Option<PathBuf> {
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp"];
+    let parent = definition.parent()?;
+    let stem = definition.file_stem()?.to_str()?;
+    EXTENSIONS
+        .iter()
+        .map(|extension| parent.join(format!("{stem}.{extension}")))
+        .find(|candidate| candidate.is_file())
 }
 
 async fn upsert_local_file(
@@ -2945,6 +3197,153 @@ mod tests {
         assert_eq!(
             row.get::<Option<i64>, _>("ParentMediaItemId"),
             Some(primary_id)
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn remote_stream_scan_persists_definition_metadata_and_continues_after_invalid_yaml() {
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let news = temp.path().join("News");
+        std::fs::create_dir_all(&news).expect("news dir");
+        let definition_path = news.join("Example.yaml");
+        std::fs::write(
+            &definition_path,
+            r#"
+url: https://example.test/live.m3u8
+script: '"tools/fallback producer.sh" "ignored"'
+is_live: true
+duration: 01:02:03
+fallback_query: tag:backup
+title: Example Live
+plot: Example plot
+year: 2024
+content_rating: TV-PG
+"#,
+        )
+        .expect("definition");
+        std::fs::write(news.join("Example.jpg"), b"artwork").expect("artwork");
+        std::fs::write(
+            temp.path().join("Broken.yml"),
+            "is_live: false\nduration: invalid",
+        )
+        .expect("broken definition");
+
+        let pool = test_db().await;
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: temp.path().display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        seed_local_library(&pool, &library_path, "Remote Streams", 7).await;
+
+        let report = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "ffprobe-unused-for-definition-scan".to_owned(),
+            },
+        )
+        .await
+        .expect("scan");
+        assert_eq!(report.scanned_files, 1);
+        assert_eq!(report.failed_files, 1);
+        assert_eq!(report.issues.len(), 1);
+        assert!(report.issues[0].starts_with("Broken.yml:"));
+
+        let row = sqlx::query(
+            r#"SELECT rs."Url", rs."Script", rs."Duration", rs."FallbackQuery", rs."IsLive",
+                      rsm."Title", rsm."Plot", rsm."Year", rsm."ContentRating",
+                      mv."Duration" AS "VersionDuration", mf."Path"
+               FROM "RemoteStream" rs
+               JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
+               JOIN "MediaVersion" mv ON mv."RemoteStreamId" = rs."Id"
+               JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id""#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("remote stream row");
+        assert_eq!(
+            row.get::<Option<String>, _>("Url").as_deref(),
+            Some("https://example.test/live.m3u8")
+        );
+        assert!(row
+            .get::<Option<String>, _>("Script")
+            .is_some_and(|script| script.contains("fallback producer.sh")));
+        assert_eq!(
+            row.get::<Option<String>, _>("Duration").as_deref(),
+            Some("01:02:03")
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("FallbackQuery").as_deref(),
+            Some("tag:backup")
+        );
+        assert_eq!(row.get::<i64, _>("IsLive"), 1);
+        assert_eq!(
+            row.get::<Option<String>, _>("Title").as_deref(),
+            Some("Example Live")
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("Plot").as_deref(),
+            Some("Example plot")
+        );
+        assert_eq!(row.get::<Option<i32>, _>("Year"), Some(2024));
+        assert_eq!(
+            row.get::<Option<String>, _>("ContentRating").as_deref(),
+            Some("TV-PG")
+        );
+        assert_eq!(row.get::<String, _>("VersionDuration"), "01:02:03");
+        assert_eq!(
+            row.get::<String, _>("Path"),
+            definition_path.display().to_string()
+        );
+
+        let tags = sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Tag" ORDER BY "Name""#)
+            .fetch_all(&pool)
+            .await
+            .expect("tags");
+        assert!(tags.contains(&"News".to_owned()));
+        assert!(tags.contains(
+            &temp
+                .path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("root folder name")
+                .to_owned()
+        ));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "Artwork""#)
+                .fetch_one(&pool)
+                .await
+                .expect("artwork count"),
+            1
+        );
+
+        std::fs::write(&definition_path, "is_live: false\n").expect("invalidate definition");
+        let second_report = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "ffprobe-unused-for-definition-scan".to_owned(),
+            },
+        )
+        .await
+        .expect("second scan");
+        assert_eq!(second_report.failed_files, 2);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                r#"SELECT "State"
+                   FROM "MediaItem"
+                   JOIN "RemoteStream" ON "RemoteStream"."Id" = "MediaItem"."Id""#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("remote stream state"),
+            1
         );
     }
 

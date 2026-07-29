@@ -389,6 +389,7 @@ fn RemoteStreamsContent(
                                                 selected=selected
                                                 last_selected=last_selected
                                                 open_collection=collection_open
+                                                open_playlist=playlist_open
                                             />
                                         }
                                         .into_any()
@@ -610,6 +611,7 @@ fn RemoteStreamCard(
     selected: RwSignal<HashSet<i64>>,
     last_selected: RwSignal<Option<i64>>,
     open_collection: RwSignal<bool>,
+    open_playlist: RwSignal<bool>,
 ) -> impl IntoView {
     let item_id = row.id;
     let title = row.title.clone();
@@ -708,6 +710,25 @@ fn RemoteStreamCard(
                             >
                                 <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::AddToCollection)}</span>
+                            </button>
+                            <button
+                                type="button"
+                                class=card_style::item_menu_entry
+                                role="menuitem"
+                                data-media-item-id=item_id.to_string()
+                                on:click=move |e| {
+                                    e.prevent_default();
+                                    e.stop_propagation();
+                                    selected.update(|items| {
+                                        items.clear();
+                                        items.insert(item_id);
+                                    });
+                                    last_selected.set(Some(item_id));
+                                    open_playlist.set(true);
+                                }
+                            >
+                                <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                                <span>{tr(TextKey::AddToPlaylist)}</span>
                             </button>
                         </div>
                     </details>
