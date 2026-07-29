@@ -186,6 +186,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Windows Remote Stream batch producers now receive their quoted script path
+  and arguments through the exact `cmd.exe` command line, so paths containing
+  spaces and URL arguments no longer become literal quoted executable names
+  during scanning or IPTV/HLS playback.
+- Scanner settings now identify the library refresh interval as hours in every
+  supported language, matching the unit used by the scheduler and ErsatzTV's
+  field adornment.
 - Admin toasts now match ErsatzTV's pinned MudBlazor 8.15 snackbar behavior and
   appearance: filled light/dark severity colors, top-right placement, semantic
   icons, accessible inline controls, five-item oldest-first queueing, duplicate

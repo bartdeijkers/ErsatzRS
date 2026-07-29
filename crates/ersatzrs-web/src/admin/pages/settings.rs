@@ -402,7 +402,10 @@ fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::Scanner) action="/api/settings/scanner/save">
             <Field label=tr(TextKey::LibraryRefreshInterval)>
-                <input class=style::input name="library_refresh_interval" type="number" min="0" max="999999" required value=form.library_refresh_interval/>
+                <div class=style::input_with_adornment>
+                    <input class=style::input name="library_refresh_interval" type="number" min="0" max="999999" required value=form.library_refresh_interval/>
+                    <span class=style::adornment>{tr(TextKey::Hours)}</span>
+                </div>
             </Field>
         </SettingsForm>
     }
@@ -690,6 +693,19 @@ mod tests {
         assert!(html.contains(r#"name="fallback_subtitle_language_code""#));
         assert!(html.contains(r#"value="nld" selected"#));
         assert!(html.contains(r#"value="eng" selected"#));
+    }
+
+    #[test]
+    fn scanner_refresh_interval_renders_hours_adornment() {
+        let html = render_scanner(ScannerSettingsForm {
+            library_refresh_interval: 6,
+        })
+        .into_view()
+        .to_html();
+
+        let input = input_html(&html, r#"name="library_refresh_interval""#);
+        assert!(input.contains(r#"value="6""#));
+        assert!(html.contains(r">hours</span>"));
     }
 
     #[cfg(all(feature = "ssr", not(feature = "mysql")))]

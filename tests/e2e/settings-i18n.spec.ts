@@ -5,6 +5,7 @@ type RouteExpectation = {
   heading: string;
   marker: string;
   englishMarker?: string;
+  unit?: string;
 };
 
 type LanguageExpectation = {
@@ -25,7 +26,12 @@ const languages: LanguageExpectation[] = [
       { path: '/settings/ffmpeg', heading: 'FFmpeg', marker: 'FFmpeg Path' },
       { path: '/settings/logging', heading: 'Logging', marker: 'Default Minimum Log Level' },
       { path: '/settings/hdhr', heading: 'HDHomeRun', marker: 'Tuner Count' },
-      { path: '/settings/scanner', heading: 'Scanner', marker: 'Library Refresh Interval' },
+      {
+        path: '/settings/scanner',
+        heading: 'Scanner',
+        marker: 'Library Refresh Interval',
+        unit: 'hours',
+      },
       { path: '/settings/playout', heading: 'Playout', marker: 'Skip Missing Items' },
       { path: '/settings/ui', heading: 'UI', marker: 'Theme' },
       { path: '/settings/xmltv', heading: 'XMLTV', marker: 'XMLTV Time Zone' },
@@ -60,6 +66,7 @@ const languages: LanguageExpectation[] = [
         heading: 'Skaner',
         marker: 'Interwał odświeżania biblioteki',
         englishMarker: 'Library Refresh Interval',
+        unit: 'godz.',
       },
       {
         path: '/settings/playout',
@@ -105,6 +112,7 @@ const languages: LanguageExpectation[] = [
         heading: 'Scanner',
         marker: 'Intervalo de atualização da biblioteca',
         englishMarker: 'Library Refresh Interval',
+        unit: 'horas',
       },
       {
         path: '/settings/playout',
@@ -150,6 +158,7 @@ const languages: LanguageExpectation[] = [
         heading: 'Scanner',
         marker: 'Vernieuwingsinterval bibliotheek',
         englishMarker: 'Library Refresh Interval',
+        unit: 'uur',
       },
       {
         path: '/settings/playout',
@@ -195,6 +204,7 @@ const languages: LanguageExpectation[] = [
         heading: 'Scanner',
         marker: "Intervalle d'actualisation des bibliothèques",
         englishMarker: 'Library Refresh Interval',
+        unit: 'heures',
       },
       {
         path: '/settings/playout',
@@ -250,6 +260,9 @@ test.describe('settings i18n parity', () => {
         await expect(page.locator('html')).toHaveAttribute('lang', language.code);
         await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible();
         await expect(page.getByText(route.marker, { exact: true }).first()).toBeVisible();
+        if (route.unit) {
+          await expect(page.getByText(route.unit, { exact: true }).first()).toBeVisible();
+        }
         await expect(page.getByRole('button', { name: language.save }).first()).toBeVisible();
         await expect(page.locator('[role="alert"]')).toHaveCount(0);
 
