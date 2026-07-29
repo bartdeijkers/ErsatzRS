@@ -2,7 +2,7 @@ feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
 status     = 'Ported'
-adr        = []
+adr        = ['0057']
 
 summary    = '''
 Local filesystem scanning dispatches by `Library.MediaKind` for movies, other
@@ -48,6 +48,16 @@ writers serialize instead of aborting immediately. The media-server
 remote streaming; the pinned ErsatzTV baseline confirms every concrete
 Plex/Jellyfin/Emby scanner currently overrides `ServerSupportsRemoteStreaming`
 to `true`, so no additional provider path is missing at the baseline.
+
+Remote Stream scanning now strictly parses the complete upstream YAML contract
+(`url`, `script`, `duration`, `fallback_query`, `is_live`, title/plot/year/
+content rating), persists both source forms and metadata, probes the effective
+URL or script-produced MPEG-TS, writes streams/chapters/configured duration,
+applies folder tags and same-basename thumbnails, and ignores macOS `._`
+sidecars. URL takes precedence when both source fields are configured.
+Transient source probe failures preserve the valid definition; invalid YAML
+is isolated to that file and marks an existing item unavailable until a fixed
+definition is rescanned. ADR 0057 owns the shared direct producer contract.
 '''
 
 [[debt]]

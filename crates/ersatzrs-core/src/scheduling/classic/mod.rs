@@ -641,8 +641,21 @@ impl ClassicContext {
                 break;
             }
 
-            if self.schedule_media_item(schedule_item, &media_item, item_start_time, None, "Flood")
-            {
+            let effective_media_item = if duration == media_item.duration {
+                media_item.clone()
+            } else {
+                SchedulingMediaItem {
+                    duration,
+                    ..media_item.clone()
+                }
+            };
+            if self.schedule_media_item(
+                schedule_item,
+                &effective_media_item,
+                item_start_time,
+                None,
+                "Flood",
+            ) {
                 scheduled_any = true;
                 self.advance_media(schedule_item);
                 self.state.current_time = item_start_time + duration;
@@ -2701,6 +2714,41 @@ mod tests {
             .added_items
             .iter()
             .all(|item| item.start < fixed_start));
+    }
+
+    #[test]
+    fn classic_flood_expands_zero_duration_remote_stream_to_hard_stop() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 18, 0, 0).unwrap();
+        let finish = start + Duration::minutes(30);
+        let item = schedule_item(1, PlayoutMode::Flood, 1, None);
+        let key = item_key(&item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data
+            .media_by_key
+            .insert(key, vec![SchedulingMediaItem::new(101, Duration::zero())]);
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish,
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("zero-duration remote stream flood should build");
+
+        let scheduled = result.added_items.first().expect("scheduled item");
+        assert_eq!(scheduled.start, start);
+        assert_eq!(scheduled.finish, finish);
+        assert_eq!(scheduled.out_point, Duration::minutes(30));
     }
 
     #[test]

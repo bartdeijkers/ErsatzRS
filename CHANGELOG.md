@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Added standalone Linux/macOS and Windows Beeld & Geluid Schatkamer Remote
+  Stream extractors and ErsatzRS library instructions.
+- Added complete Remote Stream YAML scanning and URL/script probing, direct
+  producer piping for IPTV and HLS, live/reconnect timing, structural health
+  checks, and per-card Add To Playlist support.
 - Added Jellyfin-inspired Version, Video, Audio, and Subtitle selection to
   movie details for exact Add To Schedule and Add To Playlist entries. The
   selected media version and stream indexes persist through editors and
@@ -181,6 +186,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS work-ahead now evaluates Remote Stream liveness at the actual transcode
+  cursor, preventing a following live item from being opened before its
+  scheduled start. Script producers are cancelled and reaped whenever IPTV,
+  HLS, or ffprobe stops consuming them, including stalled producers with no
+  stdout, and producer stderr now retains only a bounded rolling tail.
 - Exact movie stream selections now preserve an explicitly silent audio choice
   and Subtitle Off instead of falling through to channel selectors, resolve
   pinned subtitles against the selected media version, and fail closed on

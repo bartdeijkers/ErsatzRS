@@ -31,6 +31,8 @@ type RemoteStreamSeed = {
   mediaItemId: number;
   otherMediaItemId: number;
   collectionId: number;
+  playlistGroupId: number;
+  playlistId: number;
 };
 
 function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
@@ -49,6 +51,8 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
     mediaItemId: base + 7_001,
     otherMediaItemId: base + 8_001,
     collectionId: base + 9_001,
+    playlistGroupId: base + 9_002,
+    playlistId: base + 9_003,
   };
 }
 
@@ -58,6 +62,10 @@ function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
 DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId};
 DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
+DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ${seed.playlistId}
+  OR "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "Playlist" WHERE "Id" = ${seed.playlistId};
+DELETE FROM "PlaylistGroup" WHERE "Id" = ${seed.playlistGroupId};
 DELETE FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "RemoteStream" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "MediaItem" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
@@ -107,6 +115,15 @@ INSERT OR IGNORE INTO "RemoteStreamMetadata" (
 
 INSERT OR IGNORE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
   VALUES (${seed.collectionId}, 'E2E Existing Remote Stream Collection ${testInfo.project.name}', 0);
+INSERT OR IGNORE INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+  VALUES (${seed.playlistGroupId}, 'E2E Remote Stream Playlist Group ${testInfo.project.name}', 0);
+INSERT OR IGNORE INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
+  VALUES (
+    ${seed.playlistId},
+    'E2E Remote Stream Playlist ${testInfo.project.name}',
+    ${seed.playlistGroupId},
+    0
+  );
 `);
   return seed;
 }
@@ -129,6 +146,15 @@ async function clickFirstCardAddToCollection(page: Page): Promise<void> {
     await itemMenu.locator('summary[aria-label="Item actions"]').click();
   }
   await itemMenu.getByRole('menuitem', { name: /^add to collection$/i }).click();
+}
+
+async function clickFirstCardAddToPlaylist(page: Page): Promise<void> {
+  const itemMenu = page.locator('details[class*="item-menu"]').first();
+  const isOpen = await itemMenu.evaluate((node) => (node as HTMLDetailsElement).open);
+  if (!isOpen) {
+    await itemMenu.locator('summary[aria-label="Item actions"]').click();
+  }
+  await itemMenu.getByRole('menuitem', { name: /^add to playlist$/i }).click();
 }
 
 async function selectNewCollection(
@@ -209,6 +235,41 @@ FROM "CollectionItem" ci
 JOIN "Collection" c ON c."Id" = ci."CollectionId"
 WHERE ci."MediaItemId" = ${seed.mediaItemId} AND c."Name" = '${sqlEscape(collectionName)}';
 `)).toBe('1');
+  });
+
+  test('hydrated card adds a remote stream directly to a playlist', async ({ page }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
+    await gotoRemoteStreams(page, seed);
+
+    await clickFirstCardAddToPlaylist(page);
+    const playlistModal = page
+      .locator('div[class*="panel"]')
+      .filter({ has: page.getByRole('heading', { name: /^add to playlist$/i }) })
+      .last();
+    await expect(playlistModal).toBeVisible();
+    await expect(playlistModal.getByText('1 selected items')).toBeVisible();
+    await playlistModal
+      .locator('select')
+      .first()
+      .selectOption({ label: `E2E Remote Stream Playlist Group ${testInfo.project.name}` });
+    await expect(playlistModal.locator('select').nth(1)).toContainText(
+      `E2E Remote Stream Playlist ${testInfo.project.name}`,
+    );
+    await playlistModal
+      .locator('select')
+      .nth(1)
+      .selectOption({ label: `E2E Remote Stream Playlist ${testInfo.project.name}` });
+    await playlistModal.getByRole('button', { name: /^add to playlist$/i }).click();
+
+    await expect(playlistModal).toBeHidden();
+    await expect.poll(() => sqlite(`
+SELECT "CollectionType"
+FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId}
+  AND "MediaItemId" = ${seed.mediaItemId}
+ORDER BY "Id" DESC
+LIMIT 1;
+`)).toBe('70');
   });
 
   test('no-JS route still server-renders the list and pager links', async ({ browser, baseURL }, testInfo) => {

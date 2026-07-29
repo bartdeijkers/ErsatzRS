@@ -66,7 +66,7 @@ notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded
 name   = 'RemoteStreamsPage'
 status = '✅'
 routes = ['/media/remote/streams', '/media/remote/streams/page/:page']
-notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, card Add To Collection persistence, mobile action menu, and geometry screenshots covered by `tests/e2e/remote-streams.spec.ts`.'
+notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, card Add To Collection and direct Add To Playlist persistence (`CollectionType = 70`), mobile action menu, and geometry screenshots covered by focused Chromium `tests/e2e/remote-streams.spec.ts` proof on 2026-07-29.'
 
 [[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'

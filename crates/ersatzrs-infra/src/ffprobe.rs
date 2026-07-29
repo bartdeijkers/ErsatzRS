@@ -1,11 +1,18 @@
 use std::path::Path;
-use std::process::ExitStatus;
+use std::process::{ExitStatus, Stdio};
+use std::time::Duration as StdDuration;
 
 use chrono::{Duration, Utc};
 use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, MediaVersion, VideoScanKind};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::process::Command;
+
+use crate::remote_stream::{
+    pipe_remote_stream_producer, redacted_source_label, remote_url_input_options,
+    spawn_remote_stream_producer, RemoteStreamProducerPipe, RemoteStreamSource,
+    ResolvedRemoteStream,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FfprobeMediaVersion {
@@ -32,6 +39,8 @@ pub enum FfprobeError {
         path: String,
         source: serde_json::Error,
     },
+    #[error("ffprobe timed out for {path}")]
+    Timeout { path: String },
 }
 
 pub type Result<T> = std::result::Result<T, FfprobeError>;
@@ -93,6 +102,151 @@ impl FfprobeExtractor {
             path: path.display().to_string(),
             source,
         })
+    }
+
+    /// Probe a persisted Remote Stream URL or MPEG-TS-producing script.
+    ///
+    /// Script stdout is connected directly to ffprobe stdin and both
+    /// processes are bounded by one timeout/lifecycle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when either process cannot start, the probe times out,
+    /// ffprobe exits unsuccessfully, or its JSON cannot be decoded.
+    pub async fn extract_remote(
+        &self,
+        stream: &ResolvedRemoteStream,
+        ffmpeg_path: &str,
+    ) -> Result<FfprobeMediaVersion> {
+        self.extract_remote_with_timeout(stream, ffmpeg_path, StdDuration::from_secs(30))
+            .await
+    }
+
+    async fn extract_remote_with_timeout(
+        &self,
+        stream: &ResolvedRemoteStream,
+        ffmpeg_path: &str,
+        timeout: StdDuration,
+    ) -> Result<FfprobeMediaVersion> {
+        let label = redacted_source_label(&stream.source);
+        let (args, mut producer) = self.remote_probe_command(stream, ffmpeg_path, &label)?;
+        let mut process = Command::new(&self.ffprobe_path);
+        process
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        if producer.is_some() {
+            process.stdin(Stdio::piped());
+        } else {
+            process.stdin(Stdio::null());
+        }
+        let mut child = process.spawn().map_err(|source| FfprobeError::Spawn {
+            path: label.clone(),
+            source,
+        })?;
+
+        let mut producer_pipe = if let Some(mut producer) = producer.take() {
+            let Some(consumer_stdin) = child.stdin.take() else {
+                let _ = producer.start_kill();
+                return Err(FfprobeError::Spawn {
+                    path: label,
+                    source: std::io::Error::other("ffprobe did not expose stdin"),
+                });
+            };
+            Some(
+                pipe_remote_stream_producer(producer, consumer_stdin, label.clone()).map_err(
+                    |error| FfprobeError::Spawn {
+                        path: label.clone(),
+                        source: std::io::Error::other(error),
+                    },
+                )?,
+            )
+        } else {
+            None
+        };
+
+        let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(source)) => {
+                shutdown_remote_producer(&mut producer_pipe).await;
+                return Err(FfprobeError::Spawn {
+                    path: label,
+                    source,
+                });
+            }
+            Err(_) => {
+                shutdown_remote_producer(&mut producer_pipe).await;
+                return Err(FfprobeError::Timeout { path: label });
+            }
+        };
+        shutdown_remote_producer(&mut producer_pipe).await;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stderr = match &stream.source {
+                RemoteStreamSource::Url(url) => stderr.replace(url, &label),
+                RemoteStreamSource::Script(_) => stderr.into_owned(),
+            };
+            return Err(FfprobeError::Process {
+                path: label,
+                status: output.status,
+                stderr,
+            });
+        }
+        parse_ffprobe_json(Path::new("remote-stream"), &output.stdout).map_err(|source| {
+            FfprobeError::Json {
+                path: label,
+                source,
+            }
+        })
+    }
+
+    fn remote_probe_command(
+        &self,
+        stream: &ResolvedRemoteStream,
+        ffmpeg_path: &str,
+        label: &str,
+    ) -> Result<(Vec<String>, Option<tokio::process::Child>)> {
+        let mut args = [
+            "-hide_banner",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            "-show_chapters",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        let mut producer = None;
+        match &stream.source {
+            RemoteStreamSource::Url(url) => {
+                args.extend(remote_url_input_options(url, stream.is_live));
+                args.extend(["-i".to_owned(), url.clone()]);
+            }
+            RemoteStreamSource::Script(command) => {
+                args.extend([
+                    "-f".to_owned(),
+                    "mpegts".to_owned(),
+                    "-i".to_owned(),
+                    "pipe:0".to_owned(),
+                ]);
+                producer = Some(
+                    spawn_remote_stream_producer(command, ffmpeg_path, Some(&self.ffprobe_path))
+                        .map_err(|error| FfprobeError::Spawn {
+                            path: label.to_owned(),
+                            source: std::io::Error::other(error),
+                        })?,
+                );
+            }
+        }
+        Ok((args, producer))
+    }
+}
+
+async fn shutdown_remote_producer(producer: &mut Option<RemoteStreamProducerPipe>) {
+    if let Some(mut producer) = producer.take() {
+        producer.shutdown().await;
     }
 }
 
@@ -368,4 +522,50 @@ struct FfprobeTags {
     title: Option<String>,
     filename: Option<String>,
     mimetype: Option<String>,
+}
+
+// Process-permission setup is Unix-specific; the shared producer lifecycle is
+// also covered by the cross-platform tests in remote_stream.rs.
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn remote_probe_timeout_cancels_stalled_producer() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let blocker = temp.path().join("block-forever.sh");
+        std::fs::write(&blocker, "#!/bin/sh\nwhile :; do :; done\n").expect("blocker script");
+        let mut permissions = std::fs::metadata(&blocker)
+            .expect("blocker metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&blocker, permissions).expect("blocker permissions");
+
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Script(crate::remote_stream::RemoteStreamCommand {
+                program: blocker.display().to_string(),
+                args: Vec::new(),
+                working_directory: temp.path().to_path_buf(),
+            }),
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            url_overrides_script: false,
+        };
+        let extractor = FfprobeExtractor::new(blocker.display().to_string());
+        let result = tokio::time::timeout(
+            StdDuration::from_secs(2),
+            extractor.extract_remote_with_timeout(
+                &stream,
+                "ffmpeg-unused",
+                StdDuration::from_millis(50),
+            ),
+        )
+        .await
+        .expect("producer cancellation timed out");
+
+        assert!(matches!(result, Err(FfprobeError::Timeout { .. })));
+    }
 }

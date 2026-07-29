@@ -232,6 +232,8 @@ pub struct OtherVideoMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RemoteStreamMetadata {
     pub metadata: Metadata,
+    pub content_rating: Option<String>,
+    pub plot: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

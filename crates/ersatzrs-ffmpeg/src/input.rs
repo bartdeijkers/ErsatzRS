@@ -37,6 +37,8 @@ pub struct InputFile {
     pub filter_steps: Vec<String>,
     pub subtitle_method: Option<SubtitleMethod>,
     pub is_image_based_subtitle: bool,
+    pub allow_readrate: bool,
+    pub seek_after_input: bool,
 }
 
 impl InputFile {
@@ -50,6 +52,8 @@ impl InputFile {
             filter_steps: Vec::new(),
             subtitle_method: None,
             is_image_based_subtitle: false,
+            allow_readrate: true,
+            seek_after_input: false,
         }
     }
 
@@ -182,6 +186,20 @@ impl InputFile {
     #[must_use]
     pub fn with_stream_index(mut self, index: usize) -> Self {
         self.streams = vec![MediaStream::new(index)];
+        self
+    }
+
+    #[must_use]
+    pub const fn without_readrate(mut self) -> Self {
+        self.allow_readrate = false;
+        self
+    }
+
+    /// Request accurate output-side seeking for non-seekable sources such as
+    /// producer pipes. Regular files and URLs keep the faster input-side seek.
+    #[must_use]
+    pub const fn with_seek_after_input(mut self) -> Self {
+        self.seek_after_input = true;
         self
     }
 }
