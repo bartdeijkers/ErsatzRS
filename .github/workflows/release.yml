@@ -64,13 +64,11 @@ jobs:
           Copy-Item "$bin/ersatzrs-scanner.exe" $stage
           Copy-Item "$bin/ersatzrs-healthcheck.exe" $stage
           Copy-Item "$bin/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-          # `cargo leptos build` already copies the assets-dir (public/)
-          # contents into the top level of the site root alongside pkg/ (see
-          # [package.metadata.leptos] assets-dir = "public" in
-          # crates/ersatzrs-web/Cargo.toml), so target/site is already the
-          # single merged admin-UI directory. Ship it as-is instead of
-          # re-splitting it into separate site/ and public/ folders.
           Copy-Item -Recurse "$env:CARGO_TARGET_DIR/site" "$stage/site"
+          # `cargo leptos build --frontend-only` can leave assets-dir content
+          # in the source public/ directory on Windows. Merge it explicitly so
+          # the archive still exposes one complete site/ runtime tree.
+          Copy-Item -Recurse -Force "crates/ersatzrs-web/public/*" "$stage/site"
           Copy-Item -Recurse assets "$stage/assets"
           Copy-Item LICENSE, README.md $stage
           $css = Get-Item "$stage/site/bundle.css" -ErrorAction Stop
@@ -149,12 +147,12 @@ jobs:
       - name: Stage web assets
         run: |
           set -euo pipefail
-          # `cargo leptos build` already copies the assets-dir (public/)
-          # contents into the top level of the site root alongside pkg/, so
-          # target/site is already the single merged admin-UI directory —
-          # stage only that, not a separate public/ copy.
           mkdir -p release-web-assets
           cp -R target/site release-web-assets/site
+          # Frontend-only builds do not consistently copy assets-dir content
+          # into site-root on every platform. Merge the generated public
+          # source explicitly while retaining the single site/ archive layout.
+          cp -R crates/ersatzrs-web/public/. release-web-assets/site/
           test -f release-web-assets/site/bundle.css
       - name: Upload web assets
         uses: actions/upload-artifact@v7

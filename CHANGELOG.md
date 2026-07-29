@@ -52,11 +52,11 @@ release section when tagging a release.
 
 - Release archives and the Docker image now ship a single merged `site/`
   directory for admin-UI assets instead of duplicating them across separate
-  `site/` and `public/` folders. `cargo-leptos` already copies the
-  `assets-dir` (`public/`) contents into the top level of the site root
-  alongside the hydration `pkg/` bundle at build time, so packaging now ships
-  that directory as-is. `crates/ersatzrs-web/public/` remains the source
-  layout; only the packaged/runtime duplication was removed.
+  `site/` and `public/` folders. Release packaging explicitly merges the
+  generated `public/` assets with the hydration `pkg/` bundle because
+  frontend-only `cargo-leptos` builds do not consistently copy `assets-dir`
+  content into `site-root` on every platform. `crates/ersatzrs-web/public/`
+  remains the source layout; only the packaged/runtime duplication was removed.
 - Replaced the EPG Visible window scrubber with a 50–200% Zoom control that
   rescales the horizontal timeline and preserves its temporal center. The
   default desktop scale shows about three hours, and the channel-watch layout

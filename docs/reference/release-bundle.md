@@ -22,8 +22,7 @@ matching top-level directory.
 | `ersatzrs-web.exe` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner.exe` | One-shot scanner binary |
 | `ersatzrs-healthcheck.exe` | Readiness probe for `/healthz` |
-| `site/` | Leptos JavaScript and WASM hydration assets |
-| `public/` | CSS, fonts, images, and other public assets |
+| `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
 | `assets/` | Graphics and template assets |
 | `LICENSE` | Project license |
 | `README.md` | Project overview |
@@ -44,15 +43,14 @@ top-level directory.
 | `ersatzrs-web` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner` | One-shot scanner binary |
 | `ersatzrs-healthcheck` | Readiness probe for `/healthz` |
-| `site/` | Leptos JavaScript and WASM hydration assets |
-| `public/` | CSS, fonts, images, and other public assets |
+| `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
 | `assets/` | Graphics and template assets |
 | `LICENSE` | Project license |
 | `README.md` | Project overview |
 
 Run `ersatzrs-web` from the extracted top-level directory unless the service
-configuration supplies explicit asset locations. Keep `site/`, `public/`, and
-`assets/` from the same archive as the server binary.
+configuration supplies explicit asset locations. Keep `site/` and `assets/`
+from the same archive as the server binary.
 
 ## FFmpeg contents
 
