@@ -332,6 +332,29 @@ async function expectStayInContextSuccess(
   const link = page.getByRole('link', { name: linkName }).last();
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('href', href);
+  const layout = await link.evaluate((element) => {
+    const toast = element.closest('[data-toast-id]');
+    const message = toast?.querySelector('[class*="toast-text"]');
+    if (!toast || !message) {
+      return null;
+    }
+    const linkRect = element.getBoundingClientRect();
+    const messageRect = message.getBoundingClientRect();
+    return {
+      display: window.getComputedStyle(element).display,
+      inToast: true,
+      verticallyInline:
+        linkRect.bottom >= messageRect.top &&
+        linkRect.top <= messageRect.bottom,
+    };
+  });
+  expect(layout).toEqual({
+    // Flex items are blockified by the flex formatting context, so an
+    // authored `inline-flex` action reports `flex` as its computed display.
+    display: 'flex',
+    inToast: true,
+    verticallyInline: true,
+  });
 }
 
 async function expectSelectAllRightAligned(page: Page): Promise<void> {

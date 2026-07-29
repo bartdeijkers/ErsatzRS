@@ -12,6 +12,7 @@ pub enum IconName {
     Warning,
     Error,
     Check,
+    AlertSuccess,
     Info,
     Play,
     Stop,
@@ -56,6 +57,7 @@ fn icon_path(name: IconName) -> &'static str {
         IconName::Warning => "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
         IconName::Error => "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z",
         IconName::Check => "M20 6L9 17l-5-5",
+        IconName::AlertSuccess => "M20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4C12.76,4 13.5,4.11 14.2,4.31L15.77,2.74C14.61,2.26 13.34,2 12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12M7.91,10.08L6.5,11.5L11,16L21,6L19.59,4.58L11,13.17L7.91,10.08Z",
         IconName::Info => "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
         IconName::Play => "M5 3l14 9-14 9V3z",
         IconName::Stop => "M6 6h12v12H6z",
@@ -84,8 +86,13 @@ fn icon_path(name: IconName) -> &'static str {
 }
 
 fn icon_mask_url(path: &str) -> String {
+    let fill = if path == icon_path(IconName::AlertSuccess) {
+        r#"fill="black""#
+    } else {
+        r#"fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round""#
+    };
     let svg = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="{path}" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="{path}" {fill}/></svg>"#
     );
     format!("url(\"data:image/svg+xml,{}\")", urlencoding::encode(&svg))
 }

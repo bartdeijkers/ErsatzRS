@@ -186,6 +186,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Admin toasts now match ErsatzTV's pinned MudBlazor 8.15 snackbar behavior and
+  appearance: filled light/dark severity colors, top-right placement, semantic
+  icons, accessible inline controls, five-item oldest-first queueing, duplicate
+  suppression, timed entry/visibility/exit, and lifecycle pause during pointer
+  or touch interaction.
 - Playwright E2E now explicitly regenerates the Stylance CSS bundle and
   synchronizes the authoritative web `public/` assets into the built Leptos
   site root before booting the server, preventing clean checkouts paired with

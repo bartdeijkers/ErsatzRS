@@ -1,0 +1,29 @@
+feature    = 'Admin toast notifications'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Shared/MainLayout.razor`, `$ERSATZTV_SRC/ErsatzTV/Startup.cs`, MudBlazor 8.15 `SnackbarConfiguration` and filled snackbar defaults'
+rs_target  = '`crates/ersatzrs-web/src/admin/ui/primitives/toast.rs`, `crates/ersatzrs-web/src/admin/ui/primitives/toast.module.css`, `tests/e2e/toast-parity.spec.ts`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported 2026-07-29: the shared client-only toast primitive matches the pinned
+ErsatzTV shell's unconfigured MudBlazor 8.15 snackbar contract. Toasts render
+oldest-first at the top-right, show at most five with queued overflow, trim and
+reject empty messages, suppress active and queued duplicates, fade in for one
+second, remain visible for five seconds, and fade out for two seconds before
+removal. Pointer hover and touch interaction pause the remaining lifecycle;
+manual close uses the same exit state. The process-global hydrated store and
+inert server-side write boundary remain unchanged, so resource failures still
+use hydration-stable page surfaces.
+
+Presentation follows the pinned filled variant: 24px top/right placement, 16px
+stack spacing, 288–500px sizing, mobile viewport containment, 6px by 16px
+padding, 4px radius, MudBlazor elevation, white content, 95% severity fills,
+22px semantic shared icons, inline navigation actions, localized accessible
+close control, and the ErsatzTV cyan info override plus MudBlazor 8.15
+light/dark success, warning, and error palettes. Focused Rust tests cover queue
+normalization, duplicate suppression, overflow ordering, lifecycle transitions,
+interaction pause, and final removal. `tests/e2e/toast-parity.spec.ts` exercises
+real playout rebuild feedback across dark desktop and light mobile layouts,
+hover/touch pause and resume, automatic expiry, duplicate suppression, and
+manual close; media-browser coverage keeps the action-link navigation and now
+asserts that the action remains inline.
+'''
