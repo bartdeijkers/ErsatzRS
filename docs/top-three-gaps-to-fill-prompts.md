@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-28
-last_processed_commit: 70b4be03ed34fc3b1b969c97025bde05b3587c84
+generated: 2026-07-29
+last_processed_commit: ef728cc35cf7aef988cec93b11f72f578a6d74a1
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,21 +9,28 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `817e019..70b4be0` window landed one feature commit —
-`feat(web): add EPG and browser channel previews` — plus CI target-dir
-perf/docs work with no parity impact. The feature is Phase 7 admin-UI hardening
-(the `/epg` grid and the `/channels/:id/watch` browser player under ADRs
-0053–0055); it was reconciled in its own commit (`channels-admin-ui` stays
-`Ported`, `hydration.toml` gained `EpgPreviewPage`/`ChannelWatchPage`), and this
-run only added the missing `/epg` nav route to `routes.toml`. It did **not**
-touch any of the top three chores.
+and Phase 8A state. The `70b4be0..ef728cc` window landed a Classic
+randomized-playback rework (four `core` commits: fresh seed regeneration on
+Reset/Refresh, a seed-truncation fix, distinct `Shuffle`/`ShuffleInOrder`/
+`Random`/`RandomRotation` orders, and anti-repeat guards), a `feat(web)` slice
+adding exact movie media-version/stream selection plus a reactive EPG zoom
+control (ADR 0056, now `Accepted`/`Implemented`, with a `pinned_stream_selections`
+migration), and a release-packaging fix that ships a single merged `site/`
+admin-UI directory (no parity impact). These were reconciled in their own
+commits: `classic-scheduling` stays `Ported` (remaining Marathon /
+MultiEpisodeShuffle / `keep_multi_part_episodes_together` /
+`treat_collections_as_shows` refinements stay tracked in its playback-order debt
+evidence and ADR 0010), `content-variants` and `media-browsers` gained `adr 0056`
+in their summaries, and this run verified those edits, registered ADR 0056 in the
+index, and added the EPG-zoom note to `EpgPreviewPage` in `hydration.toml`. None
+of the merged work touched the top three chores.
 
 `cargo xtask progress gaps` still reports a single remaining feature
 (`video-jukebox-addon-api`, Not started, four open debt items) — the only file
 with unresolved `[[debt]]`. Its first slice is milestone **p8a-01**, the
 `phase.toml` `current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02,
-so it holds the top slot. Every other actionable spec source is the queue of
-`Proposed` / `Not implemented` localization ADRs (0022–0047+); no ADR-backed
+so it holds the top slot. Every other actionable spec source is the queue of 26
+`Proposed` / `Not implemented` localization ADRs (0022–0047); no ADR-backed
 FFmpeg/HLS hardening or blocking runtime debt is open to outrank them. The two
 lowest-numbered, maintainer-requested ones (ADR 0022 de-de, ADR 0023 hi-in) saw
 no commits this window and carry over unchanged as `#2` and `#3`.

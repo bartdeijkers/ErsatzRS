@@ -96,7 +96,7 @@ notes  = 'ADRs 0053 through 0055 dedicated channel-watch route: server-rendered 
 name   = 'EpgPreviewPage'
 status = '✅'
 routes = ['/epg']
-notes  = 'ADR 0054 aggregate EPG route: a hydrated five-hour viewport over two hours of history plus 24 hours ahead, with sticky channel/time labels, complete filler and gap semantics, keyboard scrolling, clamped controls, and 30-second refresh that preserves scroll. `tests/e2e/channel-watch.spec.ts` covers navigation and the shared grid in Chromium and Firefox.'
+notes  = 'ADR 0054 aggregate EPG route: a hydrated five-hour viewport over two hours of history plus 24 hours ahead, with sticky channel/time labels, complete filler and gap semantics, keyboard scrolling, clamped controls, and 30-second refresh that preserves scroll. 2026-07-28: added a reactive 50-200% zoom control (localized `EpgZoom` label) that rescales the grid while preserving the temporal center. `tests/e2e/channel-watch.spec.ts` covers navigation and the shared grid in Chromium and Firefox.'
 
 [[page]]
 name   = 'FfmpegProfilesListPage'
