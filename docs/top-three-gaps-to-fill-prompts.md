@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-29
-last_processed_commit: ef728cc35cf7aef988cec93b11f72f578a6d74a1
+generated: 2026-07-30
+last_processed_commit: 3fca779c486603c0a2e52d3f8f2bcb18364a6142
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,31 +9,39 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `70b4be0..ef728cc` window landed a Classic
-randomized-playback rework (four `core` commits: fresh seed regeneration on
-Reset/Refresh, a seed-truncation fix, distinct `Shuffle`/`ShuffleInOrder`/
-`Random`/`RandomRotation` orders, and anti-repeat guards), a `feat(web)` slice
-adding exact movie media-version/stream selection plus a reactive EPG zoom
-control (ADR 0056, now `Accepted`/`Implemented`, with a `pinned_stream_selections`
-migration), and a release-packaging fix that ships a single merged `site/`
-admin-UI directory (no parity impact). These were reconciled in their own
-commits: `classic-scheduling` stays `Ported` (remaining Marathon /
-MultiEpisodeShuffle / `keep_multi_part_episodes_together` /
-`treat_collections_as_shows` refinements stay tracked in its playback-order debt
-evidence and ADR 0010), `content-variants` and `media-browsers` gained `adr 0056`
-in their summaries, and this run verified those edits, registered ADR 0056 in the
-index, and added the EPG-zoom note to `EpgPreviewPage` in `hydration.toml`. None
-of the merged work touched the top three chores.
+and Phase 8A state. The `ef728cc..3fca779` window (10 work commits) landed
+**Remote Stream playback** end to end: a `feat(infra)` slice completing the
+URL/script resolver, bounded network reads, redacted direct MPEG-TS piping,
+transcode-cursor liveness, Classic Flood zero-duration expansion, a
+side-effect-free health check, scanner persistence, and the standalone Beeld &
+Geluid extractor wrappers, followed by two hardening fixes (an exact raw
+`cmd.exe` command line for Windows batch producers, then selecting a single HLS
+video/audio rendition pair so MPEG-TS output keeps a stable stream order). The
+window also restored ErsatzTV **toast** parity (`admin-toast-notifications`), a
+`fix(web)` showing scanner interval hours on `/settings`, and several
+`fix(ci)`/`fix(release)` changes (accept terminal beta tags, merge public assets
+into the beta `site/`, regenerate/restore the Playwright CSS bundle) with no
+parity impact. These were reconciled in their own feature commits: a new
+`remote-stream-playback.toml` was created as `Ported` (ADR 0057) with full test
+evidence and no open debt; `remote-streams-browser`, `scanner`, and `settings`
+had their summaries/debt refreshed and their remaining debts are all
+`resolved`; `hydration.toml` gained the remote-streams note. This run verified
+those edits, confirmed ADR 0057 is registered, and appended the daily session
+line. None of the merged work touched the top three chores.
 
 `cargo xtask progress gaps` still reports a single remaining feature
 (`video-jukebox-addon-api`, Not started, four open debt items) — the only file
-with unresolved `[[debt]]`. Its first slice is milestone **p8a-01**, the
-`phase.toml` `current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02,
-so it holds the top slot. Every other actionable spec source is the queue of 26
-`Proposed` / `Not implemented` localization ADRs (0022–0047); no ADR-backed
-FFmpeg/HLS hardening or blocking runtime debt is open to outrank them. The two
-lowest-numbered, maintainer-requested ones (ADR 0022 de-de, ADR 0023 hi-in) saw
-no commits this window and carry over unchanged as `#2` and `#3`.
+with unresolved `[[debt]]` anywhere in `docs/progress/parity/`. Its first slice
+is milestone **p8a-01**, the `phase.toml` `current_focus` decision gate that
+unblocks p8a-02/03 and p8b-01/02, so it holds the top slot. Every other
+actionable spec source is the queue of 26 `Proposed` / `Not implemented`
+localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS hardening or blocking
+runtime debt is open to outrank them (the remote-stream work closed as `Ported`
+with no open debt), and the only deferred plan work (mdBook, macOS archives,
+Claude hooks) is developer-experience tooling that ranks below the
+maintainer-requested localization ADRs. The two lowest-numbered of those
+(ADR 0022 de-de, ADR 0023 hi-in) saw no commits this window and carry over
+unchanged as `#2` and `#3`.
 
 ---
 
