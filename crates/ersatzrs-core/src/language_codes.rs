@@ -78,6 +78,31 @@ pub fn language_options() -> Vec<(String, String)> {
     options
 }
 
+/// Return the common playback-language options exposed by Kodi's audio and
+/// subtitle settings.
+///
+/// Kodi builds these selectors from languages that have an ISO-639-1 code.
+/// ErsatzRS persists the primary three-letter code to preserve its existing
+/// playback and database contracts. Special values such as `und` are added by
+/// the owning UI because their labels and meaning depend on the selector.
+#[must_use]
+pub fn playback_language_options() -> Vec<(String, String)> {
+    let cache = cache();
+    let mut options: Vec<(String, String)> = cache
+        .code_to_group
+        .values()
+        .filter(|group| group.iter().any(|code| code.len() == 2))
+        .filter_map(|group| {
+            let code = group.first()?.clone();
+            let name = cache.english_name_by_code.get(&code)?.clone();
+            Some((code, name))
+        })
+        .collect();
+    options.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    options.dedup_by(|a, b| a.0 == b.0);
+    options
+}
+
 fn cache() -> &'static LanguageCodeCache {
     LANGUAGE_CODES.get_or_init(|| LanguageCodeCache::parse(LANGUAGE_DATA))
 }
@@ -159,5 +184,17 @@ mod tests {
     fn preserves_unknown_codes_for_service_parity() {
         assert_eq!(all_language_codes(["  zzx  "]), vec!["zzx".to_string()]);
         assert_eq!(english_name("zzx"), None);
+    }
+
+    #[test]
+    fn playback_options_match_kodi_iso_639_1_vocabulary() {
+        let options = playback_language_options();
+
+        assert_eq!(options.len(), 184);
+        assert!(options.contains(&("eng".to_owned(), "English".to_owned())));
+        assert!(options.contains(&("dut".to_owned(), "Dutch".to_owned())));
+        assert!(!options.iter().any(|(code, _)| code == "enm"));
+        assert!(!options.iter().any(|(code, _)| code == "und"));
+        assert!(options.windows(2).all(|pair| pair[0].1 <= pair[1].1));
     }
 }

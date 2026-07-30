@@ -295,7 +295,7 @@ test.describe('settings i18n parity', () => {
     expect(runtimeErrors).toEqual([]);
   });
 
-  test('ffmpeg subtitle language preferences persist through the HTML form', async ({
+  test('ffmpeg playback language preferences use the Kodi list and persist und', async ({
     browserName,
     page,
   }) => {
@@ -303,23 +303,34 @@ test.describe('settings i18n parity', () => {
       browserName !== 'chromium',
       'FFmpeg settings are global; Chromium coverage avoids repeating the mutation across projects',
     );
+    await switchLanguage(page, 'en-us');
     await page.goto('/settings/ffmpeg');
     const form = page.locator('form[action="/api/settings/ffmpeg/save"]');
     await expect(form).toBeVisible();
 
+    const audio = form.locator('select[name="preferred_audio_language_code"]');
     const primary = form.locator('select[name="preferred_subtitle_language_code"]');
     const fallback = form.locator('select[name="fallback_subtitle_language_code"]');
-    await primary.selectOption('dut');
-    await fallback.selectOption('eng');
+    await expect(audio.locator('option[value="und"]')).toHaveText('Original (und)');
+    await expect(primary.locator('option[value="und"]')).toHaveText('Undefined (und)');
+    await expect(fallback.locator('option[value="und"]')).toHaveText('Undefined (und)');
+    await expect(form.locator('option[value="enm"]')).toHaveCount(0);
+
+    await audio.selectOption('und');
+    await primary.selectOption('und');
+    await fallback.selectOption('und');
     await form.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/settings\/ffmpeg$/);
-    await expect(primary).toHaveValue('dut');
-    await expect(fallback).toHaveValue('eng');
+    await expect(audio).toHaveValue('und');
+    await expect(primary).toHaveValue('und');
+    await expect(fallback).toHaveValue('und');
 
+    await audio.selectOption('eng');
     await primary.selectOption('');
     await fallback.selectOption('');
     await form.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/settings\/ffmpeg$/);
+    await expect(audio).toHaveValue('eng');
     await expect(primary).toHaveValue('');
     await expect(fallback).toHaveValue('');
   });

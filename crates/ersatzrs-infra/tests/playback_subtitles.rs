@@ -219,6 +219,39 @@ async fn unset_subtitle_languages_preserve_unfiltered_mode_ranking() {
 }
 
 #[tokio::test]
+async fn undefined_subtitle_preference_matches_und_and_missing_languages() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "Subtitle" (
+               "Id", "MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
+               "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted",
+               "Path", "DateAdded", "DateUpdated"
+           ) VALUES
+               (4, 20, 1, 'Undefined', 5, 'subrip', 0, 0, 0, 'und', 0,
+                'movie.srt', '2026-05-31 00:00:00', '2026-05-31 00:00:00'),
+               (5, 20, 1, 'Missing language', 6, 'subrip', 1, 0, 0, NULL, 0,
+                'movie.default.srt', '2026-05-31 00:00:00', '2026-05-31 00:00:00')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let selected = select_playback_subtitle(
+        &pool,
+        10,
+        &["und".to_owned()],
+        ChannelSubtitleMode::Default,
+        StreamingMode::HttpLiveStreamingDirect,
+    )
+    .await
+    .unwrap()
+    .expect("undefined subtitle");
+
+    assert_eq!(selected.id, 5);
+}
+
+#[tokio::test]
 async fn pinned_subtitle_is_resolved_for_the_selected_media_version() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;

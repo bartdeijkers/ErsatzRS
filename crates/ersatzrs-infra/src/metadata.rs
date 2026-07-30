@@ -674,7 +674,7 @@ fn locate_external_subtitles(
 
             let forced = tokens.contains(&"forced");
             let sdh = tokens.iter().any(|token| *token == "sdh" || *token == "cc");
-            let language = sidecar_language(&tokens);
+            let language = Some(sidecar_language(&tokens));
 
             let path_value = if save_full_path {
                 path.display().to_string()
@@ -727,12 +727,12 @@ fn sidecar_tokens(suffix: &str) -> Vec<&str> {
         .collect()
 }
 
-fn sidecar_language(tokens: &[&str]) -> Option<String> {
+fn sidecar_language(tokens: &[&str]) -> String {
     tokens
         .iter()
         .copied()
         .find(|token| !matches!(*token, "forced" | "sdh" | "cc"))
-        .map(normalize_sidecar_language)
+        .map_or_else(|| "und".to_owned(), normalize_sidecar_language)
 }
 
 fn normalize_sidecar_language(language: &str) -> String {
@@ -748,4 +748,78 @@ fn normalize_sidecar_language(language: &str) -> String {
 
 fn encode_datetime(value: DateTime<Utc>) -> String {
     value.naive_utc().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecars_without_language_use_und() {
+        assert_eq!(sidecar_language(&[]), "und");
+        assert_eq!(sidecar_language(&["forced"]), "und");
+        assert_eq!(sidecar_language(&["forced", "sdh"]), "und");
+    }
+
+    #[test]
+    fn sidecars_with_language_keep_canonical_language_code() {
+        assert_eq!(sidecar_language(&["en"]), "eng");
+        assert_eq!(sidecar_language(&["de", "forced"]), "ger");
+    }
+
+    #[test]
+    fn forced_in_media_title_is_not_a_sidecar_flag() {
+        let media_stem = "bloodfist.iii.forced.to.fight.1991";
+
+        assert_eq!(
+            sidecar_suffix(media_stem, media_stem),
+            Some(""),
+            "the bare sidecar has no language or flag suffix"
+        );
+        assert_eq!(
+            sidecar_suffix("bloodfist.iii.forced.to.fight.1991.en.forced", media_stem),
+            Some("en.forced")
+        );
+    }
+
+    #[test]
+    fn external_subtitle_scan_persists_und_for_suffixless_sidecars() {
+        let folder = tempfile::tempdir().expect("subtitle folder");
+        let media = folder.path().join("Bloodfist.III.Forced.To.Fight.1991.mkv");
+        fs::write(&media, []).expect("media fixture");
+        for name in [
+            "Bloodfist.III.Forced.To.Fight.1991.srt",
+            "Bloodfist.III.Forced.To.Fight.1991.forced.srt",
+            "Bloodfist.III.Forced.To.Fight.1991.en.srt",
+        ] {
+            fs::write(folder.path().join(name), []).expect("subtitle fixture");
+        }
+
+        let subtitles = locate_external_subtitles(&media, false);
+        let bare = subtitles
+            .iter()
+            .find(|subtitle| {
+                subtitle.path.as_deref() == Some("Bloodfist.III.Forced.To.Fight.1991.srt")
+            })
+            .expect("bare subtitle");
+        let forced = subtitles
+            .iter()
+            .find(|subtitle| {
+                subtitle.path.as_deref() == Some("Bloodfist.III.Forced.To.Fight.1991.forced.srt")
+            })
+            .expect("forced subtitle");
+        let english = subtitles
+            .iter()
+            .find(|subtitle| {
+                subtitle.path.as_deref() == Some("Bloodfist.III.Forced.To.Fight.1991.en.srt")
+            })
+            .expect("English subtitle");
+
+        assert_eq!(bare.language.as_deref(), Some("und"));
+        assert!(!bare.forced);
+        assert_eq!(forced.language.as_deref(), Some("und"));
+        assert!(forced.forced);
+        assert_eq!(english.language.as_deref(), Some("eng"));
+        assert!(!english.forced);
+    }
 }

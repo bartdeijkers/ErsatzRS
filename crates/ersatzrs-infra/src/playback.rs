@@ -392,13 +392,7 @@ pub fn select_playback_audio_stream_index(
             let codes = language_codes::all_language_codes([language]);
             let matching = source_audio_streams
                 .iter()
-                .filter(|stream| {
-                    stream.language.as_deref().is_some_and(|candidate| {
-                        codes
-                            .iter()
-                            .any(|code| candidate.eq_ignore_ascii_case(code.as_str()))
-                    })
-                })
+                .filter(|stream| language_matches_preference(stream.language.as_deref(), &codes))
                 .collect::<Vec<_>>();
             (!matching.is_empty()).then_some(matching)
         })
@@ -428,6 +422,16 @@ fn contains_case_insensitive(value: &str, needle: &str) -> bool {
     value
         .to_ascii_lowercase()
         .contains(&needle.to_ascii_lowercase())
+}
+
+fn language_matches_preference(candidate: Option<&str>, codes: &[String]) -> bool {
+    let candidate = candidate
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .unwrap_or("und");
+    codes
+        .iter()
+        .any(|code| candidate.eq_ignore_ascii_case(code))
 }
 
 fn prioritize_audio_stream<'a>(streams: &[&'a SourceAudioStream]) -> Option<&'a SourceAudioStream> {
@@ -1327,11 +1331,7 @@ pub async fn select_playback_subtitle(
         let codes = language_codes::all_language_codes([language]);
         let selected = select_subtitle_by_mode(
             candidates.iter().filter(|subtitle| {
-                subtitle.language.as_deref().is_some_and(|candidate| {
-                    codes
-                        .iter()
-                        .any(|code| candidate.eq_ignore_ascii_case(code.as_str()))
-                })
+                language_matches_preference(subtitle.language.as_deref(), &codes)
             }),
             subtitle_mode,
         );
@@ -3012,6 +3012,41 @@ mod tests {
             Some("eng"),
             Some("commentary"),
         );
+
+        assert_eq!(selected, Some(1));
+    }
+
+    #[test]
+    fn playback_audio_selector_treats_missing_language_as_und() {
+        let mut literal_und = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        literal_und.language = Some("und".to_owned());
+        literal_und.channels = Some(2);
+        let mut missing_language = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(2);
+        missing_language.default = true;
+        missing_language.channels = Some(6);
+        let mut english = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3);
+        english.language = Some("eng".to_owned());
+        english.default = true;
+        english.channels = Some(8);
+
+        let selected = select_playback_audio_stream_index(
+            &[literal_und, missing_language, english],
+            Some("und"),
+            None,
+        );
+
+        assert_eq!(selected, Some(2));
+    }
+
+    #[test]
+    fn playback_audio_selector_und_falls_back_to_overall_default() {
+        let mut english = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        english.language = Some("eng".to_owned());
+        english.default = true;
+        let mut japanese = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(2);
+        japanese.language = Some("jpn".to_owned());
+
+        let selected = select_playback_audio_stream_index(&[japanese, english], Some("und"), None);
 
         assert_eq!(selected, Some(1));
     }

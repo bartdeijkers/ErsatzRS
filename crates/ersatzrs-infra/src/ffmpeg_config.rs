@@ -45,7 +45,9 @@ impl Default for PlaybackLanguagePreferences {
 
 impl PlaybackLanguagePreferences {
     /// Resolve the built-in audio preference. HLS Direct retains all source
-    /// streams only when neither a language nor a title is explicitly selected.
+    /// streams when neither an item/channel language nor a title is selected,
+    /// except that the global `und` preference explicitly requests the
+    /// original/default source track.
     #[must_use]
     pub fn audio_language(
         &self,
@@ -61,8 +63,13 @@ impl PlaybackLanguagePreferences {
             return explicit_language;
         }
 
+        let prefer_original = self
+            .default_audio_language
+            .as_deref()
+            .is_some_and(|language| language.eq_ignore_ascii_case("und"));
         if streaming_mode == StreamingMode::HttpLiveStreamingDirect
             && non_blank(preferred_title).is_none()
+            && !prefer_original
         {
             return None;
         }
@@ -241,6 +248,19 @@ mod tests {
                 StreamingMode::HttpLiveStreamingDirect
             ),
             None
+        );
+    }
+
+    #[test]
+    fn hls_direct_und_audio_preference_selects_original_track() {
+        let preferences = PlaybackLanguagePreferences {
+            default_audio_language: Some("und".to_owned()),
+            ..PlaybackLanguagePreferences::default()
+        };
+
+        assert_eq!(
+            preferences.audio_language(None, None, None, StreamingMode::HttpLiveStreamingDirect),
+            Some("und".to_owned())
         );
     }
 }

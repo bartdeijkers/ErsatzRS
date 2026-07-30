@@ -1455,6 +1455,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PreferredAudioLanguage => "Voorkeurstaal voor audio",
         TextKey::DefaultSubtitleLanguage => "Standaardtaal voor ondertitels",
         TextKey::FallbackSubtitleLanguage => "Terugvaltaal voor ondertitels",
+        TextKey::OriginalLanguageOption => "Origineel (und)",
+        TextKey::UndefinedLanguageOption => "Ongedefinieerd (und)",
         TextKey::Previous24Hours => "Vorige 24 uur",
         TextKey::PreviousPage => "Vorige pagina",
         TextKey::RerunCollections => "Herhalingscollecties",

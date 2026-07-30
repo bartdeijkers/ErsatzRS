@@ -50,6 +50,13 @@ release section when tagging a release.
 
 ### Changed
 
+- FFmpeg playback-language settings now use Kodi's common ISO-639-1-backed
+  language list instead of exposing historical ISO-639-3 entries. The `und`
+  value is presented as Original for audio and Undefined for subtitles,
+  selects missing-language streams consistently in MPEG-TS and HLS, and is
+  persisted for local sidecar subtitles without a language suffix. Stored
+  language-code case and surrounding whitespace are matched
+  case-insensitively and normalized without changing the selected language.
 - Windows beta tags may now use either the terminal `-beta` form or a numbered
   `-beta.N` suffix; both publish only the win-x64 prerelease archive and skip
   the normal multi-platform and Docker release jobs.

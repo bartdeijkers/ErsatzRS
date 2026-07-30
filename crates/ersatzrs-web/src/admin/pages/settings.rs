@@ -126,11 +126,35 @@ fn settings_result_view<T>(
 #[allow(clippy::too_many_lines)]
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let active_transcode_capacity = data.active_transcode_capacity;
-    let form = data.form;
+    let mut form = data.form;
     let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
-    let audio_languages = data.languages.clone();
-    let default_subtitle_languages = data.languages.clone();
-    let fallback_subtitle_languages = data.languages;
+    let audio_languages = playback_language_options(
+        &data.languages,
+        &form.preferred_audio_language_code,
+        TextKey::OriginalLanguageOption,
+    );
+    let default_subtitle_languages = playback_language_options(
+        &data.languages,
+        &form.preferred_subtitle_language_code,
+        TextKey::UndefinedLanguageOption,
+    );
+    let fallback_subtitle_languages = playback_language_options(
+        &data.languages,
+        &form.fallback_subtitle_language_code,
+        TextKey::UndefinedLanguageOption,
+    );
+    form.preferred_audio_language_code = canonical_playback_language_selection(
+        &audio_languages,
+        &form.preferred_audio_language_code,
+    );
+    form.preferred_subtitle_language_code = canonical_playback_language_selection(
+        &default_subtitle_languages,
+        &form.preferred_subtitle_language_code,
+    );
+    form.fallback_subtitle_language_code = canonical_playback_language_selection(
+        &fallback_subtitle_languages,
+        &form.fallback_subtitle_language_code,
+    );
     // The path inputs are intentionally not `required`: an empty value saves
     // and means auto-detect, matching the FFmpegLocator behavior the startup
     // path and save server fn already implement. The locator-resolved path is
@@ -554,6 +578,45 @@ fn Select(
     }
 }
 
+fn playback_language_options(
+    languages: &[SelectOption],
+    selected: &str,
+    und_label: TextKey,
+) -> Vec<SelectOption> {
+    let mut options = vec![SelectOption {
+        value: "und".to_owned(),
+        label: tr(und_label).to_owned(),
+    }];
+    options.extend(
+        languages
+            .iter()
+            .filter(|option| option.value != "und")
+            .cloned(),
+    );
+
+    let selected = selected.trim();
+    if !selected.is_empty()
+        && !options
+            .iter()
+            .any(|option| option.value.eq_ignore_ascii_case(selected))
+    {
+        options.push(SelectOption {
+            value: selected.to_owned(),
+            label: selected.to_owned(),
+        });
+    }
+
+    options
+}
+
+fn canonical_playback_language_selection(options: &[SelectOption], selected: &str) -> String {
+    let selected = selected.trim();
+    options
+        .iter()
+        .find(|option| option.value.eq_ignore_ascii_case(selected))
+        .map_or_else(|| selected.to_owned(), |option| option.value.clone())
+}
+
 #[component]
 fn CheckboxField(
     label: &'static str,
@@ -693,6 +756,85 @@ mod tests {
         assert!(html.contains(r#"name="fallback_subtitle_language_code""#));
         assert!(html.contains(r#"value="nld" selected"#));
         assert!(html.contains(r#"value="eng" selected"#));
+    }
+
+    #[test]
+    fn ffmpeg_language_preferences_render_contextual_und_labels() {
+        let mut data = ffmpeg_settings_fixture();
+        data.form.preferred_audio_language_code = "und".to_owned();
+        data.form.preferred_subtitle_language_code = "und".to_owned();
+        data.form.fallback_subtitle_language_code = "und".to_owned();
+        data.languages = vec![SelectOption {
+            value: "eng".to_owned(),
+            label: "English".to_owned(),
+        }];
+
+        let html = render_ffmpeg(data).into_view().to_html();
+
+        assert_eq!(html.matches(">Original (und)</option>").count(), 1);
+        assert_eq!(html.matches(">Undefined (und)</option>").count(), 2);
+        assert_eq!(html.matches(r#"value="und" selected"#).count(), 3);
+    }
+
+    #[test]
+    fn playback_language_options_preserve_only_the_selected_legacy_value() {
+        let languages = vec![SelectOption {
+            value: "eng".to_owned(),
+            label: "English".to_owned(),
+        }];
+
+        let options =
+            playback_language_options(&languages, "enm", TextKey::UndefinedLanguageOption);
+
+        assert_eq!(options[0].value, "und");
+        assert_eq!(options[0].label, "Undefined (und)");
+        assert!(options
+            .iter()
+            .any(|option| option.value == "enm" && option.label == "enm"));
+        assert!(
+            !playback_language_options(&languages, "eng", TextKey::UndefinedLanguageOption,)
+                .iter()
+                .any(|option| option.value == "enm")
+        );
+    }
+
+    #[test]
+    fn playback_language_options_canonicalize_case_and_whitespace_variants() {
+        let languages = vec![SelectOption {
+            value: "eng".to_owned(),
+            label: "English".to_owned(),
+        }];
+
+        for selected in ["ENG", " eng "] {
+            let options =
+                playback_language_options(&languages, selected, TextKey::UndefinedLanguageOption);
+
+            assert_eq!(
+                canonical_playback_language_selection(&options, selected),
+                "eng"
+            );
+            assert!(!options.iter().any(|option| option.value == selected));
+        }
+    }
+
+    #[test]
+    fn ffmpeg_language_preferences_select_canonical_persisted_variants() {
+        let mut data = ffmpeg_settings_fixture();
+        data.form.preferred_audio_language_code = "ENG".to_owned();
+        data.form.preferred_subtitle_language_code = " eng ".to_owned();
+        data.form.fallback_subtitle_language_code = "UND".to_owned();
+        data.languages = vec![SelectOption {
+            value: "eng".to_owned(),
+            label: "English".to_owned(),
+        }];
+
+        let html = render_ffmpeg(data).into_view().to_html();
+
+        assert_eq!(html.matches(r#"value="eng" selected"#).count(), 2);
+        assert_eq!(html.matches(r#"value="und" selected"#).count(), 1);
+        assert!(!html.contains(r#"value="ENG""#));
+        assert!(!html.contains(r#"value=" eng ""#));
+        assert!(!html.contains(r#"value="UND""#));
     }
 
     #[test]

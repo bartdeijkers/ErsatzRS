@@ -121,7 +121,7 @@ async fn local_movie_subtitles_include_embedded_streams_and_sidecars() {
 }
 
 #[tokio::test]
-async fn local_sidecars_require_exact_basename_and_strip_extension_for_language() {
+async fn local_sidecars_require_exact_basename_and_use_und_without_language_suffix() {
     let pool = common::test_db().await;
     seed_local_movie(&pool).await;
 
@@ -160,7 +160,10 @@ async fn local_sidecars_require_exact_basename_and_strip_extension_for_language(
     .unwrap();
 
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].get::<Option<String>, _>("Language"), None);
+    assert_eq!(
+        rows[0].get::<Option<String>, _>("Language").as_deref(),
+        Some("und")
+    );
     let expected_path = bare_sidecar.display().to_string();
     assert_eq!(
         rows[0].get::<Option<String>, _>("Path").as_deref(),

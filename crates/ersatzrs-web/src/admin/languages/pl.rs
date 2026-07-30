@@ -1465,6 +1465,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PreferredAudioLanguage => "Preferowany język audio",
         TextKey::DefaultSubtitleLanguage => "Domyślny język napisów",
         TextKey::FallbackSubtitleLanguage => "Zapasowy język napisów",
+        TextKey::OriginalLanguageOption => "Oryginalny (und)",
+        TextKey::UndefinedLanguageOption => "Niezdefiniowany (und)",
         TextKey::Previous24Hours => "Poprzednie 24 godz.",
         TextKey::PreviousPage => "Poprzednia strona",
         TextKey::RerunCollections => "Kolekcje powtórek",

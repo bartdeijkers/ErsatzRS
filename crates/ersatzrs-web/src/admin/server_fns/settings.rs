@@ -360,7 +360,7 @@ async fn load_ffmpeg_settings_with_capabilities(
         ffprobe_resolved,
         active_transcode_capacity,
         ffmpeg_profiles: settings_select_options(model.ffmpeg_profiles),
-        languages: ersatzrs_core::language_codes::language_options()
+        languages: ersatzrs_core::language_codes::playback_language_options()
             .into_iter()
             .map(|(value, label)| SelectOption { value, label })
             .collect(),
@@ -736,6 +736,10 @@ mod tests {
         assert_eq!(data.form.preferred_audio_language_code, "eng");
         assert!(data.form.preferred_subtitle_language_code.is_empty());
         assert!(data.form.fallback_subtitle_language_code.is_empty());
+        assert_eq!(data.languages.len(), 184);
+        assert!(data.languages.iter().any(|option| option.value == "eng"));
+        assert!(!data.languages.iter().any(|option| option.value == "enm"));
+        assert!(!data.languages.iter().any(|option| option.value == "und"));
     }
 
     #[test]

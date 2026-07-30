@@ -793,6 +793,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PreferredAudioLanguage => "Langue audio préférée",
         TextKey::DefaultSubtitleLanguage => "Langue de sous-titres par défaut",
         TextKey::FallbackSubtitleLanguage => "Langue de sous-titres de secours",
+        TextKey::OriginalLanguageOption => "Original (und)",
+        TextKey::UndefinedLanguageOption => "Indéfini (und)",
         TextKey::Previous24Hours => "24 h précédentes",
         TextKey::PreviousPage => "Page précédente",
         TextKey::RerunCollections => "Collections de rediffusions",
