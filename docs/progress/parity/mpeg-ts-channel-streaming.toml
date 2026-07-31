@@ -34,6 +34,11 @@ script without overwriting user edits; custom script YAML uses the ErsatzTV
 field names and renders `HlsUrl`, `ChannelName`, `FFmpegPath`, `MuxRate`, and
 `PcrPeriod`. Invalid scripts warn and fall back to the built-in wrapper.
 
+Mirror channels resolve active media from their generated source at
+`wall clock - PlayoutOffset`, then project item times back onto the target
+timeline. FFmpeg profile, branding, selectors, watermarks, and language choices
+continue to come from the requested target channel.
+
 Runtime proof: On 2026-06-29, after broadening the MPEG-TS mux timing helper to
 direct `.ts`, legacy concat, HLS-direct, and the configured/fallback hybrid
 wrapper, `scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks. The

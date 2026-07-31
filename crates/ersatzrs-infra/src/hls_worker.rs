@@ -9,6 +9,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use crate::channel_playout::load_channel_playout_context;
 use crate::db::DbPool;
 use crate::repositories::common::{
     encode_datetime, map_data_access_error, try_decode_duration_text,
@@ -3558,7 +3559,10 @@ async fn load_active_hls_item(
     path_replacements: &[PathReplacement],
     now: DateTime<Utc>,
 ) -> RepositoryResult<Option<ActiveHlsItem>> {
-    let now_text = encode_datetime(now);
+    let Some(playout_context) = load_channel_playout_context(pool, channel_id).await? else {
+        return Ok(None);
+    };
+    let now_text = encode_datetime(playout_context.source_time(now)?);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
                   pi."Id" AS "PlayoutItemId",
@@ -3594,7 +3598,7 @@ async fn load_active_hls_item(
                   rs."IsLive" AS "RemoteIsLive"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
+           JOIN "Channel" c ON c."Id" = ?
            JOIN "MediaVersion" mv ON (
                   mv."MovieId" = pi."MediaItemId"
                OR mv."EpisodeId" = pi."MediaItemId"
@@ -3614,6 +3618,7 @@ async fn load_active_hls_item(
            LIMIT 1"#,
     )
     .bind(channel_id)
+    .bind(playout_context.source_channel_id)
     .bind(&now_text)
     .bind(&now_text)
     .fetch_optional(pool)
@@ -3656,18 +3661,21 @@ async fn load_active_hls_item(
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
     let playout_start_text = decode_hls_column::<String>(&row, "PlayoutStart")?;
-    let playout_start =
+    let source_playout_start =
         parse_sqlite_utc_timestamp(&playout_start_text).ok_or_else(|| RepositoryError::Decode {
             kind: "active HLS item",
             value: format!("PlayoutStart: invalid timestamp {playout_start_text:?}"),
         })?;
     let playout_finish_text = decode_hls_column::<String>(&row, "PlayoutFinish")?;
-    let playout_finish = parse_sqlite_utc_timestamp(&playout_finish_text).ok_or_else(|| {
-        RepositoryError::Decode {
-            kind: "active HLS item",
-            value: format!("PlayoutFinish: invalid timestamp {playout_finish_text:?}"),
-        }
-    })?;
+    let source_playout_finish =
+        parse_sqlite_utc_timestamp(&playout_finish_text).ok_or_else(|| {
+            RepositoryError::Decode {
+                kind: "active HLS item",
+                value: format!("PlayoutFinish: invalid timestamp {playout_finish_text:?}"),
+            }
+        })?;
+    let playout_start = playout_context.target_time(source_playout_start)?;
+    let playout_finish = playout_context.target_time(source_playout_finish)?;
     let program_duration =
         (playout_finish - playout_start)
             .to_std()
@@ -3775,7 +3783,10 @@ async fn current_remote_stream_is_live(
     channel_id: i64,
     transcode_at: DateTime<Utc>,
 ) -> RepositoryResult<bool> {
-    let transcode_at_text = encode_datetime(transcode_at);
+    let Some(playout_context) = load_channel_playout_context(pool, channel_id).await? else {
+        return Ok(false);
+    };
+    let transcode_at_text = encode_datetime(playout_context.source_time(transcode_at)?);
     let is_live = sqlx::query_scalar::<_, i64>(
         r#"SELECT CASE
                        WHEN rs."IsLive" <> 0 OR LOWER(rs."Url") LIKE 'rtsp:%' THEN 1
@@ -3790,7 +3801,7 @@ async fn current_remote_stream_is_live(
            ORDER BY pi."Start" DESC, pi."Id" DESC
            LIMIT 1"#,
     )
-    .bind(channel_id)
+    .bind(playout_context.source_channel_id)
     .bind(&transcode_at_text)
     .bind(&transcode_at_text)
     .fetch_optional(pool)
@@ -5484,6 +5495,51 @@ mod tests {
     }
 
     #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn active_hls_item_uses_source_programming_and_target_channel_settings() {
+        let pool = active_hls_item_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "Channel" (
+                   "Id", "Name", "StreamSelectorMode", "SubtitleMode",
+                   "MusicVideoCreditsMode", "PlayoutSource", "MirrorSourceChannelId",
+                   "PlayoutOffset"
+               ) VALUES (8, 'Delayed Eight', 0, 0, 0, 1, 7, '01:00:00')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed mirror target");
+        sqlx::query(r#"UPDATE "PlayoutItem" SET "SubtitleMode" = 0 WHERE "Id" = 12"#)
+            .execute(&pool)
+            .await
+            .expect("make HLS item valid");
+        let mirror_now = DateTime::parse_from_rfc3339("2026-06-08T13:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+
+        let active = load_active_hls_item(&pool, 8, &[], mirror_now)
+            .await
+            .expect("load mirror HLS item")
+            .expect("active mirror HLS item");
+
+        assert_eq!(active.playout_item_id, 12);
+        assert_eq!(active.channel_name, "Delayed Eight");
+        assert_eq!(
+            active.playout_start,
+            DateTime::parse_from_rfc3339("2026-06-08T12:59:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        );
+        assert_eq!(
+            active.playout_finish,
+            Some(
+                DateTime::parse_from_rfc3339("2026-06-08T13:01:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc)
+            )
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
     async fn active_hls_item_test_pool() -> sqlx::SqlitePool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -5502,7 +5558,10 @@ mod tests {
                 "PreferredSubtitleLanguageCode" TEXT NULL,
                 "SubtitleMode" INTEGER NOT NULL,
                 "MusicVideoCreditsMode" INTEGER NOT NULL,
-                "MusicVideoCreditsTemplate" TEXT NULL
+                "MusicVideoCreditsTemplate" TEXT NULL,
+                "PlayoutSource" INTEGER NOT NULL,
+                "MirrorSourceChannelId" INTEGER NULL,
+                "PlayoutOffset" TEXT NULL
             )"#,
             r#"CREATE TABLE "Playout" (
                 "Id" INTEGER PRIMARY KEY,
@@ -5557,8 +5616,8 @@ mod tests {
         for statement in [
             r#"INSERT INTO "Channel" (
                 "Id", "Name", "StreamSelectorMode", "SubtitleMode",
-                "MusicVideoCreditsMode"
-            ) VALUES (7, 'Seven', 0, 0, 0)"#,
+                "MusicVideoCreditsMode", "PlayoutSource"
+            ) VALUES (7, 'Seven', 0, 0, 0, 0)"#,
             r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (11, 7)"#,
             r#"INSERT INTO "PlayoutItem" (
                 "Id", "MediaItemId", "PlayoutId", "InPoint", "Start", "Finish",

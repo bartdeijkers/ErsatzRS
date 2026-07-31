@@ -232,7 +232,12 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         Ok(())
     }
 
-    async fn apply_build_result(&self, result: &SchedulingResult, playout: &Playout) -> Result<()> {
+    async fn apply_build_result(
+        &self,
+        result: &SchedulingResult,
+        playout: &Playout,
+        max_playout_offset: chrono::Duration,
+    ) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
 
         // ── items ─────────────────────────────────────────────────────────────
@@ -251,7 +256,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                     .repository()?;
             }
             if let Some(cutoff) = result.remove_before {
-                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Start" < ?"#)
+                let cutoff = cutoff - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
                     .bind(playout.id)
                     .bind(encode_datetime(cutoff))
                     .execute(&mut *tx)
@@ -814,10 +820,13 @@ async fn list_create_channels_admin(
 ) -> Result<Vec<PlayoutCreateChannelAdmin>> {
     let rows = sqlx::query(
         r#"SELECT c."Id", COALESCE(c."Number", '') AS "Number",
-                  COALESCE(c."Name", '') AS "Name", COUNT(p."Id") AS "PlayoutCount"
+                  COALESCE(c."Name", '') AS "Name",
+                  ((SELECT COUNT(*) FROM "Playout" own_p WHERE own_p."ChannelId" = c."Id") +
+                   CASE WHEN c."PlayoutSource" = 1 THEN
+                     (SELECT COUNT(*) FROM "Playout" source_p
+                      WHERE source_p."ChannelId" = c."MirrorSourceChannelId")
+                   ELSE 0 END) AS "PlayoutCount"
            FROM "Channel" c
-           LEFT JOIN "Playout" p ON p."ChannelId" = c."Id"
-           GROUP BY c."Id", c."Number", c."Name", c."SortNumber"
            ORDER BY c."SortNumber", c."Id""#,
     )
     .fetch_all(pool)

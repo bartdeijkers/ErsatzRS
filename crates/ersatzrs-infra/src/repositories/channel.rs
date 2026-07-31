@@ -14,11 +14,13 @@ use sqlx::{Pool, Row};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+use crate::channel_playout::{load_channel_playout_context, ChannelPlayoutContext};
 use crate::music_video_credits::list_music_video_credit_template_names;
 
 use super::common::{
-    decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
-    encode_datetime, encode_duration, encode_enum, load_ids, not_found,
+    decode_bool_column, decode_datetime, decode_enum_column, decode_message, encode_datetime,
+    encode_duration, encode_enum, encode_signed_duration, load_ids, not_found,
+    try_decode_signed_duration_text,
 };
 
 #[derive(Clone)]
@@ -331,7 +333,11 @@ impl ChannelRepository for SqliteChannelRepository {
             r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
                       c."IsEnabled", c."ShowInEpg", c."StreamingMode",
                       COALESCE(p."Name", '') AS "ProfileName",
-                      (SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") AS "PlayoutCount",
+                      ((SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") +
+                       CASE WHEN c."PlayoutSource" = 1 THEN
+                         (SELECT COUNT(*) FROM "Playout" source_pl
+                          WHERE source_pl."ChannelId" = c."MirrorSourceChannelId")
+                       ELSE 0 END) AS "PlayoutCount",
                       (SELECT a."Path" FROM "Artwork" a
                        WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
                        ORDER BY a."Id" LIMIT 1) AS "LogoPath"
@@ -506,9 +512,19 @@ async fn load_watch_state(
         return Ok(None);
     };
 
-    let playout_id = select_watch_playout(pool, id, now).await?;
+    let Some(playout_context) = load_channel_playout_context(pool, id).await? else {
+        return Ok(None);
+    };
+    let source_now = playout_context.source_time(now)?;
+    let source_start = playout_context.source_time(start)?;
+    let source_finish = playout_context.source_time(finish)?;
+    let playout_id =
+        select_watch_playout(pool, playout_context.source_channel_id, source_now).await?;
     let programmes = match playout_id {
-        Some(playout_id) => load_watch_programmes(pool, playout_id, start, finish).await?,
+        Some(playout_id) => project_programmes(
+            load_watch_programmes(pool, playout_id, source_start, source_finish).await?,
+            playout_context,
+        )?,
         None => Vec::new(),
     };
 
@@ -643,8 +659,10 @@ struct EpgChannelRow {
     logo_path: Option<String>,
     ffmpeg_profile_name: String,
     streaming_mode: i32,
+    playout_context: ChannelPlayoutContext,
 }
 
+#[allow(clippy::too_many_lines)]
 async fn load_epg_preview_states(
     pool: &Pool<crate::db::Db>,
     now: DateTime<Utc>,
@@ -653,6 +671,7 @@ async fn load_epg_preview_states(
 ) -> Result<Vec<EpgPreviewChannelState>> {
     let channel_rows = sqlx::query(
         r#"SELECT c."Id", c."Number", c."SortNumber", c."Name", c."StreamingMode",
+                  c."PlayoutSource", c."MirrorSourceChannelId", c."PlayoutOffset",
                   COALESCE(fp."Name", '') AS "ProfileName",
                   (SELECT a."Path" FROM "Artwork" a
                    WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
@@ -668,14 +687,38 @@ async fn load_epg_preview_states(
     let channels = channel_rows
         .iter()
         .map(|row| {
+            let id = row.try_get("Id").repository()?;
+            let playout_source: i32 = row.try_get("PlayoutSource").repository()?;
+            let offset = row
+                .try_get::<Option<String>, _>("PlayoutOffset")
+                .repository()?
+                .as_deref()
+                .map(try_decode_signed_duration_text)
+                .transpose()?
+                .unwrap_or_default();
             Ok(EpgChannelRow {
-                id: row.try_get("Id").repository()?,
+                id,
                 number: row.try_get("Number").repository()?,
                 sort_number: row.try_get("SortNumber").repository()?,
                 name: row.try_get("Name").repository()?,
                 logo_path: row.try_get("LogoPath").repository()?,
                 ffmpeg_profile_name: row.try_get("ProfileName").repository()?,
                 streaming_mode: row.try_get("StreamingMode").repository()?,
+                playout_context: ChannelPlayoutContext {
+                    requested_channel_id: id,
+                    source_channel_id: if playout_source == 1 {
+                        row.try_get::<Option<EntityId>, _>("MirrorSourceChannelId")
+                            .repository()?
+                            .unwrap_or(id)
+                    } else {
+                        id
+                    },
+                    offset: if playout_source == 1 {
+                        offset
+                    } else {
+                        Duration::zero()
+                    },
+                },
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -685,13 +728,11 @@ async fn load_epg_preview_states(
 
     let channel_ids = channels
         .iter()
-        .map(|channel| channel.id)
+        .map(|channel| channel.playout_context.source_channel_id)
         .collect::<HashSet<_>>();
     let playout_rows = sqlx::query(
         r#"SELECT p."Id", p."ChannelId"
            FROM "Playout" p
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
-           WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
            ORDER BY p."ChannelId", p."Id""#,
     )
     .fetch_all(pool)
@@ -708,18 +749,38 @@ async fn load_epg_preview_states(
         }
     }
 
-    let mut rows_by_playout = load_epg_programmes(pool, start, finish).await?;
+    let source_start = channels
+        .iter()
+        .map(|channel| channel.playout_context.source_time(start))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .min()
+        .unwrap_or(start);
+    let source_finish = channels
+        .iter()
+        .map(|channel| channel.playout_context.source_time(finish))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .max()
+        .unwrap_or(finish);
+    let rows_by_playout = load_epg_programmes(pool, source_start, source_finish).await?;
 
     let mut output = Vec::with_capacity(channels.len());
     for channel in channels {
         let playout_ids = playouts_by_channel
-            .get(&channel.id)
+            .get(&channel.playout_context.source_channel_id)
             .map(Vec::as_slice)
             .unwrap_or_default();
-        let playout_id = select_epg_playout(playout_ids, &rows_by_playout, now);
+        let source_now = channel.playout_context.source_time(now)?;
+        let playout_id = select_epg_playout(playout_ids, &rows_by_playout, source_now);
         let programmes = playout_id
-            .and_then(|id| rows_by_playout.remove(&id))
-            .unwrap_or_default();
+            .and_then(|id| rows_by_playout.get(&id).cloned())
+            .map(|programmes| project_programmes(programmes, channel.playout_context))
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|programme| programme.finish > start && programme.start < finish)
+            .collect();
         output.push(EpgPreviewChannelState {
             id: channel.id,
             number: channel.number,
@@ -749,18 +810,14 @@ async fn load_epg_programmes(
                           pi."Finish" AS "Finish", pi."FillerKind" AS "FillerKind"
                    FROM "PlayoutItem" pi
                    JOIN "Playout" p ON p."Id" = pi."PlayoutId"
-                   JOIN "Channel" c ON c."Id" = p."ChannelId"
-                   WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
-                     AND pi."Finish" > ? AND pi."Start" < ?
+                   WHERE pi."Finish" > ? AND pi."Start" < ?
                    UNION ALL
                    SELECT p."ChannelId" AS "ChannelId", pg."PlayoutId" AS "PlayoutId",
                           'gap' AS "Kind", pg."Id" AS "Id", pg."Start" AS "Start",
                           pg."Finish" AS "Finish", -1 AS "FillerKind"
                    FROM "PlayoutGap" pg
                    JOIN "Playout" p ON p."Id" = pg."PlayoutId"
-                   JOIN "Channel" c ON c."Id" = p."ChannelId"
-                   WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
-                     AND pg."Finish" > ? AND pg."Start" < ?
+                   WHERE pg."Finish" > ? AND pg."Start" < ?
                ) AS combined
                ORDER BY "ChannelId", "PlayoutId", "Start", "Kind", "Id""#,
     )
@@ -803,6 +860,20 @@ async fn load_epg_programmes(
             });
     }
     Ok(rows_by_playout)
+}
+
+fn project_programmes(
+    programmes: Vec<ChannelWatchProgramme>,
+    context: ChannelPlayoutContext,
+) -> Result<Vec<ChannelWatchProgramme>> {
+    programmes
+        .into_iter()
+        .map(|mut programme| {
+            programme.start = context.target_time(programme.start)?;
+            programme.finish = context.target_time(programme.finish)?;
+            Ok(programme)
+        })
+        .collect()
 }
 
 fn select_epg_playout(
@@ -1004,7 +1075,8 @@ async fn load_editor_form(
         .try_get::<Option<String>, _>("PlayoutOffset")
         .repository()?
         .as_deref()
-        .map(decode_duration_text);
+        .map(try_decode_signed_duration_text)
+        .transpose()?;
 
     Ok(Some((
         ChannelEditorForm {
@@ -1542,16 +1614,6 @@ fn is_valid_channel_number(value: &str) -> bool {
         && !fractional.contains('.')
 }
 
-fn encode_signed_duration(value: Duration) -> String {
-    let total_seconds = value.num_seconds();
-    let sign = if total_seconds < 0 { "-" } else { "" };
-    let total_seconds = total_seconds.abs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
-}
-
 fn map_channel(row: &DbRow) -> Result<Channel> {
     let unique_id = row.try_get::<String, _>("UniqueId").repository()?;
     Ok(Channel {
@@ -1598,7 +1660,8 @@ fn map_channel(row: &DbRow) -> Result<Channel> {
             .try_get::<Option<String>, _>("PlayoutOffset")
             .repository()?
             .as_deref()
-            .map(decode_duration_text),
+            .map(super::common::try_decode_signed_duration_text)
+            .transpose()?,
         transcode_mode: decode_enum_column("channel transcode_mode", row, "TranscodeMode")?,
         idle_behavior: decode_enum_column("channel idle_behavior", row, "IdleBehavior")?,
         is_enabled: decode_bool_column(row, "IsEnabled")?,

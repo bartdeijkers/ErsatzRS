@@ -32,6 +32,7 @@ use ersatzrs_ffmpeg::{
     OutputFormat, OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream,
     SourceVideoCodec, SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
+use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
     learned_hardware_decode_denial, persist_hardware_decode_denial,
@@ -1483,7 +1484,11 @@ pub(crate) async fn load_active_media_path(
     channel_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<ActivePlayoutItem>, RepositoryError> {
-    let now_text = encode_sql_datetime(now);
+    let Some(playout_context) = load_channel_playout_context(pool, channel_id).await? else {
+        return Ok(None);
+    };
+    let source_now = playout_context.source_time(now)?;
+    let now_text = encode_sql_datetime(source_now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
                   pi."Id" AS "PlayoutItemId",
@@ -1528,7 +1533,7 @@ pub(crate) async fn load_active_media_path(
            ORDER BY pi."Start" DESC, pi."Id" DESC, mv."Id"
            LIMIT 1"#,
     )
-    .bind(channel_id)
+    .bind(playout_context.source_channel_id)
     .bind(&now_text)
     .bind(&now_text)
     .fetch_optional(pool)
@@ -1541,20 +1546,24 @@ pub(crate) async fn load_active_media_path(
     let content_duration = parse_duration_text(&content_duration_text)?;
     let in_point_text = decode_active_item_column::<String>(&row, "InPoint")?;
     let out_point_text = decode_active_item_column::<String>(&row, "OutPoint")?;
-    let playout_start = decode_active_item_column::<String>(&row, "PlayoutStart")?;
-    let playout_finish = decode_active_item_column::<String>(&row, "PlayoutFinish")?;
-    if parse_sqlite_utc_timestamp(&playout_start).is_none() {
-        return Err(RepositoryError::Decode {
-            kind: "active playback item",
-            value: format!("PlayoutStart: invalid timestamp {playout_start:?}"),
-        });
-    }
-    if parse_sqlite_utc_timestamp(&playout_finish).is_none() {
-        return Err(RepositoryError::Decode {
-            kind: "active playback item",
-            value: format!("PlayoutFinish: invalid timestamp {playout_finish:?}"),
-        });
-    }
+    let source_playout_start = decode_active_item_column::<String>(&row, "PlayoutStart")?;
+    let source_playout_finish = decode_active_item_column::<String>(&row, "PlayoutFinish")?;
+    let source_playout_start =
+        parse_sqlite_utc_timestamp(&source_playout_start).ok_or_else(|| {
+            RepositoryError::Decode {
+                kind: "active playback item",
+                value: format!("PlayoutStart: invalid timestamp {source_playout_start:?}"),
+            }
+        })?;
+    let source_playout_finish =
+        parse_sqlite_utc_timestamp(&source_playout_finish).ok_or_else(|| {
+            RepositoryError::Decode {
+                kind: "active playback item",
+                value: format!("PlayoutFinish: invalid timestamp {source_playout_finish:?}"),
+            }
+        })?;
+    let playout_start = encode_sql_datetime(playout_context.target_time(source_playout_start)?);
+    let playout_finish = encode_sql_datetime(playout_context.target_time(source_playout_finish)?);
     let subtitle_mode_value = decode_active_item_column::<Option<i64>>(&row, "SubtitleMode")?;
     let subtitle_mode = subtitle_mode_value
         .map(|value| {
@@ -2859,6 +2868,40 @@ mod tests {
         assert_eq!(active.media_path, "/media/streams/live.yml");
     }
 
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn active_playback_item_loader_resolves_and_projects_delayed_mirror() {
+        let pool = active_playback_item_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "Channel" (
+                   "Id", "PlayoutSource", "MirrorSourceChannelId", "PlayoutOffset"
+               ) VALUES (8, 1, 7, '01:00:00')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed delayed mirror");
+        sqlx::query(r#"UPDATE "PlayoutItem" SET "SubtitleMode" = 0 WHERE "Id" = 12"#)
+            .execute(&pool)
+            .await
+            .expect("make playback item valid");
+        let mirror_now = DateTime::parse_from_rfc3339("2026-06-08T13:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+
+        let active = load_active_media_path(&pool, 8, mirror_now)
+            .await
+            .expect("load mirror item")
+            .expect("active mirror item");
+
+        assert_eq!(active.playout_item_id, 12);
+        assert_eq!(active.playout_start, "2026-06-08 12:59:00");
+        assert_eq!(active.playout_finish, "2026-06-08 13:01:00");
+        assert_eq!(
+            active.content_seek_position(mirror_now),
+            Duration::from_mins(1)
+        );
+    }
+
     #[test]
     fn active_playback_duration_rejects_empty_fraction() {
         assert!(matches!(
@@ -2883,6 +2926,12 @@ mod tests {
             .await
             .expect("open active playback item test database");
         for statement in [
+            r#"CREATE TABLE "Channel" (
+                "Id" INTEGER PRIMARY KEY,
+                "PlayoutSource" INTEGER NOT NULL,
+                "MirrorSourceChannelId" INTEGER NULL,
+                "PlayoutOffset" TEXT NULL
+            )"#,
             r#"CREATE TABLE "Playout" (
                 "Id" INTEGER PRIMARY KEY,
                 "ChannelId" INTEGER NOT NULL
@@ -2935,6 +2984,9 @@ mod tests {
                 .expect("create active playback item test table");
         }
         for statement in [
+            r#"INSERT INTO "Channel" (
+                "Id", "PlayoutSource", "MirrorSourceChannelId", "PlayoutOffset"
+            ) VALUES (7, 0, NULL, NULL)"#,
             r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (11, 7)"#,
             r#"INSERT INTO "PlayoutItem" (
                 "Id", "MediaItemId", "PlayoutId", "InPoint", "OutPoint",

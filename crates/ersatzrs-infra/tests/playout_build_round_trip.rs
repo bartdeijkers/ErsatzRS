@@ -93,7 +93,7 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
 
     repos
         .playout
-        .apply_build_result(&result, &playout)
+        .apply_build_result(&result, &playout, Duration::zero())
         .await
         .unwrap();
 
@@ -121,6 +121,58 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
         "guide_group": i.guide_group,
         "filler_kind": format!("{:?}", i.filler_kind),
     })).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn apply_build_result_retains_source_items_until_delayed_mirror_finishes() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    pool.execute(
+        r#"INSERT OR REPLACE INTO "Playout"
+           ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (1, 1, 'Classic', 42)"#,
+    )
+    .await
+    .unwrap();
+    let cutoff = common::fixed_time();
+    let mut expired = common::playout_item(1, 1, 1);
+    expired.start = cutoff - Duration::hours(2);
+    expired.finish = cutoff - Duration::minutes(70);
+    let mut delayed_still_needed = common::playout_item(2, 1, 1);
+    delayed_still_needed.start = cutoff - Duration::minutes(90);
+    delayed_still_needed.finish = cutoff - Duration::minutes(30);
+    repos.playout.upsert_item(&expired).await.unwrap();
+    repos
+        .playout
+        .upsert_item(&delayed_still_needed)
+        .await
+        .unwrap();
+
+    let result = SchedulingResult {
+        remove_before: Some(cutoff),
+        ..SchedulingResult::default()
+    };
+    let playout = Playout {
+        id: 1,
+        channel_id: 1,
+        schedule_kind: PlayoutScheduleKind::Classic,
+        ..Playout::default()
+    };
+    repos
+        .playout
+        .apply_build_result(&result, &playout, Duration::hours(1))
+        .await
+        .unwrap();
+
+    let ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlayoutItem" WHERE "PlayoutId" = 1 ORDER BY "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ids, vec![2]);
 }
 
 #[tokio::test]
@@ -185,7 +237,7 @@ async fn apply_build_result_persists_graphics_variables_for_generated_items() {
 
     repos
         .playout
-        .apply_build_result(&result, &playout)
+        .apply_build_result(&result, &playout, Duration::zero())
         .await
         .unwrap();
 
@@ -267,7 +319,7 @@ async fn apply_build_result_continue_appends_and_removes_selectively() {
 
     repos
         .playout
-        .apply_build_result(&result, &playout)
+        .apply_build_result(&result, &playout, Duration::zero())
         .await
         .unwrap();
 
@@ -351,7 +403,7 @@ async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
 
     repos
         .playout
-        .apply_build_result(&result, &playout)
+        .apply_build_result(&result, &playout, Duration::zero())
         .await
         .unwrap();
 
@@ -447,7 +499,7 @@ playout:
 
     repos
         .playout
-        .apply_build_result(&result, &playout_with_anchor)
+        .apply_build_result(&result, &playout_with_anchor, Duration::zero())
         .await
         .unwrap();
 
@@ -593,7 +645,7 @@ async fn block_and_yaml_playtouts_round_trip_against_real_world_db() {
 
         mem_repos
             .playout
-            .apply_build_result(&result, &playout_with_anchor)
+            .apply_build_result(&result, &playout_with_anchor, Duration::zero())
             .await
             .unwrap();
 
@@ -682,7 +734,7 @@ async fn block_and_yaml_playtouts_round_trip_against_real_world_db() {
 
         mem_repos
             .playout
-            .apply_build_result(&result, &playout_with_anchor)
+            .apply_build_result(&result, &playout_with_anchor, Duration::zero())
             .await
             .unwrap();
 

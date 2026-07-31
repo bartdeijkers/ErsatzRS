@@ -3,6 +3,7 @@
 pub mod admin_libraries;
 pub mod admin_settings;
 pub mod cache_cleanup;
+pub mod channel_playout;
 pub(crate) mod condition;
 pub mod db;
 pub mod emby;

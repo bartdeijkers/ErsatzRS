@@ -217,6 +217,38 @@ VALUES (${id + 4}, ${playoutId}, '${dbTime(nextFinish)}', '${dbTime(gapFinish)}'
   return { id, name, number };
 }
 
+function seedMirrorCandidate(
+  testInfo: TestInfo,
+  source: { id: number; number: string },
+): { id: number; name: string; number: string } {
+  const id = source.id + 500;
+  const number = `${Number.parseInt(source.number, 10) + 100}`;
+  const name = `E2E Delayed Mirror ${testInfo.project.name}`;
+  const profileId = sqlite(
+    `SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id" = ${source.id};`,
+  );
+  sqlite(`
+DELETE FROM "Channel" WHERE "Id" = ${id};
+INSERT INTO "Channel" (
+  "Id", "UniqueId", "Number", "SortNumber", "Name", "Group",
+  "FFmpegProfileId", "StreamingMode", "StreamSelectorMode",
+  "PlayoutSource", "PlayoutMode", "TranscodeMode", "IdleBehavior",
+  "MusicVideoCreditsMode", "SongVideoMode", "SubtitleMode", "IsEnabled", "ShowInEpg"
+) VALUES (
+  ${id}, '00000000-0000-0000-0001-${id.toString().padStart(12, '0')}',
+  '${number}', -999, '${name}', 'ErsatzRS', ${profileId}, 5, 0,
+  0, 0, 0, 0, 0, 0, 0, 1, 1
+);
+`);
+  return { id, name, number };
+}
+
+function programmeStartMinutes(title: string): number {
+  const match = title.match(/·\s*(\d{2}):(\d{2})/);
+  if (!match) throw new Error(`programme title has no start time: ${title}`);
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 async function forceEnglish(page: Page): Promise<void> {
   await page.request.post('/api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
@@ -468,6 +500,91 @@ test.describe('channel preview modal and watch route', () => {
     await expect
       .poll(async () => Math.abs((await timelineCenterMinutes(page, 150)) - centerBefore))
       .toBeLessThan(1);
+  });
+
+  test('configures and renders a one-hour delayed mirror through the admin UI', async ({
+    page,
+  }, testInfo) => {
+    const source = seedChannel(testInfo);
+    const mirror = seedMirrorCandidate(testInfo, source);
+    const now = new Date();
+    sqlite(`
+UPDATE "PlayoutItem"
+SET "Start" = '${dbTime(new Date(now.getTime() - 90 * 60_000))}',
+    "Finish" = '${dbTime(new Date(now.getTime() + 30 * 60_000))}'
+WHERE "Id" = ${source.id + 2};
+UPDATE "PlayoutItem"
+SET "Start" = '${dbTime(new Date(now.getTime() + 30 * 60_000))}',
+    "Finish" = '${dbTime(new Date(now.getTime() + 90 * 60_000))}'
+WHERE "Id" = ${source.id + 3};
+`);
+    await forceEnglish(page);
+    const browserErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') browserErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => browserErrors.push(error.message));
+
+    await page.goto(`/channels/${mirror.id}`);
+    await waitForHydration(page);
+    await page.locator('select[name="playout_source"]').selectOption('1');
+    await page
+      .locator('select[name="mirror_source_channel_id"]')
+      .selectOption(String(source.id));
+    await page.locator('input[name="playout_offset_hours"]').fill('1');
+    await Promise.all([
+      page.waitForURL(/\/channels$/),
+      page.getByRole('button', { name: 'Save Channel', exact: true }).click(),
+    ]);
+
+    await page.goto(`/channels/${mirror.id}`);
+    await waitForHydration(page);
+    await expect(page.locator('select[name="playout_source"]')).toHaveValue('1');
+    await expect(page.locator('select[name="mirror_source_channel_id"]')).toHaveValue(
+      String(source.id),
+    );
+    await expect(page.locator('input[name="playout_offset_hours"]')).toHaveValue('1');
+
+    await page.goto('/channels');
+    await waitForHydration(page);
+    const mirrorRow = page.getByRole('row').filter({ hasText: mirror.name });
+    await expect(mirrorRow.getByRole('button', { name: 'Preview channel' })).toBeVisible();
+
+    await page.goto('/playouts/add');
+    await waitForHydration(page);
+    await expect(
+      page.locator(`select[name="channel_id"] option[value="${mirror.id}"]`),
+    ).toHaveAttribute('disabled', '');
+
+    await page.goto(`/channels/${mirror.id}/watch`);
+    await waitForHydration(page);
+    await expect(page.getByRole('heading', { name: new RegExp(mirror.name) })).toBeVisible();
+    await expect(page.getByRole('gridcell').filter({ hasText: 'E2E Preview Programme' }).first())
+      .toBeVisible();
+
+    await page.goto('/epg');
+    await waitForHydration(page);
+    const sourceLane = page.locator(`[data-channel-id="${source.id}"]`);
+    const mirrorLane = page.locator(`[data-channel-id="${mirror.id}"]`);
+    const sourceProgramme = sourceLane
+      .getByRole('gridcell')
+      .filter({ hasText: 'E2E Preview Programme' })
+      .first();
+    const mirrorProgramme = mirrorLane
+      .getByRole('gridcell')
+      .filter({ hasText: 'E2E Preview Programme' })
+      .first();
+    await expect(sourceProgramme).toBeVisible();
+    await expect(mirrorProgramme).toBeVisible();
+    const sourceTitle = await sourceProgramme.getAttribute('title');
+    const mirrorTitle = await mirrorProgramme.getAttribute('title');
+    expect(sourceTitle).not.toBeNull();
+    expect(mirrorTitle).not.toBeNull();
+    expect(
+      (programmeStartMinutes(mirrorTitle!) - programmeStartMinutes(sourceTitle!) + 24 * 60) %
+        (24 * 60),
+    ).toBe(60);
+    expect(browserErrors).toEqual([]);
   });
 
   test('preview video and modal stay contained on desktop and mobile screens', async ({

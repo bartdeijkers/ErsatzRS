@@ -217,6 +217,18 @@ pub fn encode_duration(value: Duration) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
+/// Encode a signed [`Duration`] as an ErsatzTV time span (`[-]HH:MM:SS`).
+#[must_use]
+pub fn encode_signed_duration(value: Duration) -> String {
+    let total_seconds = value.num_seconds();
+    let sign = if total_seconds < 0 { "-" } else { "" };
+    let total_seconds = total_seconds.unsigned_abs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
+}
+
 /// Decode an `HH:MM:SS` (or similar) TEXT duration stored by `ErsatzTV`.
 #[must_use]
 pub fn decode_duration_text(value: &str) -> Duration {
@@ -229,13 +241,31 @@ pub fn decode_duration_text(value: &str) -> Duration {
 ///
 /// Returns a decode error for malformed, negative, or overflowing values.
 pub fn try_decode_duration_text(value: &str) -> Result<Duration> {
-    let (day_text, time_text) = value.rsplit_once('.').map_or(("", value), |(left, right)| {
-        if left.contains(':') {
-            ("", value)
-        } else {
-            (left, right)
+    let duration = try_decode_signed_duration_text(value)?;
+    if duration < Duration::zero() {
+        return Err(decode_message("duration", "value must be non-negative"));
+    }
+    Ok(duration)
+}
+
+/// Strictly decode a signed ErsatzTV time span (`[-]HH:MM:SS`).
+///
+/// # Errors
+///
+/// Returns a decode error for malformed or overflowing values.
+pub fn try_decode_signed_duration_text(value: &str) -> Result<Duration> {
+    let (sign, value) = value
+        .strip_prefix('-')
+        .map_or((1_i32, value), |unsigned| (-1_i32, unsigned));
+    if value.starts_with('+') || value.is_empty() {
+        return Err(decode_message("duration", "expected [-]HH:MM:SS"));
+    }
+    let (day_text, time_text) = match (value.find('.'), value.find(':')) {
+        (Some(day_separator), Some(first_colon)) if day_separator < first_colon => {
+            (&value[..day_separator], &value[day_separator + 1..])
         }
-    });
+        _ => ("", value),
+    };
     let parts: Vec<&str> = time_text.split(':').collect();
     let [hours_text, minutes_text, seconds_text] = parts.as_slice() else {
         return Err(decode_message("duration", "expected HH:MM:SS"));
@@ -285,7 +315,7 @@ pub fn try_decode_duration_text(value: &str) -> Result<Duration> {
         .and_then(|value| value.checked_add(&Duration::try_seconds(seconds)?))
         .and_then(|value| value.checked_add(&Duration::nanoseconds(nanos)))
         .ok_or_else(|| decode_message("duration", "value overflows supported range"))?;
-    Ok(duration)
+    Ok(if sign < 0 { -duration } else { duration })
 }
 
 db_enum!(ArtworkKind {
@@ -656,7 +686,11 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{map_data_access_error, not_found};
+    use super::{
+        encode_signed_duration, map_data_access_error, not_found, try_decode_duration_text,
+        try_decode_signed_duration_text,
+    };
+    use chrono::Duration;
     use ersatzrs_core::repositories::RepositoryError;
 
     #[test]
@@ -685,5 +719,26 @@ mod tests {
                 id: 12
             }
         ));
+    }
+
+    #[test]
+    fn signed_duration_round_trips_channel_playout_offsets() {
+        for hours in [-12, -1, 0, 1, 12] {
+            let duration = Duration::hours(hours);
+            let encoded = encode_signed_duration(duration);
+            assert_eq!(try_decode_signed_duration_text(&encoded).unwrap(), duration);
+        }
+
+        assert_eq!(
+            try_decode_signed_duration_text("-1.01:02:03.5").unwrap(),
+            -Duration::days(1)
+                - Duration::hours(1)
+                - Duration::minutes(2)
+                - Duration::seconds(3)
+                - Duration::milliseconds(500)
+        );
+        assert!(try_decode_duration_text("-01:00:00").is_err());
+        assert!(try_decode_signed_duration_text("+01:00:00").is_err());
+        assert!(try_decode_signed_duration_text("-01:60:00").is_err());
     }
 }

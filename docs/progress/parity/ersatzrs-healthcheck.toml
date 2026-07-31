@@ -23,6 +23,9 @@ image paths that still need duration metadata.
 The Playback Data Access health check also verifies that global audio and
 subtitle language preferences remain readable before runtime stream selection
 depends on them.
+
+The Mirror Channels check reports missing or non-Generated sources, malformed
+or out-of-range signed offsets, and legacy mirrors that also own a playout.
 '''
 
 [[debt]]

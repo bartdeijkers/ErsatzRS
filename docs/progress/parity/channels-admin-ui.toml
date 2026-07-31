@@ -30,7 +30,15 @@ Refined 2026-07-27 under ADR 0055: both player surfaces make a muted autoplay
 attempt per activation. Closing invalidates pending work, and viewport-bound
 16:9 sizing keeps the full modal visible on desktop and portrait/landscape
 mobile screens.
+
 '''
+
+[[debt]]
+id          = 'mirror-channel-runtime-ignored-source-and-offset'
+description = 'Mirror fields persisted in the channel editor, but playback and guide queries selected playouts by the mirror channel id and unsigned duration decoding converted negative offsets to zero. Operators could add an independent mirror playout, producing unrelated programming.'
+discovered  = '2026-07-31'
+evidence    = 'Resolved 2026-07-31: shared mirror context resolution translates target time to source time and projects programme times back to the target timeline. Repository, direct-stream, HLS, XMLTV, retention, and health regressions pass; focused Chromium `tests/e2e/channel-watch.spec.ts` configures the source and +1 hour offset through `/channels/:id`, verifies effective playout eligibility, and compares the shifted `/epg` lanes with no browser errors.'
+resolved    = true
 
 [[debt]]
 id          = 'channels-edit-numbers-routes-to-add'

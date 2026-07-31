@@ -967,7 +967,7 @@ async fn rebuild_yaml_playout(
     playout_with_anchor.anchor = result.anchor.clone();
     if let Err(e) = repos
         .playout
-        .apply_build_result(&result, &playout_with_anchor)
+        .apply_build_result(&result, &playout_with_anchor, Duration::zero())
         .await
     {
         tracing::warn!(id, error = %e, "yaml rebuild: failed to persist result");
@@ -1101,10 +1101,12 @@ mod legacy_sql_regressions {
             r#"SELECT c."Id",
                   COALESCE(c."Number", '') AS "Number",
                   COALESCE(c."Name", '') AS "Name",
-                  COUNT(p."Id") AS "PlayoutCount"
+                  ((SELECT COUNT(*) FROM "Playout" own_p WHERE own_p."ChannelId" = c."Id") +
+                   CASE WHEN c."PlayoutSource" = 1 THEN
+                     (SELECT COUNT(*) FROM "Playout" source_p
+                      WHERE source_p."ChannelId" = c."MirrorSourceChannelId")
+                   ELSE 0 END) AS "PlayoutCount"
            FROM "Channel" c
-           LEFT JOIN "Playout" p ON p."ChannelId" = c."Id"
-           GROUP BY c."Id", c."Number", c."Name", c."SortNumber"
            ORDER BY c."SortNumber", c."Id""#,
         )
         .fetch_all(pool)
@@ -1158,13 +1160,15 @@ mod legacy_sql_regressions {
         }
 
         let channel = sqlx::query(
-            r#"SELECT c."Id",
-                  c."PlayoutMode",
-                  COUNT(p."Id") AS "PlayoutCount"
+            r#"SELECT c."Id", c."PlayoutMode",
+                  ((SELECT COUNT(*) FROM "Playout" own_p WHERE own_p."ChannelId" = c."Id") +
+                   CASE WHEN c."PlayoutSource" = 1 THEN
+                     (SELECT COUNT(*) FROM "Playout" source_p
+                      WHERE source_p."ChannelId" = c."MirrorSourceChannelId")
+                   ELSE 0 END) AS "PlayoutCount"
            FROM "Channel" c
-           LEFT JOIN "Playout" p ON p."ChannelId" = c."Id"
            WHERE c."Id" = ?
-           GROUP BY c."Id", c."PlayoutMode""#,
+           "#,
         )
         .bind(channel_id)
         .fetch_optional(pool)
@@ -3289,7 +3293,9 @@ mod legacy_sql_regressions {
                 "Number" TEXT NULL,
                 "Name" TEXT NULL,
                 "SortNumber" REAL NOT NULL,
-                "PlayoutMode" INTEGER NOT NULL
+                "PlayoutMode" INTEGER NOT NULL,
+                "PlayoutSource" INTEGER NOT NULL DEFAULT 0,
+                "MirrorSourceChannelId" INTEGER NULL
             )"#,
                 r#"CREATE TABLE "Playout" (
                 "Id" INTEGER PRIMARY KEY AUTOINCREMENT,

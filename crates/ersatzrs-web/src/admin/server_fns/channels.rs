@@ -595,10 +595,32 @@ pub async fn save_channel_with_state(
     state: &crate::host::state::AppState,
     form: ChannelForm,
 ) -> ersatzrs_app::Result<i64> {
-    state
+    use ersatzrs_core::repositories::ChannelRepository as _;
+
+    let requested_number = form.number.clone();
+    let previous_number = if form.id > 0 {
+        Some(
+            state
+                .repositories
+                .channel
+                .get_with_profile(form.id)
+                .await?
+                .number,
+        )
+    } else {
+        None
+    };
+    let id = state
         .application
         .save_channel(ersatzrs_app::commands::SaveChannel::new(form.into_core()))
-        .await
+        .await?;
+    if let Some(previous_number) = previous_number.as_deref() {
+        state.hls_sessions.playout_updated(previous_number).await;
+    }
+    if previous_number.as_deref() != Some(requested_number.as_str()) {
+        state.hls_sessions.playout_updated(&requested_number).await;
+    }
+    Ok(id)
 }
 
 #[cfg(feature = "ssr")]

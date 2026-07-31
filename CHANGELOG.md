@@ -196,6 +196,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Delayed mirror channels now reuse their source channel's playout across
+  MPEG-TS, HLS, browser preview, admin EPG, and XMLTV while keeping the mirror's
+  own channel settings. Signed offsets round-trip correctly, source history is
+  retained until delayed broadcasts finish, and the admin UI prevents valid
+  mirrors from receiving an independent playout.
 - Beeld & Geluid Remote Stream extractors now select one video/audio rendition
   pair instead of mapping every HLS rendition into the MPEG-TS pipe, preserving
   the stream order required by channel HLS transcoding.

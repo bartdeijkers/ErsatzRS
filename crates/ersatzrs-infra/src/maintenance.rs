@@ -426,21 +426,22 @@ async fn build_playout(
     let window = Duration::days(days);
     let finish = now + window;
 
-    let reference_data = match playout.schedule_kind {
+    let max_playout_offset = load_max_mirror_playout_offset(pool, playout.channel_id).await?;
+    let mut reference_data = match playout.schedule_kind {
         PlayoutScheduleKind::Classic => {
             scheduling
-                .classic_reference_data(playout.id, now, window)
+                .classic_reference_data(playout.id, now, max_playout_offset)
                 .await?
         }
         PlayoutScheduleKind::Block => {
             scheduling
-                .block_reference_data(playout.id, now, 1, window)
+                .block_reference_data(playout.id, now, 1, max_playout_offset)
                 .await?
         }
         PlayoutScheduleKind::Sequential => {
             let schedule_file = playout.schedule_file.as_deref().unwrap_or_default();
             scheduling
-                .yaml_reference_data(playout.id, schedule_file, window)
+                .yaml_reference_data(playout.id, schedule_file, max_playout_offset)
                 .await?
         }
         PlayoutScheduleKind::Scripted => {
@@ -462,6 +463,7 @@ async fn build_playout(
         PlayoutScheduleKind::ExternalJson => scheduling.configured_playout_options().await?,
         PlayoutScheduleKind::None => return Ok(()),
     };
+    reference_data.max_playout_offset = max_playout_offset;
 
     let result = PlayoutBuilder::default().build(SchedulingRequest {
         playout: playout.clone(),
@@ -474,7 +476,9 @@ async fn build_playout(
     let should_notify_segmenter = mode != PlayoutBuildMode::Continue
         && (scheduling_result_has_persisted_changes(&result)
             || channel_info.playout_mode == ChannelPlayoutMode::OnDemand);
-    repository.apply_build_result(&result, &playout).await?;
+    repository
+        .apply_build_result(&result, &playout, max_playout_offset)
+        .await?;
     repository
         .upsert_build_status(&PlayoutBuildStatus {
             playout_id,
@@ -493,12 +497,56 @@ async fn build_playout(
     }
     if should_notify_segmenter {
         if let Some(hls_sessions) = hls_sessions {
-            hls_sessions
-                .playout_updated(&channel_info.channel_number)
-                .await;
+            for channel_number in
+                load_playout_dependent_channel_numbers(pool, playout.channel_id).await?
+            {
+                hls_sessions.playout_updated(&channel_number).await;
+            }
         }
     }
     Ok(())
+}
+
+async fn load_max_mirror_playout_offset(
+    pool: &Pool<Db>,
+    source_channel_id: EntityId,
+) -> Result<Duration> {
+    let values = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "PlayoutOffset"
+           FROM "Channel"
+           WHERE "PlayoutSource" = 1 AND "MirrorSourceChannelId" = ?"#,
+    )
+    .bind(source_channel_id)
+    .fetch_all(pool)
+    .await?;
+    let mut maximum = Duration::zero();
+    for value in values.into_iter().flatten() {
+        let offset = crate::repositories::common::try_decode_signed_duration_text(&value)
+            .map_err(MaintenanceError::Repository)?;
+        if offset > maximum {
+            maximum = offset;
+        }
+    }
+    Ok(maximum)
+}
+
+async fn load_playout_dependent_channel_numbers(
+    pool: &Pool<Db>,
+    source_channel_id: EntityId,
+) -> Result<Vec<String>> {
+    Ok(sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "Number" FROM "Channel"
+           WHERE "Id" = ?
+              OR ("PlayoutSource" = 1 AND "MirrorSourceChannelId" = ?)
+           ORDER BY "SortNumber", "Id""#,
+    )
+    .bind(source_channel_id)
+    .bind(source_channel_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .flatten()
+    .collect())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

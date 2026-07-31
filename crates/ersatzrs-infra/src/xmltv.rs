@@ -1,6 +1,6 @@
 //! SQL-backed XMLTV guide projection.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::xmltv::{
     project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme,
 };
@@ -8,7 +8,9 @@ use ersatzrs_domain::{FillerKind, CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR};
 use sqlx::{Pool, Row};
 
 use crate::db::Db;
-use crate::repositories::common::{decode_enum_column, decode_optional_datetime};
+use crate::repositories::common::{
+    decode_enum_column, decode_optional_datetime, try_decode_signed_duration_text,
+};
 
 const UNKNOWN_TITLE: &str = "Unknown";
 
@@ -40,6 +42,7 @@ async fn load_xmltv_block_behavior(pool: &Pool<Db>) -> Result<XmltvBlockBehavior
         .unwrap_or_default())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn load_guide_items(
     pool: &Pool<Db>,
     start: DateTime<Utc>,
@@ -48,6 +51,8 @@ async fn load_guide_items(
     let rows = sqlx::query(
         r#"SELECT
                c."Number" AS "Number",
+               c."PlayoutSource" AS "PlayoutSource",
+               c."PlayoutOffset" AS "PlayoutOffset",
                pi."Start" AS "Start",
                pi."Finish" AS "Finish",
                pi."GuideStart" AS "GuideStart",
@@ -63,17 +68,20 @@ async fn load_guide_items(
                    (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = pi."MediaItemId" LIMIT 1),
                    (SELECT "Title" FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" = pi."MediaItemId" LIMIT 1)
                ) AS "Title"
-           FROM "PlayoutItem" pi
-           JOIN "Playout" p ON p."Id" = pi."PlayoutId"
-           JOIN "Channel" c ON c."Id" = p."ChannelId"
+           FROM "Channel" c
+           JOIN "Playout" p ON p."ChannelId" = CASE
+               WHEN c."PlayoutSource" = 1 THEN c."MirrorSourceChannelId"
+               ELSE c."Id"
+           END
+           JOIN "PlayoutItem" pi ON pi."PlayoutId" = p."Id"
            WHERE c."IsEnabled" = 1
              AND c."ShowInEpg" = 1
              AND pi."Start" < ?
              AND pi."Finish" > ?
            ORDER BY c."Number", pi."GuideStart", pi."GuideFinish", pi."GuideGroup", pi."Start", pi."Id""#,
     )
-    .bind(encode_datetime(finish))
-    .bind(encode_datetime(start))
+    .bind(encode_datetime(finish + Duration::hours(12)))
+    .bind(encode_datetime(start - Duration::hours(12)))
     .fetch_all(pool)
     .await?;
 
@@ -84,10 +92,10 @@ async fn load_guide_items(
         let custom_title: Option<String> = row.try_get("CustomTitle")?;
         let metadata_title: Option<String> = row.try_get("Title")?;
 
-        let start = parse_datetime(&start_text).ok_or_else(|| {
+        let source_start = parse_datetime(&start_text).ok_or_else(|| {
             sqlx::Error::Decode(format!("invalid PlayoutItem Start: {start_text}").into())
         })?;
-        let finish = parse_datetime(&finish_text).ok_or_else(|| {
+        let source_finish = parse_datetime(&finish_text).ok_or_else(|| {
             sqlx::Error::Decode(format!("invalid PlayoutItem Finish: {finish_text}").into())
         })?;
         let title = custom_title
@@ -100,17 +108,49 @@ async fn load_guide_items(
             decode_enum_column("xmltv filler_kind", &row, "FillerKind")
                 .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
 
+        let playout_source: i32 = row.try_get("PlayoutSource")?;
+        let offset = if playout_source == 1 {
+            row.try_get::<Option<String>, _>("PlayoutOffset")?
+                .as_deref()
+                .map(try_decode_signed_duration_text)
+                .transpose()
+                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?
+                .unwrap_or_default()
+        } else {
+            Duration::zero()
+        };
+        let start_at = source_start.checked_add_signed(offset).ok_or_else(|| {
+            sqlx::Error::Decode("XMLTV mirror start overflows supported range".into())
+        })?;
+        let finish_at = source_finish.checked_add_signed(offset).ok_or_else(|| {
+            sqlx::Error::Decode("XMLTV mirror finish overflows supported range".into())
+        })?;
+        if start_at >= finish || finish_at <= start {
+            continue;
+        }
+        let project_optional = |value: Option<DateTime<Utc>>| {
+            value
+                .map(|value| {
+                    value.checked_add_signed(offset).ok_or_else(|| {
+                        sqlx::Error::Decode(
+                            "XMLTV mirror guide time overflows supported range".into(),
+                        )
+                    })
+                })
+                .transpose()
+        };
+        let guide_start = decode_optional_datetime("xmltv guide_start", row.try_get("GuideStart")?)
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+        let guide_finish =
+            decode_optional_datetime("xmltv guide_finish", row.try_get("GuideFinish")?)
+                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+
         items.push(XmltvGuideItem {
             channel_number: row.try_get("Number")?,
-            start,
-            finish,
-            guide_start: decode_optional_datetime("xmltv guide_start", row.try_get("GuideStart")?)
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
-            guide_finish: decode_optional_datetime(
-                "xmltv guide_finish",
-                row.try_get("GuideFinish")?,
-            )
-            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+            start: start_at,
+            finish: finish_at,
+            guide_start: project_optional(guide_start)?,
+            guide_finish: project_optional(guide_finish)?,
             guide_group: row.try_get("GuideGroup")?,
             filler_kind,
             title,

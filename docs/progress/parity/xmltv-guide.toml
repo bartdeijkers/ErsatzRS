@@ -4,5 +4,10 @@ rs_target  = '`crates/ersatzrs-core/src/xmltv.rs`, `crates/ersatzrs-infra/src/xm
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: `/iptv/xmltv.xml` renders a 48-hour XMLTV guide via quick-xml with COALESCEd titles from the metadata tables. `XmltvBlockBehavior` now lives in core/infra and honors `xmltv.block_behavior` (`SplitTimeEvenly` default, `UseActualTimes` optional) before the transport layer renders XML.
+Ported: `/iptv/xmltv.xml` renders a 48-hour XMLTV guide via quick-xml with
+COALESCEd titles from the metadata tables. `XmltvBlockBehavior` now lives in
+core/infra and honors `xmltv.block_behavior` (`SplitTimeEvenly` default,
+`UseActualTimes` optional) before the transport layer renders XML. Mirror
+channels project source programme and guide-block timestamps by their signed
+playout offset while retaining the target channel number and visibility flags.
 '''

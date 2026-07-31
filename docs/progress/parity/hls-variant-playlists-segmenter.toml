@@ -28,6 +28,12 @@ StopOnDisconnect is implemented for segmenter and MPEG-TS hybrid wrapper paths,
 direct `.ts` response-body disposal is guarded, and sub-second seek offsets are
 preserved end-to-end instead of flooring to seconds.
 
+Generated and delayed mirror channels share the same source playout selection
+in HLS-direct and segmenter modes. Source item times are projected onto the
+target timeline while channel-specific profiles, branding, selectors, and
+subtitle/audio preferences remain target-owned; source rebuilds invalidate all
+dependent mirror sessions.
+
 ADR 0016 adds a hard active transcode ceiling shared by HLS and MPEG-TS paths,
 with active/limit/peak reporting, hardware-aware suggestions, reclamation of
 work-ahead/cooling/stale watched sessions, and a slot-free looping

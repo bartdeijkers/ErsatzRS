@@ -21,8 +21,8 @@ use checks::{
     DirtyMigrationHealthCheck, DowngradeHealthCheck, EmptyScheduleHealthCheck,
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
-    HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MovieMetadataHealthCheck,
-    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
+    MovieMetadataHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
     SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
     VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
@@ -49,7 +49,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 23] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 24] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -69,6 +69,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 23] = [
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
+    "Mirror Channels",
     "VAAPI Driver",
     "VAAPI Device",
     "Provider Connectivity",
@@ -190,6 +191,7 @@ fn registered_health_checks(
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
+        Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),
@@ -772,6 +774,39 @@ mod tests {
             HealthCheckStatus::Warning,
             "There are 1 empty schedules in use, which are NOT supported and WILL cause errors",
         );
+    }
+
+    #[tokio::test]
+    async fn mirror_channel_health_reports_malformed_offset_and_own_playout() {
+        let pool = test_pool().await;
+        seed_empty_schedule(&pool).await;
+        pool.execute(
+            r#"INSERT INTO "Channel" (
+                "Id", "UniqueId", "Number", "SortNumber", "Name", "FFmpegProfileId",
+                "IdleBehavior", "MusicVideoCreditsMode", "PlayoutMode", "PlayoutSource",
+                "MirrorSourceChannelId", "PlayoutOffset", "SongVideoMode", "StreamingMode",
+                "StreamSelectorMode", "SubtitleMode", "TranscodeMode"
+               ) VALUES (
+                51, '00000000-0000-0000-0000-000000000051', '51', 51.0,
+                'Broken Mirror', 50, 0, 0, 0, 1, 50, 'not-a-duration', 0, 1, 0, 0, 0
+               )"#,
+        )
+        .await
+        .expect("seed broken mirror");
+        pool.execute(
+            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+               VALUES (11, 51, 1, 0)"#,
+        )
+        .await
+        .expect("seed conflicting mirror playout");
+
+        let result = MirrorChannelHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("check mirror channels");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("offset is malformed"));
+        assert!(result.message.contains("mirror also has its own playout"));
     }
 
     #[tokio::test]
