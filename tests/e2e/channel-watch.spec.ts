@@ -1,4 +1,4 @@
-import { expect, Page, TestInfo, test } from '@playwright/test';
+import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
@@ -270,6 +270,24 @@ async function waitForHydration(page: Page): Promise<void> {
     .toBe(true);
 }
 
+async function findChannelRow(page: Page, channelName: string): Promise<Locator> {
+  const rows = page.getByRole('row');
+  const channelRow = rows.filter({ hasText: channelName });
+  const nextPage = page.getByRole('button', { name: '›', exact: true });
+
+  for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+    if ((await channelRow.count()) > 0) return channelRow;
+
+    await expect(nextPage).toBeEnabled();
+    const firstRow = rows.nth(1);
+    const previousFirstRowText = await firstRow.innerText();
+    await nextPage.click();
+    await expect.poll(() => firstRow.innerText()).not.toBe(previousFirstRowText);
+  }
+
+  throw new Error(`channel row was not found after paging: ${channelName}`);
+}
+
 test.describe('channel preview modal and watch route', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required');
 
@@ -536,6 +554,7 @@ WHERE "Id" = ${source.id + 3};
       page.waitForURL(/\/channels$/),
       page.getByRole('button', { name: 'Save Channel', exact: true }).click(),
     ]);
+    await waitForHydration(page);
 
     await page.goto(`/channels/${mirror.id}`);
     await waitForHydration(page);
@@ -547,7 +566,7 @@ WHERE "Id" = ${source.id + 3};
 
     await page.goto('/channels');
     await waitForHydration(page);
-    const mirrorRow = page.getByRole('row').filter({ hasText: mirror.name });
+    const mirrorRow = await findChannelRow(page, mirror.name);
     await expect(mirrorRow.getByRole('button', { name: 'Preview channel' })).toBeVisible();
 
     await page.goto('/playouts/add');
