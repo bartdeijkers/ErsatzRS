@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-30
-last_processed_commit: 3fca779c486603c0a2e52d3f8f2bcb18364a6142
+generated: 2026-07-31
+last_processed_commit: a4ee0caf64baa503538e5e0f8aa3ec47bdab00b4
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,25 +9,28 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `ef728cc..3fca779` window (10 work commits) landed
-**Remote Stream playback** end to end: a `feat(infra)` slice completing the
-URL/script resolver, bounded network reads, redacted direct MPEG-TS piping,
-transcode-cursor liveness, Classic Flood zero-duration expansion, a
-side-effect-free health check, scanner persistence, and the standalone Beeld &
-Geluid extractor wrappers, followed by two hardening fixes (an exact raw
-`cmd.exe` command line for Windows batch producers, then selecting a single HLS
-video/audio rendition pair so MPEG-TS output keeps a stable stream order). The
-window also restored ErsatzTV **toast** parity (`admin-toast-notifications`), a
-`fix(web)` showing scanner interval hours on `/settings`, and several
-`fix(ci)`/`fix(release)` changes (accept terminal beta tags, merge public assets
-into the beta `site/`, regenerate/restore the Playwright CSS bundle) with no
-parity impact. These were reconciled in their own feature commits: a new
-`remote-stream-playback.toml` was created as `Ported` (ADR 0057) with full test
-evidence and no open debt; `remote-streams-browser`, `scanner`, and `settings`
-had their summaries/debt refreshed and their remaining debts are all
-`resolved`; `hydration.toml` gained the remote-streams note. This run verified
-those edits, confirmed ADR 0057 is registered, and appended the daily session
-line. None of the merged work touched the top three chores.
+and Phase 8A state. The `3fca779..a4ee0ca` window (the prior daily-reconcile doc
+commit plus one work commit) landed the **ADR 0052 amendment**
+(`feat(web): curate playback language preferences`): the FFmpeg audio and
+subtitle default/fallback selectors now expose Kodi's ISO-639-1-backed language
+vocabulary through ErsatzRS's canonical three-letter codes instead of historical
+ISO-639-3-only entries, `und` becomes the single special value (labelled
+`Original (und)` for audio and `Undefined (und)` for subtitles, localized in
+every supported culture) that prefers the undefined/default source track and
+matches undefined-language subtitles across MPEG-TS and HLS, suffixless local
+sidecar subtitles are persisted as `und` (matching ErsatzTV commit `32e5482`,
+with existing null rows working immediately and normalizing on next scan), and
+stored language codes are matched case-insensitively after trimming whitespace
+and re-rendered with their canonical code so legacy values such as `ENG` or
+` eng ` keep their selection. This was already reconciled in the same commit:
+`docs/adr/0052-global-subtitle-language-preferences.md` moved to
+`Implemented (2026-07-22), amended (2026-07-30)` with the Kodi/`und`/sidecar
+contract and its `xbmc` and `32e5482` source citations, and
+`docs/progress/parity/settings.toml` refreshed its ADR 0052 note; `settings`
+stays `Ported` with all `[[debt]]` items `resolved`. This run confirmed those
+edits, verified no parity status flip is warranted (the change amends an
+already-`Ported`, already-Implemented ADR), and appended the daily session line.
+None of the merged work touched the top three chores.
 
 `cargo xtask progress gaps` still reports a single remaining feature
 (`video-jukebox-addon-api`, Not started, four open debt items) — the only file
@@ -36,9 +39,9 @@ is milestone **p8a-01**, the `phase.toml` `current_focus` decision gate that
 unblocks p8a-02/03 and p8b-01/02, so it holds the top slot. Every other
 actionable spec source is the queue of 26 `Proposed` / `Not implemented`
 localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS hardening or blocking
-runtime debt is open to outrank them (the remote-stream work closed as `Ported`
-with no open debt), and the only deferred plan work (mdBook, macOS archives,
-Claude hooks) is developer-experience tooling that ranks below the
+runtime debt is open to outrank them (the ADR 0052 language work closed as
+`Implemented` with no open debt), and the only deferred plan work (mdBook, macOS
+archives, Claude hooks) is developer-experience tooling that ranks below the
 maintainer-requested localization ADRs. The two lowest-numbered of those
 (ADR 0022 de-de, ADR 0023 hi-in) saw no commits this window and carry over
 unchanged as `#2` and `#3`.
