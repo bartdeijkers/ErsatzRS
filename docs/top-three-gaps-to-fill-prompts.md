@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-31
-last_processed_commit: a4ee0caf64baa503538e5e0f8aa3ec47bdab00b4
+generated: 2026-08-01
+last_processed_commit: 30341464d78c1b455a97479708f84cf18a6a36d2
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,38 +9,43 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `3fca779..a4ee0ca` window (the prior daily-reconcile doc
-commit plus one work commit) landed the **ADR 0052 amendment**
-(`feat(web): curate playback language preferences`): the FFmpeg audio and
-subtitle default/fallback selectors now expose Kodi's ISO-639-1-backed language
-vocabulary through ErsatzRS's canonical three-letter codes instead of historical
-ISO-639-3-only entries, `und` becomes the single special value (labelled
-`Original (und)` for audio and `Undefined (und)` for subtitles, localized in
-every supported culture) that prefers the undefined/default source track and
-matches undefined-language subtitles across MPEG-TS and HLS, suffixless local
-sidecar subtitles are persisted as `und` (matching ErsatzTV commit `32e5482`,
-with existing null rows working immediately and normalizing on next scan), and
-stored language codes are matched case-insensitively after trimming whitespace
-and re-rendered with their canonical code so legacy values such as `ENG` or
-` eng ` keep their selection. This was already reconciled in the same commit:
-`docs/adr/0052-global-subtitle-language-preferences.md` moved to
-`Implemented (2026-07-22), amended (2026-07-30)` with the Kodi/`und`/sidecar
-contract and its `xbmc` and `32e5482` source citations, and
-`docs/progress/parity/settings.toml` refreshed its ADR 0052 note; `settings`
-stays `Ported` with all `[[debt]]` items `resolved`. This run confirmed those
-edits, verified no parity status flip is warranted (the change amends an
-already-`Ported`, already-Implemented ADR), and appended the daily session line.
-None of the merged work touched the top three chores.
+and Phase 8A state. The `a4ee0ca..3034146` window (the prior daily-reconcile doc
+commit plus two work commits) landed **delayed mirror channel playback**
+(`fix(infra): honor delayed mirror playback` `c4b7eba`, then `test(web):
+stabilize delayed mirror browser proof` `3034146`): delayed/generated mirror
+channels now reuse their source channel's playout across MPEG-TS, HLS
+(direct + segmenter), browser preview, admin EPG, and XMLTV while keeping the
+mirror's own channel settings (FFmpeg profile, branding, selectors, watermarks,
+subtitle/audio preferences). Media is resolved from the generated source at
+`wall clock - PlayoutOffset` and item/programme times are projected back onto
+the target timeline; signed offsets round-trip correctly (negative offsets no
+longer decode to zero), source history is retained until the largest positive
+dependent mirror offset elapses, source rebuilds invalidate dependent mirror
+sessions, a new Mirror Channels health check reports missing/non-Generated
+sources and malformed/out-of-range offsets and legacy mirrors that also own a
+playout, and `/playouts/add` disables a mirror backed by a source playout so it
+cannot receive unrelated programming. This is grounded ErsatzTV parity at the
+pin (`ChannelPlayoutSource.Mirror`, `Channel.MirrorSourceChannelId`).
+
+The work commits self-reconciled their own docs: `channels-admin-ui.toml`'s
+`mirror-channel-runtime-ignored-source-and-offset` debt is now `resolved`
+(runtime evidence via Chromium/Firefox `tests/e2e/channel-watch.spec.ts`), and
+`mpeg-ts-channel-streaming`, `hls-variant-playlists-segmenter`, `xmltv-guide`,
+`playout-list-detail`, and `ersatzrs-healthcheck` summaries plus `hydration.toml`
+note the source-playout projection. All affected features were already `Ported`,
+so this run confirmed those edits, verified **no** parity status flip is
+warranted, appended the daily session line, and refreshed the front-matter. None
+of the merged work touched the top three chores.
 
 `cargo xtask progress gaps` still reports a single remaining feature
 (`video-jukebox-addon-api`, Not started, four open debt items) — the only file
-with unresolved `[[debt]]` anywhere in `docs/progress/parity/`. Its first slice
-is milestone **p8a-01**, the `phase.toml` `current_focus` decision gate that
-unblocks p8a-02/03 and p8b-01/02, so it holds the top slot. Every other
-actionable spec source is the queue of 26 `Proposed` / `Not implemented`
-localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS hardening or blocking
-runtime debt is open to outrank them (the ADR 0052 language work closed as
-`Implemented` with no open debt), and the only deferred plan work (mdBook, macOS
+with unresolved `[[debt]]` anywhere in `docs/progress/parity/` (the mirror debt
+closed this window). Its first slice is milestone **p8a-01**, the `phase.toml`
+`current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02, so it holds
+the top slot. Every other actionable spec source is the queue of 26 `Proposed` /
+`Not implemented` localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS
+hardening or blocking runtime debt is open to outrank them (the delayed-mirror
+work closed with no open debt), and the only deferred plan work (mdBook, macOS
 archives, Claude hooks) is developer-experience tooling that ranks below the
 maintainer-requested localization ADRs. The two lowest-numbered of those
 (ADR 0022 de-de, ADR 0023 hi-in) saw no commits this window and carry over
