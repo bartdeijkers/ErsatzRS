@@ -130,6 +130,24 @@ ADR: [0053](../adr/0053-dedicated-channel-watch-route-and-reusable-preview-modal
 Follow-up ADR:
 [0054](../adr/0054-aggregate-epg-preview-and-isolated-browser-preview-pipeline.md)
 
+## minijinja instead of Scriban for XMLTV channel-guide templates
+
+ErsatzTV lets administrators override its bundled per-kind Scriban
+(`.sbntxt`) XMLTV templates. ErsatzRS ports the same override-folder pattern
+onto `minijinja` (Jinja2 syntax) since no Scriban-equivalent crate exists in
+the Rust ecosystem, and follows this codebase's existing
+`music_video_credits` bundled-template convention (defaults compiled into
+the binary, no extract-to-disk startup step) rather than ErsatzTV's
+`ResourceExtractorService`.
+
+The bundled output also favors useful guide metadata over two upstream
+omissions: movie icons fall back to thumbnail artwork when no poster exists,
+and Remote Stream genres are emitted as `<category>` elements. ErsatzTV
+already supplies those genres to custom templates but does not render them in
+its bundled default.
+
+ADR: [0058](../adr/0058-minijinja-xmltv-channel-guide-templates.md)
+
 ## Plain async handlers instead of MediatR
 
 ErsatzRS uses plain async use-case handlers and constructor-injected traits instead

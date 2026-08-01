@@ -9,6 +9,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{ContentKind, EntityId};
 use sqlx::{Pool, Row};
 
+use crate::metadata_query::{load_artwork_path, load_strings, split_content_ratings};
 use crate::repositories::SqlxResultExt as _;
 
 #[derive(Clone)]
@@ -24,19 +25,6 @@ fn decode_content_kind(value: i32) -> Result<ContentKind> {
             value: value.to_string(),
         }),
     }
-}
-
-fn split_content_ratings(value: Option<String>) -> Vec<String> {
-    value
-        .map(|value| {
-            value
-                .split('/')
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 async fn load_movie_playback_sources(
@@ -139,20 +127,6 @@ async fn load_movie_playback_sources(
         });
     }
     Ok(sources)
-}
-
-async fn load_strings(
-    pool: &Pool<crate::db::Db>,
-    table: &str,
-    column: &str,
-    metadata_id: EntityId,
-) -> Result<Vec<String>> {
-    let sql = format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ? ORDER BY "Name""#);
-    sqlx::query_scalar(crate::db::assert_sql_safe(&sql))
-        .bind(metadata_id)
-        .fetch_all(pool)
-        .await
-        .repository()
 }
 
 async fn load_audio_languages(
@@ -338,25 +312,6 @@ async fn load_actors(
             })
         })
         .collect()
-}
-
-async fn load_artwork_path(
-    pool: &Pool<crate::db::Db>,
-    owner_column: &str,
-    metadata_id: EntityId,
-    artwork_kind: i32,
-) -> Result<Option<String>> {
-    let sql = format!(
-        r#"SELECT "Path" FROM "Artwork"
-           WHERE "{owner_column}" = ? AND "ArtworkKind" = ? LIMIT 1"#
-    );
-    sqlx::query_scalar::<_, Option<String>>(crate::db::assert_sql_safe(&sql))
-        .bind(metadata_id)
-        .bind(artwork_kind)
-        .fetch_optional(pool)
-        .await
-        .repository()
-        .map(Option::flatten)
 }
 
 async fn load_path_replacements(

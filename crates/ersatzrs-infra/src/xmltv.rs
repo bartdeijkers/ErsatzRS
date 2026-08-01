@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::xmltv::{
-    project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme,
+    project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme, XmltvProgrammeContent,
 };
 use ersatzrs_domain::{FillerKind, CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR};
 use sqlx::{Pool, Row};
@@ -11,6 +11,7 @@ use crate::db::Db;
 use crate::repositories::common::{
     decode_enum_column, decode_optional_datetime, try_decode_signed_duration_text,
 };
+use crate::xmltv_metadata::load_content_cache;
 
 const UNKNOWN_TITLE: &str = "Unknown";
 
@@ -53,21 +54,14 @@ async fn load_guide_items(
                c."Number" AS "Number",
                c."PlayoutSource" AS "PlayoutSource",
                c."PlayoutOffset" AS "PlayoutOffset",
+               pi."MediaItemId" AS "MediaItemId",
                pi."Start" AS "Start",
                pi."Finish" AS "Finish",
                pi."GuideStart" AS "GuideStart",
                pi."GuideFinish" AS "GuideFinish",
                pi."GuideGroup" AS "GuideGroup",
                pi."FillerKind" AS "FillerKind",
-               pi."CustomTitle" AS "CustomTitle",
-               COALESCE(
-                   (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = pi."MediaItemId" LIMIT 1),
-                   (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = pi."MediaItemId" LIMIT 1),
-                   (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = pi."MediaItemId" LIMIT 1),
-                   (SELECT "Title" FROM "SongMetadata" WHERE "SongId" = pi."MediaItemId" LIMIT 1),
-                   (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = pi."MediaItemId" LIMIT 1),
-                   (SELECT "Title" FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" = pi."MediaItemId" LIMIT 1)
-               ) AS "Title"
+               pi."CustomTitle" AS "CustomTitle"
            FROM "Channel" c
            JOIN "Playout" p ON p."ChannelId" = CASE
                WHEN c."PlayoutSource" = 1 THEN c."MirrorSourceChannelId"
@@ -85,12 +79,22 @@ async fn load_guide_items(
     .fetch_all(pool)
     .await?;
 
+    let mut media_item_ids = rows
+        .iter()
+        .map(|row| row.try_get("MediaItemId"))
+        .collect::<Result<Vec<i64>, _>>()?;
+    media_item_ids.sort_unstable();
+    media_item_ids.dedup();
+    let content_cache = load_content_cache(pool, &media_item_ids).await?;
+
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         let start_text: String = row.try_get("Start")?;
         let finish_text: String = row.try_get("Finish")?;
-        let custom_title: Option<String> = row.try_get("CustomTitle")?;
-        let metadata_title: Option<String> = row.try_get("Title")?;
+        let custom_title = row
+            .try_get::<Option<String>, _>("CustomTitle")?
+            .filter(|value| !value.trim().is_empty());
+        let media_item_id: i64 = row.try_get("MediaItemId")?;
 
         let source_start = parse_datetime(&start_text).ok_or_else(|| {
             sqlx::Error::Decode(format!("invalid PlayoutItem Start: {start_text}").into())
@@ -98,9 +102,12 @@ async fn load_guide_items(
         let source_finish = parse_datetime(&finish_text).ok_or_else(|| {
             sqlx::Error::Decode(format!("invalid PlayoutItem Finish: {finish_text}").into())
         })?;
-        let title = custom_title
-            .and_then(|title| (!title.trim().is_empty()).then_some(title))
-            .or(metadata_title)
+
+        let (metadata_title, content) = content_cache
+            .get(&media_item_id)
+            .cloned()
+            .unwrap_or_else(|| (None, XmltvProgrammeContent::default()));
+        let title = metadata_title
             .filter(|title| !title.trim().is_empty())
             .unwrap_or_else(|| UNKNOWN_TITLE.to_owned());
 
@@ -153,7 +160,9 @@ async fn load_guide_items(
             guide_finish: project_optional(guide_finish)?,
             guide_group: row.try_get("GuideGroup")?,
             filler_kind,
+            custom_title,
             title,
+            content,
         });
     }
 

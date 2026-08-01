@@ -1,13 +1,57 @@
 feature    = 'XMLTV guide'
-etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (xmltv branch), `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/RefreshChannelDataHandler.cs`'
-rs_target  = '`crates/ersatzrs-core/src/xmltv.rs`, `crates/ersatzrs-infra/src/xmltv.rs`, `crates/ersatzrs-web/src/transport/iptv/guide.rs`'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (xmltv branch), `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/RefreshChannelDataHandler.cs`, `$ERSATZTV_SRC/ErsatzTV/Resources/Templates/_*.sbntxt`'
+rs_target  = '`crates/ersatzrs-core/src/xmltv.rs`, `crates/ersatzrs-infra/src/xmltv.rs`, `crates/ersatzrs-infra/src/xmltv_metadata.rs`, `crates/ersatzrs-infra/src/xmltv_templates.rs`, `crates/ersatzrs-web/src/transport/iptv/guide.rs`'
 status     = 'Ported'
-adr        = []
+adr        = ['0058']
 summary    = '''
-Ported: `/iptv/xmltv.xml` renders a 48-hour XMLTV guide via quick-xml with
-COALESCEd titles from the metadata tables. `XmltvBlockBehavior` now lives in
-core/infra and honors `xmltv.block_behavior` (`SplitTimeEvenly` default,
-`UseActualTimes` optional) before the transport layer renders XML. Mirror
-channels project source programme and guide-block timestamps by their signed
-playout offset while retaining the target channel number and visibility flags.
+Ported: `/iptv/xmltv.xml` renders `<channel>`/`<programme>` elements through
+seven customizable `minijinja` templates (movie/episode/musicVideo/song/
+otherVideo/remoteStream/channel), matching ErsatzTV's per-kind field set —
+title/sub-title, plot, year, genre categories, artwork icon, episode-num
+(`onscreen` + `xmltv_ns` systems), `/`-delimited multi-value content rating
+mapped to `MPAA`/`VCHIP` per `us:` prefix, and `previously-shown`. Episode
+genre/rating come from the show (no per-episode column/data), matching
+ErsatzTV's own template convention. Channel elements emit the three-way
+`<display-name>` and reuse the M3U playlist's channel-logo fallback chain
+and checksummed `ChannelIdentifier.FromNumber` id, so `<channel id>`/
+`<programme channel>` now match the M3U's `tvg-id` (previously a bare
+channel-number mismatch that could break strict `tvg-id`-matching clients).
+A custom `<name>.jinja` override in `<data>/templates/channel-guide/` beats
+the bundled default, mirroring the existing `music_video_credits` bundled-
+template convention rather than ErsatzTV's extract-to-disk startup step. The
+seven templates compile once per guide request (not once per programme) and
+are reused across every channel/programme in that render. A custom override
+with a Jinja syntax error falls back to the bundled default for that one
+kind at load time; a template that renders invalid XML falls back to a
+minimal `<title>`-only element for that one item at render time — in both
+cases nothing already written to the document is left in a partially-parsed
+state, and the rest of the guide is unaffected. Template interpolation is
+XML-escaped, localized content-rating prefixes are parsed on UTF-8 boundaries,
+and custom overrides receive the complete ErsatzTV per-kind context (including
+legacy channel id, custom-title flags, GUIDs, episode stills, and music fields).
+Metadata for all distinct scheduled IDs and their linked values/artwork is
+loaded in bounded batches rather than with per-item subtype probes. Episode
+icons use show artwork while the separate still uses episode artwork.
+Movie icons deliberately fall back to correctly sized thumbnail artwork when
+no poster exists, and bundled Remote Stream output emits persisted genres for
+EPG discovery; ADR 0058 records both end-user improvements over ErsatzTV's
+defaults. Rendered fragments are checked for balanced element structure at
+end-of-input, so token-complete unclosed custom templates also take the
+per-item fallback path instead of corrupting the full response.
+`xmltv.days_to_build`
+and `xmltv.time_zone` (`Local`/`Utc`) now take effect (previously ignored:
+hardcoded 48h window, always UTC). `XmltvBlockBehavior` continues to honor
+`xmltv.block_behavior` (`SplitTimeEvenly` default, `UseActualTimes`
+optional) before the transport layer renders XML. Mirror channels continue
+to project source programme and guide-block timestamps by their signed
+playout offset while retaining the target channel number and visibility
+flags. Jellyfin/Emby movie sync now persists genres/tags/actors/directors/
+writers (previously silently dropped, unlike show/episode sync), so guide
+enrichment has real data to show for those sources too. Locally-scanned
+library artwork icons now actually resolve: fixing this also closed an
+unauthenticated arbitrary-local-file-read in `/artwork/{posters,fanart,
+thumbnails}` (see CHANGELOG Security) — the route now only ever serves an
+absolute path that exactly matches a persisted `Artwork.Path` row. Axum
+percent-decodes the wildcard URL segment exactly once, so absolute paths and
+literal escape-like path components such as `%20` survive unchanged.
 '''

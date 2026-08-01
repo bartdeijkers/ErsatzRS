@@ -1,21 +1,37 @@
+use std::collections::HashMap;
+use std::io::Cursor;
+
 use axum::{
-    extract::State,
-    http::{header, HeaderValue, StatusCode},
+    extract::{Query, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Duration, Utc};
-use ersatzrs_core::repositories::ChannelRepository;
-use ersatzrs_core::xmltv::XmltvProgramme;
-use ersatzrs_domain::Channel;
+use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
+use ersatzrs_core::xmltv::{IconSizeHint, XmltvProgramme, XmltvTimeZone};
+use ersatzrs_domain::{Channel, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE};
+use ersatzrs_infra::xmltv_templates::{
+    self, ChannelGuideTemplates, RenderChannelInput, RenderProgrammeInput,
+};
+use quick_xml::errors::IllFormedError;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
-use std::io::Cursor;
 
+use crate::api::artwork::{artwork_url, ArtworkUrlKind};
 use crate::host::state::AppState;
+use crate::transport::iptv::access_token::AccessToken;
+use crate::transport::iptv::hls::{request_host, request_scheme};
+use crate::transport::iptv::identifier::{channel_identifier, parse_channel_number};
+use crate::transport::iptv::playlist::{channel_logo_url, load_channel_logo_paths, PlaylistQuery};
 
-const GUIDE_WINDOW_HOURS: i64 = 48;
+const DEFAULT_GUIDE_WINDOW_DAYS: i64 = 2;
 
-pub async fn get_xmltv_xml(State(state): State<AppState>) -> Response {
+pub async fn get_xmltv_xml(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PlaylistQuery>,
+) -> Response {
     let channels = match state.repositories.channel.list_enabled().await {
         Ok(channels) => channels,
         Err(error) => {
@@ -24,8 +40,11 @@ pub async fn get_xmltv_xml(State(state): State<AppState>) -> Response {
         }
     };
 
+    let days_to_build = load_guide_window_days(&state).await;
+    let time_zone = load_guide_time_zone(&state).await;
+
     let now = Utc::now();
-    let horizon = now + Duration::hours(GUIDE_WINDOW_HOURS);
+    let horizon = now + Duration::days(days_to_build);
     let programmes =
         match ersatzrs_infra::xmltv::load_xmltv_programmes(&state.pool, now, horizon).await {
             Ok(programmes) => programmes,
@@ -35,7 +54,36 @@ pub async fn get_xmltv_xml(State(state): State<AppState>) -> Response {
             }
         };
 
-    match build_xmltv(&channels, &programmes) {
+    let logo_paths = match load_channel_logo_paths(&state.pool).await {
+        Ok(paths) => paths,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load channel logo paths; using generated logos");
+            HashMap::new()
+        }
+    };
+
+    let templates = match xmltv_templates::load_channel_guide_templates().await {
+        Ok(templates) => templates,
+        Err(error) => {
+            tracing::error!(%error, "failed to load channel guide templates");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let scheme = request_scheme(&headers);
+    let host = request_host(&headers);
+    let access_token = AccessToken::new(query.access_token);
+
+    match build_xmltv(
+        &channels,
+        &programmes,
+        time_zone,
+        &templates,
+        &logo_paths,
+        &scheme,
+        &host,
+        &access_token,
+    ) {
         Ok(body) => {
             let mut response = body.into_response();
             response.headers_mut().insert(
@@ -51,9 +99,42 @@ pub async fn get_xmltv_xml(State(state): State<AppState>) -> Response {
     }
 }
 
+async fn load_guide_window_days(state: &AppState) -> i64 {
+    state
+        .repositories
+        .config
+        .get(CONFIG_KEY_XMLTV_DAYS_TO_BUILD)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|days| *days > 0)
+        .unwrap_or(DEFAULT_GUIDE_WINDOW_DAYS)
+}
+
+async fn load_guide_time_zone(state: &AppState) -> XmltvTimeZone {
+    state
+        .repositories
+        .config
+        .get(CONFIG_KEY_XMLTV_TIME_ZONE)
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        .and_then(XmltvTimeZone::parse)
+        .unwrap_or_default()
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn build_xmltv(
     channels: &[Channel],
     programmes: &[XmltvProgramme],
+    time_zone: XmltvTimeZone,
+    templates: &ChannelGuideTemplates,
+    logo_paths: &HashMap<i64, String>,
+    scheme: &str,
+    host: &str,
+    access_token: &AccessToken,
 ) -> Result<String, quick_xml::Error> {
     let mut ordered_channels: Vec<&Channel> = channels.iter().filter(|c| c.show_in_epg).collect();
     ordered_channels.sort_by(|a, b| {
@@ -67,26 +148,111 @@ pub fn build_xmltv(
     tv_start.push_attribute(("generator-info-name", "ersatzrs"));
     writer.write_event(Event::Start(tv_start))?;
 
+    let token_uri = access_token.query();
+    let token_uri_amp = access_token.query_amp();
+
     for channel in &ordered_channels {
-        let mut channel_start = BytesStart::new("channel");
-        channel_start.push_attribute(("id", channel.number.as_str()));
-        writer.write_event(Event::Start(channel_start))?;
-        writer.write_event(Event::Start(BytesStart::new("display-name")))?;
-        writer.write_event(Event::Text(BytesText::new(&channel.name)))?;
-        writer.write_event(Event::End(BytesEnd::new("display-name")))?;
-        writer.write_event(Event::End(BytesEnd::new("channel")))?;
+        let channel_id = channel_identifier(&channel.number);
+        let icon_url = channel_logo_url(
+            scheme,
+            host,
+            channel,
+            logo_paths,
+            &token_uri,
+            &token_uri_amp,
+        );
+        let categories = split_categories(channel.categories.as_deref());
+        let channel_artwork_path = logo_paths.get(&channel.id).map(String::as_str);
+        let channel_name_encoded = urlencoding::encode(&channel.name);
+
+        let mut wrote_channel = false;
+        match xmltv_templates::render_channel(
+            templates,
+            &RenderChannelInput {
+                channel_id: &channel_id,
+                channel_number: &channel.number,
+                channel_name: &channel.name,
+                channel_categories: &categories,
+                channel_artwork_path,
+                channel_name_encoded: &channel_name_encoded,
+                channel_icon_url: &icon_url,
+            },
+        ) {
+            Ok(fragment) => match append_fragment(&mut writer, &fragment) {
+                Ok(()) => wrote_channel = true,
+                Err(error) => {
+                    tracing::warn!(%error, channel_id = %channel_id, "channel guide template produced invalid XML");
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, channel_id = %channel_id, "channel guide template render failed");
+            }
+        }
+        if !wrote_channel {
+            write_fallback_channel(&mut writer, &channel_id, &channel.name)?;
+        }
     }
 
     for programme in programmes {
-        let mut programme_start = BytesStart::new("programme");
-        programme_start.push_attribute(("start", format_xmltv_time(programme.start).as_str()));
-        programme_start.push_attribute(("stop", format_xmltv_time(programme.stop).as_str()));
-        programme_start.push_attribute(("channel", programme.channel_number.as_str()));
-        writer.write_event(Event::Start(programme_start))?;
-        writer.write_event(Event::Start(BytesStart::new("title")))?;
-        writer.write_event(Event::Text(BytesText::new(&programme.title)))?;
-        writer.write_event(Event::End(BytesEnd::new("title")))?;
-        writer.write_event(Event::End(BytesEnd::new("programme")))?;
+        let channel_id = channel_identifier(&programme.channel_number);
+        let programme_start = format_xmltv_time(programme.start, time_zone);
+        let programme_stop = format_xmltv_time(programme.stop, time_zone);
+        let icon_url = programme
+            .content
+            .icon_path
+            .as_deref()
+            .filter(|path| !path.trim().is_empty())
+            .and_then(|path| artwork_url(path, artwork_kind_for(programme.content.icon_size_hint)))
+            .map(|resolved| absolute_url(scheme, host, &resolved));
+        let thumbnail_url = programme
+            .content
+            .thumbnail_path
+            .as_deref()
+            .filter(|path| !path.trim().is_empty())
+            .and_then(|path| {
+                artwork_url(
+                    path,
+                    artwork_kind_for(programme.content.thumbnail_size_hint),
+                )
+            })
+            .map(|resolved| absolute_url(scheme, host, &resolved));
+        let input = RenderProgrammeInput {
+            programme_start: &programme_start,
+            programme_stop: &programme_stop,
+            channel_id: &channel_id,
+            channel_number: &programme.channel_number,
+            custom_title: programme.custom_title.as_deref(),
+            title: &programme.title,
+            content: &programme.content,
+            icon_url: icon_url.as_deref(),
+            thumbnail_url: thumbnail_url.as_deref(),
+        };
+
+        let mut wrote_programme = false;
+        match xmltv_templates::render_programme(templates, &input) {
+            Ok(fragment) => match append_fragment(&mut writer, &fragment) {
+                Ok(()) => wrote_programme = true,
+                Err(error) => {
+                    tracing::warn!(%error, channel_id = %channel_id, title = %programme.title, "channel guide template produced invalid XML");
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, channel_id = %channel_id, title = %programme.title, "channel guide template render failed");
+            }
+        }
+        if !wrote_programme {
+            let fallback_title = programme
+                .custom_title
+                .as_deref()
+                .unwrap_or(&programme.title);
+            write_fallback_programme(
+                &mut writer,
+                &programme_start,
+                &programme_stop,
+                &channel_id,
+                fallback_title,
+            )?;
+        }
     }
 
     writer.write_event(Event::End(BytesEnd::new("tv")))?;
@@ -95,18 +261,147 @@ pub fn build_xmltv(
         .map_err(|error| quick_xml::Error::Io(std::sync::Arc::new(std::io::Error::other(error))))
 }
 
-fn parse_channel_number(number: &str) -> f64 {
-    number.parse::<f64>().unwrap_or(f64::MAX)
+/// Parse a rendered template fragment and re-emit its events through the
+/// document writer. This validates well-formedness before the fragment
+/// reaches the response: a malformed custom template (unescaped `&`, an
+/// unclosed tag) fails here rather than corrupting the whole guide.
+///
+/// Events are collected into an owned buffer first and only written to
+/// `writer` once the *entire* fragment has parsed successfully. Writing as
+/// we go would leave whatever parsed before a mid-fragment failure already
+/// committed to the shared document — an unclosed tag from a malformed
+/// custom template would then have the caller's fallback element appended
+/// after it, producing unbalanced, invalid XML instead of a clean fallback.
+fn append_fragment(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    fragment: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut reader = Reader::from_str(fragment);
+    reader.config_mut().trim_text(true);
+    let mut events = Vec::new();
+    let mut open_elements = Vec::new();
+    loop {
+        let event = reader.read_event()?;
+        match &event {
+            Event::Start(start) => open_elements.push(start.name().as_ref().to_vec()),
+            Event::End(end) => {
+                let found = String::from_utf8_lossy(end.name().as_ref()).into_owned();
+                let Some(expected) = open_elements.pop() else {
+                    return Err(IllFormedError::UnmatchedEndTag(found).into());
+                };
+                if expected != end.name().as_ref() {
+                    return Err(IllFormedError::MismatchedEndTag {
+                        expected: String::from_utf8_lossy(&expected).into_owned(),
+                        found,
+                    }
+                    .into());
+                }
+            }
+            Event::Eof => {
+                if let Some(expected) = open_elements.last() {
+                    return Err(IllFormedError::MissingEndTag(
+                        String::from_utf8_lossy(expected).into_owned(),
+                    )
+                    .into());
+                }
+                break;
+            }
+            _ => {}
+        }
+        events.push(event.into_owned());
+    }
+    for event in events {
+        writer.write_event(event)?;
+    }
+    Ok(())
 }
 
-fn format_xmltv_time(value: DateTime<Utc>) -> String {
-    value.format("%Y%m%d%H%M%S +0000").to_string()
+fn write_fallback_channel(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    channel_id: &str,
+    channel_name: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut channel_start = BytesStart::new("channel");
+    channel_start.push_attribute(("id", channel_id));
+    writer.write_event(Event::Start(channel_start))?;
+    writer.write_event(Event::Start(BytesStart::new("display-name")))?;
+    writer.write_event(Event::Text(BytesText::new(channel_name)))?;
+    writer.write_event(Event::End(BytesEnd::new("display-name")))?;
+    Ok(writer.write_event(Event::End(BytesEnd::new("channel")))?)
+}
+
+fn write_fallback_programme(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    start: &str,
+    stop: &str,
+    channel_id: &str,
+    title: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut programme_start = BytesStart::new("programme");
+    programme_start.push_attribute(("start", start));
+    programme_start.push_attribute(("stop", stop));
+    programme_start.push_attribute(("channel", channel_id));
+    writer.write_event(Event::Start(programme_start))?;
+    let mut title_start = BytesStart::new("title");
+    title_start.push_attribute(("lang", "en"));
+    writer.write_event(Event::Start(title_start))?;
+    writer.write_event(Event::Text(BytesText::new(title)))?;
+    writer.write_event(Event::End(BytesEnd::new("title")))?;
+    Ok(writer.write_event(Event::End(BytesEnd::new("programme")))?)
+}
+
+/// Comma-split, trim, and dedupe (case-insensitively) a channel's
+/// categories, matching ErsatzTV's `ChannelCategories`.
+fn split_categories(raw: Option<&str>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    raw.map(|value| {
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|category| !category.is_empty())
+            .filter(|category| seen.insert(category.to_ascii_lowercase()))
+            .map(ToOwned::to_owned)
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// The SQL layer already resolved which artwork kind `icon_path` actually
+/// is (poster-then-thumbnail priority, see `IconSizeHint`); this just picks
+/// the matching resize budget `artwork_url` applies.
+fn artwork_kind_for(hint: IconSizeHint) -> ArtworkUrlKind {
+    match hint {
+        IconSizeHint::Poster => ArtworkUrlKind::Poster,
+        IconSizeHint::Thumbnail => ArtworkUrlKind::Thumbnail,
+    }
+}
+
+/// `artwork_url` passes external http(s) sources through unchanged and
+/// otherwise returns a path relative to this server; XMLTV is fetched by
+/// external clients, so relative paths must be made absolute.
+fn absolute_url(scheme: &str, host: &str, relative_or_absolute: &str) -> String {
+    if relative_or_absolute.starts_with("http://") || relative_or_absolute.starts_with("https://") {
+        relative_or_absolute.to_owned()
+    } else {
+        format!("{scheme}://{host}{relative_or_absolute}")
+    }
+}
+
+fn format_xmltv_time(value: DateTime<Utc>, time_zone: XmltvTimeZone) -> String {
+    match time_zone {
+        XmltvTimeZone::Utc => value.format("%Y%m%d%H%M%S +0000").to_string(),
+        XmltvTimeZone::Local => value
+            .with_timezone(&chrono::Local)
+            .format("%Y%m%d%H%M%S %z")
+            .to_string(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use ersatzrs_core::xmltv::{XmltvItemKind, XmltvProgrammeContent};
     use ersatzrs_domain::Channel;
     use uuid::Uuid;
 
@@ -117,37 +412,246 @@ mod tests {
         channel
     }
 
+    async fn fixture_templates() -> ChannelGuideTemplates {
+        let root = tempfile::tempdir().expect("temp templates root");
+        ersatzrs_infra::xmltv_templates::load_channel_guide_templates_in(root.path())
+            .await
+            .expect("load bundled templates")
+    }
+
     #[test]
-    fn build_xmltv_matches_snapshot() {
+    fn append_fragment_does_not_partially_write_a_malformed_fragment() {
+        let mut writer = Writer::new(Cursor::new(Vec::<u8>::new()));
+        let malformed = "<channel id=\"BAD\"><display-name>oops<unterminated";
+
+        let result = append_fragment(&mut writer, malformed);
+
+        assert!(result.is_err());
+        let written = String::from_utf8(writer.into_inner().into_inner()).unwrap();
+        assert!(
+            written.is_empty(),
+            "a failed parse must not leave partial content in the writer, got: {written}"
+        );
+    }
+
+    #[test]
+    fn append_fragment_rejects_a_token_complete_unclosed_element() {
+        let mut writer = Writer::new(Cursor::new(Vec::<u8>::new()));
+        let unclosed = "<programme><title>x</title>";
+
+        let result = append_fragment(&mut writer, unclosed);
+
+        assert!(matches!(
+            result,
+            Err(quick_xml::Error::IllFormed(
+                IllFormedError::MissingEndTag(tag)
+            )) if tag == "programme"
+        ));
+        assert!(writer.into_inner().into_inner().is_empty());
+    }
+
+    #[tokio::test]
+    async fn build_xmltv_falls_back_cleanly_when_a_custom_template_is_malformed() {
+        let root = tempfile::tempdir().expect("temp templates root");
+        tokio::fs::write(
+            root.path().join("movie.jinja"),
+            "<programme><title>{{ movie_title }}</title>",
+        )
+        .await
+        .unwrap();
+        let templates =
+            ersatzrs_infra::xmltv_templates::load_channel_guide_templates_in(root.path())
+                .await
+                .expect("load templates with malformed override");
+
+        let channels = vec![fixture_channel("1", "Movies")];
+        let programmes = vec![XmltvProgramme {
+            channel_number: "1".into(),
+            start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
+            stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+            custom_title: None,
+            title: "Big Buck Bunny".into(),
+            content: XmltvProgrammeContent::default(),
+        }];
+
+        let output = build_xmltv(
+            &channels,
+            &programmes,
+            XmltvTimeZone::Utc,
+            &templates,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .expect("xmltv render");
+
+        let mut validation_writer = Writer::new(Cursor::new(Vec::<u8>::new()));
+        append_fragment(&mut validation_writer, &output)
+            .expect("the complete output must remain well-formed XML");
+        assert!(output.contains("<title lang=\"en\">Big Buck Bunny</title>"));
+        assert!(!output.contains("<programme><title>Big Buck Bunny</title>"));
+    }
+
+    #[tokio::test]
+    async fn build_xmltv_matches_snapshot() {
+        let templates = fixture_templates().await;
         let channels = vec![fixture_channel("2", "Kids"), fixture_channel("1", "Movies")];
         let programmes = vec![
             XmltvProgramme {
                 channel_number: "1".into(),
                 start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
                 stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+                custom_title: None,
                 title: "Big Buck Bunny".into(),
+                content: XmltvProgrammeContent::default(),
             },
             XmltvProgramme {
                 channel_number: "1".into(),
                 start: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
                 stop: Utc.with_ymd_and_hms(2026, 4, 17, 22, 0, 0).unwrap(),
+                custom_title: None,
                 title: "Sintel".into(),
+                content: XmltvProgrammeContent::default(),
             },
             XmltvProgramme {
                 channel_number: "2".into(),
                 start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
                 stop: Utc.with_ymd_and_hms(2026, 4, 17, 20, 30, 0).unwrap(),
+                custom_title: None,
                 title: "Pingu".into(),
+                content: XmltvProgrammeContent::default(),
             },
             XmltvProgramme {
                 channel_number: "2".into(),
                 start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 30, 0).unwrap(),
                 stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+                custom_title: None,
                 title: "Unknown".into(),
+                content: XmltvProgrammeContent::default(),
             },
         ];
 
-        let output = build_xmltv(&channels, &programmes).expect("xmltv render");
+        let output = build_xmltv(
+            &channels,
+            &programmes,
+            XmltvTimeZone::Utc,
+            &templates,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .expect("xmltv render");
         insta::assert_snapshot!(output);
+    }
+
+    #[tokio::test]
+    async fn build_xmltv_includes_rich_movie_and_episode_fields() {
+        let templates = fixture_templates().await;
+        let channels = vec![fixture_channel("1", "Movies")];
+        let movie_content = XmltvProgrammeContent {
+            kind: XmltvItemKind::Movie,
+            description: Some("A large rabbit has a larger problem.".into()),
+            year: Some(2008),
+            genres: vec!["Animation".into()],
+            content_rating: Some("us:G".into()),
+            icon_path: Some("/media/movies/Big Buck Bunny/poster.jpg".into()),
+            ..Default::default()
+        };
+        let episode_content = XmltvProgrammeContent {
+            kind: XmltvItemKind::Episode,
+            sub_title: Some("Pilot".into()),
+            genres: vec!["Drama".into()],
+            content_rating: Some("us:TV-14".into()),
+            season_number: Some(1),
+            episode_number: Some(1),
+            ..Default::default()
+        };
+        let programmes = vec![
+            XmltvProgramme {
+                channel_number: "1".into(),
+                start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
+                stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+                custom_title: None,
+                title: "Big Buck Bunny".into(),
+                content: movie_content,
+            },
+            XmltvProgramme {
+                channel_number: "1".into(),
+                start: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+                stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 30, 0).unwrap(),
+                custom_title: None,
+                title: "Some Show".into(),
+                content: episode_content,
+            },
+        ];
+
+        let output = build_xmltv(
+            &channels,
+            &programmes,
+            XmltvTimeZone::Utc,
+            &templates,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .expect("xmltv render");
+
+        assert!(output.contains("<desc lang=\"en\">A large rabbit has a larger problem.</desc>"));
+        assert!(output.contains("<date>2008</date>"));
+        assert!(output.contains("<category lang=\"en\">Animation</category>"));
+        assert!(output.contains("<rating system=\"MPAA\"><value>G</value></rating>"));
+        assert!(output.contains(&format!(
+            "http:&#x2f;&#x2f;example.test&#x2f;artwork&#x2f;posters&#x2f;{}",
+            urlencoding::encode("/media/movies/Big Buck Bunny/poster.jpg")
+        )));
+        assert!(output.contains("<sub-title lang=\"en\">Pilot</sub-title>"));
+        assert!(output.contains("<episode-num system=\"onscreen\">S01E01</episode-num>"));
+        assert!(output.contains("<rating system=\"VCHIP\"><value>TV-14</value></rating>"));
+    }
+
+    #[test]
+    fn split_categories_trims_dedupes_and_drops_blanks() {
+        assert_eq!(
+            split_categories(Some(" Film, family , Film,,")),
+            vec!["Film".to_owned(), "family".to_owned()]
+        );
+        assert_eq!(split_categories(None), Vec::<String>::new());
+    }
+
+    #[test]
+    fn absolute_url_passes_through_external_urls() {
+        assert_eq!(
+            absolute_url("http", "host", "https://cdn.example/x.png"),
+            "https://cdn.example/x.png"
+        );
+        assert_eq!(
+            absolute_url("http", "host:8409", "/artwork/posters/x.jpg"),
+            "http://host:8409/artwork/posters/x.jpg"
+        );
+    }
+
+    #[test]
+    fn format_xmltv_time_utc_is_unaffected_by_local_offset() {
+        let value = Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap();
+        assert_eq!(
+            format_xmltv_time(value, XmltvTimeZone::Utc),
+            "20260417200000 +0000"
+        );
+    }
+
+    #[test]
+    fn format_xmltv_time_local_uses_signed_local_offset() {
+        let value = Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap();
+        let formatted = format_xmltv_time(value, XmltvTimeZone::Local);
+        let (datetime_part, offset_part) =
+            formatted.split_once(' ').expect("space-separated offset");
+        assert_eq!(datetime_part.len(), 14);
+        assert!(datetime_part.chars().all(|c| c.is_ascii_digit()));
+        assert!(offset_part.starts_with('+') || offset_part.starts_with('-'));
+        assert_eq!(offset_part.len(), 5);
+        assert!(offset_part[1..].chars().all(|c| c.is_ascii_digit()));
     }
 }

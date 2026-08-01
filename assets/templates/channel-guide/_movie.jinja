@@ -1,0 +1,18 @@
+{#
+  Ports ErsatzTV's `_movie.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
+  Available values: programme_start, programme_stop, channel_id,
+  channel_number, movie_title, movie_plot, movie_year, movie_genres,
+  movie_artwork_url, movie_ratings (list of {system, value}).
+#}
+<programme start="{{ programme_start }}" stop="{{ programme_stop }}" channel="{{ channel_id }}">
+  {% if has_custom_title %}<title lang="en">{{ custom_title }}</title>{% else %}
+    <title lang="en">{{ movie_title }}</title>
+    {% if movie_has_plot %}<desc lang="en">{{ movie_plot }}</desc>{% endif %}
+    {% if movie_has_year %}<date>{{ movie_year }}</date>{% endif %}
+    <category lang="en">Movie</category>
+    {% for genre in movie_genres %}<category lang="en">{{ genre }}</category>{% endfor %}
+    {% if movie_has_artwork %}<icon src="{{ movie_artwork_url }}" />{% endif %}
+  {% endif %}
+  {% for rating in movie_ratings %}<rating{% if rating.system %} system="{{ rating.system }}"{% endif %}><value>{{ rating.value }}</value></rating>{% endfor %}
+  <previously-shown />
+</programme>

@@ -1,0 +1,14 @@
+{#
+  Ports ErsatzTV's `_channel.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
+  Available values: channel_id, channel_number, channel_name,
+  channel_categories, channel_icon_url (already resolved: external URL,
+  local logo, or generated-text fallback — matching the M3U playlist's
+  tvg-logo resolution).
+#}
+<channel id="{{ channel_id }}">
+  <display-name>{{ channel_number }} {{ channel_name }}</display-name>
+  <display-name>{{ channel_number }}</display-name>
+  <display-name>{{ channel_name }}</display-name>
+  {% for category in channel_categories %}<category lang="en">{{ category }}</category>{% endfor %}
+  <icon src="{{ channel_icon_url }}" />
+</channel>

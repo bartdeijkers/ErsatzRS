@@ -1,6 +1,7 @@
 mod admin_media;
 mod admin_search;
 mod admin_settings;
+mod artwork;
 mod block;
 mod channel;
 mod collection;
@@ -37,6 +38,7 @@ pub use admin_search::{
 pub use admin_settings::{
     AdminSettingsRepository, SettingsMutation, SettingsOptionKind, SettingsSelectOption,
 };
+pub use artwork::ArtworkRepository;
 pub use block::{
     BlockAdminRow, BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow,
     BlockItemAdmin, BlockRepository,

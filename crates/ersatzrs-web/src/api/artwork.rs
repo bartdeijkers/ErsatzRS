@@ -10,9 +10,18 @@
 //!   [`serve_poster`] / [`serve_fanart`], which proxy through to the upstream
 //!   Jellyfin / Emby instance using the configured connection address and the
 //!   stored API key.
-//! * For plain hash paths (local cache, currently not yet written) the same
-//!   routes serve from a local cache folder under `data/artwork/{kind}/{hash}`,
-//!   matching `FileSystemLayout.PosterCacheFolder`.
+//! * A local absolute filesystem path (what the local scanner actually
+//!   stores in `Artwork.Path`) is percent-encoded into one opaque URL
+//!   segment and served directly from its source location, gated on an
+//!   exact match against a known `Artwork.Path` row — this route is
+//!   unauthenticated, so that DB membership check is the only thing
+//!   standing between it and arbitrary local file disclosure; do not relax
+//!   it to a prefix/containment check without equal care.
+//! * A short hash-style filename (local cache, sharded by the first two hex
+//!   chars per `FileSystemLayout.PosterCacheFolder` — nothing currently
+//!   populates this cache, but the lookup is kept for forward
+//!   compatibility) is served from `data/artwork/{kind}/{hash}` after
+//!   rejecting any path component that isn't an ordinary filename.
 //!
 //! `ArtworkKind` numeric encoding matches `ErsatzTV`: `0 = Poster`,
 //! `1 = Thumbnail`, `2 = Logo`, `3 = FanArt`, `4 = Watermark`.
@@ -77,8 +86,14 @@ pub fn artwork_url(path: &str, kind: ArtworkUrlKind) -> Option<String> {
         return Some(url);
     }
 
-    // Plain hash filename — served from local cache.
-    Some(format!("/artwork/{kind_segment}/{trimmed}"))
+    // A local absolute filesystem path (the scanner's stored `Artwork.Path`)
+    // or a plain cache-hash filename. Percent-encode so an absolute path
+    // becomes one opaque URL segment; Axum decodes it once before
+    // `serve_local_artwork` validates it against known `Artwork.Path` rows.
+    Some(format!(
+        "/artwork/{kind_segment}/{}",
+        urlencoding::encode(trimmed)
+    ))
 }
 
 /// Which artwork URL kind to build. Picks the URL segment (`posters` /
@@ -226,10 +241,49 @@ async fn serve_artwork(
     if let Some(rest) = full_path.strip_prefix("emby/") {
         return serve_emby_artwork(&state, rest, params).await;
     }
-    serve_local_artwork(kind, full_path).await
+    serve_local_artwork(&state.repositories.artwork, kind, full_path).await
 }
 
-async fn serve_local_artwork(kind: &str, file_name: &str) -> Response {
+/// Reject any path segment that isn't a single, ordinary filename component
+/// (no `..`, no root/prefix, no embedded separators once decoded) — this is
+/// the local-cache-lookup path, so nothing here should ever escape `base`.
+fn is_safe_relative_path(value: &str) -> bool {
+    let path = std::path::Path::new(value);
+    path.components()
+        .all(|component| matches!(component, std::path::Component::Normal(_)))
+}
+
+async fn serve_local_artwork(
+    repository: &dyn ersatzrs_core::repositories::ArtworkRepository,
+    kind: &str,
+    file_name: &str,
+) -> Response {
+    // Axum's `Path<String>` extractor has already percent-decoded the wildcard
+    // capture exactly once. Decoding again corrupts valid persisted paths that
+    // contain a literal escape-looking component such as `%20`.
+    let decoded_path = std::path::Path::new(file_name);
+
+    if decoded_path.is_absolute() {
+        // The DB is the trust boundary here: only a path the scanner already
+        // persisted as an `Artwork.Path` value may ever be served, so a real
+        // lookup failure must surface as an error, not silently become
+        // "not found" and mask a genuine database problem.
+        match repository.is_known_path(file_name).await {
+            Ok(true) => {}
+            Ok(false) => return StatusCode::NOT_FOUND.into_response(),
+            Err(error) => {
+                tracing::warn!(%error, "failed to check known artwork path");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+        return match read_artwork_file(decoded_path).await {
+            Ok(response) | Err(response) => response,
+        };
+    }
+
+    if !is_safe_relative_path(file_name) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let base = match kind {
         "posters" => data_path("artwork/posters"),
         "fanart" => data_path("artwork/fanart"),
@@ -250,36 +304,46 @@ async fn serve_local_artwork(kind: &str, file_name: &str) -> Response {
         if candidate.as_os_str().is_empty() {
             continue;
         }
-        match tokio::fs::read(&candidate).await {
-            Ok(bytes) => {
-                let ext = candidate
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("jpg");
-                let mime = match ext {
-                    "png" => "image/png",
-                    "gif" => "image/gif",
-                    "webp" => "image/webp",
-                    _ => "image/jpeg",
-                };
-                return (
-                    [
-                        (header::CONTENT_TYPE, mime.to_string()),
-                        (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-                    ],
-                    Body::from(bytes),
-                )
-                    .into_response();
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                tracing::warn!(%error, path = %candidate.display(), "failed to read local artwork");
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
+        match read_artwork_file(&candidate).await {
+            Err(response) if response.status() == StatusCode::NOT_FOUND => {}
+            Ok(response) | Err(response) => return response,
         }
     }
 
     StatusCode::NOT_FOUND.into_response()
+}
+
+/// Read an artwork file from a path already validated by the caller.
+/// Returns `Err` with a `NOT_FOUND` or `INTERNAL_SERVER_ERROR` response on
+/// failure so callers can distinguish "try the next candidate" from
+/// "stop and return this error".
+async fn read_artwork_file(path: &std::path::Path) -> Result<Response, Response> {
+    match tokio::fs::read(path).await {
+        Ok(bytes) => {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+            let mime = match ext {
+                "png" => "image/png",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                _ => "image/jpeg",
+            };
+            Ok((
+                [
+                    (header::CONTENT_TYPE, mime.to_string()),
+                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
+                ],
+                Body::from(bytes),
+            )
+                .into_response())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(StatusCode::NOT_FOUND.into_response())
+        }
+        Err(error) => {
+            tracing::warn!(%error, path = %path.display(), "failed to read local artwork");
+            Err(StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        }
+    }
 }
 
 async fn serve_jellyfin_artwork(
@@ -504,5 +568,131 @@ mod tests {
     fn empty_path_yields_none() {
         assert!(artwork_url("", ArtworkUrlKind::Poster).is_none());
         assert!(artwork_url("   ", ArtworkUrlKind::FanArt).is_none());
+    }
+
+    #[test]
+    fn local_absolute_path_is_percent_encoded_and_round_trips() {
+        let raw = "/media/movies/Big Buck Bunny/poster.jpg";
+        let url = artwork_url(raw, ArtworkUrlKind::Poster).unwrap();
+        let encoded = url.strip_prefix("/artwork/posters/").unwrap();
+        assert!(!encoded.contains('/'), "should be one opaque segment");
+        assert_eq!(
+            urlencoding::decode(encoded).unwrap().into_owned(),
+            raw,
+            "must decode back to the exact stored path"
+        );
+    }
+
+    #[test]
+    fn is_safe_relative_path_rejects_traversal_and_absolute_segments() {
+        assert!(is_safe_relative_path("abcdef0123456789"));
+        assert!(!is_safe_relative_path("../../../etc/passwd"));
+        assert!(!is_safe_relative_path("/etc/passwd"));
+        assert!(!is_safe_relative_path("a/../../b"));
+    }
+
+    #[cfg(feature = "mysql")]
+    async fn test_db() -> ersatzrs_infra::db::DbPool {
+        sqlx::any::install_default_drivers();
+        let pool = sqlx::any::AnyPoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create in-memory sqlite pool");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn test_db() -> ersatzrs_infra::db::DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create in-memory sqlite pool");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
+    #[tokio::test]
+    async fn serve_local_artwork_rejects_absolute_paths_not_in_the_database() {
+        let pool = test_db().await;
+        let repo = ersatzrs_infra::repositories::SqliteArtworkRepository(pool);
+        let response = serve_local_artwork(&repo, "posters", "/etc/passwd").await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn serve_local_artwork_serves_a_path_registered_in_the_artwork_table() {
+        let pool = test_db().await;
+        let file_path = std::env::temp_dir().join(format!(
+            "ersatzrs-artwork-test-{}.jpg",
+            uuid::Uuid::new_v4()
+        ));
+        tokio::fs::write(&file_path, b"fake-jpeg-bytes")
+            .await
+            .expect("write fixture file");
+        let path_str = file_path.to_str().expect("utf-8 path");
+        sqlx::query(
+            r#"INSERT INTO "Artwork" ("ArtworkKind", "Path", "DateAdded", "DateUpdated")
+               VALUES (0, ?, '2026-01-01 00:00:00', '2026-01-01 00:00:00')"#,
+        )
+        .bind(path_str)
+        .execute(&pool)
+        .await
+        .expect("insert artwork row");
+
+        let repo = ersatzrs_infra::repositories::SqliteArtworkRepository(pool);
+        let response = serve_local_artwork(&repo, "posters", path_str).await;
+
+        tokio::fs::remove_file(&file_path).await.ok();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn serve_local_artwork_rejects_traversal_on_the_hash_cache_branch() {
+        let pool = test_db().await;
+        let repo = ersatzrs_infra::repositories::SqliteArtworkRepository(pool);
+        let response = serve_local_artwork(&repo, "posters", "../../../etc/passwd").await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn serve_local_artwork_preserves_literal_percent_escape_sequences() {
+        let pool = test_db().await;
+        let repo = ersatzrs_infra::repositories::SqliteArtworkRepository(pool.clone());
+        let fixture_root = std::env::temp_dir().join(format!(
+            "ersatzrs-artwork-percent-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let literal_escape_dir = fixture_root.join("literal%20directory");
+        tokio::fs::create_dir_all(&literal_escape_dir)
+            .await
+            .expect("create fixture directory");
+        let file_path = literal_escape_dir.join("poster.jpg");
+        tokio::fs::write(&file_path, b"fake-jpeg-bytes")
+            .await
+            .expect("write fixture file");
+        let path_str = file_path.to_str().expect("utf-8 path");
+        sqlx::query(
+            r#"INSERT INTO "Artwork" ("ArtworkKind", "Path", "DateAdded", "DateUpdated")
+               VALUES (0, ?, '2026-01-01 00:00:00', '2026-01-01 00:00:00')"#,
+        )
+        .bind(path_str)
+        .execute(&pool)
+        .await
+        .expect("insert artwork row");
+
+        let response = serve_local_artwork(&repo, "posters", path_str).await;
+
+        tokio::fs::remove_dir_all(&fixture_root).await.ok();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

@@ -572,7 +572,42 @@ pub(super) async fn upsert_movie_metadata(
 
     replace_movie_artwork(tx, metadata_id, item).await?;
     replace_movie_guids(tx, metadata_id, &item.provider_guids).await?;
+    crate::metadata::replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &item.genres)
+        .await?;
+    crate::metadata::replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &item.tags).await?;
+    replace_movie_actors(tx, metadata_id, &item.actors).await?;
+    replace_movie_people(tx, "Director", metadata_id, &item.directors).await?;
+    replace_movie_people(tx, "Writer", metadata_id, &item.writers).await?;
     Ok(metadata_id)
+}
+
+pub(super) async fn replace_movie_actors(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    actors: &[JellyfinActor],
+) -> Result<()> {
+    let people: Vec<crate::metadata::PersonRef> = actors
+        .iter()
+        .map(|actor| crate::metadata::PersonRef {
+            name: actor.name.clone(),
+            role: actor.role.clone(),
+            order: actor.order,
+        })
+        .collect();
+    crate::metadata::replace_people(tx, "Actor", "MovieMetadataId", metadata_id, &people).await
+}
+
+pub(super) async fn replace_movie_people(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    table: &'static str,
+    metadata_id: i64,
+    names: &[String],
+) -> Result<()> {
+    let people: Vec<crate::metadata::PersonRef> = names
+        .iter()
+        .map(|name| crate::metadata::PersonRef::new(name.clone()))
+        .collect();
+    crate::metadata::replace_people(tx, table, "MovieMetadataId", metadata_id, &people).await
 }
 
 pub(super) async fn replace_movie_artwork(

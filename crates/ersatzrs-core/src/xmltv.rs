@@ -39,6 +39,93 @@ impl XmltvBlockBehavior {
     }
 }
 
+/// `ErsatzTV` `XmltvTimeZone` — controls whether `<programme>` start/stop
+/// timestamps are rendered in the server's local UTC offset or in UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum XmltvTimeZone {
+    #[default]
+    Local,
+    Utc,
+}
+
+impl XmltvTimeZone {
+    /// Decode the persisted `ConfigElement` value (`"Local"` or `"Utc"`).
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "local" => Some(Self::Local),
+            "utc" => Some(Self::Utc),
+            _ => None,
+        }
+    }
+}
+
+/// The `MediaItem` subtype backing a guide item, driving which
+/// category-literal/episode-num/rating-system rules a `<programme>` uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum XmltvItemKind {
+    #[default]
+    Movie,
+    Episode,
+    MusicVideo,
+    Song,
+    OtherVideo,
+    RemoteStream,
+}
+
+/// Which artwork kind `icon_path` actually resolved to, so the web layer
+/// can request the matching resize budget from `artwork_url` (poster-sized
+/// vs. thumbnail-sized) instead of guessing from `XmltvItemKind` alone —
+/// e.g. an episode that fell back to its show's poster should be resized
+/// like a poster, not like the thumbnail episodes usually have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IconSizeHint {
+    #[default]
+    Poster,
+    Thumbnail,
+}
+
+/// Rich per-item metadata riding alongside the block-behavior timing
+/// projection. Populated by the SQL loader, consumed by the XML template
+/// renderer; the timing math in this module never inspects it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct XmltvProgrammeContent {
+    pub kind: XmltvItemKind,
+    /// Episode title (episodes) or video title (music videos/songs) — the
+    /// item's own title, distinct from the `<title>` shown for the item
+    /// (which is the show/artist name for those kinds).
+    pub sub_title: Option<String>,
+    pub description: Option<String>,
+    pub year: Option<i32>,
+    pub genres: Vec<String>,
+    /// Artist-level genres, kept separate from music-video genres to match
+    /// ErsatzTV's custom-template context.
+    pub artist_genres: Vec<String>,
+    /// Raw, possibly `/`-delimited multi-value `ContentRating` string.
+    pub content_rating: Option<String>,
+    /// Raw artwork path, resolved to a servable URL at render time.
+    pub icon_path: Option<String>,
+    /// Ignored when `icon_path` is `None`.
+    pub icon_size_hint: IconSizeHint,
+    /// Episode-level still artwork. Episode `icon_path` is deliberately the
+    /// parent show's prioritized artwork, matching ErsatzTV.
+    pub thumbnail_path: Option<String>,
+    /// Ignored when `thumbnail_path` is `None`.
+    pub thumbnail_size_hint: IconSizeHint,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub guids: Vec<String>,
+    pub episode_guids: Vec<String>,
+    pub track: Option<String>,
+    pub album: Option<String>,
+    pub release_date: Option<String>,
+    pub artists: Vec<String>,
+    pub album_artists: Vec<String>,
+    pub comment: Option<String>,
+    pub studios: Vec<String>,
+    pub directors: Vec<String>,
+}
+
 /// Raw playout item data needed to project an XMLTV programme.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmltvGuideItem {
@@ -49,7 +136,9 @@ pub struct XmltvGuideItem {
     pub guide_finish: Option<DateTime<Utc>>,
     pub guide_group: i32,
     pub filler_kind: FillerKind,
+    pub custom_title: Option<String>,
     pub title: String,
+    pub content: XmltvProgrammeContent,
 }
 
 /// XMLTV programme data after configured block behavior has been applied.
@@ -58,7 +147,9 @@ pub struct XmltvProgramme {
     pub channel_number: String,
     pub start: DateTime<Utc>,
     pub stop: DateTime<Utc>,
+    pub custom_title: Option<String>,
     pub title: String,
+    pub content: XmltvProgrammeContent,
 }
 
 /// Apply `ErsatzTV` XMLTV block behavior to sorted playout items.
@@ -75,7 +166,9 @@ pub fn project_programmes(
                 channel_number: item.channel_number.clone(),
                 start: item.start,
                 stop: item.finish,
+                custom_title: item.custom_title.clone(),
                 title: item.title.clone(),
+                content: item.content.clone(),
             })
             .collect(),
         XmltvBlockBehavior::SplitTimeEvenly => split_time_evenly(items),
@@ -117,7 +210,9 @@ fn split_time_evenly(items: &[XmltvGuideItem]) -> Vec<XmltvProgramme> {
                 channel_number: channel_number.clone(),
                 start: current_start,
                 stop: current_stop,
+                custom_title: item.custom_title.clone(),
                 title: item.title.clone(),
+                content: item.content.clone(),
             });
             current_start = current_stop;
         }
@@ -142,6 +237,13 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
+
+    #[test]
+    fn parses_named_time_zone_case_insensitively() {
+        assert_eq!(XmltvTimeZone::parse("Local"), Some(XmltvTimeZone::Local));
+        assert_eq!(XmltvTimeZone::parse("utc"), Some(XmltvTimeZone::Utc));
+        assert_eq!(XmltvTimeZone::parse("bogus"), None);
+    }
 
     #[test]
     fn split_time_evenly_groups_by_guide_window() {
@@ -171,6 +273,41 @@ mod tests {
             programmes[1].stop,
             Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn content_rides_through_both_block_behaviors_unchanged() {
+        let content = XmltvProgrammeContent {
+            kind: XmltvItemKind::Episode,
+            sub_title: Some("Pilot".to_owned()),
+            description: Some("First episode".to_owned()),
+            year: Some(2026),
+            genres: vec!["Drama".to_owned()],
+            content_rating: Some("us:TV-14".to_owned()),
+            icon_path: Some("path/to/art.jpg".to_owned()),
+            icon_size_hint: IconSizeHint::Thumbnail,
+            thumbnail_path: Some("path/to/still.jpg".to_owned()),
+            thumbnail_size_hint: IconSizeHint::Thumbnail,
+            season_number: Some(1),
+            episode_number: Some(1),
+            ..XmltvProgrammeContent::default()
+        };
+        let source_item = XmltvGuideItem {
+            content: content.clone(),
+            ..item("1", 20, 0, 20, 30, "Episode Title")
+        };
+
+        let split = project_programmes(
+            std::slice::from_ref(&source_item),
+            XmltvBlockBehavior::SplitTimeEvenly,
+        );
+        let actual = project_programmes(
+            std::slice::from_ref(&source_item),
+            XmltvBlockBehavior::UseActualTimes,
+        );
+
+        assert_eq!(split[0].content, content);
+        assert_eq!(actual[0].content, content);
     }
 
     #[test]
@@ -209,7 +346,9 @@ mod tests {
             guide_finish: Some(Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap()),
             guide_group: 10,
             filler_kind: FillerKind::None,
+            custom_title: None,
             title: title.to_owned(),
+            content: XmltvProgrammeContent::default(),
         }
     }
 }

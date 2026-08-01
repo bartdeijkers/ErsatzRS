@@ -1,0 +1,27 @@
+{#
+  Ports ErsatzTV's `_episode.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
+  Available values: programme_start, programme_stop, channel_id,
+  channel_number, show_title, episode_title, episode_plot, show_genres,
+  episode_artwork_url, season_number, episode_number,
+  season_number_padded, episode_number_padded, show_ratings (list of
+  {system, value}).
+
+  Episode/show artwork and rating come from the show, not the episode —
+  matching ErsatzTV: there is no per-episode content rating, and
+  episode-level genre rows are not populated by any scanner.
+#}
+<programme start="{{ programme_start }}" stop="{{ programme_stop }}" channel="{{ channel_id }}">
+  {% if has_custom_title %}<title lang="en">{{ custom_title }}</title>{% else %}
+    <title lang="en">{{ show_title }}</title>
+    {% if episode_has_title %}<sub-title lang="en">{{ episode_title }}</sub-title>{% endif %}
+    {% if episode_has_plot %}<desc lang="en">{{ episode_plot }}</desc>{% endif %}
+    <category lang="en">Series</category>
+    {% for genre in show_genres %}<category lang="en">{{ genre }}</category>{% endfor %}
+    {% if episode_has_artwork %}<icon src="{{ episode_artwork_url }}" />{% endif %}
+    {% if episode_has_thumbnail %}<image type="still" orient="L" size="3">{{ episode_thumbnail_url }}</image>{% endif %}
+  {% endif %}
+  <episode-num system="onscreen">S{{ season_number_padded }}E{{ episode_number_padded }}</episode-num>
+  <episode-num system="xmltv_ns">{{ season_number - 1 }}.{{ episode_number - 1 }}.0/1</episode-num>
+  {% for rating in show_ratings %}<rating{% if rating.system %} system="{{ rating.system }}"{% endif %}><value>{{ rating.value }}</value></rating>{% endfor %}
+  <previously-shown />
+</programme>

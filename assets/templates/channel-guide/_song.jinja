@@ -1,0 +1,17 @@
+{#
+  Ports ErsatzTV's `_song.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
+  Available values: programme_start, programme_stop, channel_id,
+  channel_number, song_artists, song_title, song_year, song_genres,
+  song_artwork_url.
+#}
+<programme start="{{ programme_start }}" stop="{{ programme_stop }}" channel="{{ channel_id }}">
+  {% if has_custom_title %}<title lang="en">{{ custom_title }}</title>{% else %}
+    <title lang="en">{{ song_artists | join(', ') }}</title>
+    <sub-title lang="en">{{ song_title }}</sub-title>
+    {% if song_has_year %}<date>{{ song_year }}</date>{% endif %}
+    <category lang="en">Music</category>
+    {% for genre in song_genres %}<category lang="en">{{ genre }}</category>{% endfor %}
+    {% if song_has_artwork %}<icon src="{{ song_artwork_url }}" />{% endif %}
+  {% endif %}
+  <previously-shown />
+</programme>

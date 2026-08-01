@@ -14,6 +14,7 @@ use serde::Deserialize;
 
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
+use crate::transport::iptv::identifier::{channel_identifier, parse_channel_number};
 use crate::transport::iptv::streaming_specs::{self, ChannelStreamingSpec};
 
 #[derive(Debug, Deserialize, Default)]
@@ -160,7 +161,7 @@ pub fn build_m3u(
     out
 }
 
-async fn load_channel_logo_paths(
+pub(crate) async fn load_channel_logo_paths(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<HashMap<i64, String>, sqlx::Error> {
     use sqlx::Row;
@@ -186,7 +187,7 @@ async fn load_channel_logo_paths(
     Ok(paths)
 }
 
-fn channel_logo_url(
+pub(crate) fn channel_logo_url(
     scheme: &str,
     host: &str,
     channel: &Channel,
@@ -210,10 +211,6 @@ fn channel_logo_url(
     }
 }
 
-fn parse_channel_number(number: &str) -> f64 {
-    number.parse::<f64>().unwrap_or(f64::MAX)
-}
-
 /// URL-safe short identifier for a channel.
 ///
 /// Ports the `shortUniqueId` snippet from `ErsatzTV`'s `ChannelPlaylist.cs`:
@@ -224,41 +221,6 @@ fn short_unique_id(unique_id: uuid::Uuid) -> String {
         .trim_end_matches('=')
         .replace('/', "_")
         .replace('+', "-")
-}
-
-/// Ports `ErsatzTV.Core.Iptv.ChannelIdentifier.FromNumber`.
-///
-/// The `ErsatzTV` algorithm is `(int)(decimal.Parse(channelNumber) * 100)`,
-/// i.e. channel numbers with at most two decimals (per
-/// `Channel.NUMBER_PATTERN`). We mirror the cast by scaling to cents and
-/// rounding, then saturating into `i32` so malformed input can never alias a
-/// valid identifier.
-fn channel_identifier(channel_number: &str) -> String {
-    let scaled = (channel_number.parse::<f64>().unwrap_or(0.0) * 100.0).round();
-    let mut number: i32 = if scaled.is_finite() {
-        #[allow(clippy::cast_possible_truncation)] // clamped to i32 range above
-        let truncated = scaled.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32;
-        truncated
-    } else {
-        0
-    };
-    let mut id: i32 = 0;
-    while number != 0 {
-        id += (number % 10) + 48;
-        number /= 10;
-    }
-
-    let instance_id = instance_id();
-    if instance_id.is_empty() {
-        format!("C{channel_number}.{id}.ersatztv.org")
-    } else {
-        format!("C{channel_number}.{id}.{instance_id}.ersatztv.org")
-    }
-}
-
-fn instance_id() -> String {
-    #[allow(clippy::disallowed_methods)]
-    std::env::var("ETV_INSTANCE_ID").unwrap_or_default()
 }
 
 fn video_format_name(format: FFmpegProfileVideoFormat) -> &'static str {
@@ -474,17 +436,6 @@ mod tests {
             &logo_paths,
         );
         insta::assert_snapshot!("m3u_access_token", output);
-    }
-
-    #[test]
-    fn channel_identifier_matches_ersatztv_algorithm() {
-        // ErsatzTV: number * 100, sum digits + 48
-        // "1"   -> 100 -> (1+48)+(0+48)+(0+48) = 145
-        // "1.5" -> 150 -> (1+48)+(5+48)+(0+48) = 150
-        // "2"   -> 200 -> (2+48)+(0+48)+(0+48) = 146
-        assert_eq!(channel_identifier("1"), "C1.145.ersatztv.org");
-        assert_eq!(channel_identifier("1.5"), "C1.5.150.ersatztv.org");
-        assert_eq!(channel_identifier("2"), "C2.146.ersatztv.org");
     }
 
     #[test]

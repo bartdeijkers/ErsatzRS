@@ -1,5 +1,6 @@
 mod admin_media;
 mod admin_settings;
+mod artwork;
 mod block;
 mod channel;
 mod collection;
@@ -23,6 +24,7 @@ mod troubleshooting;
 mod watermark;
 
 pub use admin_settings::SqliteAdminSettingsRepository;
+pub use artwork::SqliteArtworkRepository;
 pub use block::SqliteBlockRepository;
 pub use channel::SqliteChannelRepository;
 pub use collection::SqliteCollectionRepository;
@@ -66,6 +68,7 @@ impl<T> SqlxResultExt<T> for std::result::Result<T, sqlx::Error> {
 pub struct Repositories {
     pub admin_media: SqliteAdminMediaRepository,
     pub admin_settings: SqliteAdminSettingsRepository,
+    pub artwork: SqliteArtworkRepository,
     pub channel: SqliteChannelRepository,
     pub playout: SqlitePlayoutRepository,
     pub program_schedule: SqliteProgramScheduleRepository,
@@ -93,6 +96,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
     Repositories {
         admin_media: SqliteAdminMediaRepository(pool.clone()),
         admin_settings: SqliteAdminSettingsRepository(pool.clone()),
+        artwork: SqliteArtworkRepository(pool.clone()),
         channel: SqliteChannelRepository(pool.clone()),
         playout: SqlitePlayoutRepository(pool.clone()),
         program_schedule: SqliteProgramScheduleRepository(pool.clone()),

@@ -13,8 +13,29 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.17-beta] - 2026-08-02
+
 ### Added
 
+- Added rich XMLTV guide content: `/iptv/xmltv.xml` now renders plot, genre
+  categories, content rating (mapped to `MPAA`/`VCHIP` per ErsatzTV's `us:`
+  convention), artwork icons, episode numbering (`onscreen` and `xmltv_ns`
+  systems), and per-kind titles for movies, episodes, music videos, songs,
+  other videos, and remote streams, matching ErsatzTV's own field set.
+  Channel elements gain the three-way `<display-name>`, category tags, and
+  the same logo fallback chain as the M3U playlist. Guide templates are
+  customizable per media kind via `minijinja`, following the same bundled-
+  default/override-folder convention as the existing Music Video Credits
+  templates (`<data>/templates/channel-guide/<name>.jinja`); a broken custom
+  override falls back to the bundled default for that one kind, and a
+  template that renders invalid XML falls back to a minimal element for
+  that one item, rather than either failing the whole guide. Movie icons
+  deliberately fall back to correctly sized thumbnail artwork when no poster
+  exists, while bundled Remote Stream entries emit persisted genre categories
+  for better filtering and discovery. Locally-scanned
+  library artwork icons are now actually reachable (see Security) — this
+  previously 404'd because the artwork route only understood Jellyfin/Emby
+  paths and a local-cache hash convention nothing ever populated.
 - Added standalone Linux/macOS and Windows Beeld & Geluid Schatkamer Remote
   Stream extractors and ErsatzRS library instructions.
 - Added complete Remote Stream YAML scanning and URL/script probing, direct
@@ -196,6 +217,22 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed rich XMLTV guide rendering for metadata and provider URLs containing
+  XML metacharacters, localized non-ASCII ratings, custom-title overrides,
+  episode poster/still artwork parity, and literal percent sequences in local
+  artwork paths. Custom guide templates now receive ErsatzTV's complete
+  per-kind context, and guide metadata is loaded in bounded batches instead of
+  issuing sequential subtype and relationship queries for every distinct
+  scheduled item. Token-complete custom fragments with unclosed elements now
+  take the per-item fallback path instead of corrupting the complete guide.
+- Fixed the XMLTV `<channel id>`/`<programme channel>` attributes, which used
+  the bare channel number and could mismatch the M3U playlist's checksummed
+  `tvg-id`, breaking guide-to-channel association for IPTV clients that match
+  strictly by id. The `xmltv.days_to_build` and `xmltv.time_zone` settings
+  now take effect (previously always rendered a hardcoded 48-hour UTC
+  window regardless of the persisted setting). Jellyfin and Emby movie sync
+  now persist genres, tags, actors, directors, and writers, matching show
+  and episode sync (previously silently dropped for movies only).
 - Delayed mirror channels now reuse their source channel's playout across
   MPEG-TS, HLS, browser preview, admin EPG, and XMLTV while keeping the mirror's
   own channel settings. Signed offsets round-trip correctly, source history is
@@ -332,6 +369,15 @@ release section when tagging a release.
 
 ### Security
 
+- Fixed an unauthenticated arbitrary local file read in `/artwork/posters`,
+  `/artwork/fanart`, and `/artwork/thumbnails`: a percent-encoded or
+  double-slash absolute path in the URL replaced the intended local-cache
+  base directory entirely (`PathBuf::join` overrides its base when the
+  joined segment is absolute), letting any remote client read any file
+  readable by the server process. Local artwork is now only ever served
+  when the requested path exactly matches a `Artwork.Path` row the scanner
+  already persisted, and the local-cache-hash lookup path now rejects any
+  path component that isn't an ordinary filename.
 - Preview and normal HLS segment routes now reject unsafe channel path
   components before resolving session files, preventing percent-decoded route
   captures from escaping their session-owned temporary directories when IPTV
@@ -1181,7 +1227,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...HEAD
+[1.0.17-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...v1.0.17-beta
 [1.0.15-beta.9]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.8...v1.0.15-beta.9
 [1.0.15-beta.8]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.7...v1.0.15-beta.8
 [1.0.15-beta.7]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.6...v1.0.15-beta.7

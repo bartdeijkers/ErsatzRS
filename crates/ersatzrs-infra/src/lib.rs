@@ -21,6 +21,7 @@ pub mod logging;
 pub mod maintenance;
 pub mod media_server;
 pub mod metadata;
+pub(crate) mod metadata_query;
 pub mod music_video_credits;
 pub mod playback;
 pub mod plex;
@@ -33,5 +34,7 @@ pub mod trakt_sync;
 pub mod transcode_capacity;
 pub mod tsduck;
 pub mod xmltv;
+pub(crate) mod xmltv_metadata;
+pub mod xmltv_templates;
 
 pub use repositories::map_repository_error;

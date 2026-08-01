@@ -1,0 +1,18 @@
+{#
+  Ports ErsatzTV's `_otherVideo.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
+  Available values: programme_start, programme_stop, channel_id,
+  channel_number, other_video_title, other_video_plot, other_video_year,
+  other_video_genres, other_video_artwork_url, other_video_ratings (list
+  of {system, value}).
+#}
+<programme start="{{ programme_start }}" stop="{{ programme_stop }}" channel="{{ channel_id }}">
+  {% if has_custom_title %}<title lang="en">{{ custom_title }}</title>{% else %}
+    <title lang="en">{{ other_video_title }}</title>
+    {% if other_video_has_plot %}<desc lang="en">{{ other_video_plot }}</desc>{% endif %}
+    {% if other_video_has_year %}<date>{{ other_video_year }}</date>{% endif %}
+    {% for genre in other_video_genres %}<category lang="en">{{ genre }}</category>{% endfor %}
+    {% if other_video_has_artwork %}<icon src="{{ other_video_artwork_url }}" />{% endif %}
+  {% endif %}
+  {% for rating in other_video_ratings %}<rating{% if rating.system %} system="{{ rating.system }}"{% endif %}><value>{{ rating.value }}</value></rating>{% endfor %}
+  <previously-shown />
+</programme>

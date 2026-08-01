@@ -40,6 +40,11 @@ async fn emby_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(movie_metadata_title(&pool, 1).await, "Big Buck Bunny");
     assert_eq!(count(&pool, "MetadataGuid").await, 3);
     assert_eq!(count(&pool, "Artwork").await, 2);
+    assert_eq!(count(&pool, "Genre").await, 2);
+    assert_eq!(count(&pool, "Tag").await, 1);
+    assert_eq!(count(&pool, "Actor").await, 1);
+    assert_eq!(count(&pool, "Director").await, 1);
+    assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 4);
@@ -852,6 +857,13 @@ async fn mock_detailed_movie_items(server: &MockServer) -> Mock<'_> {
                             "Tmdb": "10378",
                             "Tvdb": "98765"
                         },
+                        "Genres": ["Animation", "Short"],
+                        "TagItems": [{ "Name": "cgi" }],
+                        "People": [
+                            { "Name": "Sacha Goedegebure", "Type": "Actor", "Role": "Bunny" },
+                            { "Name": "Sacha Goedegebure", "Type": "Director" },
+                            { "Name": "William Reynish", "Type": "Writer" }
+                        ],
                         "ImageTags": { "Primary": "poster-tag" },
                         "BackdropImageTags": ["fanart-tag"],
                         "LocationType": "FileSystem",

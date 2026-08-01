@@ -1,6 +1,7 @@
 pub mod access_token;
 pub mod guide;
 pub mod hls;
+pub mod identifier;
 pub mod logos;
 pub mod playlist;
 pub mod stream;
