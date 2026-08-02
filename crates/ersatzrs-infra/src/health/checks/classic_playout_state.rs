@@ -3,8 +3,10 @@ use super::super::{
     Result, Row,
 };
 use chrono::{Duration, Utc};
+use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::maintenance::classic_runtime_state_is_complete;
+use crate::repositories::common::decode_enum_column;
 use crate::repositories::SqliteSchedulingContentRepository;
 
 pub(crate) struct ClassicPlayoutStateHealthCheck {
@@ -25,11 +27,10 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
-            r#"SELECT "p"."Id", "c"."Number", "c"."Name"
+            r#"SELECT "p"."Id", "p"."ScheduleKind", "c"."Number", "c"."Name"
                FROM "Playout" AS "p"
                JOIN "Channel" AS "c" ON "c"."Id" = "p"."ChannelId"
-               WHERE "p"."ScheduleKind" = 1
-                 AND EXISTS (
+               WHERE EXISTS (
                      SELECT 1 FROM "PlayoutItem" AS "pi" WHERE "pi"."PlayoutId" = "p"."Id"
                  )
                ORDER BY "c"."SortNumber", "p"."Id""#,
@@ -41,6 +42,16 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
         let scheduling = SqliteSchedulingContentRepository::new(self.pool.clone());
         let mut invalid = Vec::new();
         for row in rows {
+            if !matches!(
+                decode_enum_column::<PlayoutScheduleKind>(
+                    "playout schedule_kind",
+                    &row,
+                    "ScheduleKind"
+                ),
+                Ok(PlayoutScheduleKind::Classic)
+            ) {
+                continue;
+            }
             let playout_id = row
                 .try_get::<i64, _>("Id")
                 .map_err(|error| HealthCheckError::Database(error.to_string()))?;

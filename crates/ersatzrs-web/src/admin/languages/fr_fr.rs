@@ -323,6 +323,12 @@ impl LanguageStrings for FrenchStrings {
         format!("{errors} erreur(s), {warnings} avertissement(s)")
     }
 
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "L’état de l’énumérateur de diffusion classique est incomplet pour : {playouts}. Le planificateur doit actualiser ces diffusions avant qu’elles puissent continuer en toute sécurité."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Impossible de charger le contexte de dépannage de lecture : {error}")
     }
@@ -705,6 +711,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockTemplatesAddedLater => "Les modèles de blocs s'ajoutent plus tard",
         TextKey::UnsupportedPlayoutKind => "Type de diffusion non pris en charge.",
         TextKey::ClassicPlayout => "Diffusion classique",
+        TextKey::ClassicPlayoutState => "État de la diffusion classique",
         TextKey::BlockPlayout => "Diffusion par blocs",
         TextKey::ScriptedPlayout => "Grille scriptée",
         TextKey::AlternateSchedules => "Grilles alternatives",

@@ -26,7 +26,7 @@ use crate::cache_cleanup::{
 };
 use crate::db::{DatabaseSchemaStatus, Db};
 use crate::health::{run_and_persist_health_checks, PersistedHealthCheckRun};
-use crate::repositories::common::{decode_datetime, encode_datetime};
+use crate::repositories::common::{decode_datetime, decode_enum_column, encode_datetime};
 use crate::repositories::{SqlitePlayoutRepository, SqliteSchedulingContentRepository};
 
 const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
@@ -337,17 +337,29 @@ pub async fn repair_invalid_classic_playouts(
     now: DateTime<Utc>,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<u32> {
-    let playout_ids = sqlx::query_scalar::<_, EntityId>(
-        r#"SELECT "p"."Id"
+    let rows = sqlx::query(
+        r#"SELECT "p"."Id", "p"."ScheduleKind"
            FROM "Playout" AS "p"
-           WHERE "p"."ScheduleKind" = 1
-             AND EXISTS (
+           WHERE EXISTS (
                  SELECT 1 FROM "PlayoutItem" AS "pi" WHERE "pi"."PlayoutId" = "p"."Id"
              )
            ORDER BY "p"."Id""#,
     )
     .fetch_all(pool)
     .await?;
+    let mut playout_ids = Vec::new();
+    for row in rows {
+        if matches!(
+            decode_enum_column::<PlayoutScheduleKind>(
+                "playout schedule_kind",
+                &row,
+                "ScheduleKind"
+            ),
+            Ok(PlayoutScheduleKind::Classic)
+        ) {
+            playout_ids.push(row.try_get("Id")?);
+        }
+    }
 
     let mut repaired = 0u32;
     for playout_id in playout_ids {

@@ -317,6 +317,12 @@ impl LanguageStrings for PortugueseBrazilStrings {
         format!("{errors} erro(s), {warnings} aviso(s)")
     }
 
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "O estado do enumerador da programação clássica está incompleto para: {playouts}. O agendador precisa atualizar essas programações antes que elas possam continuar com segurança."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!(
             "Não foi possível carregar o contexto de solução de problemas de reprodução: {error}"
@@ -1395,6 +1401,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockTemplatesAddedLater => "Modelos de blocos são adicionados depois",
         TextKey::UnsupportedPlayoutKind => "Tipo de programação sem suporte.",
         TextKey::ClassicPlayout => "Programação clássica",
+        TextKey::ClassicPlayoutState => "Estado da programação clássica",
         TextKey::BlockPlayout => "Programação por blocos",
         TextKey::ScriptedPlayout => "Grade com script",
         TextKey::AlternateSchedules => "Grades alternativas",

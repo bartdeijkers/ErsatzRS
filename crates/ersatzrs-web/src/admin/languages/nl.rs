@@ -321,6 +321,12 @@ impl LanguageStrings for DutchStrings {
         format!("{errors} fout(en), {warnings} waarschuwing(en)")
     }
 
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "De enumeratorstatus van de klassieke uitzending is onvolledig voor: {playouts}. De planner moet deze uitzendingen vernieuwen voordat ze veilig kunnen doorgaan."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kan context voor afspeelprobleemoplossing niet laden: {error}")
     }
@@ -1369,6 +1375,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockTemplatesAddedLater => "Bloksjablonen worden later toegevoegd",
         TextKey::UnsupportedPlayoutKind => "Niet-ondersteund uitzendingstype.",
         TextKey::ClassicPlayout => "Klassieke uitzending",
+        TextKey::ClassicPlayoutState => "Status klassieke uitzending",
         TextKey::BlockPlayout => "Blokuitzending",
         TextKey::ScriptedPlayout => "Scripted uitzending",
         TextKey::AlternateSchedules => "Alternatieve schema's",

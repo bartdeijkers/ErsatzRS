@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{health_summary, tr, TextKey};
+use crate::admin::i18n::{health_check_message, health_check_title, health_summary, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::layout::{
@@ -172,14 +172,17 @@ fn runtime_source_label(source: &str) -> &'static str {
 }
 
 fn render_row(row: AdminHealthRow) -> AnyView {
-    let color = status_color(row.status.as_str());
-    let status = status_label(row.status.as_str());
-    let message = if row.message.is_empty() {
-        row.brief_message.clone()
-    } else {
-        row.message.clone()
-    };
-    let link = row.link.clone();
+    let AdminHealthRow {
+        title: persisted_title,
+        status: persisted_status,
+        message: persisted_message,
+        brief_message,
+        link,
+    } = row;
+    let color = status_color(persisted_status.as_str());
+    let status = status_label(persisted_status.as_str());
+    let title = health_check_title(&persisted_title);
+    let message = health_check_message(&persisted_title, &persisted_message, &brief_message);
 
     view! {
         <tr style="border-bottom:1px solid var(--color-border-subtle)">
@@ -190,7 +193,7 @@ fn render_row(row: AdminHealthRow) -> AnyView {
                         title=status
                         style=format!("background:{color};border-radius:999px;display:inline-block;flex:0 0 auto;height:0.65rem;width:0.65rem")
                     ></span>
-                    <span>{row.title}</span>
+                    <span>{title}</span>
                 </div>
             </td>
             <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-300)">

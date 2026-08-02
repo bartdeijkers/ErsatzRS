@@ -327,6 +327,12 @@ impl LanguageStrings for EnglishStrings {
         )
     }
 
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "Classic playout enumerator state is incomplete for: {playouts}. The scheduler must Refresh these playouts before they can continue safely."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Unable to load playback troubleshooting context: {error}")
     }
@@ -705,6 +711,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockTemplatesAddedLater => "Block templates are added later",
         TextKey::UnsupportedPlayoutKind => "Unsupported playout kind.",
         TextKey::ClassicPlayout => "Classic Playout",
+        TextKey::ClassicPlayoutState => "Classic Playout State",
         TextKey::BlockPlayout => "Block Playout",
         TextKey::ScriptedPlayout => "Scripted Schedule",
         TextKey::AlternateSchedules => "Alternate Schedules",

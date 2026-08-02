@@ -823,6 +823,9 @@ mod tests {
             })
             .await
             .expect("seed generated Classic item");
+        pool.execute(r#"UPDATE "Playout" SET "ScheduleKind" = 'Classic' WHERE "Id" = 10"#)
+            .await
+            .expect("seed legacy textual Classic schedule kind");
 
         let check = ClassicPlayoutStateHealthCheck::new(pool.clone());
         let invalid = check.check().await.expect("audit invalid Classic state");

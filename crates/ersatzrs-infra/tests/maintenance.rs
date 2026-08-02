@@ -572,6 +572,9 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
     pool.execute(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88"#)
         .await
         .unwrap();
+    pool.execute(r#"UPDATE "Playout" SET "ScheduleKind" = 'Classic' WHERE "Id" = 88"#)
+        .await
+        .unwrap();
 
     let repaired = repair_invalid_classic_playouts(&pool, &locker, now, None)
         .await

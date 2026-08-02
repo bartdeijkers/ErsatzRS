@@ -317,6 +317,12 @@ impl LanguageStrings for PolishStrings {
         format!("Błędy: {errors}, ostrzeżenia: {warnings}")
     }
 
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "Stan iteratora klasycznej emisji jest niekompletny dla: {playouts}. Harmonogram musi odświeżyć te emisje, zanim będzie można je bezpiecznie kontynuować."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Nie można wczytać kontekstu diagnostyki odtwarzania: {error}")
     }
@@ -1379,6 +1385,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockTemplatesAddedLater => "Szablony bloków zostaną dodane później",
         TextKey::UnsupportedPlayoutKind => "Nieobsługiwany typ planu emisji.",
         TextKey::ClassicPlayout => "Klasyczna emisja",
+        TextKey::ClassicPlayoutState => "Stan klasycznej emisji",
         TextKey::BlockPlayout => "Emisja blokowa",
         TextKey::ScriptedPlayout => "Harmonogram skryptowy",
         TextKey::AlternateSchedules => "Harmonogramy alternatywne",

@@ -1218,6 +1218,7 @@ pub enum TextKey {
     BlockTemplatesAddedLater,
     UnsupportedPlayoutKind,
     ClassicPlayout,
+    ClassicPlayoutState,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -2407,6 +2408,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::BlockTemplatesAddedLater,
     TextKey::UnsupportedPlayoutKind,
     TextKey::ClassicPlayout,
+    TextKey::ClassicPlayoutState,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -2819,6 +2821,49 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
     languages_for(use_i18n()).health_summary(errors, warnings)
 }
 
+const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
+    "Classic playout enumerator state is incomplete for: ";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str =
+    ". The scheduler must Refresh these playouts before they can continue safely.";
+
+pub fn health_check_title(title: &str) -> String {
+    health_check_title_text(use_i18n(), title)
+}
+
+pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
+    match title {
+        CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
+        _ => title.to_owned(),
+    }
+}
+
+pub fn health_check_message(title: &str, message: &str, brief_message: &str) -> String {
+    health_check_message_text(use_i18n(), title, message, brief_message)
+}
+
+pub fn health_check_message_text(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+    brief_message: &str,
+) -> String {
+    let displayed_message = if message.is_empty() {
+        brief_message
+    } else {
+        message
+    };
+    if title == CLASSIC_PLAYOUT_STATE_TITLE {
+        if let Some(playouts) = displayed_message
+            .strip_prefix(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX)
+            .and_then(|value| value.strip_suffix(CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX))
+        {
+            return languages_for(language).classic_playout_state_message(playouts);
+        }
+    }
+    displayed_message.to_owned()
+}
+
 pub fn unable_to_load_playback_troubleshooting(error: impl std::fmt::Display) -> String {
     languages_for(use_i18n()).unable_to_load_playback_troubleshooting(&error)
 }
@@ -2954,6 +2999,7 @@ pub trait LanguageStrings: Sync {
     fn provider_path_replacements_title(&self, provider: &'static str) -> String;
     fn provider_path_label(&self, provider: &'static str) -> String;
     fn health_summary(&self, errors: u32, warnings: u32) -> String;
+    fn classic_playout_state_message(&self, playouts: &str) -> String;
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String;
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String;
 }
@@ -3036,6 +3082,33 @@ mod tests {
         for language in languages {
             for key in ALL_TEXT_KEYS {
                 assert!(!text(language, *key).trim().is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn classic_playout_health_text_is_localized_for_every_language() {
+        let languages = [
+            UiLanguage::English,
+            UiLanguage::Polish,
+            UiLanguage::PortugueseBrazil,
+            UiLanguage::Dutch,
+            UiLanguage::French,
+        ];
+        let message = "Classic playout enumerator state is incomplete for: 50 - Health. The scheduler must Refresh these playouts before they can continue safely.";
+        for language in languages {
+            let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
+            let localized = health_check_message_text(
+                language,
+                CLASSIC_PLAYOUT_STATE_TITLE,
+                message,
+                "1 Classic playout state error(s)",
+            );
+            assert!(!title.trim().is_empty());
+            assert!(localized.contains("50 - Health"));
+            if language != UiLanguage::English {
+                assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
+                assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
             }
         }
     }
