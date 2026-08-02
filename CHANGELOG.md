@@ -24,6 +24,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed Windows release validation so the targeted startup-registration tests
+  use the normal test profile, where cross-crate test support is available,
+  instead of failing to compile before reaching the Windows registry checks.
 - Fixed Classic playout corruption across multiple channels by letting SQLite
   and MySQL allocate globally unique identities for collection and fill-group
   enumerator state. Runtime-state writes can no longer replace another

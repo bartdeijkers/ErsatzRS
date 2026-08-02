@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-02","summary":"Fixed Windows release startup-test profile compatibility after the first v1.0.18-beta run exposed release-only cross-crate test gating."}
 {"agent":"Codex","date":"2026-08-02","summary":"Corrected missing-launcher Windows startup status to unavailable and added a platform-independent regression test."}
 {"agent":"Codex","date":"2026-08-02","summary":"Added opt-in per-user Windows tray autostart with live HKCU status, Windows release tests, and Linux systemd guidance."}
 {"agent":"Codex","date":"2026-08-02","summary":"Fixed legacy textual Classic repair and health auditing, and localized Classic state health output."}
