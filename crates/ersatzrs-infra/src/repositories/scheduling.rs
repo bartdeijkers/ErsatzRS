@@ -1236,7 +1236,7 @@ impl SqliteSchedulingContentRepository {
                     &row,
                     "PlaybackOrder",
                 )?,
-                play_all: row.try_get::<bool, _>("PlayAll").repository()?,
+                play_all: decode_bool_column(&row, "PlayAll")?,
                 count: row
                     .try_get::<Option<i64>, _>("Count")
                     .repository()?
@@ -2665,8 +2665,8 @@ impl SqliteSchedulingContentRepository {
                     &row,
                     "PlaybackOrder",
                 )?,
-                include_in_program_guide: row.try_get("IncludeInProgramGuide").unwrap_or(true),
-                disable_watermarks: row.try_get("DisableWatermarks").unwrap_or(false),
+                include_in_program_guide: decode_bool_column(&row, "IncludeInProgramGuide")?,
+                disable_watermarks: decode_bool_column(&row, "DisableWatermarks")?,
                 watermark_ids: load_ids(
                     &self.0,
                     r#"SELECT "WatermarkId"
@@ -3453,7 +3453,7 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
         out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint").repository()?),
         chapter_title: row.try_get("ChapterTitle").repository()?,
         watermark_ids: Vec::new(),
-        disable_watermarks: row.try_get("DisableWatermarks").repository()?,
+        disable_watermarks: decode_bool_column(row, "DisableWatermarks")?,
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
         preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
         preferred_subtitle_language_code: row
@@ -3657,11 +3657,12 @@ fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
 
 async fn exists_by_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> Result<bool> {
     let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "Id" = ?)"#);
-    sqlx::query_scalar::<_, bool>(crate::db::assert_sql_safe(&sql))
+    let exists = sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(&sql))
         .bind(id)
         .fetch_one(pool)
         .await
-        .repository()
+        .repository()?;
+    Ok(exists != 0)
 }
 
 /// Dedupe key for expanded scheduling items. ADR 0048 allows the same media

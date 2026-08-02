@@ -16,7 +16,8 @@ use ersatzrs_domain::{
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db::DatabaseSchemaStatus;
 use ersatzrs_infra::maintenance::{
-    load_library_refresh_interval, run_maintenance_once, run_requested_playout_build,
+    load_library_refresh_interval, repair_invalid_classic_playouts, run_maintenance_once,
+    run_requested_playout_build,
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, Row, SqlitePool};
@@ -539,6 +540,113 @@ async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     );
 }
 
+#[tokio::test]
+async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_state() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"DELETE FROM "CollectionEnumeratorState"
+           WHERE "PlayoutProgramScheduleAnchorId" IN (
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88"#)
+        .await
+        .unwrap();
+
+    let repaired = repair_invalid_classic_playouts(&pool, &locker, now, None)
+        .await
+        .unwrap();
+    assert_eq!(repaired, 1);
+    assert_eq!(classic_anchor_count(&pool, 88).await, 1);
+    assert_eq!(classic_anchor_state_count(&pool, 88).await, 1);
+    assert_eq!(
+        repair_invalid_classic_playouts(&pool, &locker, now, None)
+            .await
+            .unwrap(),
+        0,
+        "a repaired playout must pass the next startup audit"
+    );
+}
+
+#[tokio::test]
+async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"DELETE FROM "CollectionEnumeratorState"
+           WHERE "PlayoutProgramScheduleAnchorId" IN (
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88"#)
+        .await
+        .unwrap();
+
+    let hls_registry = Arc::new(FakeHlsRegistry::default());
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Continue,
+        },
+        now + Duration::minutes(1),
+        Some(hls_registry.as_ref()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(classic_anchor_count(&pool, 88).await, 1);
+    assert_eq!(classic_anchor_state_count(&pool, 88).await, 1);
+    assert_eq!(
+        *hls_registry
+            .playout_updates
+            .lock()
+            .expect("fake hls registry lock"),
+        vec!["1".to_owned()],
+        "promotion to Refresh must invalidate dependent HLS sessions"
+    );
+}
+
 async fn seed_refresh_rebuild_fixture(pool: &SqlitePool, repos: &Repositories) {
     common::seed_media_path(pool, 1, 1, 1).await;
     common::seed_media_item(pool, 100, 1).await;
@@ -599,7 +707,7 @@ async fn seed_refresh_rebuild_fixture(pool: &SqlitePool, repos: &Repositories) {
         .unwrap();
     pool.execute(
         r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
-           VALUES (88, 1, 301, 'Classic', 0)"#,
+           VALUES (88, 1, 301, 1, 0)"#,
     )
     .await
     .unwrap();
@@ -618,6 +726,30 @@ async fn first_playout_item_subtitle_mode(pool: &SqlitePool, playout_id: i64) ->
     .await
     .unwrap()
     .flatten()
+}
+
+async fn classic_anchor_count(pool: &SqlitePool, playout_id: i64) -> i64 {
+    sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn classic_anchor_state_count(pool: &SqlitePool, playout_id: i64) -> i64 {
+    sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "CollectionEnumeratorState" AS "s"
+           JOIN "PlayoutProgramScheduleAnchor" AS "a"
+             ON "a"."Id" = "s"."PlayoutProgramScheduleAnchorId"
+           WHERE "a"."PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 #[tokio::test]

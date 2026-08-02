@@ -91,6 +91,34 @@ existing deterministic LCG rather than reproducing .NET `Random` byte-for-byte:
 the collection state persists the seed and draw count, runtime draws advance
 in O(1), and anchor restoration jumps to the required draw in O(log n).
 
+### 2026-08-02 addendum: database-owned runtime-state identities
+
+Classic runtime-state identities are global database primary keys, not
+playout-local sequence numbers. ErsatzTV leaves new owned EF entities at their
+default identity and lets the database assign the key. ErsatzRS previously
+derived a new key from the maximum state ID visible to one playout and then
+persisted it with `REPLACE`. Two playouts could therefore choose the same key;
+the later write deleted the first playout's enumerator state and caused future
+Continue builds to restart shuffled collections, producing consecutive
+duplicate movies.
+
+New Classic anchors and fill-group indices now use identity zero as the
+in-process "not persisted" marker. The repository omits the key on insert,
+captures the SQLite/MySQL generated identity, and uses that identity for the
+owned enumerator row. Existing positive identities are retained with strict
+`INSERT` semantics; a collision fails and rolls back instead of replacing
+another playout. Multiple schedule items that share one content source also
+persist exactly one collection enumerator, matching ErsatzTV's source-keyed
+state.
+
+Upgraded installations audit Classic runtime state before the normal scheduler
+cadence. Only a playout with generated items and incomplete, duplicated, or
+orphaned enumerator state is rebuilt with Refresh. Every later Continue build
+repeats the invariant check as defense in depth, and the health engine reports
+any inconsistent playout that remains. No schema migration is required because
+both existing schemas already define these identities as auto-incrementing
+global primary keys.
+
 ## Alternatives Considered
 
 - Drop Classic scheduling and require migration to YAML or Block: rejected

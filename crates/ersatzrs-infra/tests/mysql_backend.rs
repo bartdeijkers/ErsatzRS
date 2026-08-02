@@ -1,6 +1,13 @@
 #![cfg(all(feature = "mysql", feature = "mysql-integration"))]
 
-use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, FfmpegProfileRepository};
+use ersatzrs_core::repositories::{
+    ChannelRepository, ConfigRepository, FfmpegProfileRepository, PlayoutRepository,
+    ProgramScheduleRepository,
+};
+use ersatzrs_domain::{
+    CollectionEnumeratorState, CollectionType, Playout, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, ProgramSchedule,
+};
 use ersatzrs_infra::db;
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Row;
@@ -134,4 +141,92 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
             .try_get("Count")
             .expect("decode count");
     assert_eq!(playout_count, 1);
+
+    sqlx::query(
+        r#"REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+           VALUES (7101, 'mysql-runtime-state', 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime-state collection");
+    for (schedule_id, item_id) in [(7101, 7101), (7102, 7102)] {
+        repos
+            .program_schedule
+            .upsert(&ProgramSchedule {
+                id: schedule_id,
+                name: format!("mysql-runtime-state-{schedule_id}"),
+                item_ids: vec![item_id],
+                ..ProgramSchedule::default()
+            })
+            .await
+            .expect("seed runtime-state schedule");
+    }
+    for (playout_id, schedule_id) in [(7101, 7101), (7102, 7102)] {
+        sqlx::query(
+            r#"REPLACE INTO "Playout" (
+                   "Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed"
+               ) VALUES (?, 7001, ?, 1, 0)"#,
+        )
+        .bind(playout_id)
+        .bind(schedule_id)
+        .execute(&pool)
+        .await
+        .expect("seed runtime-state playout");
+        repos
+            .playout
+            .replace_runtime_state(
+                &Playout {
+                    id: playout_id,
+                    channel_id: 7001,
+                    program_schedule_id: Some(schedule_id),
+                    ..Playout::default()
+                },
+                &[],
+                &[],
+                &[PlayoutProgramScheduleAnchor {
+                    id: 0,
+                    playout_id,
+                    collection_type: CollectionType::Collection,
+                    collection_id: Some(7101),
+                    enumerator_state: CollectionEnumeratorState { seed: 1, index: 2 },
+                    ..PlayoutProgramScheduleAnchor::default()
+                }],
+                &[PlayoutScheduleItemFillGroupIndex {
+                    id: 0,
+                    playout_id,
+                    program_schedule_item_id: schedule_id,
+                    enumerator_state: CollectionEnumeratorState { seed: 3, index: 4 },
+                }],
+            )
+            .await
+            .expect("persist database-assigned runtime-state identities");
+    }
+
+    let anchor_ids = sqlx::query(
+        r#"SELECT "Id" FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" IN (7101, 7102) ORDER BY "PlayoutId""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load generated anchor identities")
+    .into_iter()
+    .map(|row| row.try_get::<i64, _>("Id").expect("decode anchor identity"))
+    .collect::<Vec<_>>();
+    let fill_group_ids = sqlx::query(
+        r#"SELECT "Id" FROM "PlayoutScheduleItemFillGroupIndex"
+           WHERE "PlayoutId" IN (7101, 7102) ORDER BY "PlayoutId""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load generated fill-group identities")
+    .into_iter()
+    .map(|row| {
+        row.try_get::<i64, _>("Id")
+            .expect("decode fill-group identity")
+    })
+    .collect::<Vec<_>>();
+    assert_eq!(anchor_ids.len(), 2);
+    assert_ne!(anchor_ids[0], anchor_ids[1]);
+    assert_eq!(fill_group_ids.len(), 2);
+    assert_ne!(fill_group_ids[0], fill_group_ids[1]);
 }

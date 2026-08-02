@@ -42,6 +42,77 @@ pub fn classic_schedule_item_key(item: &ProgramScheduleItem) -> String {
     item_key(item)
 }
 
+/// Summary of persisted Classic enumerator state compared with the active schedule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ClassicRuntimeStateAudit {
+    /// Number of unique content enumerators required by the active schedule.
+    pub expected_anchor_count: usize,
+    /// Number of undated content enumerators currently persisted.
+    pub actual_anchor_count: usize,
+    /// Number of fill-group enumerators required by the active schedule.
+    pub expected_fill_group_count: usize,
+    /// Number of fill-group enumerators currently persisted.
+    pub actual_fill_group_count: usize,
+    /// Whether persisted content enumerators exactly match the active schedule.
+    pub anchors_match: bool,
+    /// Whether persisted fill-group enumerators exactly match the active schedule.
+    pub fill_groups_match: bool,
+}
+
+impl ClassicRuntimeStateAudit {
+    /// Return whether every active Classic content key and fill group has exactly one state row.
+    #[must_use]
+    pub const fn is_complete(self) -> bool {
+        self.anchors_match && self.fill_groups_match
+    }
+}
+
+/// Compare persisted Classic runtime-state identities with the active schedule definition.
+#[must_use]
+pub fn audit_classic_runtime_state(
+    reference_data: &SchedulingReferenceData,
+) -> ClassicRuntimeStateAudit {
+    let expected_anchor_keys = reference_data
+        .classic_schedule_items
+        .iter()
+        .map(classic_schedule_item_key)
+        .collect::<BTreeSet<_>>();
+    let actual_anchor_keys = reference_data
+        .existing_program_schedule_anchors
+        .iter()
+        .filter(|anchor| anchor.anchor_date.is_none())
+        .map(|anchor| history_key_for_collection_key(&collection_key_for_anchor(anchor)))
+        .collect::<Vec<_>>();
+    let actual_anchor_key_set = actual_anchor_keys.iter().cloned().collect::<BTreeSet<_>>();
+
+    let expected_fill_group_ids = reference_data
+        .classic_schedule_items
+        .iter()
+        .filter(|item| item.fill_with_group_mode != FillWithGroupMode::None)
+        .map(|item| item.id)
+        .collect::<BTreeSet<_>>();
+    let actual_fill_group_ids = reference_data
+        .existing_fill_group_indices
+        .iter()
+        .map(|index| index.program_schedule_item_id)
+        .collect::<Vec<_>>();
+    let actual_fill_group_id_set = actual_fill_group_ids
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    ClassicRuntimeStateAudit {
+        expected_anchor_count: expected_anchor_keys.len(),
+        actual_anchor_count: actual_anchor_keys.len(),
+        expected_fill_group_count: expected_fill_group_ids.len(),
+        actual_fill_group_count: actual_fill_group_ids.len(),
+        anchors_match: actual_anchor_keys.len() == actual_anchor_key_set.len()
+            && actual_anchor_key_set == expected_anchor_keys,
+        fill_groups_match: actual_fill_group_ids.len() == actual_fill_group_id_set.len()
+            && actual_fill_group_id_set == expected_fill_group_ids,
+    }
+}
+
 /// Return the stable identity key used for an item's Smart Shuffle attachment.
 #[must_use]
 pub fn classic_schedule_item_policy_key(item: &ProgramScheduleItem) -> String {
@@ -132,8 +203,6 @@ struct ClassicContext {
     random_draw_states: BTreeMap<String, u64>,
     random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
     result: SchedulingResult,
-    next_anchor_id: EntityId,
-    next_fill_group_id: EntityId,
 }
 
 impl ClassicContext {
@@ -288,33 +357,12 @@ impl ClassicContext {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
             },
-            next_anchor_id: 0,
-            next_fill_group_id: 0,
         };
         context.refresh_schedule_order();
         context
     }
 
     fn apply_existing_collection_anchors(&mut self) {
-        self.next_anchor_id = self
-            .request
-            .reference_data
-            .existing_program_schedule_anchors
-            .iter()
-            .map(|anchor| anchor.id)
-            .max()
-            .unwrap_or_default()
-            + 1;
-        self.next_fill_group_id = self
-            .request
-            .reference_data
-            .existing_fill_group_indices
-            .iter()
-            .map(|index| index.id)
-            .max()
-            .unwrap_or_default()
-            + 1;
-
         let mut selected_anchors = BTreeMap::<String, PlayoutProgramScheduleAnchor>::new();
         for anchor in &self.collection_anchors {
             let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
@@ -1330,10 +1378,13 @@ impl ClassicContext {
 
     fn program_schedule_anchors(&self) -> Vec<PlayoutProgramScheduleAnchor> {
         let mut result = Vec::new();
-        let mut next_id = self.next_anchor_id;
+        let mut seen_keys = BTreeSet::new();
         for schedule_item in &self.schedule_items {
             let key = collection_key(schedule_item);
             let key_string = history_key_for_collection_key(&key);
+            if !seen_keys.insert(key_string.clone()) {
+                continue;
+            }
             let Some(enumerator) = self.media.get(&key_string) else {
                 continue;
             };
@@ -1341,14 +1392,10 @@ impl ClassicContext {
                 .collection_anchors
                 .iter()
                 .find(|anchor| anchor.anchor_date.is_none() && anchor_matches_key(anchor, &key));
-            let id = existing.map_or_else(
-                || {
-                    let id = next_id;
-                    next_id += 1;
-                    id
-                },
-                |anchor| anchor.id,
-            );
+            // Match EF entity semantics: zero means new and lets the database
+            // allocate the globally unique primary key. Existing entities keep
+            // their persisted identity.
+            let id = existing.map_or(0, |anchor| anchor.id);
             result.push(PlayoutProgramScheduleAnchor {
                 id,
                 playout_id: self.request.playout.id,
@@ -1388,7 +1435,6 @@ impl ClassicContext {
 
     fn fill_group_indices(&self) -> Vec<PlayoutScheduleItemFillGroupIndex> {
         let mut result = Vec::new();
-        let mut next_id = self.next_fill_group_id;
         for schedule_item in self
             .schedule_items
             .iter()
@@ -1400,14 +1446,7 @@ impl ClassicContext {
                 .existing_fill_group_indices
                 .iter()
                 .find(|index| index.program_schedule_item_id == schedule_item.id);
-            let id = existing.map_or_else(
-                || {
-                    let id = next_id;
-                    next_id += 1;
-                    id
-                },
-                |index| index.id,
-            );
+            let id = existing.map_or(0, |index| index.id);
             result.push(PlayoutScheduleItemFillGroupIndex {
                 id,
                 playout_id: self.request.playout.id,
@@ -2379,6 +2418,78 @@ mod tests {
 
         assert_eq!(context.version, 1);
         assert!(context.random_rotation_cycle_predecessors.is_empty());
+    }
+
+    #[test]
+    fn classic_runtime_state_audit_requires_exact_unique_schedule_state() {
+        let mut first = schedule_item(1, PlayoutMode::One, 99, None);
+        first.fill_with_group_mode = FillWithGroupMode::FillWithOrderedGroups;
+        let duplicate_source = schedule_item(2, PlayoutMode::One, 99, None);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![first, duplicate_source],
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                id: 101,
+                playout_id: 7,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(99),
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            existing_fill_group_indices: vec![PlayoutScheduleItemFillGroupIndex {
+                id: 201,
+                playout_id: 7,
+                program_schedule_item_id: 1,
+                ..PlayoutScheduleItemFillGroupIndex::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+
+        let audit = audit_classic_runtime_state(&reference_data);
+        assert!(audit.is_complete());
+        assert_eq!(audit.expected_anchor_count, 1);
+        assert_eq!(audit.expected_fill_group_count, 1);
+
+        reference_data
+            .existing_program_schedule_anchors
+            .push(reference_data.existing_program_schedule_anchors[0].clone());
+        assert!(!audit_classic_runtime_state(&reference_data).is_complete());
+    }
+
+    #[test]
+    fn classic_new_runtime_state_uses_database_identity_and_deduplicates_sources() {
+        let start = Utc.with_ymd_and_hms(2026, 8, 2, 12, 0, 0).unwrap();
+        let mut first = schedule_item(1, PlayoutMode::One, 99, None);
+        first.fill_with_group_mode = FillWithGroupMode::FillWithOrderedGroups;
+        let duplicate_source = schedule_item(2, PlayoutMode::One, 99, None);
+        let key = item_key(&first);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_id: Some(10),
+            classic_schedule_items: vec![first, duplicate_source],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![SchedulingMediaItem::new(100, Duration::minutes(10))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 7,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 42,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(20),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("Classic schedule should build");
+
+        assert_eq!(result.program_schedule_anchors.len(), 1);
+        assert_eq!(result.program_schedule_anchors[0].id, 0);
+        assert_eq!(result.fill_group_indices.len(), 1);
+        assert_eq!(result.fill_group_indices[0].id, 0);
     }
 
     #[test]

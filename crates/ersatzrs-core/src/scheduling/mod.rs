@@ -23,8 +23,8 @@ pub use block::{
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
 pub use classic::{
-    classic_schedule_item_key, classic_schedule_item_policy_key, ClassicSchedulingContext,
-    ClassicSchedulingEngine,
+    audit_classic_runtime_state, classic_schedule_item_key, classic_schedule_item_policy_key,
+    ClassicRuntimeStateAudit, ClassicSchedulingContext, ClassicSchedulingEngine,
 };
 pub use scripted::ScriptedSchedulingEngine;
 pub use smart_shuffle::{

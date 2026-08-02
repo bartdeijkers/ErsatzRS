@@ -1614,12 +1614,13 @@ fn map_program_schedule(row: &DbRow) -> Result<ProgramSchedule> {
     Ok(ProgramSchedule {
         id: row.try_get("Id").repository()?,
         name: row.try_get("Name").repository()?,
-        keep_multi_part_episodes_together: row
-            .try_get("KeepMultiPartEpisodesTogether")
-            .repository()?,
-        treat_collections_as_shows: row.try_get("TreatCollectionsAsShows").repository()?,
-        shuffle_schedule_items: row.try_get("ShuffleScheduleItems").repository()?,
-        random_start_point: row.try_get("RandomStartPoint").repository()?,
+        keep_multi_part_episodes_together: decode_bool_column(
+            row,
+            "KeepMultiPartEpisodesTogether",
+        )?,
+        treat_collections_as_shows: decode_bool_column(row, "TreatCollectionsAsShows")?,
+        shuffle_schedule_items: decode_bool_column(row, "ShuffleScheduleItems")?,
+        random_start_point: decode_bool_column(row, "RandomStartPoint")?,
         fixed_start_time_behavior: decode_enum_column(
             "program schedule fixed_start_time_behavior",
             row,

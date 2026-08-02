@@ -1,3 +1,4 @@
+mod classic_playout_state;
 mod dirty_migration;
 mod downgrade;
 mod empty_schedule;
@@ -23,6 +24,7 @@ mod vaapi_device;
 mod vaapi_driver;
 mod zero_duration;
 
+pub(super) use classic_playout_state::ClassicPlayoutStateHealthCheck;
 pub(super) use dirty_migration::DirtyMigrationHealthCheck;
 pub(super) use downgrade::DowngradeHealthCheck;
 pub(super) use empty_schedule::EmptyScheduleHealthCheck;

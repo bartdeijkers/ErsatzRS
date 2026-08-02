@@ -26,6 +26,11 @@ depends on them.
 
 The Mirror Channels check reports missing or non-Generated sources, malformed
 or out-of-range signed offsets, and legacy mirrors that also own a playout.
+
+The Classic Playout State check reports generated Classic playouts whose
+source-keyed collection anchors, fill-group indices, or owned enumerator rows
+do not exactly match the active schedule. The scheduler audits and repairs the
+same invariant at startup and before every Continue build.
 '''
 
 [[debt]]

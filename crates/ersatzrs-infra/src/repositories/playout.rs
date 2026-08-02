@@ -18,7 +18,7 @@ use ersatzrs_domain::{
 use sqlx::{Pool, Row, Transaction};
 
 use super::common::{
-    decode_datetime, decode_duration_text, decode_enum_column, decode_message,
+    decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
     encode_datetime, encode_duration, encode_enum, encode_optional_datetime, load_ids, not_found,
     replace_ids,
@@ -1332,7 +1332,7 @@ fn alternate_item_admin(
 
 fn date_filter_admin(row: &DbRow, named_days: bool) -> Result<PlayoutDateFilterAdmin> {
     Ok(PlayoutDateFilterAdmin {
-        limit_to_date_range: row.try_get("LimitToDateRange").repository()?,
+        limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
         start_month: row.try_get("StartMonth").repository()?,
         start_day: row.try_get("StartDay").repository()?,
         start_year: row.try_get("StartYear").repository()?,
@@ -2020,8 +2020,8 @@ fn map_anchor(row: &DbRow, state_row: Option<&DbRow>) -> Result<ersatzrs_domain:
             "playout anchor duration_finish",
             row.try_get("DurationFinish").repository()?,
         )?,
-        in_flood: row.try_get("InFlood").repository()?,
-        in_duration_filler: row.try_get("InDurationFiller").repository()?,
+        in_flood: decode_bool_column(row, "InFlood")?,
+        in_duration_filler: decode_bool_column(row, "InDurationFiller")?,
         next_guide_group: row.try_get("NextGuideGroup").repository()?,
         next_instruction_index: row.try_get("NextInstructionIndex").repository()?,
         context: row.try_get("Context").repository()?,
@@ -2035,7 +2035,7 @@ fn map_build_status(row: &DbRow) -> Result<PlayoutBuildStatus> {
             "playout build status last_build",
             &row.try_get::<String, _>("LastBuild").repository()?,
         )?,
-        success: row.try_get("Success").repository()?,
+        success: decode_bool_column(row, "Success")?,
         message: row.try_get("Message").repository()?,
     })
 }
@@ -2068,7 +2068,7 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
         out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint").repository()?),
         chapter_title: row.try_get("ChapterTitle").repository()?,
         watermark_ids: Vec::new(),
-        disable_watermarks: row.try_get("DisableWatermarks").repository()?,
+        disable_watermarks: decode_bool_column(row, "DisableWatermarks")?,
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
         preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
         preferred_subtitle_language_code: row
@@ -2208,7 +2208,7 @@ fn map_playout_template(row: &DbRow) -> Result<ersatzrs_domain::PlayoutTemplate>
             "playout template MonthsOfYear",
             &row.try_get::<String, _>("MonthsOfYear").unwrap_or_default(),
         )?,
-        limit_to_date_range: row.try_get("LimitToDateRange").repository()?,
+        limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
         start_month: row.try_get("StartMonth").repository()?,
         start_day: row.try_get("StartDay").repository()?,
         start_year: row.try_get("StartYear").repository()?,
@@ -2354,6 +2354,11 @@ async fn replace_program_schedule_anchors(
     playout_id: EntityId,
     anchors: &[PlayoutProgramScheduleAnchor],
 ) -> Result<()> {
+    if anchors.iter().any(|anchor| anchor.playout_id != playout_id) {
+        return Err(RepositoryError::Conflict(format!(
+            "Classic collection anchor does not belong to playout {playout_id}"
+        )));
+    }
     sqlx::query(
         r#"DELETE FROM "CollectionEnumeratorState"
            WHERE "PlayoutProgramScheduleAnchorId" IN (
@@ -2370,34 +2375,67 @@ async fn replace_program_schedule_anchors(
         .await
         .repository()?;
     for anchor in anchors {
+        let persisted_id = if anchor.id > 0 {
+            sqlx::query(
+                r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+                    "Id", "AnchorDate", "CollectionId", "CollectionType", "FakeCollectionKey",
+                    "MediaItemId", "MultiCollectionId", "PlaylistId", "PlayoutId",
+                    "RerunCollectionId", "SmartCollectionId", "SearchQuery"
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(anchor.id)
+            .bind(encode_optional_datetime(anchor.anchor_date))
+            .bind(anchor.collection_id)
+            .bind(encode_enum(anchor.collection_type))
+            .bind(&anchor.fake_collection_key)
+            .bind(anchor.media_item_id)
+            .bind(anchor.multi_collection_id)
+            .bind(anchor.playlist_id)
+            .bind(anchor.playout_id)
+            .bind(anchor.rerun_collection_id)
+            .bind(anchor.smart_collection_id)
+            .bind(&anchor.search_query)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+            anchor.id
+        } else {
+            let inserted = sqlx::query(
+                r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+                    "AnchorDate", "CollectionId", "CollectionType", "FakeCollectionKey",
+                    "MediaItemId", "MultiCollectionId", "PlaylistId", "PlayoutId",
+                    "RerunCollectionId", "SmartCollectionId", "SearchQuery"
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(encode_optional_datetime(anchor.anchor_date))
+            .bind(anchor.collection_id)
+            .bind(encode_enum(anchor.collection_type))
+            .bind(&anchor.fake_collection_key)
+            .bind(anchor.media_item_id)
+            .bind(anchor.multi_collection_id)
+            .bind(anchor.playlist_id)
+            .bind(anchor.playout_id)
+            .bind(anchor.rerun_collection_id)
+            .bind(anchor.smart_collection_id)
+            .bind(&anchor.search_query)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+            let id = crate::db::last_insert_id(inserted);
+            if id <= 0 {
+                return Err(RepositoryError::unavailable(
+                    "persist playout program schedule anchor",
+                    "database did not return a generated identity",
+                ));
+            }
+            id
+        };
         sqlx::query(
-            r#"REPLACE INTO "PlayoutProgramScheduleAnchor" (
-                "Id", "AnchorDate", "CollectionId", "CollectionType", "FakeCollectionKey",
-                "MediaItemId", "MultiCollectionId", "PlaylistId", "PlayoutId",
-                "RerunCollectionId", "SmartCollectionId", "SearchQuery"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(anchor.id)
-        .bind(encode_optional_datetime(anchor.anchor_date))
-        .bind(anchor.collection_id)
-        .bind(encode_enum(anchor.collection_type))
-        .bind(&anchor.fake_collection_key)
-        .bind(anchor.media_item_id)
-        .bind(anchor.multi_collection_id)
-        .bind(anchor.playlist_id)
-        .bind(anchor.playout_id)
-        .bind(anchor.rerun_collection_id)
-        .bind(anchor.smart_collection_id)
-        .bind(&anchor.search_query)
-        .execute(&mut **tx)
-        .await
-        .repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "CollectionEnumeratorState" (
+            r#"INSERT INTO "CollectionEnumeratorState" (
                 "PlayoutProgramScheduleAnchorId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
-        .bind(anchor.id)
+        .bind(persisted_id)
         .bind(anchor.enumerator_state.seed)
         .bind(anchor.enumerator_state.index)
         .execute(&mut **tx)
@@ -2412,6 +2450,11 @@ async fn replace_fill_group_indices(
     playout_id: EntityId,
     indices: &[PlayoutScheduleItemFillGroupIndex],
 ) -> Result<()> {
+    if indices.iter().any(|index| index.playout_id != playout_id) {
+        return Err(RepositoryError::Conflict(format!(
+            "Classic fill-group state does not belong to playout {playout_id}"
+        )));
+    }
     sqlx::query(
         r#"DELETE FROM "FillGroupEnumeratorState"
            WHERE "PlayoutScheduleItemFillGroupIndexId" IN (
@@ -2428,23 +2471,45 @@ async fn replace_fill_group_indices(
         .await
         .repository()?;
     for index in indices {
+        let persisted_id = if index.id > 0 {
+            sqlx::query(
+                r#"INSERT INTO "PlayoutScheduleItemFillGroupIndex" (
+                    "Id", "PlayoutId", "ProgramScheduleItemId"
+                 ) VALUES (?, ?, ?)"#,
+            )
+            .bind(index.id)
+            .bind(index.playout_id)
+            .bind(index.program_schedule_item_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+            index.id
+        } else {
+            let inserted = sqlx::query(
+                r#"INSERT INTO "PlayoutScheduleItemFillGroupIndex" (
+                    "PlayoutId", "ProgramScheduleItemId"
+                 ) VALUES (?, ?)"#,
+            )
+            .bind(index.playout_id)
+            .bind(index.program_schedule_item_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+            let id = crate::db::last_insert_id(inserted);
+            if id <= 0 {
+                return Err(RepositoryError::unavailable(
+                    "persist playout fill group index",
+                    "database did not return a generated identity",
+                ));
+            }
+            id
+        };
         sqlx::query(
-            r#"REPLACE INTO "PlayoutScheduleItemFillGroupIndex" (
-                "Id", "PlayoutId", "ProgramScheduleItemId"
-             ) VALUES (?, ?, ?)"#,
-        )
-        .bind(index.id)
-        .bind(index.playout_id)
-        .bind(index.program_schedule_item_id)
-        .execute(&mut **tx)
-        .await
-        .repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "FillGroupEnumeratorState" (
+            r#"INSERT INTO "FillGroupEnumeratorState" (
                 "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
-        .bind(index.id)
+        .bind(persisted_id)
         .bind(index.enumerator_state.seed)
         .bind(index.enumerator_state.index)
         .execute(&mut **tx)

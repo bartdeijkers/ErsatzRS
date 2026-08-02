@@ -18,7 +18,16 @@ Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the ch
 Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
 
 Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
+
+Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
 '''
+
+[[debt]]
+id          = 'playout-local-runtime-state-primary-keys'
+description = 'Classic generated anchor and fill-group IDs from playout-local maxima and persisted them with REPLACE, allowing a later playout to delete another playout state on a global primary-key collision.'
+discovered  = '2026-08-02'
+evidence    = 'Resolved by database-assigned identities, strict transactional inserts, source-key deduplication, startup and Continue audits, the Classic Playout State health check, and multi-playout SQLite/MySQL regressions. Live diagnosis showed earlier channels losing all anchors while later channels owned the colliding low IDs; the affected channel then restarted shuffled collection state and scheduled repeated movies.'
+resolved    = true
 
 [[debt]]
 id          = 'continue-build-seam-overlap'

@@ -8,7 +8,8 @@ use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
-    run_maintenance_once, run_requested_playout_build, MaintenancePassReport,
+    repair_invalid_classic_playouts, run_maintenance_once, run_requested_playout_build,
+    MaintenancePassReport,
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
@@ -75,6 +76,20 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     // matching ErsatzTV's `IEntityLocker` singleton. When the web host supplies
     // one, reuse it so the admin UI can observe playout lock state.
     let locker = locker.unwrap_or_default();
+
+    let repaired = repair_invalid_classic_playouts(
+        &startup.pool,
+        &locker,
+        chrono::Utc::now(),
+        hls_sessions.as_deref(),
+    )
+    .await?;
+    if repaired > 0 {
+        info!(
+            repaired,
+            "repaired inconsistent Classic playout runtime state"
+        );
+    }
 
     if run_once {
         let report = run_maintenance_once(

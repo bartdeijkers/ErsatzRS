@@ -11,7 +11,8 @@ use ersatzrs_core::maintenance::{
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{
-    PlayoutBuildMode, PlayoutBuildRequest, SchedulingError, SchedulingRequest, SchedulingResult,
+    audit_classic_runtime_state, PlayoutBuildMode, PlayoutBuildRequest, SchedulingError,
+    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
 use ersatzrs_domain::{ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
@@ -319,6 +320,83 @@ pub async fn run_requested_playout_build(
     }
 }
 
+/// Repair Classic playouts whose persisted enumerator state cannot safely continue.
+///
+/// The audit is intentionally run before the normal cadence gate so an upgraded
+/// installation does not keep serving a corrupted future horizon until the next
+/// periodic build.
+///
+/// # Errors
+///
+/// Returns an error when state auditing or failure-status persistence fails.
+/// Individual Refresh failures are recorded and do not prevent the scheduler
+/// from repairing other playouts or starting its normal cadence.
+pub async fn repair_invalid_classic_playouts(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
+) -> Result<u32> {
+    let playout_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "p"."Id"
+           FROM "Playout" AS "p"
+           WHERE "p"."ScheduleKind" = 1
+             AND EXISTS (
+                 SELECT 1 FROM "PlayoutItem" AS "pi" WHERE "pi"."PlayoutId" = "p"."Id"
+             )
+           ORDER BY "p"."Id""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut repaired = 0u32;
+    for playout_id in playout_ids {
+        let repository = SqlitePlayoutRepository(pool.clone());
+        let playout = repository.get_with_anchor(playout_id).await?;
+        let max_playout_offset = load_max_mirror_playout_offset(pool, playout.channel_id).await?;
+        let reference_data = SqliteSchedulingContentRepository::new(pool.clone())
+            .classic_reference_data(playout_id, now, max_playout_offset)
+            .await?;
+        if classic_runtime_state_is_complete(pool, playout_id, &reference_data).await? {
+            continue;
+        }
+
+        let Some(_guard) = PlayoutLockGuard::try_acquire(locker, playout_id) else {
+            debug!(
+                playout_id,
+                "Classic runtime-state repair skipped because playout is locked"
+            );
+            continue;
+        };
+        warn!(
+            playout_id,
+            "repairing inconsistent Classic runtime state with Refresh"
+        );
+        if let Err(error) = build_playout(
+            pool,
+            playout_id,
+            PlayoutBuildMode::Refresh,
+            now,
+            hls_sessions,
+        )
+        .await
+        {
+            warn!(playout_id, %error, "Classic runtime-state repair failed");
+            repository
+                .upsert_build_status(&PlayoutBuildStatus {
+                    playout_id,
+                    last_build: now,
+                    success: false,
+                    message: Some(error.to_string()),
+                })
+                .await?;
+            continue;
+        }
+        repaired = repaired.saturating_add(1);
+    }
+    Ok(repaired)
+}
+
 async fn loop_due(
     pool: &Pool<Db>,
     loop_name: &'static str,
@@ -408,7 +486,7 @@ async fn build_due_playouts(
 async fn build_playout(
     pool: &Pool<Db>,
     playout_id: EntityId,
-    mode: PlayoutBuildMode,
+    mut mode: PlayoutBuildMode,
     now: DateTime<Utc>,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<()> {
@@ -465,6 +543,15 @@ async fn build_playout(
     };
     reference_data.max_playout_offset = max_playout_offset;
 
+    mode = safe_classic_build_mode(
+        pool,
+        playout.id,
+        playout.schedule_kind,
+        mode,
+        &reference_data,
+    )
+    .await?;
+
     let result = PlayoutBuilder::default().build(SchedulingRequest {
         playout: playout.clone(),
         start: now,
@@ -505,6 +592,66 @@ async fn build_playout(
         }
     }
     Ok(())
+}
+
+async fn safe_classic_build_mode(
+    pool: &Pool<Db>,
+    playout_id: EntityId,
+    schedule_kind: PlayoutScheduleKind,
+    requested_mode: PlayoutBuildMode,
+    reference_data: &SchedulingReferenceData,
+) -> Result<PlayoutBuildMode> {
+    if requested_mode != PlayoutBuildMode::Continue
+        || schedule_kind != PlayoutScheduleKind::Classic
+        || reference_data.existing_items.is_empty()
+        || classic_runtime_state_is_complete(pool, playout_id, reference_data).await?
+    {
+        return Ok(requested_mode);
+    }
+
+    let audit = audit_classic_runtime_state(reference_data);
+    warn!(
+        playout_id,
+        expected_anchors = audit.expected_anchor_count,
+        actual_anchors = audit.actual_anchor_count,
+        expected_fill_groups = audit.expected_fill_group_count,
+        actual_fill_groups = audit.actual_fill_group_count,
+        "promoting Classic Continue build to Refresh because runtime state is inconsistent"
+    );
+    Ok(PlayoutBuildMode::Refresh)
+}
+
+pub(crate) async fn classic_runtime_state_is_complete(
+    pool: &Pool<Db>,
+    playout_id: EntityId,
+    reference_data: &SchedulingReferenceData,
+) -> Result<bool> {
+    let audit = audit_classic_runtime_state(reference_data);
+    if !audit.is_complete() {
+        return Ok(false);
+    }
+
+    let missing_child_states: i64 = sqlx::query_scalar(
+        r#"SELECT
+             (SELECT COUNT(*)
+                FROM "PlayoutProgramScheduleAnchor" AS "a"
+                LEFT JOIN "CollectionEnumeratorState" AS "s"
+                  ON "s"."PlayoutProgramScheduleAnchorId" = "a"."Id"
+               WHERE "a"."PlayoutId" = ?
+                 AND "s"."PlayoutProgramScheduleAnchorId" IS NULL)
+             +
+             (SELECT COUNT(*)
+                FROM "PlayoutScheduleItemFillGroupIndex" AS "i"
+                LEFT JOIN "FillGroupEnumeratorState" AS "s"
+                  ON "s"."PlayoutScheduleItemFillGroupIndexId" = "i"."Id"
+               WHERE "i"."PlayoutId" = ?
+                 AND "s"."PlayoutScheduleItemFillGroupIndexId" IS NULL)"#,
+    )
+    .bind(playout_id)
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(missing_child_states == 0)
 }
 
 async fn load_max_mirror_playout_offset(

@@ -13,6 +13,15 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Classic playout corruption across multiple channels by letting SQLite
+  and MySQL allocate globally unique identities for collection and fill-group
+  enumerator state. Runtime-state writes can no longer replace another
+  playout's rows on a primary-key collision; startup audits and Refreshes only
+  affected Classic playouts, later Continue builds retain the same guard, and
+  the health report exposes any state that cannot be repaired safely.
+
 ## [1.0.17-beta] - 2026-08-02
 
 ### Added

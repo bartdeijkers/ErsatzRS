@@ -132,6 +132,129 @@ async fn playout_repository_replaces_runtime_state_tables() {
 }
 
 #[tokio::test]
+async fn playout_runtime_state_ids_are_global_and_cannot_replace_another_playout() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_runtime_state_fixture(&pool, &repos).await;
+    seed_second_runtime_state_fixture(&pool, &repos).await;
+    let first = common::playout(1, 1, 1);
+    let second = common::playout(2, 2, 2);
+
+    repos
+        .playout
+        .replace_runtime_state(
+            &first,
+            &[],
+            &[],
+            &[common::program_schedule_anchor(0, 1)],
+            &[common::fill_group_index(0, 1, 30)],
+        )
+        .await
+        .unwrap();
+    repos
+        .playout
+        .replace_runtime_state(
+            &second,
+            &[],
+            &[],
+            &[common::program_schedule_anchor(0, 2)],
+            &[common::fill_group_index(0, 2, 31)],
+        )
+        .await
+        .unwrap();
+
+    let first_anchor_id = runtime_state_id(&pool, "PlayoutProgramScheduleAnchor", 1).await;
+    let second_anchor_id = runtime_state_id(&pool, "PlayoutProgramScheduleAnchor", 2).await;
+    let first_fill_id = runtime_state_id(&pool, "PlayoutScheduleItemFillGroupIndex", 1).await;
+    let second_fill_id = runtime_state_id(&pool, "PlayoutScheduleItemFillGroupIndex", 2).await;
+    assert_ne!(first_anchor_id, second_anchor_id);
+    assert_ne!(first_fill_id, second_fill_id);
+
+    let anchor_collision = repos
+        .playout
+        .replace_runtime_state(
+            &first,
+            &[],
+            &[],
+            &[common::program_schedule_anchor(second_anchor_id, 1)],
+            &[common::fill_group_index(first_fill_id, 1, 30)],
+        )
+        .await;
+    assert!(anchor_collision.is_err());
+    assert_eq!(
+        runtime_state_id(&pool, "PlayoutProgramScheduleAnchor", 1).await,
+        first_anchor_id,
+        "a rejected anchor collision must roll back the caller's state"
+    );
+    assert_eq!(
+        runtime_state_id(&pool, "PlayoutProgramScheduleAnchor", 2).await,
+        second_anchor_id,
+        "a rejected anchor collision must preserve the owning playout"
+    );
+
+    let fill_collision = repos
+        .playout
+        .replace_runtime_state(
+            &first,
+            &[],
+            &[],
+            &[common::program_schedule_anchor(first_anchor_id, 1)],
+            &[common::fill_group_index(second_fill_id, 1, 30)],
+        )
+        .await;
+    assert!(fill_collision.is_err());
+    assert_eq!(
+        runtime_state_id(&pool, "PlayoutScheduleItemFillGroupIndex", 1).await,
+        first_fill_id,
+        "a rejected fill-group collision must roll back the caller's state"
+    );
+    assert_eq!(
+        runtime_state_id(&pool, "PlayoutScheduleItemFillGroupIndex", 2).await,
+        second_fill_id,
+        "a rejected fill-group collision must preserve the owning playout"
+    );
+
+    let wrong_owner = repos
+        .playout
+        .replace_runtime_state(
+            &first,
+            &[],
+            &[],
+            &[common::program_schedule_anchor(0, 2)],
+            &[common::fill_group_index(first_fill_id, 1, 30)],
+        )
+        .await;
+    assert!(wrong_owner.is_err());
+    assert_eq!(
+        runtime_state_id(&pool, "PlayoutProgramScheduleAnchor", 1).await,
+        first_anchor_id,
+        "cross-playout state must be rejected before deleting existing rows"
+    );
+}
+
+async fn seed_second_runtime_state_fixture(
+    pool: &sqlx::SqlitePool,
+    repos: &ersatzrs_infra::repositories::Repositories,
+) {
+    repos
+        .channel
+        .upsert(&common::channel(2, "2", true))
+        .await
+        .unwrap();
+    repos
+        .program_schedule
+        .upsert(&common::schedule(2, vec![31]))
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (2, 2, 2, 0, 100)"#,
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
 async fn playout_admin_repository_lists_creates_edits_and_erases_playouts() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -319,4 +442,24 @@ async fn assert_fill_group_state_row(pool: &sqlx::SqlitePool) {
     .unwrap();
     assert_eq!(fill_group_state.try_get::<i32, _>("Seed").unwrap(), 55);
     assert_eq!(fill_group_state.try_get::<i32, _>("Index").unwrap(), 11);
+}
+
+async fn runtime_state_id(pool: &sqlx::SqlitePool, table: &str, playout_id: i64) -> i64 {
+    match table {
+        "PlayoutProgramScheduleAnchor" => sqlx::query_scalar(
+            r#"SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_one(pool)
+        .await
+        .unwrap(),
+        "PlayoutScheduleItemFillGroupIndex" => sqlx::query_scalar(
+            r#"SELECT "Id" FROM "PlayoutScheduleItemFillGroupIndex" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_one(pool)
+        .await
+        .unwrap(),
+        _ => panic!("unsupported runtime-state table"),
+    }
 }

@@ -18,14 +18,15 @@ use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
 
 use checks::{
-    DirtyMigrationHealthCheck, DowngradeHealthCheck, EmptyScheduleHealthCheck,
-    EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
-    FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
-    HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
-    MovieMetadataHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DowngradeHealthCheck,
+    EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
+    FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
+    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck,
+    MirrorChannelHealthCheck, MovieMetadataHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
+    SearchProjectionHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -49,7 +50,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 24] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 25] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -69,6 +70,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 24] = [
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
+    "Classic Playout State",
     "Mirror Channels",
     "VAAPI Driver",
     "VAAPI Device",
@@ -191,6 +193,7 @@ fn registered_health_checks(
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
+        Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
@@ -506,6 +509,9 @@ fn sqlx_error(error: sqlx::Error) -> HealthCheckError {
 mod tests {
     use std::collections::BTreeSet;
 
+    use chrono::{Duration, Utc};
+    use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
+    use ersatzrs_domain::{CollectionType, PlayoutItem, ProgramScheduleItem};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use sqlx::Executor;
 
@@ -773,6 +779,79 @@ mod tests {
             "Empty Schedule",
             HealthCheckStatus::Warning,
             "There are 1 empty schedules in use, which are NOT supported and WILL cause errors",
+        );
+    }
+
+    #[tokio::test]
+    async fn classic_playout_state_health_fails_until_runtime_state_is_complete() {
+        let pool = test_pool().await;
+        seed_empty_schedule(&pool).await;
+        seed_library_path(&pool).await;
+        for statement in [
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (80, 10, 0)"#,
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+               VALUES (80, 'Classic Health', 0)"#,
+            r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (80, 80)"#,
+        ] {
+            pool.execute(statement)
+                .await
+                .expect("seed Classic health content");
+        }
+        let repositories = crate::repositories::make_repositories(pool.clone());
+        repositories
+            .program_schedule
+            .upsert_item(&ProgramScheduleItem {
+                id: 80,
+                program_schedule_id: 10,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(80),
+                ..ProgramScheduleItem::default()
+            })
+            .await
+            .expect("seed Classic schedule item");
+        let now = Utc::now();
+        repositories
+            .playout
+            .upsert_item(&PlayoutItem {
+                id: 80,
+                playout_id: 10,
+                media_item_id: 80,
+                start: now,
+                finish: now + Duration::minutes(1),
+                out_point: Duration::minutes(1),
+                ..PlayoutItem::default()
+            })
+            .await
+            .expect("seed generated Classic item");
+
+        let check = ClassicPlayoutStateHealthCheck::new(pool.clone());
+        let invalid = check.check().await.expect("audit invalid Classic state");
+        assert_eq!(invalid.status, HealthCheckStatus::Fail);
+        assert!(invalid.message.contains("50 - Health"));
+
+        pool.execute(
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+                   "CollectionId", "CollectionType", "PlayoutId"
+               ) VALUES (80, 0, 10)"#,
+        )
+        .await
+        .expect("seed Classic collection anchor");
+        pool.execute(
+            r#"INSERT INTO "CollectionEnumeratorState" (
+                   "PlayoutProgramScheduleAnchorId", "Seed", "Index"
+               ) SELECT "Id", 0, 0 FROM "PlayoutProgramScheduleAnchor"
+                 WHERE "PlayoutId" = 10"#,
+        )
+        .await
+        .expect("seed Classic collection state");
+
+        assert_eq!(
+            check
+                .check()
+                .await
+                .expect("audit repaired Classic state")
+                .status,
+            HealthCheckStatus::Pass
         );
     }
 
