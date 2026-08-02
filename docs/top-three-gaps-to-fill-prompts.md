@@ -1,6 +1,6 @@
 <!--
-generated: 2026-08-01
-last_processed_commit: 30341464d78c1b455a97479708f84cf18a6a36d2
+generated: 2026-08-02
+last_processed_commit: 3c12cd89241ad71e556681a0e2ac8328989720e6
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,42 +9,44 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `a4ee0ca..3034146` window (the prior daily-reconcile doc
-commit plus two work commits) landed **delayed mirror channel playback**
-(`fix(infra): honor delayed mirror playback` `c4b7eba`, then `test(web):
-stabilize delayed mirror browser proof` `3034146`): delayed/generated mirror
-channels now reuse their source channel's playout across MPEG-TS, HLS
-(direct + segmenter), browser preview, admin EPG, and XMLTV while keeping the
-mirror's own channel settings (FFmpeg profile, branding, selectors, watermarks,
-subtitle/audio preferences). Media is resolved from the generated source at
-`wall clock - PlayoutOffset` and item/programme times are projected back onto
-the target timeline; signed offsets round-trip correctly (negative offsets no
-longer decode to zero), source history is retained until the largest positive
-dependent mirror offset elapses, source rebuilds invalidate dependent mirror
-sessions, a new Mirror Channels health check reports missing/non-Generated
-sources and malformed/out-of-range offsets and legacy mirrors that also own a
-playout, and `/playouts/add` disables a mirror backed by a source playout so it
-cannot receive unrelated programming. This is grounded ErsatzTV parity at the
-pin (`ChannelPlayoutSource.Mirror`, `Channel.MirrorSourceChannelId`).
+and Phase 8A state. The `3034146..3c12cd8` window (the prior daily-reconcile doc
+commit plus one work commit) landed the **customizable rich XMLTV guide**
+(`feat(web): add customizable rich XMLTV guide` `3c12cd8`, ADR 0058
+`Accepted`/`Implemented`): `/iptv/xmltv.xml` now renders `<channel>`/`<programme>`
+elements through seven customizable `minijinja` templates (movie/episode/
+musicVideo/song/otherVideo/remoteStream/channel), matching ErsatzTV's per-kind
+field set — title/sub-title, plot, year, genre categories, artwork icon,
+`onscreen`+`xmltv_ns` episode-num, `/`-delimited content-rating mapped to
+`MPAA`/`VCHIP`, and `previously-shown`. Channel `id`/`programme channel` now use
+the checksummed `ChannelIdentifier.FromNumber` id so XMLTV and the M3U `tvg-id`
+match; a `<name>.jinja` override in `<data>/templates/channel-guide/` beats the
+bundled default, and syntax-error or invalid-XML overrides fall back safely
+per-kind/per-item without corrupting the document. `xmltv.days_to_build` and
+`xmltv.time_zone` now take effect (previously hardcoded 48h/UTC). This is
+grounded ErsatzTV parity at the pin — the seven `_*.sbntxt` templates
+(`_channel/_episode/_movie/_musicVideo/_otherVideo/_remoteStream/_song`),
+`IptvController.cs` (xmltv branch), and `RefreshChannelDataHandler.cs` all exist
+at `0d301df5`.
 
-The work commits self-reconciled their own docs: `channels-admin-ui.toml`'s
-`mirror-channel-runtime-ignored-source-and-offset` debt is now `resolved`
-(runtime evidence via Chromium/Firefox `tests/e2e/channel-watch.spec.ts`), and
-`mpeg-ts-channel-streaming`, `hls-variant-playlists-segmenter`, `xmltv-guide`,
-`playout-list-detail`, and `ersatzrs-healthcheck` summaries plus `hydration.toml`
-note the source-playout projection. All affected features were already `Ported`,
-so this run confirmed those edits, verified **no** parity status flip is
-warranted, appended the daily session line, and refreshed the front-matter. None
-of the merged work touched the top three chores.
+The work commit self-reconciled its own docs: `xmltv-guide.toml` is `Ported`
+with ADR `0058` linked and a current summary, ADR 0058 is registered
+`Accepted`/`Implemented`, `docs/explanation/deviations.md` records the two
+end-user improvements over ErsatzTV (movie thumbnail-artwork icon fallback,
+Remote Stream genre emission), and its own session lines were added. The feature
+touched no admin route and no `hydration.toml`, so no route/hydration edit was
+warranted. This run confirmed those edits, verified **no** additional parity
+status flip is warranted (no other feature was touched), appended the daily
+session line, and refreshed the front-matter. None of the merged work touched the
+top three chores.
 
 `cargo xtask progress gaps` still reports a single remaining feature
 (`video-jukebox-addon-api`, Not started, four open debt items) — the only file
-with unresolved `[[debt]]` anywhere in `docs/progress/parity/` (the mirror debt
-closed this window). Its first slice is milestone **p8a-01**, the `phase.toml`
-`current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02, so it holds
-the top slot. Every other actionable spec source is the queue of 26 `Proposed` /
-`Not implemented` localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS
-hardening or blocking runtime debt is open to outrank them (the delayed-mirror
+with unresolved `[[debt]]` anywhere in `docs/progress/parity/` (the XMLTV feature
+closed with no open debt). Its first slice is milestone **p8a-01**, the
+`phase.toml` `current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02,
+so it holds the top slot. Every other actionable spec source is the queue of
+`Proposed` / `Not implemented` localization ADRs (0022–0047); no ADR-backed
+FFmpeg/HLS hardening or blocking runtime debt is open to outrank them (the XMLTV
 work closed with no open debt), and the only deferred plan work (mdBook, macOS
 archives, Claude hooks) is developer-experience tooling that ranks below the
 maintainer-requested localization ADRs. The two lowest-numbered of those
