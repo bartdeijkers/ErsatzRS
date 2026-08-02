@@ -50,6 +50,8 @@ pub enum ScannerError {
     Repository(#[from] RepositoryError),
     #[error(transparent)]
     RemoteStream(#[from] RemoteStreamError),
+    #[error("local television reconciliation failed: {0}")]
+    Reconciliation(String),
     #[error("failed to read remote stream definition {path}: {source}")]
     RemoteStreamRead {
         path: String,

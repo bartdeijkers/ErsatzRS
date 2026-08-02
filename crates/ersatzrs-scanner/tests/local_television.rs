@@ -177,6 +177,113 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     assert_eq!(episode_kind, 1);
 }
 
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
+async fn rescan_repairs_same_title_original_and_reboot_collision() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-television-remakes");
+    let library = temp.path().join("library");
+    for (folder, year, imdb, episode_name) in [
+        ("original", 1988, "tt0096623", "original-s01e01.mkv"),
+        ("reboot", 2022, "tt11921588", "reboot-s01e01.mkv"),
+    ] {
+        let show = library.join(folder);
+        let season = show.join("Season 01");
+        std::fs::create_dir_all(&season).unwrap();
+        std::fs::write(
+            show.join("tvshow.nfo"),
+            format!(
+                r#"<tvshow>
+                    <title>The Kids in the Hall</title>
+                    <year>{year}</year>
+                    <uniqueid type="imdb" default="true">{imdb}</uniqueid>
+                </tvshow>"#
+            ),
+        )
+        .unwrap();
+        std::fs::copy(&fixture, season.join(episode_name)).unwrap();
+    }
+
+    let pool = test_db().await;
+    seed_local_library(&pool, &library, 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+    let first = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(first.scanned_files, 2);
+
+    let shows = sqlx::query(
+        r#"SELECT show."Id", metadata."Year"
+           FROM "Show" show JOIN "ShowMetadata" metadata ON metadata."ShowId" = show."Id"
+           ORDER BY metadata."Year""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(shows.len(), 2);
+    let original_show_id: i64 = shows[0].get("Id");
+    let reboot_show_id: i64 = shows[1].get("Id");
+    assert_eq!(shows[0].get::<Option<i32>, _>("Year"), Some(1988));
+    assert_eq!(shows[1].get::<Option<i32>, _>("Year"), Some(2022));
+
+    let reboot_season_id: i64 = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "Season" WHERE "ShowId" = ? AND "SeasonNumber" = 1"#,
+    )
+    .bind(reboot_show_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"UPDATE "Season" SET "ShowId" = ? WHERE "Id" = ?"#)
+        .bind(original_show_id)
+        .bind(reboot_season_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+        .bind(reboot_show_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "LibraryFolder" SET "Etag" = 'cached' WHERE "ParentId" IS NOT NULL"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let repair = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(
+        repair.scanned_files, 2,
+        "the split must bypass both cached season folder etags"
+    );
+    let repaired = sqlx::query(
+        r#"SELECT show."Id", metadata."Year", COUNT(DISTINCT season."Id") AS "Seasons",
+                  COUNT(DISTINCT episode."Id") AS "Episodes"
+           FROM "Show" show
+           JOIN "ShowMetadata" metadata ON metadata."ShowId" = show."Id"
+           LEFT JOIN "Season" season ON season."ShowId" = show."Id"
+           LEFT JOIN "Episode" episode ON episode."SeasonId" = season."Id"
+           GROUP BY show."Id", metadata."Year" ORDER BY metadata."Year""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(repaired.len(), 2);
+    assert_eq!(repaired[0].get::<i64, _>("Id"), original_show_id);
+    for (row, year) in repaired.iter().zip([1988, 2022]) {
+        assert_eq!(row.get::<Option<i32>, _>("Year"), Some(year));
+        assert_eq!(row.get::<i64, _>("Seasons"), 1);
+        assert_eq!(row.get::<i64, _>("Episodes"), 1);
+    }
+}
+
 /// Step 5 parity: a second scan of an unchanged season folder hits the etag
 /// fast path (no episode probing, `scanned_files == 0`), while touching a
 /// file under the season folder changes the etag and forces a rescan.

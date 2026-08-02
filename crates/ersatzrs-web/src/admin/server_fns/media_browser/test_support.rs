@@ -210,6 +210,190 @@ mod remote_stream_tests {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
+mod local_show_identity_browser_tests {
+    use super::{get_season_details, get_show_details, list_shows};
+    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
+    use leptos::prelude::{provide_context, Owner};
+    use tempfile::NamedTempFile;
+    use tokio::sync::mpsc;
+    use uuid::Uuid;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn same_title_local_shows_are_distinguished_by_year_and_episode_hierarchy() {
+        let database_file = NamedTempFile::new().unwrap();
+        let database_url = format!("sqlite:{}", database_file.path().display());
+        let pool = db::init(&database_url).await.unwrap();
+        seed_fixture(&pool).await;
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::unbounded_channel();
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let (cards, total) = list_shows(String::new(), 0, 100, false).await.unwrap();
+        assert_eq!(total, 2);
+        assert_eq!(cards.len(), 2);
+        assert!(cards
+            .iter()
+            .all(|card| card.title == "The Kids in the Hall"));
+        assert_eq!(
+            cards
+                .iter()
+                .map(|card| card.subtitle.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("1988"), Some("2022")]
+        );
+
+        let original = get_show_details(100).await.unwrap().unwrap();
+        let reboot = get_show_details(200).await.unwrap().unwrap();
+        assert_eq!(original.year, Some(1988));
+        assert_eq!(reboot.year, Some(2022));
+        assert_eq!(
+            original
+                .seasons
+                .iter()
+                .map(|season| season.id)
+                .collect::<Vec<_>>(),
+            vec![101]
+        );
+        assert_eq!(
+            reboot
+                .seasons
+                .iter()
+                .map(|season| season.id)
+                .collect::<Vec<_>>(),
+            vec![201]
+        );
+
+        let original_season = get_season_details(101).await.unwrap().unwrap();
+        let reboot_season = get_season_details(201).await.unwrap().unwrap();
+        assert_eq!(
+            original_season
+                .episodes
+                .iter()
+                .map(|episode| episode.episode_id)
+                .collect::<Vec<_>>(),
+            vec![102]
+        );
+        assert_eq!(
+            reboot_season
+                .episodes
+                .iter()
+                .map(|episode| episode.episode_id)
+                .collect::<Vec<_>>(),
+            vec![202]
+        );
+        owner.cleanup();
+    }
+
+    async fn seed_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Local TV', 2, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, '/library')"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        for id in [100_i64, 101, 102, 200, 201, 202] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        for (show_id, season_id, episode_id, year) in
+            [(100_i64, 101_i64, 102_i64, 1988_i64), (200, 201, 202, 2022)]
+        {
+            sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+                .bind(show_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "ShowMetadata"
+                   ("ShowId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "SortTitle", "Year")
+                   VALUES (?, '2024-01-01', '2024-01-01', 1,
+                           'The Kids in the Hall', 'Kids in the Hall, The', ?)"#,
+            )
+            .bind(show_id)
+            .bind(year)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, ?, 1)"#,
+            )
+            .bind(season_id)
+            .bind(show_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "SeasonMetadata"
+                   ("SeasonId", "MetadataKind", "Title", "SortTitle", "DateAdded", "DateUpdated")
+                   VALUES (?, 0, 'Season 1', '01', '2024-01-01', '2024-01-01')"#,
+            )
+            .bind(season_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (?, ?)"#)
+                .bind(episode_id)
+                .bind(season_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "EpisodeMetadata"
+                   ("EpisodeId", "MetadataKind", "Title", "SortTitle", "DateAdded", "DateUpdated", "EpisodeNumber")
+                   VALUES (?, 0, 'Episode 1', '01', '2024-01-01', '2024-01-01', 1)"#,
+            )
+            .bind(episode_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+}
+
 #[cfg(test)]
 mod playlist_tests {
     use super::{

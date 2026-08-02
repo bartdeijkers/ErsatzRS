@@ -128,6 +128,17 @@ systemd configuration. Operators install the documented unit explicitly.
 
 ADR: [0059](../adr/0059-platform-owned-automatic-startup.md)
 
+## Conservative local television identity
+
+ErsatzTV matches local shows by title/year with an episode-path recovery
+fallback. ErsatzRS retains that baseline but prefers exclusive top-level-folder
+provenance and exact normalized NFO provider GUIDs, and it does not merge two
+separate no-year/no-GUID folders by title alone. Full scans transactionally
+split older collisions while preserving the largest hierarchy's existing ID
+and references.
+
+ADR: [0060](../adr/0060-local-television-folder-identity.md)
+
 ## Aggregate EPG and browser-compatible channel preview
 
 ErsatzTV exposes channel preview only as a modal. ErsatzRS retains and improves

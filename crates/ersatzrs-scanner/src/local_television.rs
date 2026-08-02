@@ -17,7 +17,7 @@
 //! After all shows are processed, stale `LibraryFolder` rows are cleaned,
 //! mirroring ErsatzTV's `CleanEtagsForLibraryPath`.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -32,7 +32,7 @@ use ersatzrs_infra::metadata::{
     update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use sqlx::{Row, Transaction};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::library_folder;
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
@@ -62,6 +62,42 @@ struct ShowWork {
     folder: PathBuf,
     seasons: Vec<SeasonWork>,
     extra_files: Vec<ExtraVideoWork>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LocalShowIdentity {
+    normalized_title: String,
+    year: Option<i32>,
+    provider_guids: BTreeMap<String, String>,
+    normalized_folder: String,
+}
+
+#[derive(Debug, Clone)]
+struct LocalShowDescriptor {
+    identity: LocalShowIdentity,
+    folder_name: String,
+    title: String,
+    sort_title: String,
+    metadata_kind: i32,
+    nfo: Option<TvShowNfo>,
+}
+
+#[derive(Debug, Clone)]
+struct OwnedEpisode {
+    show_id: i64,
+    season_id: i64,
+    season_number: i32,
+    episode_id: i64,
+    season_folder_id: i64,
+    normalized_show_folder: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ReconciliationStats {
+    moved_episodes: usize,
+    moved_extras: usize,
+    created_shows: usize,
+    created_seasons: usize,
 }
 
 struct ExtraVideoWork {
@@ -424,6 +460,129 @@ pub(crate) fn guids_from_nfo(guids: &[NfoGuid]) -> Vec<String> {
     guids.iter().filter_map(NfoGuid::as_metadata_guid).collect()
 }
 
+fn normalize_identity_text(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn normalize_folder_path(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_lowercase()
+}
+
+fn normalize_persisted_guid(value: &str) -> Option<(String, String)> {
+    let (provider, identifier) = value.split_once("://")?;
+    let provider = provider.trim().to_lowercase();
+    let identifier = identifier.trim().to_lowercase();
+    if provider.is_empty() || identifier.is_empty() {
+        return None;
+    }
+    Some((provider, identifier))
+}
+
+fn normalized_nfo_guids(guids: &[NfoGuid]) -> BTreeMap<String, String> {
+    guids
+        .iter()
+        .filter_map(NfoGuid::as_metadata_guid)
+        .filter_map(|guid| normalize_persisted_guid(&guid))
+        .collect()
+}
+
+fn identities_conflict(left: &LocalShowIdentity, right: &LocalShowIdentity) -> bool {
+    if left.year.is_some() && right.year.is_some() && left.year != right.year {
+        return true;
+    }
+
+    left.provider_guids.iter().any(|(provider, value)| {
+        right
+            .provider_guids
+            .get(provider)
+            .is_some_and(|other| other != value)
+    })
+}
+
+fn identities_match(left: &LocalShowIdentity, right: &LocalShowIdentity) -> bool {
+    if identities_conflict(left, right) {
+        return false;
+    }
+
+    if left.provider_guids.iter().any(|(provider, value)| {
+        right
+            .provider_guids
+            .get(provider)
+            .is_some_and(|other| other == value)
+    }) {
+        return true;
+    }
+
+    left.year.is_some()
+        && left.year == right.year
+        && left.normalized_title == right.normalized_title
+}
+
+#[cfg(test)]
+fn should_reuse_show(
+    exclusive_same_folder: bool,
+    existing: &LocalShowIdentity,
+    incoming: &LocalShowIdentity,
+) -> bool {
+    exclusive_same_folder || identities_match(existing, incoming)
+}
+
+fn describe_show(show: &ShowWork) -> LocalShowDescriptor {
+    let nfo = locate_show_nfo(&show.folder).and_then(|path| match nfo::parse_tvshow_nfo(&path) {
+        Ok(parsed) => Some(parsed),
+        Err(err) => {
+            warn!(error = %err, "failed to parse tvshow.nfo; falling back");
+            None
+        }
+    });
+    let folder_name = show
+        .folder
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = nfo
+        .as_ref()
+        .and_then(|value| value.title.clone())
+        .unwrap_or_else(|| folder_name.clone());
+    let sort_title = nfo
+        .as_ref()
+        .and_then(|value| value.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let year = nfo
+        .as_ref()
+        .and_then(|value| value.year)
+        .or_else(|| parse_year_from_folder_name(&folder_name));
+    let provider_guids = nfo
+        .as_ref()
+        .map_or_else(BTreeMap::new, |value| normalized_nfo_guids(&value.guids));
+
+    LocalShowDescriptor {
+        identity: LocalShowIdentity {
+            normalized_title: normalize_identity_text(&title),
+            year,
+            provider_guids,
+            normalized_folder: normalize_folder_path(&show.folder),
+        },
+        folder_name,
+        title,
+        sort_title,
+        metadata_kind: if nfo.is_some() {
+            METADATA_KIND_SIDECAR
+        } else {
+            METADATA_KIND_FALLBACK
+        },
+        nfo,
+    }
+}
+
 pub(crate) fn actors_from_nfo(actors: &[NfoActor]) -> Vec<PersonRef> {
     actors
         .iter()
@@ -532,6 +691,629 @@ fn season_etag_match(
     true
 }
 
+async fn load_owned_episodes(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+) -> Result<Vec<OwnedEpisode>> {
+    let rows = sqlx::query(
+        r#"SELECT season."ShowId", season."Id" AS "SeasonId",
+                  season."SeasonNumber", episode."Id" AS "EpisodeId",
+                  season_folder."Id" AS "SeasonFolderId",
+                  show_folder."Path" AS "ShowFolderPath"
+           FROM "Season" season
+           JOIN "Episode" episode ON episode."SeasonId" = season."Id"
+           JOIN "MediaItem" media ON media."Id" = episode."Id"
+           JOIN "MediaVersion" version ON version."EpisodeId" = episode."Id"
+           JOIN "MediaFile" file ON file."MediaVersionId" = version."Id"
+           JOIN "LibraryFolder" season_folder ON season_folder."Id" = file."LibraryFolderId"
+           JOIN "LibraryFolder" show_folder ON show_folder."Id" = season_folder."ParentId"
+           WHERE media."LibraryPathId" = ?
+           ORDER BY season."ShowId", season."Id", episode."Id", file."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut seen = BTreeSet::new();
+    let mut episodes = Vec::new();
+    for row in rows {
+        let episode_id: i64 = row.get("EpisodeId");
+        if !seen.insert(episode_id) {
+            continue;
+        }
+        let show_folder_path: Option<String> = row.get("ShowFolderPath");
+        let Some(show_folder_path) = show_folder_path else {
+            continue;
+        };
+        episodes.push(OwnedEpisode {
+            show_id: row.get("ShowId"),
+            season_id: row.get("SeasonId"),
+            season_number: row.get("SeasonNumber"),
+            episode_id,
+            season_folder_id: row.get("SeasonFolderId"),
+            normalized_show_folder: normalize_folder_path(Path::new(&show_folder_path)),
+        });
+    }
+    Ok(episodes)
+}
+
+async fn load_show_identities(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+) -> Result<BTreeMap<i64, LocalShowIdentity>> {
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "ShowId", sm."Title", sm."Year", mg."Guid"
+           FROM "Show" AS s
+           JOIN "MediaItem" AS mi ON mi."Id" = s."Id"
+           LEFT JOIN "ShowMetadata" AS sm ON sm."ShowId" = s."Id"
+           LEFT JOIN "MetadataGuid" AS mg ON mg."ShowMetadataId" = sm."Id"
+           WHERE mi."LibraryPathId" = ?
+           ORDER BY s."Id", sm."Id", mg."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut identities = BTreeMap::new();
+    for row in rows {
+        let show_id: i64 = row.get("ShowId");
+        let title = row.get::<Option<String>, _>("Title").unwrap_or_default();
+        let year = row.get::<Option<i32>, _>("Year");
+        let identity = identities
+            .entry(show_id)
+            .or_insert_with(|| LocalShowIdentity {
+                normalized_title: normalize_identity_text(&title),
+                year,
+                provider_guids: BTreeMap::new(),
+                normalized_folder: String::new(),
+            });
+        if let Some(guid) = row.get::<Option<String>, _>("Guid") {
+            if let Some((provider, value)) = normalize_persisted_guid(&guid) {
+                identity.provider_guids.insert(provider, value);
+            }
+        }
+    }
+    Ok(identities)
+}
+
+async fn find_identity_candidate(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    identity: &LocalShowIdentity,
+    excluded_show_id: Option<i64>,
+) -> Result<Option<i64>> {
+    let candidates = load_show_identities(tx, library_path_id).await?;
+    Ok(candidates.into_iter().find_map(|(show_id, candidate)| {
+        (Some(show_id) != excluded_show_id && identities_match(identity, &candidate))
+            .then_some(show_id)
+    }))
+}
+
+async fn resolve_show_id(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    identity: &LocalShowIdentity,
+) -> Result<Option<i64>> {
+    let owned = load_owned_episodes(tx, library_path_id).await?;
+    let mut folders_by_show: BTreeMap<i64, BTreeSet<String>> = BTreeMap::new();
+    for episode in owned {
+        folders_by_show
+            .entry(episode.show_id)
+            .or_default()
+            .insert(episode.normalized_show_folder);
+    }
+    let extra_rows = sqlx::query(
+        r#"SELECT COALESCE(parent_show."Id", season."ShowId") AS "ShowId", file."Path"
+           FROM "MediaItem" extra
+           LEFT JOIN "Show" parent_show ON parent_show."Id" = extra."ParentMediaItemId"
+           LEFT JOIN "Season" season ON season."Id" = extra."ParentMediaItemId"
+           JOIN "OtherVideo" video ON video."Id" = extra."Id"
+           JOIN "MediaVersion" version ON version."OtherVideoId" = video."Id"
+           JOIN "MediaFile" file ON file."MediaVersionId" = version."Id"
+           WHERE extra."LibraryPathId" = ? AND extra."ContentKind" = 1
+             AND COALESCE(parent_show."Id", season."ShowId") IS NOT NULL
+           ORDER BY "ShowId", extra."Id", file."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut extras_by_show: BTreeMap<i64, Vec<String>> = BTreeMap::new();
+    for row in extra_rows {
+        if let Some(path) = row.get::<Option<String>, _>("Path") {
+            extras_by_show
+                .entry(row.get("ShowId"))
+                .or_default()
+                .push(normalize_folder_path(Path::new(&path)));
+        }
+    }
+    let mut folder_candidates = folders_by_show.keys().copied().collect::<BTreeSet<_>>();
+    folder_candidates.extend(extras_by_show.keys().copied());
+    for show_id in folder_candidates {
+        let episode_folders = folders_by_show.get(&show_id);
+        let episodes_match = episode_folders.is_none_or(|folders| {
+            folders.len() == 1 && folders.contains(&identity.normalized_folder)
+        });
+        let extra_paths = extras_by_show.get(&show_id);
+        let extras_match = extra_paths.is_none_or(|paths| {
+            paths.iter().all(|path| {
+                path == &identity.normalized_folder
+                    || path.starts_with(&format!("{}/", identity.normalized_folder))
+            })
+        });
+        if episodes_match && extras_match && (episode_folders.is_some() || extra_paths.is_some()) {
+            return Ok(Some(show_id));
+        }
+    }
+
+    find_identity_candidate(tx, library_path_id, identity, None).await
+}
+
+fn descriptor_group_for_path(path: &str, folder_groups: &HashMap<String, usize>) -> Option<usize> {
+    let normalized = normalize_folder_path(Path::new(path));
+    folder_groups.iter().find_map(|(folder, group)| {
+        (normalized == *folder || normalized.starts_with(&format!("{folder}/"))).then_some(*group)
+    })
+}
+
+async fn create_show_for_descriptor(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    descriptor: &LocalShowDescriptor,
+) -> Result<i64> {
+    let show_id = insert_media_item(tx, library_path_id).await?;
+    sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+        .bind(show_id)
+        .execute(&mut **tx)
+        .await?;
+    let now = encode_datetime(Utc::now());
+    let release_date = descriptor
+        .identity
+        .year
+        .map(|year| format!("{year:04}-01-01"));
+    let metadata_id = insert_show_metadata(
+        tx,
+        show_id,
+        &descriptor.title,
+        &descriptor.folder_name,
+        &descriptor.sort_title,
+        descriptor.identity.year,
+        release_date.as_deref(),
+        descriptor.metadata_kind,
+        descriptor.nfo.as_ref(),
+        &now,
+    )
+    .await?;
+    let guids = descriptor
+        .nfo
+        .as_ref()
+        .map_or_else(Vec::new, |value| guids_from_nfo(&value.guids));
+    replace_guids(tx, "ShowMetadataId", metadata_id, &guids).await?;
+    Ok(show_id)
+}
+
+async fn find_or_create_target_season(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    show_id: i64,
+    season_number: i32,
+    source_season_id: i64,
+    stats: &mut ReconciliationStats,
+) -> Result<i64> {
+    if let Some(season_id) = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "Season"
+           WHERE "ShowId" = ? AND "SeasonNumber" = ?
+           ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(show_id)
+    .bind(season_number)
+    .fetch_optional(&mut **tx)
+    .await?
+    {
+        return Ok(season_id);
+    }
+
+    let season_id = insert_media_item(tx, library_path_id).await?;
+    sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, ?, ?)"#)
+        .bind(season_id)
+        .bind(show_id)
+        .bind(season_number)
+        .execute(&mut **tx)
+        .await?;
+    let cloned = sqlx::query(
+        r#"INSERT INTO "SeasonMetadata" (
+              "Outline", "SeasonId", "MetadataKind", "Title", "OriginalTitle",
+              "SortTitle", "ReleaseDate", "DateAdded", "DateUpdated", "Year"
+           )
+           SELECT "Outline", ?, "MetadataKind", "Title", "OriginalTitle",
+                  "SortTitle", "ReleaseDate", "DateAdded", "DateUpdated", "Year"
+           FROM "SeasonMetadata" WHERE "SeasonId" = ?
+           ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(season_id)
+    .bind(source_season_id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    if cloned == 0 {
+        let now = encode_datetime(Utc::now());
+        let title = if season_number == 0 {
+            "Specials".to_owned()
+        } else {
+            format!("Season {season_number}")
+        };
+        let sort_title = format!("{season_number:02}");
+        insert_season_metadata(tx, season_id, &title, &sort_title, &now).await?;
+    }
+    stats.created_seasons += 1;
+    Ok(season_id)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn reconcile_one_merged_show(
+    pool: &DbPool,
+    library_path_id: i64,
+    merged_show_id: i64,
+    episodes: &[OwnedEpisode],
+    descriptors: &[&LocalShowDescriptor],
+    canonical_folder: &str,
+    inject_failure: bool,
+) -> Result<ReconciliationStats> {
+    let mut identity_groups: Vec<&LocalShowDescriptor> = Vec::new();
+    let mut folder_groups = HashMap::new();
+    for descriptor in descriptors {
+        let group = identity_groups
+            .iter()
+            .position(|candidate| identities_match(&descriptor.identity, &candidate.identity))
+            .unwrap_or_else(|| {
+                identity_groups.push(descriptor);
+                identity_groups.len() - 1
+            });
+        folder_groups.insert(descriptor.identity.normalized_folder.clone(), group);
+    }
+    if identity_groups.len() < 2 {
+        return Ok(ReconciliationStats::default());
+    }
+    let canonical_group = *folder_groups.get(canonical_folder).ok_or_else(|| {
+        ScannerError::Reconciliation("canonical folder has no identity".to_owned())
+    })?;
+
+    let mut tx = pool.begin().await?;
+    let mut stats = ReconciliationStats::default();
+    let mut target_shows = BTreeMap::from([(canonical_group, merged_show_id)]);
+    for (group, descriptor) in identity_groups.iter().enumerate() {
+        if group == canonical_group {
+            continue;
+        }
+        let show_id = if let Some(existing) = find_identity_candidate(
+            &mut tx,
+            library_path_id,
+            &descriptor.identity,
+            Some(merged_show_id),
+        )
+        .await?
+        {
+            existing
+        } else {
+            stats.created_shows += 1;
+            create_show_for_descriptor(&mut tx, library_path_id, descriptor).await?
+        };
+        target_shows.insert(group, show_id);
+    }
+
+    let mut by_season: BTreeMap<i64, Vec<&OwnedEpisode>> = BTreeMap::new();
+    for episode in episodes {
+        by_season
+            .entry(episode.season_id)
+            .or_default()
+            .push(episode);
+    }
+    let mut target_seasons: HashMap<(i64, usize), i64> = HashMap::new();
+    for (source_season_id, season_episodes) in &by_season {
+        let season_number = season_episodes[0].season_number;
+        let mut episode_groups: BTreeMap<usize, Vec<i64>> = BTreeMap::new();
+        for episode in season_episodes {
+            let group = *folder_groups
+                .get(&episode.normalized_show_folder)
+                .ok_or_else(|| {
+                    ScannerError::Reconciliation("episode folder has no identity".to_owned())
+                })?;
+            episode_groups
+                .entry(group)
+                .or_default()
+                .push(episode.episode_id);
+        }
+
+        if episode_groups.len() == 1 {
+            let group = *episode_groups.keys().next().expect("one group");
+            if group == canonical_group {
+                target_seasons.insert((*source_season_id, group), *source_season_id);
+            } else {
+                let target_show_id = target_shows[&group];
+                let existing_target: Option<i64> = sqlx::query_scalar(
+                    r#"SELECT "Id" FROM "Season"
+                       WHERE "ShowId" = ? AND "SeasonNumber" = ? AND "Id" <> ?
+                       ORDER BY "Id" LIMIT 1"#,
+                )
+                .bind(target_show_id)
+                .bind(season_number)
+                .bind(source_season_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if let Some(target_season_id) = existing_target {
+                    for episode_id in &episode_groups[&group] {
+                        sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
+                            .bind(target_season_id)
+                            .bind(episode_id)
+                            .execute(&mut *tx)
+                            .await?;
+                        stats.moved_episodes += 1;
+                    }
+                    target_seasons.insert((*source_season_id, group), target_season_id);
+                } else {
+                    sqlx::query(r#"UPDATE "Season" SET "ShowId" = ? WHERE "Id" = ?"#)
+                        .bind(target_show_id)
+                        .bind(source_season_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    stats.moved_episodes += episode_groups[&group].len();
+                    target_seasons.insert((*source_season_id, group), *source_season_id);
+                }
+            }
+            continue;
+        }
+
+        target_seasons.insert((*source_season_id, canonical_group), *source_season_id);
+        for (group, episode_ids) in episode_groups {
+            if group == canonical_group {
+                continue;
+            }
+            let target_season_id = find_or_create_target_season(
+                &mut tx,
+                library_path_id,
+                target_shows[&group],
+                season_number,
+                *source_season_id,
+                &mut stats,
+            )
+            .await?;
+            for episode_id in episode_ids {
+                sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
+                    .bind(target_season_id)
+                    .bind(episode_id)
+                    .execute(&mut *tx)
+                    .await?;
+                stats.moved_episodes += 1;
+            }
+            target_seasons.insert((*source_season_id, group), target_season_id);
+        }
+    }
+
+    let source_season_ids = by_season.keys().copied().collect::<BTreeSet<_>>();
+    let extra_rows = sqlx::query(
+        r#"SELECT media."Id", media."ParentMediaItemId", file."Path"
+           FROM "MediaItem" media
+           JOIN "OtherVideo" video ON video."Id" = media."Id"
+           JOIN "MediaVersion" version ON version."OtherVideoId" = video."Id"
+           JOIN "MediaFile" file ON file."MediaVersionId" = version."Id"
+           WHERE media."ContentKind" = 1 AND media."LibraryPathId" = ?
+           ORDER BY media."Id", file."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut seen_extras = BTreeSet::new();
+    for row in extra_rows {
+        let extra_id: i64 = row.get("Id");
+        if !seen_extras.insert(extra_id) {
+            continue;
+        }
+        let parent_id: Option<i64> = row.get("ParentMediaItemId");
+        if parent_id != Some(merged_show_id)
+            && !parent_id.is_some_and(|id| source_season_ids.contains(&id))
+        {
+            continue;
+        }
+        let Some(path) = row.get::<Option<String>, _>("Path") else {
+            continue;
+        };
+        let Some(group) = descriptor_group_for_path(&path, &folder_groups) else {
+            continue;
+        };
+        let new_parent = if parent_id == Some(merged_show_id) {
+            target_shows[&group]
+        } else {
+            target_seasons
+                .get(&(parent_id.expect("season parent"), group))
+                .copied()
+                .unwrap_or(parent_id.expect("season parent"))
+        };
+        if Some(new_parent) != parent_id {
+            sqlx::query(r#"UPDATE "MediaItem" SET "ParentMediaItemId" = ? WHERE "Id" = ?"#)
+                .bind(new_parent)
+                .bind(extra_id)
+                .execute(&mut *tx)
+                .await?;
+            stats.moved_extras += 1;
+        }
+    }
+
+    let folder_ids = episodes
+        .iter()
+        .map(|episode| episode.season_folder_id)
+        .collect::<BTreeSet<_>>();
+    for folder_id in folder_ids {
+        sqlx::query(r#"UPDATE "LibraryFolder" SET "Etag" = NULL WHERE "Id" = ?"#)
+            .bind(folder_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    let folder_rows = sqlx::query(
+        r#"SELECT parent."Path", child."Id" AS "SeasonFolderId"
+           FROM "LibraryFolder" parent
+           JOIN "LibraryFolder" child ON child."ParentId" = parent."Id"
+           WHERE parent."LibraryPathId" = ?"#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    for row in folder_rows {
+        let Some(path) = row.get::<Option<String>, _>("Path") else {
+            continue;
+        };
+        if folder_groups.contains_key(&normalize_folder_path(Path::new(&path))) {
+            sqlx::query(r#"UPDATE "LibraryFolder" SET "Etag" = NULL WHERE "Id" = ?"#)
+                .bind(row.get::<i64, _>("SeasonFolderId"))
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    if inject_failure {
+        return Err(ScannerError::Reconciliation(
+            "injected rollback after hierarchy updates".to_owned(),
+        ));
+    }
+    tx.commit().await?;
+    info!(
+        library_path_id,
+        retained_show_id = merged_show_id,
+        created_shows = stats.created_shows,
+        created_seasons = stats.created_seasons,
+        moved_episodes = stats.moved_episodes,
+        moved_extras = stats.moved_extras,
+        "reconciled merged local television identities"
+    );
+    Ok(stats)
+}
+
+async fn reconcile_merged_local_shows(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+    shows: &[(ShowWork, LocalShowDescriptor)],
+    inject_failure: bool,
+) -> Result<()> {
+    let descriptors_by_folder = shows
+        .iter()
+        .map(|(_, descriptor)| (descriptor.identity.normalized_folder.clone(), descriptor))
+        .collect::<HashMap<_, _>>();
+    let mut tx = pool.begin().await?;
+    let owned = load_owned_episodes(&mut tx, library_path.id).await?;
+    tx.commit().await?;
+
+    let mut by_show: BTreeMap<i64, Vec<OwnedEpisode>> = BTreeMap::new();
+    for episode in owned {
+        if descriptors_by_folder.contains_key(&episode.normalized_show_folder) {
+            by_show.entry(episode.show_id).or_default().push(episode);
+        }
+    }
+    for (show_id, episodes) in by_show {
+        let folders = episodes
+            .iter()
+            .map(|episode| episode.normalized_show_folder.clone())
+            .collect::<BTreeSet<_>>();
+        if folders.len() < 2 {
+            continue;
+        }
+        let descriptors = folders
+            .iter()
+            .filter_map(|folder| descriptors_by_folder.get(folder).copied())
+            .collect::<Vec<_>>();
+        let has_conflict = descriptors.iter().enumerate().any(|(index, left)| {
+            descriptors
+                .iter()
+                .skip(index + 1)
+                .any(|right| !identities_match(&left.identity, &right.identity))
+        });
+        if !has_conflict {
+            continue;
+        }
+
+        let mut ranked = folders
+            .iter()
+            .map(|folder| {
+                let folder_episodes = episodes
+                    .iter()
+                    .filter(|episode| &episode.normalized_show_folder == folder)
+                    .collect::<Vec<_>>();
+                let season_count = folder_episodes
+                    .iter()
+                    .map(|episode| episode.season_id)
+                    .collect::<BTreeSet<_>>()
+                    .len();
+                (folder.clone(), folder_episodes.len(), season_count)
+            })
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| {
+            right
+                .1
+                .cmp(&left.1)
+                .then_with(|| right.2.cmp(&left.2))
+                .then_with(|| left.0.cmp(&right.0))
+        });
+        let canonical_folder = &ranked[0].0;
+        reconcile_one_merged_show(
+            pool,
+            library_path.id,
+            show_id,
+            &episodes,
+            &descriptors,
+            canonical_folder,
+            inject_failure,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn cleanup_empty_local_television(pool: &DbPool, library_path_id: i64) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    let empty_seasons: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT season."Id"
+           FROM "Season" season
+           JOIN "MediaItem" media ON media."Id" = season."Id"
+           WHERE media."LibraryPathId" = ?
+             AND NOT EXISTS (SELECT 1 FROM "Episode" episode WHERE episode."SeasonId" = season."Id")
+             AND NOT EXISTS (
+                 SELECT 1 FROM "MediaItem" extra
+                 WHERE extra."ParentMediaItemId" = season."Id" AND extra."ContentKind" = 1
+             )
+           ORDER BY season."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    for season_id in empty_seasons {
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(season_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let empty_shows: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT s."Id"
+           FROM "Show" AS s
+           JOIN "MediaItem" AS media ON media."Id" = s."Id"
+           WHERE media."LibraryPathId" = ?
+             AND NOT EXISTS (SELECT 1 FROM "Season" season WHERE season."ShowId" = s."Id")
+             AND NOT EXISTS (
+                 SELECT 1 FROM "MediaItem" extra
+                 WHERE extra."ParentMediaItemId" = s."Id" AND extra."ContentKind" = 1
+             )
+           ORDER BY s."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    for show_id in empty_shows {
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(show_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Sync one library path of `LibraryMediaKind::Shows`. Returns the number of
 /// episode files processed so the caller can roll the total scan report.
 /// `on_episode(count)` advances scan progress by `count` episode files. It is
@@ -546,8 +1328,16 @@ pub(crate) async fn sync_local_show_library(
     extractor: &FfprobeExtractor,
     mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
-    let shows = collect_show_work(&library_path.path);
+    let shows = collect_show_work(&library_path.path)
+        .into_iter()
+        .map(|show| {
+            let descriptor = describe_show(&show);
+            (show, descriptor)
+        })
+        .collect::<Vec<_>>();
     let mut episode_count = 0usize;
+
+    reconcile_merged_local_shows(pool, library_path, &shows, false).await?;
 
     // Load trashed episode paths once per library path, like ErsatzTV's
     // `GetAllTrashedItems` call at the top of `ScanFolder`. Lowercased so the
@@ -559,7 +1349,7 @@ pub(crate) async fn sync_local_show_library(
         .map(|path| path.to_lowercase())
         .collect();
 
-    for show in shows {
+    for (show, descriptor) in shows {
         // Create the show LibraryFolder before the show upsert, mirroring
         // ErsatzTV's `ScanFolder`. The show item does not use this row
         // itself; it exists so season folders can point at it via ParentId.
@@ -570,7 +1360,7 @@ pub(crate) async fn sync_local_show_library(
             continue;
         }
 
-        let show_id = match upsert_show(pool, library_path, &show).await {
+        let show_id = match upsert_show(pool, library_path, &show, &descriptor).await {
             Ok(id) => id,
             Err(err) => {
                 warn!(
@@ -707,6 +1497,8 @@ pub(crate) async fn sync_local_show_library(
         );
     }
 
+    cleanup_empty_local_television(pool, library_path.id).await?;
+
     Ok(episode_count)
 }
 
@@ -751,59 +1543,32 @@ async fn upsert_show(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     show: &ShowWork,
+    descriptor: &LocalShowDescriptor,
 ) -> Result<i64> {
-    let nfo_path = locate_show_nfo(&show.folder);
-    let nfo = nfo_path.as_ref().and_then(|path| match nfo::parse_tvshow_nfo(path) {
-        Ok(parsed) => Some(parsed),
-        Err(err) => {
-            warn!(path = %path.display(), error = %err, "failed to parse tvshow.nfo; falling back");
-            None
-        }
-    });
-
-    let folder_name = show
-        .folder
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_owned();
-    let fallback_title = folder_name.clone();
-    let fallback_year = parse_year_from_folder_name(&folder_name);
-
-    let title = nfo
-        .as_ref()
-        .and_then(|n| n.title.clone())
-        .unwrap_or(fallback_title);
-    let sort_title = nfo
-        .as_ref()
-        .and_then(|n| n.sort_title.clone())
-        .unwrap_or_else(|| nfo::sort_title(&title));
-    let year = nfo.as_ref().and_then(|n| n.year).or(fallback_year);
-    let metadata_kind = if nfo.is_some() {
-        METADATA_KIND_SIDECAR
-    } else {
-        METADATA_KIND_FALLBACK
-    };
+    let nfo = descriptor.nfo.as_ref();
+    let folder_name = &descriptor.folder_name;
+    let title = &descriptor.title;
+    let sort_title = &descriptor.sort_title;
+    let year = descriptor.identity.year;
+    let metadata_kind = descriptor.metadata_kind;
 
     let mut tx = pool.begin().await?;
-
-    let existing = sqlx::query(
-        r#"SELECT "s"."Id" AS "ShowId", "sm"."Id" AS "ShowMetadataId"
-           FROM "Show" AS "s"
-           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "s"."Id"
-           LEFT JOIN "ShowMetadata" AS "sm" ON "sm"."ShowId" = "s"."Id"
-           WHERE "mi"."LibraryPathId" = ?
-             AND (
-               COALESCE("sm"."Title", '') = ? OR
-               COALESCE("sm"."OriginalTitle", '') = ?
-             )
-           LIMIT 1"#,
-    )
-    .bind(library_path.id)
-    .bind(&title)
-    .bind(&folder_name)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let existing_show_id = resolve_show_id(&mut tx, library_path.id, &descriptor.identity).await?;
+    let existing = if let Some(show_id) = existing_show_id {
+        sqlx::query(
+            r#"SELECT "s"."Id" AS "ShowId", "sm"."Id" AS "ShowMetadataId"
+               FROM "Show" AS "s"
+               LEFT JOIN "ShowMetadata" AS "sm" ON "sm"."ShowId" = "s"."Id"
+               WHERE "s"."Id" = ?
+               ORDER BY "sm"."Id"
+               LIMIT 1"#,
+        )
+        .bind(show_id)
+        .fetch_optional(&mut *tx)
+        .await?
+    } else {
+        None
+    };
 
     let now = encode_datetime(Utc::now());
     let release_date = year.map(|y| format!("{y:04}-01-01"));
@@ -822,15 +1587,15 @@ async fn upsert_show(
             )
             .bind(&now)
             .bind(metadata_kind)
-            .bind(&title)
-            .bind(&folder_name)
-            .bind(&sort_title)
+            .bind(title)
+            .bind(folder_name)
+            .bind(sort_title)
             .bind(year)
             .bind(&release_date)
-            .bind(nfo.as_ref().and_then(|n| n.content_rating.clone()))
-            .bind(nfo.as_ref().and_then(|n| n.plot.clone()))
-            .bind(nfo.as_ref().and_then(|n| n.outline.clone()))
-            .bind(nfo.as_ref().and_then(|n| n.tagline.clone()))
+            .bind(nfo.and_then(|n| n.content_rating.clone()))
+            .bind(nfo.and_then(|n| n.plot.clone()))
+            .bind(nfo.and_then(|n| n.outline.clone()))
+            .bind(nfo.and_then(|n| n.tagline.clone()))
             .bind(id)
             .execute(&mut *tx)
             .await?;
@@ -839,13 +1604,13 @@ async fn upsert_show(
             insert_show_metadata(
                 &mut tx,
                 show_id,
-                &title,
-                &folder_name,
-                &sort_title,
+                title,
+                folder_name,
+                sort_title,
                 year,
                 release_date.as_deref(),
                 metadata_kind,
-                nfo.as_ref(),
+                nfo,
                 &now,
             )
             .await?
@@ -864,20 +1629,20 @@ async fn upsert_show(
         let metadata_id = insert_show_metadata(
             &mut tx,
             media_item_id,
-            &title,
-            &folder_name,
-            &sort_title,
+            title,
+            folder_name,
+            sort_title,
             year,
             release_date.as_deref(),
             metadata_kind,
-            nfo.as_ref(),
+            nfo,
             &now,
         )
         .await?;
         (media_item_id, metadata_id)
     };
 
-    if let Some(parsed) = nfo.as_ref() {
+    if let Some(parsed) = nfo {
         replace_strings(
             &mut tx,
             "Genre",
@@ -1511,6 +2276,530 @@ async fn upsert_episode_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(feature = "mysql"))]
+    use ersatzrs_domain::LibraryMediaKind;
+    #[cfg(not(feature = "mysql"))]
+    use sqlx::{sqlite::SqlitePoolOptions, Executor};
+
+    fn identity(
+        folder: &str,
+        title: &str,
+        year: Option<i32>,
+        guids: &[(&str, &str)],
+    ) -> LocalShowIdentity {
+        LocalShowIdentity {
+            normalized_title: normalize_identity_text(title),
+            year,
+            provider_guids: guids
+                .iter()
+                .map(|(provider, value)| (provider.to_lowercase(), value.to_lowercase()))
+                .collect(),
+            normalized_folder: normalize_folder_path(Path::new(folder)),
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn descriptor(folder: &str, year: i32, imdb: &str) -> LocalShowDescriptor {
+        let nfo = TvShowNfo {
+            title: Some("The Kids in the Hall".to_owned()),
+            year: Some(year),
+            guids: vec![NfoGuid {
+                source: Some("imdb".to_owned()),
+                value: Some(imdb.to_owned()),
+                ..NfoGuid::default()
+            }],
+            ..TvShowNfo::default()
+        };
+        LocalShowDescriptor {
+            identity: LocalShowIdentity {
+                normalized_title: normalize_identity_text("The Kids in the Hall"),
+                year: Some(year),
+                provider_guids: normalized_nfo_guids(&nfo.guids),
+                normalized_folder: normalize_folder_path(Path::new(folder)),
+            },
+            folder_name: "The Kids in the Hall".to_owned(),
+            title: "The Kids in the Hall".to_owned(),
+            sort_title: "Kids in the Hall, The".to_owned(),
+            metadata_kind: METADATA_KIND_SIDECAR,
+            nfo: Some(nfo),
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn reconciliation_test_db() -> DbPool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create reconciliation test database");
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("enable foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[allow(clippy::too_many_lines)]
+    async fn seed_merged_kids_in_the_hall(pool: &DbPool) {
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Local TV', 2, 1)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+               VALUES (1, 1, '/library')"#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (100, 1, 0)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "Show" ("Id") VALUES (100)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "ShowMetadata"
+               ("Id", "ShowId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "SortTitle", "Year")
+               VALUES (100, 100, '2024-01-01', '2024-01-01', 1,
+                       'The Kids in the Hall', 'Kids in the Hall, The', 2022)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "MetadataGuid" ("ShowMetadataId", "Guid")
+               VALUES (100, 'imdb://tt11921588')"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (1, 'Comedy', 0)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (1, 100)"#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "Path") VALUES
+               (10, 1, '/library/original'), (20, 1, '/library/reboot')"#,
+        )
+        .await
+        .unwrap();
+        for season_number in 1..=5 {
+            let season_id = 100 + i64::from(season_number);
+            let folder_id = 10 + i64::from(season_number);
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(season_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, 100, ?)"#,
+            )
+            .bind(season_id)
+            .bind(season_number)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "SeasonMetadata"
+                   ("SeasonId", "MetadataKind", "Title", "SortTitle", "DateAdded", "DateUpdated")
+                   VALUES (?, 0, ?, ?, '2024-01-01', '2024-01-01')"#,
+            )
+            .bind(season_id)
+            .bind(format!("Season {season_number}"))
+            .bind(format!("{season_number:02}"))
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "ParentId", "Path", "Etag")
+                   VALUES (?, 1, 10, ?, 'cached')"#,
+            )
+            .bind(folder_id)
+            .bind(format!("/library/original/Season {season_number:02}"))
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        pool.execute(
+            r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "ParentId", "Path", "Etag")
+               VALUES (21, 1, 20, '/library/reboot/Season 01', 'cached')"#,
+        )
+        .await
+        .unwrap();
+
+        let original_per_season = [6, 4, 4, 4, 4];
+        let mut episode_id = 1_000_i64;
+        for (index, count) in original_per_season.into_iter().enumerate() {
+            let season_number = i32::try_from(index + 1).unwrap();
+            for episode_number in 1..=count {
+                seed_episode(
+                    pool,
+                    episode_id,
+                    100 + i64::from(season_number),
+                    10 + i64::from(season_number),
+                    &format!(
+                        "/library/original/Season {season_number:02}/e{episode_number:02}.mkv"
+                    ),
+                )
+                .await;
+                episode_id += 1;
+            }
+        }
+        for episode_number in 1..=8 {
+            seed_episode(
+                pool,
+                2_000 + i64::from(episode_number),
+                101,
+                21,
+                &format!("/library/reboot/Season 01/e{episode_number:02}.mkv"),
+            )
+            .await;
+        }
+        seed_extra(pool, 3_000, 100, "/library/reboot/Featurettes/reunion.mkv").await;
+        seed_extra(
+            pool,
+            3_001,
+            101,
+            "/library/reboot/Season 01/Trailers/preview.mkv",
+        )
+        .await;
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_episode(
+        pool: &DbPool,
+        episode_id: i64,
+        season_id: i64,
+        folder_id: i64,
+        path: &str,
+    ) {
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
+            .bind(episode_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (?, ?)"#)
+            .bind(episode_id)
+            .bind(season_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        let version_id = episode_id + 10_000;
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion"
+               ("Id", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind", "EpisodeId")
+               VALUES (?, '2024-01-01', '2024-01-01', '00:20:00', 1080, 1920, 0, ?)"#,
+        )
+        .bind(version_id)
+        .bind(episode_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("LibraryFolderId", "MediaVersionId", "Path", "PathHash")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(folder_id)
+        .bind(version_id)
+        .bind(path)
+        .bind(format!("hash-{episode_id}"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_extra(pool: &DbPool, id: i64, parent_id: i64, path: &str) {
+        sqlx::query(
+            r#"INSERT INTO "MediaItem"
+               ("Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId")
+               VALUES (?, 1, 0, 1, 'featurette', ?)"#,
+        )
+        .bind(id)
+        .bind(parent_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"INSERT INTO "OtherVideo" ("Id") VALUES (?)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        let version_id = id + 10_000;
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion"
+               ("Id", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind", "OtherVideoId")
+               VALUES (?, '2024-01-01', '2024-01-01', '00:02:00', 1080, 1920, 0, ?)"#,
+        )
+        .bind(version_id)
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash") VALUES (?, ?, ?)"#,
+        )
+        .bind(version_id)
+        .bind(path)
+        .bind(format!("hash-{id}"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn reconciliation_work() -> Vec<(ShowWork, LocalShowDescriptor)> {
+        [
+            ("/library/original", 1988, "tt0096623"),
+            ("/library/reboot", 2022, "tt11921588"),
+        ]
+        .into_iter()
+        .map(|(folder, year, imdb)| {
+            (
+                ShowWork {
+                    folder: PathBuf::from(folder),
+                    seasons: Vec::new(),
+                    extra_files: Vec::new(),
+                },
+                descriptor(folder, year, imdb),
+            )
+        })
+        .collect()
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn run_reconciliation(pool: &DbPool, inject_failure: bool) -> Result<()> {
+        reconcile_merged_local_shows(
+            pool,
+            &LocalLibraryPath {
+                id: 1,
+                path: "/library".to_owned(),
+                media_kind: LibraryMediaKind::Shows,
+            },
+            &reconciliation_work(),
+            inject_failure,
+        )
+        .await
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn reconciliation_splits_mixed_season_and_preserves_canonical_ids() {
+        let pool = reconciliation_test_db().await;
+        seed_merged_kids_in_the_hall(&pool).await;
+        run_reconciliation(&pool, false).await.unwrap();
+
+        let shows: Vec<(i64, i64, i64)> = sqlx::query_as(
+            r#"SELECT show."Id", COUNT(DISTINCT season."Id"), COUNT(DISTINCT episode."Id")
+               FROM "Show" show
+               LEFT JOIN "Season" season ON season."ShowId" = show."Id"
+               LEFT JOIN "Episode" episode ON episode."SeasonId" = season."Id"
+               GROUP BY show."Id" ORDER BY show."Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(shows.len(), 2);
+        assert_eq!(shows[0], (100, 5, 22));
+        assert_eq!((shows[1].1, shows[1].2), (1, 8));
+
+        let canonical_season_show: i64 =
+            sqlx::query_scalar(r#"SELECT "ShowId" FROM "Season" WHERE "Id" = 101"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(canonical_season_show, 100);
+        let collection_parent: i64 = sqlx::query_scalar(
+            r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(collection_parent, 100);
+        let extra_parents: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT "ParentMediaItemId" FROM "MediaItem" WHERE "Id" IN (3000, 3001) ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_ne!(extra_parents[0], 100);
+        assert_ne!(extra_parents[1], 101);
+        let cached_etags: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "LibraryFolder" WHERE "Id" IN (11, 12, 13, 14, 15, 21) AND "Etag" IS NOT NULL"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(cached_etags, 0);
+
+        run_reconciliation(&pool, false).await.unwrap();
+        let show_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Show""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(show_count, 2, "reconciliation must be idempotent");
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn reconciliation_rolls_back_the_entire_split_on_error() {
+        let pool = reconciliation_test_db().await;
+        seed_merged_kids_in_the_hall(&pool).await;
+        assert!(run_reconciliation(&pool, true).await.is_err());
+        let show_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Show""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let merged_episodes: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Episode" episode
+               JOIN "Season" season ON season."Id" = episode."SeasonId"
+               WHERE season."ShowId" = 100"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let season_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Season""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let extra_parents: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT "ParentMediaItemId" FROM "MediaItem" WHERE "Id" IN (3000, 3001) ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let cached_etags: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "LibraryFolder" WHERE "Id" IN (11, 12, 13, 14, 15, 21) AND "Etag" = 'cached'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(show_count, 1);
+        assert_eq!(season_count, 5);
+        assert_eq!(merged_episodes, 30);
+        assert_eq!(extra_parents, vec![100, 101]);
+        assert_eq!(cached_etags, 6);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn cleanup_removes_empty_parents_but_keeps_extras_only_parents() {
+        let pool = reconciliation_test_db().await;
+        seed_merged_kids_in_the_hall(&pool).await;
+        for id in [400_i64, 401, 500, 600, 601] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        pool.execute(r#"INSERT INTO "Show" ("Id") VALUES (400), (500), (600)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber")
+               VALUES (401, 400, 1), (601, 600, 1)"#,
+        )
+        .await
+        .unwrap();
+        seed_extra(
+            &pool,
+            3_100,
+            500,
+            "/library/extras-only/Featurettes/one.mkv",
+        )
+        .await;
+        seed_extra(
+            &pool,
+            3_101,
+            601,
+            "/library/season-extras/Season 01/Trailers/one.mkv",
+        )
+        .await;
+
+        cleanup_empty_local_television(&pool, 1).await.unwrap();
+        let remaining: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "MediaItem" WHERE "Id" IN (400, 401, 500, 600, 601) ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remaining, vec![500, 600, 601]);
+    }
+
+    #[test]
+    fn local_show_identity_decision_table() {
+        let original = identity(
+            "/library/original",
+            "The Kids in the Hall",
+            Some(1988),
+            &[("imdb", "tt0096623")],
+        );
+        let reboot = identity(
+            "/library/reboot",
+            "The Kids in the Hall",
+            Some(2022),
+            &[("imdb", "tt11921588")],
+        );
+        assert!(!identities_match(&original, &reboot));
+
+        let renamed = identity(
+            "/library/kids-in-the-hall",
+            "Kids in the Hall, The",
+            Some(1988),
+            &[("IMDB", "TT0096623")],
+        );
+        assert!(identities_match(&original, &renamed));
+
+        let corrected = identity(
+            "/library/original",
+            "The Kids in the Hall",
+            Some(1989),
+            &[("imdb", "corrected")],
+        );
+        assert_eq!(original.normalized_folder, corrected.normalized_folder);
+        assert!(identities_conflict(&original, &corrected));
+        assert!(should_reuse_show(true, &original, &corrected));
+
+        let wrong_imdb = identity(
+            "/library/other",
+            "The Kids in the Hall",
+            Some(1988),
+            &[("imdb", "tt0000000")],
+        );
+        assert!(!identities_match(&original, &wrong_imdb));
+
+        let unknown_one = identity("/library/one", "Shared title", None, &[]);
+        let unknown_two = identity("/library/two", "Shared title", None, &[]);
+        assert!(!identities_match(&unknown_one, &unknown_two));
+
+        let title_year_one = identity("/library/a", "Exact title", Some(2001), &[]);
+        let title_year_two = identity("/library/b", " exact   TITLE ", Some(2001), &[]);
+        assert!(identities_match(&title_year_one, &title_year_two));
+    }
 
     #[test]
     fn parses_season_number_from_folder_name() {

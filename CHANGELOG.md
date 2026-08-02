@@ -24,6 +24,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed local TV remakes and reboots with the same title being merged into one
+  show. Full local-library scans now distinguish folder, NFO provider-ID, and
+  year identities; transactionally split existing mixed seasons and extras;
+  preserve the largest hierarchy's IDs and references; invalidate affected
+  folder ETags; clean empty parents without deleting extras-only parents; and
+  report any remaining cross-folder ownership through health checks.
 - Fixed Windows release validation so the targeted startup-registration tests
   use the normal test profile, where cross-crate test support is available,
   instead of failing to compile before reaching the Windows registry checks.

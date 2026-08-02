@@ -2,7 +2,7 @@ feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
 status     = 'Ported'
-adr        = ['0057']
+adr        = ['0057', '0060']
 
 summary    = '''
 Local filesystem scanning dispatches by `Library.MediaKind` for movies, other
@@ -12,6 +12,13 @@ provider-shaped media, metadata, artwork, GUID, genre/tag/studio/person,
 values and path hashes. Local TV now mirrors `TelevisionFolderScanner.cs`
 folder-etag behavior, show/season folder persistence, trashed-item restore
 guarding, and stale-folder cleanup.
+
+Local show identity preserves ErsatzTV's title/year baseline while adding ADR
+0060's folder and NFO GUID precedence. Full scans transactionally
+separate merged remakes/reboots, preserve canonical show/season IDs, split
+mixed seasons and extras, invalidate ETags, clean empty parents, and feed the
+`Local television identity` health check. The 22/8 repair,
+rollback, FFprobe rescan, and 1988/2022 browser tests cover it.
 
 Plex, Jellyfin, and Emby sync paths cover paged libraries and item sync,
 collection sync, provider library subtype rows, credential lookup, dry-run
@@ -65,6 +72,13 @@ id          = 'music-video-nfo-fragment-leniency'
 description = 'Local music-video NFO parsing rejects real-world files that ErsatzTV accepts, falling back to filename metadata.'
 discovered  = '2026-06-10'
 evidence    = 'Fixed 2026-06-19: crates/ersatzrs-scanner/src/nfo.rs extracts the first <musicvideo> root from XML fragment streams before deserialization, matching ErsatzTV.Scanner/Core/Metadata/Nfo/MusicVideoNfoReader.cs ConformanceLevel.Fragment behavior. Covered by nfo::tests::parses_music_video_nfo_from_fragment_stream and music_video_enrichment::writes_music_video_metadata_from_fragment_nfo.'
+resolved    = true
+
+[[debt]]
+id          = 'local-tv-title-only-show-collision'
+description = 'Separate local TV folders with the same title can overwrite one ShowMetadata row and mix original and reboot episodes into one season.'
+discovered  = '2026-08-02'
+evidence    = 'Fixed 2026-08-02 under ADR 0060: local show resolution uses exclusive folder provenance, normalized NFO GUIDs, then title/non-null-year; pre-scan reconciliation transactionally splits mixed hierarchies and invalidates affected ETags. Covered by local_show_identity_decision_table, reconciliation_splits_mixed_season_and_preserves_canonical_ids, reconciliation_rolls_back_the_entire_split_on_error, rescan_repairs_same_title_original_and_reboot_collision, health pass/warning tests, and same-title media-browser projection coverage.'
 resolved    = true
 
 [[debt]]

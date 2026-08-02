@@ -21,12 +21,12 @@ use checks::{
     ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DowngradeHealthCheck,
     EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
     FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
-    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, MigrationChecksumHealthCheck,
-    MirrorChannelHealthCheck, MovieMetadataHealthCheck, PinnedStreamSelectionHealthCheck,
-    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
-    SearchProjectionHealthCheck, SqliteConnectionDefaultsHealthCheck,
-    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
-    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, LocalTelevisionIdentityHealthCheck,
+    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
+    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
+    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -50,7 +50,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 25] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 26] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -65,6 +65,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 25] = [
     "Pinned Stream Selection",
     "Movie Metadata",
     "Episode Metadata",
+    "Local television identity",
     "Zero Duration",
     "Remote Streams",
     "File Not Found",
@@ -188,6 +189,7 @@ fn registered_health_checks(
         Box::new(PinnedStreamSelectionHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),
         Box::new(EpisodeMetadataHealthCheck::new(pool.clone())),
+        Box::new(LocalTelevisionIdentityHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
