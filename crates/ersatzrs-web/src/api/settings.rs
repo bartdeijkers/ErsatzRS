@@ -13,8 +13,8 @@ use crate::admin::server_fns::settings::{
     save_ffmpeg_settings_with_state, save_hdhr_settings_with_state,
     save_logging_settings_with_state, save_playout_settings_with_state,
     save_scanner_settings_with_state, save_ui_settings_with_state, save_xmltv_settings_with_state,
-    FfmpegSettingsForm, HdhrSettingsForm, LoggingSettingsForm, PlayoutSettingsForm,
-    ScannerSettingsForm, UiSettingsForm, XmltvSettingsForm,
+    set_windows_startup_with_state, FfmpegSettingsForm, HdhrSettingsForm, LoggingSettingsForm,
+    PlayoutSettingsForm, ScannerSettingsForm, UiSettingsForm, XmltvSettingsForm,
 };
 use crate::host::state::AppState;
 
@@ -141,6 +141,16 @@ pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -
     };
     redirect_or_error(
         save_ui_settings_with_state(&state, form).await,
+        "/settings/ui",
+        &state,
+    )
+    .await
+}
+
+pub async fn save_windows_startup_form(State(state): State<AppState>, body: Bytes) -> Response {
+    let fields = parse_form(&body);
+    redirect_or_error(
+        set_windows_startup_with_state(&state, checked(&fields, "windows_startup_enabled")),
         "/settings/ui",
         &state,
     )
@@ -318,6 +328,15 @@ mod tests {
     }
 
     #[test]
+    fn windows_startup_checkbox_accepts_browser_checkbox_values() {
+        assert!(checked(
+            &parse_form(b"windows_startup_enabled=on"),
+            "windows_startup_enabled"
+        ));
+        assert!(!checked(&parse_form(b""), "windows_startup_enabled"));
+    }
+
+    #[test]
     fn optional_ids_accept_empty_selects() {
         let fields = parse_form(b"global_watermark_id=&global_fallback_filler_id=42");
         assert_eq!(parse_optional_i64(&fields, "global_watermark_id"), None);
@@ -350,5 +369,20 @@ mod tests {
         assert!(html.contains("Instellingen opslaan mislukt"));
         assert!(html.contains("Aantal tuners moet groter zijn dan nul."));
         assert!(html.contains("Terug naar instellingen"));
+    }
+
+    #[tokio::test]
+    async fn windows_startup_error_uses_selected_language() {
+        let response = settings_error_response(
+            "/settings/ui",
+            "update Windows startup registration is unavailable: Unable to update Windows startup registration",
+            UiLanguage::Dutch,
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let html = String::from_utf8(bytes.to_vec()).expect("html should be utf8");
+
+        assert!(html.contains("De Windows-opstartregistratie kon niet worden bijgewerkt."));
     }
 }

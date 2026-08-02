@@ -49,6 +49,13 @@ jobs:
           Pop-Location
           $env:ERSATZRS_SKIP_STYLANCE = "1"
           cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --bin ersatzrs-launcher --target x86_64-pc-windows-msvc
+      - name: Test Windows startup registration
+        shell: pwsh
+        env:
+          ERSATZRS_SKIP_STYLANCE: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test --release -p ersatzrs-web --lib --target x86_64-pc-windows-msvc windows_startup
       - name: Stage archive
         shell: pwsh
         run: |
@@ -280,6 +287,14 @@ jobs:
         env:
           ERSATZRS_SKIP_STYLANCE: "1"
         run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --target ${{ matrix.target }}
+      - name: Test Windows startup registration
+        if: ${{ matrix.rid == 'win-x64' }}
+        shell: pwsh
+        env:
+          ERSATZRS_SKIP_STYLANCE: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test --release -p ersatzrs-web --lib --target x86_64-pc-windows-msvc windows_startup
       # Boot the assembled bundle (this RID's freshly built SSR binary + the
       # web-assets artifact) and fail the release if any `/pkg` hydration asset
       # 404s. This is the structural catch for the recurring "wasm checksum

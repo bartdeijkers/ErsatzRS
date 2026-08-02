@@ -74,9 +74,30 @@ pub struct SettingsFfmpegPaths {
     pub ffprobe: String,
 }
 
+/// Effective per-user Windows startup registration state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowsStartupStatus {
+    /// The host platform is not Windows.
+    Unsupported,
+    /// No ErsatzRS startup registration exists for the current user.
+    Disabled,
+    /// The current user's registration points at the packaged tray launcher.
+    Enabled,
+    /// A registration exists, but its command does not match this release's launcher.
+    NeedsRepair,
+    /// The host could not inspect the registration or locate the packaged launcher.
+    Unavailable,
+}
+
 /// Runtime effects triggered by persisted admin settings.
 #[async_trait]
 pub trait SettingsRuntime: Send + Sync {
+    /// Inspect the current user's Windows startup registration.
+    fn windows_startup_status(&self) -> WindowsStartupStatus;
+
+    /// Enable or disable the current user's Windows startup registration.
+    fn set_windows_startup(&self, enabled: bool) -> Result<(), SettingsRuntimeError>;
+
     /// Reload the process logging filter from persisted settings.
     async fn reload_logging(&self) -> Result<(), SettingsRuntimeError>;
 

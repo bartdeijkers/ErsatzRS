@@ -832,6 +832,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScanningMinimumLogLevel => "Niveau de journalisation minimal de l'analyse",
         TextKey::Scheduling => "Planification",
         TextKey::SchedulingMinimumLogLevel => "Niveau de journalisation minimal de la planification",
+        TextKey::StartWithWindows => "Démarrer ErsatzRS à l’ouverture de session Windows",
+        TextKey::StartWithWindowsHelp => {
+            "Démarre automatiquement l’application de la zone de notification pour l’utilisateur Windows actuel."
+        }
         TextKey::Schedules => "Grilles",
         TextKey::AddSchedule => "Ajouter une grille",
         TextKey::AddScheduleItem => "Ajouter un élément de grille",
@@ -976,6 +980,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleOverrideBlock => "Remplacer pour cet élément de bloc",
         TextKey::SimilarityRules => "Règles de similarité",
         TextKey::AlbumArtist => "Artiste de l'album",
+        TextKey::Apply => "Appliquer",
         TextKey::ContentParent => "Parent ou variante",
         TextKey::SmartShuffleFilterRules => "Règles de filtre",
         TextKey::SearchForSchedules => "Rechercher des grilles",
@@ -1112,6 +1117,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Utiliser les sous-titres intégrés",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Élément sans titre",
+        TextKey::WindowsStartup => "Démarrage avec Windows",
+        TextKey::WindowsStartupNeedsRepair => {
+            "La commande de démarrage enregistrée pointe vers un autre emplacement. Appliquez ce réglage pour la corriger."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "Le démarrage avec Windows est indisponible car le lanceur fourni est introuvable ou l’inscription ne peut pas être lue."
+        }
         TextKey::ActiveTranscodeLimit => "Nombre maximal de transcodages simultanés",
         TextKey::ActiveTranscodeLimitHelp => {
             "Plafond strict des transcodages FFmpeg de diffusion. Lorsque tous les emplacements sont occupés, un nouveau spectateur reçoit une réponse « tous les flux sont utilisés » jusqu'à ce qu'un emplacement se libère ; les flux actifs ne dépassent pas la limite."
@@ -2071,6 +2083,9 @@ fn ffmpeg_profile_audio_format_label(format: i32) -> String {
 
 fn settings_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
@@ -2094,6 +2109,16 @@ fn settings_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "L’inscription au démarrage de Windows n’est pas prise en charge sur cette plateforme."
+                .to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "ErsatzRS.exe est introuvable à côté de ersatzrs-web.exe.".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "Impossible de mettre à jour l’inscription au démarrage de Windows.".to_owned()
+        }
         "Tuner count must be greater than zero" => {
             "Le nombre de tuners doit être supérieur à zéro".to_owned()
         }

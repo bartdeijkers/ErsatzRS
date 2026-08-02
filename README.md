@@ -62,6 +62,7 @@ Documentation follows the Diátaxis structure under [docs/](docs/README.md):
 Common end-user guides:
 
 - [Install on Windows](docs/how-to/install-on-windows.md)
+- [Install on Linux with systemd](docs/how-to/install-on-linux.md)
 - [Add and scan a local library](docs/how-to/add-and-scan-a-local-library.md)
 - [Connect a Jellyfin server](docs/how-to/connect-a-jellyfin-server.md)
 - [Connect an IPTV client](docs/how-to/connect-an-iptv-client.md)

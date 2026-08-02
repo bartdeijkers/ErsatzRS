@@ -202,10 +202,15 @@ Use the admin UI for settings that can be loaded after database startup:
 | **Settings** -> **HDHomeRun** | tuner and discovery settings |
 | **Settings** -> **Scanner** | library refresh behavior |
 | **Settings** -> **Playout** | playout build horizon and scheduling behavior |
-| **Settings** -> **UI** | language and theme |
+| **Settings** -> **UI** | language, theme, and per-user Windows login startup |
 | **Settings** -> **XMLTV** | guide days, time zone, and block behavior |
 
 These values live in the database and move with a database backup.
+
+The Windows startup checkbox is the exception: it reflects
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on the current machine and
+is not persisted in the database. Linux automatic startup is configured by an
+administrator through systemd; see [Install on Linux with systemd](../how-to/install-on-linux.md).
 
 ## Secret handling
 

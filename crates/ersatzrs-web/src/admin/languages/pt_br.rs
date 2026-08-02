@@ -742,6 +742,9 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
 
 fn settings_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
@@ -765,6 +768,16 @@ fn settings_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "O registro de inicialização com o Windows não é compatível com esta plataforma."
+                .to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "ErsatzRS.exe não foi encontrado ao lado de ersatzrs-web.exe.".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "Não foi possível atualizar o registro de inicialização com o Windows.".to_owned()
+        }
         "Tuner count must be greater than zero" => "A contagem de sintonizadores deve ser maior que zero.".to_owned(),
         "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
             "O intervalo de atualização da biblioteca deve ser 0 (não atualizar) ou maior que zero.".to_owned()
@@ -1514,6 +1527,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScanningMinimumLogLevel => "Nível mínimo de log da varredura",
         TextKey::Scheduling => "Agendamento",
         TextKey::SchedulingMinimumLogLevel => "Nível mínimo de log do agendamento",
+        TextKey::StartWithWindows => "Iniciar o ErsatzRS ao entrar no Windows",
+        TextKey::StartWithWindowsHelp => {
+            "Inicia automaticamente o aplicativo da bandeja para o usuário atual do Windows."
+        }
         TextKey::Schedules => "Horários",
         TextKey::AddSchedule => "Adicionar horário",
         TextKey::AddScheduleItem => "Adicionar item do horário",
@@ -1654,6 +1671,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleOverrideBlock => "Substituir para este item do bloco",
         TextKey::SimilarityRules => "Regras de similaridade",
         TextKey::AlbumArtist => "Artista do álbum",
+        TextKey::Apply => "Aplicar",
         TextKey::ContentParent => "Item pai ou variante",
         TextKey::SmartShuffleFilterRules => "Regras de filtro",
         TextKey::SearchForSchedules => "Pesquisar horários",
@@ -1778,6 +1796,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Usar legendas embutidas",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item sem título",
+        TextKey::WindowsStartup => "Inicialização com o Windows",
+        TextKey::WindowsStartupNeedsRepair => {
+            "O comando de inicialização salvo aponta para outro local. Aplique esta configuração para corrigi-lo."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "A inicialização com o Windows está indisponível porque o iniciador não foi encontrado ou o registro não pôde ser lido."
+        }
         TextKey::ActiveTranscodeLimit => "Máximo de transcodificações de streaming simultâneas",
         TextKey::ActiveTranscodeLimitHelp => {
             "Limite rígido para transcodificações FFmpeg de streaming. Quando todos os slots estão ocupados, um novo espectador recebe uma resposta de todos os streams em uso até que um slot seja liberado; streams ativos não ultrapassam o limite."

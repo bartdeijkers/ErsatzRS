@@ -13,6 +13,15 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in **Settings** -> **UI** control that starts the packaged
+  `ErsatzRS.exe` tray launcher when the current Windows user signs in. The UI
+  reads the live per-user registry state, can repair a stale release path, and
+  reports a missing launcher or inaccessible registration without persisting a
+  misleading database flag. Linux remains service-manager owned and now has a
+  systemd installation guide modeled on Jellyfin's package behavior.
+
 ### Fixed
 
 - Fixed Classic playout corruption across multiple channels by letting SQLite

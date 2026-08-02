@@ -67,7 +67,7 @@ The admin UI is available at the server base URL, which is
 | HDHomeRun | `/settings/hdhr` | Tuner and discovery settings |
 | Scanner | `/settings/scanner` | Scan and refresh behavior |
 | Playout | `/settings/playout` | Playout horizon and scheduling behavior |
-| UI | `/settings/ui` | Language and theme |
+| UI | `/settings/ui` | Language, theme, and Windows login startup |
 | XMLTV | `/settings/xmltv` | Guide window, time zone, and block behavior |
 
 ## Support

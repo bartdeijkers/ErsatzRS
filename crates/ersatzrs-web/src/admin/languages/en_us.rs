@@ -824,6 +824,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScanningMinimumLogLevel => "Scanning Minimum Log Level",
         TextKey::Scheduling => "Scheduling",
         TextKey::SchedulingMinimumLogLevel => "Scheduling Minimum Log Level",
+        TextKey::StartWithWindows => "Start ErsatzRS when I sign in to Windows",
+        TextKey::StartWithWindowsHelp => {
+            "Start the tray launcher automatically for the current Windows user."
+        }
         TextKey::Schedules => "Schedules",
         TextKey::AddSchedule => "Add Schedule",
         TextKey::AddScheduleItem => "Add Schedule Item",
@@ -964,6 +968,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleOverrideBlock => "Override for this Block item",
         TextKey::SimilarityRules => "Similarity Rules",
         TextKey::AlbumArtist => "Album Artist",
+        TextKey::Apply => "Apply",
         TextKey::ContentParent => "Parent or Variant",
         TextKey::SmartShuffleFilterRules => "Filter Rules",
         TextKey::SearchForSchedules => "Search for schedules",
@@ -1090,6 +1095,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Use Embedded Subtitles",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Untitled item",
+        TextKey::WindowsStartup => "Windows startup",
+        TextKey::WindowsStartupNeedsRepair => {
+            "The saved startup command points to another location. Apply this setting to repair it."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "Windows startup is unavailable because the packaged launcher could not be found or the registration could not be read."
+        }
         TextKey::ActiveTranscodeLimit => "Maximum Simultaneous Streaming Transcodes",
         TextKey::ActiveTranscodeLimitHelp => {
             "Hard ceiling for streaming FFmpeg transcodes. When all slots are busy, a new viewer gets an all-streams-in-use response until a slot frees; active streams are not bypassed over the limit."
@@ -1968,6 +1980,9 @@ fn ffmpeg_profile_audio_format_label(format: i32) -> String {
 
 fn settings_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
@@ -1991,6 +2006,15 @@ fn settings_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "Windows startup registration is not supported on this platform".to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "ErsatzRS.exe was not found next to ersatzrs-web.exe".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "Unable to update Windows startup registration".to_owned()
+        }
         "Tuner count must be greater than zero" => {
             "Tuner count must be greater than zero".to_owned()
         }

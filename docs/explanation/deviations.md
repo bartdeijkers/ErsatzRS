@@ -115,6 +115,19 @@ ErsatzRS uses Leptos for the admin UI because the project is Rust-native.
 
 ADR: [0002](../adr/0002-ui-framework-leptos.md)
 
+## Platform-owned automatic startup
+
+Windows automatic startup matches ErsatzTV's per-user login behavior while
+registering the ErsatzRS tray launcher, so the notification-area lifecycle and
+graceful **Exit** action remain available. The live HKCU registration is the
+source of truth instead of a database flag.
+
+Linux portable archives document the same service-manager ownership pattern as
+Jellyfin packages, but do not let the web process install or enable privileged
+systemd configuration. Operators install the documented unit explicitly.
+
+ADR: [0059](../adr/0059-platform-owned-automatic-startup.md)
+
 ## Aggregate EPG and browser-compatible channel preview
 
 ErsatzTV exposes channel preview only as a modal. ErsatzRS retains and improves

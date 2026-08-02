@@ -21,6 +21,7 @@ pub use ports::{
     MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
     PlexPinFlow, RemoteServerInfo, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
     ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
+    WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -660,6 +661,12 @@ impl ApplicationServices {
         queries::load_ui_settings(self.ports.admin_settings()).await
     }
 
+    /// Inspect the current user's Windows startup registration.
+    #[must_use]
+    pub fn windows_startup_status(&self) -> WindowsStartupStatus {
+        self.ports.settings_runtime().windows_startup_status()
+    }
+
     /// Load XMLTV settings.
     pub async fn load_xmltv_settings(&self) -> Result<queries::XmltvSettings> {
         queries::load_xmltv_settings(self.ports.admin_settings()).await
@@ -1227,6 +1234,11 @@ impl ApplicationServices {
     /// Atomically save transport-normalized UI settings.
     pub async fn save_ui_settings(&self, command: commands::SaveUiSettings) -> Result<()> {
         commands::save_ui_settings(command, self.ports.admin_settings()).await
+    }
+
+    /// Apply the current user's Windows startup registration.
+    pub fn set_windows_startup(&self, enabled: bool) -> Result<()> {
+        commands::set_windows_startup(enabled, self.ports.settings_runtime())
     }
 
     /// Validate, atomically save, and apply XMLTV settings.

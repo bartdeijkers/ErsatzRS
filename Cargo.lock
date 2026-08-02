@@ -1265,6 +1265,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
  "web-sys",
+ "winreg",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ the system tray.
 1. Open [ErsatzRS releases](https://github.com/bartdeijkers/ErsatzRS/releases).
 2. Download `ersatzrs-<tag>-win-x64.zip`.
 3. Extract the complete top-level folder to a stable, user-writable location.
-4. Keep `ErsatzRS.exe`, `ersatzrs-web.exe`, `site/`, `public/`, and `assets/`
+4. Keep `ErsatzRS.exe`, `ersatzrs-web.exe`, `site/`, and `assets/`
    together. Do not run a binary directly from inside the zip.
 
 If Microsoft Defender SmartScreen appears, verify that the archive came from
@@ -27,6 +27,14 @@ Run `ErsatzRS.exe`. The launcher:
 - adds an ErsatzRS icon to the notification area;
 - provides **Open Web UI**, **Show Logs**, and **Exit** actions; and
 - points the server at the bundled browser assets.
+
+To start the tray launcher automatically for your Windows account, open
+**Settings** -> **UI**, select **Start ErsatzRS when I sign in to Windows**, and
+choose **Apply**. The option is off by default. It writes the current release's
+`ErsatzRS.exe` location to your own Windows startup registration and does not
+require administrator privileges. Apply the setting again after moving the
+release folder; turn it off before deleting an old folder that is still
+registered.
 
 The first startup can take longer while ErsatzRS downloads and validates the
 managed FFmpeg 8.1 runtime. On Windows, the server also copies the selected
@@ -84,6 +92,6 @@ icon. For other failures:
 1. Open the log directory from the tray menu.
 2. Inspect `ErsatzRS.log`.
 3. Check whether another process already uses port `8409`.
-4. Confirm the extracted `site/pkg`, `public`, and `assets` directories are
+4. Confirm the extracted `site/pkg` and `assets` directories are
    present.
 5. Follow [Troubleshoot startup and playback](troubleshoot-startup-and-playback.md).

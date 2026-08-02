@@ -732,6 +732,9 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
 
 fn settings_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
@@ -755,6 +758,16 @@ fn settings_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "Rejestracja uruchamiania z systemem Windows nie jest obsługiwana na tej platformie."
+                .to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "Nie znaleziono ErsatzRS.exe obok ersatzrs-web.exe.".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "Nie można zaktualizować rejestracji uruchamiania z systemem Windows.".to_owned()
+        }
         "Tuner count must be greater than zero" => "Liczba tunerów musi być większa od zera.".to_owned(),
         "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
             "Interwał odświeżania biblioteki musi wynosić 0 (bez odświeżania) albo więcej niż zero.".to_owned()
@@ -1498,6 +1511,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScanningMinimumLogLevel => "Minimalny poziom logów skanowania",
         TextKey::Scheduling => "Planowanie",
         TextKey::SchedulingMinimumLogLevel => "Minimalny poziom logów planowania",
+        TextKey::StartWithWindows => "Uruchamiaj ErsatzRS po zalogowaniu do systemu Windows",
+        TextKey::StartWithWindowsHelp => {
+            "Automatycznie uruchamiaj aplikację zasobnika dla bieżącego użytkownika systemu Windows."
+        }
         TextKey::Schedules => "Harmonogramy",
         TextKey::AddSchedule => "Dodaj harmonogram",
         TextKey::AddScheduleItem => "Dodaj element harmonogramu",
@@ -1638,6 +1655,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleOverrideBlock => "Nadpisz dla tego elementu bloku",
         TextKey::SimilarityRules => "Reguły podobieństwa",
         TextKey::AlbumArtist => "Wykonawca albumu",
+        TextKey::Apply => "Zastosuj",
         TextKey::ContentParent => "Element nadrzędny lub wariant",
         TextKey::SmartShuffleFilterRules => "Reguły filtrów",
         TextKey::SearchForSchedules => "Szukaj harmonogramów",
@@ -1762,6 +1780,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Używaj osadzonych napisów",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Element bez tytułu",
+        TextKey::WindowsStartup => "Uruchamianie z systemem Windows",
+        TextKey::WindowsStartupNeedsRepair => {
+            "Zapisane polecenie uruchamiania wskazuje inną lokalizację. Zastosuj ustawienie, aby je naprawić."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "Uruchamianie z systemem Windows jest niedostępne, ponieważ nie znaleziono aplikacji uruchamiającej lub nie można odczytać rejestracji."
+        }
         TextKey::ActiveTranscodeLimit => "Maksymalna liczba jednoczesnych transkodowań strumieni",
         TextKey::ActiveTranscodeLimitHelp => {
             "Twardy limit strumieniowych transkodowań FFmpeg. Gdy wszystkie miejsca są zajęte, nowy widz otrzymuje komunikat, że wszystkie strumienie są w użyciu, dopóki miejsce się nie zwolni; aktywne strumienie nie omijają limitu."

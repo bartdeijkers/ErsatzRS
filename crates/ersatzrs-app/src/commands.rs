@@ -3818,6 +3818,16 @@ pub async fn save_ui_settings(
         .map_err(Into::into)
 }
 
+/// Apply the current user's Windows startup registration.
+pub fn set_windows_startup(enabled: bool, runtime: &dyn SettingsRuntime) -> crate::Result<()> {
+    runtime
+        .set_windows_startup(enabled)
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "update Windows startup registration",
+            message: error.to_string(),
+        })
+}
+
 /// Validate, atomically persist, and fan out XMLTV-setting effects.
 pub async fn save_xmltv_settings(
     command: SaveXmltvSettings,
@@ -5456,15 +5466,16 @@ mod tests {
         request_playout_build, request_scheduled_library_scan, request_show_scan, save_collection,
         save_ffmpeg_profile, save_ffmpeg_settings, save_logging_settings, save_multi_collection,
         save_playlist, save_playout_settings, save_rerun_collection, save_smart_collection,
-        validate_channel_form, validate_channel_number_updates, validate_schedule_items,
-        validate_template_group_name, validate_template_name, validate_watermark,
-        AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem, CreatePlaylistGroup,
-        DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan, RequestPlayoutBuild,
-        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
-        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
-        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
-        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
-        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
+        set_windows_startup, validate_channel_form, validate_channel_number_updates,
+        validate_schedule_items, validate_template_group_name, validate_template_name,
+        validate_watermark, AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem,
+        CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan,
+        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
+        RequestScanOutcome, RequestScanRejection, RequestScheduledLibraryScan,
+        RequestScheduledScanOutcome, RequestShowScan, SaveCollection, SaveFfmpegProfile,
+        SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection, SavePlaylist,
+        SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
@@ -5566,6 +5577,18 @@ mod tests {
 
     #[async_trait]
     impl SettingsRuntime for RecordingSettingsRuntime {
+        fn windows_startup_status(&self) -> crate::WindowsStartupStatus {
+            crate::WindowsStartupStatus::Disabled
+        }
+
+        fn set_windows_startup(&self, enabled: bool) -> Result<(), SettingsRuntimeError> {
+            self.events
+                .lock()
+                .expect("settings runtime events")
+                .push(format!("windows-startup:{enabled}"));
+            Ok(())
+        }
+
         async fn reload_logging(&self) -> Result<(), SettingsRuntimeError> {
             self.events
                 .lock()
@@ -6472,6 +6495,19 @@ mod tests {
         assert_eq!(
             *runtime.events.lock().expect("settings runtime events"),
             ["reload_logging"]
+        );
+    }
+
+    #[test]
+    fn windows_startup_uses_the_settings_runtime_port() {
+        let runtime = RecordingSettingsRuntime::default();
+
+        set_windows_startup(true, &runtime).expect("enable Windows startup");
+        set_windows_startup(false, &runtime).expect("disable Windows startup");
+
+        assert_eq!(
+            *runtime.events.lock().expect("settings runtime events"),
+            ["windows-startup:true", "windows-startup:false"]
         );
     }
 

@@ -148,6 +148,10 @@ pub fn build_app(app_state: AppState) -> Router {
             "/api/settings/ui/save",
             post(api::settings::save_ui_settings_form),
         )
+        .route(
+            "/api/settings/ui/windows-startup",
+            post(api::settings::save_windows_startup_form),
+        )
         .route("/api/settings/ui/theme", get(api::settings::ui_theme))
         .route(
             "/api/settings/xmltv/save",

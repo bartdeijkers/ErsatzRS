@@ -730,6 +730,9 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
 
 fn settings_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
 
     if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
         return format!(
@@ -753,6 +756,15 @@ fn settings_error_message(error: &str) -> String {
     }
 
     match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "Windows-opstartregistratie wordt niet ondersteund op dit platform.".to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "ErsatzRS.exe is niet naast ersatzrs-web.exe gevonden.".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "De Windows-opstartregistratie kon niet worden bijgewerkt.".to_owned()
+        }
         "Tuner count must be greater than zero" => "Aantal tuners moet groter zijn dan nul.".to_owned(),
         "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
             "Bibliotheekverversingsinterval moet 0 (niet verversen) of groter dan nul zijn.".to_owned()
@@ -1488,6 +1500,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScanningMinimumLogLevel => "Minimaal logniveau voor scannen",
         TextKey::Scheduling => "Planning",
         TextKey::SchedulingMinimumLogLevel => "Minimaal logniveau voor planning",
+        TextKey::StartWithWindows => "ErsatzRS starten wanneer ik me bij Windows aanmeld",
+        TextKey::StartWithWindowsHelp => {
+            "Start de tray-launcher automatisch voor de huidige Windows-gebruiker."
+        }
         TextKey::Schedules => "Schema's",
         TextKey::AddSchedule => "Schema toevoegen",
         TextKey::AddScheduleItem => "Schema-item toevoegen",
@@ -1628,6 +1644,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleOverrideBlock => "Overschrijven voor dit blokitem",
         TextKey::SimilarityRules => "Gelijkenisregels",
         TextKey::AlbumArtist => "Albumartiest",
+        TextKey::Apply => "Toepassen",
         TextKey::ContentParent => "Bovenliggend item of variant",
         TextKey::SmartShuffleFilterRules => "Filterregels",
         TextKey::SearchForSchedules => "Schema's zoeken",
@@ -1752,6 +1769,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Ingesloten ondertitels gebruiken",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item zonder titel",
+        TextKey::WindowsStartup => "Opstarten met Windows",
+        TextKey::WindowsStartupNeedsRepair => {
+            "De opgeslagen opstartopdracht verwijst naar een andere locatie. Pas deze instelling toe om dit te herstellen."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "Opstarten met Windows is niet beschikbaar omdat de meegeleverde launcher niet is gevonden of de registratie niet kon worden gelezen."
+        }
         TextKey::ActiveTranscodeLimit => "Maximaal gelijktijdige streamingtranscodes",
         TextKey::ActiveTranscodeLimitHelp => {
             "Harde limiet voor FFmpeg-streamingtranscodes. Wanneer alle slots bezet zijn, krijgt een nieuwe kijker een melding dat alle streams in gebruik zijn totdat er een slot vrijkomt; actieve streams omzeilen de limiet niet."

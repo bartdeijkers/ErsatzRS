@@ -110,6 +110,34 @@ pub struct UiSettingsForm {
     pub language: String,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WindowsStartupStatusForm {
+    Unsupported,
+    Disabled,
+    Enabled,
+    NeedsRepair,
+    Unavailable,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_app::WindowsStartupStatus> for WindowsStartupStatusForm {
+    fn from(value: ersatzrs_app::WindowsStartupStatus) -> Self {
+        match value {
+            ersatzrs_app::WindowsStartupStatus::Unsupported => Self::Unsupported,
+            ersatzrs_app::WindowsStartupStatus::Disabled => Self::Disabled,
+            ersatzrs_app::WindowsStartupStatus::Enabled => Self::Enabled,
+            ersatzrs_app::WindowsStartupStatus::NeedsRepair => Self::NeedsRepair,
+            ersatzrs_app::WindowsStartupStatus::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UiSettingsPageData {
+    pub form: UiSettingsForm,
+    pub windows_startup: WindowsStartupStatusForm,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct XmltvSettingsForm {
     pub days_to_build: i32,
@@ -220,7 +248,7 @@ pub async fn save_playout_settings(form: PlayoutSettingsForm) -> Result<(), Serv
 }
 
 #[server]
-pub async fn load_ui_settings() -> Result<UiSettingsForm, ServerFnError> {
+pub async fn load_ui_settings() -> Result<UiSettingsPageData, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -229,9 +257,12 @@ pub async fn load_ui_settings() -> Result<UiSettingsForm, ServerFnError> {
         .load_ui_settings()
         .await
         .map_err(ServerFnError::new)?;
-    Ok(UiSettingsForm {
-        is_dark_mode: settings.is_dark_mode,
-        language: normalize_ui_language(&settings.language),
+    Ok(UiSettingsPageData {
+        form: UiSettingsForm {
+            is_dark_mode: settings.is_dark_mode,
+            language: normalize_ui_language(&settings.language),
+        },
+        windows_startup: state.application.windows_startup_status().into(),
     })
 }
 
@@ -241,6 +272,15 @@ pub async fn save_ui_settings(form: UiSettingsForm) -> Result<(), ServerFnError>
 
     let state = expect_context::<AppState>();
     save_ui_settings_with_state(&state, form).await
+}
+
+#[server]
+#[allow(clippy::unused_async)] // Leptos server functions require an async signature.
+pub async fn save_windows_startup(enabled: bool) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    set_windows_startup_with_state(&state, enabled)
 }
 
 #[server]
@@ -553,6 +593,17 @@ pub async fn save_ui_settings_with_state(
             language,
         })
         .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub fn set_windows_startup_with_state(
+    state: &crate::host::state::AppState,
+    enabled: bool,
+) -> Result<(), ServerFnError> {
+    state
+        .application
+        .set_windows_startup(enabled)
         .map_err(ServerFnError::new)
 }
 

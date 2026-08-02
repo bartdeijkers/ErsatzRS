@@ -1,7 +1,8 @@
 # Release bundle reference
 
 This page describes the contents and runtime environment of published release
-archives. Use [Install on Windows](../how-to/install-on-windows.md) or
+archives. Use [Install on Windows](../how-to/install-on-windows.md),
+[Install on Linux with systemd](../how-to/install-on-linux.md), or
 [Install with Docker](../how-to/install-with-docker.md) for end-user setup.
 
 ## Published artifacts

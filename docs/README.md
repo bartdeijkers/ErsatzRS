@@ -17,6 +17,8 @@ Already know the basic workflow? Choose the result you need below.
 ## Install and update
 
 - [Install on Windows](how-to/install-on-windows.md)
+- [Install on Linux with systemd](how-to/install-on-linux.md) for a native
+  service installed from a normal release archive
 - [Install with Docker](how-to/install-with-docker.md) when a normal release
   publishes a container image
 - [Back up and restore ErsatzRS](how-to/back-up-and-restore.md)

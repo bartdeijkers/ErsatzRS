@@ -5,7 +5,8 @@ use crate::admin::server_fns::settings::{
     load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
     load_scanner_settings, load_ui_settings, load_xmltv_settings, ActiveTranscodeCapacityStatus,
     ActiveTranscodeSuggestionReason, FfmpegSettingsPageData, HdhrSettingsForm, LoggingSettingsForm,
-    PlayoutSettingsForm, ScannerSettingsForm, SelectOption, UiSettingsForm, XmltvSettingsForm,
+    PlayoutSettingsForm, ScannerSettingsForm, SelectOption, UiSettingsPageData,
+    WindowsStartupStatusForm, XmltvSettingsForm,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::resource_state::{
@@ -71,7 +72,7 @@ pub fn PlayoutSettingsPage() -> impl IntoView {
 
 #[component]
 pub fn UiSettingsPage() -> impl IntoView {
-    let data: Resource<Result<UiSettingsForm, ServerFnError>> =
+    let data: Resource<Result<UiSettingsPageData, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_ui_settings());
     view! {
         <Suspense fallback=loading_resource_view>
@@ -454,7 +455,9 @@ fn render_playout(form: PlayoutSettingsForm) -> impl IntoView {
     }
 }
 
-fn render_ui(form: UiSettingsForm) -> impl IntoView {
+fn render_ui(data: UiSettingsPageData) -> impl IntoView {
+    let form = data.form;
+    let windows_startup = windows_startup_controls(data.windows_startup);
     view! {
         <SettingsForm title=tr(TextKey::Ui) action="/api/settings/ui/save">
             <SelectField
@@ -474,8 +477,58 @@ fn render_ui(form: UiSettingsForm) -> impl IntoView {
                 options=supported_ui_language_options()
                 include_none=false
             />
+            {windows_startup}
         </SettingsForm>
     }
+}
+
+fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView> {
+    let (state, checked, disabled, caption) = match status {
+        WindowsStartupStatusForm::Unsupported => return None,
+        WindowsStartupStatusForm::Disabled => {
+            ("disabled", false, false, tr(TextKey::StartWithWindowsHelp))
+        }
+        WindowsStartupStatusForm::Enabled => {
+            ("enabled", true, false, tr(TextKey::StartWithWindowsHelp))
+        }
+        WindowsStartupStatusForm::NeedsRepair => (
+            "needs-repair",
+            true,
+            false,
+            tr(TextKey::WindowsStartupNeedsRepair),
+        ),
+        WindowsStartupStatusForm::Unavailable => (
+            "unavailable",
+            false,
+            true,
+            tr(TextKey::WindowsStartupUnavailable),
+        ),
+    };
+
+    Some(
+        view! {
+            <section data-windows-startup-state=state>
+                <h2 class=style::section_title>{tr(TextKey::WindowsStartup)}</h2>
+                <div class=style::divider></div>
+                <CheckboxField
+                    label=tr(TextKey::StartWithWindows)
+                    name="windows_startup_enabled"
+                    checked=checked
+                    caption=Some(caption)
+                    disabled=disabled
+                />
+                <button
+                    class=style::button
+                    type="submit"
+                    formaction="/api/settings/ui/windows-startup"
+                    disabled=disabled
+                >
+                    {tr(TextKey::Apply)}
+                </button>
+            </section>
+        }
+        .into_any(),
+    )
 }
 
 fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
@@ -666,6 +719,40 @@ mod tests {
             .collect();
 
         assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
+    }
+
+    #[test]
+    fn ui_settings_omit_windows_startup_on_unsupported_platforms() {
+        let html = render_ui(ui_settings_fixture(WindowsStartupStatusForm::Unsupported))
+            .into_view()
+            .to_html();
+
+        assert!(!html.contains("data-windows-startup-state"));
+        assert!(!html.contains("/api/settings/ui/windows-startup"));
+    }
+
+    #[test]
+    fn ui_settings_render_the_current_windows_startup_state() {
+        let disabled = render_ui(ui_settings_fixture(WindowsStartupStatusForm::Disabled))
+            .into_view()
+            .to_html();
+        let enabled = render_ui(ui_settings_fixture(WindowsStartupStatusForm::Enabled))
+            .into_view()
+            .to_html();
+        let repair = render_ui(ui_settings_fixture(WindowsStartupStatusForm::NeedsRepair))
+            .into_view()
+            .to_html();
+        let unavailable = render_ui(ui_settings_fixture(WindowsStartupStatusForm::Unavailable))
+            .into_view()
+            .to_html();
+
+        assert!(!input_html(&disabled, r#"name="windows_startup_enabled""#).contains("checked"));
+        assert!(input_html(&enabled, r#"name="windows_startup_enabled""#).contains("checked"));
+        assert!(repair.contains(r#"data-windows-startup-state="needs-repair""#));
+        assert!(input_html(&repair, r#"name="windows_startup_enabled""#).contains("checked"));
+        assert!(unavailable.contains(r#"data-windows-startup-state="unavailable""#));
+        assert!(input_html(&unavailable, r#"name="windows_startup_enabled""#).contains("disabled"));
+        assert!(unavailable.contains(r#"formaction="/api/settings/ui/windows-startup" disabled"#));
     }
 
     #[test]
@@ -906,6 +993,16 @@ mod tests {
             fallback_fillers: Vec::new(),
             mpeg_ts_scripts: Vec::new(),
             custom_resolutions: Vec::new(),
+        }
+    }
+
+    fn ui_settings_fixture(windows_startup: WindowsStartupStatusForm) -> UiSettingsPageData {
+        UiSettingsPageData {
+            form: crate::admin::server_fns::settings::UiSettingsForm {
+                is_dark_mode: true,
+                language: "en-us".to_owned(),
+            },
+            windows_startup,
         }
     }
 
