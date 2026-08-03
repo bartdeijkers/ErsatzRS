@@ -1,6 +1,6 @@
 <!--
-generated: 2026-08-02
-last_processed_commit: 3c12cd89241ad71e556681a0e2ac8328989720e6
+generated: 2026-08-03
+last_processed_commit: 510363769e65401e5f4e3e357b7125c649f2eb28
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -9,48 +9,55 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three chores to do - goal prompts
 
 Goal prompts selected from the current progress files, ADR index, active plans,
-and Phase 8A state. The `3034146..3c12cd8` window (the prior daily-reconcile doc
-commit plus one work commit) landed the **customizable rich XMLTV guide**
-(`feat(web): add customizable rich XMLTV guide` `3c12cd8`, ADR 0058
-`Accepted`/`Implemented`): `/iptv/xmltv.xml` now renders `<channel>`/`<programme>`
-elements through seven customizable `minijinja` templates (movie/episode/
-musicVideo/song/otherVideo/remoteStream/channel), matching ErsatzTV's per-kind
-field set — title/sub-title, plot, year, genre categories, artwork icon,
-`onscreen`+`xmltv_ns` episode-num, `/`-delimited content-rating mapped to
-`MPAA`/`VCHIP`, and `previously-shown`. Channel `id`/`programme channel` now use
-the checksummed `ChannelIdentifier.FromNumber` id so XMLTV and the M3U `tvg-id`
-match; a `<name>.jinja` override in `<data>/templates/channel-guide/` beats the
-bundled default, and syntax-error or invalid-XML overrides fall back safely
-per-kind/per-item without corrupting the document. `xmltv.days_to_build` and
-`xmltv.time_zone` now take effect (previously hardcoded 48h/UTC). This is
-grounded ErsatzTV parity at the pin — the seven `_*.sbntxt` templates
-(`_channel/_episode/_movie/_musicVideo/_otherVideo/_remoteStream/_song`),
-`IptvController.cs` (xmltv branch), and `RefreshChannelDataHandler.cs` all exist
-at `0d301df5`.
+and Phase 8A state. The `3c12cd8..5103637` window landed four work commits, none
+touching the top three chores:
 
-The work commit self-reconciled its own docs: `xmltv-guide.toml` is `Ported`
-with ADR `0058` linked and a current summary, ADR 0058 is registered
-`Accepted`/`Implemented`, `docs/explanation/deviations.md` records the two
-end-user improvements over ErsatzTV (movie thumbnail-artwork icon fallback,
-Remote Stream genre emission), and its own session lines were added. The feature
-touched no admin route and no `hydration.toml`, so no route/hydration edit was
-warranted. This run confirmed those edits, verified **no** additional parity
-status flip is warranted (no other feature was touched), appended the daily
-session line, and refreshed the front-matter. None of the merged work touched the
-top three chores.
+- **`fix(core): prevent cross-playout state collisions`** (`7143372`) closed a
+  confirmed-blocking Classic scheduling runtime defect. Live diagnosis showed
+  earlier channels losing all collection anchors while a later channel owned the
+  colliding low IDs, then restarting shuffled collection state and scheduling
+  repeated movies. The fix moves Classic collection-anchor and fill-group roots
+  to database-assigned global identities on SQLite/MySQL (matching upstream EF),
+  makes inserts strict/transactional so one playout can no longer `REPLACE`
+  another's state, deduplicates duplicate-source enumerators, and audits/repairs
+  the invariant at startup and before every Continue build. It self-reconciled
+  `classic-scheduling.toml` (new `playout-local-runtime-state-primary-keys`
+  debt added and marked `resolved = true`, summary note), added the
+  `Classic Playout State` check to `ersatzrs-healthcheck.toml`,
+  noted database-assigned identities in `initial-schema-database-backends.toml`,
+  and extended ADR `0010`.
+- **`fix(infra): harden Classic state health reporting`** (`f07fc25`) refined
+  that new health check and its admin System → Health surface (i18n across all
+  cultures); no parity status flipped.
+- **`feat(web): add Windows startup control`** (`2eca3ba`, ADR `0059`
+  `Accepted`/`Implemented`) added an opt-in per-user login startup control to
+  `/settings/ui` on Windows, delegating through the application runtime port to
+  the live HKCU `Run` registration for packaged `ErsatzRS.exe` (no machine-local
+  boolean in `ConfigElement`); non-Windows SSR omits the control and keeps Linux
+  startup under systemd ownership. It self-reconciled `settings.toml` (added ADR
+  `0059`, refreshed summary) and `docs/explanation/deviations.md`.
+- **`fix(ci): run Windows startup test in test profile`** (`5103637`) is a
+  release-workflow/changelog-only follow-up with no parity impact.
 
-`cargo xtask progress gaps` still reports a single remaining feature
-(`video-jukebox-addon-api`, Not started, four open debt items) — the only file
-with unresolved `[[debt]]` anywhere in `docs/progress/parity/` (the XMLTV feature
-closed with no open debt). Its first slice is milestone **p8a-01**, the
-`phase.toml` `current_focus` decision gate that unblocks p8a-02/03 and p8b-01/02,
-so it holds the top slot. Every other actionable spec source is the queue of
-`Proposed` / `Not implemented` localization ADRs (0022–0047); no ADR-backed
-FFmpeg/HLS hardening or blocking runtime debt is open to outrank them (the XMLTV
-work closed with no open debt), and the only deferred plan work (mdBook, macOS
-archives, Claude hooks) is developer-experience tooling that ranks below the
-maintainer-requested localization ADRs. The two lowest-numbered of those
-(ADR 0022 de-de, ADR 0023 hi-in) saw no commits this window and carry over
+This run verified the pinned ErsatzTV checkout (`0d301df5`), confirmed those
+self-reconciliations, swept every parity file for open `[[debt]]`, and found the
+only unresolved debt anywhere is the four items in `video-jukebox-addon-api`.
+No additional parity status flip is warranted: the cross-playout fix *closed* a
+blocking runtime debt rather than opening one, and the health/startup/CI work
+introduced no new open gaps. The daily session line was appended and the
+front-matter refreshed to `5103637`.
+
+Because that blocking debt is now resolved, no runtime debt outranks the phase
+focus this window. `cargo xtask progress gaps` reports the single remaining
+feature `video-jukebox-addon-api` (Not started, four open debt items); its first
+slice is milestone **p8a-01**, the `phase.toml` `current_focus` decision gate
+that unblocks p8a-02/03 and p8b-01/02, so it holds the top slot. Every other
+actionable spec source is the queue of `Proposed` / `Not implemented`
+localization ADRs (0022–0047); no ADR-backed FFmpeg/HLS hardening or open
+blocking runtime debt remains to outrank them, and the only deferred plan work
+(mdBook, macOS archives, Claude hooks) is developer-experience tooling that ranks
+below the maintainer-requested localization ADRs. The two lowest-numbered of
+those (ADR 0022 de-de, ADR 0023 hi-in) saw no commits this window and carry over
 unchanged as `#2` and `#3`.
 
 ---
