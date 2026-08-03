@@ -45,6 +45,21 @@ release section when tagging a release.
   `Song.jpg` next to `Song.mkv`, with no `-thumb` suffix). Local scanning now
   recognizes the bare same-basename image as Thumbnail artwork, matching
   ErsatzTV's `MusicVideoFolderScanner.LocateThumbnail` behavior.
+- Fixed local artist scans creating a duplicate artist (with its own
+  duplicated artwork) on rescans once an `artist.nfo` name diverged from the
+  disk folder name or its disambiguation changed. Artist re-identification now
+  matches on the freshly parsed title and disambiguation, and the trailing
+  scan pass removes artists that no longer own any music videos, matching
+  ErsatzTV's `GetArtistByMetadata` and `DeleteEmptyArtists` behavior.
+- Fixed a remastered or upscaled music video (e.g. an "Official Music Video
+  (Remastered)" reupload) being classified as an alternate version instead of
+  the primary video. Local scanning treats `upscaled` as a `remaster` alias and
+  prefers an available enhanced rendition as the canonical music video: a lone
+  rendition is promoted outright, and one found alongside a plain/official
+  original moves that original into the artist's Versions section. Missing
+  enhanced renditions are excluded from canonical selection so a remaining
+  playable original becomes primary again, while movie and song renditions
+  retain their existing alternate-version behavior.
 
 ## [1.0.17-beta] - 2026-08-02
 

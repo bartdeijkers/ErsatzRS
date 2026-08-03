@@ -112,6 +112,7 @@ struct AlternateVersionRow {
     item_id: i64,
     disambiguator: String,
     path: Option<String>,
+    is_available: bool,
     classification: AlternateVersionClassification,
 }
 
@@ -361,10 +362,6 @@ async fn scan_local_library_with_progress_once(
                         }
                     }
                 }
-                retry_sqlite_busy(|| async {
-                    link_alternate_versions_for_library_path(pool, &library_path).await
-                })
-                .await?;
             }
             LocalScanBucketKind::Shows { expected_episodes } => {
                 let mut local_processed = 0usize;
@@ -391,6 +388,14 @@ async fn scan_local_library_with_progress_once(
         // last scan, mirroring ErsatzTV's per-FolderScanner FlagFileNotFound.
         retry_sqlite_busy(|| async { flag_missing_local_files(pool, library_path.id).await })
             .await?;
+        retry_sqlite_busy(|| async {
+            link_alternate_versions_for_library_path(pool, &library_path).await
+        })
+        .await?;
+        if library_path.media_kind == LibraryMediaKind::MusicVideos {
+            retry_sqlite_busy(|| async { delete_empty_artists(pool, library_path.id).await })
+                .await?;
+        }
         let now = Utc::now();
         retry_sqlite_busy(|| async { update_library_path_scan(pool, library_path.id, now).await })
             .await?;
@@ -613,13 +618,17 @@ async fn link_alternate_versions_for_library_path(
                 .cmp(&right.path)
                 .then_with(|| left.item_id.cmp(&right.item_id))
         });
-        apply_alternate_version_group(pool, &group).await?;
+        apply_alternate_version_group(pool, &group, library_path.media_kind).await?;
     }
 
     Ok(())
 }
 
-async fn apply_alternate_version_group(pool: &DbPool, group: &[AlternateVersionRow]) -> Result<()> {
+async fn apply_alternate_version_group(
+    pool: &DbPool,
+    group: &[AlternateVersionRow],
+    media_kind: LibraryMediaKind,
+) -> Result<()> {
     let alternate_count = group
         .iter()
         .filter(|row| row.classification.sub_kind.is_some())
@@ -631,9 +640,31 @@ async fn apply_alternate_version_group(pool: &DbPool, group: &[AlternateVersionR
         return Ok(());
     }
 
+    // For music videos only, a playable remastered rendition is preferred over
+    // a plain/"official" original: its video quality is almost always higher
+    // and it is what channel playout should prefer. Movie and song remasters
+    // retain the normal alternate-version rules and vocabulary.
+    let available_count = group.iter().filter(|row| row.is_available).count();
+    if available_count == 0 {
+        return Ok(());
+    }
+
+    let remaster_id = if media_kind == LibraryMediaKind::MusicVideos {
+        group
+            .iter()
+            .find(|row| {
+                row.is_available && row.classification.sub_kind.as_deref() == Some("remaster")
+            })
+            .map(|row| row.item_id)
+    } else {
+        None
+    };
+
     if group.len() == 1 {
         let row = &group[0];
-        if let Some(sub_kind) = &row.classification.sub_kind {
+        if Some(row.item_id) == remaster_id {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+        } else if let Some(sub_kind) = &row.classification.sub_kind {
             set_alternate_variant_fields(pool, row.item_id, sub_kind, None).await?;
         } else {
             reset_primary_variant_fields(pool, row.item_id).await?;
@@ -641,22 +672,44 @@ async fn apply_alternate_version_group(pool: &DbPool, group: &[AlternateVersionR
         return Ok(());
     }
 
-    let canonical_id = group
-        .iter()
-        .find(|row| row.classification.sub_kind.is_none() && row.classification.canonical_hint)
+    let canonical_id = remaster_id
         .or_else(|| {
             group
                 .iter()
-                .find(|row| row.classification.sub_kind.is_none())
+                .find(|row| {
+                    row.is_available
+                        && row.classification.sub_kind.is_none()
+                        && row.classification.canonical_hint
+                })
+                .map(|row| row.item_id)
         })
-        .unwrap_or(&group[0])
-        .item_id;
+        .or_else(|| {
+            group
+                .iter()
+                .find(|row| row.is_available && row.classification.sub_kind.is_none())
+                .map(|row| row.item_id)
+        })
+        .or_else(|| {
+            group
+                .iter()
+                .find(|row| row.is_available)
+                .map(|row| row.item_id)
+        })
+        .expect("an available alternate-version row exists");
+    let promoted_remaster = remaster_id == Some(canonical_id);
 
     for row in group {
         if row.item_id == canonical_id {
             reset_primary_variant_fields(pool, row.item_id).await?;
         } else if let Some(sub_kind) = &row.classification.sub_kind {
             set_alternate_variant_fields(pool, row.item_id, sub_kind, Some(canonical_id)).await?;
+        } else if promoted_remaster {
+            // The untagged original master, superseded by the promoted
+            // remaster above, is demoted rather than left as its own
+            // primary; `official_video` is the existing ADR 0018 vocabulary
+            // slot for "the (now non-canonical) official rendition".
+            set_alternate_variant_fields(pool, row.item_id, "official_video", Some(canonical_id))
+                .await?;
         } else {
             reset_primary_variant_fields(pool, row.item_id).await?;
         }
@@ -720,6 +773,7 @@ async fn load_movie_alternate_version_rows(
     let rows = sqlx::query(
         r#"SELECT "m"."Id" AS "Id",
                   COALESCE("mm"."Title", "mm"."SortTitle", "mm"."OriginalTitle", '') AS "Title",
+                  "mi"."State" AS "State",
                   "mf"."Path" AS "Path"
            FROM "Movie" AS "m"
            JOIN "MediaItem" AS "mi" ON "mi"."Id" = "m"."Id"
@@ -749,6 +803,7 @@ async fn load_music_video_alternate_version_rows(
         r#"SELECT "mv"."Id" AS "Id",
                   COALESCE("mvm"."Title", "mvm"."SortTitle", "mvm"."OriginalTitle", '') AS "Title",
                   COALESCE("am"."Title", '') AS "Artist",
+                  "mi"."State" AS "State",
                   "mf"."Path" AS "Path"
            FROM "MusicVideo" AS "mv"
            JOIN "MediaItem" AS "mi" ON "mi"."Id" = "mv"."Id"
@@ -780,6 +835,7 @@ async fn load_song_alternate_version_rows(
         r#"SELECT "s"."Id" AS "Id",
                   COALESCE("sm"."Title", "sm"."SortTitle", "sm"."OriginalTitle", '') AS "Title",
                   COALESCE("sm"."Artists", "sm"."AlbumArtists", '') AS "Artist",
+                  "mi"."State" AS "State",
                   "mf"."Path" AS "Path"
            FROM "Song" AS "s"
            JOIN "MediaItem" AS "mi" ON "mi"."Id" = "s"."Id"
@@ -817,6 +873,7 @@ fn alternate_version_row_from_db_row(
         item_id,
         disambiguator: disambiguator.to_owned(),
         path,
+        is_available: row.get::<i32, _>("State") == 0,
         classification,
     }
 }
@@ -915,11 +972,15 @@ async fn upsert_artist_for_folder(
            FROM "Artist" AS "a"
            JOIN "MediaItem" AS "mi" ON "mi"."Id" = "a"."Id"
            LEFT JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "a"."Id"
-           WHERE "mi"."LibraryPathId" = ? AND COALESCE("am"."Title", '') = ?
+           WHERE "mi"."LibraryPathId" = ?
+             AND COALESCE("am"."Title", '') = ?
+             AND (? = 0 OR COALESCE("am"."Disambiguation", '') = COALESCE(?, ''))
            LIMIT 1"#,
     )
     .bind(library_path.id)
-    .bind(artist_name)
+    .bind(&title)
+    .bind(metadata_kind)
+    .bind(disambiguation.as_deref())
     .fetch_optional(&mut *tx)
     .await?
     .map(|row| (row.get("ArtistId"), row.get("ArtistMetadataId")));
@@ -2662,6 +2723,44 @@ async fn flag_missing_local_files(pool: &DbPool, library_path_id: i64) -> Result
     Ok(missing_ids.len())
 }
 
+/// Delete artist roots that no longer own a music video in this library path.
+///
+/// Mirrors ErsatzTV's trailing `ArtistRepository.DeleteEmptyArtists` pass. An
+/// artist metadata identity change can create a replacement artist during the
+/// add/update pass; once the existing music videos move to that replacement,
+/// deleting the empty artist's `MediaItem` root cascades through `Artist`,
+/// `ArtistMetadata`, and its artwork.
+async fn delete_empty_artists(pool: &DbPool, library_path_id: i64) -> Result<Vec<i64>> {
+    let mut tx = pool.begin().await?;
+    let rows = sqlx::query(
+        r#"SELECT "a"."Id" AS "Id"
+           FROM "Artist" AS "a"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "a"."Id"
+           WHERE "mi"."LibraryPathId" = ?
+             AND NOT EXISTS (
+                 SELECT 1 FROM "MusicVideo" AS "mv" WHERE "mv"."ArtistId" = "a"."Id"
+             )
+           ORDER BY "a"."Id""#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let artist_ids: Vec<i64> = rows.into_iter().map(|row| row.get("Id")).collect();
+
+    if !artist_ids.is_empty() {
+        let placeholders = vec!["?"; artist_ids.len()].join(", ");
+        let sql = format!(r#"DELETE FROM "MediaItem" WHERE "Id" IN ({placeholders})"#);
+        let mut query = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql));
+        for artist_id in &artist_ids {
+            query = query.bind(artist_id);
+        }
+        query.execute(&mut *tx).await?;
+    }
+
+    tx.commit().await?;
+    Ok(artist_ids)
+}
+
 async fn update_library_scan(pool: &DbPool, library_id: i64, when: DateTime<Utc>) -> Result<()> {
     sqlx::query(r#"UPDATE "Library" SET "LastScan" = ? WHERE "Id" = ?"#)
         .bind(encode_datetime(when))
@@ -3073,6 +3172,254 @@ mod tests {
             .await,
             vec![unplugged_id]
         );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn music_video_solo_upscale_becomes_primary_with_no_versions() {
+        use super::{
+            link_alternate_versions_for_library_path, upsert_artist_for_folder,
+            upsert_local_music_video,
+        };
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let artist_dir = temp.path().join("Daft Punk");
+        std::fs::create_dir_all(&artist_dir).expect("artist dir");
+        let remaster_path = artist_dir.join("Around The World (Official Video Upscaled).mkv");
+        std::fs::write(&remaster_path, b"not probed").expect("upscaled video");
+
+        let pool = test_db().await;
+        let library_path = seed_music_video_library_path(temp.path());
+        seed_music_video_library(&pool, &library_path).await;
+        let artist_id = upsert_artist_for_folder(&pool, &library_path, "Daft Punk")
+            .await
+            .expect("artist");
+
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &artist_dir,
+            &remaster_path,
+            probed_version(),
+        )
+        .await
+        .expect("upscaled video upsert");
+
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let remaster_id = media_item_id_for_path(&pool, &remaster_path).await;
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(remaster_id)
+        .fetch_one(&pool)
+        .await
+        .expect("upscaled video row");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::Primary.db_value(),
+            "a lone upscaled video is the video for this song, not an alternate of it"
+        );
+        assert!(row.get::<Option<String>, _>("SubKind").is_none());
+        assert!(row.get::<Option<i64>, _>("ParentMediaItemId").is_none());
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn music_video_remaster_promoted_over_untagged_master_demotes_it_to_versions() {
+        use super::{
+            flag_missing_local_files, link_alternate_versions_for_library_path,
+            upsert_artist_for_folder, upsert_local_music_video,
+        };
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let artist_dir = temp.path().join("Daft Punk");
+        std::fs::create_dir_all(&artist_dir).expect("artist dir");
+        let master_path = artist_dir.join("Around The World.mkv");
+        let remaster_path = artist_dir.join("Around The World (Remastered).mkv");
+        std::fs::write(&master_path, b"not probed").expect("master video");
+        std::fs::write(&remaster_path, b"not probed").expect("remaster video");
+
+        let pool = test_db().await;
+        let library_path = seed_music_video_library_path(temp.path());
+        seed_music_video_library(&pool, &library_path).await;
+        let artist_id = upsert_artist_for_folder(&pool, &library_path, "Daft Punk")
+            .await
+            .expect("artist");
+
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &artist_dir,
+            &master_path,
+            probed_version(),
+        )
+        .await
+        .expect("master upsert");
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &artist_dir,
+            &remaster_path,
+            probed_version(),
+        )
+        .await
+        .expect("remaster upsert");
+
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let master_id = media_item_id_for_path(&pool, &master_path).await;
+        let remaster_id = media_item_id_for_path(&pool, &remaster_path).await;
+
+        let remaster_row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(remaster_id)
+        .fetch_one(&pool)
+        .await
+        .expect("remaster row");
+        assert_eq!(
+            remaster_row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::Primary.db_value(),
+            "the remaster should be promoted ahead of the untagged original master"
+        );
+        assert!(remaster_row
+            .get::<Option<i64>, _>("ParentMediaItemId")
+            .is_none());
+
+        let master_row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(master_id)
+        .fetch_one(&pool)
+        .await
+        .expect("master row");
+        assert_eq!(
+            master_row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value(),
+            "the untagged original master is demoted once a remaster sibling exists"
+        );
+        assert_eq!(
+            master_row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("official_video")
+        );
+        assert_eq!(
+            master_row.get::<Option<i64>, _>("ParentMediaItemId"),
+            Some(remaster_id)
+        );
+
+        std::fs::remove_file(&remaster_path).expect("remove remaster");
+        flag_missing_local_files(&pool, library_path.id)
+            .await
+            .expect("flag missing remaster");
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("relink without remaster");
+
+        let master_row = sqlx::query(
+            r#"SELECT "State", "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(master_id)
+        .fetch_one(&pool)
+        .await
+        .expect("remaining master row");
+        assert_eq!(master_row.get::<i32, _>("State"), 0);
+        assert_eq!(
+            master_row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::Primary.db_value(),
+            "the playable original must become primary when its remaster disappears"
+        );
+        assert!(master_row.get::<Option<String>, _>("SubKind").is_none());
+        assert!(master_row
+            .get::<Option<i64>, _>("ParentMediaItemId")
+            .is_none());
+
+        let remaster_row = sqlx::query(
+            r#"SELECT "State", "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(remaster_id)
+        .fetch_one(&pool)
+        .await
+        .expect("missing remaster row");
+        assert_eq!(remaster_row.get::<i32, _>("State"), 1);
+        assert_eq!(
+            remaster_row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            remaster_row.get::<Option<i64>, _>("ParentMediaItemId"),
+            Some(master_id)
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn movie_and_song_enhanced_versions_do_not_replace_untagged_primaries() {
+        use super::{link_alternate_versions_for_library_path, upsert_local_file};
+        use tempfile::TempDir;
+
+        let movie_temp = TempDir::new().expect("movie temp dir");
+        let movie_path = movie_temp.path().join("Blade Runner.mkv");
+        let movie_remaster_path = movie_temp.path().join("Blade Runner (Upscaled).mkv");
+        std::fs::write(&movie_path, b"not probed").expect("movie");
+        std::fs::write(&movie_remaster_path, b"not probed").expect("upscaled movie");
+        let movie_pool = test_db().await;
+        let movie_library = seed_movie_library_path(&movie_pool, movie_temp.path()).await;
+        upsert_local_file(&movie_pool, &movie_library, &movie_path, probed_version())
+            .await
+            .expect("movie upsert");
+        upsert_local_file(
+            &movie_pool,
+            &movie_library,
+            &movie_remaster_path,
+            probed_version(),
+        )
+        .await
+        .expect("upscaled movie upsert");
+        link_alternate_versions_for_library_path(&movie_pool, &movie_library)
+            .await
+            .expect("link movie versions");
+        assert_primary_and_remaster_alternate(&movie_pool, &movie_path, &movie_remaster_path).await;
+
+        let song_temp = TempDir::new().expect("song temp dir");
+        let song_path = song_temp.path().join("Around The World.flac");
+        let song_remaster_path = song_temp.path().join("Around The World (Remastered).flac");
+        std::fs::write(&song_path, b"not probed").expect("song");
+        std::fs::write(&song_remaster_path, b"not probed").expect("song remaster");
+        let song_pool = test_db().await;
+        let song_library = seed_song_library(&song_pool, song_temp.path()).await;
+        upsert_local_file(&song_pool, &song_library, &song_path, probed_version())
+            .await
+            .expect("song upsert");
+        upsert_local_file(
+            &song_pool,
+            &song_library,
+            &song_remaster_path,
+            probed_version(),
+        )
+        .await
+        .expect("song remaster upsert");
+        link_alternate_versions_for_library_path(&song_pool, &song_library)
+            .await
+            .expect("link song versions");
+        assert_primary_and_remaster_alternate(&song_pool, &song_path, &song_remaster_path).await;
     }
 
     #[cfg(not(feature = "mysql"))]
@@ -3530,6 +3877,53 @@ content_rating: TV-PG
     }
 
     #[cfg(not(feature = "mysql"))]
+    async fn assert_primary_and_remaster_alternate(
+        pool: &sqlx::SqlitePool,
+        primary_path: &Path,
+        remaster_path: &Path,
+    ) {
+        use sqlx::Row;
+
+        let primary_id = media_item_id_for_path(pool, primary_path).await;
+        let remaster_id = media_item_id_for_path(pool, remaster_path).await;
+        let primary = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(primary_id)
+        .fetch_one(pool)
+        .await
+        .expect("primary row");
+        assert_eq!(
+            primary.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::Primary.db_value()
+        );
+        assert!(primary.get::<Option<String>, _>("SubKind").is_none());
+        assert!(primary.get::<Option<i64>, _>("ParentMediaItemId").is_none());
+
+        let remaster = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(remaster_id)
+        .fetch_one(pool)
+        .await
+        .expect("remaster row");
+        assert_eq!(
+            remaster.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            remaster.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("remaster")
+        );
+        assert_eq!(
+            remaster.get::<Option<i64>, _>("ParentMediaItemId"),
+            Some(primary_id)
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
     async fn seed_movie_library(pool: &sqlx::SqlitePool, path: &Path) {
         use sqlx::Executor;
 
@@ -3910,8 +4304,8 @@ content_rating: TV-PG
     #[cfg(not(feature = "mysql"))]
     mod music_video_enrichment {
         use super::super::{
-            upsert_artist_for_folder, upsert_local_music_video, LocalLibraryPath,
-            METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
+            delete_empty_artists, upsert_artist_for_folder, upsert_local_music_video,
+            LocalLibraryPath, METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
         };
         use chrono::Duration;
         use ersatzrs_domain::{LibraryMediaKind, MediaVersion, VideoScanKind};
@@ -4037,6 +4431,85 @@ content_rating: TV-PG
             );
             assert!(row.get::<Option<String>, _>("Album").is_none());
             assert!(row.get::<Option<i32>, _>("Track").is_none());
+        }
+
+        #[tokio::test]
+        async fn disambiguation_change_replaces_and_cleans_up_artist_identity() {
+            let temp = TempDir::new().expect("temp dir");
+            let library_path = seed_music_video_library_path(temp.path());
+            let artist_dir = temp.path().join("Talking Heads");
+            std::fs::create_dir_all(&artist_dir).expect("artist dir");
+            let video_path = artist_dir.join("Once in a Lifetime.mkv");
+            std::fs::write(&video_path, b"not probed").expect("video file");
+            let artist_nfo = artist_dir.join("artist.nfo");
+            std::fs::write(
+                &artist_nfo,
+                r"<artist><name>Talking Heads</name><disambiguation>American rock band</disambiguation></artist>",
+            )
+            .expect("initial artist nfo");
+
+            let pool = test_db().await;
+            seed_music_video_library(&pool, &library_path).await;
+            let original_artist_id =
+                upsert_artist_for_folder(&pool, &library_path, "Talking Heads")
+                    .await
+                    .expect("original artist");
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                original_artist_id,
+                &artist_dir,
+                &video_path,
+                probed_version(),
+            )
+            .await
+            .expect("original music video upsert");
+
+            std::fs::write(
+                &artist_nfo,
+                r"<artist><name>Talking Heads</name><disambiguation>New wave pioneers</disambiguation></artist>",
+            )
+            .expect("updated artist nfo");
+            let replacement_artist_id =
+                upsert_artist_for_folder(&pool, &library_path, "Talking Heads")
+                    .await
+                    .expect("replacement artist");
+            assert_ne!(replacement_artist_id, original_artist_id);
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                replacement_artist_id,
+                &artist_dir,
+                &video_path,
+                probed_version(),
+            )
+            .await
+            .expect("replacement music video upsert");
+            assert_eq!(count(&pool, "Artist").await, 2);
+
+            assert_eq!(
+                delete_empty_artists(&pool, library_path.id)
+                    .await
+                    .expect("empty artist cleanup"),
+                vec![original_artist_id]
+            );
+            assert_eq!(count(&pool, "Artist").await, 1);
+            assert_eq!(count(&pool, "ArtistMetadata").await, 1);
+            assert_eq!(count(&pool, "MediaItem").await, 2);
+
+            let row = sqlx::query(
+                r#"SELECT "mv"."ArtistId", "am"."Disambiguation"
+                   FROM "MusicVideo" AS "mv"
+                   JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "mv"."ArtistId""#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("replacement artist identity");
+            assert_eq!(row.get::<i64, _>("ArtistId"), replacement_artist_id);
+            assert_eq!(
+                row.get::<Option<String>, _>("Disambiguation").as_deref(),
+                Some("New wave pioneers")
+            );
         }
 
         fn seed_music_video_library_path(path: &Path) -> LocalLibraryPath {

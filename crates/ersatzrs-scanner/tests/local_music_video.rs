@@ -211,6 +211,89 @@ async fn local_music_video_scan_resolves_bare_basename_thumbnail() {
     );
 }
 
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
+async fn local_music_video_rescan_keeps_one_artist_when_nfo_name_diverges_from_folder() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-artist-rescan");
+    let library_root = temp.path().join("library");
+    let artist_dir = library_root.join("Talking Heads");
+    std::fs::create_dir_all(&artist_dir).unwrap();
+    std::fs::write(artist_dir.join("thumb.jpg"), b"\x00").unwrap();
+    std::fs::write(artist_dir.join("fanart.jpg"), b"\x00").unwrap();
+    std::fs::copy(fixture, artist_dir.join("Once in a Lifetime.mkv")).unwrap();
+    // The NFO's <name> deliberately differs from the disk folder name
+    // ("Talking Heads"), matching ErsatzTV's ArtistRepository.GetArtistByMetadata,
+    // which re-identifies an existing artist by the freshly-parsed title (plus
+    // Disambiguation when an NFO is present), never by the raw folder name.
+    std::fs::write(
+        artist_dir.join("artist.nfo"),
+        r"<artist><name>Talking Heads (band)</name></artist>",
+    )
+    .unwrap();
+
+    let pool = test_db().await;
+    seed_local_library(
+        &pool,
+        library_root.as_path(),
+        /* MediaKind = */ 3, /* MusicVideos */
+    )
+    .await;
+
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+    scan_local_library(&pool, &config).await.unwrap();
+    std::fs::write(
+        artist_dir.join("artist.nfo"),
+        r"<artist><name>Talking Heads (band)</name><disambiguation>New wave pioneers</disambiguation></artist>",
+    )
+    .unwrap();
+    scan_local_library(&pool, &config).await.unwrap();
+
+    assert_eq!(
+        count(&pool, "Artist").await,
+        1,
+        "a rescan must clean up the old artist when NFO disambiguation changes"
+    );
+    assert_eq!(count(&pool, "ArtistMetadata").await, 1);
+    let disambiguation: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Disambiguation" FROM "ArtistMetadata" LIMIT 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(disambiguation.as_deref(), Some("New wave pioneers"));
+
+    let artist_thumbnail_count: i64 = sqlx::query(
+        r#"SELECT COUNT(*) AS "Count" FROM "Artwork"
+           WHERE "ArtistMetadataId" IS NOT NULL AND "ArtworkKind" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("Count");
+    assert_eq!(artist_thumbnail_count, 1);
+
+    let artist_fanart_count: i64 = sqlx::query(
+        r#"SELECT COUNT(*) AS "Count" FROM "Artwork"
+           WHERE "ArtistMetadataId" IS NOT NULL AND "ArtworkKind" = 3"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("Count");
+    assert_eq!(artist_fanart_count, 1);
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

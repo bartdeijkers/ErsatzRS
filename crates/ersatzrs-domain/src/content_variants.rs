@@ -199,6 +199,8 @@ fn detect_alternate_token(normalized: &str) -> Option<VersionToken> {
         ("extended mix", "extended"),
         ("extended version", "extended"),
         ("extended", "extended"),
+        ("upscaled", "remaster"),
+        ("upscale", "remaster"),
         ("remastered", "remaster"),
         ("remaster", "remaster"),
         ("remix", "remix"),
@@ -265,6 +267,8 @@ fn strip_version_tokens(value: &str) -> String {
         "extended version",
         "extended mix",
         "studio version",
+        "upscaled",
+        "upscale",
         "remastered",
         "remaster",
         "remix",
@@ -382,6 +386,11 @@ mod tests {
         assert_eq!(official.base_title, "song");
         assert_eq!(official.sub_kind, None);
         assert!(official.canonical_hint);
+
+        let upscaled = classify_alternate_version(Path::new("/library"), "Song (Upscaled)", None);
+        assert_eq!(upscaled.base_title, "song");
+        assert_eq!(upscaled.sub_kind.as_deref(), Some("remaster"));
+        assert!(!upscaled.canonical_hint);
 
         let unmarked = classify_alternate_version(Path::new("/library"), "Live Wire", None);
         assert_eq!(unmarked.base_title, "Live Wire");

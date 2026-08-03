@@ -20,11 +20,10 @@ The health engine reports Search Projection readiness for these fields.
 The admin media UI always shows variants in media browse pages, renders
 localized variant badges, renders TV show/season specials as episode-style
 rows, links Extras / Special Features or Versions sections from detail pages,
-and surfaces the search tokens. The local scanner imports movie/show extras as
-typed `OtherVideo` rows, links owner folders/stems when unambiguous, and
-classifies local music-video, song, and movie alternates such as unplugged,
-live, acoustic, remix, remaster, extended, and director-cut renditions while
-keeping canonical primaries unchanged.
+and surfaces the search tokens. The local scanner imports typed movie/show
+extras, links unambiguous owners, and classifies common music-video, song, and
+movie alternates. Primaries stay unchanged except for an available music-video
+`remaster` (`upscaled` alias), promoted over an official_video sibling.
 
 Commentary-bearing smart collections now feed channels whose preferred audio
 title or custom stream selector pins commentary audio/subtitles in direct
@@ -133,6 +132,14 @@ adr         = '0018'
 description = 'Phase 5 remains open: templated smart collections and schedule/filler examples for unplugged renditions, commentary channels, and featurette-before-movie pre-roll are not shipped.'
 discovered  = '2026-06-23'
 evidence    = 'Resolved 2026-06-24: `ersatzrs-core::content_variants` now ships smart-collection examples for unplugged renditions, commentary movies, featurette pre-roll, and primary movies, plus builders for the featurette pre-roll filler preset and movie schedule item. `docs/how-to/schedule-content-variants.md` documents the operator workflow. Covered by content_variants::tests::examples_use_variant_tokens_that_opt_into_hidden_rows, content_variants::tests::featurette_pre_roll_templates_do_not_attach_to_a_schedule_by_default, and scheduling_repository::scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll; focused gates passed.'
+resolved    = true
+
+[[debt]]
+id          = 'remaster-not-preferred-as-canonical'
+adr         = '0018'
+description = 'A remastered music video was not preferred as the canonical primary: a lone remaster (e.g. an "Official Music Video (Remastered)" reupload with no separate original file) was classified as an orphaned AlternateVersion instead of the video, and a remaster found alongside an untagged original master lost the canonical-primary pick to that plain/official-marked master via canonical_hint precedence, leaving the higher-quality remaster demoted into Versions instead of preferred for playout.'
+discovered  = '2026-08-03'
+evidence    = 'Fixed 2026-08-03: domain classification normalizes `upscaled`/`upscale` as `remaster`; apply_alternate_version_group prefers an available remaster only for MusicVideos. A lone enhanced rendition becomes Primary; with siblings it becomes canonical and the untagged original becomes `official_video`. Missing files are flagged before linking and cannot become canonical, so deleting the enhanced rendition restores its playable original on the same rescan. Movie and song renditions retain normal alternate-version behavior. Covered by content_variants::tests::classifies_alternate_version_tokens_without_rewriting_unmarked_titles, music_video_solo_upscale_becomes_primary_with_no_versions, music_video_remaster_promoted_over_untagged_master_demotes_it_to_versions, and movie_and_song_enhanced_versions_do_not_replace_untagged_primaries.'
 resolved    = true
 
 [[debt]]

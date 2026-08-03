@@ -92,7 +92,7 @@ pub fn normalize_sub_kind_token(value: &str) -> Option<String> {
         "unplugged" => "unplugged",
         "acoustic" => "acoustic",
         "remixes" | "remix" => "remix",
-        "remastered" | "remasters" | "remaster" => "remaster",
+        "remastered" | "remasters" | "remaster" | "upscaled" | "upscales" | "upscale" => "remaster",
         "extended_cut" | "extended_mix" | "extended_version" | "extended" => "extended",
         "directorscut" | "director_cut" | "director_s_cut" | "directors_cut" => "directors_cut",
         _ => token.as_str(),

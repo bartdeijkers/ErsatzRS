@@ -96,6 +96,13 @@ evidence    = 'Fixed 2026-08-03: crates/ersatzrs-scanner/src/lib.rs locate_music
 resolved    = true
 
 [[debt]]
+id          = 'artist-rescan-title-mismatch-duplication'
+description = 'upsert_artist_for_folder re-identified an existing artist across rescans by comparing stored ArtistMetadata.Title against the raw disk folder name, instead of the freshly re-parsed title/disambiguation for this scan pass. Any artist folder whose artist.nfo <name> diverges from the literal folder name (common — sanitized/punctuation-stripped folder names) failed this match on every rescan after the NFO first changed the stored title, spawning a fresh duplicate Artist/ArtistMetadata row (each with its own correctly-attached artwork) on every subsequent scan. Reproduced live against a real running ersatzrs-web + ersatzrs-scanner instance: confirmed the duplicate rendered as two artist cards, both with correct thumbnails, not as a missing-artwork card — this bug alone does not explain a "no artist artwork" report, but it is a genuine, reproducible parity divergence.'
+discovered  = '2026-08-03'
+evidence    = 'Fixed 2026-08-03: crates/ersatzrs-scanner/src/lib.rs upsert_artist_for_folder now matches ErsatzTV.Infrastructure/Data/Repositories/ArtistRepository.cs GetArtistByMetadata semantics: compares stored Title against the freshly-resolved title for this scan pass, plus Disambiguation when this scan has an NFO (metadata_kind != Fallback), scoped to the same LibraryPathId. The trailing music-video scan pass also ports ArtistRepository.DeleteEmptyArtists, deleting an old artist identity after its music videos move to a replacement identity (such as when disambiguation changes). Covered by disambiguation_change_replaces_and_cleans_up_artist_identity and local_music_video_rescan_keeps_one_artist_when_nfo_name_diverges_from_folder. Note: the ersatzrs-web scheduler runs a periodic background library-scan loop, so this bug was reachable without any manual rescan click.'
+resolved    = true
+
+[[debt]]
 id          = 'media-server-unavailable-branch-unexercised'
 description = 'The media-server Unavailable (State=2) flag path needed coverage for the generic ErsatzTV branch where a media-server scanner does not support remote streaming.'
 discovered  = '2026-06-17'
