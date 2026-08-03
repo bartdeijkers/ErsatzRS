@@ -40,6 +40,11 @@ release section when tagging a release.
   affected Classic playouts (including legacy textual schedule-kind rows),
   later Continue builds retain the same guard, and the localized health report
   exposes any state that cannot be repaired safely.
+- Fixed music video cards showing the letter-placeholder instead of a
+  thumbnail for the common same-basename-image sidecar convention (e.g.
+  `Song.jpg` next to `Song.mkv`, with no `-thumb` suffix). Local scanning now
+  recognizes the bare same-basename image as Thumbnail artwork, matching
+  ErsatzTV's `MusicVideoFolderScanner.LocateThumbnail` behavior.
 
 ## [1.0.17-beta] - 2026-08-02
 

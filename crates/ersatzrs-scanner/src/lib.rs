@@ -1078,7 +1078,7 @@ fn locate_artist_nfo(artist_folder: &Path) -> Option<PathBuf> {
 }
 
 fn locate_artist_artwork(artist_folder: &Path, names: &[&str]) -> Option<PathBuf> {
-    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "tbn", "webp"];
     for name in names {
         for ext in EXTENSIONS {
             let candidate = artist_folder.join(format!("{name}.{ext}"));
@@ -1287,9 +1287,13 @@ async fn upsert_local_music_video(
     {
         artwork.push(artwork_ref(&poster, artwork_kind::POSTER));
     }
-    if let Some(thumb) =
-        locate_music_video_artwork(path, artist_folder, &["thumb"], &["-thumb"], &[".tbn"])
-    {
+    if let Some(thumb) = locate_music_video_artwork(
+        path,
+        artist_folder,
+        &["thumb"],
+        &["-thumb"],
+        &[".jpg", ".jpeg", ".png", ".gif", ".tbn", ".webp"],
+    ) {
         artwork.push(artwork_ref(&thumb, artwork_kind::THUMBNAIL));
     }
     if let Some(fanart) = locate_music_video_artwork(
@@ -1399,7 +1403,8 @@ fn locate_music_video_nfo(video_path: &Path) -> Option<PathBuf> {
 /// Locate music-video artwork following `ErsatzTV`'s discovery order:
 /// 1. `{video_basename}{per_video_suffix}.{ext}` next to the video
 ///    (e.g. `Song-poster.jpg`, `Song-thumb.png`).
-/// 2. Bare `{video_basename}{exact_ext}` (used for `.tbn`).
+/// 2. Bare `{video_basename}{exact_ext}` (e.g. bare `Song.jpg`, the primary
+///    Thumbnail convention per `MusicVideoFolderScanner.LocateThumbnail`).
 /// 3. Generic `{folder_name}.{ext}` next to the video (e.g. `poster.jpg`).
 /// 4. Same generic name in the parent artist folder as a final fallback.
 fn locate_music_video_artwork(
@@ -1409,7 +1414,7 @@ fn locate_music_video_artwork(
     per_video_suffixes: &[&str],
     exact_extensions: &[&str],
 ) -> Option<PathBuf> {
-    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "tbn", "webp"];
     let video_dir = video_path.parent().unwrap_or(artist_folder);
     let basename = video_path.file_stem().and_then(|s| s.to_str())?;
 
@@ -2747,7 +2752,7 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_scannable_for_kind, path_hash, retry_sqlite_busy};
+    use super::{is_scannable_for_kind, locate_music_video_artwork, path_hash, retry_sqlite_busy};
     use ersatzrs_domain::{
         classify_alternate_version, classify_extra_directory_name, classify_extra_video,
         ExtraParentHint, LibraryMediaKind,
@@ -2780,6 +2785,33 @@ mod tests {
             Path::new("/media/song.flac"),
             LibraryMediaKind::Movies
         ));
+    }
+
+    #[test]
+    fn music_video_thumbnail_resolves_bare_same_basename_image() {
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let artist_folder = temp.path().join("Talking Heads");
+        std::fs::create_dir_all(&artist_folder).expect("artist folder");
+        let video_path = artist_folder.join("Once in a Lifetime.mkv");
+        std::fs::write(&video_path, b"\x00").expect("video file");
+
+        // No `-thumb` suffix and no generic `thumb.jpg` folder file — only
+        // the bare same-basename image ErsatzTV's `LocateThumbnail` treats
+        // as the primary Thumbnail convention.
+        std::fs::write(artist_folder.join("Once in a Lifetime.jpg"), b"\x00")
+            .expect("bare thumbnail image");
+
+        let resolved = locate_music_video_artwork(
+            &video_path,
+            &artist_folder,
+            &["thumb"],
+            &["-thumb"],
+            &[".jpg", ".jpeg", ".png", ".gif", ".tbn", ".webp"],
+        )
+        .expect("bare-basename thumbnail should resolve");
+        assert_eq!(resolved, artist_folder.join("Once in a Lifetime.jpg"));
     }
 
     #[test]

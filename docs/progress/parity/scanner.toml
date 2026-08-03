@@ -89,6 +89,13 @@ evidence    = 'Fixed 2026-06-19: scan_local_library_with_progress retries SQLite
 resolved    = true
 
 [[debt]]
+id          = 'music-video-bare-basename-thumbnail'
+description = 'Local music-video scanning never recognized the bare `{video_basename}.{ext}` sidecar image as Thumbnail artwork, so most real libraries (which use that convention, not `-thumb.jpg`) got no Artwork row and the admin UI showed the letter-placeholder instead of a thumbnail.'
+discovered  = '2026-08-03'
+evidence    = 'Fixed 2026-08-03: crates/ersatzrs-scanner/src/lib.rs locate_music_video_artwork is now called for THUMBNAIL with exact_extensions covering every image extension (not just .tbn), matching MusicVideoFolderScanner.LocateThumbnail ($ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MusicVideoFolderScanner.cs:554-569), which treats the bare same-basename file as its primary Thumbnail candidate. Also added the missing "gif" extension to the local EXTENSIONS lists (locate_artist_artwork, locate_music_video_artwork) to match ErsatzTV.Scanner LocalFolderScanner.ImageFileExtensions. Covered by tests::music_video_thumbnail_resolves_bare_same_basename_image and local_music_video_scan_resolves_bare_basename_thumbnail.'
+resolved    = true
+
+[[debt]]
 id          = 'media-server-unavailable-branch-unexercised'
 description = 'The media-server Unavailable (State=2) flag path needed coverage for the generic ErsatzTV branch where a media-server scanner does not support remote streaming.'
 discovered  = '2026-06-17'

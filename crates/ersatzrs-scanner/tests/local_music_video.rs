@@ -149,6 +149,68 @@ async fn local_music_video_scan_writes_full_metadata_and_child_rows() {
     assert_eq!(mv_kind, 1);
 }
 
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
+async fn local_music_video_scan_resolves_bare_basename_thumbnail() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-music-video-bare-thumb");
+    let library_root = temp.path().join("library");
+    let artist_dir = library_root.join("Talking Heads");
+    std::fs::create_dir_all(&artist_dir).unwrap();
+
+    let video_path = artist_dir.join("Psycho Killer.mkv");
+    std::fs::copy(fixture, &video_path).unwrap();
+
+    // Only a bare same-basename image next to the video — no `-thumb`
+    // suffix and no folder-level `thumb.jpg`/`poster.jpg` — the common
+    // Kodi/Jellyfin convention that ErsatzTV's
+    // `MusicVideoFolderScanner.LocateThumbnail` treats as its primary
+    // Thumbnail candidate.
+    std::fs::write(artist_dir.join("Psycho Killer.jpg"), b"\x00").unwrap();
+
+    let pool = test_db().await;
+    seed_local_library(
+        &pool,
+        library_root.as_path(),
+        /* MediaKind = */ 3, /* MusicVideos */
+    )
+    .await;
+
+    let report = scan_local_library(
+        &pool,
+        &LocalScanConfig {
+            library_id: 1,
+            ffprobe_path: ffprobe,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(report.scanned_files, 1);
+    assert_eq!(count(&pool, "MusicVideo").await, 1);
+
+    let thumbnail_count: i64 = sqlx::query(
+        r#"SELECT COUNT(*) AS "Count" FROM "Artwork"
+           WHERE "MusicVideoMetadataId" IS NOT NULL AND "ArtworkKind" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("Count");
+    assert_eq!(
+        thumbnail_count, 1,
+        "bare same-basename image should resolve to ArtworkKind::THUMBNAIL"
+    );
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
