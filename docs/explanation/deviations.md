@@ -178,3 +178,16 @@ ErsatzRS uses plain async use-case handlers and constructor-injected traits inst
 of recreating MediatR.
 
 ADR: [0001](../adr/0001-record-architecture-decisions.md)
+
+## Cue-aware burned-subtitle seek rebase
+
+ErsatzTV re-bases burned text-subtitle (SRT/ASS/WebVTT) cues for each HLS
+work-ahead chunk restart via an ffmpeg `-ss`-seeked stream copy, which
+silently drops any cue already displaying when the seek point lands mid-cue.
+ErsatzRS instead normalizes local or HTTP(S) UTF-8/UTF-16 sources, rewrites
+their cue timestamps directly, and clamps a straddling cue's start to the new
+chunk's zero instead of dropping it, so the cue keeps showing for its
+remaining visible duration. Inputs with unsupported syntax or encodings retain
+the previous FFmpeg seek-and-copy compatibility path.
+
+ADR: [0061](../adr/0061-cue-aware-subtitle-seek-rebase.md)

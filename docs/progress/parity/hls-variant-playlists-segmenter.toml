@@ -2,7 +2,7 @@ feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
-adr        = ['0015', '0016']
+adr        = ['0015', '0016', '0061']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
 multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
@@ -24,6 +24,11 @@ packet continuity-counter semantics when CBR muxing inserts PCR-only packets.
 
 Access control ports `ConditionalIptvAuthorizeFilter`; subtitles burn/overlay
 for the segmenter and HLS-direct copies compatible embedded image subtitles.
+Per-chunk burned text-subtitle seek rebase (ADR 0061) normalizes local or
+HTTP(S) UTF-8/UTF-16 sources and rewrites cue timestamps directly, clamping any
+cue that straddles a work-ahead chunk boundary instead of silently dropping
+it; unsupported syntax or encodings retain the prior FFmpeg compatibility
+fallback.
 StopOnDisconnect is implemented for segmenter and MPEG-TS hybrid wrapper paths,
 direct `.ts` response-body disposal is guarded, and sub-second seek offsets are
 preserved end-to-end instead of flooring to seconds.
@@ -120,4 +125,12 @@ id          = 'hls-mpegts-append-pts-rewind'
 description = 'HLS Segmenter MPEG-TS appends could replay the previous 4-second timestamp range when the next append offset was derived from lagging PCR state instead of the worker-owned successful append duration.'
 discovered  = '2026-06-30'
 evidence    = 'User reproduced freezes in VLC, Kodi, and MPC-HC. `scripts/e2e/tsduck-playback-gate.sh --seconds 60 --item-seconds 8 --frames --keep gate` reproduced 4 HLS Segmenter PTS leaps while legacy and hybrid MPEG-TS remained clean; per-segment probing showed adjacent HLS segments overlapping by one 4-second range. Fixed in `crates/ersatzrs-infra/src/hls_worker.rs` by advancing MPEG-TS HLS output timestamps from successful append duration and keeping PCR normalization only for packet continuity. The same 60-second gate then passed 64 checks with zero HLS Segmenter continuity-counter/PTS/DTS/PCR-leap faults and audio pip cadence max gap deviation 30 ms.'
+resolved    = true
+
+[[debt]]
+id          = 'hls-segmenter-straddling-subtitle-cue-drop'
+adr         = '0061'
+description = 'Burned text-subtitle (SRT/ASS/WebVTT) cues were silently dropped when an HLS work-ahead chunk restart (~44s cadence) landed mid-cue: the ffmpeg `-ss`-seeked stream-copy rebase decides packet inclusion by start time only, so a cue already displaying when the seek point lands never carries over into the new chunk instead of being clipped to its remaining visible duration.'
+discovered  = '2026-08-03'
+evidence    = 'A wholly synthetic external SubRip fixture reproduces the missing-cue behavior at a 44-second HttpLiveStreamingSegmenter work-ahead boundary. Confirmed the same mechanism exists in $ERSATZTV_SRC (PipelineBuilderBase.Seek + StreamSeekFilterOption + EncoderCopySubtitle) — not an ErsatzRS regression. Fixed in crates/ersatzrs-infra/src/subtitles.rs with an in-process cue rewrite that shifts every cue and clamps (instead of drops) a straddling cue to start at zero; it fetches HTTP(S) inputs, decodes UTF-8/BOM-marked UTF-16, accepts comma- or dot-separated SubRip timestamps and padded ASS event headers, and retains the prior FFmpeg seek as a fallback for unsupported syntax or encodings. The subtitle-seek cache directory was versioned (seek -> seek-v2) so stale pre-fix cached output cannot keep being served. Focused tests cover source normalization, compatibility fallback argv, dot-separated SRT, padded ASS event headers, separator-less SRT fallback, and the straddling-cue clamp per format.'
 resolved    = true

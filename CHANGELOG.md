@@ -60,6 +60,16 @@ release section when tagging a release.
   enhanced renditions are excluded from canonical selection so a remaining
   playable original becomes primary again, while movie and song renditions
   retain their existing alternate-version behavior.
+- Fixed burned-in text subtitle (SRT/ASS/WebVTT) lines silently disappearing
+  partway through HLS Segmenter playback whenever a work-ahead chunk restart
+  (roughly every 44 seconds) landed in the middle of a subtitle line already
+  on screen. The per-chunk subtitle rebase now rewrites cue timestamps
+  directly instead of an ffmpeg seek-and-copy pass, and clamps a straddling
+  cue to keep showing instead of dropping it. HTTP(S), UTF-8/UTF-16,
+  dot-separated SubRip, tab-separated WebVTT timing lines, padded ASS, and
+  extensionless provider ASS inputs retain their prior FFmpeg compatibility,
+  including a fallback for unsupported syntax. Remote fetch failures also
+  redact credential-bearing subtitle URLs from logs (ADR 0061).
 
 ## [1.0.17-beta] - 2026-08-02
 

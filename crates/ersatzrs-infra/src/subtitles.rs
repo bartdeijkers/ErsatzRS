@@ -8,7 +8,7 @@
 //! `ExtractEmbeddedSubtitles(playoutId)` after channel/settings/playout changes
 //! can require subtitles.
 //!
-//! Two deliberate divergences from ErsatzTV, both consistent with existing
+//! Deliberate divergences from ErsatzTV, all consistent with existing
 //! ErsatzRS patterns:
 //!   * **Input path**: ErsatzTV's `GetMediaItemPath` builds internal
 //!     streaming-proxy URLs for Plex/Jellyfin/Emby. ErsatzRS feeds ffmpeg the
@@ -21,6 +21,15 @@
 //!     through a localhost HTTP pipe. ErsatzRS writes the same re-based stream
 //!     to the subtitle cache and burns that temp file, matching the existing
 //!     file-cache model used for extracted subtitles.
+//!   * **Cue-aware seek rebase** (ADR 0061): ErsatzTV re-bases burned
+//!     text-subtitle cues via an ffmpeg `-ss`-seeked stream copy, which
+//!     silently drops any cue already displaying when the seek point lands
+//!     mid-cue (copy-mode seeking decides packet inclusion by start time
+//!     only). ErsatzRS normalizes local or HTTP(S) UTF-8/UTF-16 sources and
+//!     rewrites their cue timestamps directly ([`rebase_subtitle_cues`]),
+//!     clamping a straddling cue's start to the new chunk's zero instead of
+//!     dropping it. `FFmpeg` remains the compatibility fallback for syntax or
+//!     encodings the cue-aware rewriter cannot safely handle.
 use crate::repositories::SqlxResultExt as _;
 
 use std::path::{Path, PathBuf};
@@ -28,7 +37,7 @@ use std::path::{Path, PathBuf};
 use chrono::{Duration, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::Result;
-use ersatzrs_ffmpeg::{ffmpeg_path, InputFile, InputKind, SubtitleMethod};
+use ersatzrs_ffmpeg::{ffmpeg_path, InputFile, InputKind, SubtitleMethod, SubtitleTextFormat};
 use md5::{Digest, Md5};
 use sqlx::{Pool, Row};
 use tokio::process::Command;
@@ -98,7 +107,17 @@ fn subtitle_codec_arg(codec: &str) -> &'static str {
     }
 }
 
-fn seek_subtitle_output_format(input_path: &str) -> (&'static str, &'static str) {
+fn seek_subtitle_output_format(
+    input_path: &str,
+    format_hint: Option<SubtitleTextFormat>,
+) -> (&'static str, &'static str) {
+    match format_hint {
+        Some(SubtitleTextFormat::Ass) => return ("ass", "ass"),
+        Some(SubtitleTextFormat::WebVtt) => return ("webvtt", "vtt"),
+        Some(SubtitleTextFormat::Srt) => return ("srt", "srt"),
+        None => {}
+    }
+
     let extension_source = input_path.split(['?', '#']).next().unwrap_or(input_path);
     match Path::new(extension_source)
         .extension()
@@ -131,19 +150,26 @@ fn format_seek_seconds(seek_seconds: i64) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
-fn seek_subtitle_output_path(input_path: &str, seek_seconds: i64) -> PathBuf {
-    let (_, extension) = seek_subtitle_output_format(input_path);
+fn seek_subtitle_output_path(
+    input_path: &str,
+    format_hint: Option<SubtitleTextFormat>,
+    seek_seconds: i64,
+) -> PathBuf {
+    let (_, extension) = seek_subtitle_output_format(input_path, format_hint);
     let name = md5_upper_hex(input_path);
 
     subtitle_seek_cache_folder().join(format!("{name}_{seek_seconds}.{extension}"))
 }
 
-/// Build the ffmpeg playback subtitle seek argv, mirroring
-/// `PipelineBuilderBase.Seek`: read the text subtitle, output-seek to the
-/// current item offset, copy subtitle packets, and write the selected text
-/// container format.
-fn build_seek_subtitle_args(input_path: &str, seek_seconds: i64, out_path: &Path) -> Vec<String> {
-    let (format, _) = seek_subtitle_output_format(input_path);
+/// Build the compatibility ffmpeg subtitle-seek argv used when a supported
+/// source cannot be normalized or parsed by the cue-aware rewriter.
+fn build_seek_subtitle_args(
+    input_path: &str,
+    format_hint: Option<SubtitleTextFormat>,
+    seek_seconds: i64,
+    out_path: &Path,
+) -> Vec<String> {
+    let (format, _) = seek_subtitle_output_format(input_path, format_hint);
     vec![
         "-nostdin".to_owned(),
         "-hide_banner".to_owned(),
@@ -162,19 +188,493 @@ fn build_seek_subtitle_args(input_path: &str, seek_seconds: i64, out_path: &Path
     ]
 }
 
+#[derive(Debug, thiserror::Error)]
+enum SubtitleTextSourceError {
+    #[error("failed to read local subtitle: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("failed to fetch remote subtitle: {0}")]
+    Http(reqwest::Error),
+    #[error("subtitle is not valid UTF-8: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
+    #[error("subtitle is not valid UTF-16: {0}")]
+    Utf16(#[from] std::string::FromUtf16Error),
+    #[error("UTF-16 subtitle has an odd byte length")]
+    OddUtf16ByteLength,
+}
+
+/// Read a local or HTTP(S) subtitle source and normalize the encodings ffmpeg
+/// commonly accepts without an explicit character-set option. UTF-8 BOMs are
+/// stripped, and BOM-marked UTF-16 is decoded in its declared byte order.
+async fn read_subtitle_text_source(
+    input_path: &str,
+) -> std::result::Result<String, SubtitleTextSourceError> {
+    let bytes = if input_path.starts_with("http://") || input_path.starts_with("https://") {
+        reqwest::get(input_path)
+            .await
+            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
+            .error_for_status()
+            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
+            .bytes()
+            .await
+            .map_err(|error| SubtitleTextSourceError::Http(error.without_url()))?
+            .to_vec()
+    } else {
+        tokio::fs::read(input_path).await?
+    };
+
+    decode_subtitle_text(bytes)
+}
+
+fn decode_subtitle_text(
+    mut bytes: Vec<u8>,
+) -> std::result::Result<String, SubtitleTextSourceError> {
+    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        bytes.drain(..3);
+        return Ok(String::from_utf8(bytes)?);
+    }
+
+    let byte_order = if bytes.starts_with(&[0xFF, 0xFE]) {
+        Some(u16::from_le_bytes as fn([u8; 2]) -> u16)
+    } else if bytes.starts_with(&[0xFE, 0xFF]) {
+        Some(u16::from_be_bytes as fn([u8; 2]) -> u16)
+    } else {
+        None
+    };
+
+    let Some(decode_unit) = byte_order else {
+        return Ok(String::from_utf8(bytes)?);
+    };
+    let payload = &bytes[2..];
+    if !payload.len().is_multiple_of(2) {
+        return Err(SubtitleTextSourceError::OddUtf16ByteLength);
+    }
+    let units = payload
+        .chunks_exact(2)
+        .map(|chunk| decode_unit([chunk[0], chunk[1]]))
+        .collect::<Vec<_>>();
+    Ok(String::from_utf16(&units)?)
+}
+
+/// Cue timestamp grammar shared by the blank-line-block subtitle formats.
+/// SRT and `WebVTT` differ only in the decimal separator and whether the
+/// hour group may be omitted (`WebVTT`'s short `MM:SS.mmm` form).
+#[derive(Clone, Copy)]
+enum TimestampSyntax {
+    Srt,
+    WebVtt,
+}
+
+/// Rewritten subtitle text plus how many cues survived, so callers can tell
+/// "no cues remain" apart from a normal non-empty rewrite without
+/// re-scanning the output.
+struct RebasedSubtitle {
+    text: String,
+    remaining_cues: usize,
+}
+
+/// Why a cue-aware rebase could not be applied safely. Callers fall back to
+/// the previous ffmpeg seek-and-copy rebase on any of these.
+#[derive(Debug)]
+enum RebaseSubtitleError {
+    UnparseableCue,
+}
+
+/// A cue's fate after shifting by `-seek_units` (same sub-second unit as
+/// `start`/`end`: ms for SRT/`WebVTT`, centiseconds for ASS).
+enum CueDecision {
+    Drop,
+    Keep { start: i64, end: i64 },
+}
+
+/// A format's cue-timestamp parse/format function pair, selected once per
+/// [`rebase_line_block_cues`] call by [`TimestampSyntax`].
+type TimestampParseFn = fn(&str) -> Option<i64>;
+type TimestampFormatFn = fn(i64) -> String;
+
+/// Shift a cue's `[start, end)` window by `-seek_units`. A cue that's fully
+/// in the past after the shift is dropped; a cue that straddles the seek
+/// point (`start` goes negative but `end` stays positive) is **clamped** to
+/// start at `0` instead of being dropped, so it keeps displaying for its
+/// remaining visible duration in the new chunk. This clamp is the fix for
+/// ADR 0061: ErsatzTV's ffmpeg `-ss`-seeked stream-copy rebase silently
+/// drops any cue already on screen when the seek point lands mid-cue,
+/// because copy-mode seeking decides packet inclusion by start time only.
+fn shift_cue(start: i64, end: i64, seek_units: i64) -> CueDecision {
+    let shifted_end = end - seek_units;
+    if shifted_end <= 0 {
+        CueDecision::Drop
+    } else {
+        let shifted_start = (start - seek_units).max(0);
+        CueDecision::Keep {
+            start: shifted_start,
+            end: shifted_end,
+        }
+    }
+}
+
+/// Parse a `[[H]H:]MM:SS<sep>fff` timestamp (hour group required for SRT,
+/// optional for `WebVTT`'s short form) to whole milliseconds.
+fn parse_hms_millis(text: &str, sep: char) -> Option<i64> {
+    let text = text.trim();
+    let (whole, fraction) = text.split_once(sep)?;
+    let millis = parse_fraction_digits(fraction, 3)?;
+    let parts: Vec<&str> = whole.split(':').collect();
+    let (hours, minutes, seconds): (i64, i64, i64) = match parts.as_slice() {
+        [h, m, s] => (h.parse().ok()?, m.parse().ok()?, s.parse().ok()?),
+        [m, s] => (0, m.parse().ok()?, s.parse().ok()?),
+        _ => return None,
+    };
+    if !(0..60).contains(&minutes) || !(0..60).contains(&seconds) {
+        return None;
+    }
+    Some(((hours * 60 + minutes) * 60 + seconds) * 1_000 + millis)
+}
+
+/// Parse a right-padded/truncated fractional-second digit string to a fixed
+/// `width`-digit integer (e.g. `width = 3` for milliseconds).
+fn parse_fraction_digits(fraction: &str, width: usize) -> Option<i64> {
+    if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let mut digits = fraction.to_owned();
+    match digits.len().cmp(&width) {
+        std::cmp::Ordering::Less => digits.push_str(&"0".repeat(width - digits.len())),
+        std::cmp::Ordering::Greater => digits.truncate(width),
+        std::cmp::Ordering::Equal => {}
+    }
+    digits.parse().ok()
+}
+
+fn parse_srt_timestamp(text: &str) -> Option<i64> {
+    parse_hms_millis(text, ',').or_else(|| parse_hms_millis(text, '.'))
+}
+
+fn format_srt_timestamp(ms: i64) -> String {
+    format_hms_millis(ms, ',')
+}
+
+fn parse_vtt_timestamp(text: &str) -> Option<i64> {
+    parse_hms_millis(text, '.')
+}
+
+fn format_vtt_timestamp(ms: i64) -> String {
+    format_hms_millis(ms, '.')
+}
+
+fn format_hms_millis(ms: i64, sep: char) -> String {
+    let ms = ms.max(0);
+    let hours = ms / 3_600_000;
+    let minutes = (ms / 60_000) % 60;
+    let seconds = (ms / 1_000) % 60;
+    let millis = ms % 1_000;
+    format!("{hours:02}:{minutes:02}:{seconds:02}{sep}{millis:03}")
+}
+
+/// ASS/SSA timestamps are `H:MM:SS.cc` (centiseconds, hour not zero-padded).
+fn parse_ass_timestamp(text: &str) -> Option<i64> {
+    let text = text.trim();
+    let (whole, fraction) = text.split_once('.')?;
+    let centis = parse_fraction_digits(fraction, 2)?;
+    let parts: Vec<&str> = whole.split(':').collect();
+    let [h, m, s] = parts.as_slice() else {
+        return None;
+    };
+    let hours: i64 = h.parse().ok()?;
+    let minutes: i64 = m.parse().ok()?;
+    let seconds: i64 = s.parse().ok()?;
+    if !(0..60).contains(&minutes) || !(0..60).contains(&seconds) {
+        return None;
+    }
+    Some(((hours * 60 + minutes) * 60 + seconds) * 100 + centis)
+}
+
+fn format_ass_timestamp(cs: i64) -> String {
+    let cs = cs.max(0);
+    let hours = cs / 360_000;
+    let minutes = (cs / 6_000) % 60;
+    let seconds = (cs / 100) % 60;
+    let centis = cs % 100;
+    format!("{hours}:{minutes:02}:{seconds:02}.{centis:02}")
+}
+
+/// Case-insensitive prefix strip that never panics on a short/non-ASCII-boundary line.
+fn strip_prefix_ci<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = line.get(..prefix.len())?;
+    if head.eq_ignore_ascii_case(prefix) {
+        Some(line[prefix.len()..].trim_start())
+    } else {
+        None
+    }
+}
+
+/// Rewrite every cue's timestamps in `content` for `seek_seconds`, dispatched
+/// by the format `seek_subtitle_output_format` selected (`"srt"`, `"ass"`, or
+/// `"webvtt"`).
+fn rebase_subtitle_cues(
+    content: &str,
+    format: &str,
+    seek_seconds: i64,
+) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
+    match format {
+        "ass" => rebase_ass_cues(content, seek_seconds),
+        "webvtt" => rebase_line_block_cues(content, seek_seconds, TimestampSyntax::WebVtt),
+        _ => rebase_line_block_cues(content, seek_seconds, TimestampSyntax::Srt),
+    }
+}
+
+/// SRT/`WebVTT` engine: cues are blank-line-delimited blocks containing one
+/// `-->`-separated timestamp line, with ASCII whitespace (including tabs)
+/// around the arrow. A block containing multiple timing lines is rejected so
+/// the complete file takes the `FFmpeg` compatibility path instead of being
+/// partially rewritten. `WebVTT`'s leading `WEBVTT` header and any
+/// `NOTE`/`STYLE`/`REGION` blocks pass through untouched.
+fn rebase_line_block_cues(
+    content: &str,
+    seek_seconds: i64,
+    syntax: TimestampSyntax,
+) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
+    let seek_units = seek_seconds * 1_000;
+    let (parse, format): (TimestampParseFn, TimestampFormatFn) = match syntax {
+        TimestampSyntax::Srt => (parse_srt_timestamp, format_srt_timestamp),
+        TimestampSyntax::WebVtt => (parse_vtt_timestamp, format_vtt_timestamp),
+    };
+
+    let mut blocks: Vec<Vec<&str>> = Vec::new();
+    let mut current: Vec<&str> = Vec::new();
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            if !current.is_empty() {
+                blocks.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push(line);
+        }
+    }
+    if !current.is_empty() {
+        blocks.push(current);
+    }
+
+    let mut out = String::new();
+    let mut remaining_cues = 0_usize;
+    let mut recognized_cues = 0_usize;
+    let mut sequence = 0_usize;
+    let mut first_block = true;
+
+    for block in blocks {
+        let mut timing_lines = block.iter().enumerate().filter_map(|(index, line)| {
+            split_subtitle_timing_line(line).map(|parts| (index, parts))
+        });
+        let Some((timestamp_line_index, (start_text, rest))) = timing_lines.next() else {
+            if !first_block {
+                out.push('\n');
+            }
+            first_block = false;
+            for line in &block {
+                out.push_str(line);
+                out.push('\n');
+            }
+            continue;
+        };
+        if timing_lines.next().is_some() {
+            return Err(RebaseSubtitleError::UnparseableCue);
+        }
+
+        recognized_cues += 1;
+        // WebVTT allows trailing cue settings after the end timestamp
+        // (`align:start position:10%`); split off only the first token as
+        // the end time and keep the rest untouched.
+        let (end_text, settings_suffix) = match rest.split_once(char::is_whitespace) {
+            Some((end, suffix)) => (end, Some(suffix)),
+            None => (rest, None),
+        };
+        let start = parse(start_text.trim()).ok_or(RebaseSubtitleError::UnparseableCue)?;
+        let end = parse(end_text.trim()).ok_or(RebaseSubtitleError::UnparseableCue)?;
+
+        let CueDecision::Keep { start, end } = shift_cue(start, end, seek_units) else {
+            continue;
+        };
+
+        if !first_block {
+            out.push('\n');
+        }
+        first_block = false;
+        remaining_cues += 1;
+
+        for (index, line) in block.iter().enumerate() {
+            if index == timestamp_line_index {
+                out.push_str(&format(start));
+                out.push_str(" --> ");
+                out.push_str(&format(end));
+                if let Some(suffix) = settings_suffix {
+                    out.push(' ');
+                    out.push_str(suffix);
+                }
+            } else if index == 0 && matches!(syntax, TimestampSyntax::Srt) {
+                // SRT sequence number: renumber sequentially for kept cues
+                // (matches the previous ffmpeg-muxer's own behavior — the
+                // index is regenerated metadata either way).
+                sequence += 1;
+                out.push_str(&sequence.to_string());
+            } else {
+                out.push_str(line);
+            }
+            out.push('\n');
+        }
+    }
+
+    if recognized_cues == 0 {
+        return Err(RebaseSubtitleError::UnparseableCue);
+    }
+
+    Ok(RebasedSubtitle {
+        text: out,
+        remaining_cues,
+    })
+}
+
+/// Split an SRT/WebVTT cue timing line around `-->`, accepting the ASCII
+/// whitespace that both formats permit around the arrow (including tabs).
+fn split_subtitle_timing_line(line: &str) -> Option<(&str, &str)> {
+    let arrow = line.find("-->")?;
+    let (start, tail) = line.split_at(arrow);
+    let rest = &tail[3..];
+    if !start
+        .chars()
+        .next_back()
+        .is_some_and(|ch| ch.is_ascii_whitespace())
+        || !rest
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_whitespace())
+    {
+        return None;
+    }
+    Some((
+        start.trim_end_matches(|ch: char| ch.is_ascii_whitespace()),
+        rest.trim_start_matches(|ch: char| ch.is_ascii_whitespace()),
+    ))
+}
+
+/// ASS/SSA engine: only `Dialogue:` lines inside `[Events]` are touched. ASCII
+/// whitespace around the section name inside the brackets is accepted.
+/// `Start`/`End` field positions are located from the section's own
+/// `Format:` line (never assumed fixed), and each `Dialogue:` line is split
+/// with `splitn(field_count, ',')` so the last field (`Text`, which may
+/// contain literal commas inside override tags like `\move(x1,y1,x2,y2)`)
+/// stays intact.
+fn rebase_ass_cues(
+    content: &str,
+    seek_seconds: i64,
+) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
+    let seek_units = seek_seconds * 100;
+
+    let mut out = String::new();
+    let mut remaining_cues = 0_usize;
+    let mut recognized_cues = 0_usize;
+    let mut in_events = false;
+    let mut fields: Vec<String> = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('[') {
+            in_events = trimmed
+                .strip_prefix('[')
+                .and_then(|section| section.strip_suffix(']'))
+                .is_some_and(|section| section.trim().eq_ignore_ascii_case("events"));
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+
+        if in_events {
+            if let Some(rest) = strip_prefix_ci(trimmed, "Format:") {
+                fields = rest
+                    .split(',')
+                    .map(|field| field.trim().to_ascii_lowercase())
+                    .collect();
+                out.push_str(line);
+                out.push('\n');
+                continue;
+            }
+
+            if let Some(rest) = strip_prefix_ci(trimmed, "Dialogue:") {
+                let start_index = fields.iter().position(|field| field == "start");
+                let end_index = fields.iter().position(|field| field == "end");
+                let (Some(start_index), Some(end_index)) = (start_index, end_index) else {
+                    return Err(RebaseSubtitleError::UnparseableCue);
+                };
+
+                let mut parts: Vec<&str> = rest.splitn(fields.len(), ',').collect();
+                if parts.len() != fields.len() {
+                    return Err(RebaseSubtitleError::UnparseableCue);
+                }
+                let start = parse_ass_timestamp(parts[start_index].trim())
+                    .ok_or(RebaseSubtitleError::UnparseableCue)?;
+                let end = parse_ass_timestamp(parts[end_index].trim())
+                    .ok_or(RebaseSubtitleError::UnparseableCue)?;
+                recognized_cues += 1;
+
+                let CueDecision::Keep { start, end } = shift_cue(start, end, seek_units) else {
+                    continue;
+                };
+                remaining_cues += 1;
+
+                let formatted_start = format_ass_timestamp(start);
+                let formatted_end = format_ass_timestamp(end);
+                parts[start_index] = &formatted_start;
+                parts[end_index] = &formatted_end;
+
+                out.push_str("Dialogue: ");
+                out.push_str(&parts.join(","));
+                out.push('\n');
+                continue;
+            }
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if recognized_cues == 0 {
+        return Err(RebaseSubtitleError::UnparseableCue);
+    }
+
+    Ok(RebasedSubtitle {
+        text: out,
+        remaining_cues,
+    })
+}
+
 /// Re-base a text subtitle file to `seek_seconds` for burned playback.
 ///
-/// Returns `input_path` unchanged for zero/negative seeks and falls back to the
-/// original path on all ffmpeg/cache failures so playback remains no worse than
-/// the pre-existing behavior. Returns `None` when the seek lands past the last
-/// cue: ffmpeg then writes an empty file that libass cannot open, so the burn
-/// must be skipped entirely instead of crashing the transcode.
+/// Rewrites normalized cue timestamps directly (see ADR 0061):
+/// every cue is shifted by `-seek_seconds`, a cue fully in the past after the
+/// shift is dropped, and a cue that straddles the seek point (already
+/// displaying when it lands) is clamped to start at `0` instead of being
+/// dropped, so it keeps showing for its remaining visible duration in the new
+/// chunk.
+///
+/// Local and HTTP(S) sources are normalized to Unicode before parsing,
+/// including UTF-8 and BOM-marked UTF-16. If normalization or cue parsing is
+/// unsupported, the previous ffmpeg seek-and-copy rebase remains as a
+/// compatibility fallback rather than passing absolute cue timestamps to a
+/// zero-based playback chunk. Returns `None` when no cues remain after
+/// rebasing: an empty file is written and cached as a skip-burn marker.
 pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> Option<String> {
+    rebase_text_subtitle_with_format(input_path, None, seek_seconds).await
+}
+
+async fn rebase_text_subtitle_with_format(
+    input_path: &str,
+    format_hint: Option<SubtitleTextFormat>,
+    seek_seconds: i64,
+) -> Option<String> {
     if seek_seconds <= 0 {
         return Some(input_path.to_owned());
     }
 
-    let output_path = seek_subtitle_output_path(input_path, seek_seconds);
+    let output_path = seek_subtitle_output_path(input_path, format_hint, seek_seconds);
     if output_path.exists() {
         return non_empty_subtitle_path(&output_path).await;
     }
@@ -191,30 +691,93 @@ pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> Option
         }
     }
 
-    let ffmpeg_path = ffmpeg_path();
-    let args = build_seek_subtitle_args(input_path, seek_seconds, &output_path);
-    let output = match Command::new(&ffmpeg_path).args(&args).output().await {
+    let content = match read_subtitle_text_source(input_path).await {
+        Ok(content) => content,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                input_hash = %md5_upper_hex(input_path),
+                seek_seconds,
+                "failed to normalize subtitle for cue-aware playback seek; falling back to ffmpeg"
+            );
+            return rebase_text_subtitle_with_ffmpeg(
+                input_path,
+                format_hint,
+                seek_seconds,
+                &output_path,
+            )
+            .await;
+        }
+    };
+
+    let (format, _extension) = seek_subtitle_output_format(input_path, format_hint);
+    let rebased = match rebase_subtitle_cues(&content, format, seek_seconds) {
+        Ok(rebased) => rebased,
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                input_hash = %md5_upper_hex(input_path),
+                seek_seconds,
+                "failed to parse subtitle for cue-aware playback seek; falling back to ffmpeg"
+            );
+            return rebase_text_subtitle_with_ffmpeg(
+                input_path,
+                format_hint,
+                seek_seconds,
+                &output_path,
+            )
+            .await;
+        }
+    };
+
+    let bytes: &[u8] = if rebased.remaining_cues == 0 {
+        b""
+    } else {
+        rebased.text.as_bytes()
+    };
+    match tokio::fs::write(&output_path, bytes).await {
+        Ok(()) => non_empty_subtitle_path(&output_path).await,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                input_hash = %md5_upper_hex(input_path),
+                seek_seconds,
+                "failed to write rebased subtitle for playback seek"
+            );
+            Some(input_path.to_owned())
+        }
+    }
+}
+
+async fn rebase_text_subtitle_with_ffmpeg(
+    input_path: &str,
+    format_hint: Option<SubtitleTextFormat>,
+    seek_seconds: i64,
+    output_path: &Path,
+) -> Option<String> {
+    let args = build_seek_subtitle_args(input_path, format_hint, seek_seconds, output_path);
+    let output = match Command::new(ffmpeg_path()).args(&args).output().await {
         Ok(output) => output,
         Err(error) => {
             tracing::warn!(
                 %error,
                 input_hash = %md5_upper_hex(input_path),
                 seek_seconds,
-                "failed to spawn ffmpeg for subtitle seek rebase"
+                "failed to spawn ffmpeg compatibility subtitle seek rebase"
             );
             return Some(input_path.to_owned());
         }
     };
 
     if output.status.success() {
-        non_empty_subtitle_path(&output_path).await
+        non_empty_subtitle_path(output_path).await
     } else {
         tracing::warn!(
             input_hash = %md5_upper_hex(input_path),
             seek_seconds,
             status = %output.status,
             stderr_bytes = output.stderr.len(),
-            "failed to rebase subtitle for playback seek"
+            "failed ffmpeg compatibility subtitle seek rebase"
         );
         Some(input_path.to_owned())
     }
@@ -250,7 +813,9 @@ pub async fn rebase_burned_text_subtitle_input(
         && !input.is_image_based_subtitle
         && seek_seconds > 0
     {
-        input.path = rebase_text_subtitle(&input.path, seek_seconds).await?;
+        input.path =
+            rebase_text_subtitle_with_format(&input.path, input.subtitle_text_format, seek_seconds)
+                .await?;
     }
     Some(input)
 }
@@ -785,6 +1350,8 @@ async fn extract_fonts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use httpmock::Method::GET;
+    use httpmock::MockServer;
     #[cfg(not(feature = "mysql"))]
     use sqlx::Executor;
 
@@ -900,56 +1467,383 @@ mod tests {
     }
 
     #[test]
-    fn build_seek_subtitle_args_matches_etv_rebase_pass() {
-        let out = Path::new("/tmp/seeked.srt");
-        let args = build_seek_subtitle_args("/srv/media/show/subtitle.srt", 900, out);
+    fn seek_subtitle_output_format_selects_by_extension() {
         assert_eq!(
-            args,
-            vec![
-                "-nostdin".to_owned(),
-                "-hide_banner".to_owned(),
-                "-nostats".to_owned(),
-                "-loglevel".to_owned(),
-                "error".to_owned(),
-                "-i".to_owned(),
-                "/srv/media/show/subtitle.srt".to_owned(),
-                "-ss".to_owned(),
-                "00:15:00".to_owned(),
-                "-c:s".to_owned(),
-                "copy".to_owned(),
-                "-f".to_owned(),
-                "srt".to_owned(),
-                "/tmp/seeked.srt".to_owned(),
-            ]
+            seek_subtitle_output_format("/tmp/subtitle.ass", None).0,
+            "ass"
+        );
+        assert_eq!(
+            seek_subtitle_output_format("/tmp/subtitle.ssa", None).0,
+            "ass"
+        );
+        assert_eq!(
+            seek_subtitle_output_format("/tmp/subtitle.vtt", None).0,
+            "webvtt"
+        );
+        assert_eq!(
+            seek_subtitle_output_format(
+                "https://example.test/subtitle.ass?X-Plex-Token=redacted",
+                None,
+            )
+            .0,
+            "ass"
+        );
+        assert_eq!(
+            seek_subtitle_output_format("/tmp/subtitle.subrip", None).0,
+            "srt"
         );
     }
 
     #[test]
-    fn build_seek_subtitle_args_selects_text_output_format_from_extension() {
-        assert_eq!(
-            build_seek_subtitle_args("/tmp/subtitle.ass", 3_723, Path::new("/tmp/out.ass"))[12],
-            "ass"
+    fn seek_subtitle_output_format_uses_codec_for_extensionless_plex_ass() {
+        let plex_stream = "https://example.test/library/streams/123?X-Plex-Token=redacted";
+        let (format, extension) =
+            seek_subtitle_output_format(plex_stream, Some(SubtitleTextFormat::Ass));
+        assert_eq!((format, extension), ("ass", "ass"));
+
+        let ass =
+            "[Events]\nFormat: Start, End, Text\nDialogue: 0:00:42.00,0:00:46.00,Visible cue\n";
+        let rebased = rebase_subtitle_cues(ass, format, 44).expect("ASS rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
+        assert!(rebased
+            .text
+            .contains("Dialogue: 0:00:00.00,0:00:02.00,Visible cue"));
+
+        let args = build_seek_subtitle_args(
+            plex_stream,
+            Some(SubtitleTextFormat::Ass),
+            44,
+            Path::new("out.ass"),
         );
+        assert!(args.windows(2).any(|pair| pair == ["-f", "ass"]));
+    }
+
+    #[test]
+    fn build_seek_subtitle_args_preserves_ffmpeg_compatibility_fallback() {
+        let output = Path::new("cache/subtitle.srt");
         assert_eq!(
-            build_seek_subtitle_args("/tmp/subtitle.ssa", 3_723, Path::new("/tmp/out.ass"))[12],
-            "ass"
+            build_seek_subtitle_args("https://example.test/subtitle.srt", None, 42, output),
+            vec![
+                "-nostdin",
+                "-hide_banner",
+                "-nostats",
+                "-loglevel",
+                "error",
+                "-i",
+                "https://example.test/subtitle.srt",
+                "-ss",
+                "00:00:42",
+                "-c:s",
+                "copy",
+                "-f",
+                "srt",
+                "cache/subtitle.srt",
+            ]
         );
+    }
+
+    #[tokio::test]
+    async fn read_subtitle_text_source_fetches_http_subtitles_before_parsing() {
+        let server = MockServer::start_async().await;
+        let mock = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/subtitle.srt");
+                then.status(200)
+                    .body("1\n00:00:42,000 --> 00:00:46,000\nRemote cue\n");
+            })
+            .await;
+
+        let content = read_subtitle_text_source(&format!("{}/subtitle.srt", server.base_url()))
+            .await
+            .expect("remote subtitle should be fetched");
+        mock.assert_async().await;
+        let rebased = rebase_subtitle_cues(&content, "srt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
+        assert!(rebased.text.contains("00:00:00,000 --> 00:00:02,000"));
+    }
+
+    #[tokio::test]
+    async fn read_subtitle_text_source_redacts_remote_url_from_http_errors() {
+        let server = MockServer::start_async().await;
+        let mock = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/library/streams/123");
+                then.status(401);
+            })
+            .await;
+        let url = format!(
+            "{}/library/streams/123?X-Plex-Token=redacted-sensitive-value",
+            server.base_url()
+        );
+
+        let error = read_subtitle_text_source(&url)
+            .await
+            .expect_err("non-success status should fail");
+        mock.assert_async().await;
+        let rendered = error.to_string();
+        assert!(rendered.contains("401"));
+        assert!(!rendered.contains("X-Plex-Token"));
+        assert!(!rendered.contains("redacted-sensitive-value"));
+        assert!(!rendered.contains(&server.base_url()));
+    }
+
+    #[tokio::test]
+    async fn read_subtitle_text_source_decodes_bom_marked_utf16_srt() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("subtitle.srt");
+        let source = "1\n00:00:42,000 --> 00:00:46,000\nZażółć gęślą\n";
+        let mut encoded = vec![0xFF, 0xFE];
+        for unit in source.encode_utf16() {
+            encoded.extend_from_slice(&unit.to_le_bytes());
+        }
+        tokio::fs::write(&path, encoded)
+            .await
+            .expect("write UTF-16 subtitle");
+
+        let content = read_subtitle_text_source(&path.to_string_lossy())
+            .await
+            .expect("UTF-16 subtitle should decode");
+        assert_eq!(content, source);
+        let rebased = rebase_subtitle_cues(&content, "srt", 44).expect("rebase should succeed");
+        assert!(rebased.text.contains("Zażółć gęślą"));
+    }
+
+    #[test]
+    fn shift_cue_drops_fully_past_cues() {
+        assert!(matches!(shift_cue(1_000, 2_000, 5_000), CueDecision::Drop));
+    }
+
+    #[test]
+    fn shift_cue_drops_when_shifted_end_is_exactly_zero() {
+        assert!(matches!(shift_cue(3_000, 5_000, 5_000), CueDecision::Drop));
+    }
+
+    #[test]
+    fn shift_cue_shifts_fully_future_cues() {
+        match shift_cue(10_000, 12_000, 5_000) {
+            CueDecision::Keep { start, end } => {
+                assert_eq!(start, 5_000);
+                assert_eq!(end, 7_000);
+            }
+            CueDecision::Drop => panic!("expected Keep"),
+        }
+    }
+
+    #[test]
+    fn shift_cue_clamps_straddling_cue_start_to_zero() {
+        match shift_cue(3_000, 7_000, 5_000) {
+            CueDecision::Keep { start, end } => {
+                assert_eq!(start, 0);
+                assert_eq!(end, 2_000);
+            }
+            CueDecision::Drop => panic!("straddling cue must not be dropped"),
+        }
+    }
+
+    #[test]
+    fn shift_cue_keeps_cue_whose_shifted_start_lands_exactly_at_zero() {
+        match shift_cue(5_000, 8_000, 5_000) {
+            CueDecision::Keep { start, end } => {
+                assert_eq!(start, 0);
+                assert_eq!(end, 3_000);
+            }
+            CueDecision::Drop => panic!("expected Keep"),
+        }
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_srt_clamps_straddling_cue_and_renumbers() {
+        let srt = "\
+1
+00:00:40,000 --> 00:00:43,000
+Before the boundary
+
+2
+00:00:42,000 --> 00:00:46,000
+Straddles the boundary
+
+3
+00:00:50,000 --> 00:00:52,000
+After the boundary
+";
+        let rebased = rebase_subtitle_cues(srt, "srt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 2);
         assert_eq!(
-            build_seek_subtitle_args("/tmp/subtitle.vtt", 3_723, Path::new("/tmp/out.vtt"))[12],
-            "webvtt"
+            rebased.text,
+            "\
+1
+00:00:00,000 --> 00:00:02,000
+Straddles the boundary
+
+2
+00:00:06,000 --> 00:00:08,000
+After the boundary
+"
         );
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_srt_accepts_dot_timestamp_separator() {
+        let srt = "1\n00:00:42.000 --> 00:00:46.000\nDot-separated cue\n";
+        let rebased = rebase_subtitle_cues(srt, "srt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
         assert_eq!(
-            build_seek_subtitle_args(
-                "https://example.test/subtitle.ass?X-Plex-Token=redacted",
-                3_723,
-                Path::new("/tmp/out.ass")
-            )[12],
-            "ass"
+            rebased.text,
+            "1\n00:00:00,000 --> 00:00:02,000\nDot-separated cue\n"
         );
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_srt_keeps_synthetic_cue_at_44s_chunk_boundary() {
+        // Synthetic fixture for a sidecar SRT cue straddling the HLS
+        // work-ahead chunk boundary.
+        let srt = "\
+12
+00:00:41,200 --> 00:00:45,800
+Boundary cue remains visible.
+
+13
+00:00:50,000 --> 00:00:53,000
+Later cue remains visible.
+";
+        let rebased = rebase_subtitle_cues(srt, "srt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 2);
+        assert!(rebased.text.contains("Boundary cue remains visible."));
+        assert!(rebased.text.starts_with("1\n00:00:00,000"));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_srt_without_blank_separator_uses_fallback() {
+        let srt = "\
+1
+00:00:42,000 --> 00:00:46,000
+Boundary cue
+2
+00:00:50,000 --> 00:00:52,000
+Later cue
+";
+        assert!(matches!(
+            rebase_subtitle_cues(srt, "srt", 44),
+            Err(RebaseSubtitleError::UnparseableCue)
+        ));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_webvtt_preserves_identifier_and_cue_settings() {
+        let vtt = "\
+WEBVTT
+
+intro
+00:00:40.000 --> 00:00:43.000 align:start position:10%
+Before the boundary
+
+cue-2
+00:00:42.000 --> 00:00:46.000 align:start position:10%
+Straddles the boundary
+";
+        let rebased = rebase_subtitle_cues(vtt, "webvtt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
         assert_eq!(
-            build_seek_subtitle_args("/tmp/subtitle.subrip", 3_723, Path::new("/tmp/out.srt"))[8],
-            "01:02:03"
+            rebased.text,
+            "\
+WEBVTT
+
+cue-2
+00:00:00.000 --> 00:00:02.000 align:start position:10%
+Straddles the boundary
+"
         );
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_webvtt_accepts_tabs_around_timing_arrow() {
+        let vtt = "WEBVTT\n\ncue-1\n00:00:42.000\t-->\t00:00:46.000 align:start\nVisible cue\n";
+        let rebased = rebase_subtitle_cues(vtt, "webvtt", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
+        assert_eq!(
+            rebased.text,
+            "WEBVTT\n\ncue-1\n00:00:00.000 --> 00:00:02.000 align:start\nVisible cue\n"
+        );
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_rejects_content_without_recognized_cues() {
+        let vtt = "WEBVTT\n\ncue-1\nnot-a-timing-line\nVisible cue\n";
+        assert!(matches!(
+            rebase_subtitle_cues(vtt, "webvtt", 44),
+            Err(RebaseSubtitleError::UnparseableCue)
+        ));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_ass_preserves_commas_and_uses_format_header_order() {
+        // Format declares End before Start (non-default order) and the Text
+        // field contains an override tag with embedded commas.
+        let ass = "\
+[Script Info]
+ScriptType: v4.00+
+
+[Events]
+Format: Layer, End, Start, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles the boundary
+";
+        let rebased = rebase_subtitle_cues(ass, "ass", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
+        assert!(rebased.text.contains(
+            "Dialogue: 0,0:00:02.00,0:00:00.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles the boundary"
+        ));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_ass_accepts_padded_events_header() {
+        let ass = concat!(
+            "[Script Info]\n",
+            "ScriptType: v4.00+\n\n",
+            "[Events ]\n",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+            "Dialogue: 0,0:00:42.00,0:00:46.00,Default,,0,0,0,,Padded header cue\n",
+        );
+        let rebased = rebase_subtitle_cues(ass, "ass", 44).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 1);
+        assert!(rebased
+            .text
+            .contains("Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,Padded header cue"));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_ass_without_recognized_dialogue_uses_fallback() {
+        let ass = "[Events ]\nFormat: Start, End, Text\nComment: 0:00:42.00,0:00:46.00,Cue\n";
+        assert!(matches!(
+            rebase_subtitle_cues(ass, "ass", 44),
+            Err(RebaseSubtitleError::UnparseableCue)
+        ));
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_returns_zero_remaining_when_seek_lands_past_last_cue() {
+        let srt = "1\n00:00:00,000 --> 00:00:02,000\nHallo\n";
+        let rebased = rebase_subtitle_cues(srt, "srt", 100).expect("rebase should succeed");
+        assert_eq!(rebased.remaining_cues, 0);
+    }
+
+    #[test]
+    fn rebase_subtitle_cues_rejects_unparseable_timestamp() {
+        let srt = "1\nnot-a-timestamp --> also-not\nHallo\n";
+        assert!(matches!(
+            rebase_subtitle_cues(srt, "srt", 10),
+            Err(RebaseSubtitleError::UnparseableCue)
+        ));
+    }
+
+    #[tokio::test]
+    async fn rebase_text_subtitle_falls_back_to_original_on_unparseable_cue() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("broken.srt");
+        tokio::fs::write(&path, b"1\nnot-a-timestamp --> also-not\nHallo\n")
+            .await
+            .expect("write broken srt");
+        let path_str = path.to_string_lossy().into_owned();
+        assert_eq!(rebase_text_subtitle(&path_str, 10).await, Some(path_str));
     }
 
     #[tokio::test]

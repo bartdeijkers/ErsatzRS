@@ -2544,23 +2544,32 @@ pub fn subtitle_input_for_stream(
             }
             _ => return None,
         };
-        let input = if subtitle.is_image() {
+        let mut input = if subtitle.is_image() {
             InputFile::image_subtitle(media_path.to_owned(), method)
         } else {
             InputFile::text_subtitle(media_path.to_owned(), method)
         };
+        if let Some(codec) = &subtitle.codec {
+            input = input.with_subtitle_codec(codec);
+        }
         return Some(input.with_stream_index(stream_index));
     }
 
     if subtitle.is_image() {
-        return Some(
-            InputFile::image_subtitle(media_path.to_owned(), SubtitleMethod::Burn)
-                .with_stream_index(stream_index),
-        );
+        let mut input = InputFile::image_subtitle(media_path.to_owned(), SubtitleMethod::Burn)
+            .with_stream_index(stream_index);
+        if let Some(codec) = &subtitle.codec {
+            input = input.with_subtitle_codec(codec);
+        }
+        return Some(input);
     }
 
     let path = subtitle_text_path(subtitle, media_path)?;
-    Some(InputFile::text_subtitle(path, SubtitleMethod::Burn))
+    let mut input = InputFile::text_subtitle(path, SubtitleMethod::Burn);
+    if let Some(codec) = &subtitle.codec {
+        input = input.with_subtitle_codec(codec);
+    }
+    Some(input)
 }
 
 fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
@@ -3185,6 +3194,36 @@ mod tests {
             None
         );
         assert_eq!(resolve_resource_watermark_path(root.path(), None), None);
+    }
+
+    #[test]
+    fn subtitle_input_preserves_extensionless_external_ass_codec() {
+        let subtitle = PlaybackSubtitle {
+            id: 1,
+            subtitle_kind: subtitle_kind::SIDECAR,
+            title: None,
+            stream_index: 0,
+            codec: Some("ass".to_owned()),
+            default: false,
+            forced: false,
+            sdh: false,
+            language: Some("eng".to_owned()),
+            is_extracted: false,
+            path: Some("https://example.test/library/streams/123?X-Plex-Token=redacted".to_owned()),
+        };
+
+        let input = subtitle_input_for_stream(
+            &subtitle,
+            "/media/video.mkv",
+            OutputFormat::MpegTs,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        )
+        .expect("external ASS subtitle should map to an input");
+
+        assert_eq!(
+            input.subtitle_text_format,
+            Some(ersatzrs_ffmpeg::SubtitleTextFormat::Ass)
+        );
     }
 
     #[tokio::test]

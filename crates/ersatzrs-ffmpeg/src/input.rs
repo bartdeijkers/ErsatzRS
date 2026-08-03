@@ -16,6 +16,13 @@ pub enum SubtitleMethod {
     Convert,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubtitleTextFormat {
+    Srt,
+    Ass,
+    WebVtt,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaStream {
     pub index: usize,
@@ -36,6 +43,7 @@ pub struct InputFile {
     pub input_options: Vec<String>,
     pub filter_steps: Vec<String>,
     pub subtitle_method: Option<SubtitleMethod>,
+    pub subtitle_text_format: Option<SubtitleTextFormat>,
     pub is_image_based_subtitle: bool,
     pub allow_readrate: bool,
     pub seek_after_input: bool,
@@ -51,6 +59,7 @@ impl InputFile {
             input_options: Vec::new(),
             filter_steps: Vec::new(),
             subtitle_method: None,
+            subtitle_text_format: None,
             is_image_based_subtitle: false,
             allow_readrate: true,
             seek_after_input: false,
@@ -186,6 +195,17 @@ impl InputFile {
     #[must_use]
     pub fn with_stream_index(mut self, index: usize) -> Self {
         self.streams = vec![MediaStream::new(index)];
+        self
+    }
+
+    #[must_use]
+    pub fn with_subtitle_codec(mut self, codec: &str) -> Self {
+        self.subtitle_text_format = match codec.trim().to_ascii_lowercase().as_str() {
+            "ass" | "ssa" => Some(SubtitleTextFormat::Ass),
+            "webvtt" | "vtt" => Some(SubtitleTextFormat::WebVtt),
+            "mov_text" | "subrip" | "srt" => Some(SubtitleTextFormat::Srt),
+            _ => None,
+        };
         self
     }
 
