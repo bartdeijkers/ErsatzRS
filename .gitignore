@@ -77,6 +77,11 @@ flamegraph.svg
 # Large test fixture videos (download locally, see plans/sequential-dancing-valiant.md)
 testdata/
 
+# Derived clippy-exemption snapshot, regenerated from
+# xtask/assets/clippy_ledger_template.html by `cargo xtask clippy-ledger`.
+# Never commit it — it's a live data view, not a living doc.
+plans/clippy-exemption-ledger.html
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db

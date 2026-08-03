@@ -5803,8 +5803,10 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "proc-macro2",
  "quote",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

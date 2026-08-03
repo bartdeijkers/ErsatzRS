@@ -1,0 +1,1004 @@
+<meta charset="utf-8">
+<title>Clippy Exemption Ledger — ErsatzRS</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg-page: #f6f5f2;
+    --bg-surface: #ffffff;
+    --bg-surface-2: #fbfaf7;
+    --ink: #191a1d;
+    --ink-2: #55585f;
+    --muted: #8a8d94;
+    --border: rgba(15, 15, 15, 0.10);
+    --border-strong: rgba(15, 15, 15, 0.16);
+    --accent: #b5722c;
+    --accent-ink: #7a4b1c;
+    --accent-soft: rgba(181, 114, 44, 0.12);
+    --data2: #0e9488;
+    --data2-soft: rgba(14, 148, 136, 0.12);
+    --critical: #d03b3b;
+    --critical-soft: rgba(208, 59, 59, 0.10);
+    --shadow: 0 1px 2px rgba(15, 15, 15, 0.04), 0 8px 24px -12px rgba(15, 15, 15, 0.12);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg-page: #0f1115;
+    --bg-surface: #171a20;
+    --bg-surface-2: #1c2028;
+    --ink: #eef0f3;
+    --ink-2: #b7bcc6;
+    --muted: #7d8390;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --accent: #c97a42;
+    --accent-ink: #f0b483;
+    --accent-soft: rgba(201, 122, 66, 0.16);
+    --data2: #0e9a8c;
+    --data2-soft: rgba(14, 154, 140, 0.16);
+    --critical: #e2665f;
+    --critical-soft: rgba(226, 102, 95, 0.14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg-page: #0f1115;
+      --bg-surface: #171a20;
+      --bg-surface-2: #1c2028;
+      --ink: #eef0f3;
+      --ink-2: #b7bcc6;
+      --muted: #7d8390;
+      --border: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --accent: #c97a42;
+      --accent-ink: #f0b483;
+      --accent-soft: rgba(201, 122, 66, 0.16);
+      --data2: #0e9a8c;
+      --data2-soft: rgba(14, 154, 140, 0.16);
+      --critical: #e2665f;
+      --critical-soft: rgba(226, 102, 95, 0.14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-page);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Liberation Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  .mono {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+  }
+
+  /* ---------- header ---------- */
+  header.top {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 1px;
+    background: var(--accent);
+    display: inline-block;
+    transform: rotate(45deg);
+  }
+  h1 {
+    font-size: clamp(1.7rem, 2.4vw, 2.35rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .dek {
+    max-width: 68ch;
+    color: var(--ink-2);
+    font-size: 1rem;
+    margin: 0;
+  }
+  .meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .meta-line code {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--ink-2);
+  }
+
+  /* ---------- stat tiles ---------- */
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .stat {
+    flex: 1 1 200px;
+    background: var(--bg-surface);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat .value {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.9rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .stat .label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+  .stat.accent .value { color: var(--accent-ink); }
+  .stat.critical .value { color: var(--critical); }
+
+  /* ---------- finding callout ---------- */
+  .finding {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--critical);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow);
+  }
+  .finding .ftitle {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .finding .ftitle .tag {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--critical);
+    background: var(--critical-soft);
+    border-radius: 5px;
+    padding: 3px 8px;
+  }
+  .finding h2 {
+    font-size: 1.15rem;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .finding p {
+    max-width: 74ch;
+    color: var(--ink-2);
+    margin: 6px 0 0;
+  }
+  .finding .snippet {
+    margin-top: 14px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.82rem;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--ink-2);
+  }
+  .finding .snippet .kw { color: var(--critical); }
+  .finding details { margin-top: 14px; }
+  .finding summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--accent-ink);
+    user-select: none;
+  }
+  .finding .filelist {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 4px 16px;
+  }
+  .finding .filelist li {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- main grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 920px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-head .ptitle {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 2px;
+  }
+  .panel-head .psub {
+    font-size: 0.82rem;
+    color: var(--ink-2);
+  }
+
+  /* ---------- filter controls ---------- */
+  .controls {
+    padding: 12px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface-2);
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 7px 10px;
+  }
+  .search svg { flex: none; color: var(--muted); }
+  .search input {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 0.86rem;
+    width: 100%;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .chiprow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.74rem;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--ink-2);
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.4;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
+  .chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chip:hover { border-color: var(--accent); color: var(--ink); }
+  .chip.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .chip.active .n { color: var(--accent-ink); }
+  .chip.clear {
+    color: var(--muted);
+    border-style: dashed;
+  }
+
+  /* ---------- table ---------- */
+  .table-scroll { overflow-x: auto; }
+  table.ledger {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 0.83rem;
+    min-width: 640px;
+  }
+  table.ledger col.col-file { width: 30%; }
+  table.ledger col.col-crate { width: 11%; }
+  table.ledger col.col-loc { width: 9%; }
+  table.ledger col.col-count { width: 16%; }
+  table.ledger col.col-scope { width: 10%; }
+  table.ledger col.col-lints { width: 24%; }
+  table.ledger thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-surface);
+    text-align: left;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border-strong);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  table.ledger thead th:hover { color: var(--ink); }
+  table.ledger thead th.sorted { color: var(--accent-ink); }
+  table.ledger thead th .arrow { font-size: 0.62rem; margin-left: 3px; opacity: 0.7; }
+  table.ledger tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  table.ledger tbody tr:hover { background: var(--bg-surface-2); }
+  table.ledger tbody tr.expanded { background: var(--bg-surface-2); }
+  table.ledger td {
+    padding: 9px 10px;
+    vertical-align: top;
+  }
+  td.file {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+  }
+  td.file .crate-tag {
+    display: block;
+    color: var(--muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    word-break: break-all;
+  }
+  td.file .fname { color: var(--ink); word-break: break-all; }
+  td.num {
+    text-align: right;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  td.count-cell { min-width: 130px; }
+  .count-wrap { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .count-bar-track {
+    flex: 1;
+    max-width: 70px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .count-bar-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px 0 0 3px;
+  }
+  .count-val {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    min-width: 1.6em;
+    text-align: right;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .badge {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+    border-radius: 4px;
+    padding: 2px 6px;
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .badge.filewide {
+    color: var(--critical);
+    background: var(--critical-soft);
+  }
+  .badge.targeted {
+    color: var(--muted);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+  }
+  td.lints { overflow-wrap: break-word; }
+  .lint-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .lint-tag {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    color: var(--ink-2);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+  .lint-tag.non-clippy { color: var(--critical); border-color: var(--critical-soft); }
+
+  tr.detail-row td {
+    background: var(--bg-surface-2);
+    padding: 10px 16px 14px 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr.detail-row .sites {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-2);
+  }
+  tr.detail-row .sites b { color: var(--ink); font-weight: 600; }
+  tr.detail-row .scope {
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+  }
+  tr.detail-row .scope.file { background: var(--critical-soft); color: var(--critical); }
+  tr.detail-row .scope.item { background: var(--bg-surface); border: 1px solid var(--border); color: var(--muted); }
+
+  .no-results {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .result-count {
+    padding: 8px 18px;
+    font-size: 0.74rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+  .result-count b { color: var(--ink-2); }
+
+  /* ---------- side panels ---------- */
+  .side-stack { display: flex; flex-direction: column; gap: 20px; }
+  .barlist { padding: 6px 18px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .barrow {
+    display: grid;
+    grid-template-columns: 128px 1fr 34px;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
+    cursor: pointer;
+    border-radius: 6px;
+    position: relative;
+  }
+  .barrow:hover { background: var(--bg-surface-2); }
+  .barrow.active .barlabel { color: var(--ink); font-weight: 600; }
+  .barlabel {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.74rem;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bartrack {
+    height: 14px;
+    background: var(--bg-surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .barfill { display: block; height: 100%; border-radius: 2px; }
+  .barfill.c-lint { background: var(--accent); }
+  .barfill.c-crate { background: var(--data2); }
+  .barval {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-2);
+  }
+  .bar-more {
+    padding: 8px 0 2px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .split-panel-body { padding: 16px 18px; }
+  .split-bar {
+    display: flex;
+    height: 22px;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .split-bar .seg { display: block; }
+  .split-bar .seg.file { background: var(--critical); }
+  .split-bar .seg.item { background: var(--bg-surface-2); }
+  .split-legend {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 0.76rem;
+    color: var(--ink-2);
+  }
+  .split-legend .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .split-legend .dot.file { background: var(--critical); }
+  .split-legend .dot.item { background: var(--border-strong); border: 1px solid var(--border-strong); }
+  .split-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .note-card { padding: 16px 18px; font-size: 0.84rem; color: var(--ink-2); }
+  .note-card p { margin: 0 0 10px; }
+  .note-card p:last-child { margin-bottom: 0; }
+  .note-card a { color: var(--accent-ink); }
+
+  /* tooltip */
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--bg-page);
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    padding: 5px 8px;
+    border-radius: 5px;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.08s ease;
+    z-index: 50;
+    white-space: nowrap;
+  }
+  #tooltip.show { opacity: 0.96; }
+
+  footer.foot {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  footer.foot code {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Code health audit &middot; ErsatzRS</div>
+    <h1>The Clippy Exemption Ledger</h1>
+    <p class="dek">
+      Every <code class="mono" style="background:var(--bg-surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;">#[allow(clippy::…)]</code>
+      in the workspace, indexed by file, crate, and lint &mdash; so exemptions
+      that quietly pile up in one corner of the codebase are visible instead
+      of buried three hundred greps apart.
+    </p>
+    <div class="meta-line">
+      <span>Generated <b id="meta-date" class="mono"></b></span>
+      <span><code id="meta-cmd"></code></span>
+      <span id="meta-scope"></span>
+    </div>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="finding" id="finding"></section>
+
+  <section class="grid">
+    <div class="panel" id="ledger-panel">
+      <div class="panel-head">
+        <p class="ptitle">File ledger</p>
+        <p class="psub">Every file carrying at least one exemption. Click a row to see exact lines; click a column to sort.</p>
+      </div>
+      <div class="controls">
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search" placeholder="Filter by path, e.g. admin/pages or hls_worker" />
+        </div>
+        <div class="chiprow" id="crate-chips"></div>
+        <div class="chiprow" id="lint-chips"></div>
+      </div>
+      <div class="result-count" id="result-count"></div>
+      <div class="table-scroll">
+        <table class="ledger">
+          <colgroup>
+            <col class="col-file"><col class="col-crate"><col class="col-loc"><col class="col-count"><col class="col-scope"><col class="col-lints">
+          </colgroup>
+          <thead>
+            <tr>
+              <th data-key="file">File</th>
+              <th data-key="crate">Crate</th>
+              <th data-key="loc" style="text-align:right">LOC</th>
+              <th data-key="count" style="text-align:right">Exemptions</th>
+              <th>Scope</th>
+              <th>Lints</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-body"></tbody>
+        </table>
+        <div class="no-results" id="no-results" style="display:none;">No files match this filter.</div>
+      </div>
+    </div>
+
+    <div class="side-stack">
+      <div class="panel">
+        <div class="panel-head">
+          <p class="ptitle">By lint type</p>
+          <p class="psub">What's actually being silenced. Click a bar to filter the ledger.</p>
+        </div>
+        <div class="barlist" id="lint-bars"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <p class="ptitle">By crate</p>
+          <p class="psub">Where exemptions concentrate. Click a bar to filter the ledger.</p>
+        </div>
+        <div class="barlist" id="crate-bars"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <p class="ptitle">Blast radius</p>
+          <p class="psub">A file-wide <span class="mono">#![allow]</span> silences the lint for every line below it, forever &mdash; a per-item <span class="mono">#[allow]</span> covers one function or struct.</p>
+        </div>
+        <div class="split-panel-body">
+          <div class="split-bar" id="split-bar"></div>
+          <div class="split-legend">
+            <span><span class="dot file"></span>File-wide &mdash; <b id="split-file-n"></b></span>
+            <span><span class="dot item"></span>Targeted &mdash; <b id="split-item-n"></b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <p class="ptitle">Reading this ledger</p>
+        </div>
+        <div class="note-card">
+          <p>The workspace runs <span class="mono">clippy::pedantic = "warn"</span> across all six crates, so a chunk of these allows are deliberate, reasonable accommodations for pedantic-tier lints &mdash; not bugs. The count that matters isn't 317, it's <em>where it clusters</em>.</p>
+          <p>File size alone isn't grounds for a split &mdash; see <span class="mono">plans/module-split-survey.md</span>, which restricts splitting to enumerable growth axes with a completeness gate. Several of the largest files here (<span class="mono">hls_worker.rs</span>, <span class="mono">commands.rs</span>) are cohesive state machines that survived that review; their exemption count is evidence of pressure, not an automatic verdict.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Static snapshot &mdash; re-run <code>grep -rn "allow(clippy" --include="*.rs" .</code> to refresh.</span>
+    <span>ErsatzRS workspace &middot; 447 tracked <code>.rs</code> files &middot; 259,631 lines</span>
+  </footer>
+</div>
+
+<div id="tooltip"></div>
+
+<script id="report-data" type="application/json">__CLIPPY_LEDGER_DATA__</script>
+<script>
+(function () {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("report-data").textContent);
+  const meta = DATA.meta;
+
+  document.getElementById("meta-date").textContent = meta.generated;
+  document.getElementById("meta-cmd").textContent = meta.grep_command;
+  document.getElementById("meta-scope").textContent =
+    meta.total_files_touched + " / " + meta.total_workspace_rs_files + " tracked .rs files carry at least one exemption";
+
+  // ---------------- stat tiles ----------------
+  const stats = [
+    { value: meta.total_attribute_sites, label: "allow(clippy::…) attribute sites, " + meta.total_lint_instances + " lint suppressions", cls: "accent" },
+    { value: meta.total_files_touched, label: "of " + meta.total_workspace_rs_files + " tracked .rs files carry an exemption" },
+    { value: meta.module_level_files, label: "whole-file #![allow] — every line below is exempt", cls: "critical" },
+    { value: pct(meta.module_level_loc, meta.total_workspace_loc) + "%", label: "of workspace LOC sits under one of those file-wide exemptions" },
+  ];
+  const statsEl = document.getElementById("stats");
+  stats.forEach(s => {
+    const d = document.createElement("div");
+    d.className = "stat" + (s.cls ? " " + s.cls : "");
+    d.innerHTML = '<div class="value mono">' + s.value + '</div><div class="label">' + s.label + '</div>';
+    statsEl.appendChild(d);
+  });
+
+  function pct(n, d) { return Math.round((n / d) * 1000) / 10; }
+
+  // ---------------- finding callout ----------------
+  const pf = meta.pattern_files;
+  const findingEl = document.getElementById("finding");
+  findingEl.innerHTML =
+    '<div class="ftitle"><span class="tag">Copy-pasted exemption</span><h2>' + pf.length +
+    ' admin pages open with the identical blanket allow</h2></div>' +
+    '<p>' + pf.length + ' files under <span class="mono">admin/pages/media*</span> and ' +
+    '<span class="mono">admin/pages/scheduling*</span> (' + fmt(meta.pattern_loc) + ' lines combined) start with the exact same line. ' +
+    'It reads as one page template copied forward: nobody trimmed the header once the page stabilized, so clippy can never again flag dead ' +
+    'code or a runaway function in any of these files &mdash; not just the line that earned the original exemption.</p>' +
+    '<div class="snippet">#!<span class="kw">[allow(clippy::too_many_lines, dead_code)]</span></div>' +
+    '<details><summary>Show all ' + pf.length + ' files</summary><ul class="filelist">' +
+    pf.map(f => '<li title="' + f + '">' + f + '</li>').join("") +
+    '</ul></details>';
+
+  function fmt(n) { return n.toLocaleString("en-US"); }
+
+  // ---------------- state ----------------
+  const state = { search: "", crate: null, lints: new Set(), sortKey: "count", sortDir: "desc" };
+
+  // ---------------- crate chips ----------------
+  const crateChips = document.getElementById("crate-chips");
+  function renderCrateChips() {
+    crateChips.innerHTML = "";
+    const clearChip = chip("All crates", null, state.crate === null, "clear");
+    clearChip.addEventListener("click", () => { state.crate = null; renderAll(); });
+    crateChips.appendChild(clearChip);
+    DATA.by_crate.forEach(([name, n]) => {
+      const c = chip(name, n, state.crate === name);
+      c.addEventListener("click", () => { state.crate = state.crate === name ? null : name; renderAll(); });
+      crateChips.appendChild(c);
+    });
+  }
+  function chip(label, n, active, extraCls) {
+    const el = document.createElement("span");
+    el.className = "chip" + (active ? " active" : "") + (extraCls ? " " + extraCls : "");
+    el.innerHTML = label + (n !== null && n !== undefined ? ' <span class="n">' + n + '</span>' : "");
+    return el;
+  }
+
+  // ---------------- lint chips ----------------
+  const lintChips = document.getElementById("lint-chips");
+  function shortLint(l) { return l.replace("clippy::", ""); }
+  function renderLintChips() {
+    lintChips.innerHTML = "";
+    DATA.by_lint.forEach(([name, n]) => {
+      const c = chip(shortLint(name), n, state.lints.has(name));
+      c.addEventListener("click", () => {
+        if (state.lints.has(name)) state.lints.delete(name); else state.lints.add(name);
+        renderAll();
+      });
+      lintChips.appendChild(c);
+    });
+  }
+
+  // ---------------- side bar lists ----------------
+  const lintBarsEl = document.getElementById("lint-bars");
+  const maxLint = DATA.by_lint[0][1];
+  function renderLintBars() {
+    lintBarsEl.innerHTML = "";
+    const shown = DATA.by_lint.slice(0, 12);
+    shown.forEach(([name, n]) => {
+      const row = document.createElement("div");
+      row.className = "barrow" + (state.lints.has(name) ? " active" : "");
+      row.innerHTML =
+        '<span class="barlabel">' + shortLint(name) + '</span>' +
+        '<span class="bartrack"><span class="barfill c-lint" style="width:' + (n / maxLint * 100) + '%"></span></span>' +
+        '<span class="barval">' + n + '</span>';
+      row.addEventListener("click", () => {
+        if (state.lints.has(name)) state.lints.delete(name); else state.lints.add(name);
+        renderAll();
+      });
+      row.addEventListener("mousemove", e => showTip(e, shortLint(name) + " — " + n + " (" + pct(n, meta.total_lint_instances) + "% of instances)"));
+      row.addEventListener("mouseleave", hideTip);
+      lintBarsEl.appendChild(row);
+    });
+    if (DATA.by_lint.length > shown.length) {
+      const more = document.createElement("div");
+      more.className = "bar-more";
+      more.textContent = "+ " + (DATA.by_lint.length - shown.length) + " more lints with 1–2 sites each";
+      lintBarsEl.appendChild(more);
+    }
+  }
+
+  const crateBarsEl = document.getElementById("crate-bars");
+  const maxCrate = DATA.by_crate[0][1];
+  function renderCrateBars() {
+    crateBarsEl.innerHTML = "";
+    DATA.by_crate.forEach(([name, n]) => {
+      const row = document.createElement("div");
+      row.className = "barrow" + (state.crate === name ? " active" : "");
+      row.innerHTML =
+        '<span class="barlabel">' + name + '</span>' +
+        '<span class="bartrack"><span class="barfill c-crate" style="width:' + (n / maxCrate * 100) + '%"></span></span>' +
+        '<span class="barval">' + n + '</span>';
+      row.addEventListener("click", () => { state.crate = state.crate === name ? null : name; renderAll(); });
+      row.addEventListener("mousemove", e => showTip(e, name + " — " + n + " (" + pct(n, meta.total_attribute_sites) + "% of sites)"));
+      row.addEventListener("mouseleave", hideTip);
+      crateBarsEl.appendChild(row);
+    });
+  }
+
+  // ---------------- split bar ----------------
+  (function renderSplit() {
+    const total = meta.module_level_sites + meta.item_level_sites;
+    document.getElementById("split-bar").innerHTML =
+      '<span class="seg file" style="width:' + (meta.module_level_sites / total * 100) + '%"></span>' +
+      '<span class="seg item" style="width:' + (meta.item_level_sites / total * 100) + '%"></span>';
+    document.getElementById("split-file-n").textContent = meta.module_level_sites;
+    document.getElementById("split-item-n").textContent = meta.item_level_sites;
+  })();
+
+  // ---------------- tooltip ----------------
+  const tip = document.getElementById("tooltip");
+  function showTip(e, text) {
+    tip.textContent = text;
+    tip.style.left = (e.clientX + 14) + "px";
+    tip.style.top = (e.clientY + 14) + "px";
+    tip.classList.add("show");
+  }
+  function hideTip() { tip.classList.remove("show"); }
+
+  // ---------------- ledger table ----------------
+  const tbody = document.getElementById("ledger-body");
+  const resultCount = document.getElementById("result-count");
+  const noResults = document.getElementById("no-results");
+  const expanded = new Set();
+
+  function filteredFiles() {
+    let rows = DATA.files;
+    if (state.crate) rows = rows.filter(f => f.crate === state.crate);
+    if (state.lints.size) rows = rows.filter(f => Object.keys(f.lints).some(l => state.lints.has(l)));
+    if (state.search.trim()) {
+      const q = state.search.trim().toLowerCase();
+      rows = rows.filter(f => f.file.toLowerCase().includes(q));
+    }
+    const dir = state.sortDir === "asc" ? 1 : -1;
+    rows = rows.slice().sort((a, b) => {
+      let av = a[state.sortKey], bv = b[state.sortKey];
+      if (state.sortKey === "file" || state.sortKey === "crate") {
+        return dir * String(av).localeCompare(String(bv));
+      }
+      return dir * ((av || 0) - (bv || 0));
+    });
+    return rows;
+  }
+
+  function renderTableHead() {
+    document.querySelectorAll("table.ledger thead th[data-key]").forEach(th => {
+      th.classList.toggle("sorted", th.dataset.key === state.sortKey);
+      const old = th.querySelector(".arrow");
+      if (old) old.remove();
+      if (th.dataset.key === state.sortKey) {
+        const arrow = document.createElement("span");
+        arrow.className = "arrow";
+        arrow.textContent = state.sortDir === "asc" ? "▲" : "▼";
+        th.appendChild(arrow);
+      }
+    });
+  }
+
+  function renderLedger() {
+    const rows = filteredFiles();
+    resultCount.innerHTML = "Showing <b>" + rows.length + "</b> of " + DATA.files.length + " files &middot; <b>" +
+      rows.reduce((s, f) => s + f.count, 0) + "</b> exemption sites in view";
+    tbody.innerHTML = "";
+    noResults.style.display = rows.length ? "none" : "block";
+
+    rows.forEach(f => {
+      const tr = document.createElement("tr");
+      tr.className = expanded.has(f.file) ? "expanded" : "";
+      const lintTags = Object.entries(f.lints)
+        .sort((a, b) => b[1] - a[1])
+        .map(([l, n]) => '<span class="lint-tag' + (l.startsWith("clippy::") ? "" : " non-clippy") + '">' +
+          shortLint(l) + (n > 1 ? " ×" + n : "") + '</span>')
+        .join("");
+      const barPct = Math.min(100, (f.count / 10) * 100);
+      tr.innerHTML =
+        '<td class="file" title="' + f.file + '"><span class="fname">' + baseName(f.file) + '</span><span class="crate-tag">' + dirOf(f.file) + '</span></td>' +
+        '<td class="mono" style="color:var(--ink-2);font-size:0.78rem;">' + f.crate + '</td>' +
+        '<td class="num">' + (f.loc ? fmt(f.loc) : "—") + '</td>' +
+        '<td class="num count-cell"><span class="count-wrap"><span class="count-bar-track"><span class="count-bar-fill" style="width:' + barPct + '%"></span></span><span class="count-val">' + f.count + '</span></span></td>' +
+        '<td>' + (f.module_level > 0 ? '<span class="badge filewide">file-wide</span>' : '<span class="badge targeted">targeted</span>') + '</td>' +
+        '<td class="lints"><div class="lint-tags">' + lintTags + '</div></td>';
+      tr.addEventListener("click", () => {
+        if (expanded.has(f.file)) expanded.delete(f.file); else expanded.add(f.file);
+        renderLedger();
+      });
+      tbody.appendChild(tr);
+
+      if (expanded.has(f.file)) {
+        const detail = document.createElement("tr");
+        detail.className = "detail-row";
+        const sitesHtml = f.sites.map(s =>
+          '<div><span class="scope ' + (s.module_level ? "file" : "item") + '">' + (s.module_level ? "file" : "line " + s.line) + '</span>' +
+          s.lints.map(shortLint).join(", ") + '</div>'
+        ).join("");
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        td.innerHTML = '<div class="sites"><b>' + f.file + '</b>' + sitesHtml + '</div>';
+        detail.appendChild(td);
+        tbody.appendChild(detail);
+      }
+    });
+  }
+
+  function baseName(p) { return p.split("/").pop(); }
+  function dirOf(p) { const parts = p.split("/"); parts.pop(); return parts.join("/"); }
+
+  document.querySelectorAll("table.ledger thead th[data-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (state.sortKey === key) {
+        state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        state.sortKey = key;
+        state.sortDir = key === "file" || key === "crate" ? "asc" : "desc";
+      }
+      renderAll();
+    });
+  });
+
+  document.getElementById("search").addEventListener("input", e => {
+    state.search = e.target.value;
+    renderAll();
+  });
+
+  function renderAll() {
+    renderCrateChips();
+    renderLintChips();
+    renderLintBars();
+    renderCrateBars();
+    renderTableHead();
+    renderLedger();
+  }
+
+  renderAll();
+})();
+</script>

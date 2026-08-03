@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
 mod architecture_lint;
+mod clippy_ledger;
 mod hydration_lint;
 mod parity_check;
 mod progress;
@@ -15,6 +16,7 @@ fn main() -> ExitCode {
     };
     match sub.as_str() {
         "architecture-lint" => architecture_lint::run(args.collect()),
+        "clippy-ledger" => clippy_ledger::run(args.collect()),
         "hydration-lint" => hydration_lint::run(args.collect()),
         "parity-check" => parity_check::run(args.collect()),
         "progress" => progress::run(args.collect()),
@@ -43,6 +45,7 @@ fn print_help() {
     eprintln!();
     eprintln!("SUBCOMMANDS:");
     eprintln!("    architecture-lint Check application-boundary and admin-debt guardrails");
+    eprintln!("    clippy-ledger     Regenerate the clippy exemption ledger / pick next fix");
     eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
     eprintln!("    parity-check      Run the fast parity gate ladder");
     eprintln!("    progress          Query/maintain the porting progress index (docs/progress/)");

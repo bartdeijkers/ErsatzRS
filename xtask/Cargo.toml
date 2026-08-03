@@ -16,8 +16,12 @@ all = "warn"
 
 [dependencies]
 anyhow = "1"
+# `clippy-ledger` subcommand: today's date for the regenerated ledger snapshot.
+chrono = "0.4"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
+# `clippy-ledger` subcommand: scans #[allow(clippy::...)] attributes.
+regex = "1"
 # `progress` subcommand: derived SQLite index over docs/progress/. rusqlite
 # `bundled` keeps SQLite self-contained (no system dep) on every dev platform.
 # These are dev-only tooling deps and never ship in a release binary.
