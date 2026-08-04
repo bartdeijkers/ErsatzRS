@@ -221,7 +221,7 @@ jobs:
       # already have a warm ~/.npm cache from the shared, persistent $HOME
       # (npm's cache directory is not inside the git checkout, so it is
       # never touched by actions/checkout's clean step).
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: ${{ inputs.runner == 'github-hosted' }}
         with:
           path: ~/.npm
@@ -297,7 +297,7 @@ jobs:
           fi
       # Only needed on the GitHub-hosted fallback path: self-hosted runs
       # already have a warm ~/.npm cache from the shared, persistent $HOME.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: ${{ inputs.runner == 'github-hosted' }}
         with:
           path: ~/.npm
