@@ -22,6 +22,15 @@ release section when tagging a release.
   misleading database flag. Linux remains service-manager owned and now has a
   systemd installation guide modeled on Jellyfin's package behavior.
 
+### Changed
+
+- The nightly Clippy-exemption cleanup now batches individually verified fixes
+  behind one push and self-tunes its batch cap from durable run trailers. Its
+  fixed 40-minute budget now terminates each verification command using the
+  remaining time, rolls back a timed-out target, and records all-skipped or
+  pre-success time-box outcomes in an empty state commit so later runs reduce
+  the cap instead of retrying the same workload unchanged.
+
 ### Fixed
 
 - Fixed local TV remakes and reboots with the same title being merged into one

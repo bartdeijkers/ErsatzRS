@@ -602,7 +602,8 @@ fn decide_batch_cap(window: &[RunRecord], last_cap: u32) -> (u32, String) {
         };
     }
 
-    let should_increase = window.iter().all(|r| r.fixes == r.cap)
+    let should_increase = window.len() >= TUNE_LOOKBACK_RUNS
+        && window.iter().all(|r| r.fixes == r.cap)
         && window
             .iter()
             .all(|r| r.duration_s * 10 <= TIME_BOX_SECONDS * 6);
@@ -614,6 +615,16 @@ fn decide_batch_cap(window: &[RunRecord], last_cap: u32) -> (u32, String) {
         } else {
             (cap, format!("increased: {reason}"))
         };
+    }
+
+    if window.len() < TUNE_LOOKBACK_RUNS {
+        return (
+            last_cap,
+            format!(
+                "insufficient-history: only {}/{TUNE_LOOKBACK_RUNS} run(s) recorded",
+                window.len()
+            ),
+        );
     }
 
     (
@@ -628,15 +639,6 @@ fn tuned_batch_cap() -> Result<(u32, String)> {
         return Ok((DEFAULT_BATCH_CAP, "no-history".to_owned()));
     };
     let last_cap = latest.cap.clamp(MIN_BATCH_CAP, MAX_BATCH_CAP);
-    if records.len() < TUNE_LOOKBACK_RUNS {
-        return Ok((
-            last_cap,
-            format!(
-                "insufficient-history: only {}/{TUNE_LOOKBACK_RUNS} run(s) recorded",
-                records.len()
-            ),
-        ));
-    }
     Ok(decide_batch_cap(&records, last_cap))
 }
 
@@ -665,4 +667,61 @@ fn print_help() {
     eprintln!("    --json            print the full ledger as JSON instead of writing the HTML");
     eprintln!("    --tune-batch-cap  print tonight's self-tuned batch cap, derived from past");
     eprintln!("                      `Clippy-cleanup-run:` commit trailers in `git log` (no tracking file)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run_record(fixes: u32, skipped: u32, duration_s: u64, cap: u32) -> RunRecord {
+        RunRecord {
+            fixes,
+            skipped,
+            duration_s,
+            cap,
+        }
+    }
+
+    #[test]
+    fn parses_empty_noop_commit_trailer_for_tuning() {
+        let record = parse_run_trailer(
+            "Clippy-cleanup-run: fixes=0 skipped=3 duration_s=2400 cap=4 timebox_s=2400",
+        )
+        .expect("valid no-op run trailer");
+
+        assert_eq!(record.fixes, 0);
+        assert_eq!(record.skipped, 3);
+        assert_eq!(record.duration_s, 2400);
+        assert_eq!(record.cap, 4);
+    }
+
+    #[test]
+    fn decreases_cap_after_all_skipped_run() {
+        let window = [run_record(0, 4, 300, 4)];
+
+        let (cap, reason) = decide_batch_cap(&window, 4);
+
+        assert_eq!(cap, 3);
+        assert!(reason.starts_with("decreased:"));
+    }
+
+    #[test]
+    fn decreases_cap_after_pre_success_time_box_run() {
+        let window = [run_record(0, 0, TIME_BOX_SECONDS, 4)];
+
+        let (cap, reason) = decide_batch_cap(&window, 4);
+
+        assert_eq!(cap, 3);
+        assert!(reason.starts_with("decreased:"));
+    }
+
+    #[test]
+    fn does_not_increase_cap_without_full_history() {
+        let window = [run_record(4, 0, 500, 4)];
+
+        let (cap, reason) = decide_batch_cap(&window, 4);
+
+        assert_eq!(cap, 4);
+        assert_eq!(reason, "insufficient-history: only 1/3 run(s) recorded");
+    }
 }
