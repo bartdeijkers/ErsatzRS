@@ -33,6 +33,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed intermittent Linux `ETXTBSY` failures in FFmpeg capability tests by
+  serializing every test that spawns a tool while another test may be writing
+  a temporary fake executable.
 - Fixed local TV remakes and reboots with the same title being merged into one
   show. Full local-library scans now distinguish folder, NFO provider-ID, and
   year identities; transactionally split existing mixed seasons and extras;

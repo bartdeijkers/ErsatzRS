@@ -2393,14 +2393,14 @@ mod unix_tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// Serializes tests that exec freshly written fake-tool scripts. When
-    /// another test thread forks between this test's `fs::write` and its
-    /// `exec`, the child briefly holds the script's file descriptor open and
-    /// the exec fails with `ETXTBSY`, dropping a probe result at random.
-    static FAKE_TOOL_EXEC_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    /// Serializes tests that spawn tools while another test may be writing a
+    /// fake-tool script. A concurrent fork can briefly inherit the writable
+    /// script descriptor, causing its next exec to fail with `ETXTBSY`.
+    static TOOL_EXEC_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_reports_missing_ffmpeg() {
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let config = test_config("/definitely/missing/ffmpeg", "/definitely/missing/ffprobe");
 
         let error = check_ffmpeg_runtime_with_config(&config)
@@ -2415,7 +2415,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_reports_missing_ffprobe() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("missing-ffprobe");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &[]);
         let config = test_config(ffmpeg.to_str().expect("utf-8 path"), "/missing/ffprobe");
@@ -2436,7 +2436,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_rejects_too_old_ffmpeg() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("old-ffmpeg");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.0", true, &[]);
         let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
@@ -2466,7 +2466,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_rejects_too_old_ffprobe() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("old-ffprobe");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &[]);
         let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.0");
@@ -2496,7 +2496,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_rejects_missing_required_drawvg() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("missing-drawvg");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", false, &[]);
         let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
@@ -2521,7 +2521,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_reports_optional_gpu_missing_without_failing() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("optional-gpu");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &["cuda"]);
         let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
@@ -2547,7 +2547,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn native_nvidia_decoder_probe_populates_decoder_rows() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("nvidia-decoder-probe");
         let ffmpeg = write_nvidia_decoder_probe_ffmpeg_script(&dir);
         let config = FfmpegRuntimeCheckConfig::with_paths(
@@ -2574,7 +2574,7 @@ mod unix_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn videotoolbox_probe_populates_framework_result_fields() {
-        let _exec_guard = FAKE_TOOL_EXEC_LOCK.lock().await;
+        let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("videotoolbox-probe");
         let ffmpeg = write_videotoolbox_probe_ffmpeg_script(&dir);
         let report = FfmpegCapabilityReport {
