@@ -12,7 +12,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    process::ExitCode,
+    process::{Command, ExitCode},
 };
 
 use anyhow::{Context, Result};
@@ -53,6 +53,24 @@ const TIER2_PRIORITY: &[&str] = &[
 // that doesn't return the field its name promises may be a real bug, not a
 // style nit, so it's surfaced separately for manual review instead.
 const FLAGGED_LINTS: &[&str] = &["clippy::misnamed_getters"];
+
+// `--tune-batch-cap` bounds: the nightly routine self-tunes how many fixes it
+// attempts per run by reading its own past `Clippy-cleanup-run:` commit
+// trailers (see docs/automation/clippy-cleanup-routine.md), never a separate
+// tracking file. Only the batch cap is tunable — the time-box below is the
+// fixed backstop that actually protects the usage window, and stays a
+// constant the tuner never touches.
+const DEFAULT_BATCH_CAP: u32 = 4;
+const MIN_BATCH_CAP: u32 = 1;
+const MAX_BATCH_CAP: u32 = 6;
+const BATCH_CAP_STEP: u32 = 1;
+const TUNE_LOOKBACK_RUNS: usize = 3;
+// Must match the time-box the nightly routine's prompt actually enforces.
+const TIME_BOX_SECONDS: u64 = 2400;
+const RUN_TRAILER_PREFIX: &str = "Clippy-cleanup-run:";
+// Record separator between `git log` entries; not a byte that appears in
+// commit message text.
+const GIT_LOG_RECORD_SEP: char = '\u{1e}';
 
 #[derive(Serialize)]
 struct Meta {
@@ -128,11 +146,13 @@ enum Mode {
     Regenerate,
     Next,
     Json,
+    TuneBatchCap,
 }
 
 #[derive(Default)]
 struct Opts {
     mode: Mode,
+    skip: BTreeSet<String>,
 }
 
 enum ParseResult {
@@ -143,11 +163,25 @@ enum ParseResult {
 impl Opts {
     fn parse(args: Vec<String>) -> std::result::Result<Self, ParseResult> {
         let mut opts = Self::default();
-        for arg in args {
+        let mut iter = args.into_iter();
+        while let Some(arg) = iter.next() {
             match arg.as_str() {
                 "-h" | "--help" => return Err(ParseResult::Help),
                 "--next" => opts.mode = Mode::Next,
                 "--json" => opts.mode = Mode::Json,
+                "--tune-batch-cap" => opts.mode = Mode::TuneBatchCap,
+                "--skip" => {
+                    let value = iter.next().ok_or_else(|| {
+                        ParseResult::Error("--skip requires a comma-separated file list".to_owned())
+                    })?;
+                    opts.skip.extend(
+                        value
+                            .split(',')
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned),
+                    );
+                }
                 other => return Err(ParseResult::Error(format!("unknown argument `{other}`"))),
             }
         }
@@ -179,12 +213,16 @@ pub fn run(args: Vec<String>) -> ExitCode {
 }
 
 fn run_inner(opts: &Opts) -> Result<()> {
+    if matches!(opts.mode, Mode::TuneBatchCap) {
+        return print_tuned_batch_cap();
+    }
+
     let workspace = Path::new(".");
     let today = chrono::Utc::now().date_naive().to_string();
     let ledger = build_ledger(workspace, &today)?;
 
     match opts.mode {
-        Mode::Next => print_next(&next_target(&ledger)),
+        Mode::Next => print_next(&next_target(&ledger, &opts.skip)),
         Mode::Json => {
             println!(
                 "{}",
@@ -205,6 +243,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
                 ledger.flagged.len(),
             );
         }
+        Mode::TuneBatchCap => unreachable!("handled above before the ledger scan"),
     }
     Ok(())
 }
@@ -418,8 +457,13 @@ fn regenerate_html(workspace: &Path, ledger: &Ledger) -> Result<()> {
     Ok(())
 }
 
-fn next_target(ledger: &Ledger) -> NextTarget {
-    if let Some(file) = ledger.meta.pattern_files.first() {
+fn next_target(ledger: &Ledger, skip: &BTreeSet<String>) -> NextTarget {
+    if let Some(file) = ledger
+        .meta
+        .pattern_files
+        .iter()
+        .find(|file| !skip.contains(file.as_str()))
+    {
         let loc = ledger
             .files
             .iter()
@@ -436,6 +480,7 @@ fn next_target(ledger: &Ledger) -> NextTarget {
         let mut candidates: Vec<(&str, usize)> = ledger
             .files
             .iter()
+            .filter(|f| !skip.contains(f.file.as_str()))
             .flat_map(|f| {
                 f.sites
                     .iter()
@@ -474,14 +519,150 @@ fn print_next(target: &NextTarget) {
     }
 }
 
+/// One night's outcome, parsed back out of a `Clippy-cleanup-run:` commit
+/// trailer (see docs/automation/clippy-cleanup-routine.md). This is the
+/// tuner's only state, and it already lives in git history for other
+/// reasons — no separate tracking file.
+struct RunRecord {
+    fixes: u32,
+    skipped: u32,
+    duration_s: u64,
+    cap: u32,
+}
+
+fn parse_run_trailer(line: &str) -> Option<RunRecord> {
+    let rest = line.trim().strip_prefix(RUN_TRAILER_PREFIX)?.trim();
+    let mut fixes = None;
+    let mut skipped = None;
+    let mut duration_s = None;
+    let mut cap = None;
+    for field in rest.split_whitespace() {
+        let (key, value) = field.split_once('=')?;
+        match key {
+            "fixes" => fixes = value.parse().ok(),
+            "skipped" => skipped = value.parse().ok(),
+            "duration_s" => duration_s = value.parse().ok(),
+            "cap" => cap = value.parse().ok(),
+            _ => {}
+        }
+    }
+    Some(RunRecord {
+        fixes: fixes?,
+        skipped: skipped?,
+        duration_s: duration_s?,
+        cap: cap?,
+    })
+}
+
+/// The most recent `limit` past runs, newest first, read straight from `git
+/// log` rather than any persisted file.
+fn recent_run_records(limit: usize) -> Result<Vec<RunRecord>> {
+    let output = Command::new("git")
+        .args([
+            "log",
+            &format!("--grep=^{RUN_TRAILER_PREFIX}"),
+            "-n",
+            &limit.to_string(),
+            &format!("--format=%B{GIT_LOG_RECORD_SEP}"),
+        ])
+        .output()
+        .context("run `git log` for clippy-cleanup-run history")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "git log exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let records = stdout
+        .split(GIT_LOG_RECORD_SEP)
+        .map(str::trim)
+        .filter(|block| !block.is_empty())
+        .filter_map(|block| block.lines().find_map(parse_run_trailer))
+        .collect();
+    Ok(records)
+}
+
+/// Decide tonight's batch cap from the last `TUNE_LOOKBACK_RUNS` runs.
+/// Only ever moves the cap by `BATCH_CAP_STEP`, clamped to
+/// `[MIN_BATCH_CAP, MAX_BATCH_CAP]` — never the time-box, never the lint
+/// selection policy.
+fn decide_batch_cap(window: &[RunRecord], last_cap: u32) -> (u32, String) {
+    let should_decrease = window
+        .iter()
+        .any(|r| r.duration_s * 10 >= TIME_BOX_SECONDS * 9 || r.skipped > 0);
+    if should_decrease {
+        let cap = last_cap.saturating_sub(BATCH_CAP_STEP).max(MIN_BATCH_CAP);
+        let reason = "a recent run used >=90% of the time-box or skipped a target";
+        return if cap == last_cap {
+            (cap, format!("held at minimum ({MIN_BATCH_CAP}): {reason}"))
+        } else {
+            (cap, format!("decreased: {reason}"))
+        };
+    }
+
+    let should_increase = window.iter().all(|r| r.fixes == r.cap)
+        && window
+            .iter()
+            .all(|r| r.duration_s * 10 <= TIME_BOX_SECONDS * 6);
+    if should_increase {
+        let cap = (last_cap + BATCH_CAP_STEP).min(MAX_BATCH_CAP);
+        let reason = "recent runs filled the cap well under the time-box";
+        return if cap == last_cap {
+            (cap, format!("held at maximum ({MAX_BATCH_CAP}): {reason}"))
+        } else {
+            (cap, format!("increased: {reason}"))
+        };
+    }
+
+    (
+        last_cap,
+        "unchanged: no consistent signal to raise or lower the cap".to_owned(),
+    )
+}
+
+fn tuned_batch_cap() -> Result<(u32, String)> {
+    let records = recent_run_records(TUNE_LOOKBACK_RUNS)?;
+    let Some(latest) = records.first() else {
+        return Ok((DEFAULT_BATCH_CAP, "no-history".to_owned()));
+    };
+    let last_cap = latest.cap.clamp(MIN_BATCH_CAP, MAX_BATCH_CAP);
+    if records.len() < TUNE_LOOKBACK_RUNS {
+        return Ok((
+            last_cap,
+            format!(
+                "insufficient-history: only {}/{TUNE_LOOKBACK_RUNS} run(s) recorded",
+                records.len()
+            ),
+        ));
+    }
+    Ok(decide_batch_cap(&records, last_cap))
+}
+
+fn print_tuned_batch_cap() -> Result<()> {
+    let (cap, reason) = tuned_batch_cap()?;
+    println!("batch_cap={cap}");
+    println!("reason={reason}");
+    Ok(())
+}
+
 fn print_help() {
     eprintln!("clippy-ledger — regenerate the clippy exemption ledger and pick the next safe fix");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("    cargo xtask clippy-ledger [--next | --json]");
+    eprintln!("    cargo xtask clippy-ledger [--next [--skip <file>[,<file>...]] | --json | --tune-batch-cap]");
     eprintln!();
-    eprintln!("    (no flags)  regenerate plans/clippy-exemption-ledger.html from the");
-    eprintln!("                checked-in template and print a one-line summary");
-    eprintln!("    --next      print the next deterministic, safe-to-fix target (or `tier=none`)");
-    eprintln!("    --json      print the full ledger as JSON instead of writing the HTML");
+    eprintln!("    (no flags)        regenerate plans/clippy-exemption-ledger.html from the");
+    eprintln!("                      checked-in template and print a one-line summary");
+    eprintln!(
+        "    --next            print the next deterministic, safe-to-fix target (or `tier=none`)"
+    );
+    eprintln!(
+        "    --skip <files>    with --next, exclude these files (comma-separated) from selection —"
+    );
+    eprintln!("                      for skipping a target that just failed verification within the same run");
+    eprintln!("    --json            print the full ledger as JSON instead of writing the HTML");
+    eprintln!("    --tune-batch-cap  print tonight's self-tuned batch cap, derived from past");
+    eprintln!("                      `Clippy-cleanup-run:` commit trailers in `git log` (no tracking file)");
 }
