@@ -1,4 +1,3 @@
-#![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
 use crate::admin::i18n::{library_kind_label, media_kind_label, tr, TextKey};
@@ -449,12 +448,19 @@ fn LibrariesIsland(
     }
 }
 
+// Only reachable from the wasm32 polling loop above; a native (non-test) build
+// never calls it, which clippy otherwise reports as dead code.
+#[allow(dead_code)]
 fn record_polling_error(cycle_error: &mut Option<String>, error: &ServerFnError) {
     if cycle_error.is_none() {
         *cycle_error = Some(error.to_string());
     }
 }
 
+// Reachable from the wasm32 polling loop above and directly from the test
+// below; a native non-test build never calls it, which clippy otherwise
+// reports as dead code.
+#[allow(dead_code)]
 fn finish_polling_cycle(polling_error: RwSignal<String>, cycle_error: Option<String>) {
     polling_error.set(cycle_error.unwrap_or_default());
 }
