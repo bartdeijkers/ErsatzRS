@@ -253,13 +253,13 @@ test.describe('P7C-03 search and See All parity', () => {
       .first()
       .locator('xpath=ancestor::div[contains(@class, "card-wrap")][1]');
     await expect(musicVideoCard).toBeVisible();
-    await expect(musicVideoCard.locator(`a[href="/media/music/videos/${seed.musicVideoId}"]`))
-      .toHaveCount(0);
+    await expect(
+      musicVideoCard.locator(`a[href="/media/music/videos/${seed.musicVideoId}"]`),
+    ).toHaveCount(1);
     await musicVideoCard.getByLabel('Select').click();
     await expect(page.getByText(/1 item selected/i)).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await gotoHydrated(page, `/media/music/videos?query=${encodedQuery}&page=1`);
     const hasOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );

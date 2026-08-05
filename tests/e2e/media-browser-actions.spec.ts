@@ -506,6 +506,7 @@ ORDER BY "Id" DESC LIMIT 1;
     await expect(page.getByRole('button', { name: /^add to collection$/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^add to playlist$/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^show media info$/i })).toBeVisible();
+    await expect(page.locator('[data-faceted-detail-hydrated="true"]')).toBeVisible();
     await page.getByRole('button', { name: /^add to collection$/i }).click();
     await chooseExistingCollection(page, seed);
     await expect.poll(() => sqlite(`

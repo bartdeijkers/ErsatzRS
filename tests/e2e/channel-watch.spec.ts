@@ -20,11 +20,14 @@ function sqlString(value: string): string {
 }
 
 async function setTimelineScroll(page: Page, scrollLeft: number): Promise<void> {
-  await page.locator('[role="grid"]').evaluate((element, requested) => {
+  await page.locator('[role="grid"]').evaluate(async (element, requested) => {
     const timeline = element as HTMLElement;
     const inlineScrollBehavior = timeline.style.scrollBehavior;
     timeline.style.scrollBehavior = 'auto';
     timeline.scrollLeft = requested;
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
     timeline.style.scrollBehavior = inlineScrollBehavior;
   }, scrollLeft);
 }

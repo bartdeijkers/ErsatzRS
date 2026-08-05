@@ -123,6 +123,8 @@ fn load_faceted_detail_initial(
 
 #[island]
 fn FacetedDetailIsland(detail: FacetedMediaDetailRow, kind: DetailKind) -> impl IntoView {
+    let hydrated = RwSignal::new(false);
+    Effect::new(move |_| hydrated.set(true));
     let selected = RwSignal::new(HashSet::from([detail.id]));
     let collection_open = RwSignal::new(false);
     let playlist_open = RwSignal::new(false);
@@ -181,7 +183,10 @@ fn FacetedDetailIsland(detail: FacetedMediaDetailRow, kind: DetailKind) -> impl 
     let title_for_info = detail.title.clone();
 
     view! {
-        <div class=style::page>
+        <div
+            class=style::page
+            data-faceted-detail-hydrated=move || if hydrated.get() { "true" } else { "false" }
+        >
             <div class=style::fanart_container>
                 <div class=style::fanart_tint/>
                 <img class=style::fanart src=fanart alt=tr(TextKey::FanArt) style=fanart_style/>
