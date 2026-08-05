@@ -1,6 +1,5 @@
 //! Multi-collection list and editor. Ports `Pages/MultiCollections.razor`
 //! and `Pages/MultiCollectionEditor.razor`.
-#![allow(clippy::too_many_lines, dead_code)]
 
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
@@ -22,7 +21,14 @@ use crate::admin::ui::primitives::{
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
-stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
+// collections.module.css is shared with collections.rs and
+// smart_collections.rs; classes unused in this file's per-invocation
+// generated constants are used there.
+stylance::import_crate_style!(
+    #[allow(dead_code)]
+    style,
+    "src/admin/pages/media/collections.module.css"
+);
 
 const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
 const PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
