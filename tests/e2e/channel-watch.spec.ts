@@ -335,6 +335,9 @@ test.describe('channel preview modal and watch route', () => {
     const zoom = page.getByRole('slider', { name: 'Zoom' });
     await expect(zoom).toBeVisible();
     await expect(zoom).toHaveValue('100');
+    await expect.poll(() => playlistRequests).toBeGreaterThan(modalPlaylistRequests);
+    const watchStatus = page.locator('.channel-watch-js [data-preview-status]');
+    await expect(watchStatus).toContainText(/transcode slots|network connection/);
     await setTimelineScroll(page, 360);
     const watchCenterBefore = await timelineCenterMinutes(page, 100);
     await zoom.fill('150');
@@ -344,14 +347,11 @@ test.describe('channel preview modal and watch route', () => {
       )
       .toBeLessThan(1);
     await expect(page.getByText('Now Playing').first()).toBeVisible();
-    await expect.poll(() => playlistRequests).toBeGreaterThan(modalPlaylistRequests);
     const watchVideo = page.locator('.channel-watch-js [data-channel-preview] video');
     await expect(watchVideo).toHaveAttribute('autoplay', '');
     await expect.poll(() => watchVideo.evaluate((video: HTMLVideoElement) => video.muted)).toBe(true);
     await page.getByRole('button', { name: 'Stop Preview' }).click();
-    await expect(
-      page.locator('.channel-watch-js [data-preview-status]'),
-    ).toContainText('Preview stopped');
+    await expect(watchStatus).toContainText('Preview stopped');
 
     const noJsContext = await browser.newContext({ javaScriptEnabled: false, baseURL });
     const noJsPage = await noJsContext.newPage();

@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-05","summary":"Stabilized the cross-browser channel-watch E2E zoom proof by settling the asynchronous preview failure UI before calibrating timeline geometry."}
 {"agent":"Codex","date":"2026-08-05","summary":"Aligned script-backed Remote Stream playback and probing with ErsatzTV container auto-detection, preserving MPEG-TS while accepting streamable MP4 and WebM output."}
 {"agent":"Codex","date":"2026-08-03","summary":"Fixed subtitle seek-rebase review findings: redacted remote fetch URLs, preserved extensionless provider ASS via codec format hints, and parsed tab-separated WebVTT timing lines."}
 {"agent":"Codex","date":"2026-08-03","summary":"Closed subtitle seek-rebase review regressions for remote and UTF-16 sources, dot-separated SRT timestamps, and padded ASS event headers with FFmpeg compatibility fallback."}

@@ -38,6 +38,9 @@ release section when tagging a release.
   MPEG-TS. Playback and scanner probing now let FFmpeg detect the producer
   container from its bytes, matching ErsatzTV while preserving MPEG-TS script
   support.
+- Fixed the cross-browser channel-watch E2E proof measuring EPG zoom geometry
+  before the asynchronous preview failure UI had settled, which made slower CI
+  runs report a false center-preservation regression.
 - Fixed intermittent Linux `ETXTBSY` failures in FFmpeg capability tests by
   serializing every test that spawns a tool while another test may be writing
   a temporary fake executable.
