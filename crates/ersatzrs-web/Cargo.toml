@@ -65,7 +65,7 @@ js-sys = "0.3"
 
 [target.'cfg(all(not(target_arch = "wasm32"), windows))'.dependencies]
 # Safe per-user HKCU Run-key access for the opt-in Windows tray autostart setting.
-winreg = "0.55"
+winreg = "0.56"
 
 [package.metadata.stylance]
 output_file = "public/bundle.css"
