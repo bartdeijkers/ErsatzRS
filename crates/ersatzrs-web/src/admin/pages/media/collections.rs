@@ -1,7 +1,6 @@
 //! Manual collection list and editor — ports `Pages/ManualCollections.razor`
 //! and `CollectionEditor.razor`. The editor page offers autocomplete-backed
 //! member management (maps to `ErsatzTV`'s `MudAutocomplete`).
-#![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -21,7 +20,14 @@ use crate::admin::ui::primitives::{
     toast::{load_failed_message, load_or_notify, use_toast, ToastSeverity},
 };
 
-stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
+// collections.module.css is shared with multi_collections.rs and
+// smart_collections.rs; classes unused in this file's per-invocation
+// generated constants are used there.
+stylance::import_crate_style!(
+    #[allow(dead_code)]
+    style,
+    "src/admin/pages/media/collections.module.css"
+);
 
 #[cfg(target_arch = "wasm32")]
 fn set_browser_location(path: &str) {
