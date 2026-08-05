@@ -2,7 +2,7 @@ feature    = 'Smart Shuffle scheduling'
 etv_source = 'ErsatzRS ADR 0019 scheduling extension; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-core::scheduling`, `crates/ersatzrs-infra::repositories::scheduling`, admin schedule editors'
 status     = 'Ported'
-adr        = ['0019']
+adr        = ['0019', '0062']
 summary    = '''
 ADR 0019 is implemented as opt-in Smart Shuffle policies owned by each native
 selection unit: Classic ProgramScheduleItem, reusable BlockItem, Sequential
@@ -12,7 +12,9 @@ attachments, and localized item editors preserve imported ErsatzTV behavior
 when the policy is absent or Off. The draft-wide candidate overview was
 intentionally removed because eagerly enumerating every candidate for every
 draft item was too expensive. Similar Video Cooldown was the feature's former
-name.
+name. ADR 0062 adds stable normalized content-rating,
+canonical-language-code, and music-label tags plus localized rule checkboxes without
+changing old policies.
 '''
 
 [[debt]]

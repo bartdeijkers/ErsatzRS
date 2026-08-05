@@ -160,6 +160,13 @@ fn map_common_metadata(row: &DbRow, _item_id_column: &str) -> Result<ersatzrs_do
         genre_ids: Vec::new(),
         tag_ids: Vec::new(),
         studio_ids: Vec::new(),
+        music_label_ids: Vec::new(),
+        language_codes: Vec::new(),
+        content_ratings: row
+            .try_get::<Option<String>, _>("ContentRating")
+            .unwrap_or_default()
+            .map(|value| ersatzrs_core::metadata_facets::normalize_content_ratings(&[value]))
+            .unwrap_or_default(),
         actor_ids: Vec::new(),
         guid_ids: Vec::new(),
         subtitle_ids: Vec::new(),

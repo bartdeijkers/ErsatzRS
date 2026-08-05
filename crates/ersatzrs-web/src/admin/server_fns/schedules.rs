@@ -1029,6 +1029,9 @@ fn smart_shuffle_rule_kind(value: &str) -> Option<SchedulingSmartShuffleRuleKind
         "tag" => Some(SchedulingSmartShuffleRuleKind::Tag),
         "genre" => Some(SchedulingSmartShuffleRuleKind::Genre),
         "studio" => Some(SchedulingSmartShuffleRuleKind::Studio),
+        "content_rating" => Some(SchedulingSmartShuffleRuleKind::ContentRating),
+        "language" => Some(SchedulingSmartShuffleRuleKind::Language),
+        "music_label" => Some(SchedulingSmartShuffleRuleKind::MusicLabel),
         _ => None,
     }
 }
@@ -1045,6 +1048,9 @@ fn smart_shuffle_rule_name(kind: SchedulingSmartShuffleRuleKind) -> &'static str
         SchedulingSmartShuffleRuleKind::Tag => "tag",
         SchedulingSmartShuffleRuleKind::Genre => "genre",
         SchedulingSmartShuffleRuleKind::Studio => "studio",
+        SchedulingSmartShuffleRuleKind::ContentRating => "content_rating",
+        SchedulingSmartShuffleRuleKind::Language => "language",
+        SchedulingSmartShuffleRuleKind::MusicLabel => "music_label",
         SchedulingSmartShuffleRuleKind::Filter => "filter",
     }
 }

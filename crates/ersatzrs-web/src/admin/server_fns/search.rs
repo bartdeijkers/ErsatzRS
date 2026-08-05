@@ -267,18 +267,11 @@ pub fn search_href(kind: SearchCardKind, media_item_id: i64, related_id: Option<
             None => String::new(),
         },
         SearchCardKind::Artist => format!("/media/music/artists/{media_item_id}"),
-        SearchCardKind::MusicVideo => match related_id {
-            Some(artist_id) => {
-                format!("/media/music/artists/{artist_id}#music-video-{media_item_id}")
-            }
-            None => String::new(),
-        },
+        SearchCardKind::MusicVideo => format!("/media/music/videos/{media_item_id}"),
         SearchCardKind::OtherVideo => format!("/media/other/videos/{media_item_id}"),
-        // These kinds currently have list pages only. Wire them here as soon
-        // as item detail pages land so search result cards navigate too.
-        SearchCardKind::Song | SearchCardKind::Image | SearchCardKind::RemoteStream => {
-            String::new()
-        }
+        SearchCardKind::Song => format!("/media/music/songs/{media_item_id}"),
+        SearchCardKind::Image => format!("/media/browser/images/{media_item_id}"),
+        SearchCardKind::RemoteStream => String::new(),
     }
 }
 
@@ -993,20 +986,25 @@ mod tests {
         );
         assert_eq!(
             search_href(SearchCardKind::MusicVideo, 15, Some(5)),
-            "/media/music/artists/5#music-video-15"
+            "/media/music/videos/15"
         );
-        assert_eq!(search_href(SearchCardKind::MusicVideo, 15, None), "");
+        assert_eq!(
+            search_href(SearchCardKind::MusicVideo, 15, None),
+            "/media/music/videos/15"
+        );
         assert_eq!(
             search_href(SearchCardKind::OtherVideo, 17, None),
             "/media/other/videos/17"
         );
-        for kind in [
-            SearchCardKind::Song,
-            SearchCardKind::Image,
-            SearchCardKind::RemoteStream,
-        ] {
-            assert_eq!(search_href(kind, 1, None), "");
-        }
+        assert_eq!(
+            search_href(SearchCardKind::Song, 1, None),
+            "/media/music/songs/1"
+        );
+        assert_eq!(
+            search_href(SearchCardKind::Image, 1, None),
+            "/media/browser/images/1"
+        );
+        assert_eq!(search_href(SearchCardKind::RemoteStream, 1, None), "");
     }
 
     #[test]

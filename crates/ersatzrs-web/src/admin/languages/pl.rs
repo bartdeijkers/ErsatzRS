@@ -1300,6 +1300,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Items => "Elementy",
         TextKey::Language => "Język",
         TextKey::Languages => "Języki",
+            TextKey::MusicLabels => "Wytwórnie muzyczne",
         TextKey::LeaveEmptyToAutoDetect => "Pozostaw puste, aby wykryć automatycznie",
         TextKey::Libraries => "Biblioteki",
         TextKey::LibraryRefreshInterval => "Interwał odświeżania biblioteki",

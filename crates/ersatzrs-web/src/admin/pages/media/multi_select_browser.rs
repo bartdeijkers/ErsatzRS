@@ -150,7 +150,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::MusicVideo,
         title: TextKey::MusicVideos,
         base_path: "/media/music/videos",
-        card_base_path: "",
+        card_base_path: "/media/music/videos",
         has_media_info: true,
         placeholder_icon: "🎵",
     };
@@ -166,7 +166,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Song,
         title: TextKey::Songs,
         base_path: "/media/music/songs",
-        card_base_path: "",
+        card_base_path: "/media/music/songs",
         has_media_info: true,
         placeholder_icon: "♪",
     };
@@ -174,7 +174,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Image,
         title: TextKey::Images,
         base_path: "/media/browser/images",
-        card_base_path: "",
+        card_base_path: "/media/browser/images",
         has_media_info: true,
         placeholder_icon: "▣",
     };

@@ -1,13 +1,51 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
+use ersatzrs_domain::LibraryMediaKind;
 use ersatzrs_infra::plex::{
-    sync_plex_collection_library, sync_plex_movie_library, sync_plex_show_by_id,
-    sync_plex_show_library, PlexConnectionConfig, PlexService,
+    sync_plex_collection_library, sync_plex_movie_library, sync_plex_other_video_library,
+    sync_plex_show_by_id, sync_plex_show_library, PlexConnectionConfig, PlexService,
 };
 use httpmock::prelude::*;
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
+
+#[tokio::test]
+async fn plex_library_discovery_exposes_other_video_sections() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "Directory": [
+                        {
+                            "Key": "8",
+                            "Title": "Home Videos",
+                            "type": "movie",
+                            "agent": "com.plexapp.agents.none",
+                            "scanner": "Plex Video Files Scanner"
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    let libraries = service.list_libraries(&config).await.unwrap();
+    assert_eq!(libraries.len(), 1);
+    assert_eq!(libraries[0].key, "8");
+    assert_eq!(libraries[0].name, "Home Videos");
+    assert_eq!(libraries[0].media_kind, LibraryMediaKind::OtherVideos);
+}
 
 #[tokio::test]
 async fn plex_sync_maps_mock_movie_response_to_media_rows() {
@@ -30,11 +68,138 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "PlexMediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
+    for table in [
+        "Genre",
+        "Tag",
+        "Studio",
+        "MusicLabel",
+        "MetadataGuid",
+        "Actor",
+        "Director",
+        "Writer",
+        "Artwork",
+    ] {
+        assert!(count(&pool, table).await > 0, "expected movie {table} rows");
+    }
+    let movie_metadata = sqlx::query(
+        r#"SELECT "ContentRating", "OriginalTitle", "Plot"
+           FROM "MovieMetadata" LIMIT 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        movie_metadata
+            .get::<Option<String>, _>("ContentRating")
+            .as_deref(),
+        Some("NL:12/US:PG-13")
+    );
+    assert_eq!(
+        movie_metadata
+            .get::<Option<String>, _>("OriginalTitle")
+            .as_deref(),
+        Some("Original Video")
+    );
     assert_eq!(
         provider_library_key(&pool, "PlexLibrary", "Key", 1).await,
         Some("1".to_owned())
     );
     insta::assert_json_snapshot!(plex_movie_rows(&pool).await);
+}
+
+#[tokio::test]
+async fn plex_other_video_sync_maps_uniform_metadata_and_playback_rows() {
+    let server = MockServer::start_async().await;
+    let mut item = media_json(
+        "/library/metadata/800",
+        "/library/parts/80",
+        "/media/other/concert.mkv",
+        800,
+    );
+    item["title"] = json!("Concert Film");
+    item["originalTitle"] = json!("Original Concert");
+    item["year"] = json!(2024);
+    item["originallyAvailableAt"] = json!("2024-01-02");
+    item["contentRating"] = json!("NL:12/US:PG-13");
+    item["summary"] = json!("Live performance");
+    item["tagline"] = json!("One night only");
+    item["studio"] = json!("Concert Studio");
+    item["thumb"] = json!("/library/metadata/800/thumb");
+    item["art"] = json!("/library/metadata/800/art");
+    item["Genre"] = json!([{ "tag": "Music" }]);
+    item["Label"] = json!([{ "tag": "Indie Label" }]);
+    item["Collection"] = json!([{ "tag": "Live" }]);
+    item["Guid"] = json!([{ "id": "imdb://tt1234567" }]);
+    item["Role"] = json!([{ "tag": "Singer", "role": "Self" }]);
+    item["Director"] = json!([{ "tag": "Director Name" }]);
+    item["Writer"] = json!([{ "tag": "Writer Name" }]);
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/8/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": { "totalSize": 1, "Metadata": [item] }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    assert_eq!(
+        sync_plex_other_video_library(&pool, &service, &config, 1, 8, "8", false)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(count(&pool, "PlexOtherVideo").await, 1);
+    assert_eq!(count(&pool, "OtherVideoMetadata").await, 1);
+    assert_eq!(count(&pool, "MediaVersion").await, 1);
+    assert_eq!(count(&pool, "MediaStream").await, 2);
+    for table in [
+        "Genre",
+        "Tag",
+        "Studio",
+        "MusicLabel",
+        "MetadataGuid",
+        "Actor",
+        "Director",
+        "Writer",
+        "Artwork",
+    ] {
+        assert!(count(&pool, table).await > 0, "expected {table} rows");
+    }
+    let row =
+        sqlx::query(r#"SELECT "Title", "ContentRating", "Plot" FROM "OtherVideoMetadata" LIMIT 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(row.get::<String, _>("Title"), "Concert Film");
+    assert_eq!(
+        row.get::<Option<String>, _>("ContentRating").as_deref(),
+        Some("NL:12/US:PG-13")
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("Plot").as_deref(),
+        Some("Live performance")
+    );
+    let artwork_paths =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Path" FROM "Artwork" ORDER BY "ArtworkKind""#)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        artwork_paths,
+        [
+            "plex://1/library/metadata/800/thumb",
+            "plex://1/library/metadata/800/art"
+        ]
+    );
 }
 
 #[tokio::test]
@@ -376,6 +541,41 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
+    for table in [
+        "Genre",
+        "Tag",
+        "Studio",
+        "MusicLabel",
+        "MetadataGuid",
+        "Actor",
+        "Director",
+        "Writer",
+        "Artwork",
+    ] {
+        assert!(
+            count(&pool, table).await > 0,
+            "expected episode {table} rows"
+        );
+    }
+    let episode_metadata = sqlx::query(
+        r#"SELECT "ContentRating", "OriginalTitle", "Plot"
+           FROM "EpisodeMetadata" LIMIT 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        episode_metadata
+            .get::<Option<String>, _>("ContentRating")
+            .as_deref(),
+        Some("NL:12/US:PG-13")
+    );
+    assert_eq!(
+        episode_metadata
+            .get::<Option<String>, _>("OriginalTitle")
+            .as_deref(),
+        Some("Original Video")
+    );
     assert_eq!(
         provider_library_key(&pool, "PlexLibrary", "Key", 1).await,
         Some("2".to_owned())
@@ -676,7 +876,12 @@ async fn mock_plex_movie_page(server: &MockServer) {
                 "MediaContainer": {
                     "totalSize": 1,
                     "Metadata": [
-                        media_json("/library/metadata/100", "/library/parts/10", "/media/movie.mkv", 100)
+                        media_json_with_uniform_metadata(
+                            "/library/metadata/100",
+                            "/library/parts/10",
+                            "/media/movie.mkv",
+                            100
+                        )
                     ]
                 }
             }));
@@ -732,7 +937,12 @@ async fn mock_plex_show_pages(server: &MockServer) {
                 "MediaContainer": {
                     "totalSize": 1,
                     "Metadata": [
-                        media_json("/library/metadata/202", "/library/parts/20", "/media/show/s01e01.mkv", 202)
+                        media_json_with_uniform_metadata(
+                            "/library/metadata/202",
+                            "/library/parts/20",
+                            "/media/show/s01e01.mkv",
+                            202
+                        )
                     ]
                 }
             }));
@@ -914,6 +1124,32 @@ fn media_json(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Val
             }
         ]
     })
+}
+
+fn media_json_with_uniform_metadata(
+    key: &str,
+    part_key: &str,
+    path: &str,
+    id: i32,
+) -> serde_json::Value {
+    let mut value = media_json(key, part_key, path, id);
+    value["originalTitle"] = json!("Original Video");
+    value["year"] = json!(2024);
+    value["originallyAvailableAt"] = json!("2024-01-02");
+    value["contentRating"] = json!("NL:12/US:PG-13");
+    value["summary"] = json!("Provider plot");
+    value["tagline"] = json!("Provider tagline");
+    value["studio"] = json!("Provider Studio");
+    value["thumb"] = json!(format!("{key}/thumb"));
+    value["art"] = json!(format!("{key}/art"));
+    value["Genre"] = json!([{ "tag": "Drama" }]);
+    value["Label"] = json!([{ "tag": "Provider Music Label" }]);
+    value["Collection"] = json!([{ "tag": "Featured" }]);
+    value["Guid"] = json!([{ "id": format!("imdb://tt{id:07}") }]);
+    value["Role"] = json!([{ "tag": "Actor Name", "role": "Lead" }]);
+    value["Director"] = json!([{ "tag": "Director Name" }]);
+    value["Writer"] = json!([{ "tag": "Writer Name" }]);
+    value
 }
 
 fn media_json_with_title(

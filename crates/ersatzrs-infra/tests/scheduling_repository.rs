@@ -46,6 +46,21 @@ fn persisted_smart_shuffle_policy() -> SchedulingSmartShufflePolicy {
                 search: None,
             },
             SchedulingSmartShuffleRule {
+                id: "content_rating".to_owned(),
+                kind: SchedulingSmartShuffleRuleKind::ContentRating,
+                search: None,
+            },
+            SchedulingSmartShuffleRule {
+                id: "language".to_owned(),
+                kind: SchedulingSmartShuffleRuleKind::Language,
+                search: None,
+            },
+            SchedulingSmartShuffleRule {
+                id: "music_label".to_owned(),
+                kind: SchedulingSmartShuffleRuleKind::MusicLabel,
+                search: None,
+            },
+            SchedulingSmartShuffleRule {
                 id: "pilot".to_owned(),
                 kind: SchedulingSmartShuffleRuleKind::Filter,
                 search: Some("title contains Pilot".to_owned()),
@@ -543,6 +558,41 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
         fuzzy_boosted.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![20]
     );
+}
+
+#[tokio::test]
+async fn scheduling_repository_searches_uniform_facets_for_every_media_kind() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    seed_uniform_search_facets(&pool).await;
+
+    for (media_kind, expected_ids) in [
+        ("movie", vec![20]),
+        ("show", vec![12, 13]),
+        ("episode", vec![12]),
+        ("music_video", vec![31]),
+        ("other_video", vec![50]),
+        ("song", vec![51]),
+        ("image", vec![52]),
+    ] {
+        let items = repos
+            .scheduling
+            .media_items_for_source(&SchedulingContentSource::Search(format!(
+                "type:{media_kind} AND content_rating:\"Uniform Rating\" AND \
+                 studio:\"Uniform Studio\" AND music_label:\"Uniform Label\" AND \
+                 language:Dutch AND language_tag:dut AND \
+                 genre:\"Uniform Genre\" AND tag:\"Uniform Tag\""
+            )))
+            .await
+            .unwrap();
+        assert_eq!(
+            items.iter().map(|item| item.id).collect::<Vec<_>>(),
+            expected_ids,
+            "uniform facet query failed for {media_kind}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1308,6 +1358,14 @@ async fn scheduling_repository_hydrates_persisted_smart_shuffle_policy_and_simil
     )
     .await
     .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MusicLabel" ("Id", "Name", "EpisodeMetadataId")
+           VALUES (99, 'Public Media', 120);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "EpisodeMetadataId")
+           VALUES (99, 'nld', 120)"#,
+    )
+    .await
+    .unwrap();
     common::seed_profile_and_channel(&repos, 903).await;
 
     repos
@@ -1377,6 +1435,9 @@ async fn scheduling_repository_hydrates_persisted_smart_shuffle_policy_and_simil
     assert!(pilot.contains("show:the show"));
     assert!(pilot.contains("season:the show:1"));
     assert!(pilot.contains("tag:network"));
+    assert!(pilot.contains("content_rating:tv-14"));
+    assert!(pilot.contains("language:dut"));
+    assert!(pilot.contains("music_label:public media"));
     assert!(pilot.contains(&format!("filter:{unit_key}:pilot")));
     let finale = reference_data.smart_shuffle_tags_for_media(&unit_key, 13);
     assert!(finale.contains("show:the show"));
@@ -1912,6 +1973,92 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     .await
     .unwrap();
     insert_version(pool, 31, 240_000, "MusicVideoId").await;
+}
+
+#[allow(clippy::too_many_lines)]
+async fn seed_uniform_search_facets(pool: &SqlitePool) {
+    pool.execute(
+        r#"UPDATE "MovieMetadata" SET "ContentRating" = 'Uniform Rating' WHERE "Id" = 200;
+           UPDATE "ShowMetadata" SET "ContentRating" = 'Uniform Rating' WHERE "Id" = 100;
+           UPDATE "MusicVideoMetadata" SET "ContentRating" = 'Uniform Rating' WHERE "Id" = 310"#,
+    )
+    .await
+    .unwrap();
+
+    for id in [50, 51, 52] {
+        common::seed_media_item(pool, id, 1).await;
+    }
+    pool.execute(
+        r#"INSERT INTO "OtherVideo" ("Id") VALUES (50);
+           INSERT INTO "OtherVideoMetadata" (
+               "Id", "OtherVideoId", "MetadataKind", "Title", "SortTitle",
+               "DateAdded", "DateUpdated", "ContentRating"
+           ) VALUES (
+               500, 50, 0, 'Uniform Other Video', 'uniform other video',
+               '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 'Uniform Rating'
+           );
+           INSERT INTO "Song" ("Id") VALUES (51);
+           INSERT INTO "SongMetadata" (
+               "Id", "SongId", "MetadataKind", "Title", "SortTitle",
+               "DateAdded", "DateUpdated", "ContentRating"
+           ) VALUES (
+               510, 51, 0, 'Uniform Song', 'uniform song',
+               '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 'Uniform Rating'
+           );
+           INSERT INTO "Image" ("Id") VALUES (52);
+           INSERT INTO "ImageMetadata" (
+               "Id", "ImageId", "MetadataKind", "Title", "SortTitle",
+               "DateAdded", "DateUpdated", "ContentRating"
+           ) VALUES (
+               520, 52, 0, 'Uniform Image', 'uniform image',
+               '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 'Uniform Rating'
+           )"#,
+    )
+    .await
+    .unwrap();
+    insert_version(pool, 50, 600_000, "OtherVideoId").await;
+    insert_version(pool, 51, 180_000, "SongId").await;
+    insert_version(pool, 52, 10_000, "ImageId").await;
+
+    pool.execute(
+        r#"INSERT INTO "Genre" ("Id", "Name", "MovieMetadataId") VALUES (600, 'Uniform Genre', 200);
+           INSERT INTO "Genre" ("Id", "Name", "ShowMetadataId") VALUES (601, 'Uniform Genre', 100);
+           INSERT INTO "Genre" ("Id", "Name", "EpisodeMetadataId") VALUES (602, 'Uniform Genre', 120);
+           INSERT INTO "Genre" ("Id", "Name", "MusicVideoMetadataId") VALUES (603, 'Uniform Genre', 310);
+           INSERT INTO "Genre" ("Id", "Name", "OtherVideoMetadataId") VALUES (604, 'Uniform Genre', 500);
+           INSERT INTO "Genre" ("Id", "Name", "SongMetadataId") VALUES (605, 'Uniform Genre', 510);
+           INSERT INTO "Genre" ("Id", "Name", "ImageMetadataId") VALUES (606, 'Uniform Genre', 520);
+           INSERT INTO "Tag" ("Id", "Name", "MovieMetadataId") VALUES (600, 'Uniform Tag', 200);
+           INSERT INTO "Tag" ("Id", "Name", "ShowMetadataId") VALUES (601, 'Uniform Tag', 100);
+           INSERT INTO "Tag" ("Id", "Name", "EpisodeMetadataId") VALUES (602, 'Uniform Tag', 120);
+           INSERT INTO "Tag" ("Id", "Name", "MusicVideoMetadataId") VALUES (603, 'Uniform Tag', 310);
+           INSERT INTO "Tag" ("Id", "Name", "OtherVideoMetadataId") VALUES (604, 'Uniform Tag', 500);
+           INSERT INTO "Tag" ("Id", "Name", "SongMetadataId") VALUES (605, 'Uniform Tag', 510);
+           INSERT INTO "Tag" ("Id", "Name", "ImageMetadataId") VALUES (606, 'Uniform Tag', 520);
+           INSERT INTO "Studio" ("Id", "Name", "MovieMetadataId") VALUES (600, 'Uniform Studio', 200);
+           INSERT INTO "Studio" ("Id", "Name", "ShowMetadataId") VALUES (601, 'Uniform Studio', 100);
+           INSERT INTO "Studio" ("Id", "Name", "EpisodeMetadataId") VALUES (602, 'Uniform Studio', 120);
+           INSERT INTO "Studio" ("Id", "Name", "MusicVideoMetadataId") VALUES (603, 'Uniform Studio', 310);
+           INSERT INTO "Studio" ("Id", "Name", "OtherVideoMetadataId") VALUES (604, 'Uniform Studio', 500);
+           INSERT INTO "Studio" ("Id", "Name", "SongMetadataId") VALUES (605, 'Uniform Studio', 510);
+           INSERT INTO "Studio" ("Id", "Name", "ImageMetadataId") VALUES (606, 'Uniform Studio', 520);
+           INSERT INTO "MusicLabel" ("Id", "Name", "MovieMetadataId") VALUES (600, 'Uniform Label', 200);
+           INSERT INTO "MusicLabel" ("Id", "Name", "ShowMetadataId") VALUES (601, 'Uniform Label', 100);
+           INSERT INTO "MusicLabel" ("Id", "Name", "EpisodeMetadataId") VALUES (602, 'Uniform Label', 120);
+           INSERT INTO "MusicLabel" ("Id", "Name", "MusicVideoMetadataId") VALUES (603, 'Uniform Label', 310);
+           INSERT INTO "MusicLabel" ("Id", "Name", "OtherVideoMetadataId") VALUES (604, 'Uniform Label', 500);
+           INSERT INTO "MusicLabel" ("Id", "Name", "SongMetadataId") VALUES (605, 'Uniform Label', 510);
+           INSERT INTO "MusicLabel" ("Id", "Name", "ImageMetadataId") VALUES (606, 'Uniform Label', 520);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "MovieMetadataId") VALUES (600, 'nl', 200);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "ShowMetadataId") VALUES (601, 'nl', 100);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "EpisodeMetadataId") VALUES (602, 'nl', 120);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "MusicVideoMetadataId") VALUES (603, 'nl', 310);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "OtherVideoMetadataId") VALUES (604, 'nl', 500);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "SongMetadataId") VALUES (605, 'nl', 510);
+           INSERT INTO "MetadataLanguage" ("Id", "Code", "ImageMetadataId") VALUES (606, 'nl', 520)"#,
+    )
+    .await
+    .unwrap();
 }
 
 async fn seed_content_variant_example_rows(pool: &SqlitePool) {

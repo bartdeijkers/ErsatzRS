@@ -31,6 +31,7 @@ pub enum SearchField {
     Tag,
     Collection,
     Studio,
+    MusicLabel,
     Network,
     Actor,
     Director,
@@ -118,6 +119,7 @@ pub struct SearchDocument {
     pub tags: Vec<String>,
     pub collections: Vec<String>,
     pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
     pub networks: Vec<String>,
     pub actors: Vec<String>,
     pub directors: Vec<String>,
@@ -292,6 +294,7 @@ impl SearchField {
             Self::Tag => document.tags.clone(),
             Self::Collection => document.collections.clone(),
             Self::Studio => document.studios.clone(),
+            Self::MusicLabel => document.music_labels.clone(),
             Self::Network => document.networks.clone(),
             Self::Actor => document.actors.clone(),
             Self::Director => document.directors.clone(),
@@ -418,6 +421,7 @@ impl SearchField {
             "tag" | "tag_full" => Self::Tag,
             "collection" => Self::Collection,
             "studio" => Self::Studio,
+            "music_label" => Self::MusicLabel,
             "network" => Self::Network,
             "actor" => Self::Actor,
             "director" => Self::Director,
@@ -1384,6 +1388,15 @@ mod tests {
         assert!(SearchExpression::parse("content_rating:TV-MA").matches(&doc));
         assert!(!SearchExpression::parse("content_rating:tv-ma").matches(&doc));
         assert!(!SearchExpression::parse("NOT artist:\"Alice in Chains\"").matches(&doc));
+    }
+
+    #[test]
+    fn music_label_is_a_first_class_search_field() {
+        let mut doc = document();
+        doc.music_labels = vec!["Blue Note".to_owned()];
+
+        assert!(SearchExpression::parse("music_label:\"Blue Note\"").matches(&doc));
+        assert!(!SearchExpression::parse("studio:\"Blue Note\"").matches(&doc));
     }
 
     #[test]

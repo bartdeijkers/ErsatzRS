@@ -130,11 +130,44 @@ pub async fn replace_strings(
         .await
         .repository()?;
 
+    let values = ersatzrs_core::metadata_facets::normalize_facet_values(values);
     if values.is_empty() {
         return Ok(());
     }
 
     let insert_sql = format!(r#"INSERT INTO "{table}" ("Name", "{fk_column}") VALUES (?, ?)"#);
+    for value in &values {
+        sqlx::query(crate::db::assert_sql_safe(&insert_sql))
+            .bind(value)
+            .bind(metadata_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+    }
+    Ok(())
+}
+
+/// DELETE-then-INSERT canonical language codes in `MetadataLanguage`.
+///
+/// # Errors
+///
+/// Returns an error when the underlying DELETE or INSERT statements fail.
+pub async fn replace_metadata_languages(
+    tx: &mut Transaction<'_, Db>,
+    fk_column: &'static str,
+    metadata_id: i64,
+    values: &[String],
+) -> Result<()> {
+    let delete_sql = format!(r#"DELETE FROM "MetadataLanguage" WHERE "{fk_column}" = ?"#);
+    sqlx::query(crate::db::assert_sql_safe(&delete_sql))
+        .bind(metadata_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+
+    let values = ersatzrs_core::metadata_facets::normalize_language_codes(values);
+    let insert_sql =
+        format!(r#"INSERT INTO "MetadataLanguage" ("Code", "{fk_column}") VALUES (?, ?)"#);
     for value in values {
         sqlx::query(crate::db::assert_sql_safe(&insert_sql))
             .bind(value)

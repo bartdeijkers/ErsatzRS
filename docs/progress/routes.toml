@@ -72,17 +72,22 @@ routed  = true
 
 [[route]]
 nav     = '/media/other/videos'
-backing = 'other-video browser'
+backing = 'other-video browser + `:id` detail'
 routed  = true
 
 [[route]]
 nav     = '/media/music/songs'
-backing = 'songs browser'
+backing = 'songs browser + `:id` detail'
 routed  = true
 
 [[route]]
 nav     = '/media/browser/images'
-backing = 'images browser (alias `/media/images`)'
+backing = 'images browser + `:id` detail (aliases `/media/images` and `/media/images/:id`)'
+routed  = true
+
+[[route]]
+nav     = '/media/music/videos'
+backing = 'music-video browser + `:id` detail'
 routed  = true
 
 [[route]]

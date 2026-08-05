@@ -984,6 +984,141 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn fresh_sqlite_schema_contains_uniform_metadata_facets() {
+        let pool = init("sqlite::memory:").await.expect("migrate fresh schema");
+        for table in [
+            "EpisodeMetadata",
+            "MusicVideoMetadata",
+            "SongMetadata",
+            "ImageMetadata",
+        ] {
+            let sql = format!(r#"PRAGMA table_info("{table}")"#);
+            let columns = sqlx::query(super::assert_sql_safe(sql))
+                .fetch_all(&pool)
+                .await
+                .expect("table info")
+                .into_iter()
+                .map(|row| row.get::<String, _>("name"))
+                .collect::<Vec<_>>();
+            assert!(columns.iter().any(|column| column == "ContentRating"));
+        }
+        for table in ["MusicLabel", "MetadataLanguage"] {
+            let exists: i64 = sqlx::query_scalar(
+                r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+            )
+            .bind(table)
+            .fetch_one(&pool)
+            .await
+            .expect("table exists");
+            assert_eq!(exists, 1, "missing {table}");
+            let indexes: i64 = sqlx::query_scalar(
+                r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+            )
+            .bind(table)
+            .fetch_one(&pool)
+            .await
+            .expect("index count");
+            assert!(indexes >= 10, "expected owner indexes for {table}");
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn existing_sqlite_schema_upgrades_to_uniform_metadata_facets() {
+        const UNIFORM_FACETS_VERSION: i64 = 202_608_051_200;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect upgrade database");
+        let previous = sqlx::migrate::Migrator::with_migrations(
+            super::SQLITE_MIGRATOR
+                .iter()
+                .filter(|migration| migration.version < UNIFORM_FACETS_VERSION)
+                .cloned()
+                .collect(),
+        );
+        previous.run(&pool).await.expect("migrate previous schema");
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (901)"#)
+            .execute(&pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (901)"#)
+            .execute(&pool)
+            .await
+            .expect("seed local source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+               VALUES (902, 2, 901, 'Television'), (903, 1, 901, 'Movies')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed libraries");
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (902), (903)"#)
+            .execute(&pool)
+            .await
+            .expect("seed local libraries");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId")
+               VALUES (904, '/tv', 902), (905, '/movies', 903)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed library paths");
+        sqlx::query(
+            r#"INSERT INTO "LibraryFolder" ("Id", "Etag", "LibraryPathId", "Path")
+               VALUES (906, 'stale-tv', 904, '/tv/show'),
+                      (907, 'keep-movie', 905, '/movies/title')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed library folders");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'MusicLabel'",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("query pre-upgrade schema"),
+            0
+        );
+
+        super::SQLITE_MIGRATOR
+            .run(&pool)
+            .await
+            .expect("apply uniform-facets migration");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                r"SELECT COUNT(*) FROM sqlite_master
+                   WHERE type = 'table' AND name IN ('MusicLabel', 'MetadataLanguage')",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("query upgraded schema"),
+            2
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Option<String>>(
+                r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Id" = 906"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("query television folder ETag"),
+            None
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Option<String>>(
+                r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Id" = 907"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("query movie folder ETag"),
+            Some("keep-movie".to_owned())
+        );
+    }
+
     #[test]
     fn resolve_database_url_prefers_env_override() {
         let resolved = resolve_database_url_from_parts(

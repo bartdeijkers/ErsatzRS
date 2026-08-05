@@ -1513,6 +1513,17 @@ impl ApplicationServices {
         queries::admin_search_documents(query, self.ports.admin_search()).await
     }
 
+    pub async fn plex_artwork_connection(
+        &self,
+        source_id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::PlexArtworkConnectionAdmin>> {
+        self.ports
+            .media_sources()
+            .plex_artwork_connection_admin(source_id)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn first_jellyfin_address(&self) -> Result<Option<String>> {
         self.ports
             .media_sources()
@@ -1989,6 +2000,24 @@ impl ApplicationServices {
         self.ports
             .admin_media()
             .get_other_video_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_faceted_media_detail(
+        &self,
+        id: i64,
+        kind: ersatzrs_core::repositories::AdminFacetedMediaKind,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminFacetedMediaDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "media_item_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_faceted_media_detail_admin(id, kind)
             .await
             .map_err(Into::into)
     }

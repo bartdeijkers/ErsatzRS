@@ -142,6 +142,7 @@ const SEARCH_NEED_ALBUM_ARTISTS: u64 = 1 << 34;
 const SEARCH_NEED_PARENT_TITLE: u64 = 1 << 35;
 const SEARCH_NEED_AUDIO_TITLES: u64 = 1 << 36;
 const SEARCH_NEED_SUBTITLE_TITLES: u64 = 1 << 37;
+const SEARCH_NEED_MUSIC_LABELS: u64 = 1 << 38;
 
 const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_LANGUAGE_TAGS
@@ -220,6 +221,7 @@ impl SearchHydrationNeeds {
             SearchField::Tag => self.insert(SEARCH_NEED_TAGS),
             SearchField::Collection => self.insert(SEARCH_NEED_COLLECTIONS),
             SearchField::Studio => self.insert(SEARCH_NEED_STUDIOS),
+            SearchField::MusicLabel => self.insert(SEARCH_NEED_MUSIC_LABELS),
             SearchField::Network => self.insert(SEARCH_NEED_NETWORKS),
             SearchField::Actor => self.insert(SEARCH_NEED_ACTORS),
             SearchField::Director => self.insert(SEARCH_NEED_DIRECTORS),
@@ -713,6 +715,7 @@ impl SqliteSchedulingContentRepository {
         Ok(reference_data)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn smart_shuffle_tags_for_policy(
         &self,
         policy: &SchedulingSmartShufflePolicy,
@@ -733,6 +736,15 @@ impl SqliteSchedulingContentRepository {
                 SchedulingSmartShuffleRuleKind::Tag => hydration.insert(SEARCH_NEED_TAGS),
                 SchedulingSmartShuffleRuleKind::Genre => hydration.insert(SEARCH_NEED_GENRES),
                 SchedulingSmartShuffleRuleKind::Studio => hydration.insert(SEARCH_NEED_STUDIOS),
+                SchedulingSmartShuffleRuleKind::ContentRating => {
+                    hydration.insert(SEARCH_NEED_CONTENT_RATINGS);
+                }
+                SchedulingSmartShuffleRuleKind::Language => {
+                    hydration.insert(SEARCH_NEED_LANGUAGE_TAGS);
+                }
+                SchedulingSmartShuffleRuleKind::MusicLabel => {
+                    hydration.insert(SEARCH_NEED_MUSIC_LABELS);
+                }
                 SchedulingSmartShuffleRuleKind::Filter => {
                     if let Some(search) = rule.search.as_deref() {
                         let expression = SearchExpression::parse(search);
@@ -796,6 +808,15 @@ impl SqliteSchedulingContentRepository {
                     }
                     SchedulingSmartShuffleRuleKind::Studio => {
                         extend_smart_shuffle_tags(tags, &rule.id, &document.studios);
+                    }
+                    SchedulingSmartShuffleRuleKind::ContentRating => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.content_ratings);
+                    }
+                    SchedulingSmartShuffleRuleKind::Language => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.language_tags);
+                    }
+                    SchedulingSmartShuffleRuleKind::MusicLabel => {
+                        extend_smart_shuffle_tags(tags, &rule.id, &document.music_labels);
                     }
                     SchedulingSmartShuffleRuleKind::Filter => {
                         if filters.iter().any(|(id, expression)| {
@@ -1615,6 +1636,21 @@ impl SqliteSchedulingContentRepository {
         } else {
             StreamSearchFields::default()
         };
+        let language_codes = if hydration.contains(SEARCH_NEED_LANGUAGES)
+            || hydration.contains(SEARCH_NEED_LANGUAGE_TAGS)
+        {
+            let explicit = self
+                .metadata_language_values(&metadata_kind, metadata_id)
+                .await?;
+            ersatzrs_core::metadata_facets::union_facet_values(
+                &ersatzrs_core::metadata_facets::normalize_language_codes(explicit),
+                &ersatzrs_core::metadata_facets::normalize_language_codes(
+                    &stream_fields.audio_languages,
+                ),
+            )
+        } else {
+            Vec::new()
+        };
 
         Ok(SearchDocument {
             media_item_id: item_id,
@@ -1671,6 +1707,19 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            music_labels: if hydration.contains(SEARCH_NEED_MUSIC_LABELS) {
+                self.metadata_lookup_values_fk(
+                    "MusicLabel",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?
+            } else {
+                Vec::new()
+            },
             networks: if hydration.contains(SEARCH_NEED_NETWORKS) {
                 self.metadata_tag_values_by_external_type(&metadata_kind, metadata_id, "319")
                     .await?
@@ -1696,13 +1745,12 @@ impl SqliteSchedulingContentRepository {
                 Vec::new()
             },
             languages: if hydration.contains(SEARCH_NEED_LANGUAGES) {
-                self.language_names_for_codes(&stream_fields.audio_languages)
-                    .await?
+                self.language_names_for_codes(&language_codes).await?
             } else {
                 Vec::new()
             },
             language_tags: if hydration.contains(SEARCH_NEED_LANGUAGE_TAGS) {
-                stream_fields.audio_languages.clone()
+                language_codes
             } else {
                 Vec::new()
             },
@@ -1914,6 +1962,24 @@ impl SqliteSchedulingContentRepository {
         };
         let sql =
             format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#);
+        sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
+            .bind(metadata_id)
+            .fetch_all(&self.0)
+            .await
+            .repository()
+    }
+
+    async fn metadata_language_values(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+    ) -> Result<Vec<String>> {
+        let Some(fk_column) = metadata_fk(metadata_kind) else {
+            return Ok(Vec::new());
+        };
+        let sql = format!(
+            r#"SELECT "Code" FROM "MetadataLanguage" WHERE "{fk_column}" = ? ORDER BY "Id""#
+        );
         sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
@@ -3224,7 +3290,7 @@ FROM (
         "em"."Year" AS "year",
         "em"."ReleaseDate" AS "release_date",
         "em"."DateAdded" AS "added_date",
-        NULL AS "content_rating",
+        COALESCE("em"."ContentRating", "shm"."ContentRating") AS "content_rating",
         NULL AS "album",
         NULL AS "album_artists",
         "s"."ShowId" AS "show_id",
@@ -3247,7 +3313,7 @@ FROM (
         "mvm"."Year" AS "year",
         "mvm"."ReleaseDate" AS "release_date",
         "mvm"."DateAdded" AS "added_date",
-        NULL AS "content_rating",
+        "mvm"."ContentRating" AS "content_rating",
         "mvm"."Album" AS "album",
         NULL AS "album_artists",
         NULL AS "show_id",
@@ -3307,7 +3373,7 @@ FROM (
         "som"."Year" AS "year",
         "som"."ReleaseDate" AS "release_date",
         "som"."DateAdded" AS "added_date",
-        NULL AS "content_rating",
+        "som"."ContentRating" AS "content_rating",
         "som"."Album" AS "album",
         "som"."AlbumArtists" AS "album_artists",
         NULL AS "show_id",
@@ -3327,7 +3393,7 @@ FROM (
         "im"."Year" AS "year",
         "im"."ReleaseDate" AS "release_date",
         "im"."DateAdded" AS "added_date",
-        NULL AS "content_rating",
+        "im"."ContentRating" AS "content_rating",
         NULL AS "album",
         NULL AS "album_artists",
         NULL AS "show_id",
@@ -3347,7 +3413,7 @@ FROM (
         "rsm"."Year" AS "year",
         "rsm"."ReleaseDate" AS "release_date",
         "rsm"."DateAdded" AS "added_date",
-        NULL AS "content_rating",
+        "rsm"."ContentRating" AS "content_rating",
         NULL AS "album",
         NULL AS "album_artists",
         NULL AS "show_id",

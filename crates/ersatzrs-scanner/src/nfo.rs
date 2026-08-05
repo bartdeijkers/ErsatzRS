@@ -92,6 +92,8 @@ pub struct TvShowNfo {
     pub tagline: Option<String>,
     /// MPAA/content rating.
     pub content_rating: Option<String>,
+    /// All repeated MPAA/content-rating elements.
+    pub content_ratings: Vec<String>,
     /// Premiered date.
     pub premiered: Option<DateTime<Utc>>,
     /// Genre rows.
@@ -100,6 +102,10 @@ pub struct TvShowNfo {
     pub tags: Vec<String>,
     /// Studio rows.
     pub studios: Vec<String>,
+    /// Publisher/music-label rows (ErsatzRS extension).
+    pub music_labels: Vec<String>,
+    /// Explicit metadata-language rows (ErsatzRS extension).
+    pub languages: Vec<String>,
     /// Actor rows.
     pub actors: Vec<NfoActor>,
     /// Provider GUID rows.
@@ -121,6 +127,8 @@ pub struct MovieNfo {
     pub year: Option<i32>,
     /// MPAA/content rating.
     pub content_rating: Option<String>,
+    /// All repeated MPAA/content-rating elements.
+    pub content_ratings: Vec<String>,
     /// Premiered date.
     pub premiered: Option<DateTime<Utc>>,
     /// Genre rows.
@@ -129,6 +137,10 @@ pub struct MovieNfo {
     pub tags: Vec<String>,
     /// Studio rows.
     pub studios: Vec<String>,
+    /// Publisher/music-label rows (ErsatzRS extension).
+    pub music_labels: Vec<String>,
+    /// Explicit metadata-language rows (ErsatzRS extension).
+    pub languages: Vec<String>,
     /// Actor rows.
     pub actors: Vec<NfoActor>,
     /// Writer names from `<credits>`.
@@ -169,6 +181,8 @@ pub struct EpisodeNfo {
     pub episode: Option<i32>,
     /// MPAA/content rating.
     pub content_rating: Option<String>,
+    /// All repeated MPAA/content-rating elements.
+    pub content_ratings: Vec<String>,
     /// Aired date.
     pub aired: Option<DateTime<Utc>>,
     /// Premiered date, accepted for Kodi variants that use this name.
@@ -181,6 +195,12 @@ pub struct EpisodeNfo {
     pub genres: Vec<String>,
     /// Tag rows.
     pub tags: Vec<String>,
+    /// Studio rows.
+    pub studios: Vec<String>,
+    /// Publisher/music-label rows (ErsatzRS extension).
+    pub music_labels: Vec<String>,
+    /// Explicit metadata-language rows (ErsatzRS extension).
+    pub languages: Vec<String>,
     /// Actor rows.
     pub actors: Vec<NfoActor>,
     /// Writer names from `<credits>`.
@@ -241,6 +261,68 @@ pub struct MusicVideoNfo {
     pub tags: Vec<String>,
     /// Studio rows.
     pub studios: Vec<String>,
+    /// MPAA/content-rating rows.
+    pub content_ratings: Vec<String>,
+    /// Publisher/music-label rows (ErsatzRS extension).
+    pub music_labels: Vec<String>,
+    /// Explicit metadata-language rows (ErsatzRS extension).
+    pub languages: Vec<String>,
+}
+
+/// Parsed Kodi-compatible Other Video sidecar metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OtherVideoNfo {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub outline: Option<String>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub year: Option<i32>,
+    pub premiered: Option<DateTime<Utc>>,
+    pub content_ratings: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub actors: Vec<NfoActor>,
+    pub writers: Vec<String>,
+    pub directors: Vec<String>,
+    pub guids: Vec<NfoGuid>,
+}
+
+/// Parsed ErsatzRS `<song>` sidecar metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SongNfo {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub year: Option<i32>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub album: Option<String>,
+    pub artists: Vec<String>,
+    pub album_artists: Vec<String>,
+    pub track: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+/// Parsed ErsatzRS `<image>` sidecar metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ImageNfo {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub year: Option<i32>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub content_ratings: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
 }
 
 /// Parse a `tvshow.nfo` file.
@@ -395,6 +477,73 @@ pub fn parse_music_video_nfo(path: impl AsRef<Path>) -> Result<MusicVideoNfo> {
 /// fails.
 pub fn parse_music_video_nfo_str(input: &str) -> Result<MusicVideoNfo> {
     parse_str::<RawMusicVideoNfo, _>(input, "musicvideo", MusicVideoNfo::from)
+}
+
+/// Parse an Other Video NFO using the same compatible roots as ErsatzTV.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read, no compatible root exists,
+/// or XML deserialization fails.
+pub fn parse_other_video_nfo(path: impl AsRef<Path>) -> Result<OtherVideoNfo> {
+    let input = read_sanitized_file(path)?;
+    parse_other_video_nfo_str(&input)
+}
+
+/// Parse an Other Video NFO XML string.
+///
+/// # Errors
+///
+/// Returns an error when no compatible root exists or XML deserialization
+/// fails.
+pub fn parse_other_video_nfo_str(input: &str) -> Result<OtherVideoNfo> {
+    for root in ["episodedetails", "movie", "musicvideo"] {
+        if let Some(fragment) = extract_root_fragment(&sanitize_nfo_text(input), root) {
+            let raw: RawOtherVideoNfo = de::from_str(&fragment)?;
+            return Ok(OtherVideoNfo::from(raw));
+        }
+    }
+    Err(NfoError::MissingRoot("movie|episodedetails|musicvideo"))
+}
+
+/// Parse an ErsatzRS song sidecar.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read, the `song` root is absent,
+/// or XML deserialization fails.
+pub fn parse_song_nfo(path: impl AsRef<Path>) -> Result<SongNfo> {
+    parse_file::<RawSongNfo, _>(path, "song", SongNfo::from)
+}
+
+/// Parse an ErsatzRS song sidecar XML string.
+///
+/// # Errors
+///
+/// Returns an error when the `song` root is absent or XML deserialization
+/// fails.
+pub fn parse_song_nfo_str(input: &str) -> Result<SongNfo> {
+    parse_str::<RawSongNfo, _>(input, "song", SongNfo::from)
+}
+
+/// Parse an ErsatzRS image sidecar.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read, the `image` root is absent,
+/// or XML deserialization fails.
+pub fn parse_image_nfo(path: impl AsRef<Path>) -> Result<ImageNfo> {
+    parse_file::<RawImageNfo, _>(path, "image", ImageNfo::from)
+}
+
+/// Parse an ErsatzRS image sidecar XML string.
+///
+/// # Errors
+///
+/// Returns an error when the `image` root is absent or XML deserialization
+/// fails.
+pub fn parse_image_nfo_str(input: &str) -> Result<ImageNfo> {
+    parse_str::<RawImageNfo, _>(input, "image", ImageNfo::from)
 }
 
 /// Return the ErsatzTV-compatible sort title.
@@ -636,7 +785,7 @@ struct RawTvShowNfo {
     outline: Option<String>,
     tagline: Option<String>,
     #[serde(rename = "mpaa")]
-    content_rating: Option<String>,
+    content_ratings: Vec<String>,
     premiered: Option<String>,
     #[serde(rename = "genre")]
     genres: Vec<String>,
@@ -644,6 +793,10 @@ struct RawTvShowNfo {
     tags: Vec<String>,
     #[serde(rename = "studio")]
     studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
     #[serde(rename = "actor")]
     actors: Vec<RawActorNfo>,
     #[serde(rename = "uniqueid")]
@@ -659,11 +812,14 @@ impl From<RawTvShowNfo> for TvShowNfo {
             plot: value.plot,
             outline: value.outline,
             tagline: value.tagline,
-            content_rating: value.content_rating,
+            content_rating: value.content_ratings.first().cloned(),
+            content_ratings: value.content_ratings,
             premiered: parse_datetime(value.premiered),
             genres: value.genres,
             tags: value.tags,
             studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
             actors: value.actors.into_iter().map(NfoActor::from).collect(),
             guids: value.guids.into_iter().map(NfoGuid::from).collect(),
         }
@@ -679,7 +835,7 @@ struct RawMovieNfo {
     plot: Option<String>,
     year: Option<String>,
     #[serde(rename = "mpaa")]
-    content_rating: Option<String>,
+    content_ratings: Vec<String>,
     premiered: Option<String>,
     #[serde(rename = "genre")]
     genres: Vec<String>,
@@ -687,6 +843,10 @@ struct RawMovieNfo {
     tags: Vec<String>,
     #[serde(rename = "studio")]
     studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
     #[serde(rename = "actor")]
     actors: Vec<RawActorNfo>,
     #[serde(rename = "credits")]
@@ -705,11 +865,14 @@ impl From<RawMovieNfo> for MovieNfo {
             outline: value.outline,
             plot: value.plot,
             year: parse_i32(value.year),
-            content_rating: value.content_rating,
+            content_rating: value.content_ratings.first().cloned(),
+            content_ratings: value.content_ratings,
             premiered: parse_datetime(value.premiered),
             genres: value.genres,
             tags: value.tags,
             studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
             actors: value.actors.into_iter().map(NfoActor::from).collect(),
             writers: value.writers,
             directors: value.directors,
@@ -753,7 +916,7 @@ struct RawEpisodeNfo {
     season: Option<String>,
     episode: Option<String>,
     #[serde(rename = "mpaa")]
-    content_rating: Option<String>,
+    content_ratings: Vec<String>,
     aired: Option<String>,
     premiered: Option<String>,
     year: Option<String>,
@@ -762,6 +925,12 @@ struct RawEpisodeNfo {
     genres: Vec<String>,
     #[serde(rename = "tag")]
     tags: Vec<String>,
+    #[serde(rename = "studio")]
+    studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
     #[serde(rename = "actor")]
     actors: Vec<RawActorNfo>,
     #[serde(rename = "credits")]
@@ -779,13 +948,17 @@ impl From<RawEpisodeNfo> for EpisodeNfo {
             title: value.title,
             season: parse_i32(value.season),
             episode: parse_i32(value.episode),
-            content_rating: value.content_rating,
+            content_rating: value.content_ratings.first().cloned(),
+            content_ratings: value.content_ratings,
             aired: parse_datetime(value.aired),
             premiered: parse_datetime(value.premiered),
             year: parse_i32(value.year),
             plot: value.plot,
             genres: value.genres,
             tags: value.tags,
+            studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
             actors: value.actors.into_iter().map(NfoActor::from).collect(),
             writers: value.writers,
             directors: value.directors,
@@ -847,6 +1020,12 @@ struct RawMusicVideoNfo {
     tags: Vec<String>,
     #[serde(rename = "studio")]
     studios: Vec<String>,
+    #[serde(rename = "mpaa")]
+    content_ratings: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
 }
 
 impl From<RawMusicVideoNfo> for MusicVideoNfo {
@@ -864,6 +1043,151 @@ impl From<RawMusicVideoNfo> for MusicVideoNfo {
             genres: value.genres,
             tags: value.tags,
             studios: value.studios,
+            content_ratings: value.content_ratings,
+            music_labels: value.music_labels,
+            languages: value.languages,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct RawOtherVideoNfo {
+    title: Option<String>,
+    sorttitle: Option<String>,
+    outline: Option<String>,
+    plot: Option<String>,
+    tagline: Option<String>,
+    year: Option<String>,
+    premiered: Option<String>,
+    #[serde(rename = "mpaa")]
+    content_ratings: Vec<String>,
+    #[serde(rename = "studio")]
+    studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
+    #[serde(rename = "genre")]
+    genres: Vec<String>,
+    #[serde(rename = "tag")]
+    tags: Vec<String>,
+    #[serde(rename = "actor")]
+    actors: Vec<RawActorNfo>,
+    #[serde(rename = "credits")]
+    writers: Vec<String>,
+    #[serde(rename = "director")]
+    directors: Vec<String>,
+    #[serde(rename = "uniqueid")]
+    guids: Vec<RawUniqueIdNfo>,
+}
+
+impl From<RawOtherVideoNfo> for OtherVideoNfo {
+    fn from(value: RawOtherVideoNfo) -> Self {
+        Self {
+            title: value.title,
+            sort_title: value.sorttitle,
+            outline: value.outline,
+            plot: value.plot,
+            tagline: value.tagline,
+            year: parse_i32(value.year),
+            premiered: parse_datetime(value.premiered),
+            content_ratings: value.content_ratings,
+            studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
+            genres: value.genres,
+            tags: value.tags,
+            actors: value.actors.into_iter().map(NfoActor::from).collect(),
+            writers: value.writers,
+            directors: value.directors,
+            guids: value.guids.into_iter().map(NfoGuid::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct RawSongNfo {
+    title: Option<String>,
+    sorttitle: Option<String>,
+    year: Option<String>,
+    released: Option<String>,
+    album: Option<String>,
+    #[serde(rename = "artist")]
+    artists: Vec<String>,
+    #[serde(rename = "albumartist")]
+    album_artists: Vec<String>,
+    track: Option<String>,
+    #[serde(rename = "mpaa")]
+    content_ratings: Vec<String>,
+    #[serde(rename = "studio")]
+    studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
+    #[serde(rename = "genre")]
+    genres: Vec<String>,
+    #[serde(rename = "tag")]
+    tags: Vec<String>,
+}
+
+impl From<RawSongNfo> for SongNfo {
+    fn from(value: RawSongNfo) -> Self {
+        Self {
+            title: value.title,
+            sort_title: value.sorttitle,
+            year: parse_i32(value.year),
+            release_date: parse_datetime(value.released),
+            album: value.album,
+            artists: value.artists,
+            album_artists: value.album_artists,
+            track: value.track,
+            content_ratings: value.content_ratings,
+            studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
+            genres: value.genres,
+            tags: value.tags,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct RawImageNfo {
+    title: Option<String>,
+    sorttitle: Option<String>,
+    year: Option<String>,
+    released: Option<String>,
+    #[serde(rename = "mpaa")]
+    content_ratings: Vec<String>,
+    #[serde(rename = "studio")]
+    studios: Vec<String>,
+    #[serde(rename = "label")]
+    music_labels: Vec<String>,
+    #[serde(rename = "language")]
+    languages: Vec<String>,
+    #[serde(rename = "genre")]
+    genres: Vec<String>,
+    #[serde(rename = "tag")]
+    tags: Vec<String>,
+}
+
+impl From<RawImageNfo> for ImageNfo {
+    fn from(value: RawImageNfo) -> Self {
+        Self {
+            title: value.title,
+            sort_title: value.sorttitle,
+            year: parse_i32(value.year),
+            release_date: parse_datetime(value.released),
+            content_ratings: value.content_ratings,
+            studios: value.studios,
+            music_labels: value.music_labels,
+            languages: value.languages,
+            genres: value.genres,
+            tags: value.tags,
         }
     }
 }
@@ -998,6 +1322,46 @@ mod tests {
         assert_eq!(parsed.track, Some(4));
         assert_eq!(parsed.artists, ["Talking Heads"]);
         assert_eq!(parsed.genres, ["New Wave"]);
+    }
+
+    #[test]
+    fn repeated_uniform_facets_remain_distinct_and_studio_is_not_label() {
+        let parsed = parse_other_video_nfo_str(
+            r"<movie>
+                <title>Facet Sample</title>
+                <mpaa>NL:12</mpaa><mpaa>US:PG-13</mpaa>
+                <studio>Studio One</studio><studio>Studio Two</studio>
+                <label>Label One</label><label>Label Two</label>
+                <language>nld</language><language>eng</language>
+                <genre>Documentary</genre><genre>Music</genre>
+                <tag>archive</tag><tag>concert</tag>
+            </movie>",
+        )
+        .expect("other-video nfo should parse");
+
+        assert_eq!(parsed.content_ratings, ["NL:12", "US:PG-13"]);
+        assert_eq!(parsed.studios, ["Studio One", "Studio Two"]);
+        assert_eq!(parsed.music_labels, ["Label One", "Label Two"]);
+        assert_eq!(parsed.languages, ["nld", "eng"]);
+        assert_eq!(parsed.genres, ["Documentary", "Music"]);
+        assert_eq!(parsed.tags, ["archive", "concert"]);
+    }
+
+    #[test]
+    fn parses_documented_song_and_image_sidecar_roots() {
+        let song = parse_song_nfo_str(
+            r"<song><title>Song</title><label>Indie Label</label><language>nl</language></song>",
+        )
+        .expect("song sidecar should parse");
+        let image = parse_image_nfo_str(
+            r"<image><title>Photo</title><genre>Portrait</genre><language>fr</language></image>",
+        )
+        .expect("image sidecar should parse");
+
+        assert_eq!(song.music_labels, ["Indie Label"]);
+        assert_eq!(song.languages, ["nl"]);
+        assert_eq!(image.genres, ["Portrait"]);
+        assert_eq!(image.languages, ["fr"]);
     }
 
     #[test]

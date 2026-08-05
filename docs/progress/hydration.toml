@@ -345,10 +345,28 @@ routes = ['/media/music/songs']
 notes  = '`tests/e2e/media-browser-actions.spec.ts` covers the shared browser action shell, collection and playlist persistence, media info, and playback troubleshooting.'
 
 [[page]]
+name   = 'SongPage'
+status = '✅'
+routes = ['/media/music/songs/:id']
+notes  = '`tests/e2e/media-browser-actions.spec.ts` covers list/search navigation, hydrated collection, playlist, media-info, playback-troubleshooting, linked music-label search, and console cleanliness.'
+
+[[page]]
 name   = 'ImagesPage'
 status = '✅'
 routes = ['/media/browser/images', '/media/images']
 notes  = '`tests/e2e/media-browser-actions.spec.ts` covers the shared browser action shell, playlist image stamping, media info, and playback troubleshooting.'
+
+[[page]]
+name   = 'ImagePage'
+status = '✅'
+routes = ['/media/browser/images/:id', '/media/images/:id']
+notes  = '`tests/e2e/media-browser-actions.spec.ts` covers collection navigation, canonical/alias routes, hydrated collection, playlist, media-info, linked-facet actions, and console cleanliness.'
+
+[[page]]
+name   = 'MusicVideoPage'
+status = '✅'
+routes = ['/media/music/videos/:id']
+notes  = '`tests/e2e/media-browser-actions.spec.ts` covers artist-row navigation, hydrated collection, playlist, media-info, playback-troubleshooting, linked facets, and console cleanliness.'
 
 [[page]]
 name   = 'HomePage'

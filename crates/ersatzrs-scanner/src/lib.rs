@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Duration, Utc};
+use ersatzrs_core::metadata_facets::{
+    normalize_content_ratings, normalize_facet_values, normalize_language_codes,
+    preferred_facet_values, split_embedded_values, union_facet_values,
+};
 use ersatzrs_core::repositories::RepositoryError;
 use ersatzrs_domain::{
     classify_alternate_version, classify_extra_video, normalize_group_key,
@@ -16,8 +20,8 @@ use ersatzrs_domain::{
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
-    artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
-    update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
+    artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
+    replace_strings, update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use ersatzrs_infra::remote_stream::{
     parse_remote_stream_definition, resolve_remote_stream, RemoteStreamError,
@@ -34,7 +38,101 @@ pub mod nfo;
 
 const METADATA_KIND_FALLBACK: i32 = 0;
 const METADATA_KIND_SIDECAR: i32 = 1;
+const METADATA_KIND_EMBEDDED: i32 = 3;
 const SQLITE_BUSY_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000];
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct EmbeddedFacets {
+    pub(crate) content_ratings: Vec<String>,
+    pub(crate) studios: Vec<String>,
+    pub(crate) music_labels: Vec<String>,
+    pub(crate) languages: Vec<String>,
+    pub(crate) genres: Vec<String>,
+    pub(crate) tags: Vec<String>,
+}
+
+impl EmbeddedFacets {
+    pub(crate) fn from_probe(probed: &FfprobeMediaVersion) -> Self {
+        let ratings = embedded_metadata_values(
+            &probed.format_metadata,
+            &["content_rating", "contentrating", "mpaa", "parental_rating"],
+        );
+        Self {
+            content_ratings: normalize_content_ratings(ratings),
+            studios: embedded_metadata_values(
+                &probed.format_metadata,
+                &["studio", "production_studio"],
+            ),
+            music_labels: embedded_metadata_values(
+                &probed.format_metadata,
+                &["label", "publisher", "organization"],
+            ),
+            languages: normalize_language_codes(embedded_metadata_values(
+                &probed.format_metadata,
+                &["language"],
+            )),
+            genres: embedded_metadata_values(&probed.format_metadata, &["genre"]),
+            tags: embedded_metadata_values(
+                &probed.format_metadata,
+                &["tag", "tags", "keywords", "grouping"],
+            ),
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.content_ratings.is_empty()
+            && self.studios.is_empty()
+            && self.music_labels.is_empty()
+            && self.languages.is_empty()
+            && self.genres.is_empty()
+            && self.tags.is_empty()
+    }
+}
+
+fn local_metadata_kind(
+    has_sidecar: bool,
+    probed: &FfprobeMediaVersion,
+    embedded: &EmbeddedFacets,
+    scalar_aliases: &[&str],
+) -> i32 {
+    if has_sidecar {
+        return METADATA_KIND_SIDECAR;
+    }
+    let has_scalar = scalar_aliases.iter().any(|alias| {
+        probed
+            .format_metadata
+            .keys()
+            .any(|key| key.eq_ignore_ascii_case(alias))
+    });
+    if !embedded.is_empty() || has_scalar {
+        METADATA_KIND_EMBEDDED
+    } else {
+        METADATA_KIND_FALLBACK
+    }
+}
+
+fn embedded_metadata_values(metadata: &BTreeMap<String, String>, aliases: &[&str]) -> Vec<String> {
+    normalize_facet_values(
+        aliases
+            .iter()
+            .flat_map(|alias| {
+                metadata.iter().filter_map(move |(key, value)| {
+                    key.eq_ignore_ascii_case(alias).then_some(value)
+                })
+            })
+            .flat_map(|value| split_embedded_values(value)),
+    )
+}
+
+pub(crate) fn audio_stream_languages(probed: &FfprobeMediaVersion) -> Vec<String> {
+    normalize_language_codes(
+        probed
+            .streams
+            .iter()
+            .filter(|stream| stream.kind == MediaStreamKind::Audio)
+            .filter_map(|stream| stream.language.as_deref()),
+    )
+}
 
 #[derive(Debug, Error)]
 pub enum ScannerError {
@@ -964,7 +1062,6 @@ async fn upsert_artist_for_folder(
         .and_then(|n| n.formed)
         .map(|dt| dt.naive_utc().format("%Y-%m-%d").to_string());
     let metadata_kind = i32::from(parsed_nfo.is_some());
-
     let mut tx = pool.begin().await?;
 
     let existing: Option<(i64, Option<i64>)> = sqlx::query(
@@ -1203,7 +1300,14 @@ async fn upsert_local_music_video(
                 .and_then(|dt| dt.naive_utc().date().format("%Y").to_string().parse().ok())
         })
     });
-    let metadata_kind = i32::from(parsed_nfo.is_some());
+    let embedded = EmbeddedFacets::from_probe(&probed);
+    let metadata_kind = local_metadata_kind(parsed_nfo.is_some(), &probed, &embedded, &[]);
+    let sidecar_ratings = parsed_nfo
+        .as_ref()
+        .map(|nfo| normalize_content_ratings(&nfo.content_ratings))
+        .unwrap_or_default();
+    let content_ratings = preferred_facet_values(&sidecar_ratings, &embedded.content_ratings, &[]);
+    let content_rating = (!content_ratings.is_empty()).then(|| content_ratings.join("/"));
 
     let mut tx = pool.begin().await?;
     let path_text = path.display().to_string();
@@ -1277,23 +1381,53 @@ async fn upsert_local_music_video(
         year,
         release_date.as_deref(),
         track,
+        content_rating.as_deref(),
         metadata_kind,
         &now,
     )
     .await?;
 
-    let genres = parsed_nfo
-        .as_ref()
-        .map(|n| n.genres.clone())
-        .unwrap_or_default();
-    let tags = parsed_nfo
-        .as_ref()
-        .map(|n| n.tags.clone())
-        .unwrap_or_default();
-    let studios = parsed_nfo
-        .as_ref()
-        .map(|n| n.studios.clone())
-        .unwrap_or_default();
+    let genres = preferred_facet_values(
+        &parsed_nfo
+            .as_ref()
+            .map(|n| n.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+        &[],
+    );
+    let tags = preferred_facet_values(
+        &parsed_nfo
+            .as_ref()
+            .map(|n| n.tags.clone())
+            .unwrap_or_default(),
+        &embedded.tags,
+        &[],
+    );
+    let studios = preferred_facet_values(
+        &parsed_nfo
+            .as_ref()
+            .map(|n| n.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+        &[],
+    );
+    let music_labels = preferred_facet_values(
+        &parsed_nfo
+            .as_ref()
+            .map(|n| n.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+        &[],
+    );
+    let explicit_languages = preferred_facet_values(
+        &parsed_nfo
+            .as_ref()
+            .map(|n| normalize_language_codes(&n.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+        &[],
+    );
+    let languages = union_facet_values(&explicit_languages, &audio_stream_languages(&probed));
     let directors = parsed_nfo
         .as_ref()
         .map(|n| {
@@ -1325,6 +1459,15 @@ async fn upsert_local_music_video(
         &studios,
     )
     .await?;
+    replace_strings(
+        &mut tx,
+        "MusicLabel",
+        "MusicVideoMetadataId",
+        metadata_id,
+        &music_labels,
+    )
+    .await?;
+    replace_metadata_languages(&mut tx, "MusicVideoMetadataId", metadata_id, &languages).await?;
     replace_people(
         &mut tx,
         "Director",
@@ -1402,6 +1545,7 @@ async fn upsert_music_video_metadata(
     year: Option<i32>,
     release_date: Option<&str>,
     track: Option<i32>,
+    content_rating: Option<&str>,
     metadata_kind: i32,
     now: &str,
 ) -> Result<i64> {
@@ -1416,7 +1560,7 @@ async fn upsert_music_video_metadata(
             r#"UPDATE "MusicVideoMetadata"
                SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
                    "SortTitle" = ?, "Album" = ?, "Plot" = ?, "Year" = ?,
-                   "ReleaseDate" = ?, "Track" = ?
+                   "ReleaseDate" = ?, "Track" = ?, "ContentRating" = ?
                WHERE "Id" = ?"#,
         )
         .bind(now)
@@ -1428,6 +1572,7 @@ async fn upsert_music_video_metadata(
         .bind(year)
         .bind(release_date)
         .bind(track)
+        .bind(content_rating)
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -1436,8 +1581,9 @@ async fn upsert_music_video_metadata(
         let result = sqlx::query(
             r#"INSERT INTO "MusicVideoMetadata" (
                 "MusicVideoId", "DateAdded", "DateUpdated", "MetadataKind",
-                "Title", "SortTitle", "Album", "Plot", "Year", "ReleaseDate", "Track"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Title", "SortTitle", "Album", "Plot", "Year", "ReleaseDate", "Track",
+                "ContentRating"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(music_video_id)
         .bind(now)
@@ -1450,6 +1596,7 @@ async fn upsert_music_video_metadata(
         .bind(year)
         .bind(release_date)
         .bind(track)
+        .bind(content_rating)
         .execute(&mut **tx)
         .await?;
         Ok(ersatzrs_infra::db::last_insert_id(result))
@@ -1851,8 +1998,22 @@ async fn upsert_local_file(
     {
         update_local_file_subtitles(&mut tx, owner, &probed.streams, path, true).await?;
     }
-    if library_path.media_kind == LibraryMediaKind::Movies {
-        enrich_movie_metadata(&mut tx, item_id, library_path, path).await?;
+    match library_path.media_kind {
+        LibraryMediaKind::Movies => {
+            enrich_movie_metadata(&mut tx, item_id, library_path, path, &probed).await?;
+        }
+        LibraryMediaKind::OtherVideos => {
+            enrich_other_video_metadata(&mut tx, item_id, library_path, path, &probed).await?;
+        }
+        LibraryMediaKind::Songs => {
+            enrich_song_metadata(&mut tx, item_id, library_path, path, &probed).await?;
+        }
+        LibraryMediaKind::Images => {
+            enrich_image_metadata(&mut tx, item_id, library_path, path, &probed).await?;
+        }
+        LibraryMediaKind::Shows
+        | LibraryMediaKind::MusicVideos
+        | LibraryMediaKind::RemoteStreams => {}
     }
 
     tx.commit().await?;
@@ -1949,6 +2110,7 @@ pub(crate) async fn upsert_local_extra_video(
     {
         update_local_file_subtitles(&mut tx, owner, &probed.streams, path, true).await?;
     }
+    enrich_other_video_metadata(&mut tx, item_id, library_path, path, &probed).await?;
 
     tx.commit().await?;
     Ok(item_id)
@@ -2309,6 +2471,513 @@ fn locate_movie_nfo(video_path: &Path) -> Option<PathBuf> {
     movie_nfo.is_file().then_some(movie_nfo)
 }
 
+fn locate_same_basename_nfo(path: &Path) -> Option<PathBuf> {
+    let candidate = path.with_extension("nfo");
+    candidate.is_file().then_some(candidate)
+}
+
+fn embedded_scalar(probed: &FfprobeMediaVersion, aliases: &[&str]) -> Option<String> {
+    aliases.iter().find_map(|alias| {
+        probed
+            .format_metadata
+            .get(*alias)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn local_folder_tags(root: &Path, path: &Path) -> Vec<String> {
+    path.parent()
+        .and_then(|parent| parent.strip_prefix(root).ok())
+        .into_iter()
+        .flat_map(Path::components)
+        .filter_map(|component| {
+            let value = component.as_os_str().to_str()?.trim();
+            (!value.is_empty()).then(|| value.to_owned())
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn replace_uniform_facets(
+    tx: &mut Transaction<'_, Db>,
+    fk_column: &'static str,
+    metadata_id: i64,
+    genres: &[String],
+    tags: &[String],
+    studios: &[String],
+    music_labels: &[String],
+    languages: &[String],
+) -> Result<()> {
+    replace_strings(tx, "Genre", fk_column, metadata_id, genres).await?;
+    replace_strings(tx, "Tag", fk_column, metadata_id, tags).await?;
+    replace_strings(tx, "Studio", fk_column, metadata_id, studios).await?;
+    replace_strings(tx, "MusicLabel", fk_column, metadata_id, music_labels).await?;
+    replace_metadata_languages(tx, fk_column, metadata_id, languages).await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn enrich_other_video_metadata(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+    probed: &FfprobeMediaVersion,
+) -> Result<i64> {
+    let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
+        match nfo::parse_other_video_nfo(&nfo_path) {
+            Ok(parsed) => Some(parsed),
+            Err(error) => {
+                warn!(path = %nfo_path.display(), error = %error, "failed to parse other-video nfo; falling back");
+                None
+            }
+        }
+    });
+    let embedded = EmbeddedFacets::from_probe(probed);
+    let fallback_title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.title.clone())
+        .or_else(|| embedded_scalar(probed, &["title"]))
+        .unwrap_or(fallback_title);
+    let sort_title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let ratings = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_content_ratings(&nfo.content_ratings))
+            .unwrap_or_default(),
+        &embedded.content_ratings,
+        &[],
+    );
+    let genres = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+        &[],
+    );
+    let tags = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.tags.clone())
+            .unwrap_or_default(),
+        &embedded.tags,
+        &[],
+    );
+    let studios = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+        &[],
+    );
+    let music_labels = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+        &[],
+    );
+    let explicit_languages = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_language_codes(&nfo.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+        &[],
+    );
+    let languages = union_facet_values(&explicit_languages, &audio_stream_languages(probed));
+    let rating = (!ratings.is_empty()).then(|| ratings.join("/"));
+    let now = encode_datetime(Utc::now());
+    let metadata_id: i64 = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = ? LIMIT 1"#,
+    )
+    .bind(item_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    sqlx::query(
+        r#"UPDATE "OtherVideoMetadata"
+           SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+               "SortTitle" = ?, "OriginalTitle" = ?, "Year" = ?,
+               "ReleaseDate" = ?, "ContentRating" = ?, "Outline" = ?,
+               "Plot" = ?, "Tagline" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(&now)
+    .bind(local_metadata_kind(
+        parsed.is_some(),
+        probed,
+        &embedded,
+        &["title"],
+    ))
+    .bind(&title)
+    .bind(&sort_title)
+    .bind(original_title_for_path(library_path, path))
+    .bind(parsed.as_ref().and_then(|nfo| nfo.year))
+    .bind(
+        parsed
+            .as_ref()
+            .and_then(|nfo| nfo.premiered)
+            .map(encode_datetime),
+    )
+    .bind(rating)
+    .bind(parsed.as_ref().and_then(|nfo| nfo.outline.clone()))
+    .bind(parsed.as_ref().and_then(|nfo| nfo.plot.clone()))
+    .bind(parsed.as_ref().and_then(|nfo| nfo.tagline.clone()))
+    .bind(metadata_id)
+    .execute(&mut **tx)
+    .await?;
+    replace_uniform_facets(
+        tx,
+        "OtherVideoMetadataId",
+        metadata_id,
+        &genres,
+        &tags,
+        &studios,
+        &music_labels,
+        &languages,
+    )
+    .await?;
+    let actors = parsed
+        .as_ref()
+        .map(|nfo| local_television::actors_from_nfo(&nfo.actors))
+        .unwrap_or_default();
+    let directors = parsed
+        .as_ref()
+        .map(|nfo| local_television::directors_from(&nfo.directors))
+        .unwrap_or_default();
+    let writers = parsed
+        .as_ref()
+        .map(|nfo| local_television::directors_from(&nfo.writers))
+        .unwrap_or_default();
+    let guids = parsed
+        .as_ref()
+        .map(|nfo| local_television::guids_from_nfo(&nfo.guids))
+        .unwrap_or_default();
+    replace_people(tx, "Actor", "OtherVideoMetadataId", metadata_id, &actors).await?;
+    replace_people(
+        tx,
+        "Director",
+        "OtherVideoMetadataId",
+        metadata_id,
+        &directors,
+    )
+    .await?;
+    replace_people(tx, "Writer", "OtherVideoMetadataId", metadata_id, &writers).await?;
+    replace_guids(tx, "OtherVideoMetadataId", metadata_id, &guids).await?;
+    Ok(metadata_id)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn enrich_song_metadata(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+    probed: &FfprobeMediaVersion,
+) -> Result<i64> {
+    let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
+        match nfo::parse_song_nfo(&nfo_path) {
+            Ok(parsed) => Some(parsed),
+            Err(error) => {
+                warn!(path = %nfo_path.display(), error = %error, "failed to parse song nfo; falling back");
+                None
+            }
+        }
+    });
+    let embedded = EmbeddedFacets::from_probe(probed);
+    let fallback_title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.title.clone())
+        .or_else(|| embedded_scalar(probed, &["title"]))
+        .unwrap_or(fallback_title);
+    let sort_title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let ratings = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_content_ratings(&nfo.content_ratings))
+            .unwrap_or_default(),
+        &embedded.content_ratings,
+        &[],
+    );
+    let genres = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+        &[],
+    );
+    let sidecar_tags = parsed
+        .as_ref()
+        .map(|nfo| nfo.tags.clone())
+        .unwrap_or_default();
+    let tags = union_facet_values(
+        &preferred_facet_values(&sidecar_tags, &embedded.tags, &[]),
+        &local_folder_tags(Path::new(&library_path.path), path),
+    );
+    let studios = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+        &[],
+    );
+    let music_labels = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+        &[],
+    );
+    let explicit_languages = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_language_codes(&nfo.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+        &[],
+    );
+    let languages = union_facet_values(&explicit_languages, &audio_stream_languages(probed));
+    let artists = parsed
+        .as_ref()
+        .map(|nfo| normalize_facet_values(&nfo.artists))
+        .filter(|values| !values.is_empty())
+        .unwrap_or_else(|| {
+            embedded_scalar(probed, &["artist", "artists"])
+                .map(|value| split_embedded_values(&value))
+                .unwrap_or_default()
+        });
+    let album_artists = parsed
+        .as_ref()
+        .map(|nfo| normalize_facet_values(&nfo.album_artists))
+        .filter(|values| !values.is_empty())
+        .unwrap_or_else(|| {
+            embedded_scalar(probed, &["album_artist", "albumartist"])
+                .map(|value| split_embedded_values(&value))
+                .unwrap_or_default()
+        });
+    let metadata_id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "SongMetadata" WHERE "SongId" = ? LIMIT 1"#)
+            .bind(item_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    sqlx::query(
+        r#"UPDATE "SongMetadata"
+           SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+               "SortTitle" = ?, "OriginalTitle" = ?, "Year" = ?,
+               "ReleaseDate" = ?, "ContentRating" = ?, "Album" = ?,
+               "Artists" = ?, "AlbumArtists" = ?, "Track" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(encode_datetime(Utc::now()))
+    .bind(local_metadata_kind(
+        parsed.is_some(),
+        probed,
+        &embedded,
+        &[
+            "title",
+            "artist",
+            "artists",
+            "album_artist",
+            "albumartist",
+            "album",
+            "track",
+        ],
+    ))
+    .bind(&title)
+    .bind(&sort_title)
+    .bind(original_title_for_path(library_path, path))
+    .bind(parsed.as_ref().and_then(|nfo| nfo.year))
+    .bind(
+        parsed
+            .as_ref()
+            .and_then(|nfo| nfo.release_date)
+            .map(encode_datetime),
+    )
+    .bind((!ratings.is_empty()).then(|| ratings.join("/")))
+    .bind(
+        parsed
+            .as_ref()
+            .and_then(|nfo| nfo.album.clone())
+            .or_else(|| embedded_scalar(probed, &["album"])),
+    )
+    .bind((!artists.is_empty()).then(|| artists.join("; ")))
+    .bind((!album_artists.is_empty()).then(|| album_artists.join("; ")))
+    .bind(
+        parsed
+            .as_ref()
+            .and_then(|nfo| nfo.track.clone())
+            .or_else(|| embedded_scalar(probed, &["track"])),
+    )
+    .bind(metadata_id)
+    .execute(&mut **tx)
+    .await?;
+    replace_uniform_facets(
+        tx,
+        "SongMetadataId",
+        metadata_id,
+        &genres,
+        &tags,
+        &studios,
+        &music_labels,
+        &languages,
+    )
+    .await?;
+    Ok(metadata_id)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn enrich_image_metadata(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+    probed: &FfprobeMediaVersion,
+) -> Result<i64> {
+    let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
+        match nfo::parse_image_nfo(&nfo_path) {
+            Ok(parsed) => Some(parsed),
+            Err(error) => {
+                warn!(path = %nfo_path.display(), error = %error, "failed to parse image nfo; falling back");
+                None
+            }
+        }
+    });
+    let embedded = EmbeddedFacets::from_probe(probed);
+    let fallback_title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.title.clone())
+        .or_else(|| embedded_scalar(probed, &["title"]))
+        .unwrap_or(fallback_title);
+    let sort_title = parsed
+        .as_ref()
+        .and_then(|nfo| nfo.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let ratings = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_content_ratings(&nfo.content_ratings))
+            .unwrap_or_default(),
+        &embedded.content_ratings,
+        &[],
+    );
+    let genres = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+        &[],
+    );
+    let tags = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.tags.clone())
+            .unwrap_or_default(),
+        &embedded.tags,
+        &[],
+    );
+    let studios = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+        &[],
+    );
+    let music_labels = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| nfo.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+        &[],
+    );
+    // Image language is explicit-only: sidecar or embedded container metadata,
+    // never a folder or media-stream inference.
+    let languages = preferred_facet_values(
+        &parsed
+            .as_ref()
+            .map(|nfo| normalize_language_codes(&nfo.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+        &[],
+    );
+    let metadata_id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "ImageMetadata" WHERE "ImageId" = ? LIMIT 1"#)
+            .bind(item_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    sqlx::query(
+        r#"UPDATE "ImageMetadata"
+           SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+               "SortTitle" = ?, "OriginalTitle" = ?, "Year" = ?,
+               "ReleaseDate" = ?, "ContentRating" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(encode_datetime(Utc::now()))
+    .bind(local_metadata_kind(
+        parsed.is_some(),
+        probed,
+        &embedded,
+        &["title"],
+    ))
+    .bind(&title)
+    .bind(&sort_title)
+    .bind(original_title_for_path(library_path, path))
+    .bind(parsed.as_ref().and_then(|nfo| nfo.year))
+    .bind(
+        parsed
+            .as_ref()
+            .and_then(|nfo| nfo.release_date)
+            .map(encode_datetime),
+    )
+    .bind((!ratings.is_empty()).then(|| ratings.join("/")))
+    .bind(metadata_id)
+    .execute(&mut **tx)
+    .await?;
+    replace_uniform_facets(
+        tx,
+        "ImageMetadataId",
+        metadata_id,
+        &genres,
+        &tags,
+        &studios,
+        &music_labels,
+        &languages,
+    )
+    .await?;
+    Ok(metadata_id)
+}
+
 fn locate_movie_artwork(video_path: &Path, kind: i32) -> Option<PathBuf> {
     let folder = video_path.parent()?;
     let stem = video_path.file_stem().and_then(|stem| stem.to_str());
@@ -2340,6 +3009,7 @@ async fn enrich_movie_metadata(
     movie_id: i64,
     library_path: &LocalLibraryPath,
     path: &Path,
+    probed: &FfprobeMediaVersion,
 ) -> Result<i64> {
     let nfo_path = locate_movie_nfo(path);
     let movie_nfo = nfo_path
@@ -2370,15 +3040,18 @@ async fn enrich_movie_metadata(
         .and_then(|nfo| nfo.sort_title.clone())
         .unwrap_or_else(|| nfo::sort_title(&title));
     let original_title = original_title_for_path(library_path, path);
-    let metadata_kind = if movie_nfo.is_some() {
-        METADATA_KIND_SIDECAR
-    } else {
-        METADATA_KIND_FALLBACK
-    };
     let release_date = movie_nfo
         .as_ref()
         .and_then(|nfo| nfo.premiered.map(encode_datetime));
     let now = encode_datetime(Utc::now());
+    let embedded = EmbeddedFacets::from_probe(probed);
+    let metadata_kind = local_metadata_kind(movie_nfo.is_some(), probed, &embedded, &[]);
+    let sidecar_ratings = movie_nfo
+        .as_ref()
+        .map(|nfo| normalize_content_ratings(&nfo.content_ratings))
+        .unwrap_or_default();
+    let ratings = preferred_facet_values(&sidecar_ratings, &embedded.content_ratings, &[]);
+    let rating = (!ratings.is_empty()).then(|| ratings.join("/"));
 
     let existing_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
@@ -2402,11 +3075,7 @@ async fn enrich_movie_metadata(
         .bind(&original_title)
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.year))
         .bind(&release_date)
-        .bind(
-            movie_nfo
-                .as_ref()
-                .and_then(|nfo| nfo.content_rating.clone()),
-        )
+        .bind(rating.as_deref())
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.plot.clone()))
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.outline.clone()))
         .bind(id)
@@ -2430,11 +3099,7 @@ async fn enrich_movie_metadata(
         .bind(&original_title)
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.year))
         .bind(&release_date)
-        .bind(
-            movie_nfo
-                .as_ref()
-                .and_then(|nfo| nfo.content_rating.clone()),
-        )
+        .bind(rating.as_deref())
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.plot.clone()))
         .bind(movie_nfo.as_ref().and_then(|nfo| nfo.outline.clone()))
         .execute(&mut **tx)
@@ -2442,17 +3107,61 @@ async fn enrich_movie_metadata(
         ersatzrs_infra::db::last_insert_id(result)
     };
 
+    let genres = preferred_facet_values(
+        &movie_nfo
+            .as_ref()
+            .map(|nfo| nfo.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+        &[],
+    );
+    let tags = preferred_facet_values(
+        &movie_nfo
+            .as_ref()
+            .map(|nfo| nfo.tags.clone())
+            .unwrap_or_default(),
+        &embedded.tags,
+        &[],
+    );
+    let studios = preferred_facet_values(
+        &movie_nfo
+            .as_ref()
+            .map(|nfo| nfo.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+        &[],
+    );
+    let music_labels = preferred_facet_values(
+        &movie_nfo
+            .as_ref()
+            .map(|nfo| nfo.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+        &[],
+    );
+    let explicit_languages = preferred_facet_values(
+        &movie_nfo
+            .as_ref()
+            .map(|nfo| normalize_language_codes(&nfo.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+        &[],
+    );
+    let languages = union_facet_values(&explicit_languages, &audio_stream_languages(probed));
+    replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &genres).await?;
+    replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &tags).await?;
+    replace_strings(tx, "Studio", "MovieMetadataId", metadata_id, &studios).await?;
+    replace_strings(
+        tx,
+        "MusicLabel",
+        "MovieMetadataId",
+        metadata_id,
+        &music_labels,
+    )
+    .await?;
+    replace_metadata_languages(tx, "MovieMetadataId", metadata_id, &languages).await?;
+
     if let Some(parsed) = movie_nfo.as_ref() {
-        replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &parsed.genres).await?;
-        replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &parsed.tags).await?;
-        replace_strings(
-            tx,
-            "Studio",
-            "MovieMetadataId",
-            metadata_id,
-            &parsed.studios,
-        )
-        .await?;
         replace_people(
             tx,
             "Actor",
@@ -2485,9 +3194,6 @@ async fn enrich_movie_metadata(
         )
         .await?;
     } else {
-        replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &[]).await?;
-        replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &[]).await?;
-        replace_strings(tx, "Studio", "MovieMetadataId", metadata_id, &[]).await?;
         replace_people(tx, "Actor", "MovieMetadataId", metadata_id, &[]).await?;
         replace_people(tx, "Director", "MovieMetadataId", metadata_id, &[]).await?;
         replace_people(tx, "Writer", "MovieMetadataId", metadata_id, &[]).await?;
@@ -2851,7 +3557,11 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_scannable_for_kind, locate_music_video_artwork, path_hash, retry_sqlite_busy};
+    use super::{
+        is_scannable_for_kind, local_metadata_kind, locate_music_video_artwork, path_hash,
+        retry_sqlite_busy, EmbeddedFacets, METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK,
+        METADATA_KIND_SIDECAR,
+    };
     use ersatzrs_domain::{
         classify_alternate_version, classify_extra_directory_name, classify_extra_video,
         ExtraParentHint, LibraryMediaKind,
@@ -2863,6 +3573,64 @@ mod tests {
         assert_eq!(
             path_hash("/media/movie.mkv"),
             "255ca6b14e280f5d5ca28f4e6e010b19038627dbd263a1d17556460b7ee06e24"
+        );
+    }
+
+    #[test]
+    fn embedded_facets_use_case_insensitive_aliases_without_splitting_commas() {
+        let mut format_metadata = std::collections::BTreeMap::new();
+        format_metadata.insert("MPAA".to_owned(), "NL:12; US:PG-13".to_owned());
+        format_metadata.insert("Production_Studio".to_owned(), "A, B Studios".to_owned());
+        format_metadata.insert("Publisher".to_owned(), "Label One\0Label Two".to_owned());
+        format_metadata.insert("LANGUAGE".to_owned(), "nl".to_owned());
+        format_metadata.insert("Keywords".to_owned(), "one;two".to_owned());
+        let probed = ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            version: ersatzrs_domain::MediaVersion::default(),
+            streams: Vec::new(),
+            chapters: Vec::new(),
+            format_metadata,
+        };
+
+        let facets = EmbeddedFacets::from_probe(&probed);
+        assert_eq!(facets.content_ratings, ["NL:12", "US:PG-13"]);
+        assert_eq!(facets.studios, ["A, B Studios"]);
+        assert_eq!(facets.music_labels, ["Label One", "Label Two"]);
+        assert_eq!(facets.languages, ["dut"]);
+        assert_eq!(facets.tags, ["one", "two"]);
+    }
+
+    #[test]
+    fn local_metadata_kind_distinguishes_sidecar_embedded_and_unrelated_tags() {
+        let probe = |key: &str, value: &str| ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            version: ersatzrs_domain::MediaVersion::default(),
+            streams: Vec::new(),
+            chapters: Vec::new(),
+            format_metadata: [(key.to_owned(), value.to_owned())].into_iter().collect(),
+        };
+
+        let encoder = probe("encoder", "fixture");
+        let encoder_facets = EmbeddedFacets::from_probe(&encoder);
+        assert_eq!(
+            local_metadata_kind(false, &encoder, &encoder_facets, &[]),
+            METADATA_KIND_FALLBACK
+        );
+
+        let publisher = probe("publisher", "Music Label");
+        let publisher_facets = EmbeddedFacets::from_probe(&publisher);
+        assert_eq!(
+            local_metadata_kind(false, &publisher, &publisher_facets, &[]),
+            METADATA_KIND_EMBEDDED
+        );
+        assert_eq!(
+            local_metadata_kind(true, &publisher, &publisher_facets, &[]),
+            METADATA_KIND_SIDECAR
+        );
+
+        let title = probe("title", "Embedded title");
+        let title_facets = EmbeddedFacets::from_probe(&title);
+        assert_eq!(
+            local_metadata_kind(false, &title, &title_facets, &["title"]),
+            METADATA_KIND_EMBEDDED
         );
     }
 
@@ -3755,6 +4523,7 @@ content_rating: TV-PG
             },
             streams: Vec::new(),
             chapters: Vec::new(),
+            format_metadata: std::collections::BTreeMap::new(),
         }
     }
 
@@ -3776,6 +4545,173 @@ content_rating: TV-PG
             .await
             .expect("migrate");
         pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn other_song_and_image_scans_write_and_replace_uniform_facets() {
+        use ersatzrs_domain::{MediaStream, MediaStreamKind};
+        use sqlx::{Executor, Row};
+
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let album = temp.path().join("Album Folder");
+        std::fs::create_dir_all(&album).expect("album folder");
+        let other_path = temp.path().join("Concert.mkv");
+        let song_path = album.join("Song.flac");
+        let image_path = temp.path().join("Photo.jpg");
+        for path in [&other_path, &song_path, &image_path] {
+            std::fs::write(path, b"fixture").expect("media fixture");
+        }
+        std::fs::write(
+            temp.path().join("Concert.nfo"),
+            r#"<movie><title>Concert</title><mpaa>NL:12</mpaa><studio>Video Studio</studio><label>Video Label</label><language>fr</language><genre>Music</genre><tag>Live</tag><director>Director</director><uniqueid type="imdb">tt1</uniqueid></movie>"#,
+        )
+        .expect("other nfo");
+        std::fs::write(
+            album.join("Song.nfo"),
+            r"<song><title>Song</title><mpaa>US:PG</mpaa><studio>Song Studio</studio><label>Song Label</label><language>nl</language><genre>Rock</genre><tag>Favorite</tag></song>",
+        )
+        .expect("song nfo");
+        std::fs::write(
+            temp.path().join("Photo.nfo"),
+            r"<image><title>Photo</title><mpaa>PEGI:3</mpaa><studio>Image Studio</studio><label>Image Label</label><genre>Portrait</genre><tag>Gallery</tag></image>",
+        )
+        .expect("image nfo");
+
+        let pool = test_db().await;
+        pool.execute(
+            r#"INSERT INTO "MediaSource" ("Id") VALUES (1);
+               INSERT INTO "LocalMediaSource" ("Id") VALUES (1);
+               INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Uniform Facets', 4, 1);
+               INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#,
+        )
+        .await
+        .expect("library");
+        sqlx::query(r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#)
+            .bind(temp.path().display().to_string())
+            .execute(&pool)
+            .await
+            .expect("library path");
+        pool.execute(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (101, 1, 0), (102, 1, 0), (103, 1, 0);
+               INSERT INTO "OtherVideo" ("Id") VALUES (101);
+               INSERT INTO "OtherVideoMetadata" ("Id", "OtherVideoId", "MetadataKind", "Title", "DateAdded", "DateUpdated")
+               VALUES (201, 101, 0, 'Old Other', '2026-08-05T00:00:00Z', '2026-08-05T00:00:00Z');
+               INSERT INTO "Song" ("Id") VALUES (102);
+               INSERT INTO "SongMetadata" ("Id", "SongId", "MetadataKind", "Title", "DateAdded", "DateUpdated")
+               VALUES (202, 102, 0, 'Old Song', '2026-08-05T00:00:00Z', '2026-08-05T00:00:00Z');
+               INSERT INTO "Image" ("Id") VALUES (103);
+               INSERT INTO "ImageMetadata" ("Id", "ImageId", "MetadataKind", "Title", "DateAdded", "DateUpdated")
+               VALUES (203, 103, 0, 'Old Image', '2026-08-05T00:00:00Z', '2026-08-05T00:00:00Z')"#,
+        )
+        .await
+        .expect("media rows");
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: temp.path().display().to_string(),
+            media_kind: LibraryMediaKind::OtherVideos,
+        };
+        let mut probed = probed_version();
+        probed
+            .format_metadata
+            .insert("publisher".to_owned(), "Embedded Label".to_owned());
+        probed.streams.push(MediaStream {
+            kind: MediaStreamKind::Audio,
+            language: Some("eng".to_owned()),
+            ..MediaStream::default()
+        });
+
+        let mut tx = pool.begin().await.expect("begin other");
+        super::enrich_other_video_metadata(&mut tx, 101, &library_path, &other_path, &probed)
+            .await
+            .expect("other facets");
+        tx.commit().await.expect("commit other");
+        let mut tx = pool.begin().await.expect("begin song");
+        super::enrich_song_metadata(&mut tx, 102, &library_path, &song_path, &probed)
+            .await
+            .expect("song facets");
+        tx.commit().await.expect("commit song");
+        let mut tx = pool.begin().await.expect("begin image");
+        super::enrich_image_metadata(&mut tx, 103, &library_path, &image_path, &probed)
+            .await
+            .expect("image facets");
+        tx.commit().await.expect("commit image");
+
+        for (table, owner, metadata_id, expected_count) in [
+            ("Studio", "OtherVideoMetadataId", 201_i64, 1_i64),
+            ("MusicLabel", "OtherVideoMetadataId", 201, 1),
+            ("Genre", "OtherVideoMetadataId", 201, 1),
+            ("Tag", "OtherVideoMetadataId", 201, 1),
+            ("Studio", "SongMetadataId", 202, 1),
+            ("MusicLabel", "SongMetadataId", 202, 1),
+            ("Genre", "SongMetadataId", 202, 1),
+            ("Tag", "SongMetadataId", 202, 2),
+            ("Studio", "ImageMetadataId", 203, 1),
+            ("MusicLabel", "ImageMetadataId", 203, 1),
+            ("Genre", "ImageMetadataId", 203, 1),
+            ("Tag", "ImageMetadataId", 203, 1),
+        ] {
+            let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "{owner}" = ?"#);
+            let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(sql))
+                .bind(metadata_id)
+                .fetch_one(&pool)
+                .await
+                .expect("facet count");
+            assert_eq!(count, expected_count, "unexpected {table} for {owner}");
+        }
+        let ratings = sqlx::query(
+            r#"SELECT
+                (SELECT "ContentRating" FROM "OtherVideoMetadata" WHERE "Id" = 201) AS "OtherRating",
+                (SELECT "ContentRating" FROM "SongMetadata" WHERE "Id" = 202) AS "SongRating",
+                (SELECT "ContentRating" FROM "ImageMetadata" WHERE "Id" = 203) AS "ImageRating""#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("ratings");
+        assert_eq!(ratings.get::<String, _>("OtherRating"), "NL:12");
+        assert_eq!(ratings.get::<String, _>("SongRating"), "US:PG");
+        assert_eq!(ratings.get::<String, _>("ImageRating"), "PEGI:3");
+        let image_language_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "MetadataLanguage" WHERE "ImageMetadataId" = 203"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("image languages");
+        assert_eq!(image_language_count, 0, "image must ignore stream language");
+        let song_languages: Vec<String> = sqlx::query_scalar(
+            r#"SELECT "Code" FROM "MetadataLanguage" WHERE "SongMetadataId" = 202 ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("song languages");
+        assert_eq!(song_languages, ["dut", "eng"]);
+
+        std::fs::write(
+            temp.path().join("Concert.nfo"),
+            r"<movie><title>Concert</title></movie>",
+        )
+        .expect("replace other nfo");
+        let mut tx = pool.begin().await.expect("begin rescan");
+        super::enrich_other_video_metadata(&mut tx, 101, &library_path, &other_path, &probed)
+            .await
+            .expect("other rescan");
+        tx.commit().await.expect("commit rescan");
+        let music_label: String = sqlx::query_scalar(
+            r#"SELECT "Name" FROM "MusicLabel" WHERE "OtherVideoMetadataId" = 201"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("embedded music label restored");
+        assert_eq!(music_label, "Embedded Label");
+        let stale_studios: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Studio" WHERE "OtherVideoMetadataId" = 201"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("stale studios");
+        assert_eq!(stale_studios, 0);
     }
 
     #[cfg(not(feature = "mysql"))]
@@ -4034,7 +4970,24 @@ content_rating: TV-PG
         use std::path::Path;
         use tempfile::TempDir;
 
+        fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+                version: ersatzrs_domain::MediaVersion {
+                    name: "Main".to_owned(),
+                    duration: chrono::Duration::seconds(180),
+                    video_scan_kind: ersatzrs_domain::VideoScanKind::Progressive,
+                    width: 1920,
+                    height: 1080,
+                    ..ersatzrs_domain::MediaVersion::default()
+                },
+                streams: Vec::new(),
+                chapters: Vec::new(),
+                format_metadata: std::collections::BTreeMap::new(),
+            }
+        }
+
         #[tokio::test]
+        #[allow(clippy::too_many_lines)]
         async fn enriches_movie_sidecar_artwork_and_child_rows_idempotently() {
             let temp = TempDir::new().expect("temp dir");
             let movie_path = temp.path().join("Film (2020).mkv");
@@ -4047,11 +5000,13 @@ content_rating: TV-PG
                     <outline>Short summary.</outline>
                     <plot>Detailed plot.</plot>
                     <year>2020</year>
-                    <mpaa>PG-13</mpaa>
+                    <mpaa>PG-13</mpaa><mpaa>NL:12</mpaa>
                     <premiered>2020-02-03</premiered>
                     <genre>Drama</genre>
                     <tag>Festival</tag>
                     <studio>Studio One</studio>
+                    <label>Label One</label>
+                    <language>nl</language>
                     <actor><name>Ada Actor</name><role>Lead</role><order>1</order></actor>
                     <director>Dana Director</director>
                     <credits>Will Writer</credits>
@@ -4101,7 +5056,7 @@ content_rating: TV-PG
             );
             assert_eq!(
                 row.get::<Option<String>, _>("ContentRating").as_deref(),
-                Some("PG-13")
+                Some("PG-13/NL:12")
             );
             assert_eq!(
                 row.get::<Option<String>, _>("Plot").as_deref(),
@@ -4123,6 +5078,14 @@ content_rating: TV-PG
             assert_eq!(count_for_metadata(&pool, "Tag", first_metadata_id).await, 1);
             assert_eq!(
                 count_for_metadata(&pool, "Studio", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "MusicLabel", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "MetadataLanguage", first_metadata_id).await,
                 1
             );
             assert_eq!(
@@ -4276,9 +5239,15 @@ content_rating: TV-PG
                 movie_path.file_name().and_then(|name| name.to_str())
             );
             let mut tx = pool.begin().await.expect("begin");
-            let metadata_id = enrich_movie_metadata(&mut tx, movie_id, library_path, movie_path)
-                .await
-                .expect("enrich metadata");
+            let metadata_id = enrich_movie_metadata(
+                &mut tx,
+                movie_id,
+                library_path,
+                movie_path,
+                &probed_version(),
+            )
+            .await
+            .expect("enrich metadata");
             tx.commit().await.expect("commit");
             metadata_id
         }
@@ -4305,7 +5274,8 @@ content_rating: TV-PG
     mod music_video_enrichment {
         use super::super::{
             delete_empty_artists, upsert_artist_for_folder, upsert_local_music_video,
-            LocalLibraryPath, METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
+            LocalLibraryPath, METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK,
+            METADATA_KIND_SIDECAR,
         };
         use chrono::Duration;
         use ersatzrs_domain::{LibraryMediaKind, MediaVersion, VideoScanKind};
@@ -4317,6 +5287,7 @@ content_rating: TV-PG
         use tempfile::TempDir;
 
         #[tokio::test]
+        #[allow(clippy::too_many_lines)]
         async fn writes_music_video_metadata_from_fragment_nfo() {
             let temp = TempDir::new().expect("temp dir");
             let library_path = seed_music_video_library_path(temp.path());
@@ -4337,6 +5308,9 @@ content_rating: TV-PG
                     <genre>New Wave</genre>
                     <tag>iconic</tag>
                     <studio>Sire</studio>
+                    <label>Sidecar Label</label>
+                    <language>fr</language>
+                    <mpaa>NL:AL</mpaa>
                     <director>Toni Basil</director>
                 </musicvideo>",
             )
@@ -4348,19 +5322,26 @@ content_rating: TV-PG
                 .await
                 .expect("artist");
 
+            let mut probed = probed_version();
+            probed
+                .format_metadata
+                .insert("publisher".to_owned(), "Embedded Label".to_owned());
+            probed
+                .format_metadata
+                .insert("language".to_owned(), "nl".to_owned());
             upsert_local_music_video(
                 &pool,
                 &library_path,
                 artist_id,
                 &artist_dir,
                 &video_path,
-                probed_version(),
+                probed,
             )
             .await
             .expect("music video upsert");
 
             let row = sqlx::query(
-                r#"SELECT "MetadataKind", "Title", "Album", "Plot", "Year", "Track"
+                r#"SELECT "MetadataKind", "Title", "Album", "Plot", "Year", "Track", "ContentRating"
                    FROM "MusicVideoMetadata" LIMIT 1"#,
             )
             .fetch_one(&pool)
@@ -4381,12 +5362,78 @@ content_rating: TV-PG
             );
             assert_eq!(row.get::<Option<i32>, _>("Year"), Some(1980));
             assert_eq!(row.get::<Option<i32>, _>("Track"), Some(4));
+            assert_eq!(
+                row.get::<Option<String>, _>("ContentRating").as_deref(),
+                Some("NL:AL")
+            );
 
             assert_eq!(count(&pool, "MusicVideoArtist").await, 1);
             assert_eq!(count(&pool, "Genre").await, 1);
             assert_eq!(count(&pool, "Tag").await, 1);
             assert_eq!(count(&pool, "Studio").await, 1);
+            assert_eq!(count(&pool, "MusicLabel").await, 1);
+            assert_eq!(count(&pool, "MetadataLanguage").await, 1);
             assert_eq!(count(&pool, "Director").await, 1);
+
+            std::fs::write(
+                artist_dir.join("Once in a Lifetime.nfo"),
+                r"<musicvideo><title>Once in a Lifetime</title></musicvideo>",
+            )
+            .expect("replacement nfo");
+            let mut probed = probed_version();
+            probed
+                .format_metadata
+                .insert("publisher".to_owned(), "Embedded Label".to_owned());
+            probed
+                .format_metadata
+                .insert("language".to_owned(), "nl".to_owned());
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                artist_id,
+                &artist_dir,
+                &video_path,
+                probed,
+            )
+            .await
+            .expect("authoritative music video rescan");
+            let music_label: String =
+                sqlx::query_scalar(r#"SELECT "Name" FROM "MusicLabel" LIMIT 1"#)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("restored embedded label");
+            let language: String =
+                sqlx::query_scalar(r#"SELECT "Code" FROM "MetadataLanguage" LIMIT 1"#)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("restored embedded language");
+            assert_eq!(music_label, "Embedded Label");
+            assert_eq!(language, "dut");
+            assert_eq!(count(&pool, "Studio").await, 0);
+            assert_eq!(count(&pool, "Director").await, 0);
+
+            std::fs::remove_file(artist_dir.join("Once in a Lifetime.nfo"))
+                .expect("remove sidecar");
+            let mut probed = probed_version();
+            probed
+                .format_metadata
+                .insert("publisher".to_owned(), "Embedded Label".to_owned());
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                artist_id,
+                &artist_dir,
+                &video_path,
+                probed,
+            )
+            .await
+            .expect("embedded-only music video rescan");
+            let metadata_kind: i32 =
+                sqlx::query_scalar(r#"SELECT "MetadataKind" FROM "MusicVideoMetadata" LIMIT 1"#)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("embedded metadata kind");
+            assert_eq!(metadata_kind, METADATA_KIND_EMBEDDED);
         }
 
         #[tokio::test]
@@ -4557,6 +5604,7 @@ content_rating: TV-PG
                 },
                 streams: Vec::new(),
                 chapters: Vec::new(),
+                format_metadata: std::collections::BTreeMap::new(),
             }
         }
 

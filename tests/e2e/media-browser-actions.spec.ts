@@ -122,6 +122,16 @@ DELETE FROM "Playlist" WHERE "Id" = ${seed.playlistId};
 DELETE FROM "PlaylistGroup" WHERE "Id" = ${seed.playlistGroupId};
 DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId} OR "MediaItemId" IN (${itemIds});
 DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
+DELETE FROM "Genre" WHERE "MusicVideoMetadataId" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId})
+   OR "SongMetadataId" = ${seed.songMetadataId} OR "ImageMetadataId" = ${seed.imageMetadataId};
+DELETE FROM "Tag" WHERE "MusicVideoMetadataId" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId})
+   OR "SongMetadataId" = ${seed.songMetadataId} OR "ImageMetadataId" = ${seed.imageMetadataId};
+DELETE FROM "Studio" WHERE "MusicVideoMetadataId" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId})
+   OR "SongMetadataId" = ${seed.songMetadataId} OR "ImageMetadataId" = ${seed.imageMetadataId};
+DELETE FROM "MusicLabel" WHERE "MusicVideoMetadataId" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId})
+   OR "SongMetadataId" = ${seed.songMetadataId} OR "ImageMetadataId" = ${seed.imageMetadataId};
+DELETE FROM "MetadataLanguage" WHERE "MusicVideoMetadataId" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId})
+   OR "SongMetadataId" = ${seed.songMetadataId} OR "ImageMetadataId" = ${seed.imageMetadataId};
 DELETE FROM "Artwork" WHERE "ArtistMetadataId" = ${seed.artistMetadataId}
    OR "MusicVideoMetadataId" = ${seed.musicVideoMetadataId}
    OR "SongMetadataId" = ${seed.songMetadataId}
@@ -175,33 +185,46 @@ INSERT INTO "ArtistMetadata" (
 INSERT INTO "MusicVideo" ("Id", "ArtistId")
   VALUES (${seed.musicVideoId}, ${seed.artistId}), (${seed.secondMusicVideoId}, ${seed.artistId});
 INSERT INTO "MusicVideoMetadata" (
-  "Id", "MusicVideoId", "MetadataKind", "Title", "SortTitle", "Album", "Plot", "DateAdded", "DateUpdated"
+  "Id", "MusicVideoId", "MetadataKind", "Title", "SortTitle", "Album", "Plot", "ContentRating", "DateAdded", "DateUpdated"
 ) VALUES (
   ${seed.musicVideoMetadataId}, ${seed.musicVideoId}, 0, '${sqlEscape(seed.musicVideoTitle)}',
   '${sqlEscape(seed.musicVideoTitle.toLowerCase())}', 'Browser Proof', 'Music-video artwork proof.',
-  '${now}', '${now}'
+  'NL:12', '${now}', '${now}'
 ), (
   ${seed.secondMusicVideoMetadataId}, ${seed.secondMusicVideoId}, 0, '${sqlEscape(seed.secondMusicVideoTitle)}',
   '${sqlEscape(seed.secondMusicVideoTitle.toLowerCase())}', 'Browser Proof', 'Second music-video row.',
-  '${now}', '${now}'
+  NULL, '${now}', '${now}'
 );
 
 INSERT INTO "Song" ("Id") VALUES (${seed.songId});
 INSERT INTO "SongMetadata" (
-  "Id", "SongId", "MetadataKind", "Title", "SortTitle", "Album", "Artists", "DateAdded", "DateUpdated"
+  "Id", "SongId", "MetadataKind", "Title", "SortTitle", "Album", "Artists", "ContentRating", "DateAdded", "DateUpdated"
 ) VALUES (
   ${seed.songMetadataId}, ${seed.songId}, 0, '${sqlEscape(seed.songTitle)}',
   '${sqlEscape(seed.songTitle.toLowerCase())}', 'Browser Proof', '${sqlEscape(seed.artistTitle)}',
-  '${now}', '${now}'
+  'US:PG', '${now}', '${now}'
 );
 
 INSERT INTO "Image" ("Id") VALUES (${seed.imageId});
 INSERT INTO "ImageMetadata" (
-  "Id", "ImageId", "MetadataKind", "Title", "SortTitle", "ReleaseDate", "DateAdded", "DateUpdated"
+  "Id", "ImageId", "MetadataKind", "Title", "SortTitle", "ReleaseDate", "ContentRating", "DateAdded", "DateUpdated"
 ) VALUES (
   ${seed.imageMetadataId}, ${seed.imageId}, 0, '${sqlEscape(seed.imageTitle)}',
-  '${sqlEscape(seed.imageTitle.toLowerCase())}', '2026-07-01', '${now}', '${now}'
+  '${sqlEscape(seed.imageTitle.toLowerCase())}', '2026-07-01', 'PEGI:3', '${now}', '${now}'
 );
+
+INSERT INTO "Genre" ("MusicVideoMetadataId", "Name")
+  VALUES (${seed.musicVideoMetadataId}, 'Concert');
+INSERT INTO "Tag" ("MusicVideoMetadataId", "Name")
+  VALUES (${seed.musicVideoMetadataId}, 'Live Show');
+INSERT INTO "Studio" ("MusicVideoMetadataId", "Name")
+  VALUES (${seed.musicVideoMetadataId}, 'E2E Studio');
+INSERT INTO "MusicLabel" ("MusicVideoMetadataId", "Name")
+  VALUES (${seed.musicVideoMetadataId}, 'E2E Label');
+INSERT INTO "MetadataLanguage" ("MusicVideoMetadataId", "Code")
+  VALUES (${seed.musicVideoMetadataId}, 'nld');
+INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
+  VALUES (${seed.collectionId}, ${seed.imageId}, 0);
 
 INSERT INTO "Artwork" (
   "ArtistMetadataId", "ArtworkKind", "Path", "DateAdded", "DateUpdated"
@@ -466,6 +489,82 @@ WHERE "PlaylistId" = ${seed.playlistId} AND "MediaItemId" = ${seed.imageId}
 ORDER BY "Id" DESC LIMIT 1;
 `)).toBe('60');
 
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('uniform facet detail routes are reachable from browsers, search, collections, and artists', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMediaBrowserActions(testInfo);
+    await forceEnglish(page);
+
+    await gotoHydrated(page, `/media/music/videos?query=${encodeURIComponent(seed.musicVideoTitle)}`);
+    await page.getByRole('link', { name: seed.musicVideoTitle }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/media/music/videos/${seed.musicVideoId}$`));
+    await expect(page.getByRole('heading', { name: seed.musicVideoTitle })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^add to collection$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^add to playlist$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^show media info$/i })).toBeVisible();
+    await page.getByRole('button', { name: /^add to collection$/i }).click();
+    await chooseExistingCollection(page, seed);
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "CollectionItem"
+WHERE "CollectionId" = ${seed.collectionId} AND "MediaItemId" = ${seed.musicVideoId};
+`)).toBe('1');
+    await page.getByRole('button', { name: /^add to playlist$/i }).click();
+    await chooseExistingPlaylist(page, seed);
+    await expect.poll(() => sqlite(`
+SELECT "CollectionType" FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId} AND "MediaItemId" = ${seed.musicVideoId}
+ORDER BY "Id" DESC LIMIT 1;
+`)).toBe('30');
+    await page.getByRole('button', { name: /^show media info$/i }).click();
+    const mediaInfoHeading = page.getByRole('heading', {
+      name: seed.musicVideoTitle,
+      level: 2,
+    });
+    await expect(mediaInfoHeading).toBeVisible();
+    const mediaInfo = mediaInfoHeading.locator('..');
+    await expect(mediaInfo.locator('pre')).toContainText(seed.musicVideoTitle);
+    await mediaInfo.getByRole('button', { name: /^close$/i }).click();
+    await expect(page.getByRole('link', { name: /^troubleshoot playback$/i })).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.musicVideoId}`,
+    );
+    await expect(page.getByRole('link', { name: 'NL:12' })).toHaveAttribute(
+      'href',
+      '/search?query=content_rating%3A%22NL%3A12%22',
+    );
+    await expect(page.getByRole('link', { name: 'E2E Label' })).toHaveAttribute(
+      'href',
+      '/search?query=music_label%3A%22e2e%20label%22',
+    );
+    await expect(page.getByRole('link', { name: 'Concert' })).toHaveAttribute(
+      'href',
+      '/search?query=genre%3A%22concert%22',
+    );
+
+    await gotoHydrated(page, `/search?query=${encodeURIComponent(seed.musicVideoTitle)}`);
+    await page.getByRole('link', { name: seed.musicVideoTitle }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/media/music/videos/${seed.musicVideoId}$`));
+
+    await gotoHydrated(page, `/media/music/artists/${seed.artistId}`);
+    await page.getByRole('link', { name: seed.musicVideoTitle }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/media/music/videos/${seed.musicVideoId}$`));
+
+    await gotoHydrated(page, `/media/music/songs/${seed.songId}`);
+    await expect(page.getByRole('heading', { name: seed.songTitle })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'US:PG' })).toBeVisible();
+
+    await gotoHydrated(page, `/media/collections/${seed.collectionId}`);
+    await page.getByRole('link', { name: seed.imageTitle }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/media/browser/images/${seed.imageId}$`));
+    await expect(page.getByRole('heading', { name: seed.imageTitle })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^troubleshoot playback$/i })).toBeHidden();
+
+    await gotoHydrated(page, `/media/images/${seed.imageId}`);
+    await expect(page.getByRole('heading', { name: seed.imageTitle })).toBeVisible();
     expect(runtimeErrors).toEqual([]);
   });
 

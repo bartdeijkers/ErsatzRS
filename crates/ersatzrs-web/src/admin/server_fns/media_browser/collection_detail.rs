@@ -90,6 +90,9 @@ pub(in crate::admin::server_fns::media_browser) fn collection_detail_from_admin(
                     "movie" => Some(format!("/media/movies/{}", item.media_item_id)),
                     "show" => Some(format!("/media/tv/shows/{}", item.media_item_id)),
                     "other_video" => Some(format!("/media/other/videos/{}", item.media_item_id)),
+                    "music_video" => Some(format!("/media/music/videos/{}", item.media_item_id)),
+                    "song" => Some(format!("/media/music/songs/{}", item.media_item_id)),
+                    "image" => Some(format!("/media/browser/images/{}", item.media_item_id)),
                     _ => None,
                 };
                 CollectionItemCard {
@@ -401,6 +404,9 @@ pub(in crate::admin::server_fns::media_browser) async fn get_collection_detail_l
                 "movie" => Some(format!("/media/movies/{item_id}")),
                 "show" => Some(format!("/media/tv/shows/{item_id}")),
                 "other_video" => Some(format!("/media/other/videos/{item_id}")),
+                "music_video" => Some(format!("/media/music/videos/{item_id}")),
+                "song" => Some(format!("/media/music/songs/{item_id}")),
+                "image" => Some(format!("/media/browser/images/{item_id}")),
                 _ => None,
             };
 

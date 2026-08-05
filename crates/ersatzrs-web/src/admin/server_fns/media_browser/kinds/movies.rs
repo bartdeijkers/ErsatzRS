@@ -78,8 +78,9 @@ pub(in crate::admin::server_fns::media_browser) async fn get_movie_details_impl(
             media_item_state: movie.media_item_state,
             genres: movie.genres,
             tags: movie.tags,
-            languages: movie.languages,
+            languages: movie.facets.languages,
             studios: movie.studios,
+            music_labels: movie.facets.music_labels,
             directors: movie.directors,
             writers: movie.writers,
             actors: movie
@@ -249,6 +250,8 @@ pub async fn get_movie_details_with_pool(
     let genres = load_strings(pool, r#""Genre""#, "MovieMetadataId", metadata_id).await?;
     let tags = load_strings(pool, r#""Tag""#, "MovieMetadataId", metadata_id).await?;
     let studios = load_strings(pool, r#""Studio""#, "MovieMetadataId", metadata_id).await?;
+    let music_labels =
+        load_strings(pool, r#""MusicLabel""#, "MovieMetadataId", metadata_id).await?;
     let directors = load_strings(pool, r#""Director""#, "MovieMetadataId", metadata_id).await?;
     let writers = load_strings(pool, r#""Writer""#, "MovieMetadataId", metadata_id).await?;
     let languages = load_movie_languages(pool, id).await?;
@@ -303,6 +306,7 @@ pub async fn get_movie_details_with_pool(
         tags,
         languages,
         studios,
+        music_labels,
         directors,
         writers,
         actors,
@@ -348,8 +352,9 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_impl(
             media_item_state: show.media_item_state,
             genres: show.genres,
             tags: show.tags,
-            languages: show.languages,
+            languages: show.facets.languages,
             studios: show.studios,
+            music_labels: show.facets.music_labels,
             networks: show.networks,
             actors: show
                 .actors
@@ -446,6 +451,13 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_legacy
 
     let genres = load_strings(&state.pool, r#""Genre""#, "ShowMetadataId", metadata_id).await?;
     let studios = load_strings(&state.pool, r#""Studio""#, "ShowMetadataId", metadata_id).await?;
+    let music_labels = load_strings(
+        &state.pool,
+        r#""MusicLabel""#,
+        "ShowMetadataId",
+        metadata_id,
+    )
+    .await?;
     let languages = load_show_languages(&state.pool, id).await?;
 
     // Tags split into plain tags vs Plex "network" tags, mirroring
@@ -564,6 +576,7 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_legacy
         tags,
         languages,
         studios,
+        music_labels,
         networks,
         actors,
         seasons,
@@ -663,6 +676,9 @@ pub fn media_item_info_json_from_admin(
         AdminMediaInfoKind::Movie => "Movie",
         AdminMediaInfoKind::OtherVideo => "OtherVideo",
         AdminMediaInfoKind::Episode => "Episode",
+        AdminMediaInfoKind::MusicVideo => "MusicVideo",
+        AdminMediaInfoKind::Song => "Song",
+        AdminMediaInfoKind::Image => "Image",
     };
     let json = MediaItemInfoJson {
         id: info.id,

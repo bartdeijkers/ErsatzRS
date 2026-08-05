@@ -61,6 +61,12 @@ pub struct RemoteConnectionAdmin {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlexArtworkConnectionAdmin {
+    pub address: String,
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibraryPreferenceAdmin {
     pub id: EntityId,
     pub name: String,
@@ -84,6 +90,10 @@ pub trait MediaSourceRepository: Send + Sync {
     async fn upsert_plex(&self, source: &PlexMediaSource) -> Result<()>;
     async fn upsert_jellyfin(&self, source: &JellyfinMediaSource) -> Result<()>;
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()>;
+    async fn plex_artwork_connection_admin(
+        &self,
+        source_id: EntityId,
+    ) -> Result<Option<PlexArtworkConnectionAdmin>>;
     async fn first_jellyfin_address_admin(&self) -> Result<Option<String>>;
     async fn first_emby_address_admin(&self) -> Result<Option<String>>;
     async fn list_local_libraries_admin(&self) -> Result<Vec<LocalLibraryAdminRow>>;

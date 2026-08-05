@@ -110,6 +110,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         tags,
         languages,
         studios,
+        music_labels,
         directors,
         writers,
         actors,
@@ -340,6 +341,12 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     {linked_fact_row(tr(TextKey::ContentRatings), "content_rating", &content_ratings, false)}
                     {linked_fact_row(tr(TextKey::Languages), "language", &languages, true)}
                     {linked_fact_row(tr(TextKey::Studios), "studio", &studios, true)}
+                    {linked_fact_row(
+                        tr(TextKey::MusicLabels),
+                        "music_label",
+                        &music_labels,
+                        true,
+                    )}
                     {linked_fact_row(tr(TextKey::Directors), "director", &directors, true)}
                     {linked_fact_row(tr(TextKey::Writers), "writer", &writers, true)}
                     {linked_fact_row(tr(TextKey::Genres), "genre", &genres, true)}

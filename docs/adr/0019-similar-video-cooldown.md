@@ -244,6 +244,8 @@ operator enables cooldowns.
 Scheduling reference data becomes wider because it must carry groupable facets
 needed by policies. That work should be centralized in
 `SchedulingMediaItem`/reference-data loading rather than duplicated per engine.
+ADR 0062 adds canonical content-rating, language-code, and music-label rules to that
+shared hydration path without changing version-1 policy defaults.
 
 The scheduler gains state that spans generated items and Continue builds.
 State serialization needs snapshot tests and compatibility tests before this
@@ -293,3 +295,5 @@ to deterministic best-effort diversity with a warning, not an offline channel.
 - 2026-07-22: Removed the draft-aware overview and paginated candidate query.
   Enumerating every candidate for every draft item made the preview too slow to
   be useful; item policy editing and playout-building behavior are unchanged.
+- 2026-08-05: Added the additive `content_rating`, `language`, and `music_label`
+  grouping facets defined by ADR 0062; language tags group by canonical code.

@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Added uniform content-rating/Kijkwijzer, studio, music-label, language, genre, and
+  tag metadata for movies, television, music videos, other videos, songs, and
+  images across local/Plex scanning, SQLite/MySQL persistence, search and smart
+  collections, Smart Shuffle grouping, and localized detail pages. Music
+  videos, songs, and images now have read-only detail routes with linked facet
+  searches and the established media actions.
+
 - Added an opt-in **Settings** -> **UI** control that starts the packaged
   `ErsatzRS.exe` tray launcher when the current Windows user signs in. The UI
   reads the live per-user registry state, can repair a stale release path, and
@@ -33,6 +40,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed the uniform metadata-facet slice so new detail-page actions hydrate,
+  existing local-TV seasons are forced through their first facet backfill,
+  Plex movie and episode facets are persisted, Plex artwork uses its owning
+  server and token, television episodes use field-local embedded fallbacks,
+  and embedded-only scans retain `Embedded` source provenance.
 - Fixed script-backed Remote Streams failing when a producer emitted a
   streamable MP4, WebM, or another FFmpeg-supported container instead of
   MPEG-TS. Playback and scanner probing now let FFmpeg detect the producer

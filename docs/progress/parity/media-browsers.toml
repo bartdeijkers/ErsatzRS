@@ -2,13 +2,16 @@ feature    = 'Media browsers (movies, shows, images, music, other videos, songs)
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
 status     = 'Ported'
-adr        = ['0048', '0056']
+adr        = ['0048', '0056', '0062']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
 
 Closed 2026-07-01 for the movie-detail extras regression: `/media/movies/:id` now renders linked extras with the same episode-style row treatment as TV extras and exposes Add To Collection, Add To Playlist, Show Media Info, and Troubleshoot Playback actions. Movie detail also keeps its localized labels and shared modal/action plumbing.
 
-Closed 2026-07-01 for the remaining action/toolbar regression: `/media/music/songs` and `/media/browser/images` now reuse the shared multi-select browser shell, right-side toolbar placement, item overflow menu, media-info/troubleshooting links, and correct song/image playlist collection-type stamps. `/media/music/artists/:id` now resolves initial detail data before the island boundary, restoring the artist Add To Collection dialog/persistence path and rendered artist/music-video preview images. `/media/tv/shows/:id` also resolves detail data before its island boundary after focused browser proof exposed a Suspense hydration mismatch. Movie, show, season, and artist detail routes were rechecked against the ErsatzTV-valid header/row action model.
+Closed 2026-07-01: song/image lists share the multi-select action shell and
+correct playlist types. Artist and show details resolve initial data before
+their island boundaries, preserving actions, previews, and hydration. Detail
+routes retain the ErsatzTV header/row action model.
 
 ADR 0048 adds an ErsatzRS-only movie-detail playback-options surface: audio
 track cards appear near the top of `/media/movies/:id`, can seed Add To
@@ -21,17 +24,9 @@ Version/Video/Audio/Subtitle selectors. Exact combinations remain pinned from
 schedule/playlist insertion through editing and playback; subtitles default
 to Off.
 
-Closed 2026-07-03 for the stay-in-context add flows: every Add To Collection /
-Add To Playlist dialog (shared browser/detail modals and the search page's own
-dialogs) now keeps the user on the current page after a successful add. The
-success toast carries an explicit localized "View Collection" / "View
-Playlist" action link (new `ToastAction` on the shared toast primitive) so the
-previous navigation is still one click away. The `redirect_after_add` behavior
-was removed from the collection modal; `AddToScheduleModal` redirects are
-schedule-flow behavior and unchanged. Proven by the stay-in-context assertions
-in `tests/e2e/media-browser-actions.spec.ts` covering single-item (item menu),
-bulk (selection toolbar), and artist-detail flows for collections and
-playlists, including explicit toast-link navigation.
+Closed 2026-07-03: collection/playlist dialogs keep the current browsing
+context after success and provide a localized toast link to the destination.
+Focused E2E covers single, bulk, and artist-detail add flows.
 
 Closed 2026-07-03 for artist-detail music-video multi-select:
 `/media/music/artists/:id` music-video rows (including alternate-version
@@ -47,6 +42,11 @@ Closed 2026-07-25: shared search/list artwork maps posters to height 440 and
 thumbnails to 220 while replacing stale resize parameters. Pinned ErsatzTV
 sources confirm query-preserving See All routes, season/episode links,
 nonclickable music-video cards, and no library filter; ErsatzRS matches them.
+
+ADR 0062 intentionally extends that pinned baseline with read-only music-video,
+song, and image detail routes, canonical card/search/collection destinations,
+shared actions and unavailable warnings, and linked rating, language, studio,
+music-label, genre, and tag facts on every applicable detail surface.
 '''
 
 [[debt]]

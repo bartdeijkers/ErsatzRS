@@ -30,6 +30,7 @@ struct TrashSection {
     key: &'static str,
     title_key: TextKey,
     browse_href: &'static str,
+    detail_base: Option<&'static str>,
     rows: Vec<MediaCardRow>,
 }
 
@@ -203,6 +204,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
                         let section_key = section.key;
                         let section_title = tr(section.title_key);
                         let browse_href = section.browse_href;
+                        let detail_base = section.detail_base;
                         let rows = section.rows;
                         view! {
                             <section id=section_key class=style::section>
@@ -220,6 +222,9 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
                                         let item_title = row.title.clone();
                                         let subtitle = row.subtitle.clone();
                                         let artwork_path = row.artwork_path.clone();
+                                        let href = row.href.or_else(|| {
+                                            detail_base.map(|base| format!("{base}/{item_id}"))
+                                        });
                                         let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&row.sort_title);
                                         view! {
                                             <div class=style::card_shell>
@@ -227,6 +232,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
                                                     title=item_title.clone()
                                                     subtitle=subtitle
                                                     artwork_url=artwork_path
+                                                    href=href
                                                     placeholder=placeholder
                                                 />
                                                 <div class=style::card_actions>
@@ -333,6 +339,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "movies",
             title_key: TextKey::Movies,
             browse_href: "/media/movies",
+            detail_base: Some("/media/movies"),
             rows: data.movies,
         });
     }
@@ -342,6 +349,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "shows",
             title_key: TextKey::TvShows,
             browse_href: "/media/tv/shows",
+            detail_base: Some("/media/tv/shows"),
             rows: data.shows,
         });
     }
@@ -351,6 +359,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "seasons",
             title_key: TextKey::Seasons,
             browse_href: "/media/tv/seasons",
+            detail_base: Some("/media/tv/seasons"),
             rows: data.seasons,
         });
     }
@@ -360,6 +369,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "episodes",
             title_key: TextKey::Episodes,
             browse_href: "/media/tv/episodes",
+            detail_base: None,
             rows: data.episodes,
         });
     }
@@ -369,6 +379,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "artists",
             title_key: TextKey::Artists,
             browse_href: "/media/music/artists",
+            detail_base: Some("/media/music/artists"),
             rows: data.artists,
         });
     }
@@ -378,6 +389,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "music-videos",
             title_key: TextKey::MusicVideos,
             browse_href: "/media/music/videos",
+            detail_base: Some("/media/music/videos"),
             rows: data.music_videos,
         });
     }
@@ -387,6 +399,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "other-videos",
             title_key: TextKey::OtherVideos,
             browse_href: "/media/other/videos",
+            detail_base: Some("/media/other/videos"),
             rows: data.other_videos,
         });
     }
@@ -396,6 +409,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "songs",
             title_key: TextKey::Songs,
             browse_href: "/media/music/songs",
+            detail_base: Some("/media/music/songs"),
             rows: data.songs,
         });
     }
@@ -405,6 +419,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "images",
             title_key: TextKey::Images,
             browse_href: "/media/browser/images",
+            detail_base: Some("/media/browser/images"),
             rows: data.images,
         });
     }
@@ -414,6 +429,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             key: "remote-streams",
             title_key: TextKey::RemoteStreams,
             browse_href: "/media/remote/streams",
+            detail_base: None,
             rows: data.remote_streams,
         });
     }

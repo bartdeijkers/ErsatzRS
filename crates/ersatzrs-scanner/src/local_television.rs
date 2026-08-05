@@ -22,14 +22,17 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::Utc;
+use ersatzrs_core::metadata_facets::{
+    normalize_content_ratings, normalize_language_codes, preferred_facet_values, union_facet_values,
+};
 use ersatzrs_domain::{
     classify_extra_directory_name, classify_extra_video, ExtraVideoClassification,
 };
 use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
-    artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
-    update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
+    artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
+    replace_strings, update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use sqlx::{Row, Transaction};
 use tracing::{info, warn};
@@ -37,9 +40,9 @@ use tracing::{info, warn};
 use crate::library_folder;
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
 use crate::{
-    encode_datetime, insert_media_item, insert_media_version_with_owner, path_hash,
-    replace_chapters, replace_streams, update_media_version, upsert_local_extra_video,
-    LocalLibraryPath, Result, ScannerError,
+    audio_stream_languages, encode_datetime, insert_media_item, insert_media_version_with_owner,
+    path_hash, replace_chapters, replace_streams, update_media_version, upsert_local_extra_video,
+    EmbeddedFacets, LocalLibraryPath, Result, ScannerError,
 };
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];
@@ -48,6 +51,7 @@ const SQLITE_LOCK_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000, 8_0
 
 const METADATA_KIND_FALLBACK: i32 = 0;
 const METADATA_KIND_SIDECAR: i32 = 1;
+const METADATA_KIND_EMBEDDED: i32 = 3;
 
 /// One season folder discovered for a show.
 struct SeasonWork {
@@ -115,8 +119,67 @@ struct LocalEpisodeScan {
     episode_number: i32,
     year: Option<i32>,
     release_date: Option<String>,
+    content_rating: Option<String>,
     metadata_kind: i32,
     nfo: Option<EpisodeNfo>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct EpisodeFacetValues {
+    genres: Vec<String>,
+    studios: Vec<String>,
+    music_labels: Vec<String>,
+    tags: Vec<String>,
+    languages: Vec<String>,
+}
+
+fn episode_facet_values(scan: &LocalEpisodeScan) -> EpisodeFacetValues {
+    let embedded = EmbeddedFacets::from_probe(&scan.probed);
+    let preferred =
+        |sidecar: Vec<String>, embedded: &[String]| preferred_facet_values(&sidecar, embedded, &[]);
+    let genres = preferred(
+        scan.nfo
+            .as_ref()
+            .map(|parsed| parsed.genres.clone())
+            .unwrap_or_default(),
+        &embedded.genres,
+    );
+    let studios = preferred(
+        scan.nfo
+            .as_ref()
+            .map(|parsed| parsed.studios.clone())
+            .unwrap_or_default(),
+        &embedded.studios,
+    );
+    let music_labels = preferred(
+        scan.nfo
+            .as_ref()
+            .map(|parsed| parsed.music_labels.clone())
+            .unwrap_or_default(),
+        &embedded.music_labels,
+    );
+    let tags = preferred(
+        scan.nfo
+            .as_ref()
+            .map(|parsed| parsed.tags.clone())
+            .unwrap_or_default(),
+        &embedded.tags,
+    );
+    let explicit_languages = preferred(
+        scan.nfo
+            .as_ref()
+            .map(|parsed| normalize_language_codes(&parsed.languages))
+            .unwrap_or_default(),
+        &embedded.languages,
+    );
+    let languages = union_facet_values(&explicit_languages, &audio_stream_languages(&scan.probed));
+    EpisodeFacetValues {
+        genres,
+        studios,
+        music_labels,
+        tags,
+        languages,
+    }
 }
 
 /// Walk the library root and enumerate all show/season/episode work units.
@@ -1551,6 +1614,10 @@ async fn upsert_show(
     let sort_title = &descriptor.sort_title;
     let year = descriptor.identity.year;
     let metadata_kind = descriptor.metadata_kind;
+    let content_rating = nfo.and_then(|value| {
+        let values = normalize_content_ratings(&value.content_ratings);
+        (!values.is_empty()).then(|| values.join("/"))
+    });
 
     let mut tx = pool.begin().await?;
     let existing_show_id = resolve_show_id(&mut tx, library_path.id, &descriptor.identity).await?;
@@ -1592,7 +1659,7 @@ async fn upsert_show(
             .bind(sort_title)
             .bind(year)
             .bind(&release_date)
-            .bind(nfo.and_then(|n| n.content_rating.clone()))
+            .bind(&content_rating)
             .bind(nfo.and_then(|n| n.plot.clone()))
             .bind(nfo.and_then(|n| n.outline.clone()))
             .bind(nfo.and_then(|n| n.tagline.clone()))
@@ -1651,6 +1718,21 @@ async fn upsert_show(
             &parsed.genres,
         )
         .await?;
+        replace_strings(
+            &mut tx,
+            "MusicLabel",
+            "ShowMetadataId",
+            metadata_id,
+            &parsed.music_labels,
+        )
+        .await?;
+        replace_metadata_languages(
+            &mut tx,
+            "ShowMetadataId",
+            metadata_id,
+            &normalize_language_codes(&parsed.languages),
+        )
+        .await?;
         replace_strings(&mut tx, "Tag", "ShowMetadataId", metadata_id, &parsed.tags).await?;
         replace_strings(
             &mut tx,
@@ -1679,6 +1761,8 @@ async fn upsert_show(
         replace_strings(&mut tx, "Genre", "ShowMetadataId", metadata_id, &[]).await?;
         replace_strings(&mut tx, "Tag", "ShowMetadataId", metadata_id, &[]).await?;
         replace_strings(&mut tx, "Studio", "ShowMetadataId", metadata_id, &[]).await?;
+        replace_strings(&mut tx, "MusicLabel", "ShowMetadataId", metadata_id, &[]).await?;
+        replace_metadata_languages(&mut tx, "ShowMetadataId", metadata_id, &[]).await?;
         replace_people(&mut tx, "Actor", "ShowMetadataId", metadata_id, &[]).await?;
         replace_guids(&mut tx, "ShowMetadataId", metadata_id, &[]).await?;
     }
@@ -1739,7 +1823,10 @@ async fn insert_show_metadata(
     .bind(sort_title)
     .bind(year)
     .bind(release_date)
-    .bind(nfo.and_then(|n| n.content_rating.clone()))
+    .bind(nfo.and_then(|value| {
+        let values = normalize_content_ratings(&value.content_ratings);
+        (!values.is_empty()).then(|| values.join("/"))
+    }))
     .bind(nfo.and_then(|n| n.plot.clone()))
     .bind(nfo.and_then(|n| n.outline.clone()))
     .bind(nfo.and_then(|n| n.tagline.clone()))
@@ -1974,11 +2061,22 @@ async fn probe_local_episode(
         .as_ref()
         .and_then(|n| n.episode)
         .unwrap_or(fallback_episode);
+    let embedded = EmbeddedFacets::from_probe(&probed);
     let metadata_kind = if nfo.is_some() {
         METADATA_KIND_SIDECAR
+    } else if !embedded.is_empty() {
+        METADATA_KIND_EMBEDDED
     } else {
         METADATA_KIND_FALLBACK
     };
+    let content_ratings = preferred_facet_values(
+        &nfo.as_ref()
+            .map(|value| normalize_content_ratings(&value.content_ratings))
+            .unwrap_or_default(),
+        &embedded.content_ratings,
+        &[],
+    );
+    let content_rating = (!content_ratings.is_empty()).then(|| content_ratings.join("/"));
     let release_date = nfo
         .as_ref()
         .and_then(|n| n.aired.or(n.premiered))
@@ -2003,6 +2101,7 @@ async fn probe_local_episode(
         episode_number,
         year,
         release_date,
+        content_rating,
         metadata_kind,
         nfo,
     })
@@ -2089,29 +2188,50 @@ async fn sync_local_episode_once(
         scan.episode_number,
         scan.year,
         scan.release_date.as_deref(),
+        scan.content_rating.as_deref(),
         scan.metadata_kind,
         scan.nfo.as_ref(),
         &now,
     )
     .await?;
 
+    let facets = episode_facet_values(scan);
+    replace_strings(
+        &mut tx,
+        "Genre",
+        "EpisodeMetadataId",
+        metadata_id,
+        &facets.genres,
+    )
+    .await?;
+    replace_strings(
+        &mut tx,
+        "Studio",
+        "EpisodeMetadataId",
+        metadata_id,
+        &facets.studios,
+    )
+    .await?;
+    replace_strings(
+        &mut tx,
+        "MusicLabel",
+        "EpisodeMetadataId",
+        metadata_id,
+        &facets.music_labels,
+    )
+    .await?;
+    replace_strings(
+        &mut tx,
+        "Tag",
+        "EpisodeMetadataId",
+        metadata_id,
+        &facets.tags,
+    )
+    .await?;
+    replace_metadata_languages(&mut tx, "EpisodeMetadataId", metadata_id, &facets.languages)
+        .await?;
+
     if let Some(parsed) = scan.nfo.as_ref() {
-        replace_strings(
-            &mut tx,
-            "Genre",
-            "EpisodeMetadataId",
-            metadata_id,
-            &parsed.genres,
-        )
-        .await?;
-        replace_strings(
-            &mut tx,
-            "Tag",
-            "EpisodeMetadataId",
-            metadata_id,
-            &parsed.tags,
-        )
-        .await?;
         replace_people(
             &mut tx,
             "Actor",
@@ -2144,8 +2264,6 @@ async fn sync_local_episode_once(
         )
         .await?;
     } else {
-        replace_strings(&mut tx, "Genre", "EpisodeMetadataId", metadata_id, &[]).await?;
-        replace_strings(&mut tx, "Tag", "EpisodeMetadataId", metadata_id, &[]).await?;
         replace_people(&mut tx, "Actor", "EpisodeMetadataId", metadata_id, &[]).await?;
         replace_people(&mut tx, "Director", "EpisodeMetadataId", metadata_id, &[]).await?;
         replace_people(&mut tx, "Writer", "EpisodeMetadataId", metadata_id, &[]).await?;
@@ -2213,6 +2331,7 @@ async fn upsert_episode_metadata(
     episode_number: i32,
     year: Option<i32>,
     release_date: Option<&str>,
+    content_rating: Option<&str>,
     metadata_kind: i32,
     nfo: Option<&EpisodeNfo>,
     now: &str,
@@ -2227,8 +2346,8 @@ async fn upsert_episode_metadata(
             r#"UPDATE "EpisodeMetadata"
                SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
                    "OriginalTitle" = ?, "SortTitle" = ?, "EpisodeNumber" = ?,
-                   "Year" = ?, "ReleaseDate" = ?, "Plot" = ?, "Outline" = ?,
-                   "Tagline" = ?
+                   "Year" = ?, "ReleaseDate" = ?, "ContentRating" = ?,
+                   "Plot" = ?, "Outline" = ?, "Tagline" = ?
                WHERE "Id" = ?"#,
         )
         .bind(now)
@@ -2239,6 +2358,7 @@ async fn upsert_episode_metadata(
         .bind(episode_number)
         .bind(year)
         .bind(release_date)
+        .bind(content_rating)
         .bind(nfo.and_then(|n| n.plot.clone()))
         .bind(Option::<String>::None)
         .bind(Option::<String>::None)
@@ -2251,8 +2371,8 @@ async fn upsert_episode_metadata(
             r#"INSERT INTO "EpisodeMetadata" (
                 "EpisodeId", "DateAdded", "DateUpdated", "MetadataKind",
                 "Title", "OriginalTitle", "SortTitle", "EpisodeNumber",
-                "Year", "ReleaseDate", "Plot", "Outline", "Tagline"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Year", "ReleaseDate", "ContentRating", "Plot", "Outline", "Tagline"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(episode_id)
         .bind(now)
@@ -2264,6 +2384,7 @@ async fn upsert_episode_metadata(
         .bind(episode_number)
         .bind(year)
         .bind(release_date)
+        .bind(content_rating)
         .bind(nfo.and_then(|n| n.plot.clone()))
         .bind(Option::<String>::None)
         .bind(Option::<String>::None)
@@ -2281,6 +2402,59 @@ mod tests {
     use ersatzrs_domain::LibraryMediaKind;
     #[cfg(not(feature = "mysql"))]
     use sqlx::{sqlite::SqlitePoolOptions, Executor};
+
+    #[test]
+    fn episode_facets_fall_back_to_embedded_values_per_field() {
+        let probed = FfprobeMediaVersion {
+            version: ersatzrs_domain::MediaVersion::default(),
+            streams: vec![ersatzrs_domain::MediaStream {
+                kind: ersatzrs_domain::MediaStreamKind::Audio,
+                language: Some("eng".to_owned()),
+                ..ersatzrs_domain::MediaStream::default()
+            }],
+            chapters: Vec::new(),
+            format_metadata: [
+                ("genre".to_owned(), "Embedded Genre".to_owned()),
+                ("studio".to_owned(), "Embedded Studio".to_owned()),
+                ("publisher".to_owned(), "Embedded Music Label".to_owned()),
+                ("tags".to_owned(), "embedded-one;embedded-two".to_owned()),
+                ("language".to_owned(), "nl".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let scan = LocalEpisodeScan {
+            probed,
+            path_text: String::new(),
+            hash: String::new(),
+            title: String::new(),
+            fallback_title: String::new(),
+            sort_title: String::new(),
+            episode_number: 1,
+            year: None,
+            release_date: None,
+            content_rating: None,
+            metadata_kind: METADATA_KIND_SIDECAR,
+            nfo: Some(EpisodeNfo {
+                genres: vec!["Sidecar Genre".to_owned()],
+                studios: vec![" ".to_owned()],
+                music_labels: vec!["Sidecar Music Label".to_owned()],
+                languages: vec![String::new()],
+                ..EpisodeNfo::default()
+            }),
+        };
+
+        assert_eq!(
+            episode_facet_values(&scan),
+            EpisodeFacetValues {
+                genres: vec!["Sidecar Genre".to_owned()],
+                studios: vec!["Embedded Studio".to_owned()],
+                music_labels: vec!["Sidecar Music Label".to_owned()],
+                tags: vec!["embedded-one".to_owned(), "embedded-two".to_owned()],
+                languages: vec!["dut".to_owned(), "eng".to_owned()],
+            }
+        );
+    }
 
     fn identity(
         folder: &str,

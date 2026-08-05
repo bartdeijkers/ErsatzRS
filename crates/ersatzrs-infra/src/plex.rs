@@ -72,6 +72,29 @@ pub struct PlexMediaItem {
     pub streams: Vec<MediaStream>,
     pub season_number: i32,
     pub episode_number: i32,
+    pub original_title: Option<String>,
+    pub year: Option<i32>,
+    pub release_date: Option<String>,
+    pub content_rating: Option<String>,
+    pub summary: Option<String>,
+    pub tagline: Option<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub guids: Vec<String>,
+    pub actors: Vec<PlexPerson>,
+    pub directors: Vec<PlexPerson>,
+    pub writers: Vec<PlexPerson>,
+    pub thumb: Option<String>,
+    pub art: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlexPerson {
+    pub name: String,
+    pub role: Option<String>,
+    pub thumb: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,7 +159,7 @@ impl PlexService {
         }
     }
 
-    /// List movie and show libraries from Plex.
+    /// List movie, show, and Other Video libraries from Plex.
     ///
     /// # Errors
     ///
@@ -179,6 +202,22 @@ impl PlexService {
                 .filter_map(project_media_item)
                 .collect(),
         })
+    }
+
+    /// Fetch one page from a Plex Other Videos library.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_other_video_page(
+        &self,
+        config: &PlexConnectionConfig,
+        library_key: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<PlexPage<PlexMediaItem>> {
+        self.fetch_movie_page(config, library_key, start_index, limit)
+            .await
     }
 
     /// Fetch one page of Plex show items.
@@ -899,6 +938,162 @@ async fn finalize_plex_movie_library_sync(
     Ok(())
 }
 
+/// Sync a Plex Other Videos library into the schema-supported provider graph.
+///
+/// # Errors
+///
+/// Returns an error when the Plex request, response mapping, or database write
+/// fails.
+pub async fn sync_plex_other_video_library(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+) -> Result<usize> {
+    sync_plex_other_video_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        None,
+    )
+    .await
+}
+
+/// Sync a Plex Other Videos library and report scan progress.
+///
+/// # Errors
+///
+/// Returns an error when the Plex request, response mapping, or database write
+/// fails.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines
+)]
+pub async fn sync_plex_other_video_library_with_progress(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    let mut synced = 0;
+    let mut start_index = 0;
+    let mut present_item_ids = std::collections::HashSet::new();
+    let mut variant_candidates = Vec::new();
+    let mut page = service
+        .fetch_other_video_page(config, library_key, start_index, PLEX_PAGE_SIZE)
+        .await?;
+    let total_size = page.total_record_count;
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+    while start_index < total_size {
+        for item in &page.items {
+            present_item_ids.insert(item.key.clone());
+            let item_id = if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "PlexOtherVideo",
+                    library_id,
+                    &item.key,
+                    item.etag.as_deref(),
+                )
+                .await?
+            {
+                crate::media_server::provider_media_item_id(
+                    pool,
+                    "PlexOtherVideo",
+                    "Key",
+                    library_id,
+                    &item.key,
+                )
+                .await
+                .repository()?
+            } else {
+                Some(
+                    upsert_plex_other_video(
+                        pool,
+                        config,
+                        media_source_id,
+                        library_id,
+                        library_key,
+                        item,
+                    )
+                    .await?,
+                )
+            };
+            synced += 1;
+            if let Some(item_id) = item_id {
+                variant_candidates.push(crate::media_server::ProviderVariantCandidate {
+                    item_id,
+                    title: item.title.clone(),
+                    path: Some(item.path.clone()),
+                    disambiguator: String::new(),
+                    tags: Vec::new(),
+                });
+            }
+            if let Some(sink) = progress {
+                if total_size > 0 {
+                    sink.report(synced as f32 / total_size as f32);
+                }
+            }
+        }
+        start_index += PLEX_PAGE_SIZE;
+        if start_index < total_size {
+            page = service
+                .fetch_other_video_page(config, library_key, start_index, PLEX_PAGE_SIZE)
+                .await?;
+        }
+    }
+    crate::media_server::flag_missing_media_server_items(
+        pool,
+        "PlexOtherVideo",
+        "Key",
+        library_id,
+        &present_item_ids,
+    )
+    .await
+    .repository()?;
+    let replacements = crate::media_server::load_media_server_path_replacements(
+        pool,
+        "PlexPathReplacement",
+        "PlexPath",
+        "PlexMediaSourceId",
+        media_source_id,
+    )
+    .await
+    .repository()?;
+    crate::media_server::flag_unavailable_media_server_items(
+        pool,
+        "PlexOtherVideo",
+        "Key",
+        library_id,
+        &present_item_ids,
+        &replacements,
+        true,
+    )
+    .await
+    .repository()?;
+    crate::media_server::apply_provider_content_variants(pool, &variant_candidates)
+        .await
+        .repository()?;
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
+    Ok(synced)
+}
+
 /// Sync Plex shows, seasons, and episodes into media rows.
 ///
 /// # Errors
@@ -1249,7 +1444,8 @@ async fn upsert_plex_movie(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_movie_item(&mut tx, library_path_id, item).await?;
-    let movie_metadata_id = upsert_plex_movie_metadata(&mut tx, item_id, item).await?;
+    let movie_metadata_id =
+        upsert_plex_movie_metadata(&mut tx, item_id, media_source_id, item).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
     let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
@@ -1257,6 +1453,44 @@ async fn upsert_plex_movie(
     crate::metadata::update_metadata_subtitles(
         &mut tx,
         crate::metadata::SubtitleMetadataOwner::Movie(movie_metadata_id),
+        &streams,
+    )
+    .await?;
+    tx.commit().await.repository()?;
+    Ok(item_id)
+}
+
+async fn upsert_plex_other_video(
+    pool: &DbPool,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    item: &PlexMediaItem,
+) -> Result<i64> {
+    let mut tx = pool.begin().await.repository()?;
+    ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
+    let library_path_id =
+        ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
+    let item_id = ensure_simple_media_item(
+        &mut tx,
+        "OtherVideo",
+        "PlexOtherVideo",
+        "Key",
+        library_path_id,
+        &item.key,
+        item.etag.as_ref(),
+    )
+    .await?;
+    let metadata_id =
+        upsert_plex_other_video_metadata(&mut tx, item_id, media_source_id, item).await?;
+    let version_id = ensure_media_version(&mut tx, VersionOwner::OtherVideo(item_id), item).await?;
+    ensure_media_file(&mut tx, version_id, item).await?;
+    let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
+    replace_streams(&mut tx, version_id, &streams).await?;
+    crate::metadata::update_metadata_subtitles(
+        &mut tx,
+        crate::metadata::SubtitleMetadataOwner::OtherVideo(metadata_id),
         &streams,
     )
     .await?;
@@ -1311,7 +1545,8 @@ async fn upsert_plex_episode(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_episode_item(&mut tx, library_path_id, season_id, item).await?;
-    let episode_metadata_id = upsert_plex_episode_metadata(&mut tx, item_id, item).await?;
+    let episode_metadata_id =
+        upsert_plex_episode_metadata(&mut tx, item_id, media_source_id, item).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
     let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
@@ -1326,7 +1561,18 @@ async fn upsert_plex_episode(
 
 fn project_library(response: PlexLibraryResponse) -> Option<PlexLibrarySummary> {
     let media_kind = match response.library_type.as_str() {
+        "movie"
+            if response
+                .agent
+                .eq_ignore_ascii_case("com.plexapp.agents.none")
+                || response
+                    .scanner
+                    .eq_ignore_ascii_case("Plex Video Files Scanner") =>
+        {
+            LibraryMediaKind::OtherVideos
+        }
         "movie" => LibraryMediaKind::Movies,
+        "other" => LibraryMediaKind::OtherVideos,
         "show" => LibraryMediaKind::Shows,
         _ => return None,
     };
@@ -1431,6 +1677,44 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         streams: part.stream.into_iter().filter_map(project_stream).collect(),
         season_number: 0,
         episode_number: item.index.unwrap_or_default(),
+        original_title: item.original_title,
+        year: item.year,
+        release_date: item.originally_available_at,
+        content_rating: item.content_rating,
+        summary: item.summary,
+        tagline: item.tagline,
+        studios: item.studio.into_iter().collect(),
+        music_labels: plex_tag_values(item.music_label),
+        genres: plex_tag_values(item.genre),
+        tags: plex_tag_values(item.collection),
+        guids: item.guid.into_iter().filter_map(|guid| guid.id).collect(),
+        actors: item.role.into_iter().filter_map(project_person).collect(),
+        directors: item
+            .director
+            .into_iter()
+            .filter_map(project_person)
+            .collect(),
+        writers: item.writer.into_iter().filter_map(project_person).collect(),
+        thumb: item.thumb,
+        art: item.art,
+    })
+}
+
+fn plex_tag_values(values: Vec<PlexTagResponse>) -> Vec<String> {
+    ersatzrs_core::metadata_facets::normalize_facet_values(
+        values.into_iter().filter_map(|value| value.tag),
+    )
+}
+
+fn project_person(value: PlexPersonResponse) -> Option<PlexPerson> {
+    let name = value.tag?.trim().to_owned();
+    if name.is_empty() {
+        return None;
+    }
+    Some(PlexPerson {
+        name,
+        role: value.role.filter(|role| !role.trim().is_empty()),
+        thumb: value.thumb.filter(|thumb| !thumb.trim().is_empty()),
     })
 }
 
@@ -1874,6 +2158,7 @@ async fn ensure_plex_episode_item(
 async fn upsert_plex_movie_metadata(
     tx: &mut Transaction<'_, crate::db::Db>,
     movie_id: i64,
+    media_source_id: i64,
     item: &PlexMediaItem,
 ) -> Result<i64> {
     let existing_id: Option<i64> =
@@ -1884,44 +2169,223 @@ async fn upsert_plex_movie_metadata(
             .repository()?;
     let date_added = encode_datetime(item.date_added);
     let date_updated = encode_datetime(item.date_updated);
+    let ratings =
+        ersatzrs_core::metadata_facets::normalize_content_ratings(item.content_rating.iter());
+    let rating = (!ratings.is_empty()).then(|| ratings.join("/"));
 
-    if let Some(id) = existing_id {
+    let metadata_id = if let Some(id) = existing_id {
         sqlx::query(
             r#"UPDATE "MovieMetadata"
                SET "DateAdded" = ?, "DateUpdated" = ?, "MetadataKind" = 2,
-                   "SortTitle" = ?, "Title" = ?
+                   "SortTitle" = ?, "Title" = ?, "OriginalTitle" = ?, "Year" = ?,
+                   "ReleaseDate" = ?, "ContentRating" = ?, "Plot" = ?, "Tagline" = ?
                WHERE "Id" = ?"#,
         )
         .bind(&date_added)
         .bind(&date_updated)
         .bind(&item.title)
         .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
         .bind(id)
         .execute(&mut **tx)
         .await
         .repository()?;
-        return Ok(id);
-    }
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "SortTitle", "Title",
+                "OriginalTitle", "Year", "ReleaseDate", "ContentRating", "Plot", "Tagline"
+            ) VALUES (?, ?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(movie_id)
+        .bind(&item.title)
+        .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        crate::db::last_insert_id(result)
+    };
+    replace_plex_metadata_facets(tx, "MovieMetadataId", metadata_id, media_source_id, item).await?;
+    Ok(metadata_id)
+}
 
-    let result = sqlx::query(
-        r#"INSERT INTO "MovieMetadata" (
-            "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "SortTitle", "Title"
-        ) VALUES (?, ?, 2, ?, ?, ?)"#,
+#[allow(clippy::too_many_lines)]
+async fn upsert_plex_other_video_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    other_video_id: i64,
+    media_source_id: i64,
+    item: &PlexMediaItem,
+) -> Result<i64> {
+    let existing_id: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = ? LIMIT 1"#,
     )
-    .bind(&date_added)
-    .bind(&date_updated)
-    .bind(movie_id)
-    .bind(&item.title)
-    .bind(&item.title)
-    .execute(&mut **tx)
+    .bind(other_video_id)
+    .fetch_optional(&mut **tx)
     .await
     .repository()?;
-    Ok(crate::db::last_insert_id(result))
+    let ratings =
+        ersatzrs_core::metadata_facets::normalize_content_ratings(item.content_rating.iter());
+    let rating = (!ratings.is_empty()).then(|| ratings.join("/"));
+    let date_added = encode_datetime(item.date_added);
+    let date_updated = encode_datetime(item.date_updated);
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "OtherVideoMetadata"
+               SET "DateAdded" = ?, "DateUpdated" = ?, "MetadataKind" = 2,
+                   "Title" = ?, "OriginalTitle" = ?, "SortTitle" = ?, "Year" = ?,
+                   "ReleaseDate" = ?, "ContentRating" = ?, "Plot" = ?, "Tagline" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(&item.title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "OtherVideoMetadata" (
+                "OtherVideoId", "DateAdded", "DateUpdated", "MetadataKind", "Title",
+                "OriginalTitle", "SortTitle", "Year", "ReleaseDate", "ContentRating",
+                "Plot", "Tagline"
+            ) VALUES (?, ?, ?, 2, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(other_video_id)
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(&item.title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        crate::db::last_insert_id(result)
+    };
+    replace_plex_metadata_facets(
+        tx,
+        "OtherVideoMetadataId",
+        metadata_id,
+        media_source_id,
+        item,
+    )
+    .await?;
+    Ok(metadata_id)
+}
+
+async fn replace_plex_metadata_facets(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    owner_column: &'static str,
+    metadata_id: i64,
+    media_source_id: i64,
+    item: &PlexMediaItem,
+) -> Result<()> {
+    for (table, values) in [
+        ("Genre", &item.genres),
+        ("Tag", &item.tags),
+        ("Studio", &item.studios),
+        ("MusicLabel", &item.music_labels),
+    ] {
+        crate::metadata::replace_strings(tx, table, owner_column, metadata_id, values).await?;
+    }
+    let people = |values: &[PlexPerson]| {
+        values
+            .iter()
+            .enumerate()
+            .map(|(index, person)| {
+                crate::metadata::PersonRef::with_role(
+                    person.name.clone(),
+                    person.role.clone(),
+                    i32::try_from(index).ok(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    crate::metadata::replace_people(
+        tx,
+        "Actor",
+        owner_column,
+        metadata_id,
+        &people(&item.actors),
+    )
+    .await?;
+    crate::metadata::replace_people(
+        tx,
+        "Director",
+        owner_column,
+        metadata_id,
+        &people(&item.directors),
+    )
+    .await?;
+    crate::metadata::replace_people(
+        tx,
+        "Writer",
+        owner_column,
+        metadata_id,
+        &people(&item.writers),
+    )
+    .await?;
+    crate::metadata::replace_guids(tx, owner_column, metadata_id, &item.guids).await?;
+    let artwork = [
+        item.thumb.as_ref().map(|path| crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::THUMBNAIL,
+            path: format!("plex://{media_source_id}/{}", path.trim_start_matches('/')),
+            date_added: item.date_added,
+        }),
+        item.art.as_ref().map(|path| crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::FAN_ART,
+            path: format!("plex://{media_source_id}/{}", path.trim_start_matches('/')),
+            date_added: item.date_added,
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    crate::metadata::replace_artwork(
+        tx,
+        owner_column,
+        metadata_id,
+        &[
+            crate::metadata::artwork_kind::THUMBNAIL,
+            crate::metadata::artwork_kind::FAN_ART,
+        ],
+        &artwork,
+    )
+    .await?;
+    Ok(())
 }
 
 async fn upsert_plex_episode_metadata(
     tx: &mut Transaction<'_, crate::db::Db>,
     episode_id: i64,
+    media_source_id: i64,
     item: &PlexMediaItem,
 ) -> Result<i64> {
     let existing_id: Option<i64> =
@@ -1932,12 +2396,17 @@ async fn upsert_plex_episode_metadata(
             .repository()?;
     let date_added = encode_datetime(item.date_added);
     let date_updated = encode_datetime(item.date_updated);
+    let ratings =
+        ersatzrs_core::metadata_facets::normalize_content_ratings(item.content_rating.iter());
+    let rating = (!ratings.is_empty()).then(|| ratings.join("/"));
 
-    if let Some(id) = existing_id {
+    let metadata_id = if let Some(id) = existing_id {
         sqlx::query(
             r#"UPDATE "EpisodeMetadata"
                SET "DateAdded" = ?, "DateUpdated" = ?, "EpisodeNumber" = ?,
-                   "MetadataKind" = 2, "SortTitle" = ?, "Title" = ?
+                   "MetadataKind" = 2, "SortTitle" = ?, "Title" = ?,
+                   "OriginalTitle" = ?, "Year" = ?, "ReleaseDate" = ?,
+                   "ContentRating" = ?, "Plot" = ?, "Tagline" = ?
                WHERE "Id" = ?"#,
         )
         .bind(&date_added)
@@ -1945,29 +2414,45 @@ async fn upsert_plex_episode_metadata(
         .bind(item.episode_number)
         .bind(&item.title)
         .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
         .bind(id)
         .execute(&mut **tx)
         .await
         .repository()?;
-        return Ok(id);
-    }
-
-    let result = sqlx::query(
-        r#"INSERT INTO "EpisodeMetadata" (
-            "DateAdded", "DateUpdated", "EpisodeNumber", "EpisodeId",
-            "MetadataKind", "SortTitle", "Title"
-        ) VALUES (?, ?, ?, ?, 2, ?, ?)"#,
-    )
-    .bind(&date_added)
-    .bind(&date_updated)
-    .bind(item.episode_number)
-    .bind(episode_id)
-    .bind(&item.title)
-    .bind(&item.title)
-    .execute(&mut **tx)
-    .await
-    .repository()?;
-    Ok(crate::db::last_insert_id(result))
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "EpisodeMetadata" (
+                "DateAdded", "DateUpdated", "EpisodeNumber", "EpisodeId",
+                "MetadataKind", "SortTitle", "Title", "OriginalTitle", "Year",
+                "ReleaseDate", "ContentRating", "Plot", "Tagline"
+            ) VALUES (?, ?, ?, ?, 2, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(item.episode_number)
+        .bind(episode_id)
+        .bind(&item.title)
+        .bind(&item.title)
+        .bind(&item.original_title)
+        .bind(item.year)
+        .bind(&item.release_date)
+        .bind(&rating)
+        .bind(&item.summary)
+        .bind(&item.tagline)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        crate::db::last_insert_id(result)
+    };
+    replace_plex_metadata_facets(tx, "EpisodeMetadataId", metadata_id, media_source_id, item)
+        .await?;
+    Ok(metadata_id)
 }
 
 async fn upsert_plex_collection(
@@ -2193,6 +2678,7 @@ async fn insert_media_item(
 enum VersionOwner {
     Movie(i64),
     Episode(i64),
+    OtherVideo(i64),
 }
 
 async fn ensure_media_version(
@@ -2203,6 +2689,7 @@ async fn ensure_media_version(
     let (column, item_id) = match owner {
         VersionOwner::Movie(item_id) => ("MovieId", item_id),
         VersionOwner::Episode(item_id) => ("EpisodeId", item_id),
+        VersionOwner::OtherVideo(item_id) => ("OtherVideoId", item_id),
     };
     let select_sql = format!(r#"SELECT "Id" FROM "MediaVersion" WHERE "{column}" = ?"#);
     if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&select_sql))
@@ -2372,6 +2859,7 @@ pub async fn sync_library_by_id_with_options(
 /// # Errors
 ///
 /// Returns an error when config loading, the Plex API, or database writes fail.
+#[allow(clippy::too_many_lines)]
 pub async fn sync_library_by_id_with_progress(
     pool: &DbPool,
     library_id: i64,
@@ -2431,7 +2919,7 @@ pub async fn sync_library_by_id_with_progress(
 
     let service = PlexService::new();
     match kind {
-        1 => {
+        2 => {
             sync_plex_show_library_with_progress(
                 pool,
                 &service,
@@ -2444,8 +2932,21 @@ pub async fn sync_library_by_id_with_progress(
             )
             .await
         }
-        0 => {
+        1 => {
             sync_plex_movie_library_with_progress(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                library_id,
+                &library_key,
+                deep_scan,
+                progress,
+            )
+            .await
+        }
+        4 => {
+            sync_plex_other_video_library_with_progress(
                 pool,
                 &service,
                 &config,
@@ -2752,7 +3253,7 @@ async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<Strin
 fn provider_error(error: reqwest::Error) -> RepositoryError {
     RepositoryError::Decode {
         kind: "plex http",
-        value: error.to_string(),
+        value: error.without_url().to_string(),
     }
 }
 
@@ -2818,6 +3319,10 @@ struct PlexLibraryResponse {
     title: String,
     #[serde(rename = "type")]
     library_type: String,
+    #[serde(default)]
+    agent: String,
+    #[serde(default)]
+    scanner: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2891,6 +3396,49 @@ struct PlexMetadataItemResponse {
     added_at: Option<i64>,
     updated_at: Option<i64>,
     index: Option<i32>,
+    original_title: Option<String>,
+    year: Option<i32>,
+    originally_available_at: Option<String>,
+    content_rating: Option<String>,
+    summary: Option<String>,
+    tagline: Option<String>,
+    studio: Option<String>,
+    thumb: Option<String>,
+    art: Option<String>,
+    #[serde(default, rename = "Genre")]
+    genre: Vec<PlexTagResponse>,
+    #[serde(default, rename = "Label")]
+    music_label: Vec<PlexTagResponse>,
+    #[serde(default, rename = "Collection")]
+    collection: Vec<PlexTagResponse>,
+    #[serde(default, rename = "Guid")]
+    guid: Vec<PlexGuidResponse>,
+    #[serde(default, rename = "Role")]
+    role: Vec<PlexPersonResponse>,
+    #[serde(default, rename = "Director")]
+    director: Vec<PlexPersonResponse>,
+    #[serde(default, rename = "Writer")]
+    writer: Vec<PlexPersonResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlexTagResponse {
+    tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlexGuidResponse {
+    id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlexPersonResponse {
+    tag: Option<String>,
+    role: Option<String>,
+    thumb: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

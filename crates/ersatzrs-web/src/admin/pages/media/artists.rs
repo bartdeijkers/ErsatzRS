@@ -343,7 +343,9 @@ fn MusicVideoRow(
                     <span class=style::warning_badge style=warning_style>"!"</span>
                 </div>
                 <div class=style::music_video_body>
-                    <h2 class=style::music_video_title>{title}</h2>
+                    <h2 class=style::music_video_title>
+                        <a href=format!("/media/music/videos/{}", video.id)>{title}</a>
+                    </h2>
                     <p class=style::fact_inline style=album_style>
                         {tr(TextKey::Album)} ": "
                         <a href=album_href>{album}</a>

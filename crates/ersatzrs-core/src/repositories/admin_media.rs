@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{ContentKind, EntityId};
 
+use crate::metadata_facets::MediaFacetSet;
+
 use super::Result;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -87,6 +89,7 @@ pub struct AdminMovieDetail {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub facets: MediaFacetSet,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
     pub actors: Vec<AdminActorCard>,
@@ -120,6 +123,7 @@ pub struct AdminShowDetail {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub facets: MediaFacetSet,
     pub networks: Vec<String>,
     pub actors: Vec<AdminActorCard>,
     pub seasons: Vec<AdminSeasonCard>,
@@ -175,9 +179,33 @@ pub struct AdminOtherVideoDetail {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub facets: MediaFacetSet,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
     pub actors: Vec<AdminActorCard>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdminFacetedMediaKind {
+    MusicVideo,
+    Song,
+    Image,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdminFacetedMediaDetail {
+    pub id: EntityId,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub release_date: Option<String>,
+    pub artwork_path: Option<String>,
+    pub fanart_path: Option<String>,
+    pub file_path: Option<String>,
+    pub local_path: Option<String>,
+    pub media_item_state: i32,
+    pub facets: MediaFacetSet,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -216,6 +244,9 @@ pub enum AdminMediaInfoKind {
     Movie,
     OtherVideo,
     Episode,
+    MusicVideo,
+    Song,
+    Image,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -248,6 +279,11 @@ pub trait AdminMediaRepository: Send + Sync {
         &self,
         id: EntityId,
     ) -> Result<Option<AdminOtherVideoDetail>>;
+    async fn get_faceted_media_detail_admin(
+        &self,
+        id: EntityId,
+        kind: AdminFacetedMediaKind,
+    ) -> Result<Option<AdminFacetedMediaDetail>>;
     async fn list_extras_admin(&self, parent_id: EntityId) -> Result<Vec<AdminMediaCard>>;
     async fn get_media_item_info_admin(&self, id: EntityId) -> Result<Option<AdminMediaItemInfo>>;
 }

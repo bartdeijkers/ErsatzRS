@@ -150,8 +150,9 @@ pub(in crate::admin::server_fns::media_browser) async fn get_other_video_details
         media_item_state: detail.media_item_state,
         genres: detail.genres,
         tags: detail.tags,
-        languages: detail.languages,
+        languages: detail.facets.languages,
         studios: detail.studios,
+        music_labels: detail.facets.music_labels,
         directors: detail.directors,
         writers: detail.writers,
         actors: detail

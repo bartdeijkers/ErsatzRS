@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration as StdDuration;
@@ -19,6 +20,8 @@ pub struct FfprobeMediaVersion {
     pub version: MediaVersion,
     pub streams: Vec<MediaStream>,
     pub chapters: Vec<MediaChapter>,
+    /// Container-level `FFprobe` tags keyed case-insensitively in lowercase.
+    pub format_metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Error)]
@@ -335,6 +338,18 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
         version,
         streams,
         chapters,
+        format_metadata: probe
+            .format
+            .as_ref()
+            .map(|format| {
+                format
+                    .tags
+                    .iter()
+                    .map(|(key, value)| (key.trim().to_ascii_lowercase(), value.clone()))
+                    .filter(|(key, value)| !key.is_empty() && !value.trim().is_empty())
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 
@@ -464,6 +479,8 @@ struct FfprobeOutput {
 #[derive(Debug, Deserialize)]
 struct FfprobeFormat {
     duration: Option<String>,
+    #[serde(default)]
+    tags: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]

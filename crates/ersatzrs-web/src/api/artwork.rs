@@ -2,7 +2,8 @@
 //!
 //! Mirrors the `ErsatzTV` pattern:
 //!
-//! * Provider-prefixed paths stored in the DB (`jellyfin://…`, `emby://…`)
+//! * Provider-prefixed paths stored in the DB (`plex://…`, `jellyfin://…`,
+//!   `emby://…`)
 //!   are projected to relative URLs of the form
 //!   `jellyfin/{path}?{query}` / `emby/{path}?{query}` by [`relative_proxy_url`].
 //! * `<img src="/artwork/posters/{relative}">` and
@@ -62,6 +63,17 @@ pub fn artwork_url(path: &str, kind: ArtworkUrlKind) -> Option<String> {
 
     let kind_segment = kind.url_segment();
     let max_height = kind.max_height();
+
+    if let Some(rest) = trimmed.strip_prefix("plex://") {
+        let (path_segment, query) = split_path_query(rest);
+        let mut url = format!("/artwork/{kind_segment}/plex/{path_segment}");
+        let joined = build_query(query, [("height", max_height.to_string())]);
+        if !joined.is_empty() {
+            url.push('?');
+            url.push_str(&joined);
+        }
+        return Some(url);
+    }
 
     if let Some(rest) = trimmed.strip_prefix("jellyfin://") {
         let (path_segment, query) = split_path_query(rest);
@@ -241,6 +253,9 @@ async fn serve_artwork(
     if let Some(rest) = full_path.strip_prefix("emby/") {
         return serve_emby_artwork(&state, rest, params).await;
     }
+    if let Some(rest) = full_path.strip_prefix("plex/") {
+        return serve_plex_artwork(&state, rest, params).await;
+    }
     serve_local_artwork(&state.repositories.artwork, kind, full_path).await
 }
 
@@ -371,6 +386,29 @@ async fn serve_jellyfin_artwork(
     proxy_request(&url, &[("Authorization", auth_header.as_str())], params).await
 }
 
+async fn serve_plex_artwork(
+    state: &AppState,
+    rest: &str,
+    params: &HashMap<String, String>,
+) -> Response {
+    let Some((source_id, provider_path)) = rest.split_once('/') else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(source_id) = source_id.parse::<i64>() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let connection = match state.application.plex_artwork_connection(source_id).await {
+        Ok(Some(connection)) => connection,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let url = format!(
+        "{}/{provider_path}",
+        connection.address.trim_end_matches('/')
+    );
+    proxy_request(&url, &[("X-Plex-Token", connection.token.as_str())], params).await
+}
+
 async fn serve_emby_artwork(
     state: &AppState,
     rest: &str,
@@ -477,6 +515,20 @@ mod tests {
             url,
             "/artwork/posters/emby/Items/42/Images/Primary?tag=ff&maxHeight=440"
         );
+    }
+
+    #[test]
+    fn plex_path_becomes_token_hiding_proxy_url() {
+        let url = artwork_url(
+            "plex://42/library/metadata/800/thumb",
+            ArtworkUrlKind::Thumbnail,
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "/artwork/thumbnails/plex/42/library/metadata/800/thumb?height=220"
+        );
+        assert!(!url.contains("X-Plex-Token"));
     }
 
     #[test]

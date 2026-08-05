@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use ersatzrs_core::path_replacement::{PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{
-    AdminActorCard, AdminArtistDetail, AdminAudioTrack, AdminCommentarySubtitle, AdminMediaCard,
-    AdminMediaInfoChapter, AdminMediaInfoKind, AdminMediaInfoStream, AdminMediaItemInfo,
-    AdminMediaRepository, AdminMovieDetail, AdminMoviePlaybackSource, AdminMoviePlaybackStream,
-    AdminOtherVideoDetail, AdminShowDetail, RepositoryError, Result, TelevisionRepository,
+    AdminActorCard, AdminArtistDetail, AdminAudioTrack, AdminCommentarySubtitle,
+    AdminFacetedMediaDetail, AdminFacetedMediaKind, AdminMediaCard, AdminMediaInfoChapter,
+    AdminMediaInfoKind, AdminMediaInfoStream, AdminMediaItemInfo, AdminMediaRepository,
+    AdminMovieDetail, AdminMoviePlaybackSource, AdminMoviePlaybackStream, AdminOtherVideoDetail,
+    AdminShowDetail, RepositoryError, Result, TelevisionRepository,
 };
 use ersatzrs_domain::{ContentKind, EntityId};
 use sqlx::{Pool, Row};
@@ -159,6 +160,53 @@ async fn load_audio_languages(
     languages.sort();
     languages.dedup();
     Ok(languages)
+}
+
+async fn load_metadata_language_names(
+    pool: &Pool<crate::db::Db>,
+    metadata_column: &str,
+    metadata_id: EntityId,
+    stream_languages: Vec<String>,
+) -> Result<Vec<String>> {
+    let sql = format!(
+        r#"SELECT "Code" FROM "MetadataLanguage" WHERE "{metadata_column}" = ? ORDER BY "Id""#
+    );
+    let codes = sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
+        .bind(metadata_id)
+        .fetch_all(pool)
+        .await
+        .repository()?;
+    let explicit_names = ersatzrs_core::metadata_facets::normalize_language_codes(codes)
+        .into_iter()
+        .map(|code| ersatzrs_core::language_codes::english_name(&code).unwrap_or(code))
+        .collect::<Vec<_>>();
+    Ok(ersatzrs_core::metadata_facets::union_facet_values(
+        &explicit_names,
+        &stream_languages,
+    ))
+}
+
+async fn load_media_facets(
+    pool: &Pool<crate::db::Db>,
+    metadata_column: &str,
+    metadata_id: EntityId,
+    content_rating: Option<String>,
+    stream_languages: Vec<String>,
+) -> Result<ersatzrs_core::metadata_facets::MediaFacetSet> {
+    Ok(ersatzrs_core::metadata_facets::MediaFacetSet {
+        content_ratings: split_content_ratings(content_rating),
+        studios: load_strings(pool, r#""Studio""#, metadata_column, metadata_id).await?,
+        music_labels: load_strings(pool, r#""MusicLabel""#, metadata_column, metadata_id).await?,
+        languages: load_metadata_language_names(
+            pool,
+            metadata_column,
+            metadata_id,
+            stream_languages,
+        )
+        .await?,
+        genres: load_strings(pool, r#""Genre""#, metadata_column, metadata_id).await?,
+        tags: load_strings(pool, r#""Tag""#, metadata_column, metadata_id).await?,
+    })
 }
 
 async fn load_show_languages(pool: &Pool<crate::db::Db>, show_id: EntityId) -> Result<Vec<String>> {
@@ -640,6 +688,7 @@ async fn load_extras(
         .collect()
 }
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl AdminMediaRepository for SqliteAdminMediaRepository {
     #[allow(clippy::too_many_lines)]
@@ -766,6 +815,14 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             tags: load_strings(&self.0, r#""Tag""#, "MovieMetadataId", metadata_id).await?,
             languages: load_audio_languages(&self.0, "MovieId", id).await?,
             studios: load_strings(&self.0, r#""Studio""#, "MovieMetadataId", metadata_id).await?,
+            facets: load_media_facets(
+                &self.0,
+                "MovieMetadataId",
+                metadata_id,
+                row.try_get("ContentRating").repository()?,
+                load_audio_languages(&self.0, "MovieId", id).await?,
+            )
+            .await?,
             directors: load_strings(&self.0, r#""Director""#, "MovieMetadataId", metadata_id)
                 .await?,
             writers: load_strings(&self.0, r#""Writer""#, "MovieMetadataId", metadata_id).await?,
@@ -869,6 +926,14 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             tags,
             languages: load_show_languages(&self.0, id).await?,
             studios: load_strings(&self.0, r#""Studio""#, "ShowMetadataId", metadata_id).await?,
+            facets: load_media_facets(
+                &self.0,
+                "ShowMetadataId",
+                metadata_id,
+                row.try_get("ContentRating").repository()?,
+                load_show_languages(&self.0, id).await?,
+            )
+            .await?,
             networks,
             actors: load_actors(&self.0, "ShowMetadataId", metadata_id).await?,
             seasons,
@@ -987,6 +1052,14 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             languages: load_audio_languages(&self.0, "OtherVideoId", id).await?,
             studios: load_strings(&self.0, r#""Studio""#, "OtherVideoMetadataId", metadata_id)
                 .await?,
+            facets: load_media_facets(
+                &self.0,
+                "OtherVideoMetadataId",
+                metadata_id,
+                row.try_get("ContentRating").repository()?,
+                load_audio_languages(&self.0, "OtherVideoId", id).await?,
+            )
+            .await?,
             directors: load_strings(
                 &self.0,
                 r#""Director""#,
@@ -997,6 +1070,114 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             writers: load_strings(&self.0, r#""Writer""#, "OtherVideoMetadataId", metadata_id)
                 .await?,
             actors: load_actors(&self.0, "OtherVideoMetadataId", metadata_id).await?,
+        }))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn get_faceted_media_detail_admin(
+        &self,
+        id: EntityId,
+        kind: AdminFacetedMediaKind,
+    ) -> Result<Option<AdminFacetedMediaDetail>> {
+        let (item_table, metadata_table, item_fk, version_fk, metadata_column, plot_expression) =
+            match kind {
+                AdminFacetedMediaKind::MusicVideo => (
+                    "MusicVideo",
+                    "MusicVideoMetadata",
+                    "MusicVideoId",
+                    "MusicVideoId",
+                    "MusicVideoMetadataId",
+                    r#"metadata."Plot""#,
+                ),
+                AdminFacetedMediaKind::Song => (
+                    "Song",
+                    "SongMetadata",
+                    "SongId",
+                    "SongId",
+                    "SongMetadataId",
+                    "NULL",
+                ),
+                AdminFacetedMediaKind::Image => (
+                    "Image",
+                    "ImageMetadata",
+                    "ImageId",
+                    "ImageId",
+                    "ImageMetadataId",
+                    "NULL",
+                ),
+            };
+        let sql = format!(
+            r#"SELECT item."Id", COALESCE(metadata."Title", '') AS "Title",
+                      metadata."OriginalTitle", metadata."Year", {plot_expression} AS "Plot",
+                      metadata."ReleaseDate", metadata."ContentRating",
+                      COALESCE(media."State", 0) AS "State", media."LibraryPathId",
+                      metadata."Id" AS "MetadataId"
+               FROM "{item_table}" item
+               JOIN "{metadata_table}" metadata ON metadata."{item_fk}" = item."Id"
+               LEFT JOIN "MediaItem" media ON media."Id" = item."Id"
+               WHERE item."Id" = ? ORDER BY metadata."Id" LIMIT 1"#
+        );
+        let Some(row) = sqlx::query(crate::db::assert_sql_safe(&sql))
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+        else {
+            return Ok(None);
+        };
+        let metadata_id: EntityId = row.try_get("MetadataId").repository()?;
+        let file_sql = format!(
+            r#"SELECT file."Path"
+               FROM "MediaFile" file
+               JOIN "MediaVersion" version ON version."Id" = file."MediaVersionId"
+               WHERE version."{version_fk}" = ? ORDER BY version."Id", file."Id" LIMIT 1"#
+        );
+        let file_path =
+            sqlx::query_scalar::<_, Option<String>>(crate::db::assert_sql_safe(&file_sql))
+                .bind(id)
+                .fetch_optional(&self.0)
+                .await
+                .repository()?
+                .flatten();
+        let library_path_id = row.try_get("LibraryPathId").repository()?;
+        let local_path = match (file_path.as_deref(), library_path_id) {
+            (Some(path), Some(library_path_id)) => Some(resolve_local_path(
+                path,
+                &load_path_replacements(&self.0, library_path_id).await?,
+            )),
+            (Some(path), None) => Some(path.to_owned()),
+            (None, _) => None,
+        };
+        let stream_languages = match kind {
+            AdminFacetedMediaKind::MusicVideo => {
+                load_audio_languages(&self.0, "MusicVideoId", id).await?
+            }
+            AdminFacetedMediaKind::Song => load_audio_languages(&self.0, "SongId", id).await?,
+            AdminFacetedMediaKind::Image => Vec::new(),
+        };
+        let artwork_path = load_artwork_path(&self.0, metadata_column, metadata_id, 1)
+            .await?
+            .or(load_artwork_path(&self.0, metadata_column, metadata_id, 0).await?);
+        Ok(Some(AdminFacetedMediaDetail {
+            id: row.try_get("Id").repository()?,
+            title: row.try_get("Title").repository()?,
+            original_title: row.try_get("OriginalTitle").repository()?,
+            year: row.try_get("Year").repository()?,
+            plot: row.try_get("Plot").repository()?,
+            release_date: row.try_get("ReleaseDate").repository()?,
+            artwork_path,
+            fanart_path: load_artwork_path(&self.0, metadata_column, metadata_id, 3).await?,
+            file_path,
+            local_path,
+            media_item_state: row.try_get("State").repository()?,
+            facets: load_media_facets(
+                &self.0,
+                metadata_column,
+                metadata_id,
+                row.try_get("ContentRating").repository()?,
+                stream_languages,
+            )
+            .await?,
         }))
     }
 
@@ -1158,6 +1339,103 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             )
             .await
             .map(Some);
+        }
+
+        for (base_table, metadata_table, item_fk, version_fk, metadata_fk, kind) in [
+            (
+                "MusicVideo",
+                "MusicVideoMetadata",
+                "MusicVideoId",
+                "MusicVideoId",
+                "MusicVideoMetadataId",
+                AdminMediaInfoKind::MusicVideo,
+            ),
+            (
+                "Song",
+                "SongMetadata",
+                "SongId",
+                "SongId",
+                "SongMetadataId",
+                AdminMediaInfoKind::Song,
+            ),
+            (
+                "Image",
+                "ImageMetadata",
+                "ImageId",
+                "ImageId",
+                "ImageMetadataId",
+                AdminMediaInfoKind::Image,
+            ),
+        ] {
+            let sql = format!(
+                r#"SELECT item."Id", COALESCE(metadata."Title", '') AS "Title",
+                          metadata."Id" AS "MetadataId", COALESCE(media."State", 0) AS "State",
+                          COALESCE(library."Name", '') AS "LibraryName",
+                          CASE
+                            WHEN local."Id" IS NOT NULL THEN 'LocalLibrary'
+                            WHEN plex."Id" IS NOT NULL THEN 'PlexLibrary'
+                            ELSE 'Library'
+                          END AS "LibraryKind",
+                          plex_source."ServerName" AS "ServerName",
+                          version."Id" AS "MediaVersionId", version."Duration",
+                          version."SampleAspectRatio", version."DisplayAspectRatio",
+                          version."RFrameRate", COALESCE(version."VideoScanKind", 0) AS "VideoScanKind",
+                          version."InterlacedRatio", COALESCE(version."Width", 0) AS "Width",
+                          COALESCE(version."Height", 0) AS "Height"
+                   FROM "{base_table}" item
+                   JOIN "{metadata_table}" metadata ON metadata."{item_fk}" = item."Id"
+                   LEFT JOIN "MediaItem" media ON media."Id" = item."Id"
+                   LEFT JOIN "LibraryPath" path ON path."Id" = media."LibraryPathId"
+                   LEFT JOIN "Library" library ON library."Id" = path."LibraryId"
+                   LEFT JOIN "LocalLibrary" local ON local."Id" = library."Id"
+                   LEFT JOIN "PlexLibrary" plex ON plex."Id" = library."Id"
+                   LEFT JOIN "MediaSource" source ON source."Id" = library."MediaSourceId"
+                   LEFT JOIN "PlexMediaSource" plex_source ON plex_source."Id" = source."Id"
+                   LEFT JOIN "MediaVersion" version ON version."{version_fk}" = item."Id"
+                   WHERE media."Id" = ? ORDER BY version."Id" LIMIT 1"#
+            );
+            let row = sqlx::query(crate::db::assert_sql_safe(&sql))
+                .bind(id)
+                .fetch_optional(&self.0)
+                .await
+                .repository()?;
+            if let Some(row) = row {
+                let metadata_id = row.try_get("MetadataId").repository()?;
+                let media_version_id = row.try_get("MediaVersionId").repository()?;
+                let library_kind: String = row.try_get("LibraryKind").repository()?;
+                let info = AdminMediaItemInfo {
+                    id: row.try_get("Id").repository()?,
+                    title: row.try_get("Title").repository()?,
+                    kind,
+                    library_kind: library_kind.clone(),
+                    server_name: row.try_get("ServerName").repository()?,
+                    library_name: row.try_get("LibraryName").repository()?,
+                    state: row.try_get("State").repository()?,
+                    duration: row
+                        .try_get::<Option<String>, _>("Duration")
+                        .repository()?
+                        .unwrap_or_else(|| "00:00:00".to_owned()),
+                    sample_aspect_ratio: row.try_get("SampleAspectRatio").repository()?,
+                    display_aspect_ratio: row.try_get("DisplayAspectRatio").repository()?,
+                    r_frame_rate: row.try_get("RFrameRate").repository()?,
+                    video_scan_kind: row.try_get("VideoScanKind").repository()?,
+                    interlaced_ratio: row.try_get("InterlacedRatio").repository()?,
+                    width: row.try_get("Width").repository()?,
+                    height: row.try_get("Height").repository()?,
+                    streams: Vec::new(),
+                    chapters: Vec::new(),
+                };
+                return enrich_admin_media_info(
+                    &self.0,
+                    info,
+                    metadata_fk,
+                    metadata_id,
+                    media_version_id,
+                    library_kind == "LocalLibrary",
+                )
+                .await
+                .map(Some);
+            }
         }
 
         let television = super::television::SqliteTelevisionRepository(self.0.clone());

@@ -20,6 +20,7 @@ use crate::admin::pages::libraries::LibrariesPage;
 use crate::admin::pages::media::artists::{ArtistPage, ArtistsPage};
 use crate::admin::pages::media::collection_detail::CollectionDetailPage;
 use crate::admin::pages::media::collections::{CollectionEditorPage, CollectionsPage};
+use crate::admin::pages::media::faceted_detail::{ImagePage, MusicVideoPage, SongPage};
 use crate::admin::pages::media::filler_presets::{FillerPresetEditorPage, FillerPresetsPage};
 use crate::admin::pages::media::images::ImagesPage;
 use crate::admin::pages::media::movies::{MoviePage, MoviesPage};
@@ -324,8 +325,21 @@ pub fn AdminRoutes() -> impl IntoView {
             />
             <Route path=(StaticSegment("media"), StaticSegment("images")) view=ImagesPage/>
             <Route
+                path=(StaticSegment("media"), StaticSegment("images"), ParamSegment("id"))
+                view=ImagePage
+            />
+            <Route
                 path=(StaticSegment("media"), StaticSegment("browser"), StaticSegment("images"))
                 view=ImagesPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("browser"),
+                    StaticSegment("images"),
+                    ParamSegment("id"),
+                )
+                view=ImagePage
             />
             <Route
                 path=(StaticSegment("media"), StaticSegment("music"), StaticSegment("artists"))
@@ -358,6 +372,15 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=SongsPage
             />
             <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("music"),
+                    StaticSegment("songs"),
+                    ParamSegment("id"),
+                )
+                view=SongPage
+            />
+            <Route
                 path=(StaticSegment("media"), StaticSegment("tv"), StaticSegment("seasons"))
                 view=SeasonsListPage
             />
@@ -381,6 +404,15 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("media"), StaticSegment("music"), StaticSegment("videos"))
                 view=MusicVideosListPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("music"),
+                    StaticSegment("videos"),
+                    ParamSegment("id"),
+                )
+                view=MusicVideoPage
             />
             <Route
                 path=(StaticSegment("media"), StaticSegment("remote"), StaticSegment("streams"))

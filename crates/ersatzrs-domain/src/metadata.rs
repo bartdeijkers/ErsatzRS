@@ -76,6 +76,12 @@ pub struct Studio {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct MusicLabel {
+    pub id: EntityId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Actor {
     pub id: EntityId,
     pub name: String,
@@ -134,6 +140,9 @@ pub struct Metadata {
     pub genre_ids: Vec<EntityId>,
     pub tag_ids: Vec<EntityId>,
     pub studio_ids: Vec<EntityId>,
+    pub music_label_ids: Vec<EntityId>,
+    pub language_codes: Vec<String>,
+    pub content_ratings: Vec<String>,
     pub actor_ids: Vec<EntityId>,
     pub guid_ids: Vec<EntityId>,
     pub subtitle_ids: Vec<EntityId>,
@@ -156,6 +165,9 @@ impl Default for Metadata {
             genre_ids: Vec::new(),
             tag_ids: Vec::new(),
             studio_ids: Vec::new(),
+            music_label_ids: Vec::new(),
+            language_codes: Vec::new(),
+            content_ratings: Vec::new(),
             actor_ids: Vec::new(),
             guid_ids: Vec::new(),
             subtitle_ids: Vec::new(),

@@ -2,8 +2,8 @@ use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
-    MediaSourceRepository, PathReplacementAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind,
-    RemoteSourceAdminRow, RepositoryError, Result,
+    MediaSourceRepository, PathReplacementAdmin, PlexArtworkConnectionAdmin, RemoteConnectionAdmin,
+    RemoteMediaSourceKind, RemoteSourceAdminRow, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     EmbyConnection, EmbyMediaSource, EmbyPathReplacement, EntityId, JellyfinConnection,
@@ -287,6 +287,39 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()> {
         upsert_source(&self.0, &source.media_source, source).await
+    }
+
+    async fn plex_artwork_connection_admin(
+        &self,
+        source_id: EntityId,
+    ) -> Result<Option<PlexArtworkConnectionAdmin>> {
+        let row = sqlx::query(
+            r#"SELECT "pc"."Uri", "pms"."ClientIdentifier"
+               FROM "PlexConnection" AS "pc"
+               JOIN "PlexMediaSource" AS "pms"
+                 ON "pms"."Id" = "pc"."PlexMediaSourceId"
+               WHERE "pc"."PlexMediaSourceId" = ? AND "pc"."IsActive" = 1
+                 AND "pc"."Uri" IS NOT NULL
+               ORDER BY "pc"."Id"
+               LIMIT 1"#,
+        )
+        .bind(source_id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let address: String = row.try_get("Uri").repository()?;
+        let client_identifier: String = row.try_get("ClientIdentifier").repository()?;
+        let token = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ? AND "Value" <> ''"#,
+        )
+        .bind(format!("plex.server_auth_token.{client_identifier}"))
+        .fetch_optional(&self.0)
+        .await
+        .repository()?;
+        Ok(token.map(|token| PlexArtworkConnectionAdmin { address, token }))
     }
 
     async fn first_jellyfin_address_admin(&self) -> Result<Option<String>> {
@@ -1063,4 +1096,59 @@ async fn fetch_base_source(
         kind: expected_kind,
         last_scan: None,
     })
+}
+
+#[cfg(all(test, not(feature = "mysql")))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn plex_artwork_connection_uses_the_owning_sources_uri_and_token() {
+        let pool = crate::db::init("sqlite::memory:")
+            .await
+            .expect("initialize database");
+        for source_id in [41_i64, 42] {
+            sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (?)"#)
+                .bind(source_id)
+                .execute(&pool)
+                .await
+                .expect("seed media source");
+        }
+        sqlx::query(
+            r#"INSERT INTO "PlexMediaSource" ("Id", "ClientIdentifier", "ServerName")
+               VALUES (41, 'alpha', 'Alpha'), (42, 'beta', 'Beta')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed Plex sources");
+        sqlx::query(
+            r#"INSERT INTO "PlexConnection" ("PlexMediaSourceId", "IsActive", "Uri")
+               VALUES (41, 1, 'http://alpha.invalid'),
+                      (42, 1, 'http://beta.invalid')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed Plex connections");
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" ("Key", "Value")
+               VALUES ('plex.server_auth_token.alpha', 'alpha-token'),
+                      ('plex.server_auth_token.beta', 'beta-token'),
+                      ('plex.current_server_auth_token', 'wrong-global-token')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed Plex tokens");
+
+        let repository = SqliteMediaSourceRepository(pool);
+        assert_eq!(
+            repository
+                .plex_artwork_connection_admin(42)
+                .await
+                .expect("resolve artwork connection"),
+            Some(PlexArtworkConnectionAdmin {
+                address: "http://beta.invalid".to_owned(),
+                token: "beta-token".to_owned(),
+            })
+        );
+    }
 }

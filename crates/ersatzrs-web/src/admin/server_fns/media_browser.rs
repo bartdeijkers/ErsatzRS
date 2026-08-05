@@ -122,9 +122,10 @@ fn browser_card_href(
             .get(&id)
             .map(|season_id| format!("/media/tv/seasons/{season_id}#episode-{id}")),
         Kind::Artist => Some(format!("/media/music/artists/{id}")),
-        // ErsatzTV's dedicated MusicVideoList renders Href="", and these
-        // remaining kinds likewise have no item detail route.
-        Kind::MusicVideo | Kind::Song | Kind::Image | Kind::RemoteStream => None,
+        Kind::MusicVideo => Some(format!("/media/music/videos/{id}")),
+        Kind::Song => Some(format!("/media/music/songs/{id}")),
+        Kind::Image => Some(format!("/media/browser/images/{id}")),
+        Kind::RemoteStream => None,
         Kind::OtherVideo => Some(format!("/media/other/videos/{id}")),
     }
 }
@@ -186,7 +187,10 @@ mod browser_card_projection_tests {
             Some("/media/tv/seasons/31#episode-41")
         );
         assert_eq!(browser_card_href(Kind::Episode, 42, &enrichment), None);
-        assert_eq!(browser_card_href(Kind::MusicVideo, 51, &enrichment), None);
+        assert_eq!(
+            browser_card_href(Kind::MusicVideo, 51, &enrichment).as_deref(),
+            Some("/media/music/videos/51")
+        );
     }
 }
 
@@ -448,6 +452,7 @@ pub struct MovieDetailRow {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
     pub actors: Vec<ActorCardRow>,
@@ -482,9 +487,51 @@ pub struct OtherVideoDetailRow {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
     pub actors: Vec<ActorCardRow>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct FacetedMediaDetailRow {
+    pub id: i64,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub release_date: Option<String>,
+    pub artwork_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub file_path: Option<String>,
+    pub local_path: Option<String>,
+    pub media_item_state: i32,
+    pub facets: MediaFacetSetRow,
+}
+
+/// WASM-safe transport projection of the shared core metadata-facet contract.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MediaFacetSetRow {
+    pub content_ratings: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_core::metadata_facets::MediaFacetSet> for MediaFacetSetRow {
+    fn from(facets: ersatzrs_core::metadata_facets::MediaFacetSet) -> Self {
+        Self {
+            content_ratings: facets.content_ratings,
+            studios: facets.studios,
+            music_labels: facets.music_labels,
+            languages: facets.languages,
+            genres: facets.genres,
+            tags: facets.tags,
+        }
+    }
 }
 
 /// One season card on the show details page. Mirrors
@@ -529,6 +576,7 @@ pub struct ShowDetailRow {
     pub tags: Vec<String>,
     pub languages: Vec<String>,
     pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
     pub networks: Vec<String>,
     pub actors: Vec<ActorCardRow>,
     pub seasons: Vec<SeasonCardRow>,
@@ -1401,6 +1449,15 @@ pub async fn list_images(
 }
 
 #[server]
+pub async fn get_image_details(id: i64) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
+    get_faceted_media_details_impl(
+        id,
+        ersatzrs_core::repositories::AdminFacetedMediaKind::Image,
+    )
+    .await
+}
+
+#[server]
 pub async fn list_artists(
     search: String,
     page: u32,
@@ -1423,6 +1480,56 @@ pub async fn list_other_videos(
     show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     kinds::other_videos::list_other_videos_impl(search, page, page_size, show_variants).await
+}
+
+#[server]
+pub async fn get_music_video_details(
+    id: i64,
+) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
+    get_faceted_media_details_impl(
+        id,
+        ersatzrs_core::repositories::AdminFacetedMediaKind::MusicVideo,
+    )
+    .await
+}
+
+#[server]
+pub async fn get_song_details(id: i64) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
+    get_faceted_media_details_impl(id, ersatzrs_core::repositories::AdminFacetedMediaKind::Song)
+        .await
+}
+
+#[cfg(feature = "ssr")]
+async fn get_faceted_media_details_impl(
+    id: i64,
+    kind: ersatzrs_core::repositories::AdminFacetedMediaKind,
+) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state
+        .application
+        .get_faceted_media_detail(id, kind)
+        .await?
+        .map(|detail| FacetedMediaDetailRow {
+            id: detail.id,
+            title: detail.title,
+            original_title: detail.original_title,
+            year: detail.year,
+            plot: detail.plot,
+            release_date: detail.release_date,
+            artwork_url: detail
+                .artwork_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+            fanart_url: detail
+                .fanart_path
+                .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+            file_path: detail.file_path,
+            local_path: detail.local_path,
+            media_item_state: detail.media_item_state,
+            facets: detail.facets.into(),
+        }))
 }
 
 #[server]
@@ -2335,7 +2442,7 @@ mod server_fn_path_stability {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_media_browser_server_fn_routes_remain_stable() {
-        let routes: [(&str, &str); 73] = [
+        let routes: [(&str, &str); 76] = [
             (super::ListMovies::PATH, "list_movies"),
             (super::GetMovieDetails::PATH, "get_movie_details"),
             (super::GetShowDetails::PATH, "get_show_details"),
@@ -2346,9 +2453,12 @@ mod server_fn_path_stability {
             ),
             (super::ListShows::PATH, "list_shows"),
             (super::ListImages::PATH, "list_images"),
+            (super::GetImageDetails::PATH, "get_image_details"),
             (super::ListArtists::PATH, "list_artists"),
             (super::GetArtistDetails::PATH, "get_artist_details"),
             (super::ListOtherVideos::PATH, "list_other_videos"),
+            (super::GetMusicVideoDetails::PATH, "get_music_video_details"),
+            (super::GetSongDetails::PATH, "get_song_details"),
             (super::GetOtherVideoDetails::PATH, "get_other_video_details"),
             (super::ListSeasons::PATH, "list_seasons"),
             (super::ListEpisodes::PATH, "list_episodes"),

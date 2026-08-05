@@ -70,6 +70,9 @@ pub enum SchedulingSmartShuffleRuleKind {
     Tag,
     Genre,
     Studio,
+    ContentRating,
+    Language,
+    MusicLabel,
     Filter,
 }
 
@@ -542,6 +545,48 @@ mod tests {
             rules: vec![rule("artist", SchedulingSmartShuffleRuleKind::Artist)],
             ..SchedulingSmartShufflePolicy::default()
         }
+    }
+
+    #[test]
+    fn new_facet_rule_kinds_use_stable_snake_case_contracts() {
+        for (kind, expected) in [
+            (
+                SchedulingSmartShuffleRuleKind::ContentRating,
+                "content_rating",
+            ),
+            (SchedulingSmartShuffleRuleKind::Language, "language"),
+            (SchedulingSmartShuffleRuleKind::MusicLabel, "music_label"),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&kind).unwrap(),
+                format!("\"{expected}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<SchedulingSmartShuffleRuleKind>(&format!("\"{expected}\""))
+                    .unwrap(),
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn version_one_policies_without_new_facets_remain_compatible() {
+        let json = r#"{
+            "version": 1,
+            "enabled": true,
+            "preset": "custom",
+            "scope": "playout",
+            "mode": "soft",
+            "after_items": 2,
+            "include_filler": false,
+            "rules": [{"id": "genre", "kind": "genre"}]
+        }"#;
+
+        let policy: SchedulingSmartShufflePolicy = serde_json::from_str(json).unwrap();
+        assert_eq!(policy.version, 1);
+        assert_eq!(policy.rules.len(), 1);
+        assert_eq!(policy.rules[0].kind, SchedulingSmartShuffleRuleKind::Genre);
+        assert_eq!(policy.after_items, Some(2));
     }
 
     #[test]

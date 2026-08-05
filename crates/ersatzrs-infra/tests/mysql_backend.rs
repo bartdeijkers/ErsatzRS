@@ -26,6 +26,46 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
         .expect("initialize MySQL database");
     let repos = make_repositories(pool.clone());
 
+    for table in [
+        "EpisodeMetadata",
+        "MusicVideoMetadata",
+        "SongMetadata",
+        "ImageMetadata",
+    ] {
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+                 AND COLUMN_NAME = 'ContentRating'"#,
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .expect("query uniform content-rating column");
+        assert_eq!(count, 1, "missing ContentRating on {table}");
+    }
+    for table in ["MusicLabel", "MetadataLanguage"] {
+        let table_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?"#,
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .expect("query uniform facet table");
+        assert_eq!(table_count, 1, "missing {table}");
+
+        let index_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+                 AND INDEX_NAME LIKE 'IX_%'"#,
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .expect("query uniform facet indexes");
+        assert_eq!(index_count, 10, "unexpected owner-index count for {table}");
+    }
+
     let key = format!("mysql.integration.{}", uuid::Uuid::new_v4());
     repos
         .config

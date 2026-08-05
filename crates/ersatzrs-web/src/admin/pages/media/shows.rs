@@ -30,6 +30,7 @@ use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
+use crate::admin::pages::media::movies::search_link;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
 };
@@ -129,6 +130,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
         tags,
         languages,
         studios,
+        music_labels,
         networks,
         actors,
         seasons,
@@ -280,12 +282,18 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                 </div>
 
                 <dl class=detail_style::facts>
-                    {fact_row(TextKey::ContentRatings, &content_ratings)}
-                    {fact_row(TextKey::Studios, &studios)}
-                    {fact_row(TextKey::Networks, &networks)}
-                    {fact_row(TextKey::Languages, &languages)}
-                    {fact_row(TextKey::Genres, &genres)}
-                    {fact_row(TextKey::Tags, &tags)}
+                    {fact_row(TextKey::ContentRatings, "content_rating", &content_ratings, false)}
+                    {fact_row(TextKey::Studios, "studio", &studios, true)}
+                    {fact_row(
+                        TextKey::MusicLabels,
+                        "music_label",
+                        &music_labels,
+                        true,
+                    )}
+                    {fact_row(TextKey::Networks, "network", &networks, true)}
+                    {fact_row(TextKey::Languages, "language", &languages, true)}
+                    {fact_row(TextKey::Genres, "genre", &genres, true)}
+                    {fact_row(TextKey::Tags, "tag", &tags, true)}
                 </dl>
 
                 <h2 class=style::section_title>{tr(TextKey::Seasons)}</h2>
@@ -380,21 +388,25 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
 
 /// Definition-list fact row — same contract as the movies detail page:
 /// `None` when every value is blank, comma-joined otherwise.
-fn fact_row(label: TextKey, values: &[String]) -> Option<AnyView> {
+fn fact_row(
+    label: TextKey,
+    field: &'static str,
+    values: &[String],
+    lowercase: bool,
+) -> Option<AnyView> {
     if values.iter().all(|s| s.trim().is_empty()) {
         return None;
     }
-    let joined = values
-        .iter()
-        .filter(|s| !s.trim().is_empty())
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(", ");
     Some(
         view! {
             <div class=detail_style::fact_row>
                 <dt>{tr(label)}</dt>
-                <dd>{joined}</dd>
+                <dd>{values.iter().filter(|value| !value.trim().is_empty()).enumerate().map(|(index, value)| {
+                    view! {
+                        {if index > 0 { Some(view! { <span>", "</span> }) } else { None }}
+                        <a href=search_link(field, value, lowercase)>{value.clone()}</a>
+                    }
+                }).collect_view()}</dd>
             </div>
         }
         .into_any(),

@@ -59,6 +59,25 @@ pub fn english_name(code: &str) -> Option<String> {
         .cloned()
 }
 
+/// Normalize one persisted metadata language to the canonical three-letter
+/// code used by ErsatzRS. Unknown non-blank values are retained in normalized
+/// lowercase form so provider-specific tags remain searchable.
+#[must_use]
+pub fn canonical_language_code(code: &str) -> Option<String> {
+    let code = normalize_code(code);
+    if code.is_empty() {
+        return None;
+    }
+    Some(
+        cache()
+            .code_to_group
+            .get(&code)
+            .and_then(|group| group.first())
+            .cloned()
+            .unwrap_or(code),
+    )
+}
+
 /// Return one display option per ISO-639 language group, using the primary
 /// three-letter bibliographic code as the persisted value.
 #[must_use]
@@ -184,6 +203,14 @@ mod tests {
     fn preserves_unknown_codes_for_service_parity() {
         assert_eq!(all_language_codes(["  zzx  "]), vec!["zzx".to_string()]);
         assert_eq!(english_name("zzx"), None);
+    }
+
+    #[test]
+    fn canonicalizes_known_codes_and_preserves_unknown_codes() {
+        assert_eq!(canonical_language_code(" NL ").as_deref(), Some("dut"));
+        assert_eq!(canonical_language_code("nld").as_deref(), Some("dut"));
+        assert_eq!(canonical_language_code(" ZZX ").as_deref(), Some("zzx"));
+        assert_eq!(canonical_language_code("  "), None);
     }
 
     #[test]

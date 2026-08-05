@@ -1376,6 +1376,8 @@ fn block_smart_shuffle_rules(
         ("artist", TextKey::Artist), ("album_artist", TextKey::AlbumArtist),
         ("show", TextKey::Show), ("season", TextKey::Season),
         ("content_parent", TextKey::ContentParent), ("collection", TextKey::Collection),
+        ("content_rating", TextKey::ContentRatings), ("language", TextKey::Languages),
+        ("music_label", TextKey::MusicLabels),
         ("tag", TextKey::Tags), ("genre", TextKey::Genres), ("studio", TextKey::Studios),
     ].into_iter().map(|(rule, label)| {
         let checked = selected.iter().any(|value| value == rule);

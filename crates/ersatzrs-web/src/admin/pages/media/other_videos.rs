@@ -11,10 +11,11 @@ use leptos_router::hooks::use_params_map;
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::movies::search_link;
 use crate::admin::pages::media::multi_select_browser::{
-    AddToCollectionModal, BrowserKindConfig, MediaInfoModal, MultiSelectBrowserPage,
+    AddToCollectionModal, AddToPlaylistModal, BrowserKindConfig, MediaInfoModal,
+    MultiSelectBrowserPage,
 };
 use crate::admin::server_fns::media_browser::{
-    get_media_item_info_json, get_other_video_details, OtherVideoDetailRow,
+    get_media_item_info_json, get_other_video_details, MediaBrowserKind, OtherVideoDetailRow,
 };
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -87,6 +88,7 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
         tags,
         languages,
         studios,
+        music_labels,
         directors,
         writers,
         actors,
@@ -203,6 +205,12 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
                     {linked_fact_row(TextKey::ContentRatings, "content_rating", &content_ratings, false)}
                     {linked_fact_row(TextKey::Languages, "language", &languages, true)}
                     {linked_fact_row(TextKey::Studios, "studio", &studios, true)}
+                    {linked_fact_row(
+                        TextKey::MusicLabels,
+                        "music_label",
+                        &music_labels,
+                        true,
+                    )}
                     {linked_fact_row(TextKey::Directors, "director", &directors, true)}
                     {linked_fact_row(TextKey::Writers, "writer", &writers, true)}
                     {linked_fact_row(TextKey::Genres, "genre", &genres, true)}
@@ -236,6 +244,7 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
 fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let collection_open = RwSignal::new(false);
+    let playlist_open = RwSignal::new(false);
     let media_info_open = RwSignal::new(false);
     let media_info_title = RwSignal::new(title.clone());
     let media_info_body = RwSignal::new(String::new());
@@ -273,6 +282,19 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
                 type="button"
                 class=detail_style::btn_secondary
                 on:click=move |_| {
+                    selected.update(|items| {
+                        items.clear();
+                        items.insert(id);
+                    });
+                    playlist_open.set(true);
+                }
+            >
+                <span>{tr(TextKey::AddToPlaylist)}</span>
+            </button>
+            <button
+                type="button"
+                class=detail_style::btn_secondary
+                on:click=move |_| {
                     media_info_title.set(title.clone());
                     media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
                     media_info_open.set(true);
@@ -288,6 +310,11 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
                 <span>{tr(TextKey::Back)}</span>
             </a>
             <AddToCollectionModal open=collection_open selected=selected/>
+            <AddToPlaylistModal
+                open=playlist_open
+                selected
+                kind=MediaBrowserKind::OtherVideo
+            />
             <MediaInfoModal
                 open=media_info_open
                 title=media_info_title

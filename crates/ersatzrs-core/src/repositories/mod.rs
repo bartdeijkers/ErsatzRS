@@ -27,10 +27,10 @@ mod watermark;
 
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,
-    AdminCommentarySubtitle, AdminMediaCard, AdminMediaInfoChapter, AdminMediaInfoKind,
-    AdminMediaInfoStream, AdminMediaItemInfo, AdminMediaRepository, AdminMovieDetail,
-    AdminMoviePlaybackSource, AdminMoviePlaybackStream, AdminOtherVideoDetail, AdminSeasonCard,
-    AdminShowDetail,
+    AdminCommentarySubtitle, AdminFacetedMediaDetail, AdminFacetedMediaKind, AdminMediaCard,
+    AdminMediaInfoChapter, AdminMediaInfoKind, AdminMediaInfoStream, AdminMediaItemInfo,
+    AdminMediaRepository, AdminMovieDetail, AdminMoviePlaybackSource, AdminMoviePlaybackStream,
+    AdminOtherVideoDetail, AdminSeasonCard, AdminShowDetail,
 };
 pub use admin_search::{
     AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,
@@ -89,8 +89,8 @@ pub use library::{
 pub use media_item::MediaItemRepository;
 pub use media_source::{
     LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
-    MediaSourceRepository, PathReplacementAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind,
-    RemoteSourceAdminRow,
+    MediaSourceRepository, PathReplacementAdmin, PlexArtworkConnectionAdmin, RemoteConnectionAdmin,
+    RemoteMediaSourceKind, RemoteSourceAdminRow,
 };
 pub use metadata::MetadataRepository;
 pub use playout::{

@@ -613,6 +613,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Items => "Éléments",
         TextKey::Language => "Langue",
         TextKey::Languages => "Langues",
+            TextKey::MusicLabels => "Labels de musique",
         TextKey::LeaveEmptyToAutoDetect => "Laisser vide pour la détection automatique",
         TextKey::Libraries => "Bibliothèques",
         TextKey::LibraryRefreshInterval => "Intervalle d'actualisation des bibliothèques",
