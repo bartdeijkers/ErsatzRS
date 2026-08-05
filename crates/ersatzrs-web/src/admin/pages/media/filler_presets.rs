@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines, dead_code)]
-
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
