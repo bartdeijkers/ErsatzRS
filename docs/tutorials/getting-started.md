@@ -22,7 +22,7 @@ You need:
 - a directory containing at least one movie that FFmpeg can read;
 - port `8409` available on the host; and
 - internet access during the first startup so ErsatzRS can acquire its managed
-  FFmpeg 8.1 runtime.
+  FFmpeg 9 runtime.
 
 ## 1. Start ErsatzRS
 

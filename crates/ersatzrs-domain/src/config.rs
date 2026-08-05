@@ -10,6 +10,8 @@ pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING: &str = "log.minimum_level.stre
 pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP: &str = "log.minimum_level.http";
 pub const CONFIG_KEY_FFMPEG_PATH: &str = "ffmpeg.ffmpeg_path";
 pub const CONFIG_KEY_FFPROBE_PATH: &str = "ffmpeg.ffprobe_path";
+/// Whether the persisted `FFmpeg` paths are owned by managed runtime bootstrap.
+pub const CONFIG_KEY_FFMPEG_PATHS_MANAGED: &str = "ffmpeg.paths_managed";
 pub const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 pub const CONFIG_KEY_FFMPEG_SAVE_REPORTS: &str = "ffmpeg.save_reports";
 pub const CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES: &str = "ffmpeg.use_embedded_subtitles";

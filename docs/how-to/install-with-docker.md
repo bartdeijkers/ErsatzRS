@@ -53,7 +53,7 @@ Follow the server log:
 docker logs --follow ersatzrs
 ```
 
-The first start downloads and validates the first-party FFmpeg 8.1 runtime when
+The first start downloads and validates the first-party FFmpeg 9 runtime when
 no managed copy exists. Check readiness from the host:
 
 ```bash

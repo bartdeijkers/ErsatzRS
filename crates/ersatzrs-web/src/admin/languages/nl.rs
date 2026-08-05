@@ -1871,6 +1871,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::VideoBufferSize => "Videobuffergrootte (kBit)",
         TextKey::VideoFormat => "Videoformaat",
         TextKey::VideoPreset => "Videopreset",
+        TextKey::VideoTune => "Video-afstemming",
         TextKey::VideoProfile => "Videoprofiel",
         TextKey::ViewCollection => "Collectie bekijken",
         TextKey::ViewPlaylist => "Afspeellijst bekijken",

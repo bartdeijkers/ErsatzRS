@@ -2,9 +2,16 @@
 
 ## Status
 
-Accepted 2026-06-21
+Superseded by [ADR 0063](0063-ffmpeg-9-runtime-and-profile-options.md) for the
+supported FFmpeg version and managed package line. The runtime repository,
+checksum, and package-architecture decisions remain accepted.
 
 ## Implementation
+
+Implemented (historical FFmpeg 8.1 contract; superseded by ADR 0063).
+
+This section records the original implementation. The current FFmpeg 9
+contract is implemented by ADR 0063.
 
 Implemented — ErsatzRS release archives and Docker images ship without
 FFmpeg/ffprobe and follow the same managed-runtime model.

@@ -2,7 +2,7 @@ feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
-adr        = ['0003', '0014', '0017']
+adr        = ['0003', '0014', '0017', '0063']
 
 summary    = '''
 Current command-generation parity covers the software pipeline plus NVENC,
@@ -42,8 +42,8 @@ single conservative `1920x1080 x264 aac` seed to five ready-to-use AC-3 6ch
 profiles (720p, 1080p default, 1080p HDR, 4K, 4K HDR). Web startup now applies
 the preferred available hardware encoder (Nvenc > Qsv > Vaapi > VideoToolbox >
 Amf > None) to that fresh seed after the FFmpeg runtime report is captured,
-using hardware-compatible presets (`llhq` for NVENC, `veryfast` for QSV,
-unset where platform encoders reject software-style presets), without rewriting
+using hardware-compatible presets (`p7` plus tune `ll` for NVENC, `veryfast`
+for QSV, unset where platform encoders reject software-style presets), without rewriting
 existing profile tables. HLS segmenter output now emits `-max_delay 500000`
 only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
 idempotence, seed hardware update, hardware preference selection, and AC-3
@@ -56,13 +56,13 @@ bitrates 4000, 8000, 10000, 22500, and 30000 kbit/s while keeping video buffer
 sizes at 8000, 16000, 20000, 45000, and 60000 kbit; existing databases are not
 rewritten (seed remains fresh-only and idempotent).
 
-The 2026-06-19 HDR proof slice added a live HDR -> SDR calibration gate that
-generates HDR10 PQ and HLG masters, boots ErsatzRS on a throwaway database,
-streams each clip through the real MPEG-TS endpoint, probes the captured output
-for 8-bit BT.709 signaling, and compares decoded static helper-chip crops
-against generated SDR references. That proof caught and fixed the software
-tonemap filter, which now converts primaries/matrix/range to BT.709 instead of
-only changing transfer metadata.
+The 2026-08-05 ADR 0063 slice upgrades command generation to the exact FFmpeg
+9.x contract. Frame-rate normalization emits `-fps_mode:v cfr`, NVENC presets
+and tunes are independent, legacy `llhp`/`llhq` values translate at the command
+boundary, and startup probes the required output and NVENC option domains.
+Existing FFmpeg 8.1 live-proof entries below remain historical evidence for
+their specific filter-gating behavior rather than the current runtime version.
+
 '''
 
 [[debt]]

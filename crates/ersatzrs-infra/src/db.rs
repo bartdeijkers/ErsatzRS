@@ -812,10 +812,10 @@ async fn insert_default_ffmpeg_profile(
             "Name", "NormalizeFramerate", "NormalizeLoudnessMode",
             "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "ThreadCount",
             "VaapiDevice", "VaapiDriver", "VideoBitrate", "VideoBufferSize",
-            "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames",
+            "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames",
             "VaapiDisplay", "TonemapAlgorithm", "TargetLoudness", "PadMode",
             "TranscodeAudio", "NormalizeColors", "TranscodeVideo"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(640_i32)
     .bind(640_i32)
@@ -839,6 +839,7 @@ async fn insert_default_ffmpeg_profile(
     .bind(profile.video_format)
     .bind(profile.video_profile)
     .bind("veryfast")
+    .bind(Option::<&str>::None)
     .bind(0_i32)
     .bind(Option::<&str>::None)
     .bind(0_i32)
@@ -867,15 +868,16 @@ pub async fn apply_default_ffmpeg_profile_hardware_acceleration(
     acceleration: HardwareAccelerationKind,
 ) -> Result<(), sqlx::Error> {
     let acceleration = acceleration as i32;
-    let video_preset = default_profile_video_preset_for_acceleration(acceleration);
+    let (video_preset, video_tune) = default_profile_video_options_for_acceleration(acceleration);
     for name in ADR0017_DEFAULT_PROFILE_NAMES {
         sqlx::query(
             r#"UPDATE "FFmpegProfile"
-               SET "HardwareAcceleration" = ?, "VideoPreset" = ?
+               SET "HardwareAcceleration" = ?, "VideoPreset" = ?, "VideoTune" = ?
                WHERE "Name" = ?"#,
         )
         .bind(acceleration)
         .bind(video_preset)
+        .bind(video_tune)
         .bind(name)
         .execute(pool)
         .await?;
@@ -884,11 +886,13 @@ pub async fn apply_default_ffmpeg_profile_hardware_acceleration(
     Ok(())
 }
 
-const fn default_profile_video_preset_for_acceleration(acceleration: i32) -> Option<&'static str> {
+const fn default_profile_video_options_for_acceleration(
+    acceleration: i32,
+) -> (Option<&'static str>, Option<&'static str>) {
     match acceleration {
-        0 | 1 => Some("veryfast"),
-        2 => Some("llhq"),
-        _ => None,
+        0 | 1 => (Some("veryfast"), None),
+        2 => (Some("p7"), Some("ll")),
+        _ => (None, None),
     }
 }
 
@@ -988,6 +992,14 @@ mod tests {
     #[tokio::test]
     async fn fresh_sqlite_schema_contains_uniform_metadata_facets() {
         let pool = init("sqlite::memory:").await.expect("migrate fresh schema");
+        let ffmpeg_columns = sqlx::query(r#"PRAGMA table_info("FFmpegProfile")"#)
+            .fetch_all(&pool)
+            .await
+            .expect("ffmpeg profile table info")
+            .into_iter()
+            .map(|row| row.get::<String, _>("name"))
+            .collect::<Vec<_>>();
+        assert!(ffmpeg_columns.iter().any(|column| column == "VideoTune"));
         for table in [
             "EpisodeMetadata",
             "MusicVideoMetadata",
@@ -1022,6 +1034,65 @@ mod tests {
             .expect("index count");
             assert!(indexes >= 10, "expected owner indexes for {table}");
         }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn existing_sqlite_profiles_upgrade_to_ffmpeg_9_options() {
+        const FFMPEG_9_PROFILE_VERSION: i64 = 202_608_051_900;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect upgrade database");
+        let previous = sqlx::migrate::Migrator::with_migrations(
+            super::SQLITE_MIGRATOR
+                .iter()
+                .filter(|migration| migration.version < FFMPEG_9_PROFILE_VERSION)
+                .cloned()
+                .collect(),
+        );
+        previous.run(&pool).await.expect("migrate previous schema");
+        sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (801, 'test', 1920, 1080)"#)
+            .execute(&pool)
+            .await
+            .expect("seed resolution");
+        for (id, preset) in [(802_i64, "llhp"), (803, "LLHQ"), (804, "veryfast")] {
+            sqlx::query(
+                r#"INSERT INTO "FFmpegProfile" (
+                    "Id", "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
+                    "ResolutionId", "ScalingBehavior", "VideoFormat", "AudioFormat",
+                    "VideoBitrate", "VideoBufferSize", "AudioBitrate", "AudioBufferSize",
+                    "NormalizeLoudnessMode", "AudioChannels", "AudioSampleRate",
+                    "HardwareAcceleration", "QsvExtraHardwareFrames", "VaapiDriver",
+                    "TonemapAlgorithm", "AllowBFrames", "BitDepth", "NormalizeFramerate",
+                    "NormalizeColors", "DeinterlaceVideo", "PadMode", "VideoPreset"
+                ) VALUES (?, ?, 0, 1, 1, 801, 0, 1, 1, 4000, 8000, 192, 384,
+                    0, 2, 48, 2, 64, 0, 0, 0, 0, 1, 1, 1, 0, ?)"#,
+            )
+            .bind(id)
+            .bind(format!("profile-{id}"))
+            .bind(preset)
+            .execute(&pool)
+            .await
+            .expect("seed legacy profile");
+        }
+
+        super::SQLITE_MIGRATOR
+            .run(&pool)
+            .await
+            .expect("apply FFmpeg 9 profile migration");
+        let rows =
+            sqlx::query(r#"SELECT "VideoPreset", "VideoTune" FROM "FFmpegProfile" ORDER BY "Id""#)
+                .fetch_all(&pool)
+                .await
+                .expect("load migrated profiles");
+        assert_eq!(rows[0].get::<String, _>("VideoPreset"), "p1");
+        assert_eq!(rows[0].get::<String, _>("VideoTune"), "ll");
+        assert_eq!(rows[1].get::<String, _>("VideoPreset"), "p7");
+        assert_eq!(rows[1].get::<String, _>("VideoTune"), "ll");
+        assert_eq!(rows[2].get::<String, _>("VideoPreset"), "veryfast");
+        assert_eq!(rows[2].get::<Option<String>, _>("VideoTune"), None);
     }
 
     #[cfg(not(feature = "mysql"))]
@@ -1585,15 +1656,12 @@ mod tests {
             .expect("seed mediaserver defaults");
         assert!(seeded);
 
-        apply_default_ffmpeg_profile_hardware_acceleration(
-            &pool,
-            HardwareAccelerationKind::VideoToolbox,
-        )
-        .await
-        .expect("apply hardware acceleration");
+        apply_default_ffmpeg_profile_hardware_acceleration(&pool, HardwareAccelerationKind::Nvenc)
+            .await
+            .expect("apply hardware acceleration");
 
         let rows = sqlx::query(
-            r#"SELECT "HardwareAcceleration", "VideoPreset"
+            r#"SELECT "HardwareAcceleration", "VideoPreset", "VideoTune"
                FROM "FFmpegProfile"
                ORDER BY "Id""#,
         )
@@ -1605,12 +1673,17 @@ mod tests {
             assert_eq!(
                 row.try_get::<i32, _>("HardwareAcceleration")
                     .expect("hardware acceleration"),
-                4
+                2
             );
             assert_eq!(
                 row.try_get::<Option<String>, _>("VideoPreset")
                     .expect("video preset"),
-                None
+                Some("p7".to_owned())
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("VideoTune")
+                    .expect("video tune"),
+                Some("ll".to_owned())
             );
         }
     }

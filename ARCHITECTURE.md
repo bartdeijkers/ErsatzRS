@@ -75,7 +75,8 @@ preserve behavior by default, and document deliberate deviations through ADRs.
 
 - FFmpeg is invoked through `tokio::process::Command`.
 - No libav bindings are allowed without a new ADR.
-- FFmpeg 8.1 is a hard runtime requirement.
+- FFmpeg 9.x is the supported runtime line; older and unverified future major
+  versions are rejected at startup.
 - SQLite is the first database backend.
 - MySQL support is feature-gated and added later.
 

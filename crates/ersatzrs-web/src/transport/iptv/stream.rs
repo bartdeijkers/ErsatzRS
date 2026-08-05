@@ -3129,7 +3129,8 @@ mod tests {
     fn hardware_encode_retry_profile_selects_software_h264() {
         let mut profile = playback_profile();
         profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::Nvenc;
-        profile.profile.video_preset = Some("llhq".to_owned());
+        profile.profile.video_preset = Some("p7".to_owned());
+        profile.profile.video_tune = Some("ll".to_owned());
         let source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264);
         let report = ersatzrs_ffmpeg::capability_report_for_tests();
 
@@ -3152,7 +3153,7 @@ mod tests {
         .arguments
         .join(" ");
         assert!(first.contains("-codec:v h264_nvenc"), "{first}");
-        assert!(first.contains("-preset:v llhq"), "{first}");
+        assert!(first.contains("-preset:v p7 -tune:v ll"), "{first}");
 
         force_software_h264_encoding(&mut profile);
         let second = build_stream_command(
@@ -3176,7 +3177,7 @@ mod tests {
         assert!(second.contains("-codec:v libx264"), "{second}");
         assert!(second.contains("-preset:v veryfast"), "{second}");
         assert!(!second.contains("h264_nvenc"), "{second}");
-        assert!(!second.contains("llhq"), "{second}");
+        assert!(!second.contains("-tune:v"), "{second}");
         assert!(!second.contains("-hwaccel cuda"), "{second}");
     }
 
@@ -4627,8 +4628,8 @@ mod tests {
             stream.to_string_lossy().as_ref(),
             "-vf",
             "select=eq(n\\,5)+eq(n\\,20)+eq(n\\,45),crop=80:80:0:0,scale=1:1,format=rgb24",
-            "-vsync",
-            "0",
+            "-fps_mode:v",
+            "passthrough",
             "-frames:v",
             "3",
             "-f",

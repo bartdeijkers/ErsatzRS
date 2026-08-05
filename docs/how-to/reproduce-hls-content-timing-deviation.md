@@ -90,7 +90,7 @@ Extract the first frame and frame 18,000:
 ```powershell
 ffmpeg -hide_banner -y `
   -i "diagnostics\calibration-channel5\channel5_calibration_5min.ts" `
-  -vf "select='eq(n,0)+eq(n,18000)'" -vsync 0 `
+  -vf "select='eq(n,0)+eq(n,18000)'" -fps_mode:v passthrough `
   "diagnostics\calibration-channel5\frame_index_%02d.png"
 ```
 
@@ -107,7 +107,7 @@ per second around the boundary. For the original capture:
 ffmpeg -hide_banner -y `
   -i "diagnostics\calibration-channel5\channel5_calibration_5min.ts" `
   -vf "select='eq(n,2580)+eq(n,2640)+eq(n,2700)+eq(n,6960)+eq(n,7020)+eq(n,7080)+eq(n,17760)+eq(n,17820)'" `
-  -vsync 0 "diagnostics\calibration-channel5\frame_probe_%02d.png"
+  -fps_mode:v passthrough "diagnostics\calibration-channel5\frame_probe_%02d.png"
 ```
 
 Compare the visible clip and absolute time immediately before and after the

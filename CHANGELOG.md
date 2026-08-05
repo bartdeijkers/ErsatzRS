@@ -31,6 +31,12 @@ release section when tagging a release.
 
 ### Changed
 
+- FFmpeg 9.x is now the explicit runtime contract. Managed startup defaults to
+  `ErsatzRS-ffmpeg` v2, rejects FFmpeg 8 and unverified future majors, and keeps
+  downloaded paths updateable while preserving administrator-owned overrides.
+  NVENC profiles now store and edit presets (`p1`-`p7`) separately from tunes
+  (`hq`, `ll`, `ull`, `lossless`), with automatic `llhp`/`llhq` migration.
+
 - The nightly Clippy-exemption cleanup now batches individually verified fixes
   behind one push and self-tunes its batch cap from durable run trailers. Its
   fixed 40-minute budget now terminates each verification command using the
@@ -44,6 +50,12 @@ release section when tagging a release.
   page's module stylesheet (dead-code cleanup, no visible change).
 
 ### Fixed
+
+- Fixed FFmpeg 9 playback failures by replacing removed `-vsync` arguments with
+  `-fps_mode`, translating legacy NVENC low-latency presets at the playback
+  boundary, and validating the required output/NVENC options at startup. The
+  shared fix also covers script-backed Remote Streams, including the Beeld &
+  Geluid extractor.
 
 - Fixed the uniform metadata-facet slice so new detail-page actions hydrate,
   existing local-TV seasons are forced through their first facet backfill,

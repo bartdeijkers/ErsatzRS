@@ -319,6 +319,7 @@ fn ffmpeg_profile_admin_form(profile: ersatzrs_domain::FFmpegProfile) -> FfmpegP
         video_format: video_format_value(profile.video_format),
         video_profile: profile.video_profile.unwrap_or_default(),
         video_preset: profile.video_preset.unwrap_or_default(),
+        video_tune: profile.video_tune.unwrap_or_default(),
         allow_b_frames: profile.allow_b_frames,
         bit_depth: bit_depth_value(profile.bit_depth),
         video_bitrate: profile.video_bitrate,

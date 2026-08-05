@@ -295,7 +295,7 @@ scripts/e2e/hydration-smoke.sh
 The runner is self-contained: it builds the Leptos hydration assets, boots
 `ersatzrs-web` on a throwaway SQLite database (isolated `HOME`, never touches
 `~/.ersatzrs`), waits for `/healthz`, runs the spec, and tears everything down.
-An FFmpeg operator override (`~/.local/ffmpeg-8.1`, like `run.sh`) is used when
+An FFmpeg operator override (`~/.local/ffmpeg-9.0`, like `run.sh`) is used when
 present so startup skips the managed runtime download. Useful env knobs:
 `ERSATZRS_SKIP_LEPTOS_BUILD=1` (reuse existing assets), `ERSATZRS_E2E_KEEP_TEMP=1`
 (keep the temp DB/log), `ERSATZRS_E2E_PORT=NNNN`.

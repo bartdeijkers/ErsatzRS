@@ -14,7 +14,7 @@
 #   ERSATZRS_SKIP_LEPTOS_BUILD=1 scripts/e2e/hydration-smoke.sh   # reuse assets
 #   ERSATZRS_E2E_KEEP_TEMP=1 scripts/e2e/hydration-smoke.sh       # keep temp dir
 #
-# Requirements: cargo, cargo-leptos, node + npx, an FFmpeg 8.1 runtime (see the
+# Requirements: cargo, cargo-leptos, node + npx, an FFmpeg 9 runtime (see the
 # FFmpeg env below; an operator override skips the managed startup download).
 
 set -euo pipefail
@@ -31,7 +31,7 @@ err() { printf '\033[1;31m[hydration-smoke]\033[0m %s\n' "$*" >&2; }
 
 # --- FFmpeg runtime: prefer an operator override so startup skips the managed
 # --- download. Mirrors run.sh. Only exported if the path actually exists.
-LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-8.1}"
+LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-9.0}"
 if [[ -x "$LOCAL_FFMPEG_DIR/bin/ffmpeg" ]]; then
   export LD_LIBRARY_PATH="$LOCAL_FFMPEG_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   export ErsatzRS_FFMPEG__PATH="$LOCAL_FFMPEG_DIR/bin/ffmpeg"

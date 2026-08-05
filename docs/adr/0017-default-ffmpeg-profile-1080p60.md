@@ -112,8 +112,10 @@ leave it `None` (software). Detection priority:
 hardware path turns out unusable at runtime, the learned-capability fallback
 demotes that spawn to software automatically, so an over-optimistic seed is
 self-correcting rather than fatal. The software fallback preset stays
-`veryfast`; NVENC seeds use `llhq`, QSV keeps `veryfast`, and platforms whose
-FFmpeg encoders reject those software-style presets leave the preset unset.
+`veryfast`; under the FFmpeg 9 contract in
+[ADR 0063](0063-ffmpeg-9-runtime-and-profile-options.md), NVENC seeds use
+preset `p7` with tune `ll`, QSV keeps `veryfast`, and platforms whose FFmpeg
+encoders reject those software-style presets leave the preset unset.
 Admins on a strong CPU can pick a slower preset per channel.
 
 ### 3. Segmenter A/V interleaving
@@ -198,6 +200,7 @@ starting points an admin can edit or delete per channel.
 - [ADR 0014: Runtime-learned hardware-capability fallback](0014-runtime-learned-hardware-capability-fallback.md)
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+- [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
 - [`crates/ersatzrs-infra/src/db.rs`](../../crates/ersatzrs-infra/src/db.rs) — default profile/resolution seed
 - [`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`](../../crates/ersatzrs-ffmpeg/src/pipeline/mod.rs) — `hls_output`, `add_output_options`
 - [`crates/ersatzrs-domain/src/ffmpeg.rs`](../../crates/ersatzrs-domain/src/ffmpeg.rs) — profile/codec/HW enums

@@ -1221,6 +1221,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::VideoBufferSize => "Taille du tampon vidéo (kBit)",
         TextKey::VideoFormat => "Format vidéo",
         TextKey::VideoPreset => "Préréglage vidéo",
+        TextKey::VideoTune => "Réglage vidéo",
         TextKey::VideoProfile => "Profil vidéo",
         TextKey::ViewCollection => "Voir la collection",
         TextKey::ViewPlaylist => "Voir la liste de lecture",

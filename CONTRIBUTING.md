@@ -34,8 +34,9 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 cargo deny check
 ```
 
-FFmpeg 8.1 or newer is required at runtime because ErsatzRS uses the `drawvg`
-filter. Startup code must fail fast when an older FFmpeg is detected.
+FFmpeg 9.x is required at runtime because ErsatzRS uses `drawvg` and the
+FFmpeg 9 output-option contract. Startup code must fail fast for older and
+unverified future major versions.
 
 For the edit loop, install cargo-nextest using its
 [official prebuilt-binary instructions](https://nexte.st/docs/installation/pre-built-binaries/)

@@ -2,7 +2,7 @@ feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
 status     = 'Ported'
-adr        = ['0057']
+adr        = ['0057', '0063']
 
 summary    = '''
 Remote Stream playout resolves the persisted URL/script definition instead of
@@ -40,11 +40,14 @@ sources, and warns when a finite source has no usable duration.
 Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
   producer-container auto-detection, Windows batch quoting, single-pair Beeld &
-  Geluid mapping, stalled-producer cancellation, and bounded-stderr tests:
+Geluid mapping, stalled-producer cancellation, and bounded-stderr tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
+- ADR 0063 FFmpeg 9 compatibility: Beeld & Geluid remains a stream-copy
+  producer and the shared consumer pipeline emits `-fps_mode` rather than the
+  removed `-vsync` option.
 - ffprobe timeout cancellation:
   `./run.sh test -p ersatzrs-infra remote_probe_timeout_cancels_stalled_producer`.
-- Managed FFmpeg 8.1 pipe proof: generated H.264/AAC fragmented MP4 and MPEG-TS
+- Historical managed FFmpeg 8.1 pipe proof: generated H.264/AAC fragmented MP4 and MPEG-TS
   samples were both auto-detected by `ffprobe -i pipe:0`.
 - Scanner persistence and invalid-sibling isolation: `./run.sh test -p ersatzrs-scanner remote_stream_scan_persists_definition_metadata_and_continues_after_invalid_yaml`.
 - Flood duration regression: `./run.sh test -p ersatzrs-core classic_flood_expands_zero_duration_remote_stream_to_hard_stop`.

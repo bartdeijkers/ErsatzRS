@@ -27,7 +27,7 @@ install or enable that server-side playback capability.
 
 ## Requirements
 
-Both wrappers require FFmpeg and network access from the ErsatzRS process to:
+Both wrappers require FFmpeg 9 and network access from the ErsatzRS process to:
 
 - `schatkamer.beeldengeluid.nl`
 - `sk-video.cdn.beeldengeluid.nl`
@@ -75,6 +75,8 @@ Open `episode.ts` with a media player or inspect it with `ffprobe`. Diagnostics
 and failures are written to standard error; standard output contains only
 media bytes. Selecting one rendition pair keeps the output stream order stable
 as video then audio, which is the layout ErsatzRS channel playback expects.
+The wrapper remuxes with stream copy and does not normalize framerate itself;
+any later transcoding uses ErsatzRS's FFmpeg 9 playback pipeline.
 
 ## Add the episode to ErsatzRS
 

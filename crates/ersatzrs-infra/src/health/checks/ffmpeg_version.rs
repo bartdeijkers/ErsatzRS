@@ -21,15 +21,19 @@ impl HealthCheck for FFmpegVersionHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         for tool in [&self.runtime.ffmpeg, &self.runtime.ffprobe] {
-            if !tool.version.satisfies(REQUIRED_MAJOR, REQUIRED_MINOR) {
+            if !tool.version.is_supported(REQUIRED_MAJOR, REQUIRED_MINOR) {
                 return Ok(HealthCheckResult::new(
                     self.title(),
                     HealthCheckStatus::Fail,
                     format!(
-                        "{} version {} is too old; please install {}.{} or newer!",
-                        tool.tool, tool.version, REQUIRED_MAJOR, REQUIRED_MINOR
+                        "{} version {} is unsupported; please install major version {} (at least {}.{})!",
+                        tool.tool,
+                        tool.version,
+                        REQUIRED_MAJOR,
+                        REQUIRED_MAJOR,
+                        REQUIRED_MINOR
                     ),
-                    format!("{} version is too old", tool.tool),
+                    format!("{} version is unsupported", tool.tool),
                 ));
             }
         }

@@ -9,7 +9,7 @@ it captures the served stream and uses [TSDuck](https://tsduck.io/) to prove the
 across all streaming pipelines and across playout‑item boundaries (the concat
 seams where ErsatzTV‑style stitching is most likely to break).
 
-It is deliberately kept out of CI because it needs FFmpeg 8.1, real‑time
+It is deliberately kept out of CI because it needs FFmpeg 9.0, real‑time
 encoding, and tens of seconds per pipeline — too heavy and too timing‑sensitive
 for a hosted runner. Run it locally before claiming playback‑sensitive work is
 done, alongside `cargo xtask smoke`.
@@ -158,8 +158,8 @@ capture.
 
 ## Requirements
 
-`tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 8.1 on `PATH`
-(the gate auto‑exports `LD_LIBRARY_PATH` for the local `~/.local/ffmpeg-8.1`
+`tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 9 on `PATH`
+(the gate auto‑exports `LD_LIBRARY_PATH` for the local `~/.local/ffmpeg-9.0`
 build, which fails silently without it). `sqlite3` and `cargo` are needed for
 `gate` mode only.
 
@@ -270,7 +270,7 @@ The runner is self-contained: it builds the Leptos hydration assets
 an isolated `HOME` (never touches `~/.ersatzrs`), waits for `/healthz`, runs
 `tests/e2e/island-hydration.spec.ts` against every island route, then tears the
 server and temp files down. Requires `cargo-leptos` (`cargo install cargo-leptos
---locked`) and `npx`. An FFmpeg override at `~/.local/ffmpeg-8.1` (like
+--locked`) and `npx`. An FFmpeg override at `~/.local/ffmpeg-9.0` (like
 `run.sh`) is used when present so startup skips the managed runtime download.
 
 | Env var | Default | Effect |
@@ -278,7 +278,7 @@ server and temp files down. Requires `cargo-leptos` (`cargo install cargo-leptos
 | `ERSATZRS_SKIP_LEPTOS_BUILD` | `0` | `1` = reuse already-built hydration assets |
 | `ERSATZRS_E2E_KEEP_TEMP` | `0` | `1` = keep the temp DB/log dir for debugging |
 | `ERSATZRS_E2E_PORT` | `8409` | server port |
-| `ERSATZRS_FFMPEG_DIR` | `~/.local/ffmpeg-8.1` | FFmpeg override root |
+| `ERSATZRS_FFMPEG_DIR` | `~/.local/ffmpeg-9.0` | FFmpeg override root |
 | `ERSATZRS_SKIP_PW_INSTALL` | `0` | `1` = skip `playwright install chromium` |
 
 Per-route pass criteria: `window.__ersatzrs_hydrated === true` (set right after

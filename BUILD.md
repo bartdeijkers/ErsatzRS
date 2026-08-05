@@ -19,10 +19,11 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 - `cargo install cargo-leptos --locked` (the web crate is built through it,
   not plain cargo, because of the SSR + WASM dual target).
 - Network access for the first managed FFmpeg runtime download, or an explicit
-  FFmpeg 8.1+ override/pre-placed managed runtime for offline work. Startup
+  FFmpeg 9.x override/pre-placed managed runtime for offline work. Startup
   validates the managed `ErsatzRS-ffmpeg` runtime for `drawvg`, `zscale`, and
-  required codecs before serving. `run.sh` still exports local
-  `~/.local/ffmpeg-8.1/` overrides when that developer build exists.
+  required codecs and FFmpeg 9 output/NVENC options before serving. `run.sh`
+  exports local `~/.local/ffmpeg-9.0/` overrides when that developer build
+  exists.
 - `SQLX_OFFLINE=true` is already set in `.cargo/config.toml`. The repo ships
   the `.sqlx/` cache so query macros compile without a live database.
 - `wasm-bindgen-cli` is installed transitively by `cargo-leptos` and **must**
@@ -125,7 +126,7 @@ Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
 `run.cmd` calls `pwsh` (PowerShell 7+); install it with `winget install
 Microsoft.PowerShell` if it's not on PATH.
 
-`run.ps1` looks for FFmpeg 8.1 at `%USERPROFILE%\.local\ffmpeg-8.1\bin` and
+`run.ps1` looks for FFmpeg 9 at `%USERPROFILE%\.local\ffmpeg-9.0\bin` and
 sets `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH` automatically when
 that directory exists. If your FFmpeg lives elsewhere, set those two
 environment variables yourself. Without an explicit override, startup uses the

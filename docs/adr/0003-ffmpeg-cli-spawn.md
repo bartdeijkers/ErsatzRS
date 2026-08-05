@@ -11,7 +11,8 @@ Implemented — the FFmpeg pipeline spawns the CLI via `tokio::process::Command`
 ## Context
 
 ErsatzTV builds FFmpeg command lines and runs FFmpeg as a child process. ErsatzRS
-needs to preserve those pipeline patterns while using FFmpeg 8.1 features.
+needs to preserve those pipeline patterns while using its supported FFmpeg CLI
+features.
 
 ## Decision
 

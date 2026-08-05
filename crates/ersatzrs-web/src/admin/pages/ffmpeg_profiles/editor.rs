@@ -20,7 +20,7 @@ use crate::admin::i18n::{
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
-    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile,
+    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, tunes_for_profile,
     video_format_validation_error, video_profile_options, FfmpegProfileForm,
     HardwareAccelerationOption, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
 };
@@ -348,6 +348,7 @@ fn FfmpegProfileEditorForm(
     let video_format = RwSignal::new(initial_form.video_format);
     let video_profile = RwSignal::new(initial_form.video_profile.clone());
     let video_preset = RwSignal::new(initial_form.video_preset.clone());
+    let video_tune = RwSignal::new(initial_form.video_tune.clone());
     let allow_b_frames = RwSignal::new(initial_form.allow_b_frames);
     let bit_depth = RwSignal::new(initial_form.bit_depth);
     let video_bitrate = RwSignal::new(i64::from(initial_form.video_bitrate));
@@ -410,6 +411,17 @@ fn FfmpegProfileEditorForm(
                     ToastSeverity::Error,
                 ),
             }
+        }
+    });
+
+    Effect::new(move |_| {
+        let valid: Vec<String> = tunes_for_profile(hardware_acceleration.get(), video_format.get())
+            .into_iter()
+            .map(ToString::to_string)
+            .collect();
+        let current = video_tune.get_untracked();
+        if !current.is_empty() && !valid.contains(&current) {
+            video_tune.set(String::new());
         }
     });
 
@@ -517,6 +529,7 @@ fn FfmpegProfileEditorForm(
         video_format: video_format.get_untracked(),
         video_profile: video_profile.get_untracked(),
         video_preset: video_preset.get_untracked(),
+        video_tune: video_tune.get_untracked(),
         allow_b_frames: allow_b_frames.get_untracked(),
         bit_depth: bit_depth.get_untracked(),
         video_bitrate: i32::try_from(video_bitrate.get_untracked()).unwrap_or(2000),
@@ -742,21 +755,37 @@ fn FfmpegProfileEditorForm(
                                 />
                             }
                         }}
-                        // Preset options vary by hw/format/depth (AvailablePresets.ForAccelAndFormat).
-                        // Re-rendered reactively; the Effect above clears a stale preset value.
+                        // FFmpeg 9 exposes NVENC performance preset and tune as
+                        // independent encoder options (ADR 0063).
                         {move || {
                             let hw = hardware_acceleration.get();
                             let vf = video_format.get();
                             let bd = bit_depth.get();
                             let mut items: Vec<(String, String)> =
                                 vec![(String::new(), tr(TextKey::NoneOption).to_string())];
-                            for p in presets_for_profile(hw, vf, bd) {
-                                items.push((p.to_string(), p.to_string()));
+                            for preset in presets_for_profile(hw, vf, bd) {
+                                items.push((preset.to_string(), preset.to_string()));
                             }
                             view! {
                                 <SelectField<String>
                                     label=tr(TextKey::VideoPreset)
                                     value=video_preset
+                                    items=items
+                                />
+                            }
+                        }}
+                        {move || {
+                            let hw = hardware_acceleration.get();
+                            let vf = video_format.get();
+                            let mut items: Vec<(String, String)> =
+                                vec![(String::new(), tr(TextKey::NoneOption).to_string())];
+                            for tune in tunes_for_profile(hw, vf) {
+                                items.push((tune.to_string(), tune.to_string()));
+                            }
+                            view! {
+                                <SelectField<String>
+                                    label=tr(TextKey::VideoTune)
+                                    value=video_tune
                                     items=items
                                 />
                             }

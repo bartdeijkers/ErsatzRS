@@ -5,10 +5,10 @@ use ersatzrs_domain::HardwareAccelerationKind;
 
 use crate::runtime::FfmpegRuntimeAcquisition;
 
-/// Minimum required `FFmpeg` and `ffprobe` major version.
-pub const REQUIRED_MAJOR: u32 = 8;
+/// Supported `FFmpeg` and `ffprobe` major version.
+pub const REQUIRED_MAJOR: u32 = 9;
 /// Minimum required `FFmpeg` and `ffprobe` minor version.
-pub const REQUIRED_MINOR: u32 = 1;
+pub const REQUIRED_MINOR: u32 = 0;
 
 pub(crate) const DEFAULT_FFMPEG_PATH: &str = "ffmpeg";
 pub(crate) const DEFAULT_FFPROBE_PATH: &str = "ffprobe";
@@ -64,7 +64,7 @@ const REQUIRED_CONFIGURATION_FLAGS: &[&str] = &[
 #[derive(thiserror::Error, Debug)]
 pub enum FfmpegCheckError {
     /// A required binary could not be spawned.
-    #[error("{tool} not found at {path}: {error}. Please install {tool} >= {required_major}.{required_minor}.")]
+    #[error("{tool} not found at {path}: {error}. Please install {tool} major version {required_major} (at least {required_major}.{required_minor}).")]
     ToolNotFound {
         /// Binary name, such as `ffmpeg` or `ffprobe`.
         tool: &'static str,
@@ -98,7 +98,7 @@ pub enum FfmpegCheckError {
         output: String,
     },
     /// A binary is older than the required runtime floor.
-    #[error("{tool} {found} is too old. ErsatzRS requires {tool} >= {required_major}.{required_minor} for FFmpeg 8.1 drawvg support.")]
+    #[error("{tool} {found} is too old. ErsatzRS requires {tool} major version {required_major} (at least {required_major}.{required_minor}).")]
     TooOld {
         /// Binary name, such as `ffmpeg` or `ffprobe`.
         tool: &'static str,
@@ -107,6 +107,18 @@ pub enum FfmpegCheckError {
         /// Minimum required major version.
         required_major: u32,
         /// Minimum required minor version.
+        required_minor: u32,
+    },
+    /// A binary uses a newer, not-yet-verified major version.
+    #[error("{tool} {found} is unsupported. ErsatzRS requires {tool} major version {required_major} (at least {required_major}.{required_minor}).")]
+    UnsupportedMajor {
+        /// Binary name, such as `ffmpeg` or `ffprobe`.
+        tool: &'static str,
+        /// Version reported by the binary.
+        found: FfmpegVersion,
+        /// Supported major version.
+        required_major: u32,
+        /// Minimum supported minor version.
         required_minor: u32,
     },
     /// One or more required `FFmpeg` capabilities were absent.
@@ -130,6 +142,12 @@ impl FfmpegVersion {
     #[must_use]
     pub const fn satisfies(&self, req_major: u32, req_minor: u32) -> bool {
         self.major > req_major || self.major == req_major && self.minor >= req_minor
+    }
+
+    /// Returns whether this version is within the verified major-version line.
+    #[must_use]
+    pub const fn is_supported(&self, req_major: u32, req_minor: u32) -> bool {
+        self.major == req_major && self.minor >= req_minor
     }
 }
 
@@ -395,6 +413,10 @@ pub struct NvidiaEncoderCapability {
     pub pixel_formats: BTreeSet<String>,
     /// Profile option names accepted by the encoder.
     pub profiles: BTreeSet<String>,
+    /// Preset names accepted by the encoder.
+    pub presets: BTreeSet<String>,
+    /// Tune names accepted by the encoder.
+    pub tunes: BTreeSet<String>,
     /// Whether the hardware encoder accepted B-frame reference mode in a safe
     /// encode probe.
     pub supports_b_frames: bool,
@@ -412,6 +434,8 @@ impl NvidiaEncoderCapability {
             encoder: encoder.into(),
             pixel_formats,
             profiles,
+            presets: BTreeSet::new(),
+            tunes: BTreeSet::new(),
             supports_b_frames: false,
         }
     }
@@ -419,6 +443,13 @@ impl NvidiaEncoderCapability {
     #[must_use]
     pub fn with_b_frames(mut self) -> Self {
         self.supports_b_frames = true;
+        self
+    }
+
+    #[must_use]
+    pub fn with_options(mut self, presets: BTreeSet<String>, tunes: BTreeSet<String>) -> Self {
+        self.presets = presets;
+        self.tunes = tunes;
         self
     }
 
@@ -437,6 +468,22 @@ impl NvidiaEncoderCapability {
     #[must_use]
     pub fn has_profile(&self, expected: &str) -> bool {
         self.profiles
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(expected))
+    }
+
+    /// Returns whether the encoder advertises a preset.
+    #[must_use]
+    pub fn has_preset(&self, expected: &str) -> bool {
+        self.presets
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(expected))
+    }
+
+    /// Returns whether the encoder advertises a tune.
+    #[must_use]
+    pub fn has_tune(&self, expected: &str) -> bool {
+        self.tunes
             .iter()
             .any(|value| value.eq_ignore_ascii_case(expected))
     }
@@ -575,6 +622,8 @@ pub enum FfmpegRuntimeIssue {
     RequiredHwaccel { name: String },
     /// Optional hardware accelerator is missing.
     OptionalHwaccel { name: String },
+    /// A required encoder-specific option value is missing.
+    RequiredEncoderOption { encoder: String, option: String },
 }
 
 impl FfmpegRuntimeIssue {
@@ -801,12 +850,12 @@ pub fn parse_hwaccels(output: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Spawn `ffmpeg -version`, parse the version, and enforce the runtime floor.
+/// Spawn `ffmpeg -version`, parse the version, and enforce the supported line.
 ///
 /// # Errors
 ///
 /// Returns an error if `ffmpeg` cannot be spawned, prints unparsable output, or
-/// reports a version older than 8.1.
+/// reports a version outside the supported `FFmpeg` 9 major.
 pub async fn check_ffmpeg_version() -> Result<FfmpegVersion, FfmpegCheckError> {
     let config = FfmpegRuntimeCheckConfig::from_env();
     Ok(check_tool_version(
@@ -889,6 +938,28 @@ pub async fn check_ffmpeg_runtime_with_config(
 async fn run_required_smoke_transcodes(
     config: &FfmpegRuntimeCheckConfig,
 ) -> Result<(), FfmpegCheckError> {
+    run_tool(
+        "ffmpeg",
+        &config.ffmpeg_path,
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=32x32:d=0.1",
+            "-frames:v",
+            "1",
+            "-fps_mode:v",
+            "cfr",
+            "-f",
+            "null",
+            "-",
+        ],
+    )
+    .await?;
+
     if config
         .required_filters
         .iter()
@@ -968,8 +1039,18 @@ async fn check_tool_version(
         })?;
 
     let version = parse_version_for_tool(tool, first_line)?;
-    if !version.satisfies(required_major, required_minor) {
+    if version.major < required_major
+        || version.major == required_major && version.minor < required_minor
+    {
         return Err(FfmpegCheckError::TooOld {
+            tool,
+            found: version,
+            required_major,
+            required_minor,
+        });
+    }
+    if version.major > required_major {
+        return Err(FfmpegCheckError::UnsupportedMajor {
             tool,
             found: version,
             required_major,
@@ -1093,6 +1174,16 @@ async fn enrich_device_profiles(
                     }
                 })
                 .collect();
+            let cli_capabilities = probe_nvidia_encoder_capabilities(config, report).await;
+            for capability in &mut report.nvidia_encoders {
+                if let Some(cli) = cli_capabilities
+                    .iter()
+                    .find(|cli| cli.encoder_matches(&capability.encoder))
+                {
+                    capability.presets.clone_from(&cli.presets);
+                    capability.tunes.clone_from(&cli.tunes);
+                }
+            }
         } else {
             report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
         }
@@ -1443,24 +1534,34 @@ pub fn nvidia_gpu_list_summary(output: &str) -> Vec<String> {
 pub fn parse_nvidia_encoder_capability(encoder: &str, output: &str) -> NvidiaEncoderCapability {
     let mut pixel_formats = BTreeSet::new();
     let mut profiles = BTreeSet::new();
-    let mut in_profile_options = false;
+    let mut presets = BTreeSet::new();
+    let mut tunes = BTreeSet::new();
+    let mut option_values: Option<&str> = None;
 
     for line in output.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("Supported pixel formats:") {
             pixel_formats.extend(rest.split_whitespace().map(str::to_owned));
-            in_profile_options = false;
+            option_values = None;
             continue;
         }
 
         if trimmed.starts_with("-profile") {
-            in_profile_options = true;
+            option_values = Some("profile");
+            continue;
+        }
+        if trimmed.starts_with("-preset") {
+            option_values = Some("preset");
+            continue;
+        }
+        if trimmed.starts_with("-tune") {
+            option_values = Some("tune");
             continue;
         }
 
-        if in_profile_options {
-            if trimmed.starts_with('-') && !trimmed.starts_with("-profile") {
-                in_profile_options = false;
+        if let Some(option) = option_values {
+            if trimmed.starts_with('-') {
+                option_values = None;
                 continue;
             }
 
@@ -1472,12 +1573,17 @@ pub fn parse_nvidia_encoder_capability(encoder: &str, output: &str) -> NvidiaEnc
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
             {
-                profiles.insert(candidate.to_owned());
+                match option {
+                    "profile" => profiles.insert(candidate.to_owned()),
+                    "preset" => presets.insert(candidate.to_owned()),
+                    "tune" => tunes.insert(candidate.to_owned()),
+                    _ => false,
+                };
             }
         }
     }
 
-    NvidiaEncoderCapability::new(encoder, pixel_formats, profiles)
+    NvidiaEncoderCapability::new(encoder, pixel_formats, profiles).with_options(presets, tunes)
 }
 
 /// Parse native NVIDIA decoder details from CUDA device-detail text.
@@ -1960,6 +2066,25 @@ fn collect_runtime_issues(
         }
     }
 
+    for encoder in &capabilities.nvidia_encoders {
+        for preset in ["p1", "p2", "p3", "p4", "p5", "p6", "p7"] {
+            if !encoder.has_preset(preset) {
+                issues.push(FfmpegRuntimeIssue::RequiredEncoderOption {
+                    encoder: encoder.encoder.clone(),
+                    option: format!("preset={preset}"),
+                });
+            }
+        }
+        for tune in ["hq", "ll", "ull", "lossless"] {
+            if !encoder.has_tune(tune) {
+                issues.push(FfmpegRuntimeIssue::RequiredEncoderOption {
+                    encoder: encoder.encoder.clone(),
+                    option: format!("tune={tune}"),
+                });
+            }
+        }
+    }
+
     issues
 }
 
@@ -1976,7 +2101,7 @@ mod tests {
         parse_vaapi_profile_entrypoints, parse_version, preferred_default_profile_acceleration,
         videotoolbox_decoder_probe_specs, FfmpegCapabilityReport, FfmpegHardwareProbeDevice,
         FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion, HardwareAccelerationKind,
-        NvidiaDecoderCapability, VaapiProfileEntrypoint,
+        NvidiaDecoderCapability, VaapiProfileEntrypoint, REQUIRED_MAJOR, REQUIRED_MINOR,
     };
     use std::collections::BTreeSet;
 
@@ -2014,6 +2139,26 @@ mod tests {
                 patch: 1
             }
         );
+    }
+
+    #[test]
+    fn accepts_only_the_verified_ffmpeg_major_line() {
+        for minor in [0, 2] {
+            assert!(FfmpegVersion {
+                major: 9,
+                minor,
+                patch: 0,
+            }
+            .is_supported(REQUIRED_MAJOR, REQUIRED_MINOR));
+        }
+        for major in [8, 10] {
+            assert!(!FfmpegVersion {
+                major,
+                minor: 0,
+                patch: 0,
+            }
+            .is_supported(REQUIRED_MAJOR, REQUIRED_MINOR));
+        }
     }
 
     #[test]
@@ -2152,6 +2297,13 @@ h264_nvenc AVOptions:
      high            2            E..V.......
      high444p        3            E..V.......
   -preset            <int>        E..V....... Set the encoding preset
+     p1              12            E..V....... fastest
+     p7              18            E..V....... best quality
+  -tune              <int>        E..V....... Set the encoding tuning info
+     hq               1            E..V....... high quality
+     ll               2            E..V....... low latency
+     ull              3            E..V....... ultra low latency
+     lossless         4            E..V....... lossless
 ";
 
         let capability = parse_nvidia_encoder_capability("h264_nvenc", output);
@@ -2159,6 +2311,10 @@ h264_nvenc AVOptions:
         assert_eq!(capability.encoder, "h264_nvenc");
         assert!(capability.has_pixel_format("p010le"));
         assert!(capability.has_profile("high444p"));
+        assert!(capability.has_preset("p1"));
+        assert!(capability.has_preset("p7"));
+        assert!(capability.has_tune("ll"));
+        assert!(capability.has_tune("lossless"));
         assert!(!capability.has_profile("preset"));
     }
 
@@ -2417,7 +2573,7 @@ mod unix_tests {
     async fn runtime_check_reports_missing_ffprobe() {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("missing-ffprobe");
-        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &[]);
+        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "9.0", true, &[]);
         let config = test_config(ffmpeg.to_str().expect("utf-8 path"), "/missing/ffprobe");
 
         let error = check_ffmpeg_runtime_with_config(&config)
@@ -2439,7 +2595,7 @@ mod unix_tests {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("old-ffmpeg");
         let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.0", true, &[]);
-        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
+        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "9.0");
         let config = test_config(
             ffmpeg.to_str().expect("utf-8 path"),
             ffprobe.to_str().expect("utf-8 path"),
@@ -2468,7 +2624,7 @@ mod unix_tests {
     async fn runtime_check_rejects_too_old_ffprobe() {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("old-ffprobe");
-        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &[]);
+        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "9.0", true, &[]);
         let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.0");
         let config = test_config(
             ffmpeg.to_str().expect("utf-8 path"),
@@ -2498,8 +2654,8 @@ mod unix_tests {
     async fn runtime_check_rejects_missing_required_drawvg() {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("missing-drawvg");
-        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", false, &[]);
-        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
+        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "9.0", false, &[]);
+        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "9.0");
         let config = test_config(
             ffmpeg.to_str().expect("utf-8 path"),
             ffprobe.to_str().expect("utf-8 path"),
@@ -2523,8 +2679,8 @@ mod unix_tests {
     async fn runtime_check_reports_optional_gpu_missing_without_failing() {
         let _exec_guard = TOOL_EXEC_LOCK.lock().await;
         let dir = temp_test_dir("optional-gpu");
-        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "8.1", true, &["cuda"]);
-        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "8.1");
+        let ffmpeg = write_ffmpeg_script(&dir, "ffmpeg", "9.0", true, &["cuda"]);
+        let ffprobe = write_ffprobe_script(&dir, "ffprobe", "9.0");
         let mut config = test_config(
             ffmpeg.to_str().expect("utf-8 path"),
             ffprobe.to_str().expect("utf-8 path"),
@@ -2679,6 +2835,9 @@ EOF
     printf 'Hardware acceleration methods:\n{hwaccel_lines}\n'
     ;;
   "-hide_banner -loglevel error -f lavfi -i color=c=black:s=32x32:d=0.1 -vf drawvg=script='rect 4 4 16 16 fill',format=yuv420p -frames:v 1 -f null -")
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i color=c=black:s=32x32:d=0.1 -frames:v 1 -fps_mode:v cfr -f null -")
     exit 0
     ;;
   *)

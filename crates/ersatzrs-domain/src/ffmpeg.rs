@@ -99,6 +99,7 @@ pub struct FFmpegProfile {
     pub video_format: FFmpegProfileVideoFormat,
     pub video_profile: Option<String>,
     pub video_preset: Option<String>,
+    pub video_tune: Option<String>,
     pub allow_b_frames: bool,
     pub bit_depth: FFmpegProfileBitDepth,
     pub video_bitrate: i32,

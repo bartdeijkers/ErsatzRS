@@ -923,6 +923,10 @@ content_rating: PG
         assert!(!shell.contains("-map 0:a?"));
         assert!(batch.contains("-map 0:v:0? -map 0:a:0?"));
         assert!(!batch.contains("-map 0:v? -map 0:a?"));
+        assert!(!shell.contains("-vsync"));
+        assert!(!batch.contains("-vsync"));
+        assert!(shell.contains("-c copy"));
+        assert!(batch.contains("-c copy -f mpegts pipe:1"));
     }
 
     #[cfg(windows)]

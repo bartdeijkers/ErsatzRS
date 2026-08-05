@@ -557,6 +557,7 @@ pub struct DesiredVideoState {
     pub tonemap_algorithm: FFmpegProfileTonemapAlgorithm,
     pub video_profile: Option<String>,
     pub video_preset: Option<String>,
+    pub video_tune: Option<String>,
     pub video_bitrate: Option<u32>,
     pub video_buffer_size: Option<u32>,
     pub video_track_timescale: Option<u32>,
@@ -593,6 +594,7 @@ impl DesiredVideoState {
             tonemap_algorithm: FFmpegProfileTonemapAlgorithm::Hable,
             video_profile: Some("high".to_owned()),
             video_preset: Some("veryfast".to_owned()),
+            video_tune: None,
             video_bitrate: Some(8_000),
             video_buffer_size: Some(16_000),
             video_track_timescale: Some(90_000),
@@ -650,7 +652,11 @@ impl DesiredVideoState {
             bit_depth: effective_bit_depth(profile),
             tonemap_algorithm: profile.tonemap_algorithm,
             video_profile: non_empty_string(profile.video_profile.as_deref()),
-            video_preset: non_empty_string(profile.video_preset.as_deref()),
+            video_preset: normalized_video_preset(profile.video_preset.as_deref()),
+            video_tune: normalized_video_tune(
+                profile.video_preset.as_deref(),
+                profile.video_tune.as_deref(),
+            ),
             video_bitrate: positive_u32(profile.video_bitrate),
             video_buffer_size: positive_u32(profile.video_buffer_size),
             video_track_timescale: Some(90_000),
@@ -696,6 +702,7 @@ impl DesiredVideoState {
             tonemap_algorithm: profile.tonemap_algorithm,
             video_profile: None,
             video_preset: None,
+            video_tune: None,
             video_bitrate: None,
             video_buffer_size: None,
             video_track_timescale: Some(90_000),
@@ -2375,6 +2382,14 @@ fn video_encoder(
         }
     }
 
+    if acceleration == HardwareAccelerationKind::Nvenc {
+        if let Some(tune) = &desired.video_tune {
+            if !tune.trim().is_empty() {
+                extra.extend(["-tune:v".to_owned(), tune.clone()]);
+            }
+        }
+    }
+
     if acceleration == HardwareAccelerationKind::V4l2m2m
         && desired.video_format == FFmpegProfileVideoFormat::H264
     {
@@ -3144,10 +3159,29 @@ fn frame_rate_output_option(frame_rate: FrameRate) -> PipelineStep {
         [
             "-r".to_owned(),
             frame_rate.r_frame_rate(),
-            "-vsync".to_owned(),
+            "-fps_mode:v".to_owned(),
             "cfr".to_owned(),
         ],
     )
+}
+
+fn normalized_video_preset(value: Option<&str>) -> Option<String> {
+    match value.map(str::trim).filter(|value| !value.is_empty())? {
+        value if value.eq_ignore_ascii_case("llhp") => Some("p1".to_owned()),
+        value if value.eq_ignore_ascii_case("llhq") => Some("p7".to_owned()),
+        value => Some(value.to_owned()),
+    }
+}
+
+fn normalized_video_tune(legacy_preset: Option<&str>, tune: Option<&str>) -> Option<String> {
+    non_empty_string(tune).or_else(|| {
+        legacy_preset
+            .is_some_and(|value| {
+                value.trim().eq_ignore_ascii_case("llhp")
+                    || value.trim().eq_ignore_ascii_case("llhq")
+            })
+            .then(|| "ll".to_owned())
+    })
 }
 
 fn add_output_options(

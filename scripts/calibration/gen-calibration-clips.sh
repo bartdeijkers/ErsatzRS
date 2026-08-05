@@ -27,8 +27,8 @@
 # Optional SDR references write:
 #   <out>/cal_hdr10-pq_to_sdr_hable_N.mkv
 #
-# Requires FFmpeg 8.1 (drawtext/drawbox/drawgrid; libfreetype). HDR SDR
-# reference renders require zscale + tonemap. The local ~/.local/ffmpeg-8.1
+# Requires FFmpeg 9 (drawtext/drawbox/drawgrid; libfreetype). HDR SDR
+# reference renders require zscale + tonemap. The local ~/.local/ffmpeg-9.0
 # build fails silently without its lib dir on
 # LD_LIBRARY_PATH, so this script derives and exports it from the ffmpeg
 # location automatically.

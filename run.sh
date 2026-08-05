@@ -24,9 +24,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 configure_local_ffmpeg() {
-  export LD_LIBRARY_PATH="$HOME/.local/ffmpeg-8.1/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-  export ErsatzRS_FFMPEG__PATH="$HOME/.local/ffmpeg-8.1/bin/ffmpeg"
-  export ErsatzRS_FFPROBE__PATH="$HOME/.local/ffmpeg-8.1/bin/ffprobe"
+  local ffmpeg_root="$HOME/.local/ffmpeg-9.0"
+  if [[ -x "$ffmpeg_root/bin/ffmpeg" && -x "$ffmpeg_root/bin/ffprobe" ]]; then
+    export LD_LIBRARY_PATH="$ffmpeg_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export ErsatzRS_FFMPEG__PATH="$ffmpeg_root/bin/ffmpeg"
+    export ErsatzRS_FFPROBE__PATH="$ffmpeg_root/bin/ffprobe"
+  fi
 }
 
 # Opt-in sccache (caches dependency compiles on fast ext4 so config switches

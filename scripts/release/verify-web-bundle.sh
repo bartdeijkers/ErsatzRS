@@ -67,7 +67,7 @@ done
 # --- FFmpeg override so startup does not download a managed runtime in CI.
 FF_BIN="${ErsatzRS_FFMPEG__PATH:-}"
 if [[ -z "$FF_BIN" ]]; then
-  for c in "$HOME/.local/ffmpeg-8.1/bin/ffmpeg" "$(command -v ffmpeg 2>/dev/null || true)"; do
+  for c in "$HOME/.local/ffmpeg-9.0/bin/ffmpeg" "$(command -v ffmpeg 2>/dev/null || true)"; do
     [[ -n "$c" && -x "$c" ]] && { FF_BIN="$c"; break; }
   done
 fi

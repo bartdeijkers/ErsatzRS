@@ -37,7 +37,7 @@ release folder; turn it off before deleting an old folder that is still
 registered.
 
 The first startup can take longer while ErsatzRS downloads and validates the
-managed FFmpeg 8.1 runtime. On Windows, the server also copies the selected
+managed FFmpeg 9 runtime. On Windows, the server also copies the selected
 runtime files next to the executable so future launcher starts resolve the same
 pair. Use **Show Logs** to follow that work. Open <http://localhost:8409> after
 the log reports that the server is ready, or after the readiness request in the

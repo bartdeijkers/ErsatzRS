@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild FFmpeg 8.1 with NVENC/CUDA support for WSL2 + NVIDIA.
+# Rebuild FFmpeg 9.0 with NVENC/CUDA support for WSL2 + NVIDIA.
 #
 # Requires:
 #   - NVIDIA driver visible in WSL (nvidia-smi works)
@@ -7,7 +7,7 @@
 #   - nv-codec-headers (installed by this script)
 #   - libzimg development headers (apt: libzimg-dev) for the zscale filter
 #
-# The existing FFmpeg in ~/.local/ffmpeg-8.1/ was built without
+# The existing FFmpeg in ~/.local/ffmpeg-9.0/ was built without
 # --enable-nvenc / --enable-cuda-nvcc, so h264_nvenc and friends
 # are absent from `ffmpeg -encoders`. It was also built without
 # --enable-libzimg, so the `zscale` filter (required by the HDR/tonemap
@@ -16,8 +16,8 @@
 
 set -euo pipefail
 
-PREFIX="$HOME/.local/ffmpeg-8.1"
-FFMPEG_SRC_DIR="/tmp/ffmpeg-8.1-src"
+PREFIX="$HOME/.local/ffmpeg-9.0"
+FFMPEG_SRC_DIR="/tmp/ffmpeg-9.0-src"
 NV_HEADERS_DIR="/tmp/nv-codec-headers"
 CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 WSL_LIB="/usr/lib/wsl/lib"
@@ -51,11 +51,11 @@ if [[ ! -d "$NV_HEADERS_DIR" ]]; then
 fi
 (cd "$NV_HEADERS_DIR" && make PREFIX="$PREFIX" install)
 
-echo "==> Checking for FFmpeg 8.1 source..."
+echo "==> Checking for FFmpeg 9.0 source..."
 if [[ ! -d "$FFMPEG_SRC_DIR" ]]; then
-    echo "Downloading FFmpeg 8.1..."
-    curl -L "https://ffmpeg.org/releases/ffmpeg-8.1.tar.xz" | tar -xJ -C /tmp
-    mv /tmp/ffmpeg-8.1 "$FFMPEG_SRC_DIR"
+    echo "Downloading FFmpeg 9.0..."
+    curl -L "https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz" | tar -xJ -C /tmp
+    mv /tmp/ffmpeg-9.0 "$FFMPEG_SRC_DIR"
 fi
 
 echo "==> Configuring FFmpeg with NVENC + CUDA..."

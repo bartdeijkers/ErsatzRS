@@ -96,7 +96,8 @@ fn software_pipeline_single_video_mpegts_snapshot() {
     let command = pipeline.command(&request.inputs);
     let arguments = command.arguments.join(" ");
 
-    assert!(arguments.contains("-r 30000/1001 -vsync cfr"));
+    assert!(arguments.contains("-r 30000/1001 -fps_mode:v cfr"));
+    assert!(!arguments.contains("-vsync"));
     assert!(arguments.contains("-maxrate:a 192k"));
     assert!(arguments.contains("-maxrate:v 8000k"));
     insta::assert_snapshot!(arguments);
@@ -269,6 +270,38 @@ fn desired_video_state_from_profile_maps_transcode_fields_and_source_sizing() {
     assert!(desired.deinterlace);
     assert!(desired.allow_b_frames);
     assert_eq!(desired.qsv_extra_hardware_frames, 18);
+}
+
+#[test]
+fn desired_video_state_converts_legacy_nvenc_preset_for_ffmpeg_nine() {
+    let profile = FFmpegProfile {
+        hardware_acceleration: HardwareAccelerationKind::Nvenc,
+        video_format: FFmpegProfileVideoFormat::H264,
+        video_preset: Some("llhq".to_owned()),
+        video_tune: None,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source_1080p(SourceVideoCodec::H264, 1920, 1080)),
+        Some(FrameRate::DEFAULT),
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    let request = h264_request(desired);
+    let arguments = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(arguments.contains("-preset:v p7 -tune:v ll"), "{arguments}");
+    assert!(!arguments.contains("llhq"), "{arguments}");
 }
 
 #[test]
@@ -2975,7 +3008,8 @@ fn software_pipeline_uses_output_frame_rate_when_source_differs_snapshot() {
     let command = pipeline.command(&request.inputs);
     let arguments = command.arguments.join(" ");
 
-    assert!(arguments.contains("-r 60/1 -vsync cfr"));
+    assert!(arguments.contains("-r 60/1 -fps_mode:v cfr"));
+    assert!(!arguments.contains("-vsync"));
     assert!(!arguments.contains("framerate=fps=60/1"));
     insta::assert_snapshot!(arguments);
 }

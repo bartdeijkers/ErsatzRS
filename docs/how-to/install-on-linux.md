@@ -88,7 +88,7 @@ sudo systemctl status ersatzrs.service
 curl --fail http://127.0.0.1:8409/healthz
 ```
 
-The first start can take longer while the managed FFmpeg 8.1 runtime is
+The first start can take longer while the managed FFmpeg 9 runtime is
 downloaded and validated. Follow startup with:
 
 ```bash

@@ -43,6 +43,7 @@ pub struct FfmpegProfileForm {
     pub video_format: i32,
     pub video_profile: String,
     pub video_preset: String,
+    pub video_tune: String,
     pub allow_b_frames: bool,
     pub bit_depth: i32,
     pub video_bitrate: i32,
@@ -88,6 +89,7 @@ impl FfmpegProfileForm {
             video_format: 1, // H264
             video_profile: "high".to_string(),
             video_preset: String::new(),
+            video_tune: String::new(),
             allow_b_frames: false,
             bit_depth: 0, // EightBit
             video_bitrate: 2000,
@@ -128,6 +130,7 @@ fn ffmpeg_profile_form_into_admin(
         video_format: form.video_format,
         video_profile: form.video_profile,
         video_preset: form.video_preset,
+        video_tune: form.video_tune,
         allow_b_frames: form.allow_b_frames,
         bit_depth: form.bit_depth,
         video_bitrate: form.video_bitrate,
@@ -167,6 +170,7 @@ fn ffmpeg_profile_form_from_admin(
         video_format: form.video_format,
         video_profile: form.video_profile,
         video_preset: form.video_preset,
+        video_tune: form.video_tune,
         allow_b_frames: form.allow_b_frames,
         bit_depth: form.bit_depth,
         video_bitrate: form.video_bitrate,
@@ -193,21 +197,23 @@ fn ffmpeg_profile_form_from_admin(
 // Preset helpers — ports ErsatzTV's `AvailablePresets.ForAccelAndFormat`
 // ---------------------------------------------------------------------------
 
-/// Returns the valid `VideoPreset` strings for a given hardware/format/depth
-/// combination.  Mirrors `AvailablePresets.ForAccelAndFormat` exactly.
+/// Returns the valid `FFmpeg` 9 `VideoPreset` strings for a profile.
 ///
 /// - `hw`: `HardwareAccelerationKind` integer (0=None, 1=QSV, 2=NVENC, …)
 /// - `vf`: `FFmpegProfileVideoFormat` integer (1=H264, 2=HEVC, …)
 /// - `bd`: `FFmpegProfileBitDepth` integer (0=EightBit, 1=TenBit)
 pub fn presets_for_profile(hw: i32, vf: i32, bd: i32) -> Vec<&'static str> {
     match (hw, vf, bd) {
-        // NVENC: H264 8-bit uses low-latency presets; HEVC uses them for any depth.
-        // This arm must precede the H264/10-bit arm so NVENC+HEVC+10bit returns llhp/llhq.
-        (2, 1, 0) | (2, 2, _) => vec!["llhp", "llhq"],
-        // 10-bit H264 always uses libx264 veryfast (all accelerators, including NVENC).
-        // QSV and software H264/HEVC also use veryfast.
+        (2, 1 | 2 | 4, _) => vec!["p1", "p2", "p3", "p4", "p5", "p6", "p7"],
         (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
-        // AV1, MPEG-2, Copy, VAAPI, VideoToolbox, AMF, V4L2M2M, RKMPP: no presets.
+        _ => vec![],
+    }
+}
+
+/// Returns the valid `FFmpeg` 9 NVENC tune strings for a profile.
+pub fn tunes_for_profile(hw: i32, vf: i32) -> Vec<&'static str> {
+    match (hw, vf) {
+        (2, 1 | 2 | 4) => vec!["hq", "ll", "ull", "lossless"],
         _ => vec![],
     }
 }
@@ -602,6 +608,11 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
     } else {
         Some(&preset_str)
     };
+    let valid_tunes = tunes_for_profile(hw_accel, video_format);
+    let video_tune = valid_tunes
+        .contains(&form.video_tune.as_str())
+        .then_some(form.video_tune.as_str())
+        .filter(|value| !value.is_empty());
     let deinterlace: Option<i32> = Some(i32::from(form.deinterlace_video));
     let qsv_frames: Option<i32> =
         qsv_extra_hardware_frames_for_persist(hw_accel, form.qsv_extra_hardware_frames);
@@ -626,13 +637,13 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
                 "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
-                "VideoFormat", "VideoProfile", "VideoPreset", "AllowBFrames", "BitDepth",
+                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
                 "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm",
                 "AudioFormat", "AudioBitrate", "AudioBufferSize",
                 "NormalizeLoudnessMode", "TargetLoudness",
                 "AudioChannels", "AudioSampleRate",
                 "NormalizeFramerate", "NormalizeColors", "DeinterlaceVideo"
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#,
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#,
         )
         .bind(&name)
         .bind(form.thread_count)
@@ -649,6 +660,7 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
         .bind(video_format)
         .bind(video_profile)
         .bind(video_preset)
+        .bind(video_tune)
         .bind(i32::from(form.allow_b_frames))
         .bind(bit_depth)
         .bind(form.video_bitrate)
@@ -675,7 +687,7 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
                 "HardwareAcceleration" = ?, "VaapiDisplay" = ?, "VaapiDriver" = ?,
                 "VaapiDevice" = ?, "QsvExtraHardwareFrames" = ?, "ResolutionId" = ?,
                 "ScalingBehavior" = ?, "PadMode" = ?,
-                "VideoFormat" = ?, "VideoProfile" = ?, "VideoPreset" = ?,
+                "VideoFormat" = ?, "VideoProfile" = ?, "VideoPreset" = ?, "VideoTune" = ?,
                 "AllowBFrames" = ?, "BitDepth" = ?,
                 "VideoBitrate" = ?, "VideoBufferSize" = ?, "TonemapAlgorithm" = ?,
                 "AudioFormat" = ?, "AudioBitrate" = ?, "AudioBufferSize" = ?,
@@ -699,6 +711,7 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
         .bind(video_format)
         .bind(video_profile)
         .bind(video_preset)
+        .bind(video_tune)
         .bind(i32::from(form.allow_b_frames))
         .bind(bit_depth)
         .bind(form.video_bitrate)

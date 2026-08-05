@@ -76,6 +76,7 @@ pub struct FfmpegProfileAdminForm {
     pub video_format: i32,
     pub video_profile: String,
     pub video_preset: String,
+    pub video_tune: String,
     pub allow_b_frames: bool,
     pub bit_depth: i32,
     pub video_bitrate: i32,
@@ -785,9 +786,21 @@ async fn normalize_ffmpeg_profile(
         &form.video_profile,
     );
     let presets = ffmpeg_presets(resolved_hardware, resolved_video_format, form.bit_depth);
+    let normalized_preset = normalize_legacy_nvenc_preset(&form.video_preset);
     let video_preset = presets
-        .contains(&form.video_preset.as_str())
-        .then_some(form.video_preset)
+        .contains(&normalized_preset.as_str())
+        .then_some(normalized_preset)
+        .filter(|value| !value.is_empty());
+    let tunes = ffmpeg_tunes(resolved_hardware, resolved_video_format);
+    let legacy_tune = legacy_nvenc_tune(&form.video_preset);
+    let requested_tune = if form.video_tune.trim().is_empty() {
+        legacy_tune.unwrap_or_default()
+    } else {
+        form.video_tune.trim()
+    };
+    let video_tune = tunes
+        .contains(&requested_tune)
+        .then_some(requested_tune.to_owned())
         .filter(|value| !value.is_empty());
     let normalize_loudness_mode = parse_normalize_loudness(form.normalize_loudness_mode)?;
     let target_loudness = (normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm)
@@ -812,6 +825,7 @@ async fn normalize_ffmpeg_profile(
         video_format,
         video_profile,
         video_preset,
+        video_tune,
         allow_b_frames: form.allow_b_frames,
         bit_depth,
         video_bitrate: form.video_bitrate,
@@ -896,10 +910,29 @@ fn normalized_ffmpeg_video_profile(
 
 fn ffmpeg_presets(hw: i32, format: i32, depth: i32) -> Vec<&'static str> {
     match (hw, format, depth) {
-        (2, 1, 0) | (2, 2, _) => vec!["llhp", "llhq"],
+        (2, 1 | 2 | 4, _) => vec!["p1", "p2", "p3", "p4", "p5", "p6", "p7"],
         (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
         _ => Vec::new(),
     }
+}
+
+fn ffmpeg_tunes(hw: i32, format: i32) -> Vec<&'static str> {
+    match (hw, format) {
+        (2, 1 | 2 | 4) => vec!["hq", "ll", "ull", "lossless"],
+        _ => Vec::new(),
+    }
+}
+
+fn normalize_legacy_nvenc_preset(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "llhp" => "p1".to_owned(),
+        "llhq" => "p7".to_owned(),
+        _ => value.trim().to_owned(),
+    }
+}
+
+fn legacy_nvenc_tune(value: &str) -> Option<&'static str> {
+    matches!(value.trim().to_ascii_lowercase().as_str(), "llhp" | "llhq").then_some("ll")
 }
 
 macro_rules! parse_enum {
@@ -3934,11 +3967,28 @@ pub async fn save_ffmpeg_settings(
         command.extract_embedded_subtitles = false;
     }
 
+    let paths_remain_managed = repository
+        .get_optional_string(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED)
+        .await?
+        .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+        && repository
+            .get_optional_string(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
+            .await?
+            .is_some_and(|value| same_configured_tool_path(&value, &command.ffmpeg_path))
+        && repository
+            .get_optional_string(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
+            .await?
+            .is_some_and(|value| same_configured_tool_path(&value, &command.ffprobe_path));
+
     let mut mutations = vec![
         setting(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, command.ffmpeg_path),
         setting(
             ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
             command.ffprobe_path,
+        ),
+        setting(
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED,
+            paths_remain_managed.to_string(),
         ),
         setting(
             ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
@@ -4055,6 +4105,16 @@ fn optional_setting(key: impl Into<String>, value: Option<EntityId>) -> Settings
 
 fn bool_setting(value: bool) -> String {
     if value { "True" } else { "False" }.to_owned()
+}
+
+#[cfg(windows)]
+fn same_configured_tool_path(left: &str, right: &str) -> bool {
+    left.trim().eq_ignore_ascii_case(right.trim())
+}
+
+#[cfg(not(windows))]
+fn same_configured_tool_path(left: &str, right: &str) -> bool {
+    left.trim() == right.trim()
 }
 
 fn validate_choice(field: &'static str, value: &str, allowed: &[&str]) -> crate::Result<()> {
@@ -5461,20 +5521,20 @@ mod tests {
 
     use super::{
         add_default_collection_item, add_media_item_to_collection, create_playlist_group,
-        delete_playlist, finalize_initial_playout_build, normalize_channel_form,
-        normalize_channel_number_updates, normalize_schedule_item, request_library_scan,
-        request_playout_build, request_scheduled_library_scan, request_show_scan, save_collection,
-        save_ffmpeg_profile, save_ffmpeg_settings, save_logging_settings, save_multi_collection,
-        save_playlist, save_playout_settings, save_rerun_collection, save_smart_collection,
-        set_windows_startup, validate_channel_form, validate_channel_number_updates,
-        validate_schedule_items, validate_template_group_name, validate_template_name,
-        validate_watermark, AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem,
-        CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan,
-        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
-        RequestScanOutcome, RequestScanRejection, RequestScheduledLibraryScan,
-        RequestScheduledScanOutcome, RequestShowScan, SaveCollection, SaveFfmpegProfile,
-        SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection, SavePlaylist,
-        SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
+        normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
+        request_library_scan, request_playout_build, request_scheduled_library_scan,
+        request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
+        save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
+        save_rerun_collection, save_smart_collection, set_windows_startup, validate_channel_form,
+        validate_channel_number_updates, validate_schedule_items, validate_template_group_name,
+        validate_template_name, validate_watermark, AddMediaItemToCollection, BlockItemAdminForm,
+        ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
+        RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
+        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
+        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
+        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
+        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
         ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
@@ -6438,6 +6498,7 @@ mod tests {
             video_format: 99,
             video_profile: String::new(),
             video_preset: String::new(),
+            video_tune: String::new(),
             allow_b_frames: false,
             bit_depth: 8,
             video_bitrate: 0,
@@ -6550,6 +6611,18 @@ mod tests {
         let repository = RecordingSettingsRepository {
             values: Mutex::new(BTreeMap::from([
                 (
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH.to_owned(),
+                    "managed-ffmpeg".to_owned(),
+                ),
+                (
+                    ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH.to_owned(),
+                    "managed-ffprobe".to_owned(),
+                ),
+                (
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED.to_owned(),
+                    "true".to_owned(),
+                ),
+                (
                     ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID.to_owned(),
                     "12".to_owned(),
                 ),
@@ -6572,6 +6645,10 @@ mod tests {
             values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES),
             Some(&"False".to_owned())
         );
+        assert_eq!(
+            values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
+            Some(&"false".to_owned())
+        );
         assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID));
         assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID));
         drop(values);
@@ -6586,6 +6663,52 @@ mod tests {
                 "refresh:resolved-ffmpeg:resolved-ffprobe"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_settings_keep_unchanged_managed_paths_updateable() {
+        let repository = RecordingSettingsRepository {
+            values: Mutex::new(BTreeMap::from([
+                (
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH.to_owned(),
+                    "ffmpeg-custom".to_owned(),
+                ),
+                (
+                    ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH.to_owned(),
+                    "ffprobe-custom".to_owned(),
+                ),
+                (
+                    ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED.to_owned(),
+                    "True".to_owned(),
+                ),
+            ])),
+            ..RecordingSettingsRepository::default()
+        };
+
+        save_ffmpeg_settings(
+            ffmpeg_settings(),
+            &repository,
+            &RecordingSettingsRuntime::default(),
+        )
+        .await
+        .expect("save unchanged managed FFmpeg settings");
+
+        assert_eq!(
+            repository
+                .values
+                .lock()
+                .expect("settings values")
+                .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
+            Some(&"true".to_owned())
+        );
+    }
+
+    #[test]
+    fn legacy_nvenc_presets_split_into_ffmpeg_nine_preset_and_tune() {
+        assert_eq!(normalize_legacy_nvenc_preset("llhp"), "p1");
+        assert_eq!(legacy_nvenc_tune("llhp"), Some("ll"));
+        assert_eq!(normalize_legacy_nvenc_preset("LLHQ"), "p7");
+        assert_eq!(legacy_nvenc_tune("LLHQ"), Some("ll"));
     }
 
     #[tokio::test]

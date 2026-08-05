@@ -5,7 +5,7 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ## Project
 
-ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/legacy) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
+ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/legacy) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting modern FFmpeg features that ErsatzTV does not yet use.
 
 ErsatzRS is internationally oriented. Subtitle and alternate-audio track
 handling, selection, metadata, health reporting, and admin management are
@@ -181,8 +181,8 @@ DATABASE_URL='mysql://user:pass@127.0.0.1:3306/ersatzrs' cargo run --features my
 cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
 
 # The ignored scanner integration tests need LD_LIBRARY_PATH pointed at the
-# FFmpeg 8.1 libs, or they silently skip exercising ffprobe:
-#   LD_LIBRARY_PATH=<ffmpeg-8.1>/lib ./run.sh test -p ersatzrs-scanner --run-ignored ignored-only
+# FFmpeg 9 libs, or they silently skip exercising ffprobe:
+#   LD_LIBRARY_PATH=<ffmpeg-9>/lib ./run.sh test -p ersatzrs-scanner --run-ignored ignored-only
 
 # Dependency audit
 cargo deny check
@@ -348,8 +348,8 @@ indicator of ErsatzTV parity.
 ## Key architectural decisions (from the plan)
 
 - **UI:** Leptos (full-stack Rust, SSR + islands hydration). Start server-rendered; add interactivity only where needed.
-- **FFmpeg integration:** CLI spawn via `tokio::process::Command` - same model as ErsatzTV's `CliWrap` usage. **No libav bindings.** FFmpeg 8.1 is a hard runtime requirement (for the `drawvg` filter); detect on startup and fail fast on older versions.
-- **Graphics engine:** use FFmpeg 8.1's `drawvg` filter with SVG templates in `assets/` as the replacement for ErsatzTV's `ScriptGraphicsElement` + external renderer pipe. This is the main "why Rust rewrite" win - do not reintroduce an external graphics process.
+- **FFmpeg integration:** CLI spawn via `tokio::process::Command` - same model as ErsatzTV's `CliWrap` usage. **No libav bindings.** FFmpeg 9.x is the supported runtime line (for `drawvg` and the current output-option contract); detect on startup and reject older and unverified future major versions.
+- **Graphics engine:** use FFmpeg's `drawvg` filter with SVG templates in `assets/` as the replacement for ErsatzTV's `ScriptGraphicsElement` + external renderer pipe. This is the main "why Rust rewrite" win - do not reintroduce an external graphics process.
 - **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` (99 DbSets) and evolve from there.
 - **Web host:** `axum` + `tower` + `tokio`. Leptos mounts via `leptos_axum`.
 - **CQRS:** no MediatR equivalent - plain `async fn` handlers in `ersatzrs-app`, repository traits in `ersatzrs-core`, sqlx impls in `ersatzrs-infra`.

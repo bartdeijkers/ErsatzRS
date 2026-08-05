@@ -5,7 +5,7 @@ listed here and backed by ADRs.
 
 ## drawvg graphics instead of external renderer
 
-ErsatzRS uses FFmpeg 8.1 `drawvg` instead of recreating ErsatzTV's external
+ErsatzRS uses FFmpeg `drawvg` instead of recreating ErsatzTV's external
 graphics-renderer process. `drawvg` executes VGS scripts, not SVG documents, so
 the older SVG-template wording in implementation notes represents a remaining
 graphics follow-up rather than a packaging/runtime decision.
@@ -13,6 +13,8 @@ graphics follow-up rather than a packaging/runtime decision.
 ADR: [0005](../adr/0005-drawvg-graphics-engine.md)
 
 Follow-up ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+
+Current runtime ADR: [0063](../adr/0063-ffmpeg-9-runtime-and-profile-options.md)
 
 ## Managed first-party FFmpeg runtime
 
@@ -32,10 +34,14 @@ such as libfdk_aac.
 
 ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 
+FFmpeg 9 package-line revision:
+[0063](../adr/0063-ffmpeg-9-runtime-and-profile-options.md)
+
 ## Explicit FFmpeg and ffprobe runtime checks
 
-ErsatzRS fails startup when `ffmpeg` or `ffprobe` is missing, older than 8.1,
-or lacks required CPU/drawvg/text/codec capabilities. The admin FFmpeg profile
+ErsatzRS fails startup when `ffmpeg` or `ffprobe` is missing, not on the
+supported FFmpeg 9 major, or lacks required CPU/drawvg/text/codec and output
+option capabilities. The admin FFmpeg profile
 hardware list uses the startup capability report instead of probing
 `ffmpeg -hwaccels` per request.
 
@@ -51,6 +57,19 @@ container GPU runtime support, while VAAPI and Vulkan require `/dev/dri`
 device passthrough. The `linux/arm/v7` image is CPU-only for this slice.
 
 ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+
+Current version and option contract:
+[0063](../adr/0063-ffmpeg-9-runtime-and-profile-options.md)
+
+## FFmpeg 9 frame synchronization and NVENC profile options
+
+ErsatzTV emits the removed `-vsync` option and represents NVENC low-latency
+choices as combined preset aliases. ErsatzRS targets FFmpeg 9, emits
+`-fps_mode`, and stores NVENC preset and tune independently. Legacy `llhp` and
+`llhq` profiles are migrated and also translated at the playback boundary.
+Future FFmpeg majors require an explicit compatibility review.
+
+ADR: [0063](../adr/0063-ffmpeg-9-runtime-and-profile-options.md)
 
 ## Global subtitle language preferences
 

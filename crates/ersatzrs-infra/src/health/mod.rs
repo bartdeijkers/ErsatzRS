@@ -426,6 +426,9 @@ fn runtime_issue_name(issue: &FfmpegRuntimeIssue) -> String {
         | FfmpegRuntimeIssue::RequiredHwaccel { name }
         | FfmpegRuntimeIssue::OptionalHwaccel { name } => name.clone(),
         FfmpegRuntimeIssue::RequiredConfigurationFlag { flag } => flag.clone(),
+        FfmpegRuntimeIssue::RequiredEncoderOption { encoder, option } => {
+            format!("{encoder} {option}")
+        }
     }
 }
 

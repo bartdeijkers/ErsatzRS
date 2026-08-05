@@ -26,6 +26,16 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
         .expect("initialize MySQL database");
     let repos = make_repositories(pool.clone());
 
+    let video_tune_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FFmpegProfile'
+             AND COLUMN_NAME = 'VideoTune'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("query VideoTune column");
+    assert_eq!(video_tune_count, 1, "missing FFmpegProfile.VideoTune");
+
     for table in [
         "EpisodeMetadata",
         "MusicVideoMetadata",
@@ -93,7 +103,8 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
                "NormalizeLoudnessMode", "AudioChannels", "AudioSampleRate",
                "HardwareAcceleration", "QsvExtraHardwareFrames", "VaapiDriver",
                "TonemapAlgorithm", "AllowBFrames", "BitDepth", "NormalizeFramerate",
-               "NormalizeColors", "DeinterlaceVideo", "PadMode"
+               "NormalizeColors", "DeinterlaceVideo", "PadMode", "VideoPreset",
+               "VideoTune"
            ) VALUES (
                7001, 'mysql-test', 0, 1, 1,
                7001, 0, 1, 1,
@@ -101,7 +112,7 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
                0, 2, 48000,
                0, 0, 0,
                0, 0, 0, 0,
-               1, 0, 0
+               1, 0, 0, 'p7', 'll'
            )"#,
     )
     .execute(&pool)
@@ -137,6 +148,8 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
         .await
         .expect("read ffmpeg profile");
     assert_eq!(profile.name, "mysql-test");
+    assert_eq!(profile.video_preset.as_deref(), Some("p7"));
+    assert_eq!(profile.video_tune.as_deref(), Some("ll"));
 
     sqlx::query(r#"REPLACE INTO "MediaSource" ("Id") VALUES (7001)"#)
         .execute(&pool)

@@ -1882,6 +1882,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::VideoBufferSize => "Rozmiar bufora wideo (kBit)",
         TextKey::VideoFormat => "Format wideo",
         TextKey::VideoPreset => "Preset wideo",
+        TextKey::VideoTune => "Dostrajanie wideo",
         TextKey::VideoProfile => "Profil wideo",
         TextKey::ViewCollection => "Zobacz kolekcję",
         TextKey::ViewPlaylist => "Zobacz playlistę",

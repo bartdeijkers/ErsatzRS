@@ -274,6 +274,21 @@ async fn resolve_and_check_startup_ffmpeg_runtime(
         .get(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
         .await
         .unwrap_or_default();
+    let paths_managed = repositories
+        .config
+        .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED)
+        .await
+        .unwrap_or_default()
+        .as_deref()
+        .is_some_and(|value| value.eq_ignore_ascii_case("true"));
+    let manager = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(
+        file_system_layout::ffmpeg_runtime_folder(),
+    );
+    let legacy_managed_paths = persisted_paths_are_managed(
+        ffmpeg_config.as_deref(),
+        ffprobe_config.as_deref(),
+        &manager.managed_root,
+    );
     let ffmpeg_config = sanitize_startup_ffmpeg_config(
         &repositories.config,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
@@ -288,9 +303,11 @@ async fn resolve_and_check_startup_ffmpeg_runtime(
         "ffprobe.exe",
     )
     .await;
-    let manager = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(
-        file_system_layout::ffmpeg_runtime_folder(),
-    );
+    let (ffmpeg_config, ffprobe_config) = if paths_managed || legacy_managed_paths {
+        (None, None)
+    } else {
+        (ffmpeg_config, ffprobe_config)
+    };
     let client = ersatzrs_ffmpeg::GitHubFfmpegReleaseClient::default_repository();
     let validator = StartupFfmpegRuntimeValidator { pool: pool.clone() };
 
@@ -308,6 +325,42 @@ async fn resolve_and_check_startup_ffmpeg_runtime(
             tracing::error!(error = %error, "FFmpeg runtime acquisition failed");
             std::process::exit(1);
         }
+    }
+}
+
+fn persisted_paths_are_managed(
+    ffmpeg: Option<&str>,
+    ffprobe: Option<&str>,
+    managed_root: &Path,
+) -> bool {
+    let (Some(ffmpeg), Some(ffprobe)) = (ffmpeg, ffprobe) else {
+        return false;
+    };
+    let ffmpeg = Path::new(ffmpeg.trim());
+    let ffprobe = Path::new(ffprobe.trim());
+    if ffmpeg.starts_with(managed_root) && ffprobe.starts_with(managed_root) {
+        return true;
+    }
+
+    #[cfg(windows)]
+    {
+        let executable_dir = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(Path::to_path_buf));
+        executable_dir.is_some_and(|directory| {
+            ffmpeg.parent() == Some(directory.as_path())
+                && ffprobe.parent() == Some(directory.as_path())
+                && ffmpeg
+                    .file_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("ffmpeg.exe"))
+                && ffprobe
+                    .file_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("ffprobe.exe"))
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        false
     }
 }
 
@@ -687,6 +740,9 @@ async fn persist_managed_ffmpeg_runtime_paths_to_repo(
             &report.ffprobe.path,
         )
         .await?;
+    repository
+        .set(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED, "true")
+        .await?;
 
     Ok(())
 }
@@ -732,7 +788,7 @@ async fn finish_startup_ffmpeg_runtime(
         downloaded_update = report.acquisition.downloaded_update,
         update_available = report.acquisition.update_available,
         update_error = ?report.acquisition.update_check_error,
-        "FFmpeg 8.1+ runtime detected"
+        "FFmpeg 9 runtime detected"
     );
     for issue in report.issues.iter().filter(|issue| !issue.is_error()) {
         tracing::warn!(?issue, "FFmpeg runtime capability warning");
@@ -973,6 +1029,29 @@ mod tests {
                 .as_deref(),
             Some(r"C:\ErsatzRS\ffmpeg\current\ffprobe.exe")
         );
+        assert_eq!(
+            repo.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED)
+                .await
+                .expect("managed marker")
+                .as_deref(),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn persisted_paths_under_managed_root_are_managed() {
+        let root = Path::new("/var/lib/ersatzrs/ffmpeg");
+
+        assert!(persisted_paths_are_managed(
+            Some("/var/lib/ersatzrs/ffmpeg/current/ffmpeg"),
+            Some("/var/lib/ersatzrs/ffmpeg/current/ffprobe"),
+            root,
+        ));
+        assert!(!persisted_paths_are_managed(
+            Some("/opt/operator/ffmpeg"),
+            Some("/opt/operator/ffprobe"),
+            root,
+        ));
     }
 
     #[tokio::test]

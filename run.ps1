@@ -24,11 +24,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location -Path $PSScriptRoot
 
-# Default to a Windows-conventional FFmpeg 8.1 install if present. Users with
+# Default to a Windows-conventional FFmpeg 9.0 install if present. Users with
 # a different layout should set ErsatzRS_FFMPEG__PATH / ErsatzRS_FFPROBE__PATH
 # (or put ffmpeg on PATH) before running this script.
 function Set-LocalFfmpegOverrides {
-    $ffmpegRoot = Join-Path $HOME '.local\ffmpeg-8.1'
+    $ffmpegRoot = Join-Path $HOME '.local\ffmpeg-9.0'
     $ffmpegBin = Join-Path $ffmpegRoot 'bin\ffmpeg.exe'
     $ffprobeBin = Join-Path $ffmpegRoot 'bin\ffprobe.exe'
     if ((Test-Path $ffmpegBin) -and -not $env:ErsatzRS_FFMPEG__PATH) {

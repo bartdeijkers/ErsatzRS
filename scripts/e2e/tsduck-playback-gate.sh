@@ -49,7 +49,7 @@ FRAMES=0
 die() { printf 'tsduck-gate: %s\n' "$*" >&2; exit 2; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 
-# Local ffmpeg-8.1 fails silently without its lib dir; the server (and our
+# A local FFmpeg build can fail silently without its lib dir; the server (and our
 # frame grabs) need it. Derive it from ffmpeg on PATH.
 setup_ffmpeg_env() {
   FFMPEG_BIN="$(command -v ffmpeg || true)"

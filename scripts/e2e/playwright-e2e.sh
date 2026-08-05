@@ -20,7 +20,7 @@ SERVER_LOG="$RESULT_DIR/ersatzrs-web.log"
 log() { printf '\033[1;34m[playwright-e2e]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[playwright-e2e]\033[0m %s\n' "$*" >&2; }
 
-LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-8.1}"
+LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-9.0}"
 if [[ -x "$LOCAL_FFMPEG_DIR/bin/ffmpeg" ]]; then
   export LD_LIBRARY_PATH="$LOCAL_FFMPEG_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   export ErsatzRS_FFMPEG__PATH="$LOCAL_FFMPEG_DIR/bin/ffmpeg"

@@ -43,7 +43,7 @@ consistent with ErsatzTV where parity matters.
 | Term | Definition |
 | --- | --- |
 | EPG | Electronic Program Guide. Program metadata that describes channel schedules for clients. |
-| ErsatzRS | Rust reimplementation of ErsatzTV focused on feature parity, a simpler deployment model, and FFmpeg 8.1 capabilities. |
+| ErsatzRS | Rust reimplementation of ErsatzTV focused on feature parity, a simpler deployment model, and FFmpeg 9 capabilities. |
 | ErsatzTV | The upstream .NET project used as the behavioral reference for ErsatzRS. |
 
 ## F
