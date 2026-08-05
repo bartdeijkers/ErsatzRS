@@ -1,7 +1,7 @@
 # Add Remote Streams
 
 Use a Remote Streams library to schedule an HTTP, HTTPS, or RTSP source, or a
-local producer script that writes MPEG-TS to standard output.
+local producer script that writes a media stream to standard output.
 
 ## Create the library
 
@@ -45,9 +45,14 @@ title: Script-backed programme
 ```
 
 ErsatzRS starts the command in the definition file's directory and connects its
-standard output directly to FFmpeg as MPEG-TS. It sets `FFMPEG_BIN` and
-`FFPROBE_BIN` to the managed runtime paths. Quote paths or arguments that
-contain spaces.
+standard output directly to FFmpeg. FFmpeg detects the media container from the
+stream bytes, matching ErsatzTV; streamable MP4, WebM, and MPEG-TS output are
+supported. It sets `FFMPEG_BIN` and `FFPROBE_BIN` to the managed runtime paths.
+Quote paths or arguments that contain spaces.
+
+Write only media bytes to standard output and send progress or diagnostic text
+to standard error. The container must be readable from a non-seekable pipe;
+MPEG-TS remains the safest choice for live producers.
 
 Commands are not evaluated by a shell. Put pipelines, redirection, variable
 expansion, or other shell features inside a `.sh`, `.bat`, or `.cmd` file and
@@ -87,8 +92,8 @@ When playback fails:
 2. check **System > Health Checks** for structural errors;
 3. verify that a URL is reachable from the ErsatzRS host, or run the producer
    script as the ErsatzRS service account;
-4. confirm that script stdout is MPEG-TS and that diagnostic text goes to
-   stderr, not stdout.
+4. confirm that script stdout is a media container FFmpeg can probe from a
+   non-seekable pipe and that diagnostic text goes to stderr, not stdout.
 
 Playback logs redact full Remote Stream URLs. A scheme and host, or the producer
 executable name, remains visible so failures can still be correlated safely.

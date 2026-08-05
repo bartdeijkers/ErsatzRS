@@ -9,11 +9,12 @@ Accepted (2026-07-29)
 Implemented (2026-07-29). Remote Stream YAML definitions are scanned into the
 persisted model, URL and script sources are probed, and IPTV/HLS playback uses
 the resolved source instead of opening the YAML file. Script stdout is piped
-directly into the managed FFmpeg process. The Remote Streams browser exposes
-Add To Playlist on each card and persists ErsatzTV `CollectionType` value 70.
-HLS evaluates liveness at its transcode cursor, consumer termination cancels
-and reaps stalled producers independently of stdout, and producer diagnostics
-use a bounded rolling stderr tail.
+directly into the managed FFmpeg process, which probes the producer's container
+from its bytes as ErsatzTV does. The Remote Streams browser exposes Add To
+Playlist on each card and persists ErsatzTV `CollectionType` value 70. HLS
+evaluates liveness at its transcode cursor, consumer termination cancels and
+reaps stalled producers independently of stdout, and producer diagnostics use
+a bounded rolling stderr tail.
 
 ## Context
 
@@ -39,10 +40,12 @@ upstream controller. RTSP sources are always treated as live.
 URL sources are supplied directly to managed FFmpeg/ffprobe with bounded
 network reads and HTTP reconnect options. Script commands are tokenized without
 a shell, started in the definition directory, and receive `FFMPEG_BIN` plus
-`FFPROBE_BIN` where applicable. Their MPEG-TS stdout is connected directly to
-the consumer's stdin. Windows `.bat` and `.cmd` files use the platform command
-interpreter because they are not executable images; other commands remain
-direct child processes.
+`FFPROBE_BIN` where applicable. Their media stdout is connected directly to the
+consumer's stdin without forcing an input format, so FFmpeg and ffprobe detect
+streamable MP4, WebM, MPEG-TS, and other supported containers just as the
+upstream loopback endpoint allows. Windows `.bat` and `.cmd` files use the
+platform command interpreter because they are not executable images; other
+commands remain direct child processes.
 
 The FFmpeg process, producer process, cancellation signal, stderr drains, and
 response/HLS worker share one ownership chain. Script VOD seeking is emitted
@@ -72,6 +75,8 @@ Scripts are trusted local configuration and run with the ErsatzRS process
 account's permissions. The parser deliberately does not provide shell
 expansion, pipelines, redirection, or environment interpolation; operators who
 need those features must put them in a script file and invoke that file.
+Producer containers must be readable from a non-seekable pipe, and diagnostic
+text must remain on standard error instead of contaminating the media bytes.
 
 Per-card playlist insertion is an ErsatzRS usability extension over the pinned
 ErsatzTV Remote Stream list. Persisted playlist rows remain compatible with

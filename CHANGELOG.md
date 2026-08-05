@@ -33,6 +33,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed script-backed Remote Streams failing when a producer emitted a
+  streamable MP4, WebM, or another FFmpeg-supported container instead of
+  MPEG-TS. Playback and scanner probing now let FFmpeg detect the producer
+  container from its bytes, matching ErsatzTV while preserving MPEG-TS script
+  support.
 - Fixed intermittent Linux `ETXTBSY` failures in FFmpeg capability tests by
   serializing every test that spawns a tool while another test may be writing
   a temporary fake executable.

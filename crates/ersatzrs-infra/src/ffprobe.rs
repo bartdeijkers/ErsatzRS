@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::process::Command;
 
 use crate::remote_stream::{
-    pipe_remote_stream_producer, redacted_source_label, remote_url_input_options,
+    pipe_remote_stream_producer, redacted_source_label, remote_stream_input_file,
     spawn_remote_stream_producer, RemoteStreamProducerPipe, RemoteStreamSource,
     ResolvedRemoteStream,
 };
@@ -104,7 +104,7 @@ impl FfprobeExtractor {
         })
     }
 
-    /// Probe a persisted Remote Stream URL or MPEG-TS-producing script.
+    /// Probe a persisted Remote Stream URL or media-producing script.
     ///
     /// Script stdout is connected directly to ffprobe stdin and both
     /// processes are bounded by one timeout/lifecycle.
@@ -218,28 +218,19 @@ impl FfprobeExtractor {
         .into_iter()
         .map(str::to_owned)
         .collect::<Vec<_>>();
-        let mut producer = None;
-        match &stream.source {
-            RemoteStreamSource::Url(url) => {
-                args.extend(remote_url_input_options(url, stream.is_live));
-                args.extend(["-i".to_owned(), url.clone()]);
-            }
-            RemoteStreamSource::Script(command) => {
-                args.extend([
-                    "-f".to_owned(),
-                    "mpegts".to_owned(),
-                    "-i".to_owned(),
-                    "pipe:0".to_owned(),
-                ]);
-                producer = Some(
-                    spawn_remote_stream_producer(command, ffmpeg_path, Some(&self.ffprobe_path))
-                        .map_err(|error| FfprobeError::Spawn {
-                            path: label.to_owned(),
-                            source: std::io::Error::other(error),
-                        })?,
-                );
-            }
-        }
+        let input = remote_stream_input_file(stream);
+        args.extend(input.input_options);
+        args.extend(["-i".to_owned(), input.path]);
+        let producer = match &stream.source {
+            RemoteStreamSource::Url(_) => None,
+            RemoteStreamSource::Script(command) => Some(
+                spawn_remote_stream_producer(command, ffmpeg_path, Some(&self.ffprobe_path))
+                    .map_err(|error| FfprobeError::Spawn {
+                        path: label.to_owned(),
+                        source: std::io::Error::other(error),
+                    })?,
+            ),
+        };
         Ok((args, producer))
     }
 }

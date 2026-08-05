@@ -375,9 +375,11 @@ pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
             }
         }
         RemoteStreamSource::Script(_) => {
-            let input = InputFile::video("pipe:0")
-                .with_input_options(["-f", "mpegts"])
-                .with_seek_after_input();
+            // ErsatzTV forwards producer stdout through its internal endpoint
+            // without adding an FFmpeg input format. Keep the direct pipe
+            // equally opaque so FFmpeg can probe streamable MP4, WebM, MPEG-TS,
+            // and other supported containers from their bytes.
+            let input = InputFile::video("pipe:0").with_seek_after_input();
             if stream.is_live {
                 input.without_readrate()
             } else {
@@ -993,6 +995,28 @@ content_rating: PG
         assert!(!remote_url_input_options("https://example.test/vod", false)
             .windows(2)
             .any(|pair| pair == ["-reconnect_at_eof", "1"]));
+    }
+
+    #[test]
+    fn script_input_uses_container_autodetection() {
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Script(RemoteStreamCommand {
+                program: "producer".to_owned(),
+                args: Vec::new(),
+                working_directory: PathBuf::from("streams"),
+            }),
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            url_overrides_script: false,
+        };
+
+        let input = remote_stream_input_file(&stream);
+
+        assert_eq!(input.path, "pipe:0");
+        assert!(input.input_options.is_empty());
+        assert!(input.seek_after_input);
+        assert!(input.allow_readrate);
     }
 
     #[test]
