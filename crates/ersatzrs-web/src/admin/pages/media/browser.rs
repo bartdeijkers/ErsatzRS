@@ -2,7 +2,6 @@
 //! Ports the shell of `Pages/MovieList.razor`, `TelevisionShowList.razor`, and
 //! `ImageList.razor` (which all follow the same Card/LetterBar/MudPagination
 //! pattern in `ErsatzTV`).
-#![allow(clippy::too_many_lines, dead_code)]
 use std::collections::HashSet;
 use std::future::Future;
 
@@ -21,7 +20,13 @@ use crate::admin::ui::primitives::toast::load_failed_message;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
-stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
+// browser.module.css is shared with multi_select_browser.rs; classes unused
+// in this file's per-invocation generated constants are used there.
+stylance::import_crate_style!(
+    #[allow(dead_code)]
+    style,
+    "src/admin/pages/media/browser.module.css"
+);
 
 pub const PAGE_SIZE: u32 = 50;
 
@@ -42,6 +47,7 @@ pub type Loader = fn(
 /// Renders the shared browser shell. `loader` is typed as a boxed async fn so
 /// each page can inject its own server function (e.g. `list_movies`).
 #[component]
+#[allow(clippy::too_many_lines)]
 pub fn MediaBrowserPage<L, Fut>(
     title: TextKey,
     loader: L,
