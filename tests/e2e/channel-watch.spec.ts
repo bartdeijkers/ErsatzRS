@@ -32,13 +32,58 @@ async function setTimelineScroll(page: Page, scrollLeft: number): Promise<void> 
   }, scrollLeft);
 }
 
-async function timelineCenterMinutes(page: Page, zoomPercent: number): Promise<number> {
-  return page.locator('[role="grid"]').evaluate((element, zoom) => {
+type TimelineGeometry = {
+  scrollLeft: number;
+  clientWidth: number;
+  scrollWidth: number;
+  channelColumn: number;
+};
+
+async function timelineGeometry(page: Page): Promise<TimelineGeometry> {
+  return page.locator('[role="grid"]').evaluate((element) => {
     const timeline = element as HTMLElement;
-    const timelineViewport = Math.max(timeline.clientWidth - 352, 0);
-    const pixelsPerMinute = (6 * zoom) / 100;
-    return (timeline.scrollLeft + timelineViewport / 2) / pixelsPerMinute;
-  }, zoomPercent);
+    // The sticky channel column overlays the left edge of the timeline, so the
+    // visible programme viewport excludes it. Measure it from the DOM rather
+    // than repeating the app's CHANNEL_COLUMN_PIXELS, so a CSS change cannot
+    // silently desync this measurement from what the app scrolls by.
+    const columnHeader = timeline.querySelector('[role="columnheader"]');
+    return {
+      scrollLeft: timeline.scrollLeft,
+      clientWidth: timeline.clientWidth,
+      scrollWidth: timeline.scrollWidth,
+      channelColumn: columnHeader?.getBoundingClientRect().width ?? 0,
+    };
+  });
+}
+
+function centerMinutes(geometry: TimelineGeometry, zoomPercent: number): number {
+  const viewport = Math.max(geometry.clientWidth - geometry.channelColumn, 0);
+  const pixelsPerMinute = (6 * zoomPercent) / 100;
+  return (geometry.scrollLeft + viewport / 2) / pixelsPerMinute;
+}
+
+async function timelineCenterMinutes(page: Page, zoomPercent: number): Promise<number> {
+  return centerMinutes(await timelineGeometry(page), zoomPercent);
+}
+
+// The centre-preservation proof is only meaningful when the timeline is a real
+// scroll container. If the layout blows out (the guide sized to its own content),
+// scrollLeft is pinned at 0 and the computed centre scales exactly with zoom, so
+// the comparison passes without testing anything - while the Now/±2h controls
+// silently do nothing. Assert the precondition so that failure mode is loud.
+async function expectScrollableTimeline(page: Page): Promise<void> {
+  const geometry = await timelineGeometry(page);
+  expect(geometry.channelColumn).toBeGreaterThan(0);
+  expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+}
+
+// Proves the viewport-stepping controls actually move the timeline.
+async function expectStepScrollsTimeline(page: Page, button: string): Promise<void> {
+  const before = (await timelineGeometry(page)).scrollLeft;
+  await page.getByRole('button', { name: button, exact: true }).click();
+  await expect
+    .poll(async () => (await timelineGeometry(page)).scrollLeft)
+    .toBeGreaterThan(before);
 }
 
 function makeCalibrationClip(testInfo: TestInfo): string {
@@ -350,6 +395,7 @@ test.describe('channel preview modal and watch route', () => {
     await expect(
       page.locator('[data-epg-grid] [role="rowheader"]').first(),
     ).toContainText(channel.name);
+    await expectScrollableTimeline(page);
     await setTimelineScroll(page, 360);
     const watchCenterBefore = await timelineCenterMinutes(page, 100);
     await zoom.fill('150');
@@ -358,6 +404,7 @@ test.describe('channel preview modal and watch route', () => {
         Math.abs((await timelineCenterMinutes(page, 150)) - watchCenterBefore),
       )
       .toBeLessThan(1);
+    await expectStepScrollsTimeline(page, '+2h');
     await expect(page.getByText('Now Playing').first()).toBeVisible();
     const watchVideo = page.locator('.channel-watch-js [data-channel-preview] video');
     await expect(watchVideo).toHaveAttribute('autoplay', '');
@@ -512,6 +559,7 @@ test.describe('channel preview modal and watch route', () => {
     const timelineWidthBefore = await timeline.evaluate(
       (element) => element.getBoundingClientRect().width,
     );
+    await expectScrollableTimeline(page);
     await setTimelineScroll(page, 360);
     const centerBefore = await timelineCenterMinutes(page, 100);
     await zoom.fill('150');
@@ -530,6 +578,7 @@ test.describe('channel preview modal and watch route', () => {
     await expect
       .poll(async () => Math.abs((await timelineCenterMinutes(page, 150)) - centerBefore))
       .toBeLessThan(1);
+    await expectStepScrollsTimeline(page, '+2h');
   });
 
   test('configures and renders a one-hour delayed mirror through the admin UI', async ({

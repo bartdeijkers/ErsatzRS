@@ -130,6 +130,9 @@ changelog, and git history for evidence. The authoritative live state is always
   instead of restoring `target/` through the remote `Swatinem/rust-cache`
   round-trip every run, plus a `test_hosted` matrix cache-key fix and small
   tool-install/npm caching wins.
+- `epg-timeline-scroll-container.md` - admin UI plan behind the channel watch
+  route's programme guide never being a real scroll container, and the browser
+  assertion that silently passed because of it.
 
 ## Deferred Contract Work
 

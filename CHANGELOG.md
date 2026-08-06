@@ -51,6 +51,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed the programme guide on the channel watch route never scrolling. Its
+  section is a plain grid item, so the page's implicit `auto` column sized
+  itself to the guide's full zoomed timeline (~9700px) and left the guide's own
+  scroller as wide as its content — the **Now**, **-2h**/**-1h** and
+  **+2h**/**+4h** controls had nothing to move. The standalone EPG preview was
+  already correct and is unchanged.
+
 - Fixed FFmpeg 9 playback failures by replacing removed `-vsync` arguments with
   `-fps_mode`, translating legacy NVENC low-latency presets at the playback
   boundary, and validating the required output/NVENC options at startup. The

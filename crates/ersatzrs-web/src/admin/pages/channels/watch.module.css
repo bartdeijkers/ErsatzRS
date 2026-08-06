@@ -87,6 +87,13 @@
 
 .content {
     display: grid;
+    /* minmax(0, 1fr), not the implicit `auto` track: the programme guide section
+       is a plain grid item, so with an `auto` min track sizing function its
+       automatic minimum size resolves to the guide's content width (the full
+       zoomed timeline, ~9700px). That blew the track out and left the guide's
+       own `overflow: auto` scroller as wide as its content, so it never
+       scrolled and the Now/±2h controls had nothing to move. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 1.5rem;
     box-sizing: border-box;
     width: 100%;

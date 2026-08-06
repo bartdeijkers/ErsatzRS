@@ -34,6 +34,13 @@ mobile screens.
 '''
 
 [[debt]]
+id          = 'watch-route-programme-guide-never-scrolled'
+description = 'The channel watch route rendered the programme guide inside a plain grid item, so the implicit `auto` column on the page grid sized itself to the full zoomed timeline of the guide (~9700px) and left the `overflow: auto` scroller inside the guide as wide as its content. The timeline never scrolled and the Now, -2h/-1h and +2h/+4h viewport controls had no effect. The standalone `/epg` preview was unaffected because its guide section is a direct grid item and therefore a scroll container.'
+discovered  = '2026-08-06'
+evidence    = 'Resolved 2026-08-06: `.content` in `crates/ersatzrs-web/src/admin/pages/channels/watch.module.css` pins `grid-template-columns: minmax(0, 1fr)`, so grid items resolve an automatic minimum size of 0 and the guide scroller inherits the container width (measured `clientWidth` 1006 vs `scrollWidth` 9712, previously 9712/9712). `tests/e2e/channel-watch.spec.ts` now asserts the timeline is a real scroll container before its zoom-centre proof and that the +2h control moves `scrollLeft`, on both the watch route and `/epg`; reverting the CSS makes those assertions fail. The zoom-centre assertion had been passing vacuously because a pinned `scrollLeft` of 0 makes the computed centre scale exactly with zoom.'
+resolved    = true
+
+[[debt]]
 id          = 'mirror-channel-runtime-ignored-source-and-offset'
 description = 'Mirror fields persisted in the channel editor, but playback and guide queries selected playouts by the mirror channel id and unsigned duration decoding converted negative offsets to zero. Operators could add an independent mirror playout, producing unrelated programming.'
 discovered  = '2026-07-31'
