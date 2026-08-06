@@ -341,6 +341,15 @@ test.describe('channel preview modal and watch route', () => {
     await expect.poll(() => playlistRequests).toBeGreaterThan(modalPlaylistRequests);
     const watchStatus = page.locator('.channel-watch-js [data-preview-status]');
     await expect(watchStatus).toContainText(/transcode slots|network connection/);
+    // The guide arrives through a client-side resource and scrolls the timeline
+    // to its default position exactly once, when the first snapshot lands. The
+    // lane renders from a placeholder before then, so gate on the channel label
+    // the loaded snapshot supplies: otherwise that one-shot scroll can fall
+    // between the scroll set below and the zoom proof, moving the measured
+    // center and failing the comparison.
+    await expect(
+      page.locator('[data-epg-grid] [role="rowheader"]').first(),
+    ).toContainText(channel.name);
     await setTimelineScroll(page, 360);
     const watchCenterBefore = await timelineCenterMinutes(page, 100);
     await zoom.fill('150');

@@ -265,8 +265,14 @@ SELECT "Value" FROM "ConfigElement" WHERE "Key" = 'pages.playouts.detail_show_fi
 `)).toBe('true');
 
     await primaryRow.getByRole('button', { name: 'Troubleshoot' }).click();
-    await expect(page.locator('pre').filter({ hasText: 'primary context' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close' }).click();
+    const contextBody = page.locator('pre').filter({ hasText: 'primary context' });
+    await expect(contextBody).toBeVisible();
+    // Scope the close to the scheduling context panel. Toasts also expose a
+    // "Close" control, so an unscoped role lookup is ambiguous whenever one is
+    // on screen - the startup "FFmpeg runtime downloaded" notification fires
+    // once per browser session when the host acquired a managed runtime.
+    await contextBody.locator('..').getByRole('button', { name: 'Close' }).click();
+    await expect(contextBody).toBeHidden();
 
     await classicRow.getByRole('button', { name: 'Schedule Reset' }).click();
     const resetDialog = page.getByRole('heading', { name: 'Schedule Playout Reset' }).locator('..');

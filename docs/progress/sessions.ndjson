@@ -1,3 +1,4 @@
+{"agent":"Claude (Opus 5)","date":"2026-08-06","summary":"Rebase ffmpeg-9 runtime fix onto clippy-cleanup refactors; make browser gates immune to the startup FFmpeg runtime toast that broke CI 31069631920"}
 {"agent":"Codex","date":"2026-08-05","summary":"Implemented FFmpeg 9 runtime, profile option, playback, admin, and Beeld & Geluid compatibility under ADR 0063."}
 {"agent":"Codex","date":"2026-08-05","summary":"Stabilized the uniform-facet release browser gates with explicit detail-island readiness, updated route expectations, and settled Firefox zoom geometry."}
 {"agent":"Codex","date":"2026-08-05","summary":"Fixed uniform metadata facet review regressions across detail hydration, local-TV backfill and embedded precedence, Plex movie and episode persistence, and source-owned Plex artwork."}

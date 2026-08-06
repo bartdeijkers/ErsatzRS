@@ -32,8 +32,16 @@ async function waitForHydration(page: Page): Promise<void> {
     .toBe(true);
 }
 
+// Error surfaces are `role="alert"`, but so are toasts. Benign info/success
+// toasts are not page errors and can appear unbidden - the startup "FFmpeg
+// runtime downloaded" notification fires once per browser session whenever the
+// host acquired a managed runtime instead of using an operator override. Keep
+// failing on error/warning toasts and on any non-toast alert.
+const ERROR_SURFACE_SELECTOR =
+  '[role="alert"]:not([data-toast-id]), [role="alert"][data-toast-severity="error"], [role="alert"][data-toast-severity="warning"]';
+
 async function expectNoRuntimeErrors(page: Page, runtimeErrors: string[]): Promise<void> {
-  await expect(page.locator('[role="alert"]')).toHaveCount(0);
+  await expect(page.locator(ERROR_SURFACE_SELECTOR)).toHaveCount(0);
   expect(runtimeErrors).toEqual([]);
 }
 
