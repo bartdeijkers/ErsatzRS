@@ -1,7 +1,6 @@
 //! Playlist group/list and editor pages. Ports
 //! `$ERSATZTV_SRC/ErsatzTV/Pages/Playlists.razor` and
 //! `$ERSATZTV_SRC/ErsatzTV/Pages/PlaylistEditor.razor`.
-#![allow(clippy::too_many_lines, dead_code)]
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -719,6 +718,7 @@ fn playlist_item_editor(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn source_select(
     idx: usize,
     items: RwSignal<Vec<PlaylistItemForm>>,
