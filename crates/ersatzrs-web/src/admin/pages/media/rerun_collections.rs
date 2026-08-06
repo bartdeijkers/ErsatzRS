@@ -1,6 +1,5 @@
 //! Rerun collection list and editor. Ports `Pages/RerunCollections.razor`
 //! and `Pages/RerunCollectionEditor.razor`.
-#![allow(clippy::too_many_lines, dead_code)]
 
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};

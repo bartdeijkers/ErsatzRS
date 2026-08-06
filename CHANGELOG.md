@@ -38,6 +38,11 @@ release section when tagging a release.
   pre-success time-box outcomes in an empty state commit so later runs reduce
   the cap instead of retrying the same workload unchanged.
 
+### Removed
+
+- Removed the unused `.empty-cell` CSS rule from the rerun collections admin
+  page's module stylesheet (dead-code cleanup, no visible change).
+
 ### Fixed
 
 - Fixed the uniform metadata-facet slice so new detail-page actions hydrate,

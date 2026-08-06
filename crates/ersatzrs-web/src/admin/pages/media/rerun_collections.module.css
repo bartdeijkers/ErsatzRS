@@ -153,12 +153,6 @@ tbody tr:hover {
     background-color: var(--color-table-hover);
 }
 
-.empty-cell {
-    height: 3.25rem;
-    color: var(--color-muted);
-    text-align: center;
-}
-
 .row-actions {
     display: flex;
     align-items: center;
