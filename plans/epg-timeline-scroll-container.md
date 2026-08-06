@@ -129,7 +129,12 @@ file, record the fix there (`cargo xtask progress parity --feature <slug>`).
 
 ## Out of scope
 
-- The missed CI run on `main` (push `0e3980a..8c78db7` created no workflow run) —
-  dropped at your request; the observation is saved to memory if you want it later.
+- The missed CI runs on `main` (pushes `0e3980a..8c78db7` and `..8e17b27` created no
+  workflow run). Root cause was a GitHub Actions incident, not this repository:
+  the incident opened 2026-08-06T15:22:49Z (impact: critical) and throttled webhook
+  triggers to roughly 15%, so most pushes and pull requests did not start a workflow
+  run, on both GitHub-hosted and self-hosted runners. `workflow_dispatch` kept
+  working and was used to run CI manually. No repository change is warranted; a
+  standing CI sentinel was proposed and deliberately deferred.
 - `target/` is at 41 GiB, past the 40 GiB `cargo clean` threshold — worth doing before
   the full-suite runs, but unrelated to this work.
