@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-08-05).
+Accepted (2026-08-05; revised — see Revision history).
 
 ## Implementation
 
@@ -65,6 +65,46 @@ values case-insensitively:
 The boundary conversion protects databases that have not yet run the migration
 and imported profiles that still carry the ErsatzTV value.
 
+### Why this table follows FFmpeg, not NVIDIA
+
+Two different mappings exist for the deprecated low-latency presets, and they
+disagree. NVIDIA's own preset migration guide recommends architecture-dependent
+equivalents (for H.264 on Ampere/Turing, `LowLatencyDefault` maps to P4 and
+`LowLatencyHP` to P3). FFmpeg 8.1's `libavcodec/nvenc.c` instead resolved
+`PRESET_LOW_LATENCY_HQ` to `NV_ENC_PRESET_P7_GUID` and `PRESET_LOW_LATENCY_HP`
+to `NV_ENC_PRESET_P1_GUID`, both with `NVENC_LOWLATENCY` tuning.
+
+ErsatzRS deliberately follows **FFmpeg's** mapping. The values ErsatzRS
+migrates are the values FFmpeg 8.1 was already translating them into, so an
+administrator's existing NVENC profile keeps producing the exact stream it
+produced before the upgrade. Adopting NVIDIA's table instead would have
+silently retuned every migrated profile at the same moment the runtime changed,
+making any playback regression impossible to attribute.
+
+This equivalence is empirically verified rather than assumed — see the
+`nvenc-legacy-preset-migration-equivalence` entry in
+`docs/progress/parity/ffmpeg-command-generation.toml`.
+
+### H.264 NVENC profile default
+
+FFmpeg 9 changed the `h264_nvenc` default `profile` from `main` to `high`
+(`hevc_nvenc` is unchanged at `main`). ErsatzRS emits `-profile:v` only when the
+FFmpeg profile record carries a video profile, so an NVENC H.264 profile that
+leaves it unset inherits the encoder default and changed behavior at the
+runtime upgrade.
+
+ErsatzRS does not pin an explicit default. ErsatzTV's `EncoderH264Nvenc` applies
+the same optional emission (`foreach` over an `Option<string>` video profile), so
+ErsatzTV running on FFmpeg 9 would behave identically. This is upstream behavior
+observed at exact ErsatzTV parity, not a port gap, and pinning `main` would
+invent a divergence ahead of evidence.
+
+The residual compatibility risk — High profile can be rejected by legacy or
+constrained IPTV and HDHomeRun clients — is recorded with its evidence in the
+`ffmpeg-9-differential-review` entry in
+`docs/progress/parity/ffmpeg-command-generation.toml`, to be revisited if a
+client-compatibility report justifies pinning `main`.
+
 Managed acquisition defaults to `ErsatzRS-ffmpeg` v2 and never falls back to a
 v1 package. A persisted ownership marker distinguishes paths selected by the
 runtime manager from paths saved through the admin settings page. Managed
@@ -78,7 +118,10 @@ it never accepts FFmpeg 8.
 - FFmpeg 9 packages play existing channels without the removed `-vsync`
   option or invalid NVENC aliases.
 - Existing `llhp` and `llhq` profiles retain their intended low-latency
-  performance/quality bias after migration.
+  performance/quality bias after migration. The 2026-08-07 review proved this
+  is bit-exact, not approximate.
+- NVENC H.264 profiles with no explicit video profile now encode as High rather
+  than Main. This is an accepted, recorded behavior change, not an oversight.
 - FFmpeg 8 installations must be upgraded before ErsatzRS starts. This is an
   intentional ErsatzTV divergence; rollback to FFmpeg 8 is not supported.
 - A future FFmpeg major requires an explicit compatibility review and code
@@ -104,11 +147,34 @@ it never accepts FFmpeg 8.
 - **Add FFmpeg flags to each Remote Stream extractor.** Rejected: extractors
   own acquisition and stream copy; the shared pipeline owns transcoding and
   synchronization.
+- **Adopt NVIDIA's preset migration table.** Rejected: it disagrees with the
+  mapping FFmpeg 8.1 actually applied, so it would have retuned every migrated
+  NVENC profile during the runtime upgrade instead of preserving it.
+- **Pin `-profile:v main` for NVENC H.264 to preserve the FFmpeg 8 default.**
+  Rejected: ErsatzTV emits `-profile:v` with the same optional semantics and has
+  no such pin, so pinning would create an ErsatzTV divergence to compensate for
+  an upstream default both projects inherit. Recorded with evidence instead.
+
+## Revision history
+
+- **2026-08-07 (v2 — documentation only).** Recorded the evidence and rationale
+  behind the v1 migration table after an 8.1.2-vs-9.0 differential review:
+  the `llhp`/`llhq` mapping follows FFmpeg's internal resolution rather than
+  NVIDIA's migration guide, and is proven bit-exact. Documented the
+  `h264_nvenc` default profile change from `main` to `high` as an accepted
+  upstream behavior change observed at exact ErsatzTV parity. No code or schema
+  change.
+- **2026-08-05 (v1 — original).** Adopted FFmpeg 9.x as the supported runtime
+  line, replaced `-vsync` with `-fps_mode:v`, split NVENC preset and tune into
+  independent persisted fields with legacy `llhp`/`llhq` translation, and made
+  managed runtime paths updateable while preserving operator overrides.
 
 ## References
 
 - [FFmpeg command-line documentation](https://ffmpeg.org/ffmpeg.html)
 - [FFmpeg NVENC encoder option definitions](https://git.ffmpeg.org/gitweb/ffmpeg.git/blob/HEAD:/libavcodec/nvenc.c)
+- [FFmpeg 9.0 Changelog](https://git.ffmpeg.org/gitweb/ffmpeg.git/blob/refs/heads/release/9.0:/Changelog)
+- [NVIDIA NVENC preset migration guide](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-preset-migration-guide/index.html)
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 - [ADR 0017: Default FFmpeg profiles for multi-resolution streaming](0017-default-ffmpeg-profile-1080p60.md)

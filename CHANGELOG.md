@@ -35,7 +35,14 @@ release section when tagging a release.
   `ErsatzRS-ffmpeg` v2, rejects FFmpeg 8 and unverified future majors, and keeps
   downloaded paths updateable while preserving administrator-owned overrides.
   NVENC profiles now store and edit presets (`p1`-`p7`) separately from tunes
-  (`hq`, `ll`, `ull`, `lossless`), with automatic `llhp`/`llhq` migration.
+  (`hq`, `ll`, `ull`, `lossless`), with automatic `llhp`/`llhq` migration. The
+  migration is verified to be bit-exact: a profile that used `llhq` or `llhp`
+  before the upgrade produces pixel-identical output afterwards.
+  One upstream behavior change comes with FFmpeg 9 and is intentionally not
+  overridden: `h264_nvenc` now defaults to the **High** profile instead of
+  **Main**. This affects only NVENC H.264 profiles that leave the video profile
+  unset; set it explicitly on the FFmpeg profile if a client device requires
+  Main.
 
 - The nightly Clippy-exemption cleanup now batches individually verified fixes
   behind one push and self-tunes its batch cap from durable run trailers. Its

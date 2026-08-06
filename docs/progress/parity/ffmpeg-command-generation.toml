@@ -49,12 +49,9 @@ only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
 idempotence, seed hardware update, hardware preference selection, and AC-3
 max-delay gating.
 
-Reopened 2026-07-01: the ADR 0017 seeded default profile video bitrate targets
-need to be halved while the existing video buffer-size values remain unchanged.
-Closed 2026-07-02 (ADR 0017 v3): the fresh-database seed now writes video
-bitrates 4000, 8000, 10000, 22500, and 30000 kbit/s while keeping video buffer
-sizes at 8000, 16000, 20000, 45000, and 60000 kbit; existing databases are not
-rewritten (seed remains fresh-only and idempotent).
+Closed 2026-07-02 (ADR 0017 v3): the fresh-database seed halves the seeded video
+bitrates while keeping video buffer sizes unchanged, and existing databases are
+still not rewritten; see `default-profile-video-bitrate-halving` below.
 
 The 2026-08-05 ADR 0063 slice upgrades command generation to the exact FFmpeg
 9.x contract. Frame-rate normalization emits `-fps_mode:v cfr`, NVENC presets
@@ -62,6 +59,9 @@ and tunes are independent, legacy `llhp`/`llhq` values translate at the command
 boundary, and startup probes the required output and NVENC option domains.
 Existing FFmpeg 8.1 live-proof entries below remain historical evidence for
 their specific filter-gating behavior rather than the current runtime version.
+
+A 2026-08-07 differential review found the emitted command surface unaffected by
+the 8.1.2 to 9.0 upgrade; see `ffmpeg-9-differential-review` below.
 
 '''
 
@@ -102,4 +102,20 @@ id          = 'hdr-tonemap-calibration-live-proof'
 description = 'Resolved 2026-06-19: `scripts/e2e/hdr-tone-map-proof.sh` now live-proves the software HDR -> SDR path by generating HDR10 PQ and HLG calibration masters plus hable SDR references, booting ErsatzRS on a throwaway SQLite database, seeding each HDR master as the active channel source, capturing the live MPEG-TS output, asserting 8-bit BT.709 SDR signaling, and comparing decoded static helper-chip crops against the generated SDR references. The proof caught the previous software zscale+tonemap bug where output stayed tagged BT.2020; `tonemap_filter` now converts and tags BT.709 primaries, transfer, matrix, and range.'
 discovered  = '2026-06-18'
 evidence    = '`scripts/e2e/hdr-tone-map-proof.sh` passed on 2026-06-19: HDR10 PQ source signaling was yuv420p10le/bt2020/smpte2084, live output was yuv420p/bt709 with helper-chip psnr=38.45 and ssim=0.997898; HLG source signaling was yuv420p10le/bt2020/arib-std-b67, live output was yuv420p/bt709 with psnr=32.47 and ssim=0.993461. Focused `cargo test -p ersatzrs-ffmpeg --test pipeline_snapshots tonemap` passed after updating the software tonemap snapshots.'
+resolved    = true
+
+[[debt]]
+id          = 'nvenc-legacy-preset-migration-equivalence'
+adr         = '0063'
+description = 'Resolved 2026-08-07: the ADR 0063 legacy NVENC preset migration (`llhp` to `p1` + tune `ll`, `llhq` to `p7` + tune `ll`) is proven to reproduce FFmpeg 8.1 behavior exactly rather than approximately. Two conflicting mappings exist: the NVIDIA preset migration guide recommends architecture-dependent equivalents (H.264 on Ampere/Turing maps `LowLatencyHP` to P3 and `LowLatencyDefault` to P4), while FFmpeg 8.1 `libavcodec/nvenc.c` resolved `PRESET_LOW_LATENCY_HP` to `NV_ENC_PRESET_P1_GUID` and `PRESET_LOW_LATENCY_HQ` to `NV_ENC_PRESET_P7_GUID`, both with `NVENC_LOWLATENCY` tuning. ErsatzRS deliberately follows FFmpeg so migrated administrator profiles keep producing the stream they produced before the runtime upgrade.'
+discovered  = '2026-08-07'
+evidence    = 'Differential encode on an NVIDIA GeForce RTX 3080 Ti (driver 610.47) of one source clip through both shipped runtime payloads, holding bitrate/VBV/profile constant: `ErsatzRS-ffmpeg` v1.0.2 (`n8.1.2-20260626`) `-preset llhq` produced 6083697 bytes in 1.10 s and v2.0.0 (`n9.0-20260805`) `-preset p7 -tune ll` produced 6083696 bytes in 1.06 s; `-preset llhp` produced 6050755 bytes in 0.64 s against `-preset p1 -tune ll` at 6050754 bytes in 0.64 s. SSIM between each legacy/migrated output pair was `Y:1.000000 U:1.000000 V:1.000000 All:1.000000 (inf)`, i.e. pixel-identical. FFmpeg 9 rejects the legacy alias outright (`Unable to parse "preset" option value "llhq"`), confirming the translation is required rather than optional. Unit tests `normalize_legacy_nvenc_preset` / `legacy_nvenc_tune` in `crates/ersatzrs-app/src/commands.rs` and the SQLite/MySQL `202608051900_ffmpeg_9_profile_options.sql` migrations encode the same table.'
+resolved    = true
+
+[[debt]]
+id          = 'ffmpeg-9-differential-review'
+adr         = '0063'
+description = 'Resolved 2026-08-07: a differential review of the ADR 0063 runtime upgrade compared the two shipped first-party payloads directly, so the measured delta is upstream FFmpeg rather than build drift. The emitted command surface is unaffected. Two accepted upstream behavior notes carry forward. (1) FFmpeg 9 changed the `h264_nvenc` default `profile` from `main` to `high`; `hevc_nvenc` is unchanged at `main`. Both ErsatzRS (`video_profile_option`) and ErsatzTV (`EncoderH264Nvenc.cs`) emit `-profile:v` only when the FFmpeg profile record carries a video profile, so NVENC H.264 profiles that leave it unset now encode as High. This is upstream behavior at exact ErsatzTV parity, not a port gap, and ADR 0063 v2 accepts it rather than inventing a divergence; revisit only if a client-compatibility report justifies pinning `main`, since High profile can be rejected by legacy or constrained IPTV and HDHomeRun clients. Pipeline snapshots cannot catch it because every snapshot sets a video profile explicitly. (2) `-filter_complex_script` was removed (FFmpeg 9 replacement: `-/filter_complex <file>`). ErsatzRS never emitted it, but it was the standard fallback for long inline filtergraphs against the Windows command-line length limit, so the workaround now has a different name.'
+discovered  = '2026-08-07'
+evidence    = 'Compared `ErsatzRS-ffmpeg` v1.0.2 (`n8.1.2-20260626`, the cached managed runtime) against v2.0.0 (`n9.0-20260805`); their configure lines differ only by a dropped `--enable-libshaderc`, which proved harmless (Vulkan filters and `libplacebo` remain present with identical options, and a Vulkan `libplacebo` tonemap initialized cleanly on both). Component delta affecting ErsatzRS: zero filters removed; `transpose_cuda` and `v360_vulkan` added; `dovi_split` bitstream filter and `webp_anim` decoder/demuxer added; hwaccels unchanged. Removed fftools options are `-vsync`, `-top`, `-qphist`, `-filter_script`, `-filter_complex_script`, and `-adrift_threshold`; added are the input-side `-mastering_display` and `-content_light`. Of these only `-vsync` was ever emitted (fixed in ADR 0063 v1). All 24 filters ErsatzRS emits kept identical option sets, as did the `hls` and `mpegts` muxers. Replayed real pipelines: the MPEG-TS command produced identical output stream properties (H.264 High/yuv420p/1920x1080/30000-1001/timebase 1-90000 plus AAC LC 48000 2ch) on both, and the HLS command produced identical playlists and segment counts. `-progress pipe:1` emitted an identical key set, so progress parsing is unaffected. `drawvg` rendered a placeholder-substituted `assets/graphics/lower-third.vgs` to a byte-identical PNG (matching md5). `ffprobe -show_format -show_streams -show_chapters` JSON was identical in both key paths and values for a fixture carrying two audio tracks with language/title tags and two subtitle tracks with a forced disposition, so scanner, metadata, and subtitle/audio parity surfaces are unaffected. Removed NVENC options `-cbr`, `-spatial_aq`, and `-temporal_aq` are emitted by neither ErsatzRS nor ErsatzTV. The `h264_nvenc` default-profile change was read from encoder help on both payloads; reachability was confirmed at `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:2652` and `:2348`.'
 resolved    = true
