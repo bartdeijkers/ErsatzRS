@@ -205,6 +205,60 @@ that measurement cannot justify a change either way. The remaining three could
 not be measured at all. ADR 0064's rule is that a candidate is adopted only on a
 measured win, so the current graphs stand.
 
+## Finding 9: SDR output was leaking stale HDR static metadata
+
+Characterizing a real Dolby Vision file exposed a defect in the *existing*
+HDR-to-SDR path, unrelated to Dolby Vision itself.
+
+After tone-mapping an HDR source to BT.709, the mastering-display and
+content-light side data survived the conversion and was written onto the SDR
+output — measured identically for `libx264`, `libx265`, and `hevc_nvenc`. The
+stream tags were correct (`bt709/bt709/bt709`) while the attached metadata still
+claimed a 1000-nit BT.2020 grade, so a display would be told to expect HDR for
+pictures that are not. ADR 0064 forbids exactly this: "A pipeline must never copy
+source HDR metadata onto transformed SDR frames."
+
+The fix is the `sidedata` filter rather than encoder-specific options such as
+x264's `mastering-display=none`, because the metadata must be gone for hardware
+encoders that have no equivalent option:
+
+```
+sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,
+sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,
+sidedata=mode=delete:type=DOVI_RPU_BUFFER,
+sidedata=mode=delete:type=DOVI_METADATA
+```
+
+Verified to leave no HDR or Dolby Vision side data on the output for all three
+encoders, and applied to every SDR tone-map path (software, CUDA/libplacebo,
+VAAPI, QSV).
+
+## Finding 10: Dolby Vision profile 8.1 behaves as the policy predicts
+
+Characterized against a real 4K profile 8.1 HEVC file (a commercial recording,
+so it is not committed; the gate takes its path from
+`ERSATZRS_DOLBY_VISION_FIXTURE`).
+
+ffprobe reports, and the ErsatzRS parser reproduces exactly:
+
+```
+dv_profile 8   dv_bl_signal_compatibility_id 1   rpu_present 1
+el_present 0   bl_present 1   dv_level 6
+```
+
+Compatibility id 1 means the base layer is a conforming HDR10 signal, which the
+stream confirms: `bt2020nc / smpte2084 / bt2020` with mastering-display and
+MaxCLL/MaxFALL present. Both output contracts behave as ADR 0064 requires:
+
+| Output | Result |
+|---|---|
+| SDR (`SdrBt709`) | `bt709/bt709/bt709`, no HDR side data, no DOVI record |
+| HDR10 (`Hdr10Bt2020Pq`) | `bt2020nc/smpte2084/bt2020` with metadata kept, no DOVI record |
+
+The Dolby Vision configuration record is absent from both outputs, which is
+correct: neither output is Dolby Vision, so retaining its signalling would
+describe a stream that no longer exists.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,

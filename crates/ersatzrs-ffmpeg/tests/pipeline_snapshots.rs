@@ -4396,3 +4396,116 @@ fn a_pq_source_still_emits_no_metadata_options_even_when_it_has_them() {
     assert!(!args.contains("-mastering_display"), "got: {args}");
     assert!(!args.contains("-content_light"), "got: {args}");
 }
+
+#[test]
+fn every_sdr_tonemap_path_strips_stale_hdr_metadata() {
+    // ADR 0064: "A pipeline must never copy source HDR metadata onto
+    // transformed SDR frames." Measured against FFmpeg 9 before this was
+    // added: mastering-display and content-light side data survived the
+    // tone-map and was written onto BT.709 output by libx264, libx265, and
+    // h264_nvenc alike, telling a display to expect a 1000-nit BT.2020 grade
+    // for pictures that are neither.
+    let state = FrameState::new(FrameSize::new(1920, 1080));
+
+    for filter in [
+        tonemap_filter(&state, PixelFormat::Yuv420P, TonemapAlgorithm::Hable),
+        tonemap_cuda_filter(PixelFormat::Yuv420P, TonemapAlgorithm::Hable),
+        tonemap_vaapi_filter(TonemapAlgorithm::Hable),
+        tonemap_qsv_filter(),
+    ] {
+        assert!(
+            filter.contains("sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA"),
+            "{filter}"
+        );
+        assert!(
+            filter.contains("sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL"),
+            "{filter}"
+        );
+        // Dolby Vision metadata must go too: a tone-mapped SDR picture is not
+        // Dolby Vision either.
+        assert!(
+            filter.contains("sidedata=mode=delete:type=DOVI_RPU_BUFFER"),
+            "{filter}"
+        );
+    }
+}
+
+#[test]
+fn hdr10_output_keeps_its_metadata_and_never_strips_it() {
+    // The strip belongs to the SDR path only; an HDR10 profile must retain the
+    // metadata that makes its output meaningful.
+    let request = PipelineRequest::new(InputFile::video("/media/hdr10.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("smpte2084"), true));
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("sidedata=mode=delete"), "got: {args}");
+}
+
+#[test]
+fn an_unproven_dolby_vision_source_is_refused_before_transcoding() {
+    // ADR 0064: reject rather than produce plausible but incorrect colour.
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 5,
+        bl_signal_compatibility_id: 0,
+        rpu_present: true,
+        el_present: false,
+        bl_present: true,
+    });
+    let request = PipelineRequest::new(
+        InputFile::video("/media/dv5.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let reason =
+        ersatzrs_ffmpeg::unsupported_source_reason(&request).expect("profile 5 must be refused");
+    assert!(reason.contains("no HDR10 fallback"), "{reason}");
+}
+
+#[test]
+fn a_compatible_dolby_vision_source_is_played_from_its_base_layer() {
+    // Profile 8 declaring HDR10 base-layer compatibility, which is what a real
+    // profile 8.1 file reports.
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 8,
+        bl_signal_compatibility_id: 1,
+        rpu_present: true,
+        el_present: false,
+        bl_present: true,
+    });
+    let request = PipelineRequest::new(
+        InputFile::video("/media/dv81.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    assert_eq!(ersatzrs_ffmpeg::unsupported_source_reason(&request), None);
+}
+
+#[test]
+fn stream_copy_never_refuses_a_dolby_vision_source() {
+    // Copy hands the elementary stream to the client untouched, so ErsatzRS is
+    // not interpreting the colour and has no basis to refuse.
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 5,
+        bl_signal_compatibility_id: 0,
+        rpu_present: true,
+        el_present: false,
+        bl_present: true,
+    });
+    let desired = DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        ..DesiredVideoState::h264_1080p()
+    };
+    let request = PipelineRequest::new(InputFile::video("/media/dv5.mkv"), desired)
+        .with_source_video_stream(source);
+
+    assert_eq!(ersatzrs_ffmpeg::unsupported_source_reason(&request), None);
+}

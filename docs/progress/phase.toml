@@ -1,46 +1,38 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 8 — FFmpeg 9 media-pipeline hardening'
-current_focus = 'Phase 8A — HDR and Dolby Vision output contract'
+current_phase = 'Phase 9 — Teletext support'
+current_focus = 'Phase 9A — Teletext product contract and runtime capability'
 
 summary = '''
-Phases 0–7 are complete: the workspace, baseline FFmpeg pipeline, scheduling
+Phases 0–8 are complete: the workspace, baseline FFmpeg pipeline, scheduling
 engines, media-source scanning, IPTV/HDHomeRun endpoints, main admin UI route
-families, hardening, application-boundary extraction, stopgap closeout, and
-large-module splits are in place. Phase 8 now owns the FFmpeg 9 HDR, Dolby
-Vision, Vulkan/libplacebo, performance, and media-input hardening program.
-Phase 9 adds teletext support. The "The Box" video-jukebox extension follows
-as Phase 10.
+families, hardening, application-boundary extraction, stopgap closeout,
+large-module splits, and the FFmpeg 9 HDR/Dolby Vision/Vulkan/performance and
+media-input hardening program are in place. Phase 9 now owns teletext support.
+The "The Box" video-jukebox extension follows as Phase 10.
 '''
 
 next_steps = '''
-P8A-02 is the only required Phase 8 milestone still open, and it is BLOCKED on
-fixtures rather than on implementation. Its safe-default half is done: the Dolby
-Vision configuration record is parsed, persisted, and carried to playback; the
-profile policy plays only standards-guaranteed compatible base layers and
-rejects profile 5 and dual-layer profile 7 with health evidence; Dolby Vision
-output is not advertised. What is missing is decoded-output characterization of a
-real Dolby Vision file. No redistributable profile 5/7/8.1 fixture could be
-produced locally — libx265 needs an external RPU file that only Dolby tooling
-generates, and `dolby-vision-rpu=none` silently yields plain HDR10. Unblocking it
-needs a licensed or genuinely generated fixture; see parity debt
-`dolby-vision-playback-is-not-fixture-proven`.
+Phase 8 closed on 2026-08-07 with all seven required milestones complete:
+P8A-01, P8A-02, P8B-01, P8B-02, P8C-01, P8C-02, and P8C-03. Deferred milestone
+P8C-04, the separate decision about first-class Vulkan encoding, remains
+deferred: no multi-vendor runtime evidence was produced, so the ADR it would
+require does not exist yet.
 
-P8A-01, P8B-01, P8B-02, P8C-01, P8C-02, and P8C-03 are complete with recorded
-evidence. Their residual gaps are tracked as visible parity debt rather than
-folded into these milestones: HDR10 is uncharacterized on non-NVIDIA hardware,
-graph probes model only the NVIDIA graphs, three of the four p8b-02 benchmark
-candidates need a real GPU, seeded HDR10 metadata is not operator-editable, and
-MPEG-TS cannot carry a display matrix through a stream copy.
+Phase 9 is now the live phase and begins with P9A-01, the teletext
+product/standards ADR, which is a blocking decision before any schema, runtime
+packaging, selection, or output work. It then proves six-RID FFmpeg/libzvbi
+capability, scanner persistence, selectable delivery, localized management,
+health reporting, and runtime fixtures.
 
-Phase 9 is dependency-gated on all required Phase 8 milestones and is therefore
-NOT yet unblocked: P8A-02 must reach Complete first. It begins with the P9A-01
-teletext product/standards ADR, then proves six-RID FFmpeg/libzvbi capability,
-scanner persistence, selectable delivery, localized management, health
-reporting, and runtime fixtures. Deferred milestone P8C-04, the separate decision
-about first-class Vulkan encoding, does not block Phase 9; no multi-vendor
-evidence was produced for it, so it stays deferred.
+Phase 8 residual gaps are tracked as visible parity debt and do not block
+Phase 9: HDR10 is uncharacterized on non-NVIDIA hardware; hardware graph probes
+model only the NVIDIA graphs; three of the four P8B-02 benchmark candidates need
+a real GPU to measure; seeded HDR10 metadata is documented constants rather than
+operator-editable profile fields; Dolby Vision profiles 5 and 7 stay rejected
+until fixtures exist; Dolby Vision overlay/subtitle/seek behavior is unproven;
+and MPEG-TS cannot carry a display matrix through a stream copy.
 
 Phase 10 contains the video-jukebox extension. Its P10A-01 product and
 architecture ADR remains mandatory before schema or add-on API work and is

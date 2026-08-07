@@ -1,6 +1,5 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 364
 expression: "tonemap_cuda_filter(PixelFormat::Yuv420P, TonemapAlgorithm::Hable,)"
 ---
-libplacebo=tonemapping=hable:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=yuv420p,hwupload_cuda
+libplacebo=tonemapping=hable:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=yuv420p,sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA,hwupload_cuda

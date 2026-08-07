@@ -6,9 +6,9 @@ Accepted (2026-08-07).
 
 ## Implementation
 
-Partial — the SDR/HDR10 output contract is implemented on the software and
-NVENC paths (2026-08-07, Phase 8); Dolby Vision playback and the other hardware
-backends are not.
+Partial — the SDR/HDR10 output contract and Dolby Vision input policy are
+implemented on the software and NVENC paths (2026-08-07, Phase 8); the other
+hardware backends are not.
 
 Implemented: `FFmpegProfile` persists a validated, localized `OutputDynamicRange`
 with `SdrBt709` preserving the previous behavior exactly; HDR10 output works on
@@ -22,13 +22,22 @@ software rather than emitting SDR; and unproven Dolby Vision profiles are
 rejected with health evidence instead of played with wrong colour. Dolby Vision
 output is not advertised.
 
+Dolby Vision profile 8.1 is characterized against a real file: its HDR10
+base layer plays to both SDR and HDR10 targets with the Dolby Vision
+configuration record correctly absent from the output. That work also uncovered
+and fixed a defect in the pre-existing SDR path, where mastering-display and
+content-light metadata survived the tone-map and was written onto BT.709 frames
+— the exact "never copy source HDR metadata onto transformed SDR frames" rule
+this ADR states.
+
 Not implemented, tracked as parity debt in
 `docs/progress/parity/hdr-dolby-vision-metadata.toml` and
 `docs/progress/parity/ffmpeg-9-performance-and-support.toml`: HDR10 is
 uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M; the seeded HDR10
 metadata defaults are constants rather than operator-editable profile fields;
-and no real Dolby Vision profile 5/7/8.1 file has been played, because no
-redistributable fixture could be produced or obtained.
+Dolby Vision profiles 5 and 7 remain rejected because no fixture of either was
+available; and Dolby Vision overlay, subtitle, and seek behavior was not
+re-exercised with Dolby Vision input specifically.
 
 ## Context
 

@@ -1,6 +1,5 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 380
 expression: tonemap_qsv_filter()
 ---
-vpp_qsv=tonemap=1
+sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA,vpp_qsv=tonemap=1

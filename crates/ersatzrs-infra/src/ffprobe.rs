@@ -888,4 +888,92 @@ mod tests {
         assert_eq!(video.dolby_vision_profile, None);
         assert_eq!(video.dolby_vision_rpu_present, None);
     }
+
+    /// Real-file gate for the Dolby Vision configuration record.
+    ///
+    /// Point `ERSATZRS_DOLBY_VISION_FIXTURE` at any Dolby Vision file. The path
+    /// is supplied by the operator and never committed: `CONTRIBUTING.md`
+    /// forbids private media paths in repository content.
+    ///
+    /// Run with:
+    /// `ERSATZRS_FFMPEG=<ffmpeg> ERSATZRS_DOLBY_VISION_FIXTURE=<file> \
+    ///  ./run.sh test -p ersatzrs-infra --run-ignored ignored-only real_dolby_vision`
+    // Test-only opt-in path; the configuration layer is for the application.
+    #[allow(clippy::disallowed_methods)]
+    #[tokio::test]
+    #[ignore = "requires a real Dolby Vision file"]
+    async fn real_dolby_vision_file_is_parsed_and_classified() {
+        let (Some(ffmpeg), Some(fixture)) = (
+            std::env::var_os("ERSATZRS_FFMPEG"),
+            std::env::var_os("ERSATZRS_DOLBY_VISION_FIXTURE"),
+        ) else {
+            eprintln!("set ERSATZRS_FFMPEG and ERSATZRS_DOLBY_VISION_FIXTURE to run this gate");
+            return;
+        };
+        let ffprobe = std::path::Path::new(&ffmpeg)
+            .parent()
+            .expect("ffmpeg directory")
+            .join("ffprobe");
+        let fixture = std::path::PathBuf::from(&fixture);
+
+        let output = tokio::process::Command::new(&ffprobe)
+            .args(super::ffprobe_args(&fixture))
+            .output()
+            .await
+            .expect("run ffprobe");
+        assert!(output.status.success(), "ffprobe failed");
+
+        let probed =
+            super::parse_ffprobe_json(&fixture, &output.stdout).expect("parse ffprobe output");
+        let video = probed
+            .streams
+            .iter()
+            .find(|stream| stream.kind == ersatzrs_domain::MediaStreamKind::Video)
+            .expect("video stream");
+
+        let profile = video
+            .dolby_vision_profile
+            .expect("the fixture must actually be Dolby Vision");
+        let configuration = ersatzrs_ffmpeg::DolbyVisionConfiguration {
+            profile: u8::try_from(profile).expect("profile fits"),
+            bl_signal_compatibility_id: u8::try_from(
+                video.dolby_vision_bl_compatibility_id.unwrap_or_default(),
+            )
+            .expect("compatibility id fits"),
+            rpu_present: video.dolby_vision_rpu_present.unwrap_or_default(),
+            el_present: video.dolby_vision_el_present.unwrap_or_default(),
+            bl_present: true,
+        };
+
+        println!(
+            "profile={} compatibility_id={} rpu={} el={} -> {}",
+            configuration.profile,
+            configuration.bl_signal_compatibility_id,
+            configuration.rpu_present,
+            configuration.el_present,
+            configuration.evidence()
+        );
+
+        // The parse must produce a usable record, not silently default.
+        assert!(
+            configuration.rpu_present,
+            "a Dolby Vision stream has an RPU"
+        );
+
+        // A profile 8 stream declaring HDR10 base-layer compatibility is the
+        // one case ADR 0064 allows to play; anything else must be rejected.
+        if configuration.profile == 8 && configuration.bl_signal_compatibility_id == 1 {
+            assert!(configuration.is_playable());
+            assert!(!configuration.el_present, "profile 8 is single layer");
+            // The HDR10 base layer must carry real HDR10 signalling.
+            assert_eq!(video.color_transfer.as_deref(), Some("smpte2084"));
+            assert_eq!(video.color_primaries.as_deref(), Some("bt2020"));
+            assert!(
+                video.mastering_display.is_some(),
+                "an HDR10-compatible base layer should carry mastering display"
+            );
+        } else {
+            assert!(!configuration.is_playable(), "{}", configuration.evidence());
+        }
+    }
 }

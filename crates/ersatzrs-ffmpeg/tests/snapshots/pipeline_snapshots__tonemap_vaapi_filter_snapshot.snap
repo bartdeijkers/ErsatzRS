@@ -1,6 +1,5 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 385
 expression: "tonemap_vaapi_filter(TonemapAlgorithm::Hable)"
 ---
-hwupload=derive_device=vaapi,hwmap=derive_device=opencl,tonemap_opencl=tonemap=hable,hwmap=derive_device=vaapi:reverse=1,scale_vaapi=format=p010le
+sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA,hwupload=derive_device=vaapi,hwmap=derive_device=opencl,tonemap_opencl=tonemap=hable,hwmap=derive_device=vaapi:reverse=1,scale_vaapi=format=p010le

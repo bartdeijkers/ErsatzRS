@@ -29,6 +29,23 @@ impl TonemapAlgorithm {
     }
 }
 
+/// Drop every HDR and Dolby Vision static-metadata side data block.
+///
+/// ADR 0064: "For SDR output, strip HDR10 and Dolby Vision metadata after
+/// tonemapping. A pipeline must never copy source HDR metadata onto transformed
+/// SDR frames." Without this the metadata survives the tone-map and is written
+/// onto BT.709 frames, which measurably happened for every HDR source and every
+/// encoder tested (libx264, libx265, `h264_nvenc`) — a display would be told to
+/// expect a 1000-nit BT.2020 grade for pictures that are neither.
+///
+/// The `sidedata` filter is used rather than encoder-specific options such as
+/// x264's `mastering-display=none`, because the metadata has to be gone for
+/// every encoder, including hardware ones with no equivalent option.
+#[must_use]
+pub fn strip_hdr_metadata_filter() -> &'static str {
+    "sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA"
+}
+
 #[must_use]
 pub fn tonemap_filter(
     current: &FrameState,
@@ -36,9 +53,10 @@ pub fn tonemap_filter(
     algorithm: TonemapAlgorithm,
 ) -> String {
     let tonemap = format!(
-        "zscale=t=linear,tonemap={},zscale=p=bt709:t=bt709:m=bt709:r=tv,format={},setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709",
+        "zscale=t=linear,tonemap={},zscale=p=bt709:t=bt709:m=bt709:r=tv,format={},setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709,{}",
         algorithm.ffmpeg_name(),
-        desired_pixel_format.ffmpeg_name()
+        desired_pixel_format.ffmpeg_name(),
+        strip_hdr_metadata_filter()
     );
 
     if current.frame_data_location == FrameDataLocation::Hardware {
@@ -60,8 +78,9 @@ pub fn tonemap_cuda_filter(
     };
 
     format!(
-        "libplacebo=tonemapping={}:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format={vulkan_output_format},hwupload_cuda{cuda_format}",
-        algorithm.ffmpeg_name()
+        "libplacebo=tonemapping={}:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format={vulkan_output_format},{strip},hwupload_cuda{cuda_format}",
+        algorithm.ffmpeg_name(),
+        strip = strip_hdr_metadata_filter()
     )
 }
 
@@ -112,15 +131,16 @@ pub fn tonemap_cuda_software_fallback_filter(
 }
 
 #[must_use]
-pub fn tonemap_qsv_filter() -> &'static str {
-    "vpp_qsv=tonemap=1"
+pub fn tonemap_qsv_filter() -> String {
+    format!("{},vpp_qsv=tonemap=1", strip_hdr_metadata_filter())
 }
 
 #[must_use]
 pub fn tonemap_vaapi_filter(algorithm: TonemapAlgorithm) -> String {
     format!(
-        "hwupload=derive_device=vaapi,hwmap=derive_device=opencl,tonemap_opencl=tonemap={},hwmap=derive_device=vaapi:reverse=1,scale_vaapi=format=p010le",
-        algorithm.ffmpeg_name()
+        "{strip},hwupload=derive_device=vaapi,hwmap=derive_device=opencl,tonemap_opencl=tonemap={},hwmap=derive_device=vaapi:reverse=1,scale_vaapi=format=p010le",
+        algorithm.ffmpeg_name(),
+        strip = strip_hdr_metadata_filter()
     )
 }
 
@@ -145,7 +165,7 @@ pub fn tonemap_filter_for(
         HardwareAccelerationKind::Nvenc => {
             tonemap_cuda_software_fallback_filter(current, desired_pixel_format, algorithm)
         }
-        HardwareAccelerationKind::Qsv => tonemap_qsv_filter().to_owned(),
+        HardwareAccelerationKind::Qsv => tonemap_qsv_filter(),
         HardwareAccelerationKind::Vaapi => tonemap_vaapi_filter(algorithm),
         HardwareAccelerationKind::None
         | HardwareAccelerationKind::Amf

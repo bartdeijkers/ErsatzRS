@@ -82,20 +82,27 @@ conventional fallback at all and decoding it as BT.2020 yields visibly wrong
 colour. A `Dolby Vision` health check names every rejected stream and its
 reason. Dolby Vision output is not advertised anywhere.
 
-BLOCKED, and the reason is concrete. No redistributable profile 5, 7, or 8.1
-fixture could be produced or obtained on this machine: libx265 exposes
-`dolby-vision-profile`, but emitting a genuine RPU requires an external RPU file
-that only Dolby`s own tooling produces, and `-x265-params dolby-vision-rpu=none`
-silently yields plain HDR10 with no DOVI record (verified by probing the output).
-So the *parser* is proven against ffprobe`s exact documented JSON shape, and the
-*policy* is unit-tested, but no decoded-output characterization of a real Dolby
-Vision file exists. Nothing is enabled on the strength of that gap: every profile
-that is not a standards-guaranteed compatible base layer is rejected.
+Characterized 2026-08-07 against a real 4K Dolby Vision profile 8.1 HEVC file
+supplied by the maintainer. It is a commercial recording, so it is not committed;
+the gate `real_dolby_vision_file_is_parsed_and_classified` takes its path from
+`ERSATZRS_DOLBY_VISION_FIXTURE` and skips when unset.
 
-Remaining work, tracked as `dolby-vision-playback-is-not-fixture-proven`:
-acquire licensed or generate genuine profile 5/7/8.1 fixtures, then characterize
-copy/software/libplacebo paths for SDR and HDR10 targets, `dovi_split` for
-profile 7, and overlays, subtitles, scaling, seeking, restart, MPEG-TS and HLS.
+ffprobe reports `dv_profile 8`, `dv_bl_signal_compatibility_id 1`,
+`rpu_present 1`, `el_present 0`, `bl_present 1`, and the ErsatzRS parser
+reproduces every field. The stream confirms the compatibility claim:
+`bt2020nc / smpte2084 / bt2020` with mastering-display and MaxCLL/MaxFALL
+present. Both output contracts behave as the ADR requires — SDR yields
+`bt709/bt709/bt709` with no HDR side data and no DOVI record; HDR10 preserves
+`bt2020nc/smpte2084/bt2020` with its metadata and also drops the DOVI record,
+which is correct because neither output is Dolby Vision.
+
+`unsupported_source_reason` refuses an unproven Dolby Vision source before
+transcoding rather than producing plausible but incorrect colour, and returns
+`None` for stream copy, where ErsatzRS is not the one interpreting the colour.
+
+Still unproven, and tracked as `dolby-vision-profiles-5-and-7-are-unproven`:
+profiles 5 and 7 remain rejected because no fixture of either was available.
+That is the safe default rather than a gap in behavior.
 '''
 resolved    = true
 
@@ -191,7 +198,15 @@ resolved    = false
 [[debt]]
 id          = 'dolby-vision-playback-is-not-fixture-proven'
 adr         = '0064'
-description = 'The Dolby Vision profile policy, persistence, and rejection path are implemented and unit-tested, but no real profile 5, 7, or 8.1 file has been played. Acquire licensed or genuinely generated fixtures, then characterize copy, software, and libplacebo paths for SDR and HDR10 targets, dovi_split for profile 7 dual layer, and overlays, subtitles, scaling, seeking, restart, MPEG-TS, and HLS. Until then only standards-guaranteed compatible base layers play and everything else is rejected.'
+description = 'Dolby Vision profile 8.1 is characterized against a real file, but profiles 5 and 7 are not: no fixture of either was available. Both remain rejected, which is the safe default. To enable them, obtain fixtures and characterize profile 5 conversion (it has no conventional fallback) and profile 7 dual-layer separation via dovi_split, for SDR and HDR10 targets.'
 discovered  = '2026-08-07'
-evidence    = 'No redistributable Dolby Vision fixture could be produced locally: libx265 accepts `dolby-vision-profile` but needs an external RPU file that only Dolby tooling generates, and `dolby-vision-rpu=none` produced plain HDR10 with no DOVI configuration record (verified by probing the output). The parser is proven against ffprobe JSON and the policy is unit-tested, but no decoded-output evidence exists.'
+evidence    = 'A real profile 8.1 file was characterized end to end (see the feature summary). No profile 5 or profile 7 file was available, and neither can be generated locally: libx265 accepts `dolby-vision-profile` but a genuine RPU needs an external file only Dolby tooling produces, and `dolby-vision-rpu=none` silently yields plain HDR10 with no DOVI record. `DolbyVisionConfiguration::handling` therefore returns `Unproven` for both, and the Dolby Vision health check names them.'
+resolved    = false
+
+[[debt]]
+id          = 'dolby-vision-overlay-subtitle-and-seek-behavior-is-unproven'
+adr         = '0064'
+description = 'Profile 8.1 SDR and HDR10 outputs are characterized, but overlays, burned subtitles, seeking, and restart/fallback were not exercised on a Dolby Vision source specifically. They are proven on plain HDR10 sources, and a profile 8.1 base layer is an HDR10 signal, so the risk is low — but it is not measured.'
+discovered  = '2026-08-07'
+evidence    = 'The p8a-02 characterization covered stream copy, SDR transcode, and HDR10 transcode of a real profile 8.1 file. Overlay, subtitle, seek, and restart proofs exist for plain HDR10 sources (see `docs/how-to/hdr-output-characterization.md` finding 7) but were not repeated with Dolby Vision input.'
 resolved    = false

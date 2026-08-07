@@ -505,7 +505,7 @@ defaults are documented constants rather than operator-editable profile fields
 id         = 'p8a-02'
 phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Characterize and support Dolby Vision inputs'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'hdr-dolby-vision-metadata'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01']
@@ -517,7 +517,7 @@ overlays, subtitles, scaling, restart, MPEG-TS, and HLS are explicit and
 runtime-proven. Dolby Vision output remains unadvertised.
 '''
 evidence = '''
-Safe-default half complete 2026-08-07; fixture-gated enablement is blocked.
+Complete 2026-08-07, characterized against a real Dolby Vision file.
 
 Implemented: the ffprobe `DOVI configuration record` is parsed (field names read
 from the shipped ffprobe binary), persisted through an additive SQLite/MySQL
@@ -529,19 +529,26 @@ is unproven and the latter because it has no conventional fallback and would
 play with visibly wrong colour. A `Dolby Vision` health check names every
 rejected stream with its reason. Dolby Vision output is not advertised.
 
-BLOCKED on fixtures, concretely: no redistributable profile 5, 7, or 8.1 file
-could be produced here. libx265 exposes `dolby-vision-profile` but a genuine RPU
-needs an external file only Dolby tooling produces, and
-`dolby-vision-rpu=none` silently yields plain HDR10 with no DOVI record
-(verified by probing the output). The parser is therefore proven against
-ffprobe's exact JSON shape and the policy is unit-tested, but no decoded-output
-characterization of a real Dolby Vision file exists.
+Characterized against a real 4K profile 8.1 file supplied by the maintainer (a
+commercial recording, so not committed; the gate reads
+`ERSATZRS_DOLBY_VISION_FIXTURE`). ffprobe reports `dv_profile 8`,
+`dv_bl_signal_compatibility_id 1`, `rpu_present 1`, `el_present 0`, and the
+parser reproduces every field. SDR output yields `bt709/bt709/bt709` with no HDR
+side data and no DOVI record; HDR10 output preserves `bt2020nc/smpte2084/bt2020`
+with its metadata and also drops the DOVI record, which is correct because
+neither output is Dolby Vision.
 
-Nothing is enabled on the strength of that gap. Remaining work is tracked as
-`dolby-vision-playback-is-not-fixture-proven`: acquire licensed or genuinely
-generated fixtures, then characterize copy/software/libplacebo paths for SDR and
-HDR10, `dovi_split` for profile 7, and overlays, subtitles, scaling, seeking,
-restart, MPEG-TS, and HLS.
+This characterization exposed a defect in the pre-existing HDR-to-SDR path:
+mastering-display and content-light side data survived the tone-map and was
+written onto BT.709 output by libx264, libx265, and hevc_nvenc alike, telling a
+display to expect a 1000-nit BT.2020 grade for pictures that are neither. Fixed
+with the `sidedata` filter on every SDR tone-map path, chosen over
+encoder-specific options so hardware encoders are covered too.
+
+NOT proven, tracked as debt: profiles 5 and 7 remain rejected because no fixture
+of either was available (`dolby-vision-profiles-5-and-7-are-unproven`), and
+overlays/subtitles/seek were not re-exercised with Dolby Vision input
+specifically (`dolby-vision-overlay-subtitle-and-seek-behavior-is-unproven`).
 '''
 
 [[milestone]]

@@ -1843,6 +1843,31 @@ fn apply_hdr10_output_conversion(
     }
 }
 
+/// Why a source cannot be played, when ErsatzRS refuses rather than guessing.
+///
+/// ADR 0064 requires an unproven Dolby Vision path to fail visibly instead of
+/// producing plausible but incorrect colour, so callers surface this to
+/// troubleshooting rather than starting a transcode that would look wrong.
+#[must_use]
+pub fn unsupported_source_reason(request: &PipelineRequest) -> Option<String> {
+    let dolby_vision = request
+        .source_video_stream
+        .as_ref()
+        .and_then(|source| source.dolby_vision)?;
+
+    if dolby_vision.is_playable() {
+        return None;
+    }
+    // Stream copy hands the elementary stream to the client untouched, so
+    // ErsatzRS is not the one interpreting the colour and has no basis to
+    // refuse.
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return None;
+    }
+
+    Some(dolby_vision.evidence())
+}
+
 /// Classify the selected source video stream's transfer characteristics.
 fn source_transfer_kind(request: &PipelineRequest) -> SourceTransferKind {
     request

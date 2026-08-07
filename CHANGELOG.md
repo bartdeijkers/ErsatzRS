@@ -99,14 +99,21 @@ release section when tagging a release.
 - Removed the unused `.empty-cell` CSS rule from the rerun collections admin
   page's module stylesheet (dead-code cleanup, no visible change).
 
-- Added a Dolby Vision input policy. Sources whose base layer is a
-  standards-guaranteed HDR10 or HLG signal play from it with Dolby Vision
-  signalling removed; profile 5 and dual-layer profile 7 are rejected with a
-  health entry naming the reason, rather than played with visibly wrong colour.
-  Scanning records each source's Dolby Vision configuration. Dolby Vision output
-  is not supported.
+- Added Dolby Vision input support. Profile 8.1 sources — the common case for
+  streaming-service 4K releases — now play from their HDR10-compatible base
+  layer to both SDR and HDR10 channels, verified against a real file. Profile 5
+  and dual-layer profile 7 are rejected with a health entry naming the reason
+  rather than played with visibly wrong colour, because neither has a
+  characterized conversion. Scanning records each source's Dolby Vision
+  configuration. Dolby Vision output is not supported.
 
 ### Fixed
+
+- Fixed HDR content keeping its HDR metadata after being converted to SDR. The
+  mastering-display and MaxCLL/MaxFALL values survived tone-mapping and were
+  written onto the BT.709 output, so a display was told to expect a 1000-nit
+  HDR grade for a picture that had already been converted away from it. This
+  affected every HDR source and every encoder.
 
 - Fixed portrait and other rotated recordings being scaled as though they were
   landscape. FFmpeg rotates such sources from their display matrix before any
