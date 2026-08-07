@@ -26,13 +26,23 @@ packaging, selection, or output work. It then proves six-RID FFmpeg/libzvbi
 capability, scanner persistence, selectable delivery, localized management,
 health reporting, and runtime fixtures.
 
-Phase 8 residual gaps are tracked as visible parity debt and do not block
-Phase 9: HDR10 is uncharacterized on non-NVIDIA hardware; hardware graph probes
-model only the NVIDIA graphs; three of the four P8B-02 benchmark candidates need
-a real GPU to measure; seeded HDR10 metadata is documented constants rather than
-operator-editable profile fields; Dolby Vision profiles 5 and 7 stay rejected
-until fixtures exist; Dolby Vision overlay/subtitle/seek behavior is unproven;
-and MPEG-TS cannot carry a display matrix through a stream copy.
+Phase 8 milestone closeout remains historical, but a 2026-08-07 follow-up
+review found eleven open playback, capability-state, database-portability,
+metadata, health, and image-input defects. The canonical findings and closure
+gates are the structured debt in `ffmpeg-9-performance-and-support.toml`,
+`hdr-dolby-vision-metadata.toml`, and `ersatzrs-healthcheck.toml`.
+
+Remediate them in three passes. First close every P1: portable graph-state
+persistence; explicit positive/unproven probe evidence; CUDA-fallback demotion;
+one-shot HLS/IPTV graph fallback; and pre-spawn Dolby Vision rejection. Then
+close the P2 hardening: exact selected-device probing and identity-aware cache
+validity; stream-indexed frame metadata; Dolby Vision stripping from HDR10;
+the MySQL health query; and structural GIF/WebP animation parsing. Finally run
+the focused default/MySQL tests and FFmpeg argv snapshots, both Clippy
+configurations, `cargo xtask smoke`, the TSDuck playback gate, and the available
+real-hardware/Dolby Vision ignored gates before resolving the debt. P1 playback
+correctness should land before new Phase 9 runtime implementation; the P9A-01
+standards ADR can proceed independently because it does not touch playback.
 
 Phase 10 contains the video-jukebox extension. Its P10A-01 product and
 architecture ADR remains mandatory before schema or add-on API work and is

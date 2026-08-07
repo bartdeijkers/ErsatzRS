@@ -4,13 +4,16 @@ rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzr
 status     = 'In progress'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
-Not started. The FFmpeg 9 differential review found no additional mandatory
-command migration after ADR 0063, but it exposed several worthwhile support and
-performance slices. The recommended work is to harden the existing NVENC
-Vulkan/libplacebo HDR graph with an operation-scoped probe and learned fallback,
-then benchmark fused/native hardware HDR graphs against the ADR 0064 correctness
-oracle. Independent support work covers long filter graphs, source orientation,
-and animated WebP graphics inputs.
+In progress. The FFmpeg 9 differential review found no additional mandatory
+command migration after ADR 0063. Phase 8 added operation-scoped NVIDIA graph
+probes, persisted denials, health visibility, long-filtergraph file transport,
+source-orientation handling, and animated WebP coverage. A 2026-08-07 follow-up
+review found that the graph implementation still lacks trustworthy positive
+probe/cache state, exact playback-device probing, denial handling in command
+selection, runtime supervisor fallback, and portable persistence. The same
+review found that graphics animation detection still relies on a bounded marker
+scan instead of parsing GIF/WebP structure. Those findings are tracked as
+separate open debt below.
 
 Vulkan already exists as an internal NVENC HDR processing bridge; it is not a
 persisted hardware-acceleration kind. First-class Vulkan H.264/HEVC encoding is
@@ -265,4 +268,60 @@ adr         = '0064'
 description = 'Three of the four p8b-02 candidates could not be measured: fused libplacebo tone-map/scale and libplacebo peak detection need a real Vulkan GPU (only llvmpipe was available), native tonemap_vaapi needs a VAAPI device, and the AMF colour-conversion path needs AMD hardware. Re-run `scripts/bench/hdr-graph-bench.sh` on each and adopt only measured wins.'
 discovered  = '2026-08-07'
 evidence    = 'The harness reports device availability: cuda and vulkan available (vulkan resolving to `llvmpipe (software)`), vaapi/amf/qsv unavailable. Fused libplacebo measured 12.03s against the current path`s 3.95s on llvmpipe, which is a software-rasterizer artefact rather than a verdict on the graph.'
+resolved    = false
+
+[[debt]]
+id          = 'hardware-graph-config-upsert-is-not-cross-database'
+adr         = '0014'
+description = 'P1: Replace the SQLite-only `ON CONFLICT ... excluded` statement in `crates/ersatzrs-infra/src/hardware_graph.rs` with the repository-wide `REPLACE INTO "ConfigElement"` pattern (or an explicitly backend-specific equivalent). Closure requires SQLite and MySQL coverage for persist, overwrite, clear, startup reload, and the FFmpeg-settings save/refresh path so graph state cannot make startup or settings saves fail on a supported backend.'
+discovered  = '2026-08-07'
+evidence    = '`upsert_config` currently emits `INSERT ... ON CONFLICT("Key") DO UPDATE ... excluded`, while the shared capability, health, maintenance, and repository persistence paths use `REPLACE INTO "ConfigElement"`; MySQL 8 rejects the graph statement.'
+resolved    = false
+
+[[debt]]
+id          = 'failed-hardware-graph-probes-can-count-as-positive-evidence'
+adr         = '0014'
+description = 'P1: Replace the probe result shape with explicit `Proven`, classified `Denied`, and unclassified `Unproven` outcomes. Every non-zero, timeout, or spawn failure must be non-selectable for the current process; only classified denials may be persisted, while unclassified failures leave the cache incomplete and eligible for re-probe. Closure requires fake-FFmpeg tests for success, classified failure, unclassified failure, timeout, and spawn failure plus command-generation assertions that only `Proven` graphs are selected.'
+discovered  = '2026-08-07'
+evidence    = '`probe_hardware_graph` applies `GraphFailureKind::classify(&stderr)?`; an unclassified non-zero exit therefore returns `None`, the same value used for a successful probe, and `nvidia_vulkan_hdr_tonemap` treats absence of a denial as sufficient evidence.'
+resolved    = false
+
+[[debt]]
+id          = 'nvenc-cuda-scale-denial-does-not-demote-to-software'
+adr         = '0014'
+description = 'P1: Make NVENC acceleration selection consult the `NvencCudaScale` graph state before emitting any CUDA upload/scale/NVENC path. A denied or unproven CUDA fallback has no further hardware graph, so `effective_video_acceleration` must select software encoding. Closure requires snapshots for a proven graph, a Vulkan denial falling through to proven CUDA/NVENC, and a CUDA denial/unproven result producing no CUDA/NVENC arguments.'
+discovered  = '2026-08-07'
+evidence    = '`HardwareGraphOperation::NvencCudaScale::fallback()` correctly returns `None`, but `effective_video_acceleration` checks encoder/decode capabilities only and never consults that operation denial, so the denied graph is still generated.'
+resolved    = false
+
+[[debt]]
+id          = 'runtime-hardware-graph-failures-bypass-stream-retry'
+adr         = '0014'
+description = 'P1: Carry the selected `HardwareGraphOperation` into both the HLS segmenter and direct IPTV supervisors. On abnormal exit, classify known graph stderr, persist a device-scoped denial, rebuild exactly once through the next positively proven graph (Vulkan to CUDA/NVENC, CUDA to software), and surface the denial through existing health/troubleshooting state; arbitrary failures and a failed retry remain terminal. Closure requires supervisor-level tests for both stream families, both fallback levels, persistence/reload, the one-retry bound, and a non-classified control.'
+discovered  = '2026-08-07'
+evidence    = '`GraphFailureKind::classify` is referenced by startup probing and unit tests only. `hls_worker` retries learned decode failures, and `transport/iptv/stream.rs` retries decode/encoder-open failures, but neither path classifies or persists operation-scoped graph failures.'
+resolved    = false
+
+[[debt]]
+id          = 'vulkan-graph-probe-does-not-use-the-playback-device-chain'
+adr         = '0014'
+description = 'P2: Generate the Vulkan probe from the same selected-device initialization used by playback: initialize `cuda=nv`, derive `vulkan=vk@nv`, use the same filter device and graph operations, and key the result to that selected GPU. Keep probe and pipeline argv construction coupled so they cannot drift. Closure requires exact-argv tests comparing the shared device prefix and a multi-device/llvmpipe regression proving that a standalone default Vulkan device cannot approve or deny the NVIDIA playback graph.'
+discovered  = '2026-08-07'
+evidence    = 'Playback emits `-init_hw_device cuda=nv` followed by `-init_hw_device vulkan=vk@nv`, while `HardwareGraphOperation::NvencHdrVulkanLibplacebo::probe_arguments` initializes standalone `vulkan=vk`; the two commands may select different physical devices.'
+resolved    = false
+
+[[debt]]
+id          = 'hardware-graph-cache-conflates-completion-with-denials'
+adr         = '0014'
+description = 'P2: Persist an explicit graph-probe cache record containing completion state, positively proven operations, classified denials, FFmpeg binary identity, and selected device/driver identity. Startup may reuse it only when every identity matches and all applicable operations have terminal evidence; an all-successful empty denial list must remain a valid cache, while a copied/stale/partial record must re-probe and stay non-selectable until proven. Closure requires success-with-zero-denials, partial/unclassified failure, FFmpeg replacement-at-same-path, GPU/driver change, malformed legacy row, and settings-refresh invalidation tests.'
+discovered  = '2026-08-07'
+evidence    = '`bootstrap.rs` uses `hardware_graph_denials.is_empty()` as the probe-completion marker. All-successful probes therefore run every startup, while any denial can suppress probing even when it belongs to another device; persistence records only the FFmpeg path and denial list.'
+resolved    = false
+
+[[debt]]
+id          = 'graphics-animation-detection-does-not-parse-container-structure'
+adr         = '0003'
+description = 'P2: Replace the 4 KiB marker scan with bounded structural readers. Count GIF image descriptors while correctly skipping extension sub-blocks so multi-frame GIFs do not depend on a `NETSCAPE2.0` loop extension; walk RIFF/WebP chunks (including padding and declared sizes) or read the VP8X animation flag so metadata before `ANIM` is safe. Corrupt/truncated/oversized inputs must fail closed without unbounded allocation. Closure requires static controls, a two-frame GIF without a loop extension, a WebP with more than 4 KiB of leading metadata, misleading marker bytes, truncation cases, argv assertions, and a real FFmpeg input-open/loop smoke test.'
+discovered  = '2026-08-07'
+evidence    = '`image_file_is_animated` reads only 4,096 bytes and searches for `ANIM` or `NETSCAPE2.0`; valid animated GIFs need not carry the loop extension, and valid WebP chunk ordering can place `ANIM` beyond that prefix, causing `graphics_image` to emit the fatal image2-only `-loop 1` option.'
 resolved    = false

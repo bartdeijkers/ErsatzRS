@@ -42,12 +42,19 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
+            // Every ORDER BY column must also appear in the DISTINCT
+            // projection. MySQL 8 rejects otherwise (error 3065, "Expression
+            // ... is not in SELECT list ... incompatible with DISTINCT"), and
+            // ordering by a column that was projected away is meaningless in
+            // any case. Ordering by the projected tuple is a total order over
+            // the distinct rows, so the message stays deterministic.
             r#"SELECT DISTINCT p."Name", p."VideoFormat", p."BitDepth", p."TranscodeVideo",
                       p."HardwareAcceleration"
                FROM "Channel" c
                INNER JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
                WHERE p."OutputDynamicRange" = ?
-               ORDER BY p."Name", p."Id""#,
+               ORDER BY p."Name", p."VideoFormat", p."BitDepth", p."TranscodeVideo",
+                        p."HardwareAcceleration""#,
         )
         .bind(OUTPUT_DYNAMIC_RANGE_HDR10)
         .fetch_all(&self.pool)

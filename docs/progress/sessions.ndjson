@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-07","summary":"Recorded concrete remediation debt and acceptance gates for all 11 HDR, Dolby Vision, hardware-graph, MySQL health, and animated-image P1/P2 review findings"}
 {"agent":"Claude Opus 5","date":"2026-08-07","summary":"Phase 8 complete: characterized Dolby Vision profile 8.1 against a real file, fixed HDR metadata leaking onto tone-mapped SDR output, advanced to Phase 9"}
 {"agent":"Claude Opus 5","date":"2026-08-07","summary":"Phase 8: completed p8a-01, p8b-01, p8b-02, p8c-01, p8c-02, p8c-03 with real-hardware evidence; p8a-02 blocked on unobtainable Dolby Vision fixtures so Phase 9 stays gated"}
 {"agent":"Claude Opus 5","date":"2026-08-07","summary":"Phase 8 partial: landed the ADR 0064 SDR/HDR10 output contract (software path) and the ADR 0014 operation-scoped Vulkan/libplacebo functional graph gate with real-hardware evidence"}

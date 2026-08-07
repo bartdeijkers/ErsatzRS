@@ -1,10 +1,10 @@
 feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
-status     = 'Ported'
-adr        = []
+status     = 'In progress'
+adr        = ['0064']
 summary    = '''
-Ported: ErsatzRS now includes a dedicated `ersatzrs-healthcheck` binary that
+In progress: ErsatzRS includes a dedicated `ersatzrs-healthcheck` binary that
 probes the server readiness endpoint with a direct HTTP GET and exits `0` only
 when `/healthz` returns `200`. It defaults to
 `http://127.0.0.1:8409/healthz` for Docker, accepts `--url` or host/port/path
@@ -31,6 +31,11 @@ The Classic Playout State check reports generated Classic playouts whose
 source-keyed collection anchors, fill-group indices, or owned enumerator rows
 do not exactly match the active schedule. The scheduler audits and repairs the
 same invariant at startup and before every Continue build.
+
+A 2026-08-07 follow-up review found that the Output Dynamic Range check uses a
+`SELECT DISTINCT` ordering that MySQL 8 rejects. The health engine remains in
+progress until the same check runs successfully on both supported database
+backends.
 '''
 
 [[debt]]
@@ -39,3 +44,28 @@ description = 'The in-app Zero Duration health check warns for static images eve
 discovered  = '2026-07-01'
 evidence    = 'Resolved 2026-07-01: `ZeroDurationHealthCheck` now fetches `MediaVersion.ImageId` and ignores zero-duration image rows only when the `MediaFile.Path` has a conventional still-image extension (`jpg`, `jpeg`, `png`, `bmp`, `tif`, `tiff`, `heic`, `heif`, `ico`). Animated-capable image paths such as `gif`, `webp`, `apng`, and `avif`, unknown image paths, remote-stream placeholders, and duration-bearing video/audio media keep their prior behavior. Covered by focused `cargo test -p ersatzrs-infra zero_duration_check_ignores_static_image_versions`, `cargo test -p ersatzrs-infra zero_duration_check_warns_for_video_and_animated_image_candidates`, and `cargo test -p ersatzrs-infra zero_duration_check_ignores_remote_stream_placeholders`.'
 resolved    = true
+
+[[debt]]
+id          = 'output-dynamic-range-health-query-is-invalid-on-mysql'
+adr         = '0064'
+description = 'P2: Make the Output Dynamic Range health query portable by including the ordered profile ID in the `SELECT DISTINCT` projection (without changing row classification) or by removing that tie-breaker after proving deterministic output another way. Add backend-shared result assertions and a feature-gated MySQL integration test that seeds duplicate profile names and exercises NotApplicable, invalid, inert-copy, and hardware-demotion rows. Closure requires the focused health tests plus both default and `mysql` Clippy configurations.'
+discovered  = '2026-08-07'
+evidence    = '''
+Found 2026-08-07: `output_dynamic_range.rs` selected distinct profile fields but
+ordered by `p."Id"`, which is absent from the projection; MySQL 8 rejects that
+query on every health run.
+
+Query fixed 2026-08-08: all three affected health checks now order only by
+columns present in their `SELECT DISTINCT` projection
+(`output_dynamic_range.rs`, and the two pre-existing checks the pattern was
+copied from, `vaapi_driver.rs` and `vaapi_device.rs` — the same defect had been
+latent in both). Ordering by the projected tuple is a total order over the
+distinct rows, so health messages stay deterministic.
+
+NOT closed: no MySQL server was available on this machine (no service on 3306,
+no container runtime), so the fix is portable by construction and compiles under
+`--features mysql`, but it has not been executed against a live MySQL 8. The
+feature-gated MySQL integration test this debt asks for still needs writing and
+running.
+'''
+resolved    = false

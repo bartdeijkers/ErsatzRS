@@ -22,11 +22,13 @@ impl HealthCheck for VaapiDriverHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
+            // See the note in `output_dynamic_range.rs`: MySQL 8 rejects an
+            // ORDER BY column that is absent from a DISTINCT projection.
             r#"SELECT DISTINCT p."Name", p."VaapiDevice", p."VaapiDriver"
                FROM "Channel" c
                INNER JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
                WHERE p."HardwareAcceleration" = ?
-               ORDER BY p."Name", p."Id""#,
+               ORDER BY p."Name", p."VaapiDevice", p."VaapiDriver""#,
         )
         .bind(HW_ACCEL_VAAPI)
         .fetch_all(&self.pool)
