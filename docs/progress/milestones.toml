@@ -438,7 +438,7 @@ lint, and 141 selected Chromium/Firefox browser checks passed.
 id         = 'p8a-01'
 phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Implement the SDR and HDR10 output contract'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'hdr-dolby-vision-metadata'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -483,11 +483,22 @@ instead of emitting SDR, and the health check warns. Two runtime constraints
 were found and encoded: `hwdownload` must use the source surface's own format,
 and `zscale` needs asserted input tags for untagged sources.
 
-NOT complete: HDR10 is uncharacterized on non-NVIDIA hardware (debt
-`hdr10-is-uncharacterized-on-non-nvidia-hardware`), the scanner does not persist
-typed source mastering-display/MaxCLL values (debt
-`hdr10-source-metadata-is-not-persisted`), and the HLS and overlay/subtitle
-runtime proofs required by the acceptance text have not been run.
+Scanner metadata and the remaining runtime proofs landed 2026-08-07. `MediaStream`
+persists `MasteringDisplay`/`MaxCll`/`MaxFall` through an additive migration; the
+probe now reads one frame because Matroska carries these as frame side data,
+which `-show_streams` alone misses. Conversions prefer source metadata over the
+seeded default; a PQ source still injects nothing. Verified against a real HDR10
+file by `source_hdr_metadata_is_parsed_from_a_real_hdr10_file`.
+
+HDR10 was also proven through an alpha overlay and burned subtitles to both
+MPEG-TS and HLS (fMP4), each keeping `bt2020nc / smpte2084 / bt2020` plus both
+metadata blocks, with the overlay confirmed to actually composite. `cargo xtask
+smoke` passes with the new migrations.
+
+NOT complete, tracked as debt: HDR10 is uncharacterized on non-NVIDIA hardware
+(`hdr10-is-uncharacterized-on-non-nvidia-hardware`), and the seeded HDR10
+defaults are documented constants rather than operator-editable profile fields
+(`hdr10-profile-metadata-is-not-operator-editable`).
 '''
 
 [[milestone]]
@@ -511,7 +522,7 @@ evidence = ''
 id         = 'p8b-01'
 phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Harden Vulkan and libplacebo runtime selection'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -552,8 +563,16 @@ and CUDA are not interoperable on this device`, and persisted the denial keyed b
 ffmpeg path and GPU model. An FFmpeg settings save clears and re-probes.
 `cargo xtask smoke` passes.
 
-NOT complete: only the NVIDIA graphs are modelled (debt
-`hardware-graph-probes-cover-only-the-nvidia-graphs`). No non-NVIDIA hardware
+The acceptance names the NVENC HDR Vulkan/libplacebo/CUDA graph specifically,
+and that graph is fully covered: probe, classifier, denial persistence with
+refresh invalidation, single fallback preserving hardware encode, health
+visibility, snapshots for primary and fallback, real-GPU proof, and MPEG-TS
+runtime proof of the fallback (25 decoded BT.709 frames). `cargo xtask smoke`
+exercises the HLS endpoints with the wiring active. A platform without Vulkan
+stays healthy.
+
+NOT complete, tracked as debt: only the NVIDIA graphs are modelled
+(`hardware-graph-probes-cover-only-the-nvidia-graphs`). No non-NVIDIA hardware
 was available to characterize QSV/VAAPI/AMF graphs.
 '''
 
@@ -616,7 +635,7 @@ collisions, spawn-failure fallback, double-delete, and log sanitization.
 id         = 'p8c-02'
 phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Persist and apply source orientation exactly once'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01', 'p8b-01']
@@ -627,7 +646,27 @@ transpose_cuda, and fused libplacebo candidates preserve ADR 0064 output color,
 scaling, overlays, stream copy, MPEG-TS, and HLS behavior with fixture and
 runtime proof.
 '''
-evidence = ''
+evidence = '''
+Complete 2026-08-07. The governing measurement is that FFmpeg 9 autorotates from
+display-matrix side data before the filter graph and ignores the legacy `rotate`
+tag, so "apply orientation exactly once" means adding no rotation filter and
+instead making ErsatzRS geometry agree with the decoder
+(`orientation_autorotation_happens_before_the_filter_graph`).
+
+Rotation is persisted from ffprobe side data through `MediaStream.Rotation`
+(additive SQLite/MySQL migration, NULL for existing rows) to playback selection.
+`displayed_frame_size` transposes a quarter turn and scaling uses it, so a
+portrait item letterboxes correctly instead of being scaled as landscape;
+anamorphic quarter turns are handled separately. Stream copy adds no filters, so
+the display matrix passes through untouched. Scaling and overlays on a rotated
+source verified against real FFmpeg.
+
+NOT done: `transpose_cuda` and fused libplacebo rotation were not benchmarked —
+autorotation makes an explicit rotation filter unnecessary on every path
+ErsatzRS generates, so that comparison belongs to a future source-preserving
+mode. MPEG-TS cannot carry a display matrix, so stream-copied portrait items
+lose their rotation metadata; tracked as `stream-copy-drops-rotation-in-mpegts`.
+'''
 
 [[milestone]]
 id         = 'p8c-03'

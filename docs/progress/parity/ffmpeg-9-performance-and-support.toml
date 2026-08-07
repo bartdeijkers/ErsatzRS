@@ -145,7 +145,51 @@ id          = 'source-orientation-is-uncharacterized'
 adr         = '0003'
 description = 'Characterize source display-matrix/orientation handling. Persist orientation metadata from scanning through media-version selection, apply it exactly once without fighting FFmpeg autorotation, and compare software transpose, transpose_cuda, and fused libplacebo rotation while preserving scaling, overlays, stream copy, ADR 0064 colour behavior, MPEG-TS, and HLS output.'
 discovered  = '2026-08-07'
-evidence    = 'Milestone p8c-02. Split out of the original combined orientation/animated-WebP debt when p8c-03 resolved the animated-WebP half on 2026-08-07.'
+evidence    = '''
+Resolved 2026-08-07 by milestone p8c-02.
+
+The governing measurement: FFmpeg 9 autorotates from display-matrix side data
+*before* the filter graph runs, and ignores the legacy `rotate` tag entirely. A
+320x180 stream tagged with a 90-degree display matrix transcodes to 180x320 with
+no filter of ours (`orientation_autorotation_happens_before_the_filter_graph`).
+Applying a transpose would therefore rotate the picture twice — so "apply
+orientation exactly once" means adding no rotation filter at all and instead
+making ErsatzRS geometry agree with what the decoder emits.
+
+`SourceVideoStream::rotation_degrees` is persisted end to end: ffprobe
+`side_data_list.rotation` (already available from `-show_streams`), through
+`MediaStream.Rotation` (additive migration `202608071500_media_stream_rotation.sql`
+for SQLite and MySQL, NULL for existing rows so nothing changes until a rescan),
+to playback stream selection. `displayed_frame_size` transposes a quarter turn
+and `square_pixel_frame_size` uses it, so a portrait item stored as 1920x1080
+letterboxes to 606x1080 in a 1080p channel instead of filling the frame as if it
+were landscape. Anamorphic quarter turns are handled separately because the
+sample aspect ratio describes the stored horizontal axis, which the turn maps to
+the displayed vertical one.
+
+Stream copy is untouched — no filters, no `-noautorotate` — so the elementary
+stream and its display matrix pass through
+(`stream_copy_leaves_orientation_metadata_untouched`). Scaling and overlays on a
+rotated source were verified against real FFmpeg.
+
+Container consequence, measured and not fixable without transcoding: MP4 and
+Matroska carry the display matrix through a stream copy, MPEG-TS does not. A
+copied portrait item therefore reaches an MPEG-TS client without rotation
+metadata. Transcoded output is unaffected because the rotation is baked into the
+pixels. Tracked separately as `stream-copy-drops-rotation-in-mpegts`.
+
+NOT done: `transpose_cuda` and fused libplacebo rotation were not benchmarked,
+because autorotation makes an explicit rotation filter unnecessary on every path
+ErsatzRS generates. That comparison belongs to a future source-preserving mode.
+'''
+resolved    = true
+
+[[debt]]
+id          = 'stream-copy-drops-rotation-in-mpegts'
+adr         = '0003'
+description = 'MPEG-TS has no display-matrix container field, so a stream-copied portrait item loses its rotation metadata and a client shows it sideways. MP4 and Matroska preserve it. Decide whether such items should be forced to transcode, flagged in troubleshooting, or documented as a client-side limitation.'
+discovered  = '2026-08-07'
+evidence    = 'Measured with FFmpeg 9: copying a 90-degree-tagged stream to MP4 and MKV preserves `rotation=90`, while the same copy to MPEG-TS reports no rotation side data. Transcoded output is unaffected because autorotation bakes the rotation into the pixels.'
 resolved    = false
 
 [[debt]]

@@ -39,6 +39,10 @@ release section when tagging a release.
   and V4L2M2M — encode HDR10 profiles in software instead of quietly emitting
   SDR, and the health check warns when that happens.
 
+  Scanning now records each source's mastering-display and MaxCLL/MaxFALL
+  values, so an HLG or SDR item converted to HDR10 carries the metadata its own
+  grade implies rather than a generic default.
+
 - Added uniform content-rating/Kijkwijzer, studio, music-label, language, genre, and
   tag metadata for movies, television, music videos, other videos, songs, and
   images across local/Plex scanning, SQLite/MySQL persistence, search and smart
@@ -96,6 +100,18 @@ release section when tagging a release.
   page's module stylesheet (dead-code cleanup, no visible change).
 
 ### Fixed
+
+- Fixed portrait and other rotated recordings being scaled as though they were
+  landscape. FFmpeg rotates such sources from their display matrix before any
+  filter runs, so ErsatzRS now sizes them from their displayed shape — a
+  portrait item letterboxes into a 1080p channel instead of filling it. Scanning
+  records the rotation, stream copy is untouched, and no rotation filter is
+  added, so the picture is never rotated twice.
+
+- Fixed a graphics element pointing at an animated WebP or GIF taking its whole
+  channel down. The loop option differs per demuxer, and the wrong one makes
+  FFmpeg fail to open the input at all; it is now chosen from the file's own
+  header.
 
 - Fixed NVIDIA HDR playback selecting a Vulkan/libplacebo graph that cannot run.
   ErsatzRS chose that path whenever `ffmpeg -hwaccels` listed `vulkan`, which is

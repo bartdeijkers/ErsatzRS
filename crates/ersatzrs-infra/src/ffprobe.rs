@@ -217,6 +217,11 @@ impl FfprobeExtractor {
             "-show_format",
             "-show_streams",
             "-show_chapters",
+            // One frame only: Matroska carries HDR static metadata as frame
+            // side data, and a full frame walk would be ruinous on a scan.
+            "-read_intervals",
+            "%+#1",
+            "-show_frames",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -253,6 +258,10 @@ pub fn ffprobe_args(path: &Path) -> Vec<String> {
         "-show_format",
         "-show_streams",
         "-show_chapters",
+        // See above: one frame, for HDR static metadata.
+        "-read_intervals",
+        "%+#1",
+        "-show_frames",
         "-i",
     ]
     .into_iter()
@@ -293,10 +302,15 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
         version.duration = duration;
     }
 
+    let frame_side_data: Vec<&FfprobeSideData> = probe
+        .frames
+        .iter()
+        .flat_map(|frame| &frame.side_data_list)
+        .collect();
     let streams = probe
         .streams
         .iter()
-        .filter_map(|stream| stream_to_domain(stream, 0))
+        .filter_map(|stream| stream_to_domain(stream, 0, &frame_side_data))
         .collect();
 
     if let Some(video_stream) = probe
@@ -353,7 +367,11 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
     }
 }
 
-fn stream_to_domain(stream: &FfprobeStream, media_version_id: i64) -> Option<MediaStream> {
+fn stream_to_domain(
+    stream: &FfprobeStream,
+    media_version_id: i64,
+    frame_side_data: &[&FfprobeSideData],
+) -> Option<MediaStream> {
     let kind = match stream.codec_type.as_deref()? {
         "video" => MediaStreamKind::Video,
         "audio" => MediaStreamKind::Audio,
@@ -362,6 +380,10 @@ fn stream_to_domain(stream: &FfprobeStream, media_version_id: i64) -> Option<Med
         _ => return None,
     };
 
+    // HDR static metadata describes the picture, so it is only meaningful on a
+    // video stream even when a container attaches side data elsewhere.
+    let is_video = matches!(kind, MediaStreamKind::Video);
+    let content_light = stream.content_light(frame_side_data);
     let attached_pic = stream
         .disposition
         .as_ref()
@@ -426,6 +448,12 @@ fn stream_to_domain(stream: &FfprobeStream, media_version_id: i64) -> Option<Med
         attached_pic,
         file_name,
         mime_type,
+        rotation: stream.rotation_degrees(),
+        mastering_display: is_video
+            .then(|| stream.mastering_display(frame_side_data))
+            .flatten(),
+        max_cll: is_video.then_some(content_light.0).flatten(),
+        max_fall: is_video.then_some(content_light.1).flatten(),
         ..MediaStream::default()
     })
 }
@@ -474,6 +502,20 @@ struct FfprobeOutput {
     streams: Vec<FfprobeStream>,
     #[serde(default)]
     chapters: Vec<FfprobeChapter>,
+    /// First decoded frame, probed only for HDR static metadata.
+    ///
+    /// Matroska carries mastering display and content light as *frame* side
+    /// data rather than stream side data, so a stream-only probe misses it
+    /// entirely. Measured: adding one frame to the existing probe costs no
+    /// measurable time.
+    #[serde(default)]
+    frames: Vec<FfprobeFrame>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FfprobeFrame {
+    #[serde(default)]
+    side_data_list: Vec<FfprobeSideData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -515,6 +557,96 @@ struct FfprobeStream {
     bits_per_raw_sample: Option<String>,
     disposition: Option<FfprobeDisposition>,
     tags: Option<FfprobeTags>,
+    /// Stream side data, which is where the display matrix lives.
+    ///
+    /// `FFmpeg` 9 autorotates from this and ignores the legacy `rotate` tag, so
+    /// the tag is deliberately not read.
+    side_data_list: Option<Vec<FfprobeSideData>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FfprobeSideData {
+    /// Counter-clockwise rotation in degrees from a display matrix.
+    rotation: Option<f64>,
+    /// SMPTE ST 2086 chromaticity and luminance, each reported by ffprobe as a
+    /// `"numerator/denominator"` string in the standard's own units.
+    red_x: Option<String>,
+    red_y: Option<String>,
+    green_x: Option<String>,
+    green_y: Option<String>,
+    blue_x: Option<String>,
+    blue_y: Option<String>,
+    white_point_x: Option<String>,
+    white_point_y: Option<String>,
+    max_luminance: Option<String>,
+    min_luminance: Option<String>,
+    /// CTA-861.3 content light level, in cd/m².
+    max_content: Option<i32>,
+    max_average: Option<i32>,
+}
+
+/// Parse an ffprobe rational such as `"34000/50000"` into its numerator.
+///
+/// ffprobe always reports these with the standard's own denominator (50000 for
+/// chromaticity, 10000 for luminance), which is exactly the unit `FFmpeg`'s
+/// `-mastering_display` option expects, so the numerator is stored as-is and
+/// never re-scaled.
+fn side_data_numerator(value: Option<&String>) -> Option<u32> {
+    let value = value?.trim();
+    let numerator = value
+        .split_once('/')
+        .map_or(value, |(numerator, _)| numerator);
+    numerator.parse().ok()
+}
+
+impl FfprobeStream {
+    /// SMPTE ST 2086 mastering display in `FFmpeg`'s `-mastering_display`
+    /// syntax, when the stream carries it.
+    fn mastering_display(&self, frame_side_data: &[&FfprobeSideData]) -> Option<String> {
+        let side_data = self
+            .side_data_list
+            .iter()
+            .flatten()
+            .chain(frame_side_data.iter().copied())
+            .find(|entry| entry.max_luminance.is_some() && entry.green_x.is_some())?;
+
+        Some(format!(
+            "G({},{})B({},{})R({},{})WP({},{})L({},{})",
+            side_data_numerator(side_data.green_x.as_ref())?,
+            side_data_numerator(side_data.green_y.as_ref())?,
+            side_data_numerator(side_data.blue_x.as_ref())?,
+            side_data_numerator(side_data.blue_y.as_ref())?,
+            side_data_numerator(side_data.red_x.as_ref())?,
+            side_data_numerator(side_data.red_y.as_ref())?,
+            side_data_numerator(side_data.white_point_x.as_ref())?,
+            side_data_numerator(side_data.white_point_y.as_ref())?,
+            side_data_numerator(side_data.max_luminance.as_ref())?,
+            side_data_numerator(side_data.min_luminance.as_ref())?,
+        ))
+    }
+
+    /// CTA-861.3 `MaxCLL` / `MaxFALL`, when the stream carries them.
+    fn content_light(&self, frame_side_data: &[&FfprobeSideData]) -> (Option<i32>, Option<i32>) {
+        self.side_data_list
+            .iter()
+            .flatten()
+            .chain(frame_side_data.iter().copied())
+            .find(|entry| entry.max_content.is_some() || entry.max_average.is_some())
+            .map_or((None, None), |entry| (entry.max_content, entry.max_average))
+    }
+
+    /// Display-matrix rotation in degrees, normalized to 0/90/180/270.
+    fn rotation_degrees(&self) -> Option<i32> {
+        let rotation = self
+            .side_data_list
+            .as_ref()?
+            .iter()
+            .find_map(|side_data| side_data.rotation)?;
+        // ffprobe reports counter-clockwise degrees and can emit -90.
+        #[allow(clippy::cast_possible_truncation)]
+        let normalized = (rotation.round() as i64).rem_euclid(360) as i32;
+        Some(normalized)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -575,5 +707,73 @@ mod tests {
         .expect("producer cancellation timed out");
 
         assert!(matches!(result, Err(FfprobeError::Timeout { .. })));
+    }
+
+    /// Real-`ffprobe` gate for ADR 0064 source metadata. Ignored by default.
+    ///
+    /// Run with:
+    /// `ERSATZRS_FFMPEG=<path to ffmpeg> ./run.sh test -p ersatzrs-infra \
+    ///  --run-ignored ignored-only source_hdr_metadata`
+    // Test-only opt-in path; the configuration layer is for the application.
+    #[allow(clippy::disallowed_methods)]
+    #[tokio::test]
+    #[ignore = "requires a real ffmpeg/ffprobe binary"]
+    async fn source_hdr_metadata_is_parsed_from_a_real_hdr10_file() {
+        let Some(ffmpeg) = std::env::var_os("ERSATZRS_FFMPEG") else {
+            eprintln!("set ERSATZRS_FFMPEG to run this gate");
+            return;
+        };
+        let ffmpeg = std::path::PathBuf::from(&ffmpeg);
+        let ffprobe = ffmpeg.parent().expect("ffmpeg directory").join("ffprobe");
+        let directory = tempfile::tempdir().expect("temp dir");
+        let source = directory.path().join("hdr10.mkv");
+
+        // A BT.2020/PQ HEVC file carrying ST 2086 and CTA-861.3 metadata.
+        let status = tokio::process::Command::new(&ffmpeg)
+            .args(["-nostdin", "-hide_banner", "-loglevel", "error", "-y"])
+            .args(["-f", "lavfi", "-i", "testsrc2=size=64x64:duration=1:rate=5"])
+            .args([
+                "-vf",
+                "format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=tv",
+                "-c:v",
+                "libx265",
+                "-profile:v",
+                "main10",
+                "-pix_fmt",
+                "yuv420p10le",
+                "-x265-params",
+                "master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50):max-cll=1000,400:hdr-opt=1:repeat-headers=1:log-level=error",
+            ])
+            .arg(&source)
+            .status()
+            .await
+            .expect("run ffmpeg");
+        assert!(status.success(), "failed to build the HDR10 fixture");
+
+        let output = tokio::process::Command::new(&ffprobe)
+            .args(super::ffprobe_args(&source))
+            .output()
+            .await
+            .expect("run ffprobe");
+        assert!(output.status.success(), "ffprobe failed");
+
+        let probed =
+            super::parse_ffprobe_json(&source, &output.stdout).expect("parse ffprobe output");
+
+        let video = probed
+            .streams
+            .iter()
+            .find(|stream| stream.kind == ersatzrs_domain::MediaStreamKind::Video)
+            .expect("video stream");
+
+        // Matroska carries these as frame side data, which a stream-only probe
+        // would miss entirely.
+        assert_eq!(
+            video.mastering_display.as_deref(),
+            Some("G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"),
+            "mastering display must round-trip in FFmpeg's own units"
+        );
+        assert_eq!(video.max_cll, Some(1_000));
+        assert_eq!(video.max_fall, Some(400));
     }
 }

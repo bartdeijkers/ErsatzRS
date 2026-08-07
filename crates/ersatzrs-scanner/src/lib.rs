@@ -3303,8 +3303,9 @@ pub(crate) async fn replace_streams(
                 "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
                 "Title", "Default", "Forced", "MediaVersionId",
                 "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
-                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType", "Rotation",
+                "MasteringDisplay", "MaxCll", "MaxFall"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
@@ -3325,6 +3326,10 @@ pub(crate) async fn replace_streams(
         .bind(stream.attached_pic)
         .bind(&stream.file_name)
         .bind(&stream.mime_type)
+        .bind(stream.rotation)
+        .bind(&stream.mastering_display)
+        .bind(stream.max_cll)
+        .bind(stream.max_fall)
         .execute(&mut **tx)
         .await?;
     }

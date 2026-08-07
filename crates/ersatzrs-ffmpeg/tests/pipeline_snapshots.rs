@@ -4106,3 +4106,293 @@ fn animated_webp_overlay_loops_and_composites_alpha() {
         "the overlay must actually contribute pixels"
     );
 }
+
+// ── p8c-02: source orientation applied exactly once ─────────────────────────
+
+fn rotated_source(width: u32, height: u32, rotation: Option<i32>) -> SourceVideoStream {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+    source.frame_size = Some(FrameSize::new(width, height));
+    source.rotation_degrees = rotation;
+    source
+}
+
+#[test]
+fn a_quarter_turn_transposes_the_displayed_frame_size() {
+    // FFmpeg autorotates from the display matrix before any filter runs, so a
+    // portrait recording stored as 1920x1080 reaches the graph as 1080x1920.
+    let portrait = rotated_source(1920, 1080, Some(90));
+    assert!(portrait.is_quarter_turned());
+    assert_eq!(
+        portrait.displayed_frame_size(),
+        Some(FrameSize::new(1080, 1920))
+    );
+
+    // 270 degrees is the other quarter turn; ffprobe reports it for -90.
+    assert!(rotated_source(1920, 1080, Some(270)).is_quarter_turned());
+
+    // A half turn keeps the axes, so the displayed size is the stored size.
+    let upside_down = rotated_source(1920, 1080, Some(180));
+    assert!(!upside_down.is_quarter_turned());
+    assert_eq!(
+        upside_down.displayed_frame_size(),
+        Some(FrameSize::new(1920, 1080))
+    );
+
+    // No display matrix at all: unchanged, which is every pre-existing item.
+    let plain = rotated_source(1920, 1080, None);
+    assert!(!plain.is_quarter_turned());
+    assert_eq!(
+        plain.displayed_frame_size(),
+        Some(FrameSize::new(1920, 1080))
+    );
+}
+
+#[test]
+fn a_rotated_source_is_scaled_by_its_displayed_shape_not_its_stored_one() {
+    // Into a 1920x1080 channel, a portrait item must letterbox to 606x1080
+    // (1080 x 0.5625 = 607.5, floored to an even width), not fill the frame as
+    // if it were landscape.
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::ScaleAndPad,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+
+    let portrait = rotated_source(1920, 1080, Some(90));
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&portrait),
+        None,
+        StreamingMode::TransportStream,
+    );
+    assert_eq!(desired.scaled_size, FrameSize::new(606, 1080));
+    assert_eq!(desired.frame_size, FrameSize::new(1920, 1080));
+
+    // The same stored dimensions without a display matrix fill the frame.
+    let landscape = rotated_source(1920, 1080, None);
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&landscape),
+        None,
+        StreamingMode::TransportStream,
+    );
+    assert_eq!(desired.scaled_size, FrameSize::new(1920, 1080));
+}
+
+#[test]
+fn ersatzrs_never_adds_a_rotation_filter_of_its_own() {
+    // FFmpeg already autorotated the frames. A transpose here would rotate the
+    // picture twice, which is the exact failure this milestone exists to avoid.
+    let request = PipelineRequest::new(
+        InputFile::video("/media/portrait.mp4"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(rotated_source(1920, 1080, Some(90)));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("transpose"), "got: {args}");
+    assert!(!args.contains("rotate"), "got: {args}");
+    assert!(!args.contains("-noautorotate"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn stream_copy_leaves_orientation_metadata_untouched() {
+    // Copy preserves the elementary stream and its display matrix; the client
+    // rotates. Adding a filter would force a transcode.
+    let desired = DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        ..DesiredVideoState::h264_1080p()
+    };
+    let request = PipelineRequest::new(InputFile::video("/media/portrait.mp4"), desired)
+        .with_source_video_stream(rotated_source(1920, 1080, Some(90)));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("transpose"), "got: {args}");
+    assert!(!args.contains("scale="), "got: {args}");
+}
+
+/// Real-`FFmpeg` gate for orientation. Ignored by default because it needs an
+/// `ffmpeg` binary.
+///
+/// Run with:
+/// `ERSATZRS_FFMPEG=<path to ffmpeg> ./run.sh test -p ersatzrs-ffmpeg \
+///  --run-ignored ignored-only orientation_autorotation`
+///
+/// This pins the assumption the whole milestone rests on: `FFmpeg` autorotates
+/// from the display matrix *before* the filter graph, so ErsatzRS must adjust
+/// its geometry and must not add a transpose.
+// Test-only opt-in path; the configuration layer is for the application.
+#[allow(clippy::disallowed_methods)]
+#[test]
+#[ignore = "requires a real ffmpeg binary"]
+fn orientation_autorotation_happens_before_the_filter_graph() {
+    let Some(ffmpeg) = std::env::var_os("ERSATZRS_FFMPEG") else {
+        eprintln!("set ERSATZRS_FFMPEG to run this gate");
+        return;
+    };
+    let directory = tempfile::tempdir().expect("temp dir");
+    let landscape = directory.path().join("landscape.mp4");
+    let rotated = directory.path().join("rotated.mp4");
+
+    let run = |args: &[&str]| {
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-nostdin", "-hide_banner", "-loglevel", "error", "-y"])
+            .args(args)
+            .status()
+            .expect("run ffmpeg");
+        assert!(status.success(), "ffmpeg failed for {args:?}");
+    };
+    let dimensions = |path: &std::path::Path| -> String {
+        let output = std::process::Command::new(
+            std::path::Path::new(&ffmpeg)
+                .parent()
+                .expect("ffmpeg directory")
+                .join("ffprobe"),
+        )
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(path)
+        .output()
+        .expect("run ffprobe");
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+
+    // A 320x180 landscape source, then the same elementary stream tagged with a
+    // 90-degree display matrix.
+    run(&[
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x180:duration=1:rate=10",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        landscape.to_str().expect("path"),
+    ]);
+    run(&[
+        "-display_rotation:v:0",
+        "90",
+        "-i",
+        landscape.to_str().expect("path"),
+        "-c",
+        "copy",
+        rotated.to_str().expect("path"),
+    ]);
+
+    // Stored dimensions are unchanged by the tag.
+    assert!(
+        dimensions(&rotated).starts_with("320,180"),
+        "{}",
+        dimensions(&rotated)
+    );
+
+    // Transcoding autorotates with no filter of ours: the decoded frames are
+    // already transposed, which is why `displayed_frame_size` must transpose too.
+    let transcoded = directory.path().join("transcoded.mp4");
+    run(&[
+        "-i",
+        rotated.to_str().expect("path"),
+        "-c:v",
+        "libx264",
+        "-frames:v",
+        "2",
+        transcoded.to_str().expect("path"),
+    ]);
+    assert!(
+        dimensions(&transcoded).starts_with("180,320"),
+        "FFmpeg must autorotate on transcode, got {}",
+        dimensions(&transcoded)
+    );
+}
+
+#[test]
+fn hdr10_conversion_prefers_source_static_metadata_over_the_seeded_default() {
+    // ADR 0064: use the source's own mastering display when it has one. The
+    // display the content was graded on does not change because the transfer
+    // function was converted.
+    let mut source = source_with_transfer(Some("arib-std-b67"), true);
+    source.mastering_display =
+        Some("G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)".to_owned());
+    source.max_cll = Some(4000);
+    source.max_fall = Some(600);
+
+    let request = PipelineRequest::new(InputFile::video("/media/hlg.mkv"), hdr10_desired())
+        .with_source_video_stream(source);
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        args.contains(
+            "-mastering_display G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"
+        ),
+        "got: {args}"
+    );
+    assert!(args.contains("-content_light 4000,600"), "got: {args}");
+}
+
+#[test]
+fn hdr10_conversion_falls_back_to_the_documented_default_when_the_source_is_silent() {
+    let request = PipelineRequest::new(InputFile::video("/media/sdr.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("bt709"), false));
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        args.contains("-mastering_display G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1)"),
+        "got: {args}"
+    );
+    assert!(args.contains("-content_light 1000,400"), "got: {args}");
+}
+
+#[test]
+fn a_pq_source_still_emits_no_metadata_options_even_when_it_has_them() {
+    // Its own side data survives the encode untouched, so injecting anything
+    // could only overwrite more accurate values with less accurate ones.
+    let mut source = source_with_transfer(Some("smpte2084"), true);
+    source.mastering_display = Some("G(1,2)B(3,4)R(5,6)WP(7,8)L(9,10)".to_owned());
+    source.max_cll = Some(4000);
+
+    let request = PipelineRequest::new(InputFile::video("/media/hdr10.mkv"), hdr10_desired())
+        .with_source_video_stream(source);
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("-mastering_display"), "got: {args}");
+    assert!(!args.contains("-content_light"), "got: {args}");
+}

@@ -228,6 +228,21 @@ pub struct SourceVideoStream {
     pub frame_size: Option<FrameSize>,
     pub sample_aspect_ratio: Option<String>,
     pub display_aspect_ratio: Option<String>,
+    /// Display-matrix rotation in degrees (ADR 0003, milestone `p8c-02`).
+    ///
+    /// `FFmpeg` 9 autorotates from this side data by default, so ErsatzRS must
+    /// **not** add a transpose of its own — that would rotate twice. What it
+    /// must do is agree with the rotation when computing geometry, because
+    /// `frame_size` holds the *stored* dimensions while the decoded frames are
+    /// already the *displayed* ones.
+    pub rotation_degrees: Option<i32>,
+    /// Source SMPTE ST 2086 mastering display in `FFmpeg`'s
+    /// `-mastering_display` syntax (ADR 0064), or `None`.
+    pub mastering_display: Option<String>,
+    /// Source CTA-861.3 `MaxCLL` in cd/m².
+    pub max_cll: Option<i32>,
+    /// Source CTA-861.3 `MaxFALL` in cd/m².
+    pub max_fall: Option<i32>,
 }
 
 impl SourceVideoStream {
@@ -253,7 +268,35 @@ impl SourceVideoStream {
             frame_size: None,
             sample_aspect_ratio: None,
             display_aspect_ratio: None,
+            rotation_degrees: None,
+            mastering_display: None,
+            max_cll: None,
+            max_fall: None,
         }
+    }
+
+    /// True when the display matrix turns the picture on its side, so stored
+    /// and displayed dimensions are transposed.
+    #[must_use]
+    pub fn is_quarter_turned(&self) -> bool {
+        self.rotation_degrees
+            .map(|degrees| degrees.rem_euclid(180))
+            .is_some_and(|degrees| degrees == 90)
+    }
+
+    /// Frame size as `FFmpeg` presents it to the filter graph.
+    ///
+    /// Autorotation happens before any filter runs, so a quarter-turned source
+    /// reaches the graph transposed. Every scaling, padding, and aspect
+    /// calculation has to use this rather than the stored `frame_size`, or a
+    /// portrait recording is scaled as if it were landscape.
+    #[must_use]
+    pub fn displayed_frame_size(&self) -> Option<FrameSize> {
+        let frame_size = self.frame_size?;
+        if self.is_quarter_turned() {
+            return Some(FrameSize::new(frame_size.height, frame_size.width));
+        }
+        Some(frame_size)
     }
 
     #[must_use]
@@ -281,6 +324,8 @@ impl SourceVideoStream {
         if display_aspect_ratio.is_empty() || display_aspect_ratio == "0:1" {
             return false;
         }
+        // Compared against the *stored* size on purpose: both tags describe the
+        // encoded picture, before any display-matrix rotation is applied.
         display_aspect_ratio != format!("{}:{}", size.width, size.height)
     }
 
@@ -301,17 +346,61 @@ enum SquarePixelScale {
     Fill,
 }
 
+/// Square-pixel sizing for an anamorphic source that is also quarter turned.
+///
+/// `width`/`height` here are the *displayed* axes; the sample aspect ratio
+/// applies to the stored horizontal axis, which after the turn is the displayed
+/// vertical one.
+fn quarter_turned_square_pixel_frame_size(
+    displayed_height: f64,
+    displayed_width: f64,
+    sample_aspect_ratio_factor: f64,
+    resolution: FrameSize,
+    scale: SquarePixelScale,
+) -> Option<FrameSize> {
+    let width = displayed_width;
+    let height = (displayed_height * sample_aspect_ratio_factor).floor();
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    let width_percent = f64::from(resolution.width) / width;
+    let height_percent = f64::from(resolution.height) / height;
+    let percent = match scale {
+        SquarePixelScale::Fit => width_percent.min(height_percent),
+        SquarePixelScale::Fill => width_percent.max(height_percent),
+    };
+
+    Some(even_frame_size(
+        scaled_dimension(width, percent, scale),
+        scaled_dimension(height, percent, scale),
+        scale,
+    ))
+}
+
 fn square_pixel_frame_size(
     source: &SourceVideoStream,
     resolution: FrameSize,
     scale: SquarePixelScale,
 ) -> Option<FrameSize> {
-    let source_size = source.frame_size?;
+    // Autorotation runs before the filter graph, so scaling must reason about
+    // the displayed frame, not the stored one. A portrait recording stored as
+    // 1920x1080 with a 90-degree display matrix reaches the graph as 1080x1920;
+    // using the stored size would scale it as if it were landscape.
+    let source_size = source.displayed_frame_size()?;
     let mut width = f64::from(source_size.width);
     let height = f64::from(source_size.height);
 
     if source.is_anamorphic() {
-        width = (width * source.sample_aspect_ratio_factor()?).floor();
+        // The sample aspect ratio describes stored pixels, so on a quarter turn
+        // it stretches what is now the vertical axis.
+        let factor = source.sample_aspect_ratio_factor()?;
+        if source.is_quarter_turned() {
+            return quarter_turned_square_pixel_frame_size(
+                height, width, factor, resolution, scale,
+            );
+        }
+        width = (width * factor).floor();
     }
 
     if width <= 0.0 || height <= 0.0 {
@@ -1778,11 +1867,33 @@ pub fn hdr10_static_metadata_input_options(request: &PipelineRequest) -> Vec<Str
         return Vec::new();
     }
 
+    // ADR 0064 prefers validated source metadata over a profile default, but
+    // only when the source actually carried it. A converted picture keeps the
+    // source's mastering display because that describes the display the content
+    // was graded on, which the transfer conversion does not change; the seeded
+    // default stands in when the source is silent.
+    let source = request.source_video_stream.as_ref();
+    let mastering_display = source
+        .and_then(|source| source.mastering_display.clone())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| MasteringDisplayMetadata::BT2020_1000_NITS.to_ffmpeg_value());
+    let content_light = match (
+        source.and_then(|source| source.max_cll),
+        source.and_then(|source| source.max_fall),
+    ) {
+        (Some(max_cll), Some(max_fall)) if max_cll > 0 => ContentLightLevel {
+            max_cll: max_cll.unsigned_abs(),
+            max_fall: max_fall.unsigned_abs(),
+        },
+        _ => ContentLightLevel::DEFAULT,
+    }
+    .to_ffmpeg_value();
+
     vec![
         "-mastering_display".to_owned(),
-        MasteringDisplayMetadata::BT2020_1000_NITS.to_ffmpeg_value(),
+        mastering_display,
         "-content_light".to_owned(),
-        ContentLightLevel::DEFAULT.to_ffmpeg_value(),
+        content_light,
     ]
 }
 

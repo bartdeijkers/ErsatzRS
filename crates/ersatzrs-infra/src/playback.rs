@@ -214,6 +214,10 @@ pub async fn load_source_video_stream_by_index(
                   ms."ColorTransfer" AS "ColorTransfer",
                   ms."ColorPrimaries" AS "ColorPrimaries",
                   ms."ColorSpace" AS "ColorSpace",
+                  ms."Rotation" AS "Rotation",
+                  ms."MasteringDisplay" AS "MasteringDisplay",
+                  ms."MaxCll" AS "MaxCll",
+                  ms."MaxFall" AS "MaxFall",
                   mv."VideoScanKind" AS "VideoScanKind",
                   mv."Width" AS "Width",
                   mv."Height" AS "Height",
@@ -287,6 +291,10 @@ pub async fn load_source_video_stream_by_index(
     stream.frame_rate = frame_rate.as_deref().and_then(parse_frame_rate);
     stream.sample_aspect_ratio = decode_playback_column(&row, "SampleAspectRatio")?;
     stream.display_aspect_ratio = decode_playback_column(&row, "DisplayAspectRatio")?;
+    stream.rotation_degrees = decode_playback_column(&row, "Rotation")?;
+    stream.mastering_display = decode_playback_column(&row, "MasteringDisplay")?;
+    stream.max_cll = decode_playback_column(&row, "MaxCll")?;
+    stream.max_fall = decode_playback_column(&row, "MaxFall")?;
     stream.is_still_image = decode_playback_bool(&row, "IsStillImage")?;
     stream.color_params = derive_color_params(
         pixel_format.as_deref(),

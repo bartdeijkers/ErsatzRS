@@ -420,6 +420,24 @@ pub struct MediaStream {
     pub attached_pic: bool,
     pub file_name: Option<String>,
     pub mime_type: Option<String>,
+    /// Display-matrix rotation in degrees, normalized to 0/90/180/270.
+    ///
+    /// `None` means the stream carries no display matrix. `FFmpeg` autorotates
+    /// from this side data, so it is persisted to keep ErsatzRS's scaling
+    /// geometry in step with what the decoder actually emits — not to drive a
+    /// rotation filter of ErsatzRS's own.
+    pub rotation: Option<i32>,
+    /// SMPTE ST 2086 mastering display in `FFmpeg`'s `-mastering_display`
+    /// syntax, or `None` when the source carried none.
+    ///
+    /// Stored pre-formatted because ffprobe already reports the values in the
+    /// units that option expects; re-deriving them would only invite rounding
+    /// mistakes.
+    pub mastering_display: Option<String>,
+    /// CTA-861.3 `MaxCLL` in cd/m².
+    pub max_cll: Option<i32>,
+    /// CTA-861.3 `MaxFALL` in cd/m².
+    pub max_fall: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

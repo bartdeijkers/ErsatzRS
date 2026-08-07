@@ -31,7 +31,8 @@ is proven exact from decoded frames. Evidence, including the mixed
 SDR/HDR/HLG programme-transition proof, is recorded in
 `docs/how-to/hdr-output-characterization.md`.
 
-NVENC HDR10 output is implemented and characterized on real hardware: a PQ
+Milestone p8a-01 is complete. NVENC HDR10 output is implemented and
+characterized on real hardware: a PQ
 source stays entirely on the GPU, while HLG and SDR sources convert in software
 and re-upload so NVENC still encodes. Backends with no characterized HDR10 graph
 (QSV, VAAPI, AMF, VideoToolbox, RKMPP, V4L2M2M) are demoted to software encoding
@@ -115,5 +116,42 @@ id          = 'hdr10-source-metadata-is-not-persisted'
 adr         = '0064'
 description = 'ADR 0064 requires the scanner to persist typed source colour primaries, transfer, matrix, range, mastering-display metadata, MaxCLL/MaxFALL, and the Dolby Vision configuration record, and to carry them with the selected stream. Only the raw ffprobe colour tags are persisted today, so an HLG or SDR item transformed into HDR10 always receives the documented profile defaults rather than values derived from the source.'
 discovered  = '2026-08-07'
-evidence    = '`derive_color_params` in `crates/ersatzrs-infra/src/playback.rs` persists only range/space/transfer/primaries plus the `is_hdr`/`is_bt2020_ten` flags. `MasteringDisplayMetadata::BT2020_1000_NITS` and `ContentLightLevel::DEFAULT` in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` are the documented constants used in their place; they are stated explicitly rather than guessed, but they are not yet editable per profile as the ADR ultimately requires.'
+evidence    = '''
+Resolved 2026-08-07 for HDR10 static metadata (the Dolby Vision configuration
+record belongs to p8a-02).
+
+`MediaStream` now persists `MasteringDisplay`, `MaxCll`, and `MaxFall` through an
+additive SQLite/MySQL migration (`202608071600_media_stream_hdr_metadata.sql`);
+NULL means the source carried none, so existing rows keep using the documented
+profile defaults until a rescan. Mastering display is stored pre-formatted in
+FFmpeg`s own `-mastering_display` units because ffprobe already reports them
+that way, so nothing is re-scaled.
+
+The probe had to change shape: Matroska carries these as *frame* side data, not
+stream side data, so `-show_streams` alone misses them entirely. The scanner
+probe now also requests one frame (`-read_intervals %+#1 -show_frames`), which
+measured at no detectable extra cost.
+
+The pipeline prefers source metadata over the seeded default when converting an
+HLG or SDR item, since the display the content was graded on is unchanged by a
+transfer conversion. A PQ source still emits no metadata options at all, because
+its own side data survives the encode and injecting anything could only replace
+accurate values with less accurate ones. Regressions:
+`hdr10_conversion_prefers_source_static_metadata_over_the_seeded_default`,
+`hdr10_conversion_falls_back_to_the_documented_default_when_the_source_is_silent`,
+`a_pq_source_still_emits_no_metadata_options_even_when_it_has_them`, and the
+real-ffprobe gate `source_hdr_metadata_is_parsed_from_a_real_hdr10_file`.
+
+Still open: the seeded defaults are documented constants rather than
+per-profile editable fields, which ADR 0064 ultimately wants. Tracked as
+`hdr10-profile-metadata-is-not-operator-editable`.
+'''
+resolved    = true
+
+[[debt]]
+id          = 'hdr10-profile-metadata-is-not-operator-editable'
+adr         = '0064'
+description = 'ADR 0064 requires the seeded HDR10 mastering-display and content-light defaults to be documented and editable. They are documented constants in `MasteringDisplayMetadata::BT2020_1000_NITS` and `ContentLightLevel::DEFAULT`, used only when a converted source carried no metadata of its own, but there is no profile field an operator can change.'
+discovered  = '2026-08-07'
+evidence    = 'The constants are stated explicitly in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` and covered by tests, so they are not hidden guesses, but `FFmpegProfile` has no mastering-display or content-light column and the profile editor exposes no control.'
 resolved    = false

@@ -161,6 +161,20 @@ signalling class across all 75 frames.
   common, so the SDR-to-HDR10 chain always asserts its input tags first,
   falling back to BT.709 for anything the source did not carry.
 
+## Finding 7: HDR10 survives overlays, subtitles, and HLS
+
+The acceptance for `p8a-01` requires more than a bare transcode, so the full
+shape was run against `hdr10_src.mkv`:
+
+| Output | Graph | Result |
+|---|---|---|
+| HLS (fMP4) | `setparams`, `scale`, alpha `overlay` | `bt2020nc / smpte2084 / bt2020` + both metadata blocks |
+| MPEG-TS | `setparams`, `scale`, alpha `overlay`, burned `subtitles` | same |
+
+The alpha overlay was confirmed to actually composite rather than being silently
+dropped: a pixel inside the overlay region reads `(61, 5, 0)` without it and
+`(252, 0, 0)` with it.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,
