@@ -5,7 +5,6 @@
 //! client-side without full-page round-trips. The plain page wrapper resolves
 //! the initial payload before rendering the island; server functions handle
 //! save, autocomplete, and preview actions after hydration.
-#![allow(clippy::too_many_lines, dead_code)]
 use std::fmt::Write;
 
 use leptos::prelude::*;
