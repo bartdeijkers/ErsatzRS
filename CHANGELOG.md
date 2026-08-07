@@ -34,9 +34,10 @@ release section when tagging a release.
   localized in every supported culture. Profiles that copy video are unaffected
   and say so.
 
-  Hardware-accelerated HDR10 output is not implemented yet: NVENC, QSV, VAAPI,
-  AMF, VideoToolbox, RKMPP, and V4L2M2M profiles still tone-map HDR sources to
-  SDR regardless of this setting.
+  NVENC produces HDR10 too, keeping a PQ source entirely on the GPU. Backends
+  without a characterized HDR10 graph — QSV, VAAPI, AMF, VideoToolbox, RKMPP,
+  and V4L2M2M — encode HDR10 profiles in software instead of quietly emitting
+  SDR, and the health check warns when that happens.
 
 - Added uniform content-rating/Kijkwijzer, studio, music-label, language, genre, and
   tag metadata for movies, television, music videos, other videos, songs, and

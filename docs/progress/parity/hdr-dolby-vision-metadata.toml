@@ -31,9 +31,12 @@ is proven exact from decoded frames. Evidence, including the mixed
 SDR/HDR/HLG programme-transition proof, is recorded in
 `docs/how-to/hdr-output-characterization.md`.
 
-Hardware HDR10 output graphs (NVENC/QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M)
-are NOT yet implemented or characterized; those paths still tone-map to SDR.
-Dolby Vision (`p8a-02`) has not started. The active sequence and runtime
+NVENC HDR10 output is implemented and characterized on real hardware: a PQ
+source stays entirely on the GPU, while HLG and SDR sources convert in software
+and re-upload so NVENC still encodes. Backends with no characterized HDR10 graph
+(QSV, VAAPI, AMF, VideoToolbox, RKMPP, V4L2M2M) are demoted to software encoding
+rather than allowed to emit SDR, and the health check warns. Dolby Vision
+(`p8a-02`) has not started. The active sequence and runtime
 acceptance matrix live in
 `plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
 `p8a-01`/`p8a-02`.
@@ -68,7 +71,43 @@ id          = 'hdr10-hardware-output-paths-are-unimplemented'
 adr         = '0064'
 description = 'Only the software pipeline honours `Hdr10Bt2020Pq`. NVENC, QSV, VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M still route every HDR source through the tone-map-to-BT.709 branch, so selecting an HDR10 profile with hardware acceleration silently produces SDR — exactly what ADR 0064 forbids. Implement the HDR10 graph per backend or make the combination a capability-gated rejection with health and troubleshooting evidence.'
 discovered  = '2026-08-07'
-evidence    = '`apply_hdr10_output_conversion` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` uses the software zscale/setparams chain for every acceleration kind, and `tonemap_filter_for` retains the hardware branches unchanged. The `OutputDynamicRange` health check validates codec and bit depth but not the hardware path. No hardware HDR10 output fixture has been run.'
+evidence    = '''
+Resolved 2026-08-07. No hardware path can now emit SDR from an HDR10 profile.
+
+NVENC is implemented and proven on an RTX 3080 Ti: a PQ source uses
+`hwupload,setparams,scale_cuda` and never leaves the GPU (`setparams` works on
+CUDA surfaces); HLG and SDR sources convert in software and re-upload through
+`format=p010le,hwupload_cuda`. All three produced
+`hevc / yuv420p10le / bt2020nc / smpte2084 / bt2020` with mastering-display and
+MaxCLL/MaxFALL side data, and a concatenated SDR+PQ+HLG NVENC stream reported one
+signalling class across all 75 frames.
+
+Backends without a characterized HDR10 graph are demoted to software encoding by
+`effective_video_acceleration` (`hdr10_output_support` returns `Unproven`), which
+preserves colour semantics at the cost of performance exactly as ADR 0064
+prescribes, and the `Output Dynamic Range` health check raises a Warning naming
+the affected profiles. Regressions:
+`nvenc_hdr10_keeps_a_pq_source_on_the_gpu`,
+`nvenc_hdr10_converts_an_sdr_source_and_re_uploads_to_cuda`,
+`nvenc_hdr10_normalizes_hlg_and_downloads_ten_bit_surfaces`,
+`unproven_hardware_backends_demote_to_software_for_hdr10`,
+`unproven_backends_keep_their_hardware_path_for_sdr_profiles`,
+`output_dynamic_range_check_warns_when_hdr10_demotes_to_software`, and
+`output_dynamic_range_check_passes_for_nvenc_hdr10`.
+
+Two runtime constraints were discovered and encoded: `hwdownload` can only
+produce the surface's own software format (an 8-bit CUDA surface must download
+as nv12, a 10-bit one as p010le), and `zscale` cannot convert from an unknown
+colourspace, so the SDR chain asserts BT.709 input tags for untagged sources.
+'''
+resolved    = true
+
+[[debt]]
+id          = 'hdr10-is-uncharacterized-on-non-nvidia-hardware'
+adr         = '0064'
+description = 'QSV, VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M have no characterized HDR10 output graph, so an HDR10 profile on those backends encodes in software. Correct but slow. Characterize each against real hardware and add its graph, or record that the backend genuinely cannot signal HDR10.'
+discovered  = '2026-08-07'
+evidence    = '`hdr10_output_support` in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` marks only `None` and `Nvenc` as `Proven`. No Intel, AMD, Apple, or Rockchip hardware was available during p8a-01; only an NVIDIA RTX 3080 Ti was.'
 resolved    = false
 
 [[debt]]

@@ -3794,3 +3794,130 @@ fn missing_vulkan_is_a_normal_capability_result_not_a_failure() {
     assert!(!args.contains("libplacebo"), "got: {args}");
     assert!(args.contains("h264_nvenc"), "got: {args}");
 }
+
+// ── ADR 0064: HDR10 output on hardware backends ─────────────────────────────
+
+fn hdr10_hevc_desired() -> DesiredVideoState {
+    DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Hevc,
+        bit_depth: FFmpegProfileBitDepth::TenBit,
+        output_dynamic_range: OutputDynamicRange::Hdr10Bt2020Pq,
+        video_profile: Some("main10".to_owned()),
+        video_preset: Some("p4".to_owned()),
+        ..DesiredVideoState::h264_1080p()
+    }
+}
+
+fn hdr10_nvenc_args(transfer: Option<&str>, is_hdr: bool) -> String {
+    let request = PipelineRequest::new(InputFile::video("/media/item.mkv"), hdr10_hevc_desired())
+        .with_source_video_stream(source_with_transfer(transfer, is_hdr))
+        .with_runtime_capabilities(capability_report_for_tests());
+
+    NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ")
+}
+
+#[test]
+fn nvenc_hdr10_keeps_a_pq_source_on_the_gpu() {
+    let args = hdr10_nvenc_args(Some("smpte2084"), true);
+
+    assert!(args.contains("hevc_nvenc"), "got: {args}");
+    assert!(
+        args.contains(
+            "setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020"
+        ),
+        "got: {args}"
+    );
+    // A PQ source needs no conversion, so nothing leaves the GPU.
+    assert!(!args.contains("hwdownload"), "got: {args}");
+    assert!(!args.contains("zscale"), "got: {args}");
+    assert!(!args.contains("-mastering_display"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn nvenc_hdr10_converts_an_sdr_source_and_re_uploads_to_cuda() {
+    let args = hdr10_nvenc_args(Some("bt709"), false);
+
+    assert!(args.contains("hevc_nvenc"), "got: {args}");
+    assert!(args.contains("npl=203"), "got: {args}");
+    // The converted frames must go back to the GPU so NVENC still encodes.
+    assert!(args.contains("format=p010le,hwupload_cuda"), "got: {args}");
+    assert!(args.contains("-mastering_display"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn nvenc_hdr10_normalizes_hlg_and_downloads_ten_bit_surfaces() {
+    let args = hdr10_nvenc_args(Some("arib-std-b67"), true);
+
+    assert!(args.contains("hevc_nvenc"), "got: {args}");
+    assert!(args.contains("npl=1000"), "got: {args}");
+    assert!(args.contains("format=p010le,hwupload_cuda"), "got: {args}");
+    // HLG surfaces are 10-bit; an nv12 download is rejected by FFmpeg.
+    assert!(!args.contains("hwdownload,format=nv12"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn unproven_hardware_backends_demote_to_software_for_hdr10() {
+    // ADR 0064: hardware may change performance, not colour semantics. A
+    // backend with no proven HDR10 graph must not quietly emit SDR.
+    for (name, builder) in [
+        ("vaapi", &VaapiPipelineBuilder as &dyn PipelineBuilder),
+        ("qsv", &QsvPipelineBuilder),
+        ("amf", &AmfPipelineBuilder),
+        ("videotoolbox", &VideoToolboxPipelineBuilder),
+        ("v4l2m2m", &V4l2m2mPipelineBuilder),
+        ("rkmpp", &RkmppPipelineBuilder),
+    ] {
+        let request =
+            PipelineRequest::new(InputFile::video("/media/item.mkv"), hdr10_hevc_desired())
+                .with_source_video_stream(source_with_transfer(Some("smpte2084"), true))
+                .with_runtime_capabilities(capability_report_for_tests());
+        let args = builder
+            .build(request.clone())
+            .command(&request.inputs)
+            .arguments
+            .join(" ");
+
+        // HDR10 signalling is still produced — just in software.
+        assert!(
+            args.contains(
+                "setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020"
+            ),
+            "{name} lost HDR10 signalling: {args}"
+        );
+        assert!(
+            args.contains("-codec:v libx265"),
+            "{name} must demote to the software encoder: {args}"
+        );
+        assert!(
+            !args.contains("_vaapi") && !args.contains("_qsv") && !args.contains("_amf"),
+            "{name} kept an unproven hardware encoder: {args}"
+        );
+    }
+}
+
+#[test]
+fn unproven_backends_keep_their_hardware_path_for_sdr_profiles() {
+    // The demotion is scoped to HDR10 output; ordinary SDR profiles are
+    // untouched.
+    let request = PipelineRequest::new(
+        InputFile::video("/media/item.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source_with_transfer(Some("bt709"), false))
+    .with_runtime_capabilities(capability_report_for_tests());
+
+    let args = VaapiPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("h264_vaapi"), "got: {args}");
+}

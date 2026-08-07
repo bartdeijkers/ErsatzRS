@@ -131,9 +131,41 @@ either item boundary:
 Each individual output also carried both metadata blocks. This is the ADR 0064
 "one stable output contract per stream" requirement proven from decoded frames.
 
+## Finding 6: NVENC produces HDR10 for all three source types
+
+Measured on an RTX 3080 Ti with `hevc_nvenc -profile:v main10`. All three cases
+produced `hevc / yuv420p10le / bt2020nc / smpte2084 / bt2020` with mastering
+display and MaxCLL/MaxFALL present:
+
+| Source | Graph | GPU residency |
+|---|---|---|
+| PQ | `hwupload,setparams=…,scale_cuda=format=p010le` | stays on the GPU |
+| HLG | software convert, then `format=p010le,hwupload_cuda,scale_cuda` | round trip |
+| SDR | `hwdownload,format=<surface>,setparams(bt709),` convert, `hwupload_cuda` | round trip |
+
+`setparams` works on CUDA surfaces, which is what lets the PQ case avoid a
+download entirely.
+
+Concatenating the three NVENC outputs into one stream again reports a single
+signalling class across all 75 frames.
+
+### Two hardware constraints the graphs must respect
+
+- **`hwdownload` can only produce the surface's own software format.** An
+  8-bit source in a CUDA surface must download as `nv12`; asking for `p010le`
+  fails with `Invalid output format p010le for hwframe download`. A 10-bit
+  source is the reverse. The format is therefore derived from the *source*
+  pixel format, never from the profile's desired output depth.
+- **`zscale` cannot convert from an unknown colourspace.** An untagged source
+  fails with `code 3074: no path between colorspaces`. Untagged files are
+  common, so the SDR-to-HDR10 chain always asserts its input tags first,
+  falling back to BT.709 for anything the source did not carry.
+
 ## What is not yet characterized
 
-- Hardware HDR10 output graphs (NVENC/QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M).
-  Only the software path above is proven end to end. See
+- QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,
+  AMD, Apple, or Rockchip hardware was available. Those backends are *demoted
+  to software encoding* for HDR10 profiles rather than allowed to emit SDR, and
+  the `Output Dynamic Range` health check warns when that happens. See
   `docs/progress/parity/ffmpeg-9-performance-and-support.toml`.
 - Dolby Vision inputs (milestone `p8a-02`).

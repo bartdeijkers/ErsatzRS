@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: args
+---
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device cuda -hwaccel none -c:v hevc -i /media/item.mkv -filter_complex [0:0]hwupload,setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020,scale_cuda=format=p010le[v];[0:1]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v hevc_nvenc -profile:v main10 -tag:v hvc1 -b_ref_mode 0 -preset:v p4 -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 30000/1001 -fps_mode:v cfr -video_track_timescale 90000 -b:v 8000k -maxrate:v 8000k -bufsize:v 16000k -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

@@ -4,8 +4,9 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'Not started'
 adr        = []
 summary    = '''
-Not started and dependency-gated behind the application-layer extraction. The
-planned feature provides a durable, idempotent music-video request lifecycle,
+Not started and scheduled as Phase 10 after Phase 9 teletext support. The
+application-layer extraction is complete. The planned feature provides a
+durable, idempotent music-video request lifecycle,
 policy and moderation, safe scheduler insertion, authenticated versioned
 add-on commands/queries, status events, restart recovery, health reporting,
 and end-to-end exactly-once scheduling proof. Product and public API decisions
@@ -16,26 +17,26 @@ must be accepted in an ADR before schema or transport implementation begins.
 id          = 'jukebox-contract-is-undecided'
 description = 'Queue ordering, cooldowns, identity/moderation, safe insertion, cancellation/retry/recovery, and public add-on versioning have not yet been accepted as a product and architecture contract.'
 discovered  = '2026-07-21'
-evidence    = 'Milestone p8a-01 enumerates the decisions required before schema/API work; the active plan recommends an out-of-process HTTP/event boundary rather than a native dynamic-plugin ABI.'
+evidence    = 'Milestone p10a-01 enumerates the decisions required before schema/API work; the active plan recommends an out-of-process HTTP/event boundary rather than a native dynamic-plugin ABI.'
 resolved    = false
 
 [[debt]]
 id          = 'jukebox-has-no-durable-request-domain'
 description = 'No persisted request aggregate, idempotency key, queue claim, lifecycle state machine, policy ports, or SQLite/MySQL repository exists.'
 discovered  = '2026-07-21'
-evidence    = 'The current process-local playout-build and scan queues are orchestration mechanisms, not a durable user-request ledger. Close through milestone p8a-02.'
+evidence    = 'The current process-local playout-build and scan queues are orchestration mechanisms, not a durable user-request ledger. Close through milestone p10a-02.'
 resolved    = false
 
 [[debt]]
 id          = 'jukebox-has-no-application-scheduler-integration'
 description = 'No use case can submit, moderate, claim, schedule, cancel, recover, or observe a video request at a safe playout boundary.'
 discovered  = '2026-07-21'
-evidence    = 'Close through milestone p8a-03 after the application and playout-build boundaries exist.'
+evidence    = 'Close through milestone p10a-03 after the application and playout-build boundaries exist.'
 resolved    = false
 
 [[debt]]
 id          = 'jukebox-has-no-public-addon-ingress-or-runtime-proof'
 description = 'No authenticated/versioned add-on command API, status feed, rate limiting, audit log, health coverage, or restart-safe exactly-once end-to-end proof exists.'
 discovered  = '2026-07-21'
-evidence    = 'Close through milestones p8b-01 and p8b-02.'
+evidence    = 'Close through milestones p10b-01 and p10b-02.'
 resolved    = false

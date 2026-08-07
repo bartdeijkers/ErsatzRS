@@ -1346,6 +1346,28 @@ mod tests {
         bit_depth: i32,
         transcode_video: i32,
     ) {
+        seed_hdr10_profile_with_acceleration(
+            pool,
+            id,
+            name,
+            video_format,
+            bit_depth,
+            transcode_video,
+            0,
+        )
+        .await;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn seed_hdr10_profile_with_acceleration(
+        pool: &Pool<Db>,
+        id: i64,
+        name: &str,
+        video_format: i32,
+        bit_depth: i32,
+        transcode_video: i32,
+        acceleration: i32,
+    ) {
         pool.execute(
             r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "IsCustom", "Width", "Height")
                VALUES (70, '1920x1080', 0, 1920, 1080)"#,
@@ -1361,7 +1383,7 @@ mod tests {
                 "VideoBitrate", "VideoBufferSize", "VideoFormat",
                 "TranscodeVideo", "OutputDynamicRange"
                ) VALUES (
-                {id}, 192, 384, 2, 1, 48, {bit_depth}, 0, '{name}', 0, 0, 70, 0, 0, 0,
+                {id}, 192, 384, 2, 1, 48, {bit_depth}, {acceleration}, '{name}', 0, 0, 70, 0, 0, 0,
                 2000, 4000, {video_format}, {transcode_video}, 1
                )"#,
         );
@@ -1436,6 +1458,36 @@ mod tests {
             "{}",
             result.message
         );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_warns_when_hdr10_demotes_to_software() {
+        let pool = test_pool().await;
+        // Hevc 10-bit HDR10 on VAAPI (3): no proven HDR10 graph, so the
+        // pipeline demotes to software rather than emitting SDR.
+        seed_hdr10_profile_with_acceleration(&pool, 74, "Hdr10 Vaapi", 2, 1, 1, 3).await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            result.brief_message,
+            "HDR10 output falls back to software encoding"
+        );
+        assert!(result.message.contains("Hdr10 Vaapi"), "{}", result.message);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_passes_for_nvenc_hdr10() {
+        let pool = test_pool().await;
+        // NVENC (2) has a proven HDR10 graph.
+        seed_hdr10_profile_with_acceleration(&pool, 75, "Hdr10 Nvenc", 2, 1, 1, 2).await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
     #[cfg(not(feature = "mysql"))]

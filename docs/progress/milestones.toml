@@ -475,8 +475,16 @@ retain their own mastering-display/MaxCLL through both libx265 and hevc_nvenc,
 and a concatenated SDR + HDR10 + HLG MPEG-TS stream reports one signalling
 class across all 75 frames with no change at either item boundary.
 
-NOT complete: hardware HDR10 output graphs are unimplemented (debt
-`hdr10-hardware-output-paths-are-unimplemented`), the scanner does not persist
+Hardware paths landed 2026-08-07. NVENC HDR10 is implemented and proven on an
+RTX 3080 Ti for PQ (stays on the GPU), HLG, and SDR sources, including a
+concatenated NVENC mixed-source stream with one signalling class across all 75
+frames. Backends with no characterized HDR10 graph demote to software encoding
+instead of emitting SDR, and the health check warns. Two runtime constraints
+were found and encoded: `hwdownload` must use the source surface's own format,
+and `zscale` needs asserted input tags for untagged sources.
+
+NOT complete: HDR10 is uncharacterized on non-NVIDIA hardware (debt
+`hdr10-is-uncharacterized-on-non-nvidia-hardware`), the scanner does not persist
 typed source mastering-display/MaxCLL values (debt
 `hdr10-source-metadata-is-not-persisted`), and the HLS and overlay/subtitle
 runtime proofs required by the acceptance text have not been run.

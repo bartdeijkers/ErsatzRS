@@ -9,22 +9,24 @@ use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     format_time_limit, graphics_overlay_vaapi_filter, hardware_download_filter,
-    hardware_upload_filter, hardware_upload_vaapi_filter, hide_banner, hlg_to_hdr10_filter,
+    hardware_surface_download_format, hardware_upload_filter, hardware_upload_vaapi_filter,
+    hdr10_output_support, hide_banner, hlg_to_hdr10_cuda_filter, hlg_to_hdr10_filter,
     loglevel_error, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
     no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats, normalize_loudness_filter,
     pad_filter, pad_vaapi_filter, pipe_output, preserve_hdr10_filter, progress_to_stdout,
-    realtime_filter, reset_pts_filter, scale_subtitle_image_filter, sdr_to_hdr10_filter,
-    select_forced_software_video_decoder, select_software_video_decoder, select_video_decoder,
-    standard_format_flags, still_image_loop_filter, subtitle_overlay_cuda_filter,
-    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
-    subtitles_filter, time_limit, tonemap_filter_for, vaapi_subtitle_pixel_format_filter,
-    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
-    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
-    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
-    ComplexFilter, ContentLightLevel, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
-    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
-    HardwareCapabilitiesFactory, HardwareGraphOperation, InputFile, InputKind,
-    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceTransferKind,
+    realtime_filter, reset_pts_filter, scale_subtitle_image_filter, sdr_to_hdr10_cuda_filter,
+    sdr_to_hdr10_filter, select_forced_software_video_decoder, select_software_video_decoder,
+    select_video_decoder, standard_format_flags, still_image_loop_filter,
+    subtitle_overlay_cuda_filter, subtitle_overlay_filter, subtitle_overlay_vaapi_filter,
+    subtitle_scale_npp_filter, subtitles_filter, time_limit, tonemap_filter_for,
+    vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
+    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
+    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
+    ContentLightLevel, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain,
+    FrameRate, FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory,
+    HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind, MasteringDisplayMetadata,
+    MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags, SourceTransferKind,
     SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint,
     WatermarkOpacityClock, WatermarkOverlay,
 };
@@ -1606,7 +1608,7 @@ fn apply_source_video_filters(
     // to every item so a linear stream never changes its signalling mid-flight.
     let used_hdr_tonemap = target_state.is_hdr && is_transcode && !request.desired.produces_hdr10();
     if is_transcode && request.desired.produces_hdr10() {
-        apply_hdr10_output_conversion(request, target_state, filter_chain);
+        apply_hdr10_output_conversion(request, acceleration, target_state, filter_chain);
     } else if used_hdr_tonemap {
         filter_chain.video.push(tonemap_filter_for(
             acceleration,
@@ -1688,17 +1690,49 @@ fn apply_source_video_filters(
 /// Both converting cases change what the source's static metadata means, so the
 /// caller emits validated profile metadata for them instead of copying the
 /// source's — see [`hdr10_static_metadata_input_options`].
+/// NVENC keeps the frames on the GPU: `setparams` works on CUDA surfaces, and
+/// the converting cases re-upload with `hwupload_cuda` so `hevc_nvenc` still
+/// encodes. Every other acceleration has already been demoted to software by
+/// [`effective_video_acceleration`], so only these two branches exist.
 fn apply_hdr10_output_conversion(
     request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
     target_state: &mut FrameState,
     filter_chain: &mut FilterChain,
 ) {
-    let filter = match source_transfer_kind(request) {
-        SourceTransferKind::Pq => preserve_hdr10_filter(),
-        SourceTransferKind::Hlg => hlg_to_hdr10_filter(target_state),
-        SourceTransferKind::Sdr => sdr_to_hdr10_filter(target_state),
+    let transfer = source_transfer_kind(request);
+    let uses_cuda = acceleration == HardwareAccelerationKind::Nvenc;
+    // Only frames that are actually in hardware need a download, and the format
+    // has to be the source surface's own — see `sdr_to_hdr10_filter`.
+    let download =
+        (target_state.frame_data_location == crate::FrameDataLocation::Hardware).then(|| {
+            hardware_surface_download_format(
+                request
+                    .source_video_stream
+                    .as_ref()
+                    .and_then(|source| source.pixel_format),
+            )
+        });
+
+    let source_tags = request
+        .source_video_stream
+        .as_ref()
+        .map(|source| SourceColorTags {
+            color_range: source.color_params.color_range.clone(),
+            color_space: source.color_params.color_space.clone(),
+            color_transfer: source.color_params.color_transfer.clone(),
+            color_primaries: source.color_params.color_primaries.clone(),
+        })
+        .unwrap_or_default();
+
+    let filter = match (transfer, uses_cuda) {
+        (SourceTransferKind::Pq, _) => preserve_hdr10_filter(),
+        (SourceTransferKind::Hlg, false) => hlg_to_hdr10_filter(download),
+        (SourceTransferKind::Hlg, true) => hlg_to_hdr10_cuda_filter(download),
+        (SourceTransferKind::Sdr, false) => sdr_to_hdr10_filter(download, &source_tags),
+        (SourceTransferKind::Sdr, true) => sdr_to_hdr10_cuda_filter(download, &source_tags),
     };
-    let converts_frames = source_transfer_kind(request) != SourceTransferKind::Pq;
+    let converts_frames = transfer != SourceTransferKind::Pq;
 
     filter_chain.video.push(filter);
     target_state.is_hdr = true;
@@ -1708,7 +1742,12 @@ fn apply_hdr10_output_conversion(
     target_state.colors_are_bt709 = false;
     if converts_frames {
         target_state.pixel_format = PixelFormat::Yuv420P10Le;
-        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.frame_data_location = if uses_cuda {
+            // The chain ends in `hwupload_cuda`.
+            crate::FrameDataLocation::Hardware
+        } else {
+            crate::FrameDataLocation::Software
+        };
     }
 }
 
@@ -2169,6 +2208,17 @@ fn effective_video_acceleration(
     request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    // ADR 0064: hardware acceleration may change performance, not colour
+    // semantics. A backend with no proven HDR10 graph would otherwise emit SDR
+    // from an HDR10 profile, which is the silent downgrade the ADR forbids, so
+    // demote to software encoding instead. Reported by the `Output Dynamic
+    // Range` health check so the cost is visible rather than mysterious.
+    if request.desired.produces_hdr10()
+        && hdr10_output_support(acceleration) == Hdr10OutputSupport::Unproven
+    {
+        return HardwareAccelerationKind::None;
+    }
+
     let Some(report) = &request.runtime_capabilities else {
         return acceleration;
     };
@@ -2454,18 +2504,31 @@ fn add_cuda_software_fallback_upload(
     false
 }
 
-/// True when NVENC will tone-map an HDR source in software because the
-/// Vulkan/libplacebo graph is unavailable or denied.
+/// True when the NVENC chain converts colour in software and supplies its own
+/// `hwupload_cuda`, so the generic CUDA software-fallback upload must not be
+/// added in front of it.
 ///
-/// That chain supplies its own `hwupload_cuda`, so callers must not add the
-/// generic CUDA software-fallback upload in front of it.
+/// Two chains qualify:
+///
+/// * the Vulkan-free HDR-to-SDR tone-map fallback, and
+/// * an HDR10 profile converting an HLG or SDR source.
+///
+/// A PQ source under an HDR10 profile does *not* qualify: it only gets
+/// `setparams`, which works on CUDA surfaces, so the upload is wanted and the
+/// whole graph stays on the GPU.
 fn nvenc_software_hdr_tonemap(request: &PipelineRequest) -> bool {
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return false;
+    }
+
+    if request.desired.produces_hdr10() {
+        return source_transfer_kind(request) != SourceTransferKind::Pq;
+    }
+
     request
         .source_video_stream
         .as_ref()
         .is_some_and(|source| source.color_params.is_hdr || source.color_params.is_bt2020_ten)
-        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
-        && !request.desired.produces_hdr10()
         && !nvidia_vulkan_hdr_tonemap(request)
 }
 

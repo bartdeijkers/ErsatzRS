@@ -1,3 +1,5 @@
+{"agent":"Claude Opus 5","date":"2026-08-07","summary":"Phase 8 partial: landed the ADR 0064 SDR/HDR10 output contract (software path) and the ADR 0014 operation-scoped Vulkan/libplacebo functional graph gate with real-hardware evidence"}
+{"agent":"Codex","date":"2026-08-07","summary":"Resequenced the long-term roadmap: FFmpeg 9 is Phase 8, teletext is Phase 9, and video jukebox is Phase 10"}
 {"agent":"Codex","date":"2026-08-07","summary":"Accepted the HDR and Dolby Vision output contract and registered FFmpeg 9 Vulkan, performance, and support hardening"}
 {"agent": "Claude Opus 5", "date": "2026-08-07", "summary": "Opened HDR10 static metadata and Dolby Vision source handling as tracked beyond-parity work from the FFmpeg 9 review"}
 {"agent": "Claude Opus 5", "date": "2026-08-07", "summary": "FFmpeg 8.1.2 to 9.0 differential review: recorded ADR 0063 v2 (NVENC preset mapping rationale, h264_nvenc default profile) and parity evidence entries"}

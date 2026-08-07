@@ -1,41 +1,46 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 8 — The Box video-jukebox extension'
-current_focus = 'Phase 8A — Durable video-jukebox domain'
+current_phase = 'Phase 8 — FFmpeg 9 media-pipeline hardening'
+current_focus = 'Phase 8A — HDR and Dolby Vision output contract'
 
 summary = '''
-Phases 0–7 are complete: the workspace, FFmpeg pipeline, scheduling engines,
-media-source scanning, IPTV/HDHomeRun endpoints, main admin UI route families,
-hardening, application-boundary extraction, secondary stopgap closeout, and
-exhaustive large-module splits are in place. Phase 8 is the dependency-gated
-"The Box" video-jukebox extension.
+Phases 0–7 are complete: the workspace, baseline FFmpeg pipeline, scheduling
+engines, media-source scanning, IPTV/HDHomeRun endpoints, main admin UI route
+families, hardening, application-boundary extraction, stopgap closeout, and
+large-module splits are in place. Phase 8 now owns the FFmpeg 9 HDR, Dolby
+Vision, Vulkan/libplacebo, performance, and media-input hardening program.
+Phase 9 adds teletext support. The "The Box" video-jukebox extension follows
+as Phase 10.
 '''
 
 next_steps = '''
-Phase 7 is complete. P7C-04 split media-browser transport, YAML/scripted
-registries, and Jellyfin/Emby adapters behind exhaustive completeness gates
-without changing public, serialized, provider, scheduler, hydration, or visual
-behavior.
+P8A-01 is the live next slice: implement ADR 0064's explicit BT.709 SDR versus
+BT.2020/PQ HDR10 profile contract, source metadata persistence, validation,
+localized profile editing, pipeline behavior, health reporting, and decoded
+runtime proof. P8B-01, P8C-01, and P8C-03 are independent runnable Phase 8
+slices for Vulkan/libplacebo capability hardening, safe long-filtergraph file
+transport, and animated WebP input support. P8A-02 follows the stable output
+contract with fixture-gated Dolby Vision input characterization.
 
-P8A-01 is the live next slice. It is a product and architecture decision only:
-define eligibility, queue policy, identity/moderation, cooldowns/rate limits,
-insertion/cancellation/retry/recovery semantics, and the versioned
-out-of-process add-on transport in an accepted ADR. Do not begin schema,
-public-API, or video-jukebox implementation before that ADR is accepted. Use
+Phase 9 is dependency-gated on all required Phase 8 milestones. It begins with
+the P9A-01 teletext product/standards ADR, then proves six-RID FFmpeg/libzvbi
+capability, scanner persistence, selectable delivery, localized management,
+health reporting, and runtime fixtures. Deferred milestone P8C-04, the separate
+decision about first-class Vulkan encoding, does not block Phase 9.
+
+Phase 10 contains the video-jukebox extension. Its P10A-01 product and
+architecture ADR remains mandatory before schema or add-on API work and is
+gated on Phase 9 closeout through P9B-02. Use
 `cargo xtask progress milestones --runnable` for runnable work,
 `cargo xtask progress milestones --id <id> --full` for acceptance criteria,
 and `cargo xtask progress gaps` for feature/debt state. Historical completion
 evidence remains in parity TOMLs, ADRs, sessions, the changelog, and git history
 instead of accumulating in this current-focus field.
-
-The accepted cross-cutting FFmpeg 9 track is registered separately as
-milestones ff9-01 through ff9-06 and does not displace the Phase 8 focus.
-`ff9-01` (truthful SDR/HDR10 output), `ff9-03` (Vulkan/libplacebo runtime
-hardening), and `ff9-05` (long graphs and input support) are independent
-runnable slices; use their milestone queries and
-`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` for scope.
 '''
 
 [[blocking_decision]]
-note = 'Milestone p8a-01 is the live decision gate and must produce an accepted ADR before Phase 8 schema, public add-on API, or video-jukebox implementation starts.'
+note = 'Milestone p9a-01 must accept the teletext product and standards ADR before Phase 9 schema, runtime packaging, selection, or output work starts.'
+
+[[blocking_decision]]
+note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'
