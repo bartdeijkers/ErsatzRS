@@ -6,12 +6,16 @@ Accepted (2026-06-12).
 
 ## Implementation
 
-Implemented — core implemented for the HLS segmenter and direct IPTV `.ts`
-spawns (architecture gate, CUDA-filter decode gate, refresh-triggered denial
-invalidation). `scripts/e2e/nvenc-filter-gate-proof.sh` live-proves the
-encoder-only NVENC path on a matching FFmpeg build that reports `cuda` and
-`h264_nvenc` while omitting `scale_cuda`, `yadif_cuda`, and `overlay_cuda`
-(`ParityDebt nvenc-filter-gate-live-proof` resolved 2026-06-20).
+Partial — decode capability fallback is implemented for the HLS segmenter and
+direct IPTV `.ts` spawns (architecture gate, CUDA-filter decode gate,
+refresh-triggered denial invalidation). The operation-scoped Vulkan/libplacebo
+graph probe, denial, health visibility, and safe fallback decided in the
+2026-08-07 revision are not implemented.
+
+`scripts/e2e/nvenc-filter-gate-proof.sh` live-proves the encoder-only NVENC path
+on a matching FFmpeg build that reports `cuda` and `h264_nvenc` while omitting
+`scale_cuda`, `yadif_cuda`, and `overlay_cuda` (`ParityDebt
+nvenc-filter-gate-live-proof` resolved 2026-06-20).
 
 ## Context
 
@@ -39,6 +43,14 @@ decode. A probe row can disagree with FFmpeg's own runtime acceptance
 report), and any gating decided before spawn can never fully predict the
 runtime outcome. Today that failure mode is a dead channel.
 
+The NVENC HDR path adds a second form of probe-versus-reality mismatch. It
+selects a Vulkan/libplacebo-to-CUDA graph when the runtime advertises the
+Vulkan hwaccel, but that single capability does not prove libplacebo is built,
+the selected Vulkan and CUDA devices refer to the intended GPU, hardware frame
+mapping works, or the driver accepts the complete graph. An operator-provided
+FFmpeg 9 runtime is valid under ADR 0063 and may expose a different optional
+filter/device combination from the first-party package.
+
 ## Decision
 
 Layer the hardware-capability decision, adding a runtime-learned negative
@@ -65,6 +77,23 @@ path on top of the existing probes:
    engine and troubleshooting output (per the health-check parity contract
    in `AGENTS.md`), and the triggering stderr signature is recorded as
    runtime evidence in the affected `docs/progress/parity/<slug>.toml`.
+5. **Operation-scoped graph capabilities.** Selecting a multi-device hardware
+   graph requires every component used by that operation: hwaccel, filters,
+   encoder, selected device, hardware frame mappings, and inter-device
+   interoperability. An advertised component alone is not positive evidence
+   for the graph. The first required operation is NVENC HDR tonemapping through
+   Vulkan/libplacebo followed by CUDA upload and NVENC encode.
+6. **Functional graph probe.** Capability refresh executes a bounded synthetic
+   graph for complex operation-scoped paths and caches the result with the
+   FFmpeg binary and device/driver identity. Missing optional hardware remains
+   a normal negative capability, not a startup-wide FFmpeg failure.
+7. **Runtime-learned graph denial.** Supervisors classify known Vulkan-device,
+   libplacebo, hardware-map, and CUDA-interoperability initialization failures.
+   They retry exactly once through the next positively proven graph, preserving
+   hardware encode when possible and falling back to software when necessary.
+   The operation-scoped denial is persisted, visible, and invalidated through
+   the same capability-refresh lifecycle as decode denials. Arbitrary filter or
+   encode failures remain non-retryable.
 
 Denial rows persist in `ConfigElement` alongside the capability report and
 are cleared when the capability report is explicitly refreshed by an FFmpeg
@@ -82,8 +111,14 @@ the more precise probes *and* gains a self-healing floor.
 The single-retry bound, the health-check row, and the recorded stderr
 signature exist so the fallback cannot silently mask pipeline defects: a
 learned denial is loud, queryable, and tied to evidence. Supervisors must
-not retry on arbitrary FFmpeg failures — only on the classified
-decode-unsupported signature class.
+not retry on arbitrary FFmpeg failures — only on a classified
+decode-unsupported or operation-scoped graph-initialization signature.
+
+The same boundary now applies to complex hardware graphs: individual advertised
+filters or hwaccels are necessary but insufficient. A graph is selected only
+after a functional probe, and runtime fallback remains bounded and visible.
+This increases capability-state detail and probe time, but prevents optional
+Vulkan/libplacebo failures from taking a channel offline.
 
 Costs: one extra spawn of startup latency the first time a combination
 fails; new stderr-classification and denial-persistence code in
@@ -102,11 +137,23 @@ ErsatzTV architecture-table port in step 2.
 - Retry without persisting the denial: rejected because every new session
   would pay the failed hardware spawn again.
 - Blanket retry on any FFmpeg failure: rejected because it masks genuine
-  pipeline defects; only the classified decode-unsupported signature class
-  may trigger the fallback.
+  pipeline defects; only classified decode-unsupported or operation-scoped
+  graph-initialization signatures may trigger the fallback.
 - Pre-spawn live decode self-test per source: rejected — adds per-item
   startup latency to every playback and still cannot cover all runtime
   states.
+- Treat `vulkan` in `ffmpeg -hwaccels` as proof of the complete NVENC HDR
+  graph: rejected because it says nothing about libplacebo, device affinity,
+  hardware mappings, or Vulkan/CUDA interoperability.
+- Make libplacebo globally mandatory: rejected because non-Vulkan pipelines
+  and supported machines without Vulkan must continue to run normally.
+
+## Revision history
+
+- **2026-08-07.** Extended learned capability fallback from decoder tuples to
+  operation-scoped multi-device graphs, beginning with the existing NVENC
+  Vulkan/libplacebo HDR path. Added bounded functional probing, typed graph
+  denials, health visibility, and one safe fallback attempt.
 
 ## References
 
@@ -117,5 +164,8 @@ ErsatzTV architecture-table port in step 2.
 - [Runtime triage routine](../automation/runtime-triage.md)
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+- [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
+- [ADR 0064: HDR and Dolby Vision input and output contract](0064-hdr-and-dolby-vision-input-output-contract.md)
+- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](../../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
 - ErsatzTV hardware capability checker under `$ERSATZTV_SRC/ErsatzTV.FFmpeg/`
   at the pinned parity baseline commit

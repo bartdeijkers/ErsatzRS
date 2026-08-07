@@ -6,13 +6,15 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Implemented — fresh database bootstrap seeds the five default profiles, web
+Partial — fresh database bootstrap seeds the five default profiles, web
 startup applies seed-time hardware-acceleration detection from the captured
 FFmpeg runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
 multichannel AC-3. The 2026-07-01 (v3) bitrate revision landed on 2026-07-02:
 seeded profile video bitrates are 4000, 8000, 10000, 22500, and 30000 kbit/s
 while video buffer sizes keep the v2 values (8000, 16000, 20000, 45000, and
-60000 kbit).
+60000 kbit). The two HDR seeds are not yet truthful HDR10 outputs: the profile
+schema lacks ADR 0064's output dynamic-range policy and the current transcode
+path tone-maps HDR sources to BT.709.
 
 ## Context
 
@@ -38,6 +40,12 @@ that may or may not have a hardware encoder. Bitrates are sized for 25 fps and
 for plenty of network headroom, prioritizing **smoothness first, then image
 quality**.
 
+The original HDR rows selected HEVC Main 10 and 10-bit output but did not add a
+persisted output dynamic-range contract. Current command generation therefore
+tone-maps every transcoded HDR source to BT.709 even when one of those rows is
+selected. ADR 0064 separates bit depth from color semantics and owns the
+correct source-to-output transformation and metadata rules.
+
 Changing the shipped defaults away from ErsatzTV is a deliberate deviation, so
 it is recorded here (porting rule).
 
@@ -60,7 +68,7 @@ stands against it:
   this ADR sets. The 2026-07-01 revision intentionally changes only video
   bitrate targets; existing video buffer sizes stay unchanged.
 - **Multichannel AC-3 needs tight A/V interleaving** (`-max_delay`) or audio can
-  pop/drift at segment boundaries. **Missing today** — a genuine code gap.
+  pop/drift at segment boundaries. Implemented for multichannel AC-3 HLS output.
 - **`-muxrate` / `pkt_size`** belong to a constant UDP push to an external
   segmenter. ErsatzRS *is* the `-f hls` segmenter served over HTTP, so they do
   not apply and must not be added.
@@ -102,6 +110,17 @@ bitrate targets; software fallback preset `veryfast`.
 - The three resolution rows these reference (1280×720, 1920×1080, 3840×2160) are
   already seeded by `ensure_default_resolution`.
 
+Persist ADR 0064's `OutputDynamicRange` with these fresh-database values:
+
+- profiles 1, 2, and 4: `SdrBt709`;
+- profiles 3 and 5: `Hdr10Bt2020Pq`.
+
+An additive migration defaults every pre-existing profile to `SdrBt709`, which
+preserves the current effective transcode behavior and the existing rule that
+saved profiles are not silently retuned. Administrators can explicitly select
+HDR10 after reviewing codec/client compatibility. Video-copy profiles ignore
+the field because they retain source bitstream signaling.
+
 ### 2. Hardware acceleration auto-enabled when detected
 
 At seed time, detect the best available encoder and set
@@ -141,13 +160,14 @@ starting points an admin can edit or delete per channel.
   are comfortable on a modern GPU. On a **software-only** host the 4K profiles
   are heavy; such hosts should prefer the ≤1080p profiles or accept high CPU,
   and `N` (ADR 0016) is sized to the real encoder, not the network.
-- **Quality / features out of the box:** a fresh install can immediately serve
-  720p→4K and HDR with 6-channel surround, instead of only soft 1080p stereo.
-- **Pipeline prerequisites:** the HDR/4K profiles assume the FFmpeg pipeline can
-  emit HEVC Main 10 with 10-bit HDR (BT.2020/PQ) passthrough and hardware
-  encode paths for the detected accelerator. Where that is not yet wired, it is
-  implementation work tracked under the linked debts — the ADR sets the target,
-  not a claim that the pipeline already supports every cell.
+- **Quality / features out of the box:** the five seeds provide 720p→4K and
+  6-channel surround. The HDR-named seeds become actual HDR10 output only when
+  ADR 0064's dynamic-range, color, and metadata pipeline is implemented.
+- **Pipeline prerequisites:** the HDR profiles require stable HEVC Main 10
+  BT.2020/PQ output across SDR/HDR item transitions, correct static metadata,
+  and equivalent software/hardware semantics. Open work is tracked under ADR
+  0064; this ADR sets the seed target and does not claim that current command
+  generation already supports it.
 - **Correctness:** `-maxrate` remains effective while video buffer sizes keep
   the known v2 values; `-max_delay` removes a real multichannel-AC-3 seam
   artifact.
@@ -156,7 +176,8 @@ starting points an admin can edit or delete per channel.
   detected encoder choice to that fresh seed only; HLS output emits
   `-max_delay 500000` for multichannel AC-3. The seeded video bitrate values
   carry the 2026-07-01 halving retune while video buffer sizes keep the v2
-  values.
+  values. Output-dynamic-range persistence and truthful HDR10 output remain
+  future work.
 
 ## Alternatives Considered
 
@@ -177,6 +198,12 @@ starting points an admin can edit or delete per channel.
 
 ## Revision history
 
+- **2026-08-07 (v4 — partially implemented).** Separate bit depth from output
+  dynamic range through ADR 0064. Fresh SDR seeds target `SdrBt709`, fresh HDR
+  seeds target `Hdr10Bt2020Pq`, and the additive migration preserves existing
+  effective behavior by defaulting saved rows to SDR. Correct the implementation
+  record: current HDR transcodes are tone-mapped to BT.709, so the HDR seed
+  contract remains open.
 - **2026-07-01 (v3 — implemented 2026-07-02).** Halve every seeded default
   profile video bitrate from the v2 targets while leaving `VideoBufferSize`
   untouched: 8000→4000, 16000→8000, 20000→10000, 45000→22500, and 60000→30000.
@@ -201,6 +228,8 @@ starting points an admin can edit or delete per channel.
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 - [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
+- [ADR 0064: HDR and Dolby Vision input and output contract](0064-hdr-and-dolby-vision-input-output-contract.md)
+- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](../../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
 - [`crates/ersatzrs-infra/src/db.rs`](../../crates/ersatzrs-infra/src/db.rs) — default profile/resolution seed
 - [`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`](../../crates/ersatzrs-ffmpeg/src/pipeline/mod.rs) — `hls_output`, `add_output_options`
 - [`crates/ersatzrs-domain/src/ffmpeg.rs`](../../crates/ersatzrs-domain/src/ffmpeg.rs) — profile/codec/HW enums

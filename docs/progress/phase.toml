@@ -28,6 +28,13 @@ public-API, or video-jukebox implementation before that ADR is accepted. Use
 and `cargo xtask progress gaps` for feature/debt state. Historical completion
 evidence remains in parity TOMLs, ADRs, sessions, the changelog, and git history
 instead of accumulating in this current-focus field.
+
+The accepted cross-cutting FFmpeg 9 track is registered separately as
+milestones ff9-01 through ff9-06 and does not displace the Phase 8 focus.
+`ff9-01` (truthful SDR/HDR10 output), `ff9-03` (Vulkan/libplacebo runtime
+hardening), and `ff9-05` (long graphs and input support) are independent
+runnable slices; use their milestone queries and
+`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` for scope.
 '''
 
 [[blocking_decision]]

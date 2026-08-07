@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-07","summary":"Accepted the HDR and Dolby Vision output contract and registered FFmpeg 9 Vulkan, performance, and support hardening"}
 {"agent": "Claude Opus 5", "date": "2026-08-07", "summary": "Opened HDR10 static metadata and Dolby Vision source handling as tracked beyond-parity work from the FFmpeg 9 review"}
 {"agent": "Claude Opus 5", "date": "2026-08-07", "summary": "FFmpeg 8.1.2 to 9.0 differential review: recorded ADR 0063 v2 (NVENC preset mapping rationale, h264_nvenc default profile) and parity evidence entries"}
 {"agent":"Claude (Opus 5)","date":"2026-08-06","summary":"Fix channel watch programme guide never being a scroll container; make the EPG zoom-centre browser assertion capable of failing"}

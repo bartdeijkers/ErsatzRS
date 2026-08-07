@@ -1,41 +1,51 @@
 feature    = 'HDR static metadata and Dolby Vision source handling'
-etv_source = 'ErsatzRS extension enabled by the FFmpeg 9 runtime; no ErsatzTV equivalent (`$ERSATZTV_SRC` contains no Dolby Vision handling and no HDR10 static-metadata emission)'
-rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-scanner`, `crates/ersatzrs-infra`'
+etv_source = 'ErsatzRS extension enabled by the FFmpeg 9 runtime; no ErsatzTV equivalent (`$ERSATZTV_SRC` contains no Dolby Vision policy and no HDR10 static-metadata emission)'
+rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-scanner`, `crates/ersatzrs-infra`, `crates/ersatzrs-app`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`'
 status     = 'Not started'
-adr        = []
+adr        = ['0014', '0017', '0064']
 summary    = '''
-Not started. Two beyond-parity opportunities opened by the ADR 0063 FFmpeg 9
-runtime upgrade, both surfaced by the 2026-08-07 differential review recorded in
-`ffmpeg-command-generation`. Neither is an ErsatzTV port gap: ErsatzTV has no
-Dolby Vision handling and emits no HDR10 static metadata either, so closing
-these moves ErsatzRS ahead of parity rather than toward it.
+Not started. ADR 0064 accepts a beyond-parity input/output contract for HDR10,
+HLG, SDR, and Dolby Vision sources. FFmpeg profiles will persist a localized
+output dynamic-range choice: stable BT.709 SDR or stable BT.2020/PQ HDR10.
+Bit depth remains separate, copy profiles preserve source signaling, and
+invalid codec/output combinations must fail validation rather than downgrade
+silently.
 
-The first strand is HDR10 static metadata on output. ErsatzRS seeds two HDR
-profiles (`1920x1080 x265 10-bit hdr ac3 6ch` and the 4K equivalent) that encode
-BT.2020/PQ Main10 but carry no mastering-display or content-light metadata, so
-clients receive PQ-signalled video with no display-referred luminance to
-tone-map against. FFmpeg 9 makes this cheap to fix.
+This record corrects the 2026-08-07 differential-review assumption that the two
+seeded HDR-named profiles already produce BT.2020/PQ without static metadata.
+Current command generation tone-maps every transcoded HDR source to BT.709
+because `FFmpegProfile` has no desired output dynamic range. The work is
+therefore a color-semantics and persistence slice before it is a metadata-option
+slice.
 
-The second strand is Dolby Vision sources, which ErsatzRS currently neither
-detects nor characterizes. FFmpeg 9 adds the `dovi_split` bitstream filter for
-multi-layer HEVC.
-
-Both strands need a product decision before implementation: whether HDR10
-metadata is derived from the source, configured per FFmpeg profile, or both, and
-which Dolby Vision profiles ErsatzRS intends to support. Record that decision in
-an ADR before schema or pipeline work begins.
+Dolby Vision is an input policy first. Profiles 5, 7, and 8.1 require real
+fixture characterization; `dovi_split` is a profile-7 multilayer tool rather
+than general Dolby Vision support. Dolby Vision output remains out of scope.
+The active sequence and runtime acceptance matrix live in
+`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
+`ff9-01`/`ff9-02`.
 '''
 
 [[debt]]
-id          = 'hdr10-output-omits-static-metadata'
-description = 'ErsatzRS HDR profiles encode BT.2020/PQ Main10 output without HDR10 static metadata. The pipeline emits no mastering-display primaries/luminance and no MaxCLL/MaxFALL, so a compliant client receives PQ-signalled video with no display-referred luminance reference and must guess when tone-mapping to an SDR or lower-peak display. The only `-x265-params` ErsatzRS emits is `log-level=error`. Scope for the fix includes deciding whether the values are carried through from the source (which requires the scanner to persist them), configured per FFmpeg profile, or both, and whether tone-mapped SDR output must strip them.'
+id          = 'hdr-output-dynamic-range-is-implicit'
+adr         = '0064'
+description = 'FFmpegProfile persists codec, codec profile, bit depth, and tonemap algorithm but no output dynamic range. Every transcoded HDR source currently enters the HDR-to-SDR branch and is marked BT.709, including when an ADR 0017 profile named `hdr` is selected. Implement `SdrBt709` and `Hdr10Bt2020Pq` as a persisted, validated, localized profile contract; default existing rows to SDR to preserve current effective behavior and seed new HDR rows as HDR10.'
 discovered  = '2026-08-07'
-evidence    = 'Verified absent at `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:2359`, the sole `-x265-params` emission. The affected seeds are `ADR0017_DEFAULT_PROFILES` in `crates/ersatzrs-infra/src/db.rs` (`1920x1080 x265 10-bit hdr ac3 6ch`, video_format 2, video_profile `main10`, bit_depth 1, plus the 4K HDR entry). FFmpeg 9 adds the per-stream input-side options `-mastering_display` (SMPTE2084 mastering display colour volume) and `-content_light` (Max CLL / Max FALL), neither of which existed in 8.1.2. These were proven to reach encoded output rather than merely tagging the input: encoding lavfi through `libx265 -pix_fmt yuv420p10le -profile:v main10` with `-mastering_display "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)" -content_light "1000,400"` produced output whose first frame carries `Mastering display metadata` (red 34000/50000, green 13250/50000, blue 7500/50000, white point 15635/50000, max luminance 10000000/10000) and `Content light level metadata` (max_content 1000, max_average 400). The gap is therefore closable through the shared output-option builder without hand-building `-x265-params master-display=` strings.'
+evidence    = '`crates/ersatzrs-domain/src/ffmpeg.rs` `FFmpegProfile` has no output color contract. `apply_source_video_filters` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` computes `used_hdr_tonemap = target_state.is_hdr && is_transcode`, pushes `tonemap_filter_for`, then sets `is_hdr = false` and `colors_are_bt709 = true` without consulting the selected profile name, bit depth, or intended dynamic range. ADR 0017 v4 and ADR 0064 now record the intended correction.'
+resolved    = false
+
+[[debt]]
+id          = 'hdr10-output-omits-static-metadata'
+adr         = '0064'
+description = 'After the output dynamic-range contract exists, HDR10 output must carry semantically valid mastering-display and content-light metadata. The scanner must persist source metadata, transforms must preserve it only when it remains meaningful, explicit validated profile metadata must cover transforms or missing sources, and SDR output must strip stale HDR/Dolby Vision signaling.'
+discovered  = '2026-08-07'
+evidence    = 'The pipeline emits no mastering-display primaries/luminance or MaxCLL/MaxFALL. FFmpeg 9 exposes per-stream input-side `-mastering_display` and `-content_light`; a 2026-08-07 differential fixture proved that those values reach libx265 Main 10 frame side data. They cannot be added through a generic output-option builder or before the picture transform decides whether the result is SDR or HDR10.'
 resolved    = false
 
 [[debt]]
 id          = 'dolby-vision-sources-are-unhandled'
-description = 'ErsatzRS has no Dolby Vision detection, signalling, or bitstream handling anywhere in the workspace, and playback behaviour on Dolby Vision sources has not been characterized. Profile 8.1 and profile 7 carry an HDR10-compatible base layer and are expected to degrade gracefully, while profile 5 has no HDR10 fallback and is the case most likely to render with wrong colour, but none of this has been measured against a real sample. The first task is characterization, not implementation: determine what ErsatzRS actually does today for profiles 5, 7, and 8, then decide which profiles to support and whether the RPU is preserved, stripped, or used.'
+adr         = '0064'
+description = 'ErsatzRS does not persist Dolby Vision configuration, classify profiles, or define copy/transcode behavior. Characterize profiles 5, 7, and 8.1 against stable SDR and HDR10 outputs; use profile 7/compatible 8.1 base-layer behavior only when fixture-proven; reject unproven profile 5 paths visibly; and make RPU consumption, stripping, or preservation explicit. Dolby Vision output is excluded.'
 discovered  = '2026-08-07'
-evidence    = 'A workspace-wide search for `dolby`/`dovi` matched zero Rust files; the same search over `$ERSATZTV_SRC` matched zero C# files, confirming this is beyond parity rather than a port regression. FFmpeg 9 adds the `dovi_split` bitstream filter (supported codecs: hevc) with a `mode` option selecting which components survive: `bl` (base layer only, the default), `bl_rpu` (base layer with the RPU NAL), `el` (enhancement layer only), and `el_rpu`. It is absent from `ErsatzRS-ffmpeg` v1.0.2 (`n8.1.2`) and present in v2.0.0 (`n9.0`). No Dolby Vision sample was available during the 2026-08-07 review, so no behavioural claim is recorded here.'
+evidence    = 'A workspace-wide search found no Rust Dolby Vision handling and `$ERSATZTV_SRC` contains no equivalent C# policy, confirming beyond-parity scope. FFmpeg 9 adds `dovi_split` for multilayer HEVC with base/enhancement-layer and RPU modes, while ffprobe can expose a Dolby Vision configuration record and libplacebo can consume embedded Dolby Vision metadata. No profile 5/7/8.1 output fixture was run during the differential review, so no compatibility claim is accepted without milestone ff9-02 evidence.'
 resolved    = false

@@ -1,0 +1,60 @@
+feature    = 'FFmpeg 9 pipeline performance and support hardening'
+etv_source = 'ErsatzRS extensions and operational hardening beyond the pinned ErsatzTV pipeline; compare `$ERSATZTV_SRC/ErsatzTV.FFmpeg/` before each behavior change'
+rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, `scripts/e2e`'
+status     = 'Not started'
+adr        = ['0003', '0014', '0063', '0064']
+summary    = '''
+Not started. The FFmpeg 9 differential review found no additional mandatory
+command migration after ADR 0063, but it exposed several worthwhile support and
+performance slices. The recommended work is to harden the existing NVENC
+Vulkan/libplacebo HDR graph with an operation-scoped probe and learned fallback,
+then benchmark fused/native hardware HDR graphs against the ADR 0064 correctness
+oracle. Independent support work covers long filter graphs, source orientation,
+and animated WebP graphics inputs.
+
+Vulkan already exists as an internal NVENC HDR processing bridge; it is not a
+persisted hardware-acceleration kind. First-class Vulkan H.264/HEVC encoding is
+deferred until the existing graph is proven, multi-vendor benchmarks exist, and
+a later ADR accepts the schema/UI/release-matrix consequences. Work sequencing
+and acceptance live in
+`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
+`ff9-03` through `ff9-06`.
+'''
+
+[[debt]]
+id          = 'vulkan-libplacebo-graph-is-not-functionally-gated'
+adr         = '0014'
+description = 'NVENC HDR command generation selects Vulkan/libplacebo after checking only the advertised Vulkan hwaccel. Require the full selected-device, libplacebo, Vulkan, CUDA mapping/filter, and NVENC operation; functionally probe it at capability refresh; classify known initialization/interoperability failures; retry once through the next proven graph; persist the denial; and expose it through health/troubleshooting.'
+discovered  = '2026-08-07'
+evidence    = '`nvidia_vulkan_hdr_tonemap` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` checks `report.has_hwaccel("vulkan")`; `REQUIRED_FILTERS` in `version.rs` does not include libplacebo; `learned_hardware_decode_denial` in `crates/ersatzrs-infra/src/ffmpeg_capabilities.rs` recognizes decode-unsupported signatures but no Vulkan/libplacebo/device-map class. A prior live NVENC HDR/downscale/watermark failure also demonstrated that generated multi-device surface state can diverge from runtime reality.'
+resolved    = false
+
+[[debt]]
+id          = 'hardware-hdr-paths-lack-comparative-benchmarks'
+adr         = '0064'
+description = 'Benchmark correctness, throughput, latency, CPU/GPU load, and device transfers for fused libplacebo tone-map/scale/rotation, libplacebo peak-detection policy, native tonemap_vaapi versus the VAAPI/OpenCL bridge, and FFmpeg 9 AMF HDR/hardware-memory conversion versus software tonemapping. Adopt only measured improvements that preserve the same SDR/HDR10 output contract.'
+discovered  = '2026-08-07'
+evidence    = '`tonemap_cuda_filter` currently emits libplacebo followed by CUDA upload and may be followed by separate CUDA scaling; `tonemap_vaapi_filter` maps VAAPI frames through OpenCL and back; `tonemap_filter_for` sends AMF through the software path. FFmpeg 9 exposes native/fused alternatives, but the differential review produced capability evidence rather than ErsatzRS quality or resource benchmarks.'
+resolved    = false
+
+[[debt]]
+id          = 'long-filtergraph-file-transport-is-missing'
+adr         = '0003'
+description = 'Complex filter graphs remain inline argv and can exceed native command-line limits. Add ADR 0003 file transport through FFmpeg 9 `-/filter_complex <path>` behind one portable tested threshold, with private per-spawn storage, cancellation-safe cleanup, sanitized logging, and inline/file snapshot plus runtime coverage.'
+discovered  = '2026-08-07'
+evidence    = 'FFmpeg 9 removes `-filter_complex_script` and supports the generic file-option form `-/filter_complex <path>`. ErsatzRS never emitted the removed option and currently has no long-graph file transport; dynamic subtitles, watermarks, graphics, opacity expressions, scaling, and HDR filters can all contribute to one graph.'
+resolved    = false
+
+[[debt]]
+id          = 'orientation-and-animated-webp-support-is-uncharacterized'
+description = 'Characterize source display-matrix/orientation handling and animated WebP watermark/graphics inputs. Persist orientation without double-applying FFmpeg autorotation; compare software, transpose_cuda, and fused libplacebo rotation; and prove animated frame timing, looping, alpha, resource bounds, and MPEG-TS/HLS output.'
+discovered  = '2026-08-07'
+evidence    = 'The workspace has no explicit media orientation pipeline contract. FFmpeg 9 adds `transpose_cuda` and an animated WebP decoder/demuxer, while libplacebo can combine rotation with other Vulkan processing. The differential review established availability in the first-party runtime but did not establish ErsatzTV behavior or end-to-end support.'
+resolved    = false
+
+[[debt]]
+id          = 'first-class-vulkan-encoding-is-undecided'
+description = 'Do not add a persisted Vulkan hardware-acceleration kind yet. Revisit h264_vulkan/hevc_vulkan only after operation-scoped Vulkan probing and comparative HDR benchmarks provide multi-vendor quality, latency, device-selection, mux/client, fallback, and six-RID packaging evidence; write a separate ADR before schema, UI, or encoder-priority changes.'
+discovered  = '2026-08-07'
+evidence    = 'The current Vulkan use is an internal libplacebo processing bridge for NVENC rather than an encoder backend. FFmpeg exposes Vulkan encoders, but no ErsatzRS multi-vendor runtime or release-matrix benchmark exists and FFmpeg 9 did not itself establish those product guarantees.'
+resolved    = false

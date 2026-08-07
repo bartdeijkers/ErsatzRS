@@ -31,6 +31,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Defined the future FFmpeg profile dynamic-range contract: transcoding will
+  explicitly target stable BT.709 SDR or BT.2020/PQ HDR10 instead of inferring
+  HDR from HEVC Main 10 or a profile name. The accepted plan also establishes
+  source-derived HDR metadata, fixture-gated Dolby Vision input handling,
+  operation-scoped Vulkan/libplacebo fallback, safe long-filtergraph transport,
+  and benchmark gates for AMF, VAAPI, libplacebo, and possible Vulkan encoding.
+  This is an architecture and delivery contract; the runtime implementation is
+  still tracked as not started/partial in `docs/progress/`.
+
 - FFmpeg 9.x is now the explicit runtime contract. Managed startup defaults to
   `ErsatzRS-ffmpeg` v2, rejects FFmpeg 8 and unverified future majors, and keeps
   downloaded paths updateable while preserving administrator-owned overrides.

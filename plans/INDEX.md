@@ -106,6 +106,11 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — cross-cutting plan
+  for the accepted SDR/HDR10 output contract, Dolby Vision input
+  characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
+  libplacebo improvements, safe long-filtergraph transport, source orientation,
+  animated WebP, and the deferred evidence gate for first-class Vulkan encoding.
 - `application-layer-and-video-jukebox.md` — phased structural plan to restore
   the `ersatzrs-app` use-case boundary, remove audited stopgaps and silent
   failure fallbacks, then add a durable "The Box" music-video request queue
