@@ -1,0 +1,424 @@
+//! Run and persist operation-scoped hardware-graph probes (ADR 0014, milestone
+//! `p8b-01`).
+//!
+//! The pure model — which operations exist, their probe commands, and the
+//! failure classifier — lives in `ersatzrs_ffmpeg::graph_probe`. This module
+//! owns spawning the probe, bounding it, and persisting the learned denials,
+//! mirroring the existing `HardwareDecodeDenial` split.
+
+use std::path::Path;
+use std::time::Duration;
+
+use ersatzrs_ffmpeg::{
+    FfmpegCapabilityReport, GraphFailureKind, HardwareGraphDenial, HardwareGraphOperation,
+};
+use serde::{Deserialize, Serialize};
+use sqlx::Row;
+
+use crate::db::DbPool;
+
+const CONFIG_KEY_HARDWARE_GRAPH_DENIALS: &str = "ffmpeg.hardware.graph_denials";
+
+/// Upper bound for one functional probe.
+///
+/// The probe encodes a single 256x144 frame from `lavfi`, so a healthy run is
+/// well under a second. A hung Vulkan or CUDA driver is exactly the condition
+/// being probed for, so the timeout must be treated as a denial rather than as
+/// a reason to keep waiting at startup.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(Debug, thiserror::Error)]
+pub enum HardwareGraphDenialError {
+    #[error("database error while loading hardware graph denials: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("failed to encode hardware graph denials: {0}")]
+    Encode(#[source] serde_json::Error),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PersistedHardwareGraphDenial {
+    operation: String,
+    #[serde(default)]
+    device: String,
+    kind: String,
+}
+
+impl From<&HardwareGraphDenial> for PersistedHardwareGraphDenial {
+    fn from(value: &HardwareGraphDenial) -> Self {
+        Self {
+            operation: value.operation.id().to_owned(),
+            device: value.device.clone(),
+            kind: failure_kind_name(value.kind).to_owned(),
+        }
+    }
+}
+
+impl PersistedHardwareGraphDenial {
+    fn into_denial(self) -> Option<HardwareGraphDenial> {
+        Some(HardwareGraphDenial::new(
+            HardwareGraphOperation::from_id(&self.operation)?,
+            self.device,
+            failure_kind_from_name(&self.kind)?,
+        ))
+    }
+}
+
+/// Persisted graph-denial state, keyed by the identities ADR 0014 requires:
+/// the `ffmpeg` binary the probe ran against and the device it ran on. The
+/// per-row device lives on the denial itself; the binary path is shared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct PersistedHardwareGraphState {
+    #[serde(default)]
+    ffmpeg_path: Option<String>,
+    #[serde(default)]
+    denials: Vec<PersistedHardwareGraphDenial>,
+}
+
+const fn failure_kind_name(kind: GraphFailureKind) -> &'static str {
+    match kind {
+        GraphFailureKind::VulkanDevice => "vulkan-device",
+        GraphFailureKind::Libplacebo => "libplacebo",
+        GraphFailureKind::HardwareMap => "hardware-map",
+        GraphFailureKind::CudaInterop => "cuda-interop",
+        GraphFailureKind::EncoderInit => "encoder-init",
+        GraphFailureKind::MissingFilter => "missing-filter",
+    }
+}
+
+fn failure_kind_from_name(value: &str) -> Option<GraphFailureKind> {
+    match value {
+        "vulkan-device" => Some(GraphFailureKind::VulkanDevice),
+        "libplacebo" => Some(GraphFailureKind::Libplacebo),
+        "hardware-map" => Some(GraphFailureKind::HardwareMap),
+        "cuda-interop" => Some(GraphFailureKind::CudaInterop),
+        "encoder-init" => Some(GraphFailureKind::EncoderInit),
+        "missing-filter" => Some(GraphFailureKind::MissingFilter),
+        _ => None,
+    }
+}
+
+/// Run one bounded functional graph probe.
+///
+/// Returns `None` when the graph works. Returns a denial when the probe failed
+/// with a *classified* signature, when it timed out, or when the binary could
+/// not be spawned at all.
+///
+/// An unclassified failure returns `None` on purpose: ADR 0014 forbids learning
+/// a denial from an arbitrary `FFmpeg` failure, and a transient error must not
+/// permanently disable a working graph.
+pub async fn probe_hardware_graph(
+    ffmpeg_path: &Path,
+    operation: HardwareGraphOperation,
+    device: &str,
+) -> Option<HardwareGraphDenial> {
+    let mut command = tokio::process::Command::new(ffmpeg_path);
+    command.args(operation.probe_arguments());
+    command.stdin(std::process::Stdio::null());
+    command.stdout(std::process::Stdio::null());
+    command.stderr(std::process::Stdio::piped());
+
+    let output = match tokio::time::timeout(PROBE_TIMEOUT, command.output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => {
+            tracing::warn!(
+                operation = operation.id(),
+                %error,
+                "hardware graph probe could not spawn ffmpeg; denying the graph"
+            );
+            return Some(HardwareGraphDenial::new(
+                operation,
+                device,
+                GraphFailureKind::EncoderInit,
+            ));
+        }
+        Err(_) => {
+            tracing::warn!(
+                operation = operation.id(),
+                timeout_secs = PROBE_TIMEOUT.as_secs(),
+                "hardware graph probe timed out; denying the graph"
+            );
+            return Some(HardwareGraphDenial::new(
+                operation,
+                device,
+                GraphFailureKind::VulkanDevice,
+            ));
+        }
+    };
+
+    if output.status.success() {
+        return None;
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let kind = GraphFailureKind::classify(&stderr)?;
+    tracing::info!(
+        operation = operation.id(),
+        device,
+        reason = kind.reason(),
+        "hardware graph probe denied a graph"
+    );
+    Some(HardwareGraphDenial::new(operation, device, kind))
+}
+
+/// Probe every operation that the advertised capabilities make plausible and
+/// fold the denials into the report.
+///
+/// Only graphs whose prerequisites are advertised get probed: there is no point
+/// spawning a Vulkan probe on a build without the `vulkan` hwaccel, and a
+/// platform without Vulkan must stay a normal, healthy capability result rather
+/// than a denial or a startup failure.
+pub async fn refresh_hardware_graph_capabilities(
+    ffmpeg_path: &Path,
+    report: &mut FfmpegCapabilityReport,
+) {
+    if !report.has_hwaccel("cuda") {
+        return;
+    }
+    let device = report.nvidia_gpu_list.clone().unwrap_or_default();
+
+    if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
+        if let Some(denial) = probe_hardware_graph(
+            ffmpeg_path,
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            &device,
+        )
+        .await
+        {
+            report.deny_hardware_graph(denial);
+        }
+    }
+
+    if let Some(denial) =
+        probe_hardware_graph(ffmpeg_path, HardwareGraphOperation::NvencCudaScale, &device).await
+    {
+        report.deny_hardware_graph(denial);
+    }
+}
+
+/// Load persisted graph denials, ignoring malformed rows.
+///
+/// # Errors
+///
+/// Returns an error when the database read fails.
+pub async fn load_hardware_graph_denials(
+    pool: &DbPool,
+) -> Result<Vec<HardwareGraphDenial>, HardwareGraphDenialError> {
+    let Some(raw) = load_config(pool).await? else {
+        return Ok(Vec::new());
+    };
+    let state: PersistedHardwareGraphState = serde_json::from_str(&raw).unwrap_or_default();
+    Ok(state
+        .denials
+        .into_iter()
+        .filter_map(PersistedHardwareGraphDenial::into_denial)
+        .collect())
+}
+
+/// Apply persisted graph denials to a startup report, clearing them when the
+/// `ffmpeg` binary changed since they were learned (ADR 0014 lifecycle).
+///
+/// # Errors
+///
+/// Returns an error when the database read or write fails.
+pub async fn apply_hardware_graph_denials(
+    pool: &DbPool,
+    ffmpeg_path: &str,
+    report: &mut FfmpegCapabilityReport,
+) -> Result<(), HardwareGraphDenialError> {
+    let Some(raw) = load_config(pool).await? else {
+        return Ok(());
+    };
+    let state: PersistedHardwareGraphState = serde_json::from_str(&raw).unwrap_or_default();
+
+    if state
+        .ffmpeg_path
+        .as_deref()
+        .is_some_and(|stored| stored != ffmpeg_path)
+    {
+        tracing::info!("ffmpeg path changed since hardware graph denials were learned; clearing");
+        clear_hardware_graph_denials(pool).await?;
+        return Ok(());
+    }
+
+    for denial in state
+        .denials
+        .into_iter()
+        .filter_map(PersistedHardwareGraphDenial::into_denial)
+    {
+        report.deny_hardware_graph(denial);
+    }
+    Ok(())
+}
+
+/// Clear persisted graph denials after an explicit capability refresh.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn clear_hardware_graph_denials(pool: &DbPool) -> Result<(), HardwareGraphDenialError> {
+    upsert_config(pool, "").await
+}
+
+/// Persist the report's graph denials against the current `ffmpeg` path.
+///
+/// # Errors
+///
+/// Returns an error when encoding or the database write fails.
+pub async fn persist_hardware_graph_denials(
+    pool: &DbPool,
+    ffmpeg_path: &str,
+    report: &FfmpegCapabilityReport,
+) -> Result<(), HardwareGraphDenialError> {
+    let state = PersistedHardwareGraphState {
+        ffmpeg_path: Some(ffmpeg_path.to_owned()),
+        denials: report
+            .hardware_graph_denials
+            .iter()
+            .map(PersistedHardwareGraphDenial::from)
+            .collect(),
+    };
+    let encoded = serde_json::to_string(&state).map_err(HardwareGraphDenialError::Encode)?;
+    upsert_config(pool, &encoded).await
+}
+
+async fn load_config(pool: &DbPool) -> Result<Option<String>, HardwareGraphDenialError> {
+    let row = sqlx::query(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(CONFIG_KEY_HARDWARE_GRAPH_DENIALS)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row
+        .map(|row| {
+            row.try_get::<Option<String>, _>("Value")
+                .map(Option::unwrap_or_default)
+        })
+        .transpose()?
+        .filter(|value| !value.trim().is_empty()))
+}
+
+async fn upsert_config(pool: &DbPool, value: &str) -> Result<(), HardwareGraphDenialError> {
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+           ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+    )
+    .bind(CONFIG_KEY_HARDWARE_GRAPH_DENIALS)
+    .bind(value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failure_kinds_round_trip_through_persistence() {
+        for kind in [
+            GraphFailureKind::VulkanDevice,
+            GraphFailureKind::Libplacebo,
+            GraphFailureKind::HardwareMap,
+            GraphFailureKind::CudaInterop,
+            GraphFailureKind::EncoderInit,
+            GraphFailureKind::MissingFilter,
+        ] {
+            assert_eq!(failure_kind_from_name(failure_kind_name(kind)), Some(kind));
+        }
+        assert_eq!(failure_kind_from_name("nonsense"), None);
+    }
+
+    #[test]
+    fn denials_round_trip_through_serialization() {
+        let denial = HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            "NVIDIA GeForce RTX 3080 Ti",
+            GraphFailureKind::CudaInterop,
+        );
+        let state = PersistedHardwareGraphState {
+            ffmpeg_path: Some("/opt/ffmpeg/bin/ffmpeg".to_owned()),
+            denials: vec![PersistedHardwareGraphDenial::from(&denial)],
+        };
+
+        let encoded = serde_json::to_string(&state).expect("encode");
+        let decoded: PersistedHardwareGraphState = serde_json::from_str(&encoded).expect("decode");
+
+        assert_eq!(
+            decoded.ffmpeg_path.as_deref(),
+            Some("/opt/ffmpeg/bin/ffmpeg")
+        );
+        assert_eq!(
+            decoded.denials[0].clone().into_denial(),
+            Some(denial),
+            "the persisted row must reconstruct the exact denial"
+        );
+    }
+
+    #[test]
+    fn malformed_rows_are_ignored_rather_than_breaking_startup() {
+        let decoded: PersistedHardwareGraphState =
+            serde_json::from_str("this is not json").unwrap_or_default();
+        assert!(decoded.denials.is_empty());
+
+        let unknown = PersistedHardwareGraphDenial {
+            operation: "no-such-operation".to_owned(),
+            device: String::new(),
+            kind: "cuda-interop".to_owned(),
+        };
+        assert_eq!(unknown.into_denial(), None);
+    }
+
+    /// Real-hardware gate. Ignored by default because it needs an `ffmpeg`
+    /// binary and a working NVIDIA stack; CI machines have neither.
+    ///
+    /// Run with:
+    /// `ERSATZRS_FFMPEG=$HOME/.local/ffmpeg-9.0/bin/ffmpeg \
+    ///  ./run.sh test -p ersatzrs-infra --run-ignored ignored-only hardware_graph`
+    ///
+    /// This is the probe that separates "advertised" from "works here". On the
+    /// maintainer's WSL2 host (RTX 3080 Ti, driver 610.47) it denies
+    /// `nvenc-hdr-vulkan-libplacebo` with `cuda-interop` — the only Vulkan
+    /// device is llvmpipe — and proves `nvenc-cuda-scale`.
+    // Test-only opt-in path: the configuration layer is for the running
+    // application, and this gate has to point at an arbitrary local binary.
+    #[allow(clippy::disallowed_methods)]
+    #[tokio::test]
+    #[ignore = "requires a real ffmpeg binary and NVIDIA hardware"]
+    async fn real_hardware_graph_probe_reports_what_this_machine_can_do() {
+        let Some(ffmpeg) = std::env::var_os("ERSATZRS_FFMPEG") else {
+            eprintln!("set ERSATZRS_FFMPEG to run this gate");
+            return;
+        };
+        let ffmpeg = Path::new(&ffmpeg);
+
+        for operation in [
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            HardwareGraphOperation::NvencCudaScale,
+        ] {
+            let denial = probe_hardware_graph(ffmpeg, operation, "local").await;
+            match &denial {
+                Some(denial) => println!("DENIED  {}", denial.evidence()),
+                None => println!("PROVEN  {}", operation.id()),
+            }
+        }
+
+        // The fallback graph is the one the retry depends on. If it is denied
+        // here there is no hardware path at all, which the operator must see.
+        let fallback =
+            probe_hardware_graph(ffmpeg, HardwareGraphOperation::NvencCudaScale, "local").await;
+        assert!(
+            fallback.is_none(),
+            "the CUDA fallback graph must work on a machine with NVENC: {fallback:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_binary_denies_the_graph_rather_than_hanging() {
+        let denial = probe_hardware_graph(
+            Path::new("/nonexistent/ffmpeg-does-not-exist"),
+            HardwareGraphOperation::NvencCudaScale,
+            "test device",
+        )
+        .await;
+
+        assert!(denial.is_some(), "an unspawnable probe must deny the graph");
+    }
+}

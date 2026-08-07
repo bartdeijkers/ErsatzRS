@@ -21,12 +21,13 @@ use checks::{
     ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DowngradeHealthCheck,
     EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
     FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
-    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, LocalTelevisionIdentityHealthCheck,
-    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
-    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
+    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
+    MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
+    SearchProjectionHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -50,7 +51,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 27] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 28] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -61,6 +62,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 27] = [
     "FFmpeg Capabilities",
     "FFmpeg Reports",
     "Hardware Acceleration",
+    "Hardware Graph Capability",
     "Playback Data Access",
     "Pinned Stream Selection",
     "Movie Metadata",
@@ -186,6 +188,7 @@ fn registered_health_checks(
             pool.clone(),
             ffmpeg_runtime.clone(),
         )),
+        Box::new(HardwareGraphHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(PlaybackDataAccessHealthCheck::new(pool.clone())),
         Box::new(PinnedStreamSelectionHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),

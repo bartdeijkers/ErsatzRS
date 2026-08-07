@@ -1,7 +1,7 @@
 feature    = 'FFmpeg 9 pipeline performance and support hardening'
 etv_source = 'ErsatzRS extensions and operational hardening beyond the pinned ErsatzTV pipeline; compare `$ERSATZTV_SRC/ErsatzTV.FFmpeg/` before each behavior change'
 rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, `scripts/e2e`'
-status     = 'Not started'
+status     = 'In progress'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
 Not started. The FFmpeg 9 differential review found no additional mandatory
@@ -18,7 +18,7 @@ deferred until the existing graph is proven, multi-vendor benchmarks exist, and
 a later ADR accepts the schema/UI/release-matrix consequences. Work sequencing
 and acceptance live in
 `plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
-`ff9-03` through `ff9-06`.
+`p8b-01` through `p8c-04`.
 '''
 
 [[debt]]
@@ -26,8 +26,37 @@ id          = 'vulkan-libplacebo-graph-is-not-functionally-gated'
 adr         = '0014'
 description = 'NVENC HDR command generation selects Vulkan/libplacebo after checking only the advertised Vulkan hwaccel. Require the full selected-device, libplacebo, Vulkan, CUDA mapping/filter, and NVENC operation; functionally probe it at capability refresh; classify known initialization/interoperability failures; retry once through the next proven graph; persist the denial; and expose it through health/troubleshooting.'
 discovered  = '2026-08-07'
-evidence    = '`nvidia_vulkan_hdr_tonemap` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` checks `report.has_hwaccel("vulkan")`; `REQUIRED_FILTERS` in `version.rs` does not include libplacebo; `learned_hardware_decode_denial` in `crates/ersatzrs-infra/src/ffmpeg_capabilities.rs` recognizes decode-unsupported signatures but no Vulkan/libplacebo/device-map class. A prior live NVENC HDR/downscale/watermark failure also demonstrated that generated multi-device surface state can diverge from runtime reality.'
-resolved    = false
+evidence    = '''
+Resolved 2026-08-07 by milestone p8b-01. `crates/ersatzrs-ffmpeg/src/graph_probe.rs`
+adds operation-scoped `HardwareGraphOperation` capabilities with bounded functional
+probe commands, a failure classifier built from captured `FFmpeg` 9 stderr, and
+`HardwareGraphDenial` rows keyed by operation and device.
+`crates/ersatzrs-infra/src/hardware_graph.rs` runs the probes with a 20s bound and
+persists denials under `ffmpeg.hardware.graph_denials` with the ADR 0014
+binary-identity lifecycle. `nvidia_vulkan_hdr_tonemap` now requires an
+un-denied graph, and a new `Hardware Graph Capability` health check reports the
+fallback.
+
+Real-hardware verification on the maintainer WSL2 host (RTX 3080 Ti, driver
+610.47, FFmpeg 9.0): `ffmpeg -hwaccels` lists `vulkan` and
+`-init_hw_device vulkan` succeeds, but the only Vulkan device is `llvmpipe`
+(software), so the graph fails with `Could not derive CUDA device`. The probe
+denies `nvenc-hdr-vulkan-libplacebo` with the `cuda-interop` class and proves
+`nvenc-cuda-scale` (ignored test
+`real_hardware_graph_probe_reports_what_this_machine_can_do`). Before this
+change ErsatzRS would have selected the broken graph for every HDR NVENC
+transcode on that machine.
+
+Two further real defects were found and fixed while proving the fallback:
+the previous "non-Vulkan" NVENC HDR chain still ran libplacebo and therefore
+still needed a Vulkan device (`Failed initializing vulkan device`), so a
+genuinely Vulkan-free `tonemap_cuda_software_fallback_filter` was added; and
+`hwdownload,format=nv12` fails on a 10-bit HDR CUDA surface
+(`Invalid output format nv12 for hwframe download`), so the fallback downloads
+p010le. Both are covered by unit tests and the corrected
+`pipeline_emits_tonemap_for_hdr_source_snapshot`.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'hardware-hdr-paths-lack-comparative-benchmarks'
@@ -57,4 +86,20 @@ id          = 'first-class-vulkan-encoding-is-undecided'
 description = 'Do not add a persisted Vulkan hardware-acceleration kind yet. Revisit h264_vulkan/hevc_vulkan only after operation-scoped Vulkan probing and comparative HDR benchmarks provide multi-vendor quality, latency, device-selection, mux/client, fallback, and six-RID packaging evidence; write a separate ADR before schema, UI, or encoder-priority changes.'
 discovered  = '2026-08-07'
 evidence    = 'The current Vulkan use is an internal libplacebo processing bridge for NVENC rather than an encoder backend. FFmpeg exposes Vulkan encoders, but no ErsatzRS multi-vendor runtime or release-matrix benchmark exists and FFmpeg 9 did not itself establish those product guarantees.'
+resolved    = false
+
+[[debt]]
+id          = 'hardware-graph-probes-cover-only-the-nvidia-graphs'
+adr         = '0014'
+description = 'The operation-scoped functional probe covers the two NVENC graphs. QSV, VAAPI/OpenCL, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from advertised capabilities alone, so the same advertised-but-nonfunctional class of failure remains possible there. Extend `HardwareGraphOperation` as those paths gain evidence.'
+discovered  = '2026-08-07'
+evidence    = '`HardwareGraphOperation` in `crates/ersatzrs-ffmpeg/src/graph_probe.rs` defines only `NvencHdrVulkanLibplacebo` and `NvencCudaScale`, and `refresh_hardware_graph_capabilities` returns early unless the `cuda` hwaccel is advertised. Only NVIDIA hardware was available to characterize during p8b-01.'
+resolved    = false
+
+[[debt]]
+id          = 'graph-probe-refresh-is-not-wired-into-startup'
+adr         = '0014'
+description = 'The probe runner, persistence, and ADR 0014 invalidation exist and are unit-tested, but the web host startup path does not yet call `refresh_hardware_graph_capabilities` / `apply_hardware_graph_denials` / `persist_hardware_graph_denials`, and the settings-save capability refresh does not clear graph denials. Until that wiring lands, denials are only learned when a caller invokes the probe directly.'
+discovered  = '2026-08-07'
+evidence    = 'A workspace search finds no caller of `refresh_hardware_graph_capabilities` outside `crates/ersatzrs-infra/src/hardware_graph.rs` and its tests. The pipeline gate and health check read `FfmpegCapabilityReport::hardware_graph_denials`, which stays empty without that call.'
 resolved    = false

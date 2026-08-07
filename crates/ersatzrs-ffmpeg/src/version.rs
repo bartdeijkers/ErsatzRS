@@ -299,6 +299,11 @@ pub struct FfmpegCapabilityReport {
     pub nvidia_decoders: Vec<NvidiaDecoderCapability>,
     /// Runtime-learned negative hardware decode rows.
     pub hardware_decode_denials: Vec<HardwareDecodeDenial>,
+    /// Runtime-learned negative hardware *graph* rows (ADR 0014, milestone
+    /// `p8b-01`). Distinct from decode denials: these record whole
+    /// operation-scoped graphs whose components each initialize but do not
+    /// interoperate.
+    pub hardware_graph_denials: Vec<crate::graph_probe::HardwareGraphDenial>,
     /// `VideoToolbox` hardware decoder `FourCC` values reported by the macOS
     /// framework probe, such as `avc1` or `hvc1`.
     pub videotoolbox_decoders: BTreeSet<String>,
@@ -359,6 +364,33 @@ impl FfmpegCapabilityReport {
             .any(|existing| existing.matches(denial.acceleration, &denial.codec, denial.bit_depth))
         {
             self.hardware_decode_denials.push(denial);
+        }
+    }
+
+    /// Return whether runtime evidence has denied a hardware graph operation.
+    ///
+    /// `device` is the device identity the caller is about to run on; pass an
+    /// empty string when it is unknown, which makes any denial for the
+    /// operation apply.
+    #[must_use]
+    pub fn hardware_graph_denied(
+        &self,
+        operation: crate::graph_probe::HardwareGraphOperation,
+        device: &str,
+    ) -> bool {
+        self.hardware_graph_denials
+            .iter()
+            .any(|denial| denial.matches(operation, device))
+    }
+
+    /// Add a runtime-learned graph denial row if it is not already present.
+    pub fn deny_hardware_graph(&mut self, denial: crate::graph_probe::HardwareGraphDenial) {
+        if !self
+            .hardware_graph_denials
+            .iter()
+            .any(|existing| existing.matches(denial.operation, &denial.device))
+        {
+            self.hardware_graph_denials.push(denial);
         }
     }
 }
@@ -697,6 +729,7 @@ impl FfmpegRuntimeReport {
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),
+            hardware_graph_denials: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };
@@ -1125,6 +1158,7 @@ async fn collect_ffmpeg_capabilities(
         nvidia_encoders: Vec::new(),
         nvidia_decoders: Vec::new(),
         hardware_decode_denials: Vec::new(),
+        hardware_graph_denials: Vec::new(),
         videotoolbox_decoders: BTreeSet::new(),
         videotoolbox_encoders: BTreeSet::new(),
     };
@@ -2445,6 +2479,7 @@ h264_nvenc AVOptions:
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),
+            hardware_graph_denials: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };

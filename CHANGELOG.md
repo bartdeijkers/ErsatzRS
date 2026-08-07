@@ -96,6 +96,21 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed NVIDIA HDR playback selecting a Vulkan/libplacebo graph that cannot run.
+  ErsatzRS chose that path whenever `ffmpeg -hwaccels` listed `vulkan`, which is
+  not evidence that the graph works — on a WSL2 host with an RTX 3080 Ti the
+  only Vulkan device is a software rasterizer, so every HDR NVENC transcode died
+  with `Could not derive CUDA device`. A bounded functional probe now runs the
+  real graph at capability refresh, classifies the failure, remembers the denial
+  per FFmpeg binary and GPU, and falls back once to a proven path that still
+  encodes on the GPU. Platforms without Vulkan stay healthy, and a new
+  **Hardware Graph Capability** health row reports when a fallback is in effect.
+
+  Two related runtime failures were fixed while proving the fallback: the
+  previous "non-Vulkan" NVENC HDR chain still ran libplacebo and therefore still
+  needed a Vulkan device, and downloading a 10-bit HDR CUDA surface as nv12 is
+  rejected by FFmpeg.
+
 - Removed the redundant **Apply** button from the Windows startup section in
   **Settings** -> **UI**. The existing **Save Settings** action now saves the
   theme, language, and Windows startup choice together.

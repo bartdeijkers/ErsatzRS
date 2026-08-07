@@ -503,7 +503,7 @@ evidence = ''
 id         = 'p8b-01'
 phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Harden Vulkan and libplacebo runtime selection'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -515,7 +515,34 @@ denial, and remain visible in health/troubleshooting. Snapshot, classifier,
 serialization, compatible-GPU, and MPEG-TS/HLS runtime proofs cover primary and
 fallback paths; platforms without Vulkan remain healthy.
 '''
-evidence = ''
+evidence = '''
+Core landed 2026-08-07. Operation-scoped `HardwareGraphOperation` capabilities,
+bounded functional probes, an evidence-built failure classifier, device- and
+binary-keyed `HardwareGraphDenial` persistence with the ADR 0014 invalidation
+lifecycle, a single retry through the proven fallback that keeps NVENC, and a
+`Hardware Graph Capability` health row.
+
+Real-hardware proof (RTX 3080 Ti, driver 610.47, WSL2, FFmpeg 9.0): `vulkan` is
+advertised and `-init_hw_device vulkan` succeeds, but the only Vulkan device is
+llvmpipe, so the graph dies with `Could not derive CUDA device`. The probe
+denies `nvenc-hdr-vulkan-libplacebo` (`cuda-interop`) and proves
+`nvenc-cuda-scale`; the generated fallback command was run end to end against a
+real HDR10 source and produced 25 decoded BT.709 frames with HDR metadata
+stripped. Two further real defects were found and fixed: the old "non-Vulkan"
+NVENC HDR chain still required Vulkan through libplacebo, and
+`hwdownload,format=nv12` fails on a 10-bit HDR CUDA surface.
+
+Regressions: 11 `graph_probe` unit tests including verbatim captured stderr,
+4 `hardware_graph` persistence tests, 4 `tonemap` fallback tests, 4 pipeline
+gate tests, and the ignored real-hardware gate
+`real_hardware_graph_probe_reports_what_this_machine_can_do`.
+
+NOT complete: the probe refresh is not yet wired into web-host startup or the
+settings capability refresh (debt `graph-probe-refresh-is-not-wired-into-startup`),
+and only the NVIDIA graphs are modelled (debt
+`hardware-graph-probes-cover-only-the-nvidia-graphs`). No non-NVIDIA hardware
+was available to characterize QSV/VAAPI/AMF graphs.
+'''
 
 [[milestone]]
 id         = 'p8b-02'

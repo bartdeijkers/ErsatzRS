@@ -23,10 +23,10 @@ use crate::{
     watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
     ComplexFilter, ContentLightLevel, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
     FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
-    HardwareCapabilitiesFactory, InputFile, InputKind, MasteringDisplayMetadata,
-    MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceTransferKind, SourceVideoCodec,
-    StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock,
-    WatermarkOverlay,
+    HardwareCapabilitiesFactory, HardwareGraphOperation, InputFile, InputKind,
+    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceTransferKind,
+    SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint,
+    WatermarkOpacityClock, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -1613,6 +1613,7 @@ fn apply_source_video_filters(
             target_state,
             request.desired.pixel_format(),
             tonemap_algorithm(request.desired.tonemap_algorithm),
+            nvidia_vulkan_hdr_tonemap(request),
         ));
         target_state.is_hdr = false;
         // ErsatzTV resets the stream color params to `ColorParams.Default`
@@ -2429,6 +2430,12 @@ fn add_cuda_software_fallback_upload(
         || request.source_video_stream.is_none()
         || is_still_image
         || nvidia_vulkan_hdr_tonemap(request)
+        // Both NVENC HDR tone-map branches end in hardware frames on their own:
+        // the libplacebo branch uploads itself (handled above), and the
+        // Vulkan-free software fallback ends in `hwupload_cuda`. Uploading here
+        // as well would emit `hwupload,hwdownload,...,hwupload_cuda` — a
+        // pointless round trip through GPU memory before a software tonemap.
+        || nvenc_software_hdr_tonemap(request)
     {
         return false;
     }
@@ -2447,16 +2454,49 @@ fn add_cuda_software_fallback_upload(
     false
 }
 
-fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
+/// True when NVENC will tone-map an HDR source in software because the
+/// Vulkan/libplacebo graph is unavailable or denied.
+///
+/// That chain supplies its own `hwupload_cuda`, so callers must not add the
+/// generic CUDA software-fallback upload in front of it.
+fn nvenc_software_hdr_tonemap(request: &PipelineRequest) -> bool {
     request
         .source_video_stream
         .as_ref()
+        .is_some_and(|source| source.color_params.is_hdr || source.color_params.is_bt2020_ten)
+        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && !request.desired.produces_hdr10()
+        && !nvidia_vulkan_hdr_tonemap(request)
+}
+
+/// Select the Vulkan/libplacebo NVENC HDR graph only when runtime evidence
+/// says the *whole* graph works (ADR 0014, milestone `p8b-01`).
+///
+/// The advertised `vulkan` hwaccel is necessary but nowhere near sufficient. On
+/// a WSL2 host with an RTX 3080 Ti, `ffmpeg -hwaccels` lists `vulkan` and the
+/// Vulkan device initializes — but it is `llvmpipe`, a software rasterizer, so
+/// `hwmap=derive_device=cuda` fails and every HDR NVENC transcode dies. The
+/// operation-scoped denial learned by the functional probe is what separates
+/// "advertised" from "works here".
+fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
+    if request.desired.vulkan_hdr_tonemap_mode != VulkanHdrTonemapMode::Auto {
+        return false;
+    }
+    if !request
+        .source_video_stream
+        .as_ref()
         .is_some_and(|source| source.color_params.is_hdr)
-        && request
-            .runtime_capabilities
-            .as_ref()
-            .is_some_and(|report| report.has_hwaccel("vulkan"))
-        && request.desired.vulkan_hdr_tonemap_mode == VulkanHdrTonemapMode::Auto
+    {
+        return false;
+    }
+
+    request.runtime_capabilities.as_ref().is_some_and(|report| {
+        report.has_hwaccel("vulkan")
+            && !report.hardware_graph_denied(
+                HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+                report.nvidia_gpu_list.as_deref().unwrap_or_default(),
+            )
+    })
 }
 
 fn video_encoder(

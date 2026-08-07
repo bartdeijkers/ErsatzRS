@@ -19,14 +19,14 @@ use ersatzrs_ffmpeg::{
     translate_watermark_opacity_expression, translate_watermark_opacity_expression_with_clock,
     yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
     ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate,
-    FrameSize, FrameState, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
-    GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
-    OutputMetadata, PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder,
-    RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec,
-    SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
-    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VaapiProfileEntrypoint,
-    VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOpacityClock,
-    WatermarkOverlay,
+    FrameSize, FrameState, GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay,
+    GraphicsRenderContext, GraphicsTemplateRenderer, HardwareGraphDenial, HardwareGraphOperation,
+    HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder,
+    PipelineRequest, PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder,
+    SoftwarePipelineBuilder, SourceAudioCodec, SourceAudioStream, SourceColorParams,
+    SourceVideoCodec, SourceVideoStream, SvgTemplate, TonemapAlgorithm, V4l2m2mPipelineBuilder,
+    VaapiPipelineBuilder, VaapiProfileEntrypoint, VideoToolboxPipelineBuilder, WatermarkFadeKind,
+    WatermarkFadePoint, WatermarkOpacityClock, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -3688,4 +3688,109 @@ fn hdr10_output_signalling_is_identical_for_sdr_and_hdr_items() {
             "{path} downgraded to BT.709: {args}"
         );
     }
+}
+
+// ── ADR 0014 / p8b-01: operation-scoped Vulkan graph gate ───────────────────
+
+fn hdr_nvenc_request(report: ersatzrs_ffmpeg::FfmpegCapabilityReport) -> PipelineRequest {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.color_params = SourceColorParams {
+        is_hdr: true,
+        is_bt2020_ten: true,
+        ..SourceColorParams::default()
+    };
+    PipelineRequest::new(
+        InputFile::video("/media/hdr-movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source)
+    .with_runtime_capabilities(report)
+}
+
+#[test]
+fn a_denied_vulkan_graph_falls_back_to_the_proven_cuda_path() {
+    // The exact machine state that motivated p8b-01: `vulkan` is advertised
+    // and initializes, but the only Vulkan device is a software rasterizer, so
+    // the functional probe denied the graph.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "",
+        GraphFailureKind::CudaInterop,
+    ));
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    // libplacebo needs a Vulkan device even without the `vulkan` hwaccel, so a
+    // denied Vulkan stack must drop libplacebo entirely — not merely the
+    // `-hwaccel vulkan` flag. Measured: the old "non-Vulkan" NVENC HDR chain
+    // still died with `Failed initializing vulkan device`.
+    assert!(
+        !args.contains("-init_hw_device vulkan") && !args.contains("libplacebo"),
+        "a denied Vulkan graph must not be selected, got: {args}"
+    );
+    // The retry must preserve hardware encoding, not demote to software.
+    assert!(args.contains("h264_nvenc"), "got: {args}");
+    assert!(args.contains("hwupload_cuda"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn an_unproven_vulkan_graph_is_still_selected_when_nothing_denied_it() {
+    // Absence of a denial is the normal state; the gate must not require a
+    // positive proof row that older databases do not have.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("libplacebo"), "got: {args}");
+}
+
+#[test]
+fn a_denial_for_a_different_gpu_does_not_block_this_one() {
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.nvidia_gpu_list = Some("NVIDIA GeForce RTX 4090".to_owned());
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "NVIDIA GeForce RTX 3080 Ti",
+        GraphFailureKind::CudaInterop,
+    ));
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("libplacebo"), "got: {args}");
+}
+
+#[test]
+fn missing_vulkan_is_a_normal_capability_result_not_a_failure() {
+    // ADR 0014: a platform without Vulkan must stay healthy and simply use the
+    // CUDA graph.
+    let request = hdr_nvenc_request(capability_report_for_tests());
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("libplacebo"), "got: {args}");
+    assert!(args.contains("h264_nvenc"), "got: {args}");
 }
