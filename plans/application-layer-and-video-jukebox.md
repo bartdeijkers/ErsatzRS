@@ -2,9 +2,10 @@
 
 ## Status
 
-Active. This plan sequences the structural debt found by the 2026-07-21
-stub/stopgap audit and prepares a stable application boundary for a future
-"The Box" music-video jukebox and its add-ons.
+Queued for Phase 10. The Phase 7 application-boundary work is complete; this
+plan now owns the dependency-gated future "The Box" music-video jukebox and its
+add-ons. Phase 10 begins after Phase 9 teletext support closes through
+milestone `p9b-02`.
 
 The authoritative execution state is in
 [`docs/progress/milestones.toml`](../docs/progress/milestones.toml). Query it
@@ -256,9 +257,9 @@ must not depend on concrete application services or storage.
 - Coordinate with the web server/WASM split so native application code cannot
   leak back into the hydration crate.
 
-## Phase 8A — Durable video-jukebox domain
+## Phase 10A — Durable video-jukebox domain
 
-### P8A-01 — Product and architecture decisions
+### P10A-01 — Product and architecture decisions
 
 Before schema or API work, accept an ADR covering:
 
@@ -271,7 +272,7 @@ Before schema or API work, accept an ADR covering:
 - stable add-on transport/versioning and whether adapters run out of process or
   are compiled into the binary.
 
-### P8A-02 — Durable request aggregate and ports
+### P10A-02 — Durable request aggregate and ports
 
 - Add request identity, channel/media identity, source/requester identity,
   idempotency key, queue position, timestamps, and rejection/failure detail.
@@ -281,7 +282,7 @@ Before schema or API work, accept an ADR covering:
   MySQL implementations.
 - Make submit, idempotency, claim, and state transition operations atomic.
 
-### P8A-03 — Application use cases and scheduler integration
+### P10A-03 — Application use cases and scheduler integration
 
 - Add catalog search, submit, list/status, cancel/moderate, claim, start,
   complete, fail, and recovery use cases.
@@ -290,9 +291,9 @@ Before schema or API work, accept an ADR covering:
   the currently playing item during refresh.
 - Recover accepted/playing work after restart without duplicate scheduling.
 
-## Phase 8B — Add-on ingress and runtime proof
+## Phase 10B — Add-on ingress and runtime proof
 
-### P8B-01 — Stable add-on transport
+### P10B-01 — Stable add-on transport
 
 - Expose a versioned authenticated HTTP command/query API and an SSE or
   equivalent status/event feed.
@@ -301,7 +302,7 @@ Before schema or API work, accept an ADR covering:
 - Keep adapter SDK/examples protocol-only; they must not expose SQL, Leptos
   server-function URLs, or scheduler internals.
 
-### P8B-02 — Operations and end-to-end acceptance
+### P10B-02 — Operations and end-to-end acceptance
 
 - Add health checks for stalled claims, invalid requested media, failed
   scheduler handoff, and add-on configuration.
@@ -330,7 +331,7 @@ phase, not once per milestone.
 
 ## Plan retirement
 
-Delete this file from the active-plan index after all Phase 7 milestones are
-complete and the Phase 8 contract has moved into accepted ADRs and feature
+Delete this file from the active-plan index after the Phase 10 contract has
+moved into accepted ADRs and feature
 parity records. Preserve completion evidence in milestone/parity TOMLs,
 session entries, ADRs, the changelog, and git history.

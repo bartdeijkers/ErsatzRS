@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ErsatzRS is a multi-year Rust and FFmpeg 8.1 reimplementation of ErsatzTV. This
+ErsatzRS is a multi-year Rust and FFmpeg 9.x reimplementation of ErsatzTV. This
 plan records the contract layer that must exist before substantial code is
 written: governance, style, architecture, documentation, porting, testing,
 operations, release process, CI, and repeatable AI-agent workflows.
@@ -106,16 +106,19 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
-- `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — cross-cutting plan
+- `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — current Phase 8 plan
   for the accepted SDR/HDR10 output contract, Dolby Vision input
   characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
   libplacebo improvements, safe long-filtergraph transport, source orientation,
   animated WebP, and the deferred evidence gate for first-class Vulkan encoding.
-- `application-layer-and-video-jukebox.md` — phased structural plan to restore
-  the `ersatzrs-app` use-case boundary, remove audited stopgaps and silent
-  failure fallbacks, then add a durable "The Box" music-video request queue
-  behind a stable authenticated add-on API. Fine-grained state is tracked in
-  `docs/progress/milestones.toml`.
+- `teletext-support.md` — Phase 9 plan to decide the teletext product and
+  standards contract, prove optional FFmpeg/libzvbi support on all six release
+  targets, persist stream/page metadata, deliver selectable pages, and add
+  localized management, health, and runtime proof.
+- `application-layer-and-video-jukebox.md` — Phase 10 plan for a durable "The
+  Box" music-video request queue behind a stable authenticated add-on API. The
+  prerequisite `ersatzrs-app` extraction is retained as completed context;
+  fine-grained future state is tracked in `docs/progress/milestones.toml`.
 - `docker-prebuilt-binary-images.md` - release Docker plan to assemble GHCR
   images from already-built Linux release binaries instead of compiling Rust
   inside the Docker build.

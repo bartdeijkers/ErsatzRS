@@ -1,9 +1,11 @@
 # Project Status
 
-**Phase 7 — Hardening and Parity Completion** (Phases 0–6 complete).
+**Phase 9 — Teletext support** (Phases 0–8 complete).
+
+The "The Box" video-jukebox extension is Phase 10.
 
 > **Progress tracking moved.** The detailed phase narrative, per-feature parity
-> matrix, route/hydration coverage, and the session log that used to live here
+> matrix, route/hydration coverage, roadmap milestones, and the session log
 > are now the structured source of truth under
 > [`docs/progress/`](docs/progress/README.md). Query exactly what you need
 > instead of loading a large file:

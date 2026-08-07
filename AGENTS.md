@@ -57,16 +57,14 @@ is the launcher's documented counterpart to the Unix-only-test carve-out above.
 
 ## Current status
 
-**Phase 7 — Hardening and Parity Completion** (Phases 0–6 complete). The Cargo
-workspace, FFmpeg pipeline, playout scheduling engines, media source scanning,
-IPTV/HDHomeRun endpoints, and the admin UI slices through Trakt list
-integration are all in place. The current startup/runtime parity work now
-includes shared database URL resolution, explicit mediaserver bootstrap for
-default startup data, initial readiness plus downgrade/schema checks wired
-into startup health reporting, and the first non-web ErsatzTV health-check
-engine slice in `ersatzrs-core::health` / `ersatzrs-infra::health`. Keep the
-health-check engine current whenever porting work changes FFmpeg capabilities,
-hardware acceleration support, schema readiness, media item state handling,
+**Phase 9 — Teletext support** (Phases 0–8 complete). The Cargo workspace,
+baseline FFmpeg pipeline, playout scheduling engines, media-source scanning,
+IPTV/HDHomeRun endpoints, application boundary, main admin UI, and the FFmpeg 9
+HDR/Dolby Vision, Vulkan/libplacebo, performance, and media-input hardening
+program are in place. Phase 9 adds teletext support, starting with the blocking
+`p9a-01` product/standards ADR; the "The Box" video-jukebox extension follows as
+Phase 10. Keep the health-check engine current whenever this work changes FFmpeg
+capabilities, hardware acceleration support, schema readiness, media-item state,
 metadata persistence, schedules, or provider availability; it is an explicit
 indicator for ErsatzTV port completeness. For the live focus and remaining
 gaps, run `cargo xtask progress next` (the authoritative source) rather than

@@ -2,7 +2,7 @@
 
 ## Status
 
-Active and not implemented. This plan sequences the accepted future-state
+Complete (2026-08-07). This plan sequenced the accepted future-state
 contract in [ADR 0064](../docs/adr/0064-hdr-and-dolby-vision-input-output-contract.md)
 and the follow-up hardening in ADRs [0003](../docs/adr/0003-ffmpeg-cli-spawn.md),
 [0014](../docs/adr/0014-runtime-learned-hardware-capability-fallback.md), and
@@ -10,9 +10,19 @@ and the follow-up hardening in ADRs [0003](../docs/adr/0003-ffmpeg-cli-spawn.md)
 completion evidence belong in `docs/progress/`; this document owns sequencing
 and acceptance boundaries only.
 
-The work is a cross-cutting FFmpeg 9 track. It does not replace the current
-Phase 8 video-jukebox focus and may be delivered in independently reviewable
-slices.
+This was the Phase 8 program. All seven required milestones — `p8a-01`,
+`p8a-02`, `p8b-01`, `p8b-02`, `p8c-01`, `p8c-02`, and `p8c-03` — are complete,
+so Phase 9 teletext support is unblocked. The evidence-gated first-class
+Vulkan-encoder decision `p8c-04` remains deferred, as anticipated: no
+multi-vendor runtime evidence was produced, so the separate ADR it requires does
+not exist.
+
+Residual gaps are tracked as visible parity debt rather than left in this plan:
+HDR10 is uncharacterized on non-NVIDIA hardware, hardware graph probes model only
+the NVIDIA graphs, three of the four `p8b-02` benchmark candidates need a real
+GPU to measure, seeded HDR10 metadata is not operator-editable, Dolby Vision
+profiles 5 and 7 stay rejected until fixtures exist, and MPEG-TS cannot carry a
+display matrix through a stream copy.
 
 ## Goal
 
@@ -50,7 +60,7 @@ without weakening ErsatzTV parity or the six-platform release contract.
 
 ## Workstream 1: Output dynamic range and HDR10 metadata
 
-Tracked by milestone `ff9-01` and
+Tracked by Phase 8A milestone `p8a-01` and
 `docs/progress/parity/hdr-dolby-vision-metadata.toml`.
 
 1. Add the `OutputDynamicRange` domain enum, additive SQLite/MySQL migration,
@@ -75,7 +85,7 @@ fixture comparisons, and direct MPEG-TS/HLS programme-transition proof.
 
 ## Workstream 2: Dolby Vision characterization and input handling
 
-Tracked by milestone `ff9-02`.
+Tracked by Phase 8A milestone `p8a-02`.
 
 1. Acquire redistributable or locally generated profile 5, 7, and 8.1 fixtures
    with known expected output; record any fixture licensing restriction.
@@ -94,7 +104,7 @@ new ADR and a codec/container/client support matrix.
 
 ## Workstream 3: Vulkan/libplacebo capability and fallback
 
-Tracked by milestone `ff9-03` and ADR 0014.
+Tracked by Phase 8B milestone `p8b-01` and ADR 0014.
 
 1. Define an operation-scoped capability for the NVENC HDR graph: selected
    device, Vulkan hwaccel, libplacebo, CUDA upload/interoperability, required
@@ -116,8 +126,8 @@ must remain a normal capability result, not a startup failure.
 
 ## Workstream 4: Hardware HDR performance and quality
 
-Tracked by milestone `ff9-04`. Establish the HDR correctness oracle from
-`ff9-01` before selecting faster graphs.
+Tracked by Phase 8B milestone `p8b-02`. Establish the HDR correctness oracle
+from `p8a-01` before selecting faster graphs.
 
 Benchmark representative 1080p and 4K HDR10/HLG inputs with scaling and an
 alpha overlay. Record throughput, frame latency, CPU, GPU, device transfers,
@@ -137,11 +147,12 @@ than adding platform assumptions to Rust source.
 
 ## Workstream 5: CLI and media-input support
 
-Tracked by milestone `ff9-05`.
+Tracked by Phase 8C milestones `p8c-01` through `p8c-03`.
 
 ### Long filter graphs
 
-Implement ADR 0003's portable threshold for `-/filter_complex <path>`. Use a
+Milestone `p8c-01` implements ADR 0003's portable threshold for
+`-/filter_complex <path>`. Use a
 private per-spawn file, structured argv, deterministic cleanup after child exit,
 and sanitized diagnostics. Test short inline graphs, forced file transport,
 spaces/non-ASCII paths, spawn failure, cancellation, and cleanup on every
@@ -149,16 +160,18 @@ supported native platform shape.
 
 ### Orientation and animated WebP
 
-Persist and apply source display-matrix/orientation metadata. Compare software,
+Milestone `p8c-02` persists and applies source display-matrix/orientation
+metadata. Compare software,
 `transpose_cuda`, and fused libplacebo rotation, preserving the output contract
-and avoiding duplicate autorotation. Add animated WebP input fixtures for
+and avoiding duplicate autorotation. Milestone `p8c-03` adds animated WebP input
+fixtures for
 watermarks/graphics and prove frame timing, looping, alpha, bounded resource
 use, and both IPTV output modes. These are support improvements, not reasons to
 require the filters on a platform that does not use the corresponding path.
 
 ## Workstream 6: First-class Vulkan encoding decision
 
-Milestone `ff9-06` is deferred until the operation-scoped Vulkan gate and HDR
+Milestone `p8c-04` is deferred until the operation-scoped Vulkan gate and HDR
 benchmarks exist. Revisit only with first-party runtime evidence for
 `h264_vulkan`/`hevc_vulkan`, multi-vendor device selection, quality and latency,
 MPEG-TS/HLS compatibility, fallback behavior, and the six-RID packaging matrix.
@@ -168,16 +181,21 @@ a separate ADR before schema, profile-editor, or encoder-priority changes.
 
 ## Delivery order
 
-1. `ff9-01`: establish truthful SDR/HDR10 output.
-2. `ff9-03`: make the existing Vulkan path safe to select and self-healing.
-3. `ff9-02`: characterize and implement Dolby Vision input behavior against the
+1. `p8a-01`: establish truthful SDR/HDR10 output.
+2. `p8b-01`: make the existing Vulkan path safe to select and self-healing.
+3. `p8a-02`: characterize and implement Dolby Vision input behavior against the
    stable output contract.
-4. `ff9-04`: benchmark and adopt hardware graph improvements.
-5. `ff9-05`: land independent CLI/orientation/animated-WebP support slices.
-6. `ff9-06`: decide whether first-class Vulkan encoding is justified.
+4. `p8b-02`: benchmark and adopt hardware graph improvements.
+5. `p8c-01`, `p8c-02`, and `p8c-03`: land independent long-graph,
+   orientation, and animated-WebP support slices.
+6. `p8c-04`: decide whether first-class Vulkan encoding is justified; this
+   deferred decision does not block Phase 9.
 
 Workstreams 1, 3, and the long-filtergraph portion of 5 can proceed in parallel
 when separate changes do not touch the same pipeline builder sections.
+
+Phase 9 begins only after the required Phase 8 milestones `p8a-01`, `p8a-02`,
+`p8b-01`, `p8b-02`, `p8c-01`, `p8c-02`, and `p8c-03` are complete.
 
 ## Closeout gates
 

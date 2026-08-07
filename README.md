@@ -19,10 +19,12 @@ The project is currently in **beta** stage.
 
 ## Current Status
 
-**Phase 7: Hardening and Parity Completion.** Phases 0–6 are complete. The workspace,
-FFmpeg pipeline, playout scheduling, media source scanning, IPTV/HDHomeRun endpoints, and
-admin UI slices through Trakt list integration are all in place. See [STATUS.md](STATUS.md)
-for the current phase checklist, parity matrix, and session log.
+**Phase 9: Teletext support.** Phases 0–8 are complete. SDR/HDR10 output is now
+an explicit profile contract, Dolby Vision input is characterized, the
+Vulkan/libplacebo path is functionally gated with a proven fallback, and the
+FFmpeg 9 command and media-input hardening has landed. The "The Box"
+video-jukebox extension is Phase 10. See [STATUS.md](STATUS.md) for the
+queryable current phase, parity, and session sources.
 
 ## Quick start
 
