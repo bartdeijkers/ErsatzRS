@@ -11,6 +11,7 @@ pub mod ffmpeg_capabilities;
 pub mod ffmpeg_config;
 pub mod ffprobe;
 pub mod file_system_layout;
+pub mod filter_graph_file;
 pub mod graphics_import;
 pub mod graphics_template;
 pub mod hardware_graph;

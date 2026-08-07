@@ -146,6 +146,17 @@ pub fn transcode_folder() -> PathBuf {
     app_data_folder().join("cache").join("transcode")
 }
 
+/// `<AppDataFolder>/cache/filter-graphs` — private per-spawn filter-graph
+/// transport files (ADR 0003).
+///
+/// Under `cache/` because the contents are disposable transport artifacts, not
+/// configuration: every file is written immediately before a spawn and removed
+/// once that child has exited.
+#[must_use]
+pub fn filter_graph_folder() -> PathBuf {
+    app_data_folder().join("cache").join("filter-graphs")
+}
+
 /// `<AppDataFolder>/scripts` — root for user-editable scripts.
 /// Mirrors `FileSystemLayout.ScriptsFolder`.
 #[must_use]

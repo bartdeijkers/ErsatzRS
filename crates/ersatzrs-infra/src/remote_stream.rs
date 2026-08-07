@@ -70,9 +70,27 @@ pub enum RemoteStreamError {
 pub struct RemoteStreamProcess {
     child: Child,
     producer_pipe: Option<RemoteStreamProducerPipe>,
+    /// ADR 0003 filter-graph transport file, when this spawn needed one.
+    ///
+    /// Held purely so it outlives the child: dropping this struct — on a clean
+    /// exit, a kill, a cancelled request, or supervision teardown — deletes the
+    /// file. `kill_on_drop(true)` on the child means there is no path that
+    /// leaves `FFmpeg` running without this guard.
+    filter_graph_file: Option<crate::filter_graph_file::FilterGraphFile>,
 }
 
 impl RemoteStreamProcess {
+    /// Whether this spawn moved its filter graph to a transport file
+    /// (ADR 0003).
+    ///
+    /// Exposed so tests and troubleshooting can confirm the transport choice
+    /// without parsing logs; the file itself is owned here purely so it is
+    /// deleted when this process handle drops.
+    #[must_use]
+    pub const fn uses_filter_graph_file(&self) -> bool {
+        self.filter_graph_file.is_some()
+    }
+
     /// Wait for the consumer and then stop any producer that is still running.
     ///
     /// # Errors
@@ -465,9 +483,18 @@ pub fn spawn_ffmpeg_with_remote_input(
     let mut producer_child = producer
         .map(|producer| spawn_remote_stream_producer(producer, &command.executable, None))
         .transpose()?;
+    // ADR 0003: move an oversized graph out of argv before spawning, so a
+    // complex channel cannot become unspawnable on a platform with a tight
+    // command-line limit.
+    let (arguments, filter_graph_file) = crate::filter_graph_file::apply_filter_graph_transport(
+        &command.executable,
+        &command.arguments,
+        &crate::file_system_layout::filter_graph_folder(),
+        false,
+    );
     let mut process = Command::new(&command.executable);
     process
-        .args(&command.arguments)
+        .args(&arguments)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
@@ -514,6 +541,7 @@ pub fn spawn_ffmpeg_with_remote_input(
     Ok(RemoteStreamProcess {
         child: consumer,
         producer_pipe,
+        filter_graph_file,
     })
 }
 

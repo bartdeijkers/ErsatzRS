@@ -71,8 +71,34 @@ id          = 'long-filtergraph-file-transport-is-missing'
 adr         = '0003'
 description = 'Complex filter graphs remain inline argv and can exceed native command-line limits. Add ADR 0003 file transport through FFmpeg 9 `-/filter_complex <path>` behind one portable tested threshold, with private per-spawn storage, cancellation-safe cleanup, sanitized logging, and inline/file snapshot plus runtime coverage.'
 discovered  = '2026-08-07'
-evidence    = 'FFmpeg 9 removes `-filter_complex_script` and supports the generic file-option form `-/filter_complex <path>`. ErsatzRS never emitted the removed option and currently has no long-graph file transport; dynamic subtitles, watermarks, graphics, opacity expressions, scaling, and HDR filters can all contribute to one graph.'
-resolved    = false
+evidence    = '''
+Resolved 2026-08-07 by milestone p8c-01. `crates/ersatzrs-ffmpeg/src/filter_transport.rs`
+owns one portable threshold evaluated against the complete projected command
+shape (24000 bytes) as well as the graph itself (8192 bytes), plus the argv
+rewrite to FFmpeg 9's structured `-/filter_complex <path>` pair. The removed
+`-filter_complex_script` is never emitted, asserted by
+`the_removed_ffmpeg_8_option_is_never_emitted`.
+
+`crates/ersatzrs-infra/src/filter_graph_file.rs` owns the private per-spawn file:
+written under `<AppDataFolder>/cache/filter-graphs` with mode 0600 on Unix,
+exact graph bytes with no quoting or expansion, unique per process and sequence,
+and deleted by an RAII guard. `RemoteStreamProcess` owns that guard, so a clean
+exit, a non-zero exit, a kill, a cancelled request, and supervision teardown all
+delete the file through the same path. A write failure falls back to inline
+rather than refusing to play.
+
+Logs carry the transport choice, the byte count, and the file name only —
+never the containing directory or the graph, which embeds media and subtitle
+paths (`logs_carry_the_choice_and_file_name_but_not_the_graph`).
+
+Runtime proof against real FFmpeg 9:
+`real_ffmpeg_accepts_the_rewritten_file_transport_argv` spawns through a
+directory named `fïlter graphs` (space plus non-ASCII) and asserts a successful
+encode, and `killing_a_running_child_still_removes_the_transport_file` proves
+cleanup after cancellation of a live child. 17 unit tests cover the threshold,
+rewrite, permissions, collision, spawn-failure fallback, and double-delete.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'orientation-and-animated-webp-support-is-uncharacterized'

@@ -578,7 +578,7 @@ evidence = ''
 id         = 'p8c-01'
 phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Move long complex filters to safe file transport'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -589,7 +589,28 @@ runtime tests cover short inline graphs, forced file transport, native
 path/quoting edge cases, spawn failure, cancellation, sanitized diagnostics,
 and deterministic cleanup.
 '''
-evidence = ''
+evidence = '''
+Complete 2026-08-07. One portable threshold in
+`crates/ersatzrs-ffmpeg/src/filter_transport.rs` evaluated against the complete
+projected command shape (24000 bytes) and the graph itself (8192 bytes); short
+graphs stay inline. Oversized graphs move to a private per-spawn file passed as
+FFmpeg 9's structured `-/filter_complex <path>` pair. Arguments are never
+shell-joined and the removed `-filter_complex_script` is never emitted.
+
+`crates/ersatzrs-infra/src/filter_graph_file.rs` writes the file under
+`<AppDataFolder>/cache/filter-graphs` with mode 0600 on Unix and exact graph
+bytes, and deletes it through an RAII guard owned by `RemoteStreamProcess`, so
+clean exit, non-zero exit, kill, cancellation, and supervision teardown share one
+cleanup path. A spawn-time write failure falls back to inline instead of failing
+playback. Logs carry the choice, byte count, and file name only.
+
+Runtime proof against real FFmpeg 9:
+`real_ffmpeg_accepts_the_rewritten_file_transport_argv` encodes successfully
+through a directory named `fïlter graphs` (space plus non-ASCII), and
+`killing_a_running_child_still_removes_the_transport_file` proves cleanup after
+cancelling a live child. 17 unit tests cover threshold, rewrite, permissions,
+collisions, spawn-failure fallback, double-delete, and log sanitization.
+'''
 
 [[milestone]]
 id         = 'p8c-02'
