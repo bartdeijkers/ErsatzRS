@@ -63,8 +63,33 @@ id          = 'hardware-hdr-paths-lack-comparative-benchmarks'
 adr         = '0064'
 description = 'Benchmark correctness, throughput, latency, CPU/GPU load, and device transfers for fused libplacebo tone-map/scale/rotation, libplacebo peak-detection policy, native tonemap_vaapi versus the VAAPI/OpenCL bridge, and FFmpeg 9 AMF HDR/hardware-memory conversion versus software tonemapping. Adopt only measured improvements that preserve the same SDR/HDR10 output contract.'
 discovered  = '2026-08-07'
-evidence    = '`tonemap_cuda_filter` currently emits libplacebo followed by CUDA upload and may be followed by separate CUDA scaling; `tonemap_vaapi_filter` maps VAAPI frames through OpenCL and back; `tonemap_filter_for` sends AMF through the software path. FFmpeg 9 exposes native/fused alternatives, but the differential review produced capability evidence rather than ErsatzRS quality or resource benchmarks.'
-resolved    = false
+evidence    = '''
+Resolved 2026-08-07 by milestone p8b-02, with the honest outcome that no
+candidate could be adopted.
+
+`scripts/bench/hdr-graph-bench.sh` is the reproducible harness: it generates
+1080p and 4K HDR10 fixtures from lavfi, reports which hardware devices are
+available so an unmeasurable candidate is never mistaken for a tie, and times
+every graph with an alpha overlay.
+
+Measured on the maintainer machine (RTX 3080 Ti, WSL2), 1080p HDR10 to SDR 720p
+over 10s of content: software zscale+tonemap 3.95s at 985% CPU; software tonemap
+into CUDA scale and NVENC 3.41s at 905% CPU; fused libplacebo 12.03s
+(peak_detect on) and 11.36s (off). 4K to 1080p: software 9.77s at 1533%, NVENC
+11.89s at 1137%.
+
+Adopted: nothing, and the reason is that the evidence does not exist rather than
+that the candidates lost. Fused libplacebo and peak detection could only run on
+llvmpipe, a software Vulkan device, so their numbers say nothing about a GPU.
+The VAAPI/OpenCL versus native `tonemap_vaapi` comparison needs a VAAPI device,
+and the AMF comparison needs AMD hardware and `libamfrt64.so.1`; neither exists
+here. ADR 0064 adopts a candidate only on a measured win, so the current graphs
+stand unchanged.
+
+The blocked comparisons are tracked as
+`hardware-hdr-candidates-need-real-gpu-measurement`.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'long-filtergraph-file-transport-is-missing'
@@ -233,3 +258,11 @@ now extracts the model name, covered by
 `device_identity_is_the_gpu_model_not_the_raw_probe_blob`.
 '''
 resolved    = true
+
+[[debt]]
+id          = 'hardware-hdr-candidates-need-real-gpu-measurement'
+adr         = '0064'
+description = 'Three of the four p8b-02 candidates could not be measured: fused libplacebo tone-map/scale and libplacebo peak detection need a real Vulkan GPU (only llvmpipe was available), native tonemap_vaapi needs a VAAPI device, and the AMF colour-conversion path needs AMD hardware. Re-run `scripts/bench/hdr-graph-bench.sh` on each and adopt only measured wins.'
+discovered  = '2026-08-07'
+evidence    = 'The harness reports device availability: cuda and vulkan available (vulkan resolving to `llvmpipe (software)`), vaapi/amf/qsv unavailable. Fused libplacebo measured 12.03s against the current path`s 3.95s on llvmpipe, which is a software-rasterizer artefact rather than a verdict on the graph.'
+resolved    = false

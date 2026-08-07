@@ -175,6 +175,36 @@ The alpha overlay was confirmed to actually composite rather than being silently
 dropped: a pixel inside the overlay region reads `(61, 5, 0)` without it and
 `(252, 0, 0)` with it.
 
+## Finding 8: no hardware HDR graph candidate could be adopted
+
+Milestone `p8b-02` names four candidate optimizations. `scripts/bench/hdr-graph-bench.sh`
+runs them all and reports the ones a machine cannot measure rather than skipping
+them silently. On the maintainer's machine (RTX 3080 Ti under WSL2):
+
+| Candidate | Outcome |
+|---|---|
+| Fused libplacebo tone-map + scale | Measurable only on **llvmpipe**, so not evidence about a GPU |
+| libplacebo peak detection on vs off | Same; the 2–6% difference observed is software noise |
+| VAAPI/OpenCL bridge vs native `tonemap_vaapi` | **Unavailable** — no VAAPI device |
+| AMF colour conversion / hardware memory | **Unavailable** — `libamfrt64.so.1` absent, no AMD hardware |
+
+Measured 1080p HDR10 → SDR 720p with an alpha overlay (10 s of content):
+
+```
+software zscale+tonemap, then scale     elapsed=3.95  cpu=985%
+sw tonemap -> cuda scale -> nvenc       elapsed=3.41  cpu=905%
+fused libplacebo, peak_detect=true      elapsed=12.03 cpu=1299%
+fused libplacebo, peak_detect=false     elapsed=11.36 cpu=1269%
+```
+
+4K HDR10 → SDR 1080p: software 9.77 s at 1533% CPU, NVENC 11.89 s at 1137% CPU.
+
+**Nothing was adopted.** The only candidate that ran here ran on a software
+Vulkan device, where it is unsurprisingly ~3× slower than the software path;
+that measurement cannot justify a change either way. The remaining three could
+not be measured at all. ADR 0064's rule is that a candidate is adopted only on a
+measured win, so the current graphs stand.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,

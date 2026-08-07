@@ -606,7 +606,7 @@ was available to characterize QSV/VAAPI/AMF graphs.
 id         = 'p8b-02'
 phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Benchmark and select hardware HDR graph improvements'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01', 'p8b-01']
@@ -617,7 +617,27 @@ hardware-memory paths. Measurements include decoded quality, signaling,
 throughput, latency, CPU/GPU load, and device transfers. Only proven wins are
 adopted; unsupported combinations remain capability-gated and documented.
 '''
-evidence = ''
+evidence = '''
+Complete 2026-08-07 with the outcome that no candidate was adopted, because the
+evidence to justify one does not exist on available hardware — not because the
+candidates lost.
+
+`scripts/bench/hdr-graph-bench.sh` is the reproducible harness: lavfi-generated
+1080p and 4K HDR10 fixtures, an alpha overlay, and a device-availability report
+so an unmeasurable candidate is never mistaken for a tie.
+
+Measured (RTX 3080 Ti, WSL2), 1080p HDR10 to SDR 720p over 10s: software
+zscale+tonemap 3.95s/985% CPU; software tonemap into CUDA scale and NVENC
+3.41s/905%; fused libplacebo 12.03s (peak detect on) and 11.36s (off). 4K to
+1080p: software 9.77s/1533%, NVENC 11.89s/1137%.
+
+Three of the four named candidates could not be measured: fused libplacebo and
+peak detection only ran on `llvmpipe`, a software Vulkan device, so their
+numbers say nothing about a GPU; native `tonemap_vaapi` needs a VAAPI device;
+and the AMF path needs AMD hardware and `libamfrt64.so.1`. ADR 0064 adopts only
+measured wins, so the current graphs stand unchanged and the blocked
+comparisons are tracked as `hardware-hdr-candidates-need-real-gpu-measurement`.
+'''
 
 [[milestone]]
 id         = 'p8c-01'
