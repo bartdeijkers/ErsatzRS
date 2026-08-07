@@ -64,8 +64,40 @@ id          = 'dolby-vision-sources-are-unhandled'
 adr         = '0064'
 description = 'ErsatzRS does not persist Dolby Vision configuration, classify profiles, or define copy/transcode behavior. Characterize profiles 5, 7, and 8.1 against stable SDR and HDR10 outputs; use profile 7/compatible 8.1 base-layer behavior only when fixture-proven; reject unproven profile 5 paths visibly; and make RPU consumption, stripping, or preservation explicit. Dolby Vision output is excluded.'
 discovered  = '2026-08-07'
-evidence    = 'A workspace-wide search found no Rust Dolby Vision handling and `$ERSATZTV_SRC` contains no equivalent C# policy, confirming beyond-parity scope. FFmpeg 9 adds `dovi_split` for multilayer HEVC with base/enhancement-layer and RPU modes, while ffprobe can expose a Dolby Vision configuration record and libplacebo can consume embedded Dolby Vision metadata. No profile 5/7/8.1 output fixture was run during the differential review, so no compatibility claim is accepted without milestone p8a-02 evidence.'
-resolved    = false
+evidence    = '''
+Partially resolved 2026-08-07 by milestone p8a-02: the safe-default half is
+implemented, the fixture-gated enablement half is blocked.
+
+Implemented and tested. `ersatzrs_ffmpeg::DolbyVisionConfiguration` models the
+ffprobe `DOVI configuration record` (field names read from the shipped ffprobe
+binary: `dv_profile`, `dv_bl_signal_compatibility_id`, `rpu_present_flag`,
+`el_present_flag`, `bl_present_flag`). The record is parsed, persisted through an
+additive SQLite/MySQL migration, and carried to playback. The policy follows the
+profile definitions rather than a guess: profile 8 with base-layer compatibility
+id 1 (HDR10) or 4 (HLG) may play from that base layer with Dolby Vision
+signalling removed, because the compatibility id is a standard guarantee;
+profile 7 stays unproven because separating its enhancement layer needs
+`dovi_split` plus a fixture; profile 5 stays unproven because it has no
+conventional fallback at all and decoding it as BT.2020 yields visibly wrong
+colour. A `Dolby Vision` health check names every rejected stream and its
+reason. Dolby Vision output is not advertised anywhere.
+
+BLOCKED, and the reason is concrete. No redistributable profile 5, 7, or 8.1
+fixture could be produced or obtained on this machine: libx265 exposes
+`dolby-vision-profile`, but emitting a genuine RPU requires an external RPU file
+that only Dolby`s own tooling produces, and `-x265-params dolby-vision-rpu=none`
+silently yields plain HDR10 with no DOVI record (verified by probing the output).
+So the *parser* is proven against ffprobe`s exact documented JSON shape, and the
+*policy* is unit-tested, but no decoded-output characterization of a real Dolby
+Vision file exists. Nothing is enabled on the strength of that gap: every profile
+that is not a standards-guaranteed compatible base layer is rejected.
+
+Remaining work, tracked as `dolby-vision-playback-is-not-fixture-proven`:
+acquire licensed or generate genuine profile 5/7/8.1 fixtures, then characterize
+copy/software/libplacebo paths for SDR and HDR10 targets, `dovi_split` for
+profile 7, and overlays, subtitles, scaling, seeking, restart, MPEG-TS and HLS.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'hdr10-hardware-output-paths-are-unimplemented'
@@ -154,4 +186,12 @@ adr         = '0064'
 description = 'ADR 0064 requires the seeded HDR10 mastering-display and content-light defaults to be documented and editable. They are documented constants in `MasteringDisplayMetadata::BT2020_1000_NITS` and `ContentLightLevel::DEFAULT`, used only when a converted source carried no metadata of its own, but there is no profile field an operator can change.'
 discovered  = '2026-08-07'
 evidence    = 'The constants are stated explicitly in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` and covered by tests, so they are not hidden guesses, but `FFmpegProfile` has no mastering-display or content-light column and the profile editor exposes no control.'
+resolved    = false
+
+[[debt]]
+id          = 'dolby-vision-playback-is-not-fixture-proven'
+adr         = '0064'
+description = 'The Dolby Vision profile policy, persistence, and rejection path are implemented and unit-tested, but no real profile 5, 7, or 8.1 file has been played. Acquire licensed or genuinely generated fixtures, then characterize copy, software, and libplacebo paths for SDR and HDR10 targets, dovi_split for profile 7 dual layer, and overlays, subtitles, scaling, seeking, restart, MPEG-TS, and HLS. Until then only standards-guaranteed compatible base layers play and everything else is rejected.'
+discovered  = '2026-08-07'
+evidence    = 'No redistributable Dolby Vision fixture could be produced locally: libx265 accepts `dolby-vision-profile` but needs an external RPU file that only Dolby tooling generates, and `dolby-vision-rpu=none` produced plain HDR10 with no DOVI configuration record (verified by probing the output). The parser is proven against ffprobe JSON and the policy is unit-tested, but no decoded-output evidence exists.'
 resolved    = false

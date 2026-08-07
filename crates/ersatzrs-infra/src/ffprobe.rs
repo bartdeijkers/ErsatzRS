@@ -5,6 +5,7 @@ use std::time::Duration as StdDuration;
 
 use chrono::{Duration, Utc};
 use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, MediaVersion, VideoScanKind};
+use ersatzrs_ffmpeg::DolbyVisionConfiguration;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::process::Command;
@@ -384,6 +385,9 @@ fn stream_to_domain(
     // video stream even when a container attaches side data elsewhere.
     let is_video = matches!(kind, MediaStreamKind::Video);
     let content_light = stream.content_light(frame_side_data);
+    let dolby_vision = is_video
+        .then(|| stream.dolby_vision(frame_side_data))
+        .flatten();
     let attached_pic = stream
         .disposition
         .as_ref()
@@ -454,6 +458,11 @@ fn stream_to_domain(
             .flatten(),
         max_cll: is_video.then_some(content_light.0).flatten(),
         max_fall: is_video.then_some(content_light.1).flatten(),
+        dolby_vision_profile: dolby_vision.map(|config| i32::from(config.profile)),
+        dolby_vision_bl_compatibility_id: dolby_vision
+            .map(|config| i32::from(config.bl_signal_compatibility_id)),
+        dolby_vision_el_present: dolby_vision.map(|config| config.el_present),
+        dolby_vision_rpu_present: dolby_vision.map(|config| config.rpu_present),
         ..MediaStream::default()
     })
 }
@@ -583,6 +592,13 @@ struct FfprobeSideData {
     /// CTA-861.3 content light level, in cd/m².
     max_content: Option<i32>,
     max_average: Option<i32>,
+    /// Dolby Vision configuration record fields (ADR 0064). Field names match
+    /// `ffprobe`'s `DOVI configuration record` output.
+    dv_profile: Option<u8>,
+    dv_bl_signal_compatibility_id: Option<u8>,
+    rpu_present_flag: Option<i32>,
+    el_present_flag: Option<i32>,
+    bl_present_flag: Option<i32>,
 }
 
 /// Parse an ffprobe rational such as `"34000/50000"` into its numerator.
@@ -633,6 +649,27 @@ impl FfprobeStream {
             .chain(frame_side_data.iter().copied())
             .find(|entry| entry.max_content.is_some() || entry.max_average.is_some())
             .map_or((None, None), |entry| (entry.max_content, entry.max_average))
+    }
+
+    /// Dolby Vision configuration record, when the stream carries one.
+    fn dolby_vision(
+        &self,
+        frame_side_data: &[&FfprobeSideData],
+    ) -> Option<DolbyVisionConfiguration> {
+        let side_data = self
+            .side_data_list
+            .iter()
+            .flatten()
+            .chain(frame_side_data.iter().copied())
+            .find(|entry| entry.dv_profile.is_some())?;
+
+        Some(DolbyVisionConfiguration {
+            profile: side_data.dv_profile?,
+            bl_signal_compatibility_id: side_data.dv_bl_signal_compatibility_id.unwrap_or_default(),
+            rpu_present: side_data.rpu_present_flag.unwrap_or_default() != 0,
+            el_present: side_data.el_present_flag.unwrap_or_default() != 0,
+            bl_present: side_data.bl_present_flag.unwrap_or_default() != 0,
+        })
     }
 
     /// Display-matrix rotation in degrees, normalized to 0/90/180/270.
@@ -775,5 +812,80 @@ mod tests {
         );
         assert_eq!(video.max_cll, Some(1_000));
         assert_eq!(video.max_fall, Some(400));
+    }
+
+    #[test]
+    fn dolby_vision_configuration_is_parsed_from_ffprobe_stream_side_data() {
+        // Field names taken from the shipped ffprobe binary's own writer:
+        // dv_profile, dv_level, rpu_present_flag, el_present_flag,
+        // bl_present_flag, dv_bl_signal_compatibility_id.
+        let json = br#"{
+            "streams": [{
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "side_data_list": [{
+                    "side_data_type": "DOVI configuration record",
+                    "dv_version_major": 1,
+                    "dv_version_minor": 0,
+                    "dv_profile": 8,
+                    "dv_level": 6,
+                    "rpu_present_flag": 1,
+                    "el_present_flag": 0,
+                    "bl_present_flag": 1,
+                    "dv_bl_signal_compatibility_id": 1
+                }]
+            }]
+        }"#;
+
+        let probed = super::parse_ffprobe_json("dv81.mkv", json).expect("parse");
+        let video = probed.streams.first().expect("stream");
+
+        assert_eq!(video.dolby_vision_profile, Some(8));
+        assert_eq!(video.dolby_vision_bl_compatibility_id, Some(1));
+        assert_eq!(video.dolby_vision_rpu_present, Some(true));
+        assert_eq!(video.dolby_vision_el_present, Some(false));
+    }
+
+    #[test]
+    fn a_profile_7_dual_layer_record_is_parsed_with_its_enhancement_layer() {
+        let json = br#"{
+            "streams": [{
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "side_data_list": [{
+                    "side_data_type": "DOVI configuration record",
+                    "dv_profile": 7,
+                    "rpu_present_flag": 1,
+                    "el_present_flag": 1,
+                    "bl_present_flag": 1,
+                    "dv_bl_signal_compatibility_id": 0
+                }]
+            }]
+        }"#;
+
+        let probed = super::parse_ffprobe_json("dv7.mkv", json).expect("parse");
+        let video = probed.streams.first().expect("stream");
+
+        assert_eq!(video.dolby_vision_profile, Some(7));
+        assert_eq!(video.dolby_vision_el_present, Some(true));
+    }
+
+    #[test]
+    fn a_stream_without_dolby_vision_reports_none() {
+        let json = br#"{
+            "streams": [{
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "hevc"
+            }]
+        }"#;
+
+        let probed = super::parse_ffprobe_json("plain.mkv", json).expect("parse");
+        let video = probed.streams.first().expect("stream");
+
+        assert_eq!(video.dolby_vision_profile, None);
+        assert_eq!(video.dolby_vision_rpu_present, None);
     }
 }

@@ -505,7 +505,7 @@ defaults are documented constants rather than operator-editable profile fields
 id         = 'p8a-02'
 phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Characterize and support Dolby Vision inputs'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'hdr-dolby-vision-metadata'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01']
@@ -516,7 +516,33 @@ libplacebo and dovi_split use, output signaling, rejection behavior, health,
 overlays, subtitles, scaling, restart, MPEG-TS, and HLS are explicit and
 runtime-proven. Dolby Vision output remains unadvertised.
 '''
-evidence = ''
+evidence = '''
+Safe-default half complete 2026-08-07; fixture-gated enablement is blocked.
+
+Implemented: the ffprobe `DOVI configuration record` is parsed (field names read
+from the shipped ffprobe binary), persisted through an additive SQLite/MySQL
+migration, and carried to playback. The profile policy follows the standard
+rather than a guess — profile 8 with base-layer compatibility id 1 (HDR10) or 4
+(HLG) may play from that base layer with Dolby Vision signalling removed;
+profile 7 and profile 5 are rejected, the former because dual-layer separation
+is unproven and the latter because it has no conventional fallback and would
+play with visibly wrong colour. A `Dolby Vision` health check names every
+rejected stream with its reason. Dolby Vision output is not advertised.
+
+BLOCKED on fixtures, concretely: no redistributable profile 5, 7, or 8.1 file
+could be produced here. libx265 exposes `dolby-vision-profile` but a genuine RPU
+needs an external file only Dolby tooling produces, and
+`dolby-vision-rpu=none` silently yields plain HDR10 with no DOVI record
+(verified by probing the output). The parser is therefore proven against
+ffprobe's exact JSON shape and the policy is unit-tested, but no decoded-output
+characterization of a real Dolby Vision file exists.
+
+Nothing is enabled on the strength of that gap. Remaining work is tracked as
+`dolby-vision-playback-is-not-fixture-proven`: acquire licensed or genuinely
+generated fixtures, then characterize copy/software/libplacebo paths for SDR and
+HDR10, `dovi_split` for profile 7, and overlays, subtitles, scaling, seeking,
+restart, MPEG-TS, and HLS.
+'''
 
 [[milestone]]
 id         = 'p8b-01'

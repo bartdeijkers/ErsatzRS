@@ -18,16 +18,16 @@ use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
 
 use checks::{
-    ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DowngradeHealthCheck,
-    EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
-    FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
-    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
-    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
-    MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
-    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
-    SearchProjectionHealthCheck, SqliteConnectionDefaultsHealthCheck,
-    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
-    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DolbyVisionHealthCheck,
+    DowngradeHealthCheck, EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck,
+    FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck,
+    FFmpegVersionHealthCheck, FileNotFoundHealthCheck, HardwareAccelerationHealthCheck,
+    HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
+    MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
+    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
+    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -51,7 +51,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 28] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 29] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -76,6 +76,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 28] = [
     "Classic Playout State",
     "Mirror Channels",
     "Output Dynamic Range",
+    "Dolby Vision",
     "VAAPI Driver",
     "VAAPI Device",
     "Provider Connectivity",
@@ -202,6 +203,7 @@ fn registered_health_checks(
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
+        Box::new(DolbyVisionHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),

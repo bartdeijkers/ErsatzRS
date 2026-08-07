@@ -438,6 +438,19 @@ pub struct MediaStream {
     pub max_cll: Option<i32>,
     /// CTA-861.3 `MaxFALL` in cd/m².
     pub max_fall: Option<i32>,
+    /// Dolby Vision profile from the configuration record (ADR 0064).
+    ///
+    /// `None` means the stream is not Dolby Vision. Persisted so playback can
+    /// apply the profile policy without re-probing, and so troubleshooting can
+    /// explain a rejection.
+    pub dolby_vision_profile: Option<i32>,
+    /// Dolby Vision base-layer signal compatibility id: 1 = HDR10, 4 = HLG,
+    /// 0 = none.
+    pub dolby_vision_bl_compatibility_id: Option<i32>,
+    /// Whether a Dolby Vision enhancement layer is present (profile 7).
+    pub dolby_vision_el_present: Option<bool>,
+    /// Whether Dolby Vision RPU metadata is present.
+    pub dolby_vision_rpu_present: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

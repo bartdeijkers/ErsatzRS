@@ -1,5 +1,6 @@
 mod classic_playout_state;
 mod dirty_migration;
+mod dolby_vision;
 mod downgrade;
 mod empty_schedule;
 mod episode_metadata;
@@ -29,6 +30,7 @@ mod zero_duration;
 
 pub(super) use classic_playout_state::ClassicPlayoutStateHealthCheck;
 pub(super) use dirty_migration::DirtyMigrationHealthCheck;
+pub(super) use dolby_vision::DolbyVisionHealthCheck;
 pub(super) use downgrade::DowngradeHealthCheck;
 pub(super) use empty_schedule::EmptyScheduleHealthCheck;
 pub(super) use episode_metadata::EpisodeMetadataHealthCheck;

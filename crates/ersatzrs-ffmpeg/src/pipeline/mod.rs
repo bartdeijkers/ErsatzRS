@@ -23,12 +23,12 @@ use crate::{
     watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
     watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
     yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
-    ContentLightLevel, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain,
-    FrameRate, FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory,
-    HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind, MasteringDisplayMetadata,
-    MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags, SourceTransferKind,
-    SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint,
-    WatermarkOpacityClock, WatermarkOverlay,
+    ContentLightLevel, DolbyVisionConfiguration, FfmpegCapability, FfmpegCapabilityReport,
+    FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
+    HardwareCapabilitiesFactory, HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind,
+    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
+    SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
+    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -243,6 +243,8 @@ pub struct SourceVideoStream {
     pub max_cll: Option<i32>,
     /// Source CTA-861.3 `MaxFALL` in cd/m².
     pub max_fall: Option<i32>,
+    /// Dolby Vision configuration record (ADR 0064), when the source has one.
+    pub dolby_vision: Option<DolbyVisionConfiguration>,
 }
 
 impl SourceVideoStream {
@@ -272,6 +274,7 @@ impl SourceVideoStream {
             mastering_display: None,
             max_cll: None,
             max_fall: None,
+            dolby_vision: None,
         }
     }
 

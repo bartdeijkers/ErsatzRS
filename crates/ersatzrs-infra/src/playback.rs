@@ -218,6 +218,10 @@ pub async fn load_source_video_stream_by_index(
                   ms."MasteringDisplay" AS "MasteringDisplay",
                   ms."MaxCll" AS "MaxCll",
                   ms."MaxFall" AS "MaxFall",
+                  ms."DolbyVisionProfile" AS "DolbyVisionProfile",
+                  ms."DolbyVisionBlCompatibilityId" AS "DolbyVisionBlCompatibilityId",
+                  ms."DolbyVisionElPresent" AS "DolbyVisionElPresent",
+                  ms."DolbyVisionRpuPresent" AS "DolbyVisionRpuPresent",
                   mv."VideoScanKind" AS "VideoScanKind",
                   mv."Width" AS "Width",
                   mv."Height" AS "Height",
@@ -291,10 +295,7 @@ pub async fn load_source_video_stream_by_index(
     stream.frame_rate = frame_rate.as_deref().and_then(parse_frame_rate);
     stream.sample_aspect_ratio = decode_playback_column(&row, "SampleAspectRatio")?;
     stream.display_aspect_ratio = decode_playback_column(&row, "DisplayAspectRatio")?;
-    stream.rotation_degrees = decode_playback_column(&row, "Rotation")?;
-    stream.mastering_display = decode_playback_column(&row, "MasteringDisplay")?;
-    stream.max_cll = decode_playback_column(&row, "MaxCll")?;
-    stream.max_fall = decode_playback_column(&row, "MaxFall")?;
+    decode_source_display_metadata(&row, &mut stream)?;
     stream.is_still_image = decode_playback_bool(&row, "IsStillImage")?;
     stream.color_params = derive_color_params(
         pixel_format.as_deref(),
@@ -2653,6 +2654,61 @@ fn parse_frame_rate(value: &str) -> Option<FrameRate> {
         return None;
     }
     Some(FrameRate::new(numerator, denominator))
+}
+
+/// Apply the persisted orientation and HDR/Dolby Vision metadata to a source
+/// stream (ADR 0003 and ADR 0064).
+///
+/// Grouped so the loader stays readable: these six columns are all
+/// "how should the picture be interpreted", as distinct from the codec and
+/// geometry fields around them.
+fn decode_source_display_metadata(
+    row: &crate::db::DbRow,
+    stream: &mut SourceVideoStream,
+) -> Result<()> {
+    stream.rotation_degrees = decode_playback_column(row, "Rotation")?;
+    stream.mastering_display = decode_playback_column(row, "MasteringDisplay")?;
+    stream.max_cll = decode_playback_column(row, "MaxCll")?;
+    stream.max_fall = decode_playback_column(row, "MaxFall")?;
+    stream.dolby_vision = decode_dolby_vision_configuration(row);
+    Ok(())
+}
+
+/// Rebuild the persisted Dolby Vision configuration record (ADR 0064).
+///
+/// Returns `None` when the stream is not Dolby Vision. A row missing its
+/// companion columns still yields a configuration with the profile, because the
+/// profile alone is enough for the policy in
+/// `ersatzrs_ffmpeg::DolbyVisionConfiguration::handling` to reject or allow it.
+fn decode_dolby_vision_configuration(
+    row: &crate::db::DbRow,
+) -> Option<ersatzrs_ffmpeg::DolbyVisionConfiguration> {
+    let profile = decode_playback_column::<Option<i32>>(row, "DolbyVisionProfile")
+        .ok()
+        .flatten()
+        .and_then(|profile| u8::try_from(profile).ok())?;
+
+    let flag = |column| {
+        decode_playback_column::<Option<bool>>(row, column)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    };
+
+    Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile,
+        bl_signal_compatibility_id: decode_playback_column::<Option<i32>>(
+            row,
+            "DolbyVisionBlCompatibilityId",
+        )
+        .ok()
+        .flatten()
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or_default(),
+        rpu_present: flag("DolbyVisionRpuPresent"),
+        el_present: flag("DolbyVisionElPresent"),
+        bl_present: true,
+    })
 }
 
 /// Derive HDR color metadata from ffprobe color tags, mirroring ErsatzTV's
