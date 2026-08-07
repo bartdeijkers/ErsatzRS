@@ -82,6 +82,29 @@ impl SettingsRuntime for NativeSettingsRuntime {
         ersatzrs_infra::ffmpeg_capabilities::clear_hardware_decode_denials(&self.pool)
             .await
             .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
+
+        // Saving FFmpeg settings is an explicit capability refresh (ADR 0014),
+        // so learned graph denials are discarded and re-probed against the
+        // runtime the operator just selected.
+        let mut report = report;
+        ersatzrs_infra::hardware_graph::clear_hardware_graph_denials(&self.pool)
+            .await
+            .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
+        ersatzrs_infra::hardware_graph::refresh_hardware_graph_capabilities(
+            std::path::Path::new(ffmpeg_path),
+            &mut report.capabilities,
+        )
+        .await;
+        if let Err(error) = ersatzrs_infra::hardware_graph::persist_hardware_graph_denials(
+            &self.pool,
+            ffmpeg_path,
+            &report.capabilities,
+        )
+        .await
+        {
+            tracing::warn!(%error, "failed to persist runtime-learned hardware graph denials");
+        }
+
         *self.ffmpeg_runtime.write().await = report;
         Ok(())
     }

@@ -174,7 +174,7 @@ pub async fn refresh_hardware_graph_capabilities(
     if !report.has_hwaccel("cuda") {
         return;
     }
-    let device = report.nvidia_gpu_list.clone().unwrap_or_default();
+    let device = report.hardware_graph_device();
 
     if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
         if let Some(denial) = probe_hardware_graph(

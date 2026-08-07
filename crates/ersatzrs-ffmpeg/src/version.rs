@@ -367,6 +367,23 @@ impl FfmpegCapabilityReport {
         }
     }
 
+    /// The device identity used to key hardware-graph denials.
+    ///
+    /// `nvidia_gpu_list` holds the *raw* probe output, which is the entire
+    /// `ffmpeg` banner plus the encoder trace — unusable as a cache key and
+    /// unreadable in a health message. This extracts the model name, such as
+    /// `NVIDIA GeForce RTX 3080 Ti`, and returns an empty string when the
+    /// runtime reported no usable device line.
+    #[must_use]
+    pub fn hardware_graph_device(&self) -> String {
+        self.nvidia_gpu_list
+            .as_deref()
+            .and_then(crate::capabilities::parse_nvidia_gpu_info)
+            .map(|info| info.model)
+            .filter(|model| model != "unknown")
+            .unwrap_or_default()
+    }
+
     /// Return whether runtime evidence has denied a hardware graph operation.
     ///
     /// `device` is the device identity the caller is about to run on; pass an
@@ -391,6 +408,50 @@ impl FfmpegCapabilityReport {
             .any(|existing| existing.matches(denial.operation, &denial.device))
         {
             self.hardware_graph_denials.push(denial);
+        }
+    }
+}
+
+#[cfg(test)]
+mod hardware_graph_device_tests {
+    use super::FfmpegCapabilityReport;
+
+    #[test]
+    fn device_identity_is_the_gpu_model_not_the_raw_probe_blob() {
+        // `nvidia_gpu_list` holds the whole ffmpeg banner plus the encoder
+        // trace. Using it verbatim made the health message unreadable and the
+        // denial cache key useless.
+        let report = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(
+                "ffmpeg version n9.0-20260805\n  configuration: --enable-gpl\n\
+                 [h264_nvenc @ 0x1] [ GPU #0 - < NVIDIA GeForce RTX 3080 Ti > has Compute SM 8.6 ]\n\
+                 frame=    0 fps=0.0"
+                    .to_owned(),
+            ),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        assert_eq!(report.hardware_graph_device(), "NVIDIA GeForce RTX 3080 Ti");
+    }
+
+    #[test]
+    fn an_absent_or_unparsable_device_is_empty_not_garbage() {
+        assert_eq!(
+            FfmpegCapabilityReport::default().hardware_graph_device(),
+            ""
+        );
+
+        for gpu_list in [
+            "no gpu line here",
+            // A device line with no `< model >` segment parses as "unknown",
+            // which is not a usable identity either.
+            "[ GPU #0 - has Compute SM 8.6 ]",
+        ] {
+            let report = FfmpegCapabilityReport {
+                nvidia_gpu_list: Some(gpu_list.to_owned()),
+                ..FfmpegCapabilityReport::default()
+            };
+            assert_eq!(report.hardware_graph_device(), "", "{gpu_list}");
         }
     }
 }

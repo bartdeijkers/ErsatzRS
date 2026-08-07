@@ -1338,6 +1338,8 @@ mod tests {
         .expect("seed channel");
     }
     /// Seed one HDR10-selected profile plus a channel that uses it.
+    // Only used by the SQLite-backed HDR10 health tests below.
+    #[cfg(not(feature = "mysql"))]
     async fn seed_hdr10_profile_and_channel(
         pool: &Pool<Db>,
         id: i64,
@@ -1358,6 +1360,8 @@ mod tests {
         .await;
     }
 
+    // Only used by the SQLite-backed HDR10 health tests below.
+    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_arguments)]
     async fn seed_hdr10_profile_with_acceleration(
         pool: &Pool<Db>,

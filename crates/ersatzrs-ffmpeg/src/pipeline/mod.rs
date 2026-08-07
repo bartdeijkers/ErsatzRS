@@ -2557,7 +2557,7 @@ fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
         report.has_hwaccel("vulkan")
             && !report.hardware_graph_denied(
                 HardwareGraphOperation::NvencHdrVulkanLibplacebo,
-                report.nvidia_gpu_list.as_deref().unwrap_or_default(),
+                &report.hardware_graph_device(),
             )
     })
 }

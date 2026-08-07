@@ -545,9 +545,14 @@ Regressions: 11 `graph_probe` unit tests including verbatim captured stderr,
 gate tests, and the ignored real-hardware gate
 `real_hardware_graph_probe_reports_what_this_machine_can_do`.
 
-NOT complete: the probe refresh is not yet wired into web-host startup or the
-settings capability refresh (debt `graph-probe-refresh-is-not-wired-into-startup`),
-and only the NVIDIA graphs are modelled (debt
+Startup wiring landed 2026-08-07 and was verified by booting the real web host:
+the probe ran, logged
+`nvenc-hdr-vulkan-libplacebo is unavailable on NVIDIA GeForce RTX 3080 Ti: Vulkan
+and CUDA are not interoperable on this device`, and persisted the denial keyed by
+ffmpeg path and GPU model. An FFmpeg settings save clears and re-probes.
+`cargo xtask smoke` passes.
+
+NOT complete: only the NVIDIA graphs are modelled (debt
 `hardware-graph-probes-cover-only-the-nvidia-graphs`). No non-NVIDIA hardware
 was available to characterize QSV/VAAPI/AMF graphs.
 '''

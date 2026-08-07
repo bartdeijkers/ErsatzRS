@@ -101,5 +101,24 @@ id          = 'graph-probe-refresh-is-not-wired-into-startup'
 adr         = '0014'
 description = 'The probe runner, persistence, and ADR 0014 invalidation exist and are unit-tested, but the web host startup path does not yet call `refresh_hardware_graph_capabilities` / `apply_hardware_graph_denials` / `persist_hardware_graph_denials`, and the settings-save capability refresh does not clear graph denials. Until that wiring lands, denials are only learned when a caller invokes the probe directly.'
 discovered  = '2026-08-07'
-evidence    = 'A workspace search finds no caller of `refresh_hardware_graph_capabilities` outside `crates/ersatzrs-infra/src/hardware_graph.rs` and its tests. The pipeline gate and health check read `FfmpegCapabilityReport::hardware_graph_denials`, which stays empty without that call.'
-resolved    = false
+evidence    = '''
+Resolved 2026-08-07. `crates/ersatzrs-web/src/host/bootstrap.rs` reapplies
+persisted denials, probes once when none are stored, persists the result, and
+logs the evidence; `crates/ersatzrs-web/src/host/settings.rs` treats an FFmpeg
+settings save as an explicit capability refresh, clearing and re-probing.
+
+Verified by booting the real web host against a throwaway SQLite database on the
+maintainer machine. Startup logged
+`nvenc-hdr-vulkan-libplacebo is unavailable on NVIDIA GeForce RTX 3080 Ti: Vulkan
+and CUDA are not interoperable on this device`, and `ConfigElement` row
+`ffmpeg.hardware.graph_denials` held
+`{"ffmpeg_path":"…/ffmpeg","denials":[{"operation":"nvenc-hdr-vulkan-libplacebo","device":"NVIDIA GeForce RTX 3080 Ti","kind":"cuda-interop"}]}`.
+`cargo xtask smoke` passed with the wiring in place.
+
+The first wiring attempt keyed denials on `nvidia_gpu_list`, which holds the raw
+probe output — the whole ffmpeg banner plus the encoder trace — making the health
+message unreadable and the cache key useless. `FfmpegCapabilityReport::hardware_graph_device`
+now extracts the model name, covered by
+`device_identity_is_the_gpu_model_not_the_raw_probe_blob`.
+'''
+resolved    = true

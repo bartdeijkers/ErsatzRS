@@ -3759,10 +3759,35 @@ fn an_unproven_vulkan_graph_is_still_selected_when_nothing_denied_it() {
 }
 
 #[test]
+fn a_denial_learned_on_an_unidentified_device_applies_broadly() {
+    // When the runtime cannot name the GPU, the denial has to apply rather than
+    // be re-tried on every playback of a known-broken graph.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "",
+        GraphFailureKind::CudaInterop,
+    ));
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("libplacebo"), "got: {args}");
+}
+
+#[test]
 fn a_denial_for_a_different_gpu_does_not_block_this_one() {
     let mut report = capability_report_for_tests();
     report.hwaccels.insert("vulkan".to_owned());
-    report.nvidia_gpu_list = Some("NVIDIA GeForce RTX 4090".to_owned());
+    // A realistic `-gpu list` probe line; `hardware_graph_device` parses the
+    // model out of it. A bare model string is not what the runtime reports.
+    report.nvidia_gpu_list =
+        Some("[ GPU #0 - < NVIDIA GeForce RTX 4090 > has Compute SM 8.9 ]".to_owned());
     report.deny_hardware_graph(HardwareGraphDenial::new(
         HardwareGraphOperation::NvencHdrVulkanLibplacebo,
         "NVIDIA GeForce RTX 3080 Ti",
