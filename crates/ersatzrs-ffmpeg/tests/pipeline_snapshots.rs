@@ -3719,6 +3719,8 @@ fn a_denied_vulkan_graph_falls_back_to_the_proven_cuda_path() {
         "",
         GraphFailureKind::CudaInterop,
     ));
+    // The fallback is only selectable because the probe proved it.
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
     let request = hdr_nvenc_request(report);
 
     let args = NvencPipelineBuilder
@@ -3769,6 +3771,7 @@ fn a_denial_learned_on_an_unidentified_device_applies_broadly() {
         "",
         GraphFailureKind::CudaInterop,
     ));
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
     let request = hdr_nvenc_request(report);
 
     let args = NvencPipelineBuilder
@@ -3793,6 +3796,15 @@ fn a_denial_for_a_different_gpu_does_not_block_this_one() {
         "NVIDIA GeForce RTX 3080 Ti",
         GraphFailureKind::CudaInterop,
     ));
+    // This GPU probed clean, so both graphs carry positive proof for it.
+    report.prove_hardware_graph(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "NVIDIA GeForce RTX 4090",
+    );
+    report.prove_hardware_graph(
+        HardwareGraphOperation::NvencCudaScale,
+        "NVIDIA GeForce RTX 4090",
+    );
     let request = hdr_nvenc_request(report);
 
     let args = NvencPipelineBuilder
@@ -4508,4 +4520,66 @@ fn stream_copy_never_refuses_a_dolby_vision_source() {
         .with_source_video_stream(source);
 
     assert_eq!(ersatzrs_ffmpeg::unsupported_source_reason(&request), None);
+}
+
+#[test]
+fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
+    // ADR 0014: NvencCudaScale has no further hardware fallback, so a runtime
+    // that probed and did not prove it must not emit CUDA/NVENC arguments.
+    let mut report = capability_report_for_tests();
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencCudaScale,
+        "",
+        GraphFailureKind::CudaInterop,
+    ));
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("nvenc"), "got: {args}");
+    assert!(!args.contains("scale_cuda"), "got: {args}");
+    assert!(!args.contains("hwupload_cuda"), "got: {args}");
+}
+
+#[test]
+fn a_probed_runtime_requires_positive_proof_for_the_vulkan_graph() {
+    // An unclassified probe failure leaves the graph neither proven nor denied.
+    // It must not be selectable just because no denial was recorded.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    // The runtime probed: CUDA proved, Vulkan produced no verdict.
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("libplacebo"), "got: {args}");
+    // The proven CUDA fallback still carries the encode.
+    assert!(args.contains("h264_nvenc"), "got: {args}");
+}
+
+#[test]
+fn a_runtime_that_never_probed_keeps_its_previous_behavior() {
+    // An older database has neither proofs nor denials. Demoting it would be a
+    // silent regression, so the advertised hwaccel still decides.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    assert!(!report.has_probed_hardware_graphs());
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("libplacebo"), "got: {args}");
 }

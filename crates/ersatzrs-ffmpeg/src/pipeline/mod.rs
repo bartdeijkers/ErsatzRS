@@ -2358,6 +2358,16 @@ fn effective_video_acceleration(
         return HardwareAccelerationKind::None;
     }
 
+    // ADR 0014: a denied or unproven CUDA graph has no further hardware
+    // fallback, so NVENC must demote to software rather than emit CUDA
+    // upload/scale/encode arguments that are known not to run.
+    if acceleration == HardwareAccelerationKind::Nvenc
+        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && nvenc_cuda_graph_unusable(request)
+    {
+        return HardwareAccelerationKind::None;
+    }
+
     let Some(report) = &request.runtime_capabilities else {
         return acceleration;
     };
@@ -2693,11 +2703,35 @@ fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
     }
 
     request.runtime_capabilities.as_ref().is_some_and(|report| {
+        let device = report.hardware_graph_device();
+        if report.hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device) {
+            return false;
+        }
+        // A runtime that has probed must have *positively* proved this graph.
+        // A runtime that has never probed at all (no proof and no denial
+        // recorded for any operation) keeps the pre-probe behavior of trusting
+        // the advertised hwaccel, so an older database is not silently demoted.
+        if report.has_probed_hardware_graphs() {
+            return report
+                .hardware_graph_proven(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device);
+        }
         report.has_hwaccel("vulkan")
-            && !report.hardware_graph_denied(
-                HardwareGraphOperation::NvencHdrVulkanLibplacebo,
-                &report.hardware_graph_device(),
-            )
+    })
+}
+
+/// True when NVENC's CUDA scale/encode graph is known not to work.
+///
+/// `NvencCudaScale` has no further hardware fallback, so a denial or an
+/// unproven result after probing means the whole NVENC path must demote to
+/// software encoding rather than emit CUDA arguments that cannot run.
+fn nvenc_cuda_graph_unusable(request: &PipelineRequest) -> bool {
+    request.runtime_capabilities.as_ref().is_some_and(|report| {
+        let device = report.hardware_graph_device();
+        if report.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, &device) {
+            return true;
+        }
+        report.has_probed_hardware_graphs()
+            && !report.hardware_graph_proven(HardwareGraphOperation::NvencCudaScale, &device)
     })
 }
 

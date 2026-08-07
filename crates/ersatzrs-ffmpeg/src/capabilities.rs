@@ -1016,6 +1016,7 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
         nvidia_decoders: nvidia_decoders_for_tests(),
         hardware_decode_denials: Vec::new(),
         hardware_graph_denials: Vec::new(),
+        proven_hardware_graphs: Vec::new(),
         videotoolbox_decoders: BTreeSet::from([
             "av01".to_owned(),
             "avc1".to_owned(),

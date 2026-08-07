@@ -276,6 +276,9 @@ adr         = '0014'
 description = 'P1: Replace the SQLite-only `ON CONFLICT ... excluded` statement in `crates/ersatzrs-infra/src/hardware_graph.rs` with the repository-wide `REPLACE INTO "ConfigElement"` pattern (or an explicitly backend-specific equivalent). Closure requires SQLite and MySQL coverage for persist, overwrite, clear, startup reload, and the FFmpeg-settings save/refresh path so graph state cannot make startup or settings saves fail on a supported backend.'
 discovered  = '2026-08-07'
 evidence    = '`upsert_config` currently emits `INSERT ... ON CONFLICT("Key") DO UPDATE ... excluded`, while the shared capability, health, maintenance, and repository persistence paths use `REPLACE INTO "ConfigElement"`; MySQL 8 rejects the graph statement.'
+remediation = '''
+Fixed 2026-08-08: `upsert_config` now uses the repository-wide `REPLACE INTO "ConfigElement"` pattern. Compiles under `--features mysql`; no live MySQL was available to execute the persist/overwrite/clear/reload path, so the backend coverage this debt asks for is still outstanding.
+'''
 resolved    = false
 
 [[debt]]
@@ -284,6 +287,9 @@ adr         = '0014'
 description = 'P1: Replace the probe result shape with explicit `Proven`, classified `Denied`, and unclassified `Unproven` outcomes. Every non-zero, timeout, or spawn failure must be non-selectable for the current process; only classified denials may be persisted, while unclassified failures leave the cache incomplete and eligible for re-probe. Closure requires fake-FFmpeg tests for success, classified failure, unclassified failure, timeout, and spawn failure plus command-generation assertions that only `Proven` graphs are selected.'
 discovered  = '2026-08-07'
 evidence    = '`probe_hardware_graph` applies `GraphFailureKind::classify(&stderr)?`; an unclassified non-zero exit therefore returns `None`, the same value used for a successful probe, and `nvidia_vulkan_hdr_tonemap` treats absence of a denial as sufficient evidence.'
+remediation = '''
+Fixed 2026-08-08: `probe_hardware_graph` returns an explicit `HardwareGraphProbe::{Proven, Denied, Unproven}`. Only a classified failure is persisted; an unclassified failure, spawn failure, or timeout-without-signature leaves the graph non-selectable without writing a denial. `FfmpegCapabilityReport` tracks positive proof separately, and selection requires it once a runtime has probed. A runtime that never probed keeps its previous advertised-hwaccel behavior so older databases are not silently demoted. Regressions: `a_probed_runtime_requires_positive_proof_for_the_vulkan_graph`, `a_runtime_that_never_probed_keeps_its_previous_behavior`, `a_missing_binary_is_unproven_rather_than_hanging_or_denying`. The full fake-FFmpeg matrix this debt asks for is not yet written.
+'''
 resolved    = false
 
 [[debt]]
@@ -292,6 +298,9 @@ adr         = '0014'
 description = 'P1: Make NVENC acceleration selection consult the `NvencCudaScale` graph state before emitting any CUDA upload/scale/NVENC path. A denied or unproven CUDA fallback has no further hardware graph, so `effective_video_acceleration` must select software encoding. Closure requires snapshots for a proven graph, a Vulkan denial falling through to proven CUDA/NVENC, and a CUDA denial/unproven result producing no CUDA/NVENC arguments.'
 discovered  = '2026-08-07'
 evidence    = '`HardwareGraphOperation::NvencCudaScale::fallback()` correctly returns `None`, but `effective_video_acceleration` checks encoder/decode capabilities only and never consults that operation denial, so the denied graph is still generated.'
+remediation = '''
+Fixed 2026-08-08: `effective_video_acceleration` consults `nvenc_cuda_graph_unusable` and returns software encoding when the CUDA graph is denied or unproven after probing, so no CUDA upload/scale/NVENC arguments are emitted. Regression: `an_unproven_cuda_graph_demotes_nvenc_to_software`, plus the existing Vulkan-denial-falls-through-to-CUDA snapshot.
+'''
 resolved    = false
 
 [[debt]]

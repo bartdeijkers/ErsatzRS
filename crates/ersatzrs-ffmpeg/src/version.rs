@@ -304,6 +304,9 @@ pub struct FfmpegCapabilityReport {
     /// operation-scoped graphs whose components each initialize but do not
     /// interoperate.
     pub hardware_graph_denials: Vec<crate::graph_probe::HardwareGraphDenial>,
+    /// Graph operations a functional probe positively proved, with the device
+    /// they were proved on. Empty on a runtime that has not probed yet.
+    pub proven_hardware_graphs: Vec<(crate::graph_probe::HardwareGraphOperation, String)>,
     /// `VideoToolbox` hardware decoder `FourCC` values reported by the macOS
     /// framework probe, such as `avc1` or `hvc1`.
     pub videotoolbox_decoders: BTreeSet<String>,
@@ -398,6 +401,53 @@ impl FfmpegCapabilityReport {
         self.hardware_graph_denials
             .iter()
             .any(|denial| denial.matches(operation, device))
+    }
+
+    /// Record that a graph operation demonstrably ran on this device.
+    ///
+    /// Positive evidence is tracked explicitly rather than inferred from the
+    /// absence of a denial, so an unclassified probe failure cannot leave a
+    /// broken graph looking selectable.
+    pub fn prove_hardware_graph(
+        &mut self,
+        operation: crate::graph_probe::HardwareGraphOperation,
+        device: &str,
+    ) {
+        if !self
+            .proven_hardware_graphs
+            .iter()
+            .any(|(proven, proven_device)| *proven == operation && proven_device == device)
+        {
+            self.proven_hardware_graphs
+                .push((operation, device.to_owned()));
+        }
+    }
+
+    /// Whether runtime evidence positively proved this graph on this device.
+    #[must_use]
+    pub fn hardware_graph_proven(
+        &self,
+        operation: crate::graph_probe::HardwareGraphOperation,
+        device: &str,
+    ) -> bool {
+        self.proven_hardware_graphs
+            .iter()
+            .any(|(proven, proven_device)| {
+                *proven == operation
+                    && (proven_device.is_empty()
+                        || device.is_empty()
+                        || proven_device.eq_ignore_ascii_case(device))
+            })
+    }
+
+    /// Whether this runtime has run the functional graph probes at all.
+    ///
+    /// Distinguishes "probed and found nothing wrong" from "never probed", so a
+    /// database written before graph probing existed is not treated as evidence
+    /// that every graph failed.
+    #[must_use]
+    pub fn has_probed_hardware_graphs(&self) -> bool {
+        !self.proven_hardware_graphs.is_empty() || !self.hardware_graph_denials.is_empty()
     }
 
     /// Add a runtime-learned graph denial row if it is not already present.
@@ -791,6 +841,7 @@ impl FfmpegRuntimeReport {
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),
             hardware_graph_denials: Vec::new(),
+            proven_hardware_graphs: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };
@@ -1220,6 +1271,7 @@ async fn collect_ffmpeg_capabilities(
         nvidia_decoders: Vec::new(),
         hardware_decode_denials: Vec::new(),
         hardware_graph_denials: Vec::new(),
+        proven_hardware_graphs: Vec::new(),
         videotoolbox_decoders: BTreeSet::new(),
         videotoolbox_encoders: BTreeSet::new(),
     };
@@ -2541,6 +2593,7 @@ h264_nvenc AVOptions:
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),
             hardware_graph_denials: Vec::new(),
+            proven_hardware_graphs: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };

@@ -97,20 +97,50 @@ fn failure_kind_from_name(value: &str) -> Option<GraphFailureKind> {
     }
 }
 
+/// Outcome of one functional graph probe.
+///
+/// The three states are deliberately distinct. Collapsing "worked" and "failed
+/// in a way I could not classify" into one value is what let an unclassified
+/// failure read as positive evidence: absence of a denial meant selectable, so
+/// a graph that had actually failed stayed eligible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HardwareGraphProbe {
+    /// The graph ran to completion. This is the only positive evidence.
+    Proven,
+    /// The graph failed with a recognised signature. Safe to persist, because
+    /// the same binary on the same device will fail the same way.
+    Denied(HardwareGraphDenial),
+    /// The graph failed in a way the classifier does not recognise. Not
+    /// selectable for this process, but *not* persisted: ADR 0014 forbids
+    /// learning a denial from an arbitrary `FFmpeg` failure, and a transient
+    /// error must not permanently disable a working graph. The next capability
+    /// refresh re-probes.
+    Unproven,
+}
+
+impl HardwareGraphProbe {
+    /// True only for a graph that demonstrably ran.
+    #[must_use]
+    pub const fn is_proven(&self) -> bool {
+        matches!(self, Self::Proven)
+    }
+
+    /// The denial to persist, if this outcome produced one.
+    #[must_use]
+    pub const fn denial(&self) -> Option<&HardwareGraphDenial> {
+        match self {
+            Self::Denied(denial) => Some(denial),
+            Self::Proven | Self::Unproven => None,
+        }
+    }
+}
+
 /// Run one bounded functional graph probe.
-///
-/// Returns `None` when the graph works. Returns a denial when the probe failed
-/// with a *classified* signature, when it timed out, or when the binary could
-/// not be spawned at all.
-///
-/// An unclassified failure returns `None` on purpose: ADR 0014 forbids learning
-/// a denial from an arbitrary `FFmpeg` failure, and a transient error must not
-/// permanently disable a working graph.
 pub async fn probe_hardware_graph(
     ffmpeg_path: &Path,
     operation: HardwareGraphOperation,
     device: &str,
-) -> Option<HardwareGraphDenial> {
+) -> HardwareGraphProbe {
     let mut command = tokio::process::Command::new(ffmpeg_path);
     command.args(operation.probe_arguments());
     command.stdin(std::process::Stdio::null());
@@ -120,24 +150,24 @@ pub async fn probe_hardware_graph(
     let output = match tokio::time::timeout(PROBE_TIMEOUT, command.output()).await {
         Ok(Ok(output)) => output,
         Ok(Err(error)) => {
+            // A binary that will not spawn is an environment problem, not a
+            // property of the graph, so it is not persisted as a denial.
             tracing::warn!(
                 operation = operation.id(),
                 %error,
-                "hardware graph probe could not spawn ffmpeg; denying the graph"
+                "hardware graph probe could not spawn ffmpeg; treating the graph as unproven"
             );
-            return Some(HardwareGraphDenial::new(
-                operation,
-                device,
-                GraphFailureKind::EncoderInit,
-            ));
+            return HardwareGraphProbe::Unproven;
         }
         Err(_) => {
+            // A hung driver is exactly what the probe exists to catch, and it
+            // recurs, so a timeout is a real classified denial.
             tracing::warn!(
                 operation = operation.id(),
                 timeout_secs = PROBE_TIMEOUT.as_secs(),
                 "hardware graph probe timed out; denying the graph"
             );
-            return Some(HardwareGraphDenial::new(
+            return HardwareGraphProbe::Denied(HardwareGraphDenial::new(
                 operation,
                 device,
                 GraphFailureKind::VulkanDevice,
@@ -146,18 +176,25 @@ pub async fn probe_hardware_graph(
     };
 
     if output.status.success() {
-        return None;
+        return HardwareGraphProbe::Proven;
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let kind = GraphFailureKind::classify(&stderr)?;
+    let Some(kind) = GraphFailureKind::classify(&stderr) else {
+        tracing::warn!(
+            operation = operation.id(),
+            device,
+            "hardware graph probe failed with an unrecognised signature; treating the graph as unproven"
+        );
+        return HardwareGraphProbe::Unproven;
+    };
     tracing::info!(
         operation = operation.id(),
         device,
         reason = kind.reason(),
         "hardware graph probe denied a graph"
     );
-    Some(HardwareGraphDenial::new(operation, device, kind))
+    HardwareGraphProbe::Denied(HardwareGraphDenial::new(operation, device, kind))
 }
 
 /// Probe every operation that the advertised capabilities make plausible and
@@ -176,22 +213,20 @@ pub async fn refresh_hardware_graph_capabilities(
     }
     let device = report.hardware_graph_device();
 
+    let mut operations = Vec::new();
     if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
-        if let Some(denial) = probe_hardware_graph(
-            ffmpeg_path,
-            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
-            &device,
-        )
-        .await
-        {
-            report.deny_hardware_graph(denial);
-        }
+        operations.push(HardwareGraphOperation::NvencHdrVulkanLibplacebo);
     }
+    operations.push(HardwareGraphOperation::NvencCudaScale);
 
-    if let Some(denial) =
-        probe_hardware_graph(ffmpeg_path, HardwareGraphOperation::NvencCudaScale, &device).await
-    {
-        report.deny_hardware_graph(denial);
+    for operation in operations {
+        match probe_hardware_graph(ffmpeg_path, operation, &device).await {
+            HardwareGraphProbe::Proven => report.prove_hardware_graph(operation, &device),
+            HardwareGraphProbe::Denied(denial) => report.deny_hardware_graph(denial),
+            // Left with neither proof nor denial: not selectable now, and not
+            // persisted, so the next refresh re-probes.
+            HardwareGraphProbe::Unproven => {}
+        }
     }
 }
 
@@ -296,14 +331,15 @@ async fn load_config(pool: &DbPool) -> Result<Option<String>, HardwareGraphDenia
 }
 
 async fn upsert_config(pool: &DbPool, value: &str) -> Result<(), HardwareGraphDenialError> {
-    sqlx::query(
-        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-           ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
-    )
-    .bind(CONFIG_KEY_HARDWARE_GRAPH_DENIALS)
-    .bind(value)
-    .execute(pool)
-    .await?;
+    // `REPLACE INTO` is the repository-wide ConfigElement upsert: SQLite's
+    // `ON CONFLICT ... excluded` is not valid on MySQL, and this row is written
+    // during startup and on every FFmpeg settings save, so a backend-specific
+    // statement here would break both on MySQL.
+    sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(CONFIG_KEY_HARDWARE_GRAPH_DENIALS)
+        .bind(value)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -393,10 +429,12 @@ mod tests {
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
             HardwareGraphOperation::NvencCudaScale,
         ] {
-            let denial = probe_hardware_graph(ffmpeg, operation, "local").await;
-            match &denial {
-                Some(denial) => println!("DENIED  {}", denial.evidence()),
-                None => println!("PROVEN  {}", operation.id()),
+            match probe_hardware_graph(ffmpeg, operation, "local").await {
+                HardwareGraphProbe::Proven => println!("PROVEN   {}", operation.id()),
+                HardwareGraphProbe::Denied(denial) => {
+                    println!("DENIED   {}", denial.evidence());
+                }
+                HardwareGraphProbe::Unproven => println!("UNPROVEN {}", operation.id()),
             }
         }
 
@@ -405,20 +443,23 @@ mod tests {
         let fallback =
             probe_hardware_graph(ffmpeg, HardwareGraphOperation::NvencCudaScale, "local").await;
         assert!(
-            fallback.is_none(),
+            fallback.is_proven(),
             "the CUDA fallback graph must work on a machine with NVENC: {fallback:?}"
         );
     }
 
     #[tokio::test]
-    async fn a_missing_binary_denies_the_graph_rather_than_hanging() {
-        let denial = probe_hardware_graph(
+    async fn a_missing_binary_is_unproven_rather_than_hanging_or_denying() {
+        let outcome = probe_hardware_graph(
             Path::new("/nonexistent/ffmpeg-does-not-exist"),
             HardwareGraphOperation::NvencCudaScale,
             "test device",
         )
         .await;
 
-        assert!(denial.is_some(), "an unspawnable probe must deny the graph");
+        // Not proven, so not selectable — but not persisted either, because a
+        // missing binary is an environment problem, not a property of the graph.
+        assert!(!outcome.is_proven(), "an unspawnable probe is not evidence");
+        assert_eq!(outcome.denial(), None);
     }
 }
