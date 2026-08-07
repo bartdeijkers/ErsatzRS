@@ -1,10 +1,10 @@
 feature    = 'HDR static metadata and Dolby Vision source handling'
 etv_source = 'ErsatzRS extension enabled by the FFmpeg 9 runtime; no ErsatzTV equivalent (`$ERSATZTV_SRC` contains no Dolby Vision policy and no HDR10 static-metadata emission)'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-scanner`, `crates/ersatzrs-infra`, `crates/ersatzrs-app`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`'
-status     = 'Not started'
+status     = 'In progress'
 adr        = ['0014', '0017', '0064']
 summary    = '''
-Not started. ADR 0064 accepts a beyond-parity input/output contract for HDR10,
+In progress. ADR 0064 accepts a beyond-parity input/output contract for HDR10,
 HLG, SDR, and Dolby Vision sources. FFmpeg profiles will persist a localized
 output dynamic-range choice: stable BT.709 SDR or stable BT.2020/PQ HDR10.
 Bit depth remains separate, copy profiles preserve source signaling, and
@@ -21,9 +21,22 @@ slice.
 Dolby Vision is an input policy first. Profiles 5, 7, and 8.1 require real
 fixture characterization; `dovi_split` is a profile-7 multilayer tool rather
 than general Dolby Vision support. Dolby Vision output remains out of scope.
-The active sequence and runtime acceptance matrix live in
+Milestone `p8a-01` has landed the software half of the output contract:
+`OutputDynamicRange` is persisted (additive SQLite/MySQL migration defaulting
+existing rows to `SdrBt709`), validated, localized in all five cultures, seeded
+as HDR10 for exactly the two ADR 0017 profiles named `hdr`, health-checked, and
+implemented in the software pipeline for PQ, HLG, SDR, and untagged sources.
+The SDR reference-white policy is ITU-R BT.2408 diffuse white (203 cd/m²) and
+is proven exact from decoded frames. Evidence, including the mixed
+SDR/HDR/HLG programme-transition proof, is recorded in
+`docs/how-to/hdr-output-characterization.md`.
+
+Hardware HDR10 output graphs (NVENC/QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M)
+are NOT yet implemented or characterized; those paths still tone-map to SDR.
+Dolby Vision (`p8a-02`) has not started. The active sequence and runtime
+acceptance matrix live in
 `plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
-`ff9-01`/`ff9-02`.
+`p8a-01`/`p8a-02`.
 '''
 
 [[debt]]
@@ -31,21 +44,37 @@ id          = 'hdr-output-dynamic-range-is-implicit'
 adr         = '0064'
 description = 'FFmpegProfile persists codec, codec profile, bit depth, and tonemap algorithm but no output dynamic range. Every transcoded HDR source currently enters the HDR-to-SDR branch and is marked BT.709, including when an ADR 0017 profile named `hdr` is selected. Implement `SdrBt709` and `Hdr10Bt2020Pq` as a persisted, validated, localized profile contract; default existing rows to SDR to preserve current effective behavior and seed new HDR rows as HDR10.'
 discovered  = '2026-08-07'
-evidence    = '`crates/ersatzrs-domain/src/ffmpeg.rs` `FFmpegProfile` has no output color contract. `apply_source_video_filters` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` computes `used_hdr_tonemap = target_state.is_hdr && is_transcode`, pushes `tonemap_filter_for`, then sets `is_hdr = false` and `colors_are_bt709 = true` without consulting the selected profile name, bit depth, or intended dynamic range. ADR 0017 v4 and ADR 0064 now record the intended correction.'
-resolved    = false
+evidence    = 'Resolved 2026-08-07 by milestone p8a-01. `OutputDynamicRange` is persisted in `crates/ersatzrs-domain/src/ffmpeg.rs`, migrated additively in `migrations/202608071200_output_dynamic_range.sql` (and the MySQL twin) with existing rows defaulting to `SdrBt709`, validated in `ersatzrs-app::commands::validate_output_dynamic_range`, localized in all five cultures, and consumed by `apply_hdr10_output_conversion` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`. Regressions: `existing_sqlite_profiles_default_to_sdr_output_dynamic_range`, `fresh_database_seeds_only_the_adr_0017_hdr_profiles_as_hdr10`, the `hdr10_*` pipeline snapshots, and `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before`.'
+resolved    = true
 
 [[debt]]
 id          = 'hdr10-output-omits-static-metadata'
 adr         = '0064'
 description = 'After the output dynamic-range contract exists, HDR10 output must carry semantically valid mastering-display and content-light metadata. The scanner must persist source metadata, transforms must preserve it only when it remains meaningful, explicit validated profile metadata must cover transforms or missing sources, and SDR output must strip stale HDR/Dolby Vision signaling.'
 discovered  = '2026-08-07'
-evidence    = 'The pipeline emits no mastering-display primaries/luminance or MaxCLL/MaxFALL. FFmpeg 9 exposes per-stream input-side `-mastering_display` and `-content_light`; a 2026-08-07 differential fixture proved that those values reach libx265 Main 10 frame side data. They cannot be added through a generic output-option builder or before the picture transform decides whether the result is SDR or HDR10.'
-resolved    = false
+evidence    = 'Resolved 2026-08-07 for the software path by milestone p8a-01. A PQ source is preserved and carries its own side data through both libx265 and hevc_nvenc unmodified; HLG and SDR sources are transformed and therefore receive documented, reviewable profile metadata through the FFmpeg 9 per-stream input options `-mastering_display`/`-content_light` (`hdr10_static_metadata_input_options`). SDR output still strips HDR signalling via the unchanged ErsatzTV tonemap path, asserted by `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before`. Decoded-frame evidence: `docs/how-to/hdr-output-characterization.md` findings 1, 3, and 5. The scanner does not yet persist typed source mastering-display/MaxCLL values, so profile defaults are used for every transform; that gap is tracked by `hdr10-source-metadata-is-not-persisted`.'
+resolved    = true
 
 [[debt]]
 id          = 'dolby-vision-sources-are-unhandled'
 adr         = '0064'
 description = 'ErsatzRS does not persist Dolby Vision configuration, classify profiles, or define copy/transcode behavior. Characterize profiles 5, 7, and 8.1 against stable SDR and HDR10 outputs; use profile 7/compatible 8.1 base-layer behavior only when fixture-proven; reject unproven profile 5 paths visibly; and make RPU consumption, stripping, or preservation explicit. Dolby Vision output is excluded.'
 discovered  = '2026-08-07'
-evidence    = 'A workspace-wide search found no Rust Dolby Vision handling and `$ERSATZTV_SRC` contains no equivalent C# policy, confirming beyond-parity scope. FFmpeg 9 adds `dovi_split` for multilayer HEVC with base/enhancement-layer and RPU modes, while ffprobe can expose a Dolby Vision configuration record and libplacebo can consume embedded Dolby Vision metadata. No profile 5/7/8.1 output fixture was run during the differential review, so no compatibility claim is accepted without milestone ff9-02 evidence.'
+evidence    = 'A workspace-wide search found no Rust Dolby Vision handling and `$ERSATZTV_SRC` contains no equivalent C# policy, confirming beyond-parity scope. FFmpeg 9 adds `dovi_split` for multilayer HEVC with base/enhancement-layer and RPU modes, while ffprobe can expose a Dolby Vision configuration record and libplacebo can consume embedded Dolby Vision metadata. No profile 5/7/8.1 output fixture was run during the differential review, so no compatibility claim is accepted without milestone p8a-02 evidence.'
+resolved    = false
+
+[[debt]]
+id          = 'hdr10-hardware-output-paths-are-unimplemented'
+adr         = '0064'
+description = 'Only the software pipeline honours `Hdr10Bt2020Pq`. NVENC, QSV, VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M still route every HDR source through the tone-map-to-BT.709 branch, so selecting an HDR10 profile with hardware acceleration silently produces SDR — exactly what ADR 0064 forbids. Implement the HDR10 graph per backend or make the combination a capability-gated rejection with health and troubleshooting evidence.'
+discovered  = '2026-08-07'
+evidence    = '`apply_hdr10_output_conversion` in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` uses the software zscale/setparams chain for every acceleration kind, and `tonemap_filter_for` retains the hardware branches unchanged. The `OutputDynamicRange` health check validates codec and bit depth but not the hardware path. No hardware HDR10 output fixture has been run.'
+resolved    = false
+
+[[debt]]
+id          = 'hdr10-source-metadata-is-not-persisted'
+adr         = '0064'
+description = 'ADR 0064 requires the scanner to persist typed source colour primaries, transfer, matrix, range, mastering-display metadata, MaxCLL/MaxFALL, and the Dolby Vision configuration record, and to carry them with the selected stream. Only the raw ffprobe colour tags are persisted today, so an HLG or SDR item transformed into HDR10 always receives the documented profile defaults rather than values derived from the source.'
+discovered  = '2026-08-07'
+evidence    = '`derive_color_params` in `crates/ersatzrs-infra/src/playback.rs` persists only range/space/transfer/primaries plus the `is_hdr`/`is_bt2020_ten` flags. `MasteringDisplayMetadata::BT2020_1000_NITS` and `ContentLightLevel::DEFAULT` in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` are the documented constants used in their place; they are stated explicitly rather than guessed, but they are not yet editable per profile as the ADR ultimately requires.'
 resolved    = false

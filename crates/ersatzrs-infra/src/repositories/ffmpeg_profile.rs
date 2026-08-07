@@ -50,11 +50,12 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "AudioFormat",
+                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+                "AudioFormat",
                 "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
                 "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
                 "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
         )
         .bind(profile.id)
         .bind(&profile.name)
@@ -78,6 +79,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.video_bitrate)
         .bind(profile.video_buffer_size)
         .bind(encode_enum(profile.tonemap_algorithm))
+        .bind(encode_enum(profile.output_dynamic_range))
         .bind(encode_enum(profile.audio_format))
         .bind(profile.audio_bitrate)
         .bind(profile.audio_buffer_size)
@@ -146,11 +148,12 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "AudioFormat",
+                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+                "AudioFormat",
                 "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
                 "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
                 "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(&profile.name)
         .bind(profile.thread_count)
@@ -173,6 +176,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.video_bitrate)
         .bind(profile.video_buffer_size)
         .bind(encode_enum(profile.tonemap_algorithm))
+        .bind(encode_enum(profile.output_dynamic_range))
         .bind(encode_enum(profile.audio_format))
         .bind(profile.audio_bitrate)
         .bind(profile.audio_buffer_size)
@@ -196,7 +200,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm",
+               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
                "AudioFormat", "AudioBitrate", "AudioBufferSize",
                "NormalizeLoudnessMode", "TargetLoudness",
                "AudioChannels", "AudioSampleRate",
@@ -206,7 +210,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm",
+               "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
                "AudioFormat", "AudioBitrate", "AudioBufferSize",
                "NormalizeLoudnessMode", "TargetLoudness",
                "AudioChannels", "AudioSampleRate",
@@ -263,6 +267,11 @@ fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
             "ffmpeg profile tonemap_algorithm",
             row,
             "TonemapAlgorithm",
+        )?,
+        output_dynamic_range: decode_enum_column(
+            "ffmpeg profile output_dynamic_range",
+            row,
+            "OutputDynamicRange",
         )?,
         audio_format: decode_enum_column("ffmpeg profile audio_format", row, "AudioFormat")?,
         audio_bitrate: row.try_get("AudioBitrate").repository()?,

@@ -144,6 +144,12 @@
     font-size: 0.875rem;
 }
 
+.copy-hint {
+    padding: 0.25rem 0 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+}
+
 .cancel-link {
     padding: 0.5rem 1rem;
     border-radius: var(--radius);

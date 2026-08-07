@@ -23,7 +23,7 @@ use checks::{
     FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
     FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, LocalTelevisionIdentityHealthCheck,
     MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
-    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
     SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
     VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
@@ -50,7 +50,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 26] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 27] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -73,6 +73,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 26] = [
     "Empty Schedule",
     "Classic Playout State",
     "Mirror Channels",
+    "Output Dynamic Range",
     "VAAPI Driver",
     "VAAPI Device",
     "Provider Connectivity",
@@ -197,6 +198,7 @@ fn registered_health_checks(
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
+        Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),
@@ -1331,5 +1333,121 @@ mod tests {
         )
         .await
         .expect("seed channel");
+    }
+    /// Seed one HDR10-selected profile plus a channel that uses it.
+    async fn seed_hdr10_profile_and_channel(
+        pool: &Pool<Db>,
+        id: i64,
+        name: &str,
+        video_format: i32,
+        bit_depth: i32,
+        transcode_video: i32,
+    ) {
+        pool.execute(
+            r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "IsCustom", "Width", "Height")
+               VALUES (70, '1920x1080', 0, 1920, 1080)"#,
+        )
+        .await
+        .expect("seed resolution");
+        let profile_sql = format!(
+            r#"INSERT INTO "FFmpegProfile" (
+                "Id", "AudioBitrate", "AudioBufferSize", "AudioChannels", "AudioFormat",
+                "AudioSampleRate", "BitDepth", "HardwareAcceleration", "Name",
+                "NormalizeFramerate", "NormalizeLoudnessMode", "ResolutionId",
+                "ScalingBehavior", "ThreadCount", "VaapiDriver",
+                "VideoBitrate", "VideoBufferSize", "VideoFormat",
+                "TranscodeVideo", "OutputDynamicRange"
+               ) VALUES (
+                {id}, 192, 384, 2, 1, 48, {bit_depth}, 0, '{name}', 0, 0, 70, 0, 0, 0,
+                2000, 4000, {video_format}, {transcode_video}, 1
+               )"#,
+        );
+        sqlx::query(crate::db::assert_sql_safe(profile_sql))
+            .execute(pool)
+            .await
+            .expect("seed hdr10 profile");
+        let channel_sql = format!(
+            r#"INSERT INTO "Channel" (
+                "Id", "UniqueId", "Number", "SortNumber", "Name", "FFmpegProfileId",
+                "IdleBehavior", "MusicVideoCreditsMode", "PlayoutMode", "PlayoutSource",
+                "SongVideoMode", "StreamingMode", "StreamSelectorMode", "SubtitleMode",
+                "TranscodeMode"
+               ) VALUES (
+                {id}, '00000000-0000-0000-0000-0000000000{id}', '{id}', {id}.0, '{name}', {id},
+                0, 0, 1, 0, 0, 1, 0, 0, 0
+               )"#,
+        );
+        sqlx::query(crate::db::assert_sql_safe(channel_sql))
+            .execute(pool)
+            .await
+            .expect("seed channel");
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_is_not_applicable_without_hdr10_profiles() {
+        let pool = test_pool().await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::NotApplicable);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_passes_for_a_valid_hdr10_profile() {
+        let pool = test_pool().await;
+        // Hevc (2), 10-bit (1), transcoding.
+        seed_hdr10_profile_and_channel(&pool, 70, "Hdr10 Hevc", 2, 1, 1).await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_fails_for_unsupported_codec_and_bit_depth() {
+        let pool = test_pool().await;
+        // H264 (1) cannot carry HDR10 static metadata.
+        seed_hdr10_profile_and_channel(&pool, 71, "Hdr10 H264", 1, 1, 1).await;
+        // Hevc but 8-bit (0).
+        seed_hdr10_profile_and_channel(&pool, 72, "Hdr10 EightBit", 2, 0, 1).await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            result.brief_message,
+            "HDR10 output is configured but cannot be produced"
+        );
+        assert!(
+            result
+                .message
+                .contains("codec cannot carry HDR10 static metadata"),
+            "{}",
+            result.message
+        );
+        assert!(
+            result.message.contains("HDR10 requires 10-bit"),
+            "{}",
+            result.message
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_reports_copy_profiles_as_informational() {
+        let pool = test_pool().await;
+        // Video copy: the selection is inert, not wrong.
+        seed_hdr10_profile_and_channel(&pool, 73, "Hdr10 Copy", 99, 0, 0).await;
+        let check = OutputDynamicRangeHealthCheck::new(pool);
+
+        let result = check.check().await.expect("hdr10 check");
+        assert_eq!(result.status, HealthCheckStatus::Info);
+        assert_eq!(
+            result.brief_message,
+            "HDR10 selection does not apply to copied video"
+        );
     }
 }

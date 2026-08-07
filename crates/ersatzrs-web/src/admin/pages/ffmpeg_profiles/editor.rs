@@ -15,14 +15,15 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
-    ffmpeg_loudness_mode_label, ffmpeg_profile_error_message, ffmpeg_tonemap_algorithm_label,
-    hardware_acceleration_option_text, save_failed, tr, use_i18n, TextKey,
+    ffmpeg_loudness_mode_label, ffmpeg_output_dynamic_range_label, ffmpeg_profile_error_message,
+    ffmpeg_tonemap_algorithm_label, hardware_acceleration_option_text, save_failed, tr, use_i18n,
+    TextKey,
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
-    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, tunes_for_profile,
-    video_format_validation_error, video_profile_options, FfmpegProfileForm,
-    HardwareAccelerationOption, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
+    list_supported_hw_accelerations, output_dynamic_range_validation_error, presets_for_profile,
+    save_ffmpeg_profile, tunes_for_profile, video_format_validation_error, video_profile_options,
+    FfmpegProfileForm, HardwareAccelerationOption, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -354,6 +355,7 @@ fn FfmpegProfileEditorForm(
     let video_bitrate = RwSignal::new(i64::from(initial_form.video_bitrate));
     let video_buffer_size = RwSignal::new(i64::from(initial_form.video_buffer_size));
     let tonemap_algorithm = RwSignal::new(initial_form.tonemap_algorithm);
+    let output_dynamic_range = RwSignal::new(initial_form.output_dynamic_range);
     let audio_format = RwSignal::new(initial_form.audio_format);
     let audio_bitrate = RwSignal::new(i64::from(initial_form.audio_bitrate));
     let audio_buffer_size = RwSignal::new(i64::from(initial_form.audio_buffer_size));
@@ -380,6 +382,19 @@ fn FfmpegProfileEditorForm(
         Signal::derive(move || transcode_video.get() && hardware_acceleration.get() == 3);
     // Target-loudness field: loudness mode == 1 (LoudNorm).
     let show_loudness_target = Signal::derive(move || normalize_loudness_mode.get() == 1);
+    let output_dynamic_range_error = Signal::derive(move || {
+        transcode_video
+            .get()
+            .then(|| {
+                output_dynamic_range_validation_error(
+                    output_dynamic_range.get(),
+                    video_format.get(),
+                    bit_depth.get(),
+                )
+            })
+            .flatten()
+            .map(ffmpeg_profile_error_message)
+    });
     let video_format_error = Signal::derive(move || {
         transcode_video
             .get()
@@ -535,6 +550,7 @@ fn FfmpegProfileEditorForm(
         video_bitrate: i32::try_from(video_bitrate.get_untracked()).unwrap_or(2000),
         video_buffer_size: i32::try_from(video_buffer_size.get_untracked()).unwrap_or(4000),
         tonemap_algorithm: tonemap_algorithm.get_untracked(),
+        output_dynamic_range: output_dynamic_range.get_untracked(),
         audio_format: audio_format.get_untracked(),
         audio_bitrate: i32::try_from(audio_bitrate.get_untracked()).unwrap_or(192),
         audio_buffer_size: i32::try_from(audio_buffer_size.get_untracked()).unwrap_or(384),
@@ -678,6 +694,15 @@ fn FfmpegProfileEditorForm(
             <div class=style::section>
                 <h2 class=style::section_title>{tr(TextKey::Video)}</h2>
                 <CheckBox label=tr(TextKey::TranscodeVideo) value=transcode_video/>
+                // ADR 0064: video copy preserves the source elementary stream,
+                // so the output dynamic range does not apply. Say so instead of
+                // showing a control that would not be honoured.
+                <p
+                    class=style::copy_hint
+                    style:display=move || if transcode_video.get() { "none" } else { "" }
+                >
+                    {tr(TextKey::OutputDynamicRangeCopyHint)}
+                </p>
 
                 // Video transcode fields — always rendered; hidden when transcoding is off.
                 // Stable DOM shape avoids hydration mismatches.
@@ -811,6 +836,18 @@ fn FfmpegProfileEditorForm(
                                 (3i32, ffmpeg_tonemap_algorithm_label(3)),
                                 (4i32, ffmpeg_tonemap_algorithm_label(4)),
                                 (5i32, ffmpeg_tonemap_algorithm_label(5)),
+                            ]
+                        />
+                    </div>
+                    <div class=style::form_row>
+                        <SelectField<i32>
+                            label=tr(TextKey::OutputDynamicRange)
+                            value=output_dynamic_range
+                            name=Some("output_dynamic_range")
+                            error=Some(output_dynamic_range_error)
+                            items=vec![
+                                (0i32, ffmpeg_output_dynamic_range_label(0)),
+                                (1i32, ffmpeg_output_dynamic_range_label(1)),
                             ]
                         />
                     </div>

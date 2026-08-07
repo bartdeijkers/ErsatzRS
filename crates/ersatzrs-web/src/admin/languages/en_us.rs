@@ -211,6 +211,15 @@ impl LanguageStrings for EnglishStrings {
         .to_owned()
     }
 
+    fn ffmpeg_output_dynamic_range_label(&self, range: i32) -> String {
+        match range {
+            0 => "SDR (BT.709)",
+            1 => "HDR10 (BT.2020 PQ)",
+            _ => return format!("Unknown ({range})"),
+        }
+        .to_owned()
+    }
+
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
         match mode {
             0 => text(TextKey::Off),
@@ -1190,6 +1199,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Stretch => "Stretch",
         TextKey::TargetLoudnessLufs => "Target Loudness (LUFS)",
         TextKey::ThreadCountAuto => "Thread Count (0 = auto)",
+        TextKey::OutputDynamicRange => "Output Dynamic Range",
+        TextKey::OutputDynamicRangeCopyHint => "Video is copied, so the output keeps the source dynamic range.",
         TextKey::TonemapAlgorithm => "Tonemap Algorithm",
         TextKey::VaapiDevicePath => "VAAPI Device Path",
         TextKey::VaapiDisplay => "VAAPI Display",
@@ -2302,6 +2313,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
             "V4L2 M2M supports formats (h264, hevc).".to_owned()
         }
         "Rkmpp supports formats (h264, hevc)" => "Rkmpp supports formats (h264, hevc).".to_owned(),
+        "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata" => {
+            "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata.".to_owned()
+        }
+        "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
+            "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding.".to_owned()
+        }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video does not support 10-bit content.".to_owned()
         }

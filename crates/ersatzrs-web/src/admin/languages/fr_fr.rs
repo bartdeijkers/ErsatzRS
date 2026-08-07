@@ -211,6 +211,15 @@ impl LanguageStrings for FrenchStrings {
         .to_owned()
     }
 
+    fn ffmpeg_output_dynamic_range_label(&self, range: i32) -> String {
+        match range {
+            0 => "SDR (BT.709)",
+            1 => "HDR10 (BT.2020 PQ)",
+            _ => return format!("Inconnu ({range})"),
+        }
+        .to_owned()
+    }
+
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
         match mode {
             0 => text(TextKey::Off),
@@ -1212,6 +1221,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Stretch => "Étirer",
         TextKey::TargetLoudnessLufs => "Volume cible (LUFS)",
         TextKey::ThreadCountAuto => "Nombre de threads (0 = auto)",
+        TextKey::OutputDynamicRange => "Plage dynamique de sortie",
+        TextKey::OutputDynamicRangeCopyHint => "La vidéo est copiée, la sortie conserve donc la plage dynamique de la source.",
         TextKey::TonemapAlgorithm => "Algorithme de tonemapping",
         TextKey::VaapiDevicePath => "Chemin du périphérique VAAPI",
         TextKey::VaapiDisplay => "Affichage VAAPI",
@@ -2440,6 +2451,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         }
         "Rkmpp supports formats (h264, hevc)" => {
             "RKMPP prend en charge les formats (h264, hevc).".to_owned()
+        }
+        "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata" => {
+            "La sortie HDR10 nécessite hevc ou av1 ; h264 et mpeg2video ne peuvent pas porter de métadonnées statiques HDR10.".to_owned()
+        }
+        "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
+            "La sortie HDR10 nécessite 10 bits ; 8 bits ne peut pas représenter un signal PQ sans bandes.".to_owned()
         }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video ne prend pas en charge le contenu 10 bits.".to_owned()

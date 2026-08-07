@@ -15,6 +15,29 @@ release section when tagging a release.
 
 ### Added
 
+- Added an **Output Dynamic Range** choice to FFmpeg profiles (ADR 0064), so
+  SDR and HDR10 output is now an explicit operator decision instead of being
+  inferred from a profile name, codec, or bit depth. `SDR (BT.709)` keeps the
+  existing behavior of tone-mapping HDR sources to BT.709. `HDR10 (BT.2020 PQ)`
+  produces a stable BT.2020/PQ stream: PQ sources are passed through with their
+  own mastering-display and MaxCLL/MaxFALL metadata intact, HLG sources are
+  normalized to PQ, and SDR sources are mapped in at ITU-R BT.2408 diffuse white
+  (203 cd/m²) without inventing highlight detail. The signalling is identical
+  for every item, so a schedule that mixes SDR and HDR content does not change
+  the stream's colour signalling at a programme boundary.
+
+  Existing profiles are migrated to SDR and keep streaming exactly what they
+  streamed before; only a freshly created database seeds its two `hdr` profiles
+  as HDR10. HDR10 requires hevc or av1 at 10-bit and is rejected at save time
+  rather than silently downgraded, a new **Output Dynamic Range** health check
+  reports profiles that cannot produce what they promise, and the control is
+  localized in every supported culture. Profiles that copy video are unaffected
+  and say so.
+
+  Hardware-accelerated HDR10 output is not implemented yet: NVENC, QSV, VAAPI,
+  AMF, VideoToolbox, RKMPP, and V4L2M2M profiles still tone-map HDR sources to
+  SDR regardless of this setting.
+
 - Added uniform content-rating/Kijkwijzer, studio, music-label, language, genre, and
   tag metadata for movies, television, music videos, other videos, songs, and
   images across local/Plex scanning, SQLite/MySQL persistence, search and smart
@@ -30,6 +53,12 @@ release section when tagging a release.
   systemd installation guide modeled on Jellyfin's package behavior.
 
 ### Changed
+
+- Re-sequenced the long-term roadmap: FFmpeg 9 HDR/Dolby Vision, Vulkan, and
+  pipeline hardening is Phase 8; teletext capability, persistence, delivery,
+  management, and runtime proof is Phase 9; and the "The Box" video-jukebox
+  extension moves to Phase 10. This changes planning contracts only, not
+  current runtime behavior.
 
 - Defined the future FFmpeg profile dynamic-range contract: transcoding will
   explicitly target stable BT.709 SDR or BT.2020/PQ HDR10 instead of inferring

@@ -11,9 +11,9 @@ use ersatzrs_domain::{
     FillWithGroupMode, FillerKind, FillerMode, FilterMode, FixedStartTimeBehavior,
     GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy,
     MediaItemState, MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
-    NormalizeLoudnessMode, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, ScalingBehavior,
-    StartType, StreamingMode, SubtitleKind, TailMode, TraktListItemKind, VaapiDriver,
-    VideoScanKind, WatermarkLocation, WatermarkSize,
+    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind,
+    ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, TraktListItemKind,
+    VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -422,6 +422,10 @@ db_enum!(FFmpegProfileAudioFormat {
 db_enum!(FFmpegProfileBitDepth {
     0 => FFmpegProfileBitDepth::EightBit,
     1 => FFmpegProfileBitDepth::TenBit,
+});
+db_enum!(OutputDynamicRange {
+    0 => OutputDynamicRange::SdrBt709,
+    1 => OutputDynamicRange::Hdr10Bt2020Pq,
 });
 db_enum!(FFmpegProfileTonemapAlgorithm {
     0 => FFmpegProfileTonemapAlgorithm::Linear,

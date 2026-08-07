@@ -436,85 +436,9 @@ lint, and 141 selected Chromium/Firefox browser checks passed.
 
 [[milestone]]
 id         = 'p8a-01'
-phase      = 'Phase 8A — Durable video-jukebox domain'
-title      = 'Decide the video-jukebox product and add-on contract'
-status     = 'Not started'
-feature    = 'video-jukebox-addon-api'
-plan       = 'plans/application-layer-and-video-jukebox.md'
-depends_on = ['p7c-04']
-acceptance = '''
-An accepted ADR defines eligibility, queue policy, identity/moderation,
-cooldowns/rate limits, insertion/cancellation/retry/recovery semantics, and
-the versioned out-of-process add-on transport.
-'''
-evidence = ''
-
-[[milestone]]
-id         = 'p8a-02'
-phase      = 'Phase 8A — Durable video-jukebox domain'
-title      = 'Persist the request aggregate and storage ports'
-status     = 'Not started'
-feature    = 'video-jukebox-addon-api'
-plan       = 'plans/application-layer-and-video-jukebox.md'
-depends_on = ['p7b-01', 'p8a-01']
-acceptance = '''
-SQLite and MySQL persist the approved request state machine, identity,
-idempotency, queue position, timestamps, and failure detail through
-storage-neutral ports; submit, claim, and transition operations are atomic.
-'''
-evidence = ''
-
-[[milestone]]
-id         = 'p8a-03'
-phase      = 'Phase 8A — Durable video-jukebox domain'
-title      = 'Integrate jukebox use cases with scheduling'
-status     = 'Not started'
-feature    = 'video-jukebox-addon-api'
-plan       = 'plans/application-layer-and-video-jukebox.md'
-depends_on = ['p7b-02', 'p7b-04', 'p8a-02']
-acceptance = '''
-Application commands/queries cover the request lifecycle, scheduling claims
-at the approved safe boundary, materialized items retain request identity,
-current playback is preserved, and restart recovery cannot schedule a request
-twice.
-'''
-evidence = ''
-
-[[milestone]]
-id         = 'p8b-01'
-phase      = 'Phase 8B — Add-on ingress and runtime proof'
-title      = 'Expose a stable authenticated add-on API'
-status     = 'Not started'
-feature    = 'video-jukebox-addon-api'
-plan       = 'plans/application-layer-and-video-jukebox.md'
-depends_on = ['p8a-02']
-acceptance = '''
-A versioned HTTP command/query API plus status/event feed enforce
-authentication, authorization, idempotency, rate limits, and audit logging;
-adapter examples depend only on the public protocol.
-'''
-evidence = ''
-
-[[milestone]]
-id         = 'p8b-02'
-phase      = 'Phase 8B — Add-on ingress and runtime proof'
-title      = 'Prove jukebox operations and restart safety end to end'
-status     = 'Not started'
-feature    = 'video-jukebox-addon-api'
-plan       = 'plans/application-layer-and-video-jukebox.md'
-depends_on = ['p8a-03', 'p8b-01']
-acceptance = '''
-Health checks and metrics cover stalled/failed work, and an end-to-end test
-proves multi-source submissions, duplicate idempotency, policy rejection,
-restart survival, exactly-once scheduling, and Played completion.
-'''
-evidence = ''
-
-[[milestone]]
-id         = 'ff9-01'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
+phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Implement the SDR and HDR10 output contract'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'hdr-dolby-vision-metadata'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -527,16 +451,45 @@ SDR/HDR10 source-output matrix. MPEG-TS/HLS runtime proofs assert decoded image
 quality, stable color signaling, static metadata, overlays, and mixed-item
 transitions rather than argv alone.
 '''
-evidence = ''
+evidence = '''
+Software half complete (2026-08-07). `OutputDynamicRange` persists through an
+additive SQLite/MySQL migration that defaults existing rows to `SdrBt709`
+(`existing_sqlite_profiles_default_to_sdr_output_dynamic_range`); a fresh
+database seeds exactly the two ADR 0017 `hdr` profiles as HDR10
+(`fresh_database_seeds_only_the_adr_0017_hdr_profiles_as_hdr10`). Validation
+rejects non-HEVC/AV1 and 8-bit HDR10 rather than downgrading
+(`hdr10_requires_a_codec_that_can_carry_static_metadata`,
+`hdr10_requires_ten_bit_output`); the editor control and both rejection
+messages are localized in all five cultures and pass
+`all_languages_translate_each_key`. A new `Output Dynamic Range` health check
+reports unproducible and inert-copy profiles (4 tests).
+
+Software pipeline behavior is snapshot- and runtime-proven: `hdr10_*` pipeline
+snapshots, `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before` (the
+ErsatzTV SDR path is byte-identical), and
+`hdr10_output_signalling_is_identical_for_sdr_and_hdr_items`. Decoded proof
+against the shipped FFmpeg 9 runtime is recorded in
+`docs/how-to/hdr-output-characterization.md`: the SDR reference white lands
+exactly on the BT.2408 203 cd/m² PQ code value (10-bit Y = 573), PQ sources
+retain their own mastering-display/MaxCLL through both libx265 and hevc_nvenc,
+and a concatenated SDR + HDR10 + HLG MPEG-TS stream reports one signalling
+class across all 75 frames with no change at either item boundary.
+
+NOT complete: hardware HDR10 output graphs are unimplemented (debt
+`hdr10-hardware-output-paths-are-unimplemented`), the scanner does not persist
+typed source mastering-display/MaxCLL values (debt
+`hdr10-source-metadata-is-not-persisted`), and the HLS and overlay/subtitle
+runtime proofs required by the acceptance text have not been run.
+'''
 
 [[milestone]]
-id         = 'ff9-02'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
+id         = 'p8a-02'
+phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Characterize and support Dolby Vision inputs'
 status     = 'Not started'
 feature    = 'hdr-dolby-vision-metadata'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
-depends_on = ['ff9-01']
+depends_on = ['p8a-01']
 acceptance = '''
 Known profile 5, 7, and 8.1 fixtures establish copy and transcode behavior for
 SDR and HDR10 targets. Scanner persistence, RPU/base/enhancement-layer handling,
@@ -547,8 +500,8 @@ runtime-proven. Dolby Vision output remains unadvertised.
 evidence = ''
 
 [[milestone]]
-id         = 'ff9-03'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
+id         = 'p8b-01'
+phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Harden Vulkan and libplacebo runtime selection'
 status     = 'Not started'
 feature    = 'ffmpeg-9-performance-and-support'
@@ -565,13 +518,13 @@ fallback paths; platforms without Vulkan remain healthy.
 evidence = ''
 
 [[milestone]]
-id         = 'ff9-04'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
+id         = 'p8b-02'
+phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Benchmark and select hardware HDR graph improvements'
 status     = 'Not started'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
-depends_on = ['ff9-01', 'ff9-03']
+depends_on = ['p8a-01', 'p8b-01']
 acceptance = '''
 Reproducible 1080p/4K HDR fixtures compare current and candidate NVENC
 libplacebo fusion, peak-detection, native VAAPI tonemapping, and AMF HDR
@@ -582,36 +535,226 @@ adopted; unsupported combinations remain capability-gated and documented.
 evidence = ''
 
 [[milestone]]
-id         = 'ff9-05'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
-title      = 'Harden long graphs, orientation, and animated inputs'
+id         = 'p8c-01'
+phase      = 'Phase 8C — FFmpeg command and media-input support'
+title      = 'Move long complex filters to safe file transport'
 status     = 'Not started'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
 acceptance = '''
 Long complex filters use ADR 0003's private, cancellation-safe
--/filter_complex file transport above one portable threshold. Source
-orientation is persisted and applied exactly once through proven software or
-hardware filters, and animated WebP graphics preserve timing, looping, alpha,
-and resource bounds. Focused and runtime tests cover native path edge cases and
-both IPTV output modes.
+-/filter_complex file transport above one portable threshold. Focused and
+runtime tests cover short inline graphs, forced file transport, native
+path/quoting edge cases, spawn failure, cancellation, sanitized diagnostics,
+and deterministic cleanup.
 '''
 evidence = ''
 
 [[milestone]]
-id         = 'ff9-06'
-phase      = 'Cross-cutting FFmpeg 9 — HDR and pipeline hardening'
+id         = 'p8c-02'
+phase      = 'Phase 8C — FFmpeg command and media-input support'
+title      = 'Persist and apply source orientation exactly once'
+status     = 'Not started'
+feature    = 'ffmpeg-9-performance-and-support'
+plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
+depends_on = ['p8a-01', 'p8b-01']
+acceptance = '''
+Scanner metadata preserves display-matrix/orientation state and the pipeline
+applies it exactly once without fighting FFmpeg autorotation. Software,
+transpose_cuda, and fused libplacebo candidates preserve ADR 0064 output color,
+scaling, overlays, stream copy, MPEG-TS, and HLS behavior with fixture and
+runtime proof.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8c-03'
+phase      = 'Phase 8C — FFmpeg command and media-input support'
+title      = 'Support animated WebP graphics inputs'
+status     = 'Not started'
+feature    = 'ffmpeg-9-performance-and-support'
+plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
+depends_on = []
+acceptance = '''
+Animated WebP watermarks and graphics preserve decoded frame timing, looping,
+alpha, z-order, cancellation, and bounded resource use. Static WebP and other
+existing image inputs do not regress, and live direct MPEG-TS and HLS proofs
+cover representative animations.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p8c-04'
+phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Decide whether Vulkan encoding becomes first class'
 status     = 'Deferred'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
-depends_on = ['ff9-03', 'ff9-04']
+depends_on = ['p8b-01', 'p8b-02']
 acceptance = '''
 Multi-vendor h264_vulkan/hevc_vulkan evidence covers quality, latency, device
 selection, MPEG-TS/HLS/client compatibility, fallback, and six-RID packaging.
 If a persisted Vulkan backend is justified, a separate accepted ADR precedes
 domain enum, migration, profile UI, encoder priority, or release changes;
 otherwise the deferral is retained with measurements.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9a-01'
+phase      = 'Phase 9A — Teletext contract and ingest'
+title      = 'Decide the teletext product and standards contract'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p8a-02', 'p8b-02', 'p8c-01', 'p8c-02', 'p8c-03']
+acceptance = '''
+An accepted ADR distinguishes source DVB teletext subtitles, full-page
+browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the
+supported MPEG-TS/HLS/browser behavior; chooses page/language/region and
+accessibility semantics; and records the six-RID FFmpeg/libzvbi packaging and
+fallback contract before schema or pipeline work begins.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9a-02'
+phase      = 'Phase 9A — Teletext contract and ingest'
+title      = 'Package and probe teletext decoding'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p9a-01']
+acceptance = '''
+Every first-party FFmpeg 9 RID either ships and startup-probes the accepted
+libzvbi teletext decoder contract or has an explicit supported-platform
+decision. Operator runtimes report capability accurately, and missing optional
+support is visible without breaking unrelated playback.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9a-03'
+phase      = 'Phase 9A — Teletext contract and ingest'
+title      = 'Scan and persist teletext services and pages'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p9a-02']
+acceptance = '''
+Local and supported remote scans identify DVB teletext streams and persist the
+approved service/page, subtitle flag, language, region/character-set, stream
+index, and source provenance without conflating teletext with DVB bitmap or
+ordinary text subtitles. SQLite/MySQL, rescan, missing-file, and version
+selection behavior are regression-proven.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9b-01'
+phase      = 'Phase 9B — Teletext delivery and runtime proof'
+title      = 'Deliver selectable teletext through supported outputs'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p9a-03']
+acceptance = '''
+Application and playback selection honor page, language, forced/default, and
+channel/global preferences. The accepted contract is implemented for burn-in,
+extraction, MPEG-TS carriage or passthrough, and HLS/browser fallback without
+advertising an unsupported teletext encoder or full-page service.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9b-02'
+phase      = 'Phase 9B — Teletext delivery and runtime proof'
+title      = 'Expose teletext management, health, and end-to-end proof'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p9b-01']
+acceptance = '''
+Localized admin/troubleshooting surfaces show teletext type, page, language,
+selection, capability, and failures. Licensed or redistributable DVB fixtures
+prove scan, rescan, select, seek/restart, direct MPEG-TS, HLS fallback,
+accessibility behavior, health reporting, and client-visible output end to end.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p10a-01'
+phase      = 'Phase 10A — Durable video-jukebox domain'
+title      = 'Decide the video-jukebox product and add-on contract'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7c-04', 'p9b-02']
+acceptance = '''
+An accepted ADR defines eligibility, queue policy, identity/moderation,
+cooldowns/rate limits, insertion/cancellation/retry/recovery semantics, and
+the versioned out-of-process add-on transport.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p10a-02'
+phase      = 'Phase 10A — Durable video-jukebox domain'
+title      = 'Persist the request aggregate and storage ports'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-01', 'p10a-01']
+acceptance = '''
+SQLite and MySQL persist the approved request state machine, identity,
+idempotency, queue position, timestamps, and failure detail through
+storage-neutral ports; submit, claim, and transition operations are atomic.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p10a-03'
+phase      = 'Phase 10A — Durable video-jukebox domain'
+title      = 'Integrate jukebox use cases with scheduling'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p7b-02', 'p7b-04', 'p10a-02']
+acceptance = '''
+Application commands/queries cover the request lifecycle, scheduling claims
+at the approved safe boundary, materialized items retain request identity,
+current playback is preserved, and restart recovery cannot schedule a request
+twice.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p10b-01'
+phase      = 'Phase 10B — Add-on ingress and runtime proof'
+title      = 'Expose a stable authenticated add-on API'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p10a-02']
+acceptance = '''
+A versioned HTTP command/query API plus status/event feed enforce
+authentication, authorization, idempotency, rate limits, and audit logging;
+adapter examples depend only on the public protocol.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p10b-02'
+phase      = 'Phase 10B — Add-on ingress and runtime proof'
+title      = 'Prove jukebox operations and restart safety end to end'
+status     = 'Not started'
+feature    = 'video-jukebox-addon-api'
+plan       = 'plans/application-layer-and-video-jukebox.md'
+depends_on = ['p10a-03', 'p10b-01']
+acceptance = '''
+Health checks and metrics cover stalled/failed work, and an end-to-end test
+proves multi-source submissions, duplicate idempotency, policy rejection,
+restart survival, exactly-once scheduling, and Played completion.
 '''
 evidence = ''

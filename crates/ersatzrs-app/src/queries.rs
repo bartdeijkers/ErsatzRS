@@ -325,6 +325,7 @@ fn ffmpeg_profile_admin_form(profile: ersatzrs_domain::FFmpegProfile) -> FfmpegP
         video_bitrate: profile.video_bitrate,
         video_buffer_size: profile.video_buffer_size,
         tonemap_algorithm: tonemap_value(profile.tonemap_algorithm),
+        output_dynamic_range: output_dynamic_range_value(profile.output_dynamic_range),
         audio_format: audio_format_value(profile.audio_format),
         audio_bitrate: profile.audio_bitrate,
         audio_buffer_size: profile.audio_buffer_size,
@@ -396,6 +397,13 @@ fn tonemap_value(value: ersatzrs_domain::FFmpegProfileTonemapAlgorithm) -> i32 {
         ersatzrs_domain::FFmpegProfileTonemapAlgorithm::Reinhard => 3,
         ersatzrs_domain::FFmpegProfileTonemapAlgorithm::Mobius => 4,
         ersatzrs_domain::FFmpegProfileTonemapAlgorithm::Hable => 5,
+    }
+}
+
+const fn output_dynamic_range_value(value: ersatzrs_domain::OutputDynamicRange) -> i32 {
+    match value {
+        ersatzrs_domain::OutputDynamicRange::SdrBt709 => 0,
+        ersatzrs_domain::OutputDynamicRange::Hdr10Bt2020Pq => 1,
     }
 }
 

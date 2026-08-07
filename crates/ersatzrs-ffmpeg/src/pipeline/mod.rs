@@ -1,7 +1,7 @@
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FilterMode, HardwareAccelerationKind, NormalizeLoudnessMode,
-    Resolution, ScalingBehavior, StreamingMode, VideoScanKind,
+    OutputDynamicRange, Resolution, ScalingBehavior, StreamingMode, VideoScanKind,
 };
 use std::time::Duration;
 
@@ -9,22 +9,24 @@ use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     format_time_limit, graphics_overlay_vaapi_filter, hardware_download_filter,
-    hardware_upload_filter, hardware_upload_vaapi_filter, hide_banner, loglevel_error,
-    mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
+    hardware_upload_filter, hardware_upload_vaapi_filter, hide_banner, hlg_to_hdr10_filter,
+    loglevel_error, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
     no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats, normalize_loudness_filter,
-    pad_filter, pad_vaapi_filter, pipe_output, progress_to_stdout, realtime_filter,
-    reset_pts_filter, scale_subtitle_image_filter, select_forced_software_video_decoder,
-    select_software_video_decoder, select_video_decoder, standard_format_flags,
-    still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
-    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
-    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
-    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
-    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
-    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
-    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, MpegTsMuxingOptions,
-    PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    pad_filter, pad_vaapi_filter, pipe_output, preserve_hdr10_filter, progress_to_stdout,
+    realtime_filter, reset_pts_filter, scale_subtitle_image_filter, sdr_to_hdr10_filter,
+    select_forced_software_video_decoder, select_software_video_decoder, select_video_decoder,
+    standard_format_flags, still_image_loop_filter, subtitle_overlay_cuda_filter,
+    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
+    subtitles_filter, time_limit, tonemap_filter_for, vaapi_subtitle_pixel_format_filter,
+    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
+    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
+    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
+    ComplexFilter, ContentLightLevel, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
+    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
+    HardwareCapabilitiesFactory, InputFile, InputKind, MasteringDisplayMetadata,
+    MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceTransferKind, SourceVideoCodec,
+    StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock,
+    WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -555,6 +557,9 @@ pub struct DesiredVideoState {
     pub audio_format: FFmpegProfileAudioFormat,
     pub bit_depth: FFmpegProfileBitDepth,
     pub tonemap_algorithm: FFmpegProfileTonemapAlgorithm,
+    /// ADR 0064 output dynamic-range contract. Describes the output stream, so
+    /// it does not change when an SDR item follows an HDR item.
+    pub output_dynamic_range: OutputDynamicRange,
     pub video_profile: Option<String>,
     pub video_preset: Option<String>,
     pub video_tune: Option<String>,
@@ -592,6 +597,7 @@ impl DesiredVideoState {
             audio_format: FFmpegProfileAudioFormat::Aac,
             bit_depth: FFmpegProfileBitDepth::EightBit,
             tonemap_algorithm: FFmpegProfileTonemapAlgorithm::Hable,
+            output_dynamic_range: OutputDynamicRange::SdrBt709,
             video_profile: Some("high".to_owned()),
             video_preset: Some("veryfast".to_owned()),
             video_tune: None,
@@ -651,6 +657,7 @@ impl DesiredVideoState {
             audio_format: profile.audio_format,
             bit_depth: effective_bit_depth(profile),
             tonemap_algorithm: profile.tonemap_algorithm,
+            output_dynamic_range: profile.output_dynamic_range,
             video_profile: non_empty_string(profile.video_profile.as_deref()),
             video_preset: normalized_video_preset(profile.video_preset.as_deref()),
             video_tune: normalized_video_tune(
@@ -700,6 +707,9 @@ impl DesiredVideoState {
             audio_format: FFmpegProfileAudioFormat::Copy,
             bit_depth: effective_bit_depth(profile),
             tonemap_algorithm: profile.tonemap_algorithm,
+            // Video copy preserves the source elementary stream, so ADR 0064's
+            // output contract does not apply and must not drive filters.
+            output_dynamic_range: OutputDynamicRange::SdrBt709,
             video_profile: None,
             video_preset: None,
             video_tune: None,
@@ -730,10 +740,25 @@ impl DesiredVideoState {
 
     #[must_use]
     pub const fn pixel_format(&self) -> PixelFormat {
+        // HDR10 output is 10-bit by definition; profile validation already
+        // rejects an 8-bit HDR10 profile, so this only guards the in-memory
+        // states that tests and callers can still construct by hand.
+        if self.output_dynamic_range.is_hdr10() {
+            return PixelFormat::Yuv420P10Le;
+        }
         match self.bit_depth {
             FFmpegProfileBitDepth::EightBit => PixelFormat::Yuv420P,
             FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
         }
+    }
+
+    /// True when this state must produce BT.2020/PQ HDR10 output.
+    ///
+    /// Stream copy never transforms the picture, so the contract is inert.
+    #[must_use]
+    pub const fn produces_hdr10(&self) -> bool {
+        self.output_dynamic_range.is_hdr10()
+            && !matches!(self.video_format, FFmpegProfileVideoFormat::Copy)
     }
 }
 
@@ -1021,6 +1046,7 @@ fn build_transcode_pipeline(
     // decode is forced explicit (`-hwaccel none -c:v …`), mirroring ErsatzTV.
     add_video_decoder(&request, &mut steps, encoder_acceleration);
     add_audio_decoder_input_options(&mut request);
+    add_hdr10_static_metadata_input_options(&mut request);
     add_realtime_input_options(&mut request);
     let uploaded_cuda_fallback =
         add_cuda_software_fallback_upload(&mut request, effective_acceleration);
@@ -1574,8 +1600,14 @@ fn apply_source_video_filters(
         target_state.frame_data_location = crate::FrameDataLocation::Hardware;
     }
 
-    let used_hdr_tonemap = target_state.is_hdr && is_transcode;
-    if target_state.is_hdr && is_transcode {
+    // ADR 0064: the profile's output dynamic range decides what happens to the
+    // source's dynamic range. `SdrBt709` keeps ErsatzTV's tonemap-to-BT.709
+    // behavior exactly; `Hdr10Bt2020Pq` is the beyond-parity branch and applies
+    // to every item so a linear stream never changes its signalling mid-flight.
+    let used_hdr_tonemap = target_state.is_hdr && is_transcode && !request.desired.produces_hdr10();
+    if is_transcode && request.desired.produces_hdr10() {
+        apply_hdr10_output_conversion(request, target_state, filter_chain);
+    } else if used_hdr_tonemap {
         filter_chain.video.push(tonemap_filter_for(
             acceleration,
             target_state,
@@ -1637,6 +1669,81 @@ fn apply_source_video_filters(
         target_state.pixel_format = request.desired.pixel_format();
         upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
     }
+}
+
+/// Establish the ADR 0064 `Hdr10Bt2020Pq` output contract for one item.
+///
+/// The three source cases are deliberately distinct rather than a single
+/// "convert to PQ" chain, because they have different costs and different
+/// metadata consequences:
+///
+/// * PQ source: the picture already satisfies the contract, so only the output
+///   tags are pinned and the encoder carries the source's own mastering-display
+///   and content-light side data through untouched.
+/// * HLG source: converted to PQ, because one linear stream must not switch
+///   transfer function between items.
+/// * SDR source: mapped into PQ at the documented BT.2408 reference white.
+///
+/// Both converting cases change what the source's static metadata means, so the
+/// caller emits validated profile metadata for them instead of copying the
+/// source's — see [`hdr10_static_metadata_input_options`].
+fn apply_hdr10_output_conversion(
+    request: &PipelineRequest,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    let filter = match source_transfer_kind(request) {
+        SourceTransferKind::Pq => preserve_hdr10_filter(),
+        SourceTransferKind::Hlg => hlg_to_hdr10_filter(target_state),
+        SourceTransferKind::Sdr => sdr_to_hdr10_filter(target_state),
+    };
+    let converts_frames = source_transfer_kind(request) != SourceTransferKind::Pq;
+
+    filter_chain.video.push(filter);
+    target_state.is_hdr = true;
+    // The output is BT.2020/PQ, never BT.709. Marking it "bt709" would be a
+    // lie, but the colorspace normalization gate keys off this flag, so HDR10
+    // output is excluded there explicitly instead.
+    target_state.colors_are_bt709 = false;
+    if converts_frames {
+        target_state.pixel_format = PixelFormat::Yuv420P10Le;
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+    }
+}
+
+/// Classify the selected source video stream's transfer characteristics.
+fn source_transfer_kind(request: &PipelineRequest) -> SourceTransferKind {
+    request
+        .source_video_stream
+        .as_ref()
+        .map(|source| {
+            SourceTransferKind::from_transfer_tag(source.color_params.color_transfer.as_deref())
+        })
+        .unwrap_or_default()
+}
+
+/// Per-stream HDR10 static-metadata input options for an item.
+///
+/// ADR 0064 requires these at the input-option boundary, not as generic output
+/// options, and forbids copying source metadata onto frames whose meaning a
+/// transform has changed. A PQ source therefore emits nothing — its own side
+/// data survives the encode — while HLG and SDR sources emit the documented,
+/// validated profile defaults.
+#[must_use]
+pub fn hdr10_static_metadata_input_options(request: &PipelineRequest) -> Vec<String> {
+    if !request.desired.produces_hdr10() {
+        return Vec::new();
+    }
+    if source_transfer_kind(request) == SourceTransferKind::Pq {
+        return Vec::new();
+    }
+
+    vec![
+        "-mastering_display".to_owned(),
+        MasteringDisplayMetadata::BT2020_1000_NITS.to_ffmpeg_value(),
+        "-content_light".to_owned(),
+        ContentLightLevel::DEFAULT.to_ffmpeg_value(),
+    ]
 }
 
 fn track_hardware_scale_output(
@@ -1705,6 +1812,10 @@ fn apply_colorspace_normalization(
     if request.desired.video_format == FFmpegProfileVideoFormat::Copy
         || !request.desired.normalize_colors
         || target_state.colors_are_bt709
+        // ADR 0064: an HDR10 profile has already established BT.2020/PQ. The
+        // ErsatzTV colorspace normalization converts to BT.709, so running it
+        // here would silently downgrade HDR10 output to SDR.
+        || request.desired.produces_hdr10()
     {
         return;
     }
@@ -2209,6 +2320,26 @@ fn container_movflags(state: &FfmpegState, desired: &DesiredVideoState) -> Pipel
     }
 
     fast_start()
+}
+
+/// Attach the HDR10 static-metadata options to the video input.
+///
+/// ADR 0064 places `-mastering_display` and `-content_light` at the per-stream
+/// input-option boundary rather than among the generic output options, so they
+/// describe the decoded source stream that the filter graph then transforms.
+fn add_hdr10_static_metadata_input_options(request: &mut PipelineRequest) {
+    let options = hdr10_static_metadata_input_options(request);
+    if options.is_empty() {
+        return;
+    }
+
+    for input in request
+        .inputs
+        .iter_mut()
+        .filter(|input| input.kind == InputKind::Video)
+    {
+        input.input_options.extend(options.iter().cloned());
+    }
 }
 
 fn add_audio_decoder_input_options(request: &mut PipelineRequest) {

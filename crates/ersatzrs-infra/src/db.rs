@@ -101,6 +101,10 @@ struct DefaultFfmpegProfileSeed {
     bit_depth: i32,
     video_bitrate: i32,
     video_buffer_size: i32,
+    /// ADR 0064 `OutputDynamicRange`: 0 = `SdrBt709`, 1 = `Hdr10Bt2020Pq`.
+    /// Only the two ADR 0017 profiles named `hdr` seed as HDR10; the rest stay
+    /// SDR so a fresh database matches what the profile name promises.
+    output_dynamic_range: i32,
 }
 
 const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
@@ -113,6 +117,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         bit_depth: 0,
         video_bitrate: 4000,
         video_buffer_size: 8000,
+        output_dynamic_range: 0,
     },
     DefaultFfmpegProfileSeed {
         name: DEFAULT_FFMPEG_PROFILE_NAME,
@@ -123,6 +128,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         bit_depth: 0,
         video_bitrate: 8000,
         video_buffer_size: 16000,
+        output_dynamic_range: 0,
     },
     DefaultFfmpegProfileSeed {
         name: "1920x1080 x265 10-bit hdr ac3 6ch",
@@ -133,6 +139,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         bit_depth: 1,
         video_bitrate: 10000,
         video_buffer_size: 20000,
+        output_dynamic_range: 1,
     },
     DefaultFfmpegProfileSeed {
         name: "3840x2160 x265 ac3 6ch",
@@ -143,6 +150,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         bit_depth: 0,
         video_bitrate: 22500,
         video_buffer_size: 45000,
+        output_dynamic_range: 0,
     },
     DefaultFfmpegProfileSeed {
         name: "3840x2160 x265 10-bit hdr ac3 6ch",
@@ -153,6 +161,7 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
         bit_depth: 1,
         video_bitrate: 30000,
         video_buffer_size: 60000,
+        output_dynamic_range: 1,
     },
 ];
 
@@ -814,8 +823,8 @@ async fn insert_default_ffmpeg_profile(
             "VaapiDevice", "VaapiDriver", "VideoBitrate", "VideoBufferSize",
             "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames",
             "VaapiDisplay", "TonemapAlgorithm", "TargetLoudness", "PadMode",
-            "TranscodeAudio", "NormalizeColors", "TranscodeVideo"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            "TranscodeAudio", "NormalizeColors", "TranscodeVideo", "OutputDynamicRange"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(640_i32)
     .bind(640_i32)
@@ -848,6 +857,7 @@ async fn insert_default_ffmpeg_profile(
     .bind(1_i32)
     .bind(1_i32)
     .bind(1_i32)
+    .bind(profile.output_dynamic_range)
     .execute(pool)
     .await?;
 
@@ -1093,6 +1103,115 @@ mod tests {
         assert_eq!(rows[1].get::<String, _>("VideoTune"), "ll");
         assert_eq!(rows[2].get::<String, _>("VideoPreset"), "veryfast");
         assert_eq!(rows[2].get::<Option<String>, _>("VideoTune"), None);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn existing_sqlite_profiles_default_to_sdr_output_dynamic_range() {
+        // ADR 0064: the migration is additive and must not change what an
+        // existing channel already streams. Every pre-existing row, including
+        // one named `hdr`, keeps the SDR behavior the pipeline produced before
+        // the contract existed.
+        const OUTPUT_DYNAMIC_RANGE_VERSION: i64 = 202_608_071_200;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect upgrade database");
+        let previous = sqlx::migrate::Migrator::with_migrations(
+            super::SQLITE_MIGRATOR
+                .iter()
+                .filter(|migration| migration.version < OUTPUT_DYNAMIC_RANGE_VERSION)
+                .cloned()
+                .collect(),
+        );
+        previous.run(&pool).await.expect("migrate previous schema");
+        sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (901, 'test', 1920, 1080)"#)
+            .execute(&pool)
+            .await
+            .expect("seed resolution");
+        for (id, name) in [
+            (902_i64, "1920x1080 x265 10-bit hdr ac3 6ch"),
+            (903, "plain sdr profile"),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "FFmpegProfile" (
+                    "Id", "Name", "ThreadCount", "TranscodeVideo", "TranscodeAudio",
+                    "ResolutionId", "ScalingBehavior", "VideoFormat", "AudioFormat",
+                    "VideoBitrate", "VideoBufferSize", "AudioBitrate", "AudioBufferSize",
+                    "NormalizeLoudnessMode", "AudioChannels", "AudioSampleRate",
+                    "HardwareAcceleration", "QsvExtraHardwareFrames", "VaapiDriver",
+                    "TonemapAlgorithm", "AllowBFrames", "BitDepth", "NormalizeFramerate",
+                    "NormalizeColors", "DeinterlaceVideo", "PadMode", "VideoPreset"
+                ) VALUES (?, ?, 0, 1, 1, 901, 0, 2, 1, 10000, 20000, 192, 384,
+                    0, 2, 48, 0, 64, 0, 0, 0, 1, 1, 1, 1, 0, 'veryfast')"#,
+            )
+            .bind(id)
+            .bind(name)
+            .execute(&pool)
+            .await
+            .expect("seed legacy profile");
+        }
+
+        super::SQLITE_MIGRATOR
+            .run(&pool)
+            .await
+            .expect("apply output dynamic range migration");
+
+        let rows = sqlx::query(
+            r#"SELECT "Name", "OutputDynamicRange" FROM "FFmpegProfile" ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load migrated profiles");
+        assert_eq!(rows.len(), 2);
+        for row in &rows {
+            assert_eq!(
+                row.get::<i32, _>("OutputDynamicRange"),
+                0,
+                "existing profile {} must stay SdrBt709",
+                row.get::<String, _>("Name")
+            );
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn fresh_database_seeds_only_the_adr_0017_hdr_profiles_as_hdr10() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect fresh database");
+        super::SQLITE_MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate fresh schema");
+        super::ensure_default_ffmpeg_profile(&pool)
+            .await
+            .expect("seed default profiles");
+
+        let rows = sqlx::query(
+            r#"SELECT "Name", "OutputDynamicRange" FROM "FFmpegProfile" ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load seeded profiles");
+
+        let hdr10: Vec<String> = rows
+            .iter()
+            .filter(|row| row.get::<i32, _>("OutputDynamicRange") == 1)
+            .map(|row| row.get::<String, _>("Name"))
+            .collect();
+
+        assert_eq!(
+            hdr10,
+            vec![
+                "1920x1080 x265 10-bit hdr ac3 6ch".to_owned(),
+                "3840x2160 x265 10-bit hdr ac3 6ch".to_owned(),
+            ],
+            "only the two ADR 0017 profiles named `hdr` seed as HDR10"
+        );
     }
 
     #[cfg(not(feature = "mysql"))]

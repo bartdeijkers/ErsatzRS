@@ -211,6 +211,15 @@ impl LanguageStrings for DutchStrings {
         .to_owned()
     }
 
+    fn ffmpeg_output_dynamic_range_label(&self, range: i32) -> String {
+        match range {
+            0 => "SDR (BT.709)",
+            1 => "HDR10 (BT.2020 PQ)",
+            _ => return format!("Onbekend ({range})"),
+        }
+        .to_owned()
+    }
+
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
         match mode {
             0 => text(TextKey::Off),
@@ -706,6 +715,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         }
         "Rkmpp supports formats (h264, hevc)" => {
             "Rkmpp ondersteunt formaten (h264, hevc).".to_owned()
+        }
+        "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata" => {
+            "HDR10-uitvoer vereist hevc of av1; h264 en mpeg2video kunnen geen statische HDR10-metadata dragen.".to_owned()
+        }
+        "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
+            "HDR10-uitvoer vereist 10-bit; 8-bit kan een PQ-signaal niet zonder banding weergeven.".to_owned()
         }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video ondersteunt geen 10-bit-content.".to_owned()
@@ -1862,6 +1877,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Stretch => "Uitrekken",
         TextKey::TargetLoudnessLufs => "Doelloudness (LUFS)",
         TextKey::ThreadCountAuto => "Aantal threads (0 = auto)",
+        TextKey::OutputDynamicRange => "Dynamisch bereik van uitvoer",
+        TextKey::OutputDynamicRangeCopyHint => "Video wordt gekopieerd, dus de uitvoer behoudt het dynamisch bereik van de bron.",
         TextKey::TonemapAlgorithm => "Tonemap-algoritme",
         TextKey::VaapiDevicePath => "VAAPI-apparaatpad",
         TextKey::VaapiDisplay => "VAAPI-display",

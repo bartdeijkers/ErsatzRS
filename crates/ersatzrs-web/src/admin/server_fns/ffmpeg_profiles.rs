@@ -49,6 +49,8 @@ pub struct FfmpegProfileForm {
     pub video_bitrate: i32,
     pub video_buffer_size: i32,
     pub tonemap_algorithm: i32,
+    /// ADR 0064 output dynamic range: 0 = SDR BT.709, 1 = HDR10 BT.2020/PQ.
+    pub output_dynamic_range: i32,
     pub audio_format: i32,
     pub audio_bitrate: i32,
     pub audio_buffer_size: i32,
@@ -94,8 +96,9 @@ impl FfmpegProfileForm {
             bit_depth: 0, // EightBit
             video_bitrate: 2000,
             video_buffer_size: 4000,
-            tonemap_algorithm: 0, // Linear
-            audio_format: 1,      // Aac
+            tonemap_algorithm: 0,    // Linear
+            output_dynamic_range: 0, // SdrBt709
+            audio_format: 1,         // Aac
             audio_bitrate: 192,
             audio_buffer_size: 384,
             normalize_loudness_mode: 0, // Off
@@ -136,6 +139,7 @@ fn ffmpeg_profile_form_into_admin(
         video_bitrate: form.video_bitrate,
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: form.tonemap_algorithm,
+        output_dynamic_range: form.output_dynamic_range,
         audio_format: form.audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -176,6 +180,7 @@ fn ffmpeg_profile_form_from_admin(
         video_bitrate: form.video_bitrate,
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: form.tonemap_algorithm,
+        output_dynamic_range: form.output_dynamic_range,
         audio_format: form.audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -257,6 +262,36 @@ pub fn video_format_validation_error(hw: i32, vf: i32) -> Option<&'static str> {
         _ => None,
     }
 }
+
+/// Client-side mirror of the application layer's ADR 0064 HDR10 rules.
+///
+/// Kept in lockstep with `validate_output_dynamic_range` in
+/// `ersatzrs-app::commands` so the editor can surface the same rejection before
+/// a round trip; the server remains the authority.
+#[must_use]
+pub fn output_dynamic_range_validation_error(
+    output_dynamic_range: i32,
+    video_format: i32,
+    bit_depth: i32,
+) -> Option<&'static str> {
+    if output_dynamic_range != 1 {
+        return None;
+    }
+    if !matches!(video_format, 2 | 4) {
+        return Some(HDR10_CODEC_ERROR);
+    }
+    if bit_depth != 1 {
+        return Some(HDR10_BIT_DEPTH_ERROR);
+    }
+    None
+}
+
+/// Shared with `ersatzrs-app` so both sides render the same message.
+pub const HDR10_CODEC_ERROR: &str =
+    "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata";
+/// Shared with `ersatzrs-app` so both sides render the same message.
+pub const HDR10_BIT_DEPTH_ERROR: &str =
+    "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding";
 
 #[cfg(all(test, feature = "ssr"))]
 fn normalized_video_profile_for_persist(

@@ -742,6 +742,8 @@ pub enum TextKey {
     SaveBlock,
     ScaleAndPad,
     ScalingBehavior,
+    OutputDynamicRange,
+    OutputDynamicRangeCopyHint,
     Software,
     Stretch,
     TargetLoudnessLufs,
@@ -1961,6 +1963,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SaveBlock,
     TextKey::ScaleAndPad,
     TextKey::ScalingBehavior,
+    TextKey::OutputDynamicRange,
+    TextKey::OutputDynamicRangeCopyHint,
     TextKey::Software,
     TextKey::Stretch,
     TextKey::TargetLoudnessLufs,
@@ -2700,6 +2704,14 @@ pub fn ffmpeg_tonemap_algorithm_text(language: UiLanguage, algorithm: i32) -> St
     languages_for(language).ffmpeg_tonemap_algorithm_label(algorithm)
 }
 
+pub fn ffmpeg_output_dynamic_range_label(range: i32) -> String {
+    ffmpeg_output_dynamic_range_text(use_i18n(), range)
+}
+
+pub fn ffmpeg_output_dynamic_range_text(language: UiLanguage, range: i32) -> String {
+    languages_for(language).ffmpeg_output_dynamic_range_label(range)
+}
+
 pub fn ffmpeg_loudness_mode_label(mode: i32) -> String {
     ffmpeg_loudness_mode_text(use_i18n(), mode)
 }
@@ -2990,6 +3002,7 @@ pub trait LanguageStrings: Sync {
     fn playout_schedule_kind_label(&self, kind: i32) -> String;
     fn library_kind_label(&self, kind: &str) -> String;
     fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String;
+    fn ffmpeg_output_dynamic_range_label(&self, range: i32) -> String;
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String;
     fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String;
     fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String;

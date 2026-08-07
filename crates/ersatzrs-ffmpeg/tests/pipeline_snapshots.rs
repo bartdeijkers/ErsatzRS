@@ -5,9 +5,9 @@ use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FilterMode, GraphicsElement, GraphicsElementConfig,
     HardwareAccelerationKind, ImageGraphicsConfig, MotionEndBehavior, MotionGraphicsConfig,
-    NormalizeLoudnessMode, Resolution, ScalingBehavior, ScriptGraphicsConfig, StreamingMode,
-    StyleDefinition, SubtitleGraphicsConfig, TextAlignment, TextFit, TextGraphicsConfig,
-    VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
+    NormalizeLoudnessMode, OutputDynamicRange, Resolution, ScalingBehavior, ScriptGraphicsConfig,
+    StreamingMode, StyleDefinition, SubtitleGraphicsConfig, TextAlignment, TextFit,
+    TextGraphicsConfig, VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use ersatzrs_ffmpeg::{
     audio_pad_filter, audio_resample_filter, capability_report_for_tests, colorspace_filter,
@@ -3512,4 +3512,180 @@ fn pipeline_with_subtitle_graphics_overlay_snapshot() {
     let command = pipeline.command(&request.inputs);
 
     insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+// ── ADR 0064: explicit SDR/HDR10 output dynamic range ────────────────────────
+
+/// Build an HDR10 (`Hdr10Bt2020Pq`) HEVC 10-bit desired state.
+fn hdr10_desired() -> DesiredVideoState {
+    DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Hevc,
+        bit_depth: FFmpegProfileBitDepth::TenBit,
+        output_dynamic_range: OutputDynamicRange::Hdr10Bt2020Pq,
+        video_profile: Some("main10".to_owned()),
+        ..DesiredVideoState::h264_1080p()
+    }
+}
+
+fn source_with_transfer(transfer: Option<&str>, is_hdr: bool) -> SourceVideoStream {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.color_params = SourceColorParams {
+        color_transfer: transfer.map(str::to_owned),
+        color_primaries: is_hdr.then(|| "bt2020".to_owned()),
+        color_space: is_hdr.then(|| "bt2020nc".to_owned()),
+        color_range: Some("tv".to_owned()),
+        is_hdr,
+        is_bt2020_ten: is_hdr,
+    };
+    source
+}
+
+#[test]
+fn hdr10_profile_preserves_a_pq_source_without_tonemapping() {
+    let request = PipelineRequest::new(InputFile::video("/media/hdr10.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("smpte2084"), true));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        !args.contains("tonemap"),
+        "an HDR10 profile must never tone-map a PQ source to SDR, got: {args}"
+    );
+    assert!(
+        args.contains(
+            "setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020"
+        ),
+        "got: {args}"
+    );
+    // The source's own mastering-display side data survives the encode, so no
+    // profile metadata is injected over it.
+    assert!(!args.contains("-mastering_display"), "got: {args}");
+    assert!(!args.contains("-content_light"), "got: {args}");
+    // BT.709 normalization would silently downgrade the output to SDR.
+    assert!(!args.contains("all=bt709"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn hdr10_profile_maps_an_sdr_source_at_the_documented_reference_white() {
+    let request = PipelineRequest::new(InputFile::video("/media/sdr.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("bt709"), false));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        args.contains("npl=203"),
+        "BT.2408 diffuse white, got: {args}"
+    );
+    assert!(args.contains("zscale=t=smpte2084"), "got: {args}");
+    // A transform changed what static metadata means, so validated profile
+    // metadata is emitted at the input boundary.
+    assert!(
+        args.contains("-mastering_display G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1)"),
+        "got: {args}"
+    );
+    assert!(args.contains("-content_light 1000,400"), "got: {args}");
+    assert!(!args.contains("all=bt709"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn hdr10_profile_normalizes_an_hlg_source_to_pq() {
+    let request = PipelineRequest::new(InputFile::video("/media/hlg.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("arib-std-b67"), true));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("zscale=t=smpte2084"), "got: {args}");
+    assert!(args.contains("npl=1000"), "got: {args}");
+    assert!(args.contains("-mastering_display"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before() {
+    let request = PipelineRequest::new(
+        InputFile::video("/media/hdr10.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source_with_transfer(Some("smpte2084"), true));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("tonemap="), "got: {args}");
+    assert!(
+        args.contains("zscale=p=bt709:t=bt709:m=bt709"),
+        "got: {args}"
+    );
+    // SDR output must never carry HDR static metadata.
+    assert!(!args.contains("-mastering_display"), "got: {args}");
+    assert!(!args.contains("-content_light"), "got: {args}");
+    assert!(!args.contains("smpte2084"), "got: {args}");
+}
+
+#[test]
+fn video_copy_ignores_the_output_dynamic_range() {
+    let desired = DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        output_dynamic_range: OutputDynamicRange::Hdr10Bt2020Pq,
+        ..DesiredVideoState::h264_1080p()
+    };
+    let request = PipelineRequest::new(InputFile::video("/media/hdr10.mkv"), desired)
+        .with_source_video_stream(source_with_transfer(Some("smpte2084"), true));
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("-mastering_display"), "got: {args}");
+    assert!(!args.contains("zscale"), "got: {args}");
+    assert!(!args.contains("tonemap"), "got: {args}");
+}
+
+#[test]
+fn hdr10_output_signalling_is_identical_for_sdr_and_hdr_items() {
+    // ADR 0064: an HDR10 profile describes the *output* stream, so a linear
+    // stream must not change its signalling when an SDR item follows an HDR
+    // item. This is the programme-transition contract at command level; the
+    // decoded-frame proof lives in the HDR runtime gate.
+    let tail = "setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020";
+
+    for (path, transfer, is_hdr) in [
+        ("/media/hdr10.mkv", Some("smpte2084"), true),
+        ("/media/hlg.mkv", Some("arib-std-b67"), true),
+        ("/media/sdr.mkv", Some("bt709"), false),
+        ("/media/untagged.mkv", None, false),
+    ] {
+        let request = PipelineRequest::new(InputFile::video(path), hdr10_desired())
+            .with_source_video_stream(source_with_transfer(transfer, is_hdr));
+        let args = SoftwarePipelineBuilder
+            .build(request.clone())
+            .command(&request.inputs)
+            .arguments
+            .join(" ");
+
+        assert!(args.contains(tail), "{path} lost HDR10 signalling: {args}");
+        assert!(
+            !args.contains("zscale=p=bt709"),
+            "{path} downgraded to BT.709: {args}"
+        );
+    }
 }

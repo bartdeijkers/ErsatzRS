@@ -21,7 +21,8 @@ use ersatzrs_domain::{
     FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FillerKind, FillerMode, FillerPreset, FilterMode,
     HardwareAccelerationKind, LibraryMediaKind, MediaSourceKind, NormalizeLoudnessMode,
-    PlaybackOrder, ScalingBehavior, VaapiDriver, WatermarkLocation, WatermarkSize,
+    OutputDynamicRange, PlaybackOrder, ScalingBehavior, VaapiDriver, WatermarkLocation,
+    WatermarkSize,
 };
 
 use crate::operations::OperationCoordinator;
@@ -82,6 +83,8 @@ pub struct FfmpegProfileAdminForm {
     pub video_bitrate: i32,
     pub video_buffer_size: i32,
     pub tonemap_algorithm: i32,
+    /// ADR 0064 `OutputDynamicRange`: 0 = `SdrBt709`, 1 = `Hdr10Bt2020Pq`.
+    pub output_dynamic_range: i32,
     pub audio_format: i32,
     pub audio_bitrate: i32,
     pub audio_buffer_size: i32,
@@ -755,6 +758,20 @@ async fn normalize_ffmpeg_profile(
         form.bit_depth,
         &form.video_profile,
     )?;
+    // ADR 0064: the output dynamic range only describes a transcoded stream.
+    // Video copy preserves the source elementary stream, so the selection is
+    // inert and is normalized away rather than persisted as a promise the
+    // pipeline cannot keep.
+    let output_dynamic_range = if form.transcode_video {
+        validate_output_dynamic_range(
+            form.output_dynamic_range,
+            resolved_video_format,
+            form.bit_depth,
+        )?;
+        parse_output_dynamic_range(form.output_dynamic_range)?
+    } else {
+        OutputDynamicRange::SdrBt709
+    };
     let bit_depth = if video_format == FFmpegProfileVideoFormat::Mpeg2Video {
         FFmpegProfileBitDepth::EightBit
     } else {
@@ -831,6 +848,7 @@ async fn normalize_ffmpeg_profile(
         video_bitrate: form.video_bitrate,
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: parse_tonemap_algorithm(form.tonemap_algorithm)?,
+        output_dynamic_range,
         audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -888,6 +906,45 @@ fn validate_ffmpeg_profile_options(
             "video_profile",
             "VideoProfile cannot be high10 with 8-bit h264",
         );
+    }
+    Ok(())
+}
+
+/// Rejection message for an HDR10 profile on a codec without a metadata path.
+pub const HDR10_CODEC_ERROR: &str =
+    "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata";
+/// Rejection message for an 8-bit HDR10 profile.
+pub const HDR10_BIT_DEPTH_ERROR: &str =
+    "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding";
+
+/// Reject HDR10 output combinations the pipeline cannot honour (ADR 0064).
+///
+/// ADR 0064 forbids silently downgrading HDR10 to SDR, so an impossible
+/// combination has to fail at save time rather than at play time. The two rules
+/// are the ones that make HDR10 signalling meaningless if broken:
+///
+/// * the codec must have a mastering-display/content-light metadata path
+///   `FFmpeg` actually emits — verified for HEVC and AV1;
+/// * the output must be 10-bit, because PQ banding in 8-bit is not HDR10.
+///
+/// Hardware acceleration is intentionally *not* rejected here. Whether a given
+/// device can run the HDR10 graph is a runtime capability question that ADR
+/// 0014 answers through health and troubleshooting, not a property of the saved
+/// profile.
+fn validate_output_dynamic_range(
+    output_dynamic_range: i32,
+    video_format: i32,
+    bit_depth: i32,
+) -> crate::Result<()> {
+    if output_dynamic_range != 1 {
+        return Ok(());
+    }
+    // 2 = Hevc, 4 = Av1.
+    if !matches!(video_format, 2 | 4) {
+        return validation_error("output_dynamic_range", HDR10_CODEC_ERROR);
+    }
+    if bit_depth != 1 {
+        return validation_error("output_dynamic_range", HDR10_BIT_DEPTH_ERROR);
     }
     Ok(())
 }
@@ -982,6 +1039,9 @@ parse_enum!(parse_tonemap_algorithm, FFmpegProfileTonemapAlgorithm, "tonemap_alg
 });
 parse_enum!(parse_normalize_loudness, NormalizeLoudnessMode, "normalize_loudness_mode", {
     0 => NormalizeLoudnessMode::Off, 1 => NormalizeLoudnessMode::LoudNorm
+});
+parse_enum!(parse_output_dynamic_range, OutputDynamicRange, "output_dynamic_range", {
+    0 => OutputDynamicRange::SdrBt709, 1 => OutputDynamicRange::Hdr10Bt2020Pq
 });
 
 pub async fn save_filler_preset(
@@ -5527,15 +5587,15 @@ mod tests {
         request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
         save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
         save_rerun_collection, save_smart_collection, set_windows_startup, validate_channel_form,
-        validate_channel_number_updates, validate_schedule_items, validate_template_group_name,
-        validate_template_name, validate_watermark, AddMediaItemToCollection, BlockItemAdminForm,
-        ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
-        RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
-        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
-        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
-        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
-        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
-        ScanWorkRequest, WatermarkAdminForm,
+        validate_channel_number_updates, validate_output_dynamic_range, validate_schedule_items,
+        validate_template_group_name, validate_template_name, validate_watermark,
+        AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem, CreatePlaylistGroup,
+        DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan, RequestPlayoutBuild,
+        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
+        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
+        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
+        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
+        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
@@ -6480,6 +6540,42 @@ mod tests {
         }
     }
 
+    // ── ADR 0064: HDR10 output validation ───────────────────────────────
+
+    #[test]
+    fn sdr_output_dynamic_range_is_always_valid() {
+        for video_format in [0, 1, 2, 3, 4, 99] {
+            for bit_depth in [0, 1] {
+                assert!(
+                    validate_output_dynamic_range(0, video_format, bit_depth).is_ok(),
+                    "SDR must never be rejected ({video_format}, {bit_depth})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn hdr10_requires_a_codec_that_can_carry_static_metadata() {
+        // Hevc (2) and Av1 (4) are proven; h264 (1) and mpeg2video (3) are not.
+        assert!(validate_output_dynamic_range(1, 2, 1).is_ok());
+        assert!(validate_output_dynamic_range(1, 4, 1).is_ok());
+        for rejected in [0, 1, 3, 99] {
+            let error = validate_output_dynamic_range(1, rejected, 1)
+                .expect_err("codec without an HDR10 metadata path must be rejected");
+            assert!(
+                format!("{error}").contains("hevc or av1"),
+                "unexpected message for {rejected}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn hdr10_requires_ten_bit_output() {
+        let error = validate_output_dynamic_range(1, 2, 0)
+            .expect_err("8-bit HDR10 must be rejected, never silently downgraded");
+        assert!(format!("{error}").contains("10-bit"), "{error}");
+    }
+
     fn existing_ffmpeg_profile_form() -> FfmpegProfileAdminForm {
         FfmpegProfileAdminForm {
             id: 7,
@@ -6504,6 +6600,7 @@ mod tests {
             video_bitrate: 0,
             video_buffer_size: 0,
             tonemap_algorithm: 0,
+            output_dynamic_range: 0,
             audio_format: 99,
             audio_bitrate: 0,
             audio_buffer_size: 0,
