@@ -3946,3 +3946,163 @@ fn unproven_backends_keep_their_hardware_path_for_sdr_profiles() {
 
     assert!(args.contains("h264_vaapi"), "got: {args}");
 }
+
+// ── p8c-03: animated WebP graphics and watermark inputs ─────────────────────
+
+fn graphics_fixture(name: &str) -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/graphics")
+        .join(name)
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[test]
+fn animated_webp_is_detected_from_its_header() {
+    // The `ANIM` chunk in an extended RIFF/WEBP file is the animation marker.
+    assert!(ersatzrs_ffmpeg::image_file_is_animated(
+        std::path::Path::new(&graphics_fixture("animated-alpha.webp"))
+    ));
+    assert!(!ersatzrs_ffmpeg::image_file_is_animated(
+        std::path::Path::new(&graphics_fixture("static-alpha.webp"))
+    ));
+    // A missing file must not be reported as animated, or a stale graphics
+    // element would pick the wrong demuxer option.
+    assert!(!ersatzrs_ffmpeg::image_file_is_animated(
+        std::path::Path::new(&graphics_fixture("does-not-exist.webp"))
+    ));
+}
+
+#[test]
+fn a_graphics_element_image_picks_the_demuxer_specific_loop_option() {
+    // Measured against FFmpeg 9: `-loop 1` on an animated WebP fails with
+    // `Option loop not found` and the input never opens, while
+    // `-ignore_loop 0` on a still image fails with
+    // `Option ignore_loop not found`. Either mismatch kills the channel.
+    let animated = InputFile::graphics_image(graphics_fixture("animated-alpha.webp"));
+    assert_eq!(animated.input_options, vec!["-ignore_loop", "0"]);
+
+    let still = InputFile::graphics_image(graphics_fixture("static-alpha.webp"));
+    assert_eq!(still.input_options, vec!["-loop", "1"]);
+}
+
+#[test]
+fn still_graphics_images_keep_their_existing_loop_behavior() {
+    // A path that does not exist (the shape every existing snapshot uses)
+    // must stay on the still-image option, so this change cannot alter any
+    // established graph.
+    let input = InputFile::graphics_image("/media/logo.png");
+
+    assert_eq!(input.input_options, vec!["-loop", "1"]);
+}
+
+#[test]
+fn an_animated_watermark_uses_ignore_loop_and_a_still_one_does_not() {
+    assert_eq!(
+        InputFile::watermark_animated("/media/bug.webp").input_options,
+        vec!["-ignore_loop", "0"]
+    );
+    assert_eq!(
+        InputFile::watermark_looped("/media/logo.png").input_options,
+        vec!["-loop", "1"]
+    );
+    assert!(InputFile::watermark("/media/logo.png")
+        .input_options
+        .is_empty());
+}
+
+/// Real-`FFmpeg` gate for animated WebP overlays. Ignored by default because it
+/// needs an `ffmpeg` binary.
+///
+/// Run with:
+/// `ERSATZRS_FFMPEG=<path to ffmpeg> ./run.sh test -p ersatzrs-ffmpeg \
+///  --run-ignored ignored-only animated_webp_overlay`
+///
+/// Decoded proof rather than argv: a per-frame hash sequence distinguishes
+/// correct looping (the eight distinct frames repeat) from a missing loop
+/// option (the last frame freezes), which argv inspection cannot.
+// Test-only opt-in path; the configuration layer is for the application.
+#[allow(clippy::disallowed_methods)]
+#[test]
+#[ignore = "requires a real ffmpeg binary"]
+fn animated_webp_overlay_loops_and_composites_alpha() {
+    let Some(ffmpeg) = std::env::var_os("ERSATZRS_FFMPEG") else {
+        eprintln!("set ERSATZRS_FFMPEG to run this gate");
+        return;
+    };
+    let fixture = graphics_fixture("animated-alpha.webp");
+
+    let frame_hashes = |loop_option: &[&str]| -> Vec<String> {
+        let mut command = std::process::Command::new(&ffmpeg);
+        command.args(["-nostdin", "-hide_banner", "-loglevel", "error"]);
+        command.args([
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:size=64x64:rate=8:duration=2",
+        ]);
+        command.args(loop_option);
+        command.args(["-i", &fixture]);
+        command.args([
+            "-filter_complex",
+            "[0:v][1:v]overlay=0:0[v]",
+            "-map",
+            "[v]",
+            "-frames:v",
+            "16",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "gray",
+            "-",
+        ]);
+        let output = command.output().expect("run ffmpeg");
+        assert!(
+            output.status.success(),
+            "ffmpeg failed: {:?}",
+            output.status
+        );
+
+        output
+            .stdout
+            .chunks_exact(64 * 64)
+            .map(|frame| {
+                // A cheap content signature; only equality between frames
+                // matters here.
+                let sum: u64 = frame.iter().map(|byte| u64::from(*byte)).sum();
+                format!("{sum}-{}", frame.len())
+            })
+            .collect()
+    };
+
+    let looped = frame_hashes(&["-ignore_loop", "0"]);
+    assert_eq!(looped.len(), 16);
+    assert_eq!(
+        looped[0..8],
+        looped[8..16],
+        "the animation must repeat for the whole programme"
+    );
+    assert_eq!(
+        looped[0..8]
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        8,
+        "all eight source frames must decode distinctly"
+    );
+
+    // Without the loop option the final frame freezes; this is what an operator
+    // saw before the loop option was selected per demuxer.
+    let unlooped = frame_hashes(&[]);
+    assert!(
+        unlooped[8..16].iter().all(|frame| *frame == unlooped[7]),
+        "control case: the last frame should freeze without -ignore_loop 0"
+    );
+
+    // Alpha survived the decode: the 50%-alpha fixture over black is strictly
+    // darker than the same fixture decoded on its own would be at full opacity.
+    assert!(
+        looped[0] != "0-4096",
+        "the overlay must actually contribute pixels"
+    );
+}

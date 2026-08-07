@@ -101,10 +101,51 @@ rewrite, permissions, collision, spawn-failure fallback, and double-delete.
 resolved    = true
 
 [[debt]]
-id          = 'orientation-and-animated-webp-support-is-uncharacterized'
-description = 'Characterize source display-matrix/orientation handling and animated WebP watermark/graphics inputs. Persist orientation without double-applying FFmpeg autorotation; compare software, transpose_cuda, and fused libplacebo rotation; and prove animated frame timing, looping, alpha, resource bounds, and MPEG-TS/HLS output.'
+id          = 'animated-webp-graphics-support-is-uncharacterized'
+adr         = '0003'
+description = 'Characterize animated WebP watermark/graphics inputs: frame timing, looping, alpha, z-order, cancellation, bounded resource use, and both IPTV output modes, without changing static image behavior.'
 discovered  = '2026-08-07'
-evidence    = 'The workspace has no explicit media orientation pipeline contract. FFmpeg 9 adds `transpose_cuda` and an animated WebP decoder/demuxer, while libplacebo can combine rotation with other Vulkan processing. The differential review established availability in the first-party runtime but did not establish ErsatzTV behavior or end-to-end support.'
+evidence    = '''
+Resolved 2026-08-07 by milestone p8c-03, which uncovered a real defect rather
+than only adding coverage.
+
+The loop option is demuxer-specific and a mismatch is fatal, not cosmetic.
+Measured against FFmpeg 9: `-loop 1` on an animated WebP or GIF fails with
+`Option loop not found` and the input never opens, while `-ignore_loop 0` on a
+still image fails with `Option ignore_loop not found`.
+`InputFile::graphics_image` applied `-loop 1` unconditionally, so any graphics
+element pointing at an animated image took the whole channel down. It now
+selects the option from the file header (`ANIM` chunk in an extended RIFF/WEBP
+file, `NETSCAPE2.0` extension in a GIF), synchronously and with a bounded 4 KiB
+read, defaulting to still on anything unreadable. The watermark path was already
+correct: `watermark_input_for_stream` probes with ffprobe and routes animated
+images to `-ignore_loop 0`.
+
+`-stream_loop -1` was evaluated as a demuxer-agnostic alternative and rejected:
+it opens all three input types but hung a 2-second overlay render past a
+two-minute timeout, which is exactly the unbounded resource use this milestone
+has to avoid.
+
+Fixtures `crates/ersatzrs-ffmpeg/tests/fixtures/graphics/{animated-alpha,static-alpha}.webp`
+are generated from lavfi, contain no third-party content, and are therefore
+redistributable; provenance and regeneration commands are in that folder README.
+
+Decoded runtime proof (`animated_webp_overlay_loops_and_composites_alpha`):
+per-frame signatures over a 16-frame render show the eight distinct source
+frames repeating exactly with `-ignore_loop 0`, and the control case without it
+freezing on the final frame. Alpha compositing was verified numerically: a
+source pixel (127, 0, 254) at 50% alpha over white decodes to (189, 124, 253),
+the per-channel midpoint. Z-order with two stacked animated overlays renders
+without error.
+'''
+resolved    = true
+
+[[debt]]
+id          = 'source-orientation-is-uncharacterized'
+adr         = '0003'
+description = 'Characterize source display-matrix/orientation handling. Persist orientation metadata from scanning through media-version selection, apply it exactly once without fighting FFmpeg autorotation, and compare software transpose, transpose_cuda, and fused libplacebo rotation while preserving scaling, overlays, stream copy, ADR 0064 colour behavior, MPEG-TS, and HLS output.'
+discovered  = '2026-08-07'
+evidence    = 'Milestone p8c-02. Split out of the original combined orientation/animated-WebP debt when p8c-03 resolved the animated-WebP half on 2026-08-07.'
 resolved    = false
 
 [[debt]]

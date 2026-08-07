@@ -110,12 +110,41 @@ impl InputFile {
         Self::new(InputKind::Watermark, path, 0).with_input_options(["-ignore_loop", "0"])
     }
 
+    /// Graphics-element image input.
+    ///
+    /// The loop option is demuxer-specific and getting it wrong is fatal, not
+    /// cosmetic. Measured against `FFmpeg` 9:
+    ///
+    /// | input | `-loop 1` | `-ignore_loop 0` |
+    /// |---|---|---|
+    /// | still image (image2) | works | `Option ignore_loop not found` |
+    /// | animated `GIF` / `WebP` | `Option loop not found` | works |
+    ///
+    /// Either mismatch fails at `Error opening input file`, so a graphics
+    /// element pointing at an animated image used to take the whole channel
+    /// down. The animation flag is read from the file header rather than
+    /// probed, because this builder is synchronous.
     #[must_use]
     pub fn graphics_image(path: impl Into<String>) -> Self {
+        let path = path.into();
+        let animated = image_file_is_animated(std::path::Path::new(&path));
+        Self::graphics_image_with_animation(path, animated)
+    }
+
+    /// [`Self::graphics_image`] with the animation decision supplied, for
+    /// callers that already know it and for tests.
+    #[must_use]
+    pub fn graphics_image_with_animation(path: impl Into<String>, animated: bool) -> Self {
         let mut input = Self::new(InputKind::GraphicsImage, path, 0);
-        input
-            .input_options
-            .extend(["-loop".to_owned(), "1".to_owned()]);
+        if animated {
+            input
+                .input_options
+                .extend(["-ignore_loop".to_owned(), "0".to_owned()]);
+        } else {
+            input
+                .input_options
+                .extend(["-loop".to_owned(), "1".to_owned()]);
+        }
         input
     }
 
@@ -222,4 +251,45 @@ impl InputFile {
         self.seek_after_input = true;
         self
     }
+}
+
+/// Whether an image file contains an animation, decided from its header.
+///
+/// `ffprobe -count_frames` is the authoritative check and is what the watermark
+/// path uses, but it is async and costs a process spawn. Graphics elements are
+/// built synchronously, and the two formats that matter both announce animation
+/// in their first few kilobytes:
+///
+/// * `WebP` animations are an extended (`VP8X`) RIFF file carrying an `ANIM`
+///   chunk;
+/// * animated `GIF`s carry the `NETSCAPE2.0` application extension that holds
+///   the loop count.
+///
+/// Anything unreadable or unrecognised is treated as a still image, which is
+/// the pre-existing behavior.
+#[must_use]
+pub fn image_file_is_animated(path: &std::path::Path) -> bool {
+    use std::io::Read as _;
+
+    // The markers live in the header. Reading a bounded prefix keeps this cheap
+    // and stops a large image from being pulled into memory.
+    const HEADER_BYTES: usize = 4_096;
+
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut header = vec![0_u8; HEADER_BYTES];
+    let Ok(read) = file.read(&mut header) else {
+        return false;
+    };
+    header.truncate(read);
+
+    contains(&header, b"RIFF") && contains(&header, b"WEBP") && contains(&header, b"ANIM")
+        || contains(&header, b"NETSCAPE2.0")
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }

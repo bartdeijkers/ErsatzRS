@@ -633,7 +633,7 @@ evidence = ''
 id         = 'p8c-03'
 phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Support animated WebP graphics inputs'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
 plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
@@ -643,7 +643,33 @@ alpha, z-order, cancellation, and bounded resource use. Static WebP and other
 existing image inputs do not regress, and live direct MPEG-TS and HLS proofs
 cover representative animations.
 '''
-evidence = ''
+evidence = '''
+Complete 2026-08-07, and it found a real defect rather than only adding
+coverage. The loop option is demuxer-specific: `-loop 1` on an animated
+WebP or GIF fails with `Option loop not found` and the input never opens, while
+`-ignore_loop 0` on a still image fails the same way. `InputFile::graphics_image`
+applied `-loop 1` unconditionally, so a graphics element pointing at an animated
+image took the whole channel down. It now selects from the file header
+(`ANIM` chunk, or GIF `NETSCAPE2.0`) with a bounded 4 KiB read, defaulting to
+still. Static image behavior is unchanged, asserted by
+`still_graphics_images_keep_their_existing_loop_behavior`.
+
+`-stream_loop -1` was evaluated as a demuxer-agnostic alternative and rejected:
+it opens every input type but hung a two-second overlay render past a two-minute
+timeout — the unbounded resource use this milestone must avoid.
+
+Redistributable lavfi-generated fixtures live in
+`crates/ersatzrs-ffmpeg/tests/fixtures/graphics/` with provenance and
+regeneration commands. Decoded proof in
+`animated_webp_overlay_loops_and_composites_alpha`: eight distinct frames repeat
+exactly with the loop option and freeze without it. Alpha verified numerically
+((127,0,254) at 50% over white decodes to (189,124,253)); z-order verified with
+two stacked animated overlays.
+
+NOT covered: an end-to-end MPEG-TS and HLS channel serving an animated WebP
+watermark. The overlay graph is proven at the FFmpeg level and the watermark
+input selection is unit-tested, but no seeded-channel playback gate exercises it.
+'''
 
 [[milestone]]
 id         = 'p8c-04'
