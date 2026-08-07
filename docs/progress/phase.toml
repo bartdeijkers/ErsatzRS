@@ -15,19 +15,32 @@ as Phase 10.
 '''
 
 next_steps = '''
-P8A-01 is the live next slice: implement ADR 0064's explicit BT.709 SDR versus
-BT.2020/PQ HDR10 profile contract, source metadata persistence, validation,
-localized profile editing, pipeline behavior, health reporting, and decoded
-runtime proof. P8B-01, P8C-01, and P8C-03 are independent runnable Phase 8
-slices for Vulkan/libplacebo capability hardening, safe long-filtergraph file
-transport, and animated WebP input support. P8A-02 follows the stable output
-contract with fixture-gated Dolby Vision input characterization.
+P8A-02 is the only required Phase 8 milestone still open, and it is BLOCKED on
+fixtures rather than on implementation. Its safe-default half is done: the Dolby
+Vision configuration record is parsed, persisted, and carried to playback; the
+profile policy plays only standards-guaranteed compatible base layers and
+rejects profile 5 and dual-layer profile 7 with health evidence; Dolby Vision
+output is not advertised. What is missing is decoded-output characterization of a
+real Dolby Vision file. No redistributable profile 5/7/8.1 fixture could be
+produced locally — libx265 needs an external RPU file that only Dolby tooling
+generates, and `dolby-vision-rpu=none` silently yields plain HDR10. Unblocking it
+needs a licensed or genuinely generated fixture; see parity debt
+`dolby-vision-playback-is-not-fixture-proven`.
 
-Phase 9 is dependency-gated on all required Phase 8 milestones. It begins with
-the P9A-01 teletext product/standards ADR, then proves six-RID FFmpeg/libzvbi
-capability, scanner persistence, selectable delivery, localized management,
-health reporting, and runtime fixtures. Deferred milestone P8C-04, the separate
-decision about first-class Vulkan encoding, does not block Phase 9.
+P8A-01, P8B-01, P8B-02, P8C-01, P8C-02, and P8C-03 are complete with recorded
+evidence. Their residual gaps are tracked as visible parity debt rather than
+folded into these milestones: HDR10 is uncharacterized on non-NVIDIA hardware,
+graph probes model only the NVIDIA graphs, three of the four p8b-02 benchmark
+candidates need a real GPU, seeded HDR10 metadata is not operator-editable, and
+MPEG-TS cannot carry a display matrix through a stream copy.
+
+Phase 9 is dependency-gated on all required Phase 8 milestones and is therefore
+NOT yet unblocked: P8A-02 must reach Complete first. It begins with the P9A-01
+teletext product/standards ADR, then proves six-RID FFmpeg/libzvbi capability,
+scanner persistence, selectable delivery, localized management, health
+reporting, and runtime fixtures. Deferred milestone P8C-04, the separate decision
+about first-class Vulkan encoding, does not block Phase 9; no multi-vendor
+evidence was produced for it, so it stays deferred.
 
 Phase 10 contains the video-jukebox extension. Its P10A-01 product and
 architecture ADR remains mandatory before schema or add-on API work and is

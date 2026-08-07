@@ -6,11 +6,19 @@ Accepted (2026-06-12).
 
 ## Implementation
 
-Partial — decode capability fallback is implemented for the HLS segmenter and
-direct IPTV `.ts` spawns (architecture gate, CUDA-filter decode gate,
-refresh-triggered denial invalidation). The operation-scoped Vulkan/libplacebo
-graph probe, denial, health visibility, and safe fallback decided in the
-2026-08-07 revision are not implemented.
+Partial — implemented for the NVIDIA graphs (2026-08-07, milestone `p8b-01`),
+not yet for the other backends. Decode
+capability fallback covers the HLS segmenter and direct IPTV `.ts` spawns
+(architecture gate, CUDA-filter decode gate, refresh-triggered denial
+invalidation). The operation-scoped Vulkan/libplacebo graph probe, denial, health
+visibility, and safe fallback decided in the 2026-08-07 revision now exist:
+`ersatzrs_ffmpeg::graph_probe` owns the operations, bounded functional probes,
+and the failure classifier built from captured FFmpeg 9 stderr;
+`ersatzrs_infra::hardware_graph` runs the probes and persists denials keyed by
+ffmpeg binary and device identity; the web host probes at startup and re-probes
+on an explicit capability refresh. Only the NVIDIA graphs are modelled; QSV,
+VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from
+advertised capabilities alone.
 
 `scripts/e2e/nvenc-filter-gate-proof.sh` live-proves the encoder-only NVENC path
 on a matching FFmpeg build that reports `cuda` and `h264_nvenc` while omitting

@@ -99,6 +99,13 @@ release section when tagging a release.
 - Removed the unused `.empty-cell` CSS rule from the rerun collections admin
   page's module stylesheet (dead-code cleanup, no visible change).
 
+- Added a Dolby Vision input policy. Sources whose base layer is a
+  standards-guaranteed HDR10 or HLG signal play from it with Dolby Vision
+  signalling removed; profile 5 and dual-layer profile 7 are rejected with a
+  health entry naming the reason, rather than played with visibly wrong colour.
+  Scanning records each source's Dolby Vision configuration. Dolby Vision output
+  is not supported.
+
 ### Fixed
 
 - Fixed portrait and other rotated recordings being scaled as though they were

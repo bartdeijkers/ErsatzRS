@@ -6,10 +6,29 @@ Accepted (2026-08-07).
 
 ## Implementation
 
-Partial — HDR-to-SDR BT.709 tonemapping and an NVENC Vulkan/libplacebo path
-exist, but FFmpeg profiles do not yet persist an output dynamic-range policy,
-HDR10 output metadata is not carried end to end, and Dolby Vision inputs are
-not characterized or supported.
+Partial — the SDR/HDR10 output contract is implemented on the software and
+NVENC paths (2026-08-07, Phase 8); Dolby Vision playback and the other hardware
+backends are not.
+
+Implemented: `FFmpegProfile` persists a validated, localized `OutputDynamicRange`
+with `SdrBt709` preserving the previous behavior exactly; HDR10 output works on
+the software and NVENC paths for PQ, HLG, and SDR sources, with stable signalling
+across programme transitions proven from decoded frames; source colour, rotation,
+mastering-display, MaxCLL/MaxFALL, and the Dolby Vision configuration record are
+persisted by the scanner; HDR10 static metadata is emitted at the FFmpeg 9
+per-stream input boundary, preferring source values and falling back to
+documented defaults; backends with no characterized HDR10 graph demote to
+software rather than emitting SDR; and unproven Dolby Vision profiles are
+rejected with health evidence instead of played with wrong colour. Dolby Vision
+output is not advertised.
+
+Not implemented, tracked as parity debt in
+`docs/progress/parity/hdr-dolby-vision-metadata.toml` and
+`docs/progress/parity/ffmpeg-9-performance-and-support.toml`: HDR10 is
+uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M; the seeded HDR10
+metadata defaults are constants rather than operator-editable profile fields;
+and no real Dolby Vision profile 5/7/8.1 file has been played, because no
+redistributable fixture could be produced or obtained.
 
 ## Context
 
