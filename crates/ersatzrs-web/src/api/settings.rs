@@ -139,12 +139,19 @@ pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -
         is_dark_mode: field(&fields, "is_dark_mode") == "true",
         language: field(&fields, "language"),
     };
-    redirect_or_error(
-        save_ui_settings_with_state(&state, form).await,
-        "/settings/ui",
-        &state,
-    )
-    .await
+    let result = save_ui_settings_with_state(&state, form).await;
+    let result = match (
+        result,
+        optional_checked(
+            &fields,
+            "windows_startup_present",
+            "windows_startup_enabled",
+        ),
+    ) {
+        (Ok(()), Some(enabled)) => set_windows_startup_with_state(&state, enabled),
+        (result, _) => result,
+    };
+    redirect_or_error(result, "/settings/ui", &state).await
 }
 
 pub async fn save_windows_startup_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -300,6 +307,17 @@ fn checked(fields: &[(String, String)], name: &str) -> bool {
         .any(|(key, value)| key == name && matches!(value.as_str(), "true" | "on" | "1" | "True"))
 }
 
+fn optional_checked(
+    fields: &[(String, String)],
+    present_name: &str,
+    checked_name: &str,
+) -> Option<bool> {
+    fields
+        .iter()
+        .any(|(key, _)| key == present_name)
+        .then(|| checked(fields, checked_name))
+}
+
 fn parse_i32(fields: &[(String, String)], name: &str) -> i32 {
     field(fields, name).parse().unwrap_or_default()
 }
@@ -334,6 +352,34 @@ mod tests {
             "windows_startup_enabled"
         ));
         assert!(!checked(&parse_form(b""), "windows_startup_enabled"));
+    }
+
+    #[test]
+    fn optional_checkbox_distinguishes_unchecked_from_absent_controls() {
+        assert_eq!(
+            optional_checked(
+                &parse_form(b"windows_startup_present=true&windows_startup_enabled=on"),
+                "windows_startup_present",
+                "windows_startup_enabled"
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            optional_checked(
+                &parse_form(b"windows_startup_present=true"),
+                "windows_startup_present",
+                "windows_startup_enabled"
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            optional_checked(
+                &parse_form(b"is_dark_mode=true&language=en-us"),
+                "windows_startup_present",
+                "windows_startup_enabled"
+            ),
+            None
+        );
     }
 
     #[test]

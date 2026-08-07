@@ -517,14 +517,9 @@ fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView>
                     caption=Some(caption)
                     disabled=disabled
                 />
-                <button
-                    class=style::button
-                    type="submit"
-                    formaction="/api/settings/ui/windows-startup"
-                    disabled=disabled
-                >
-                    {tr(TextKey::Apply)}
-                </button>
+                {(!disabled).then(|| view! {
+                    <input type="hidden" name="windows_startup_present" value="true"/>
+                })}
             </section>
         }
         .into_any(),
@@ -752,7 +747,13 @@ mod tests {
         assert!(input_html(&repair, r#"name="windows_startup_enabled""#).contains("checked"));
         assert!(unavailable.contains(r#"data-windows-startup-state="unavailable""#));
         assert!(input_html(&unavailable, r#"name="windows_startup_enabled""#).contains("disabled"));
-        assert!(unavailable.contains(r#"formaction="/api/settings/ui/windows-startup" disabled"#));
+        assert!(disabled.contains(r#"name="windows_startup_present""#));
+        assert!(enabled.contains(r#"name="windows_startup_present""#));
+        assert!(repair.contains(r#"name="windows_startup_present""#));
+        assert!(!unavailable.contains("windows_startup_present"));
+        assert!(!disabled.contains("formaction"));
+        assert!(!enabled.contains("formaction"));
+        assert_eq!(enabled.matches(r#"type="submit""#).count(), 1);
     }
 
     #[test]

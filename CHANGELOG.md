@@ -67,6 +67,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Removed the redundant **Apply** button from the Windows startup section in
+  **Settings** -> **UI**. The existing **Save Settings** action now saves the
+  theme, language, and Windows startup choice together.
+
 - Fixed the programme guide on the channel watch route never scrolling. Its
   section is a plain grid item, so the page's implicit `auto` column sized
   itself to the guide's full zoomed timeline (~9700px) and left the guide's own
