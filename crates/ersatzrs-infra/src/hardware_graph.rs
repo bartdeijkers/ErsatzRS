@@ -471,7 +471,7 @@ mod tests {
     ///
     /// The probe only cares about exit status and the stderr signature, so a
     /// shell script is a faithful stand-in and keeps these tests hermetic —
-    /// they assert the classifier and the outcome shape, not FFmpeg itself.
+    /// they assert the classifier and the outcome shape, not `FFmpeg` itself.
     #[cfg(unix)]
     fn write_fake_ffmpeg(dir: &Path, code: i32, stderr: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt as _;
@@ -575,6 +575,8 @@ mod tests {
         assert!(outcome.denial().is_some(), "a timeout is persistable");
     }
 
+    // Only used by the SQLite-backed lifecycle tests below.
+    #[cfg(not(feature = "mysql"))]
     async fn test_pool() -> DbPool {
         let dir = std::env::temp_dir().join(format!("ersatzrs-graph-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create temp db dir");
@@ -583,6 +585,8 @@ mod tests {
             .expect("initialize test database")
     }
 
+    // Only used by the SQLite-backed lifecycle tests below.
+    #[cfg(not(feature = "mysql"))]
     fn denial() -> HardwareGraphDenial {
         HardwareGraphDenial::new(
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
@@ -591,10 +595,10 @@ mod tests {
         )
     }
 
-    /// The full persist/overwrite/clear/reload lifecycle on SQLite.
+    /// The full persist/overwrite/clear/reload lifecycle on `SQLite`.
     ///
-    /// This row is written at startup and on every FFmpeg settings save, so a
-    /// backend-specific statement here breaks both. The MySQL half of this
+    /// This row is written at startup and on every `FFmpeg` settings save, so a
+    /// backend-specific statement here breaks both. The `MySQL` half of this
     /// lifecycle lives in `tests/mysql_backend.rs`.
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
@@ -690,9 +694,12 @@ mod tests {
     #[tokio::test]
     async fn a_runtime_graph_failure_is_classified_persisted_and_reloadable() {
         let pool = test_pool().await;
-        let mut report = FfmpegCapabilityReport::default();
-        report.nvidia_gpu_list =
-            Some("[ GPU #0 - < NVIDIA GeForce RTX 3080 Ti > has Compute SM 8.6 ]".to_owned());
+        let mut report = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(
+                "[ GPU #0 - < NVIDIA GeForce RTX 3080 Ti > has Compute SM 8.6 ]".to_owned(),
+            ),
+            ..FfmpegCapabilityReport::default()
+        };
         report.prove_hardware_graph(
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
             "NVIDIA GeForce RTX 3080 Ti",

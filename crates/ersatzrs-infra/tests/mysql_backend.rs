@@ -284,11 +284,11 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
     assert_ne!(fill_group_ids[0], fill_group_ids[1]);
 }
 
-/// The graph-state row's persist/overwrite/clear/reload lifecycle on MySQL.
+/// The graph-state row's persist/overwrite/clear/reload lifecycle on `MySQL`.
 ///
-/// This row is written at startup and on every FFmpeg settings save, so a
-/// SQLite-only upsert (`ON CONFLICT ... excluded`) breaks both paths on MySQL.
-/// The SQLite half of this lifecycle lives in the `hardware_graph` unit tests;
+/// This row is written at startup and on every `FFmpeg` settings save, so a
+/// `SQLite`-only upsert (`ON CONFLICT ... excluded`) breaks both paths on `MySQL`.
+/// The `SQLite` half of this lifecycle lives in the `hardware_graph` unit tests;
 /// this is the backend that actually rejects the wrong statement.
 #[tokio::test]
 async fn mysql_persists_and_clears_hardware_graph_state() {
