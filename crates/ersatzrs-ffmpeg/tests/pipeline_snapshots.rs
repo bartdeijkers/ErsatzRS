@@ -4583,3 +4583,92 @@ fn a_runtime_that_never_probed_keeps_its_previous_behavior() {
 
     assert!(args.contains("libplacebo"), "got: {args}");
 }
+
+// ── p8a-02: rejection is enforced at the command boundary ───────────────────
+
+fn dolby_vision_request(profile: u8, compatibility: u8, copy: bool) -> PipelineRequest {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile,
+        bl_signal_compatibility_id: compatibility,
+        rpu_present: true,
+        el_present: profile == 7,
+        bl_present: true,
+    });
+    let desired = if copy {
+        DesiredVideoState {
+            video_format: FFmpegProfileVideoFormat::Copy,
+            ..DesiredVideoState::h264_1080p()
+        }
+    } else {
+        DesiredVideoState::h264_1080p()
+    };
+    PipelineRequest::new(InputFile::video("/media/dv.mkv"), desired)
+        .with_source_video_stream(source)
+}
+
+#[test]
+fn the_command_builder_refuses_unplayable_dolby_vision_profiles() {
+    // There is no command to spawn, which is what makes the refusal real: a
+    // caller cannot accidentally start FFmpeg on a source that would decode to
+    // plausible but incorrect colour.
+    for (profile, compatibility, expected) in [
+        (5_u8, 0_u8, "no HDR10 fallback"),
+        (7, 0, "dual-layer"),
+        (9, 1, "unrecognised"),
+        (8, 0, "no conventional base-layer compatibility"),
+    ] {
+        let request = dolby_vision_request(profile, compatibility, false);
+        let error =
+            ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+                .expect_err("profile {profile} must be refused");
+
+        assert!(
+            error.reason.contains(expected),
+            "profile {profile}: {}",
+            error.reason
+        );
+    }
+}
+
+#[test]
+fn the_command_builder_allows_a_compatible_dolby_vision_profile() {
+    // Profile 8.1: the base layer is a conforming HDR10 signal.
+    let request = dolby_vision_request(8, 1, false);
+
+    let command = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+        .expect("profile 8.1 plays from its HDR10 base layer");
+
+    assert!(command
+        .arguments
+        .iter()
+        .any(|argument| argument == "pipe:1"));
+}
+
+#[test]
+fn the_command_builder_allows_stream_copy_of_any_dolby_vision_profile() {
+    // Copy hands the elementary stream to the client untouched, so ErsatzRS is
+    // not interpreting the colour and has no basis to refuse.
+    for profile in [5_u8, 7, 8] {
+        let request = dolby_vision_request(profile, 0, true);
+
+        assert!(
+            ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+                .is_ok(),
+            "stream copy of profile {profile} must be allowed"
+        );
+    }
+}
+
+#[test]
+fn a_source_without_dolby_vision_is_never_refused() {
+    let request = PipelineRequest::new(
+        InputFile::video("/media/plain.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::Hevc));
+
+    assert!(
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).is_ok()
+    );
+}

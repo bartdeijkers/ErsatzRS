@@ -292,7 +292,7 @@ async fn start_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    );
+    )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
     spawn_preview_ffmpeg(&working_dir, command)?;
@@ -531,7 +531,7 @@ async fn start_channel_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    );
+    )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
     spawn_preview_ffmpeg(&working_dir, command)?;

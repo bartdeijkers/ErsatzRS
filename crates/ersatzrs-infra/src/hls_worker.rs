@@ -1073,7 +1073,7 @@ impl HlsSessionWorker {
                 remote_stream_input_file,
             );
             let remote_stream = active.remote_stream.clone();
-            let command = build_hls_command_with_input_explicit_discontinuity(
+            let command = match build_hls_command_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
                 is_first,
@@ -1094,7 +1094,24 @@ impl HlsSessionWorker {
                 graphics_overlays,
                 HlsDiscontinuity::from(discontinuity),
                 Some(opacity_clock),
-            );
+            ) {
+                Ok(command) => command,
+                Err(error) => {
+                    // ADR 0064: refuse rather than transcode a source whose
+                    // colour ErsatzRS cannot render correctly. No child is
+                    // spawned, and the reason reaches the operator. Matches the
+                    // pinned-subtitle idiom above: log, back off, and move on
+                    // rather than spinning on an item that cannot play.
+                    tracing::error!(
+                        channel_id = self.channel_id,
+                        media_item_id = active.media_item_id,
+                        reason = %error,
+                        "refusing to transcode an unsupported source"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             log_hls_av1_spawn_diagnostics(
                 &self.channel_number,
                 &command,
@@ -1869,7 +1886,10 @@ impl HlsSessionHandle for HlsSessionWorker {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[must_use]
+/// # Errors
+///
+/// Returns [`ersatzrs_ffmpeg::UnsupportedSource`] when the selected source
+/// carries a Dolby Vision configuration with no characterized conversion.
 pub fn build_hls_command(
     media_path: &str,
     working_dir: &Path,
@@ -1890,7 +1910,7 @@ pub fn build_hls_command(
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let audio_selection = audio_selection.into();
     build_hls_command_with_opacity_clock(
         media_path,
@@ -1917,7 +1937,10 @@ pub fn build_hls_command(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[must_use]
+/// # Errors
+///
+/// Returns [`ersatzrs_ffmpeg::UnsupportedSource`] when the selected source
+/// carries a Dolby Vision configuration with no characterized conversion.
 pub fn build_hls_command_with_opacity_clock(
     media_path: &str,
     working_dir: &Path,
@@ -1939,7 +1962,7 @@ pub fn build_hls_command_with_opacity_clock(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let audio_selection = audio_selection.into();
     build_hls_command_with_explicit_discontinuity(
         media_path,
@@ -1994,7 +2017,6 @@ impl From<bool> for HlsDiscontinuity {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 fn build_hls_command_with_explicit_discontinuity(
     media_path: &str,
     _working_dir: &Path,
@@ -2017,7 +2039,7 @@ fn build_hls_command_with_explicit_discontinuity(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     build_hls_command_with_input_explicit_discontinuity(
         InputFile::video(media_path.to_string()),
         output_format,
@@ -2064,7 +2086,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
@@ -2145,11 +2167,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
         troubleshooting,
     });
 
-    build_pipeline_for_acceleration(
-        playback_profile.profile.hardware_acceleration,
-        request.clone(),
-    )
-    .command(&request.inputs)
+    ersatzrs_ffmpeg::build_pipeline_command(playback_profile.profile.hardware_acceleration, request)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5830,7 +5848,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         insta::assert_snapshot!(command.arguments.join(" "));
     }
 
@@ -6002,7 +6021,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity"));
@@ -6030,7 +6050,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-output_ts_offset 12.5s"));
         assert!(!arguments.contains("discont_start"), "{arguments}");
@@ -6064,7 +6085,8 @@ mod tests {
             Vec::new(),
             HlsDiscontinuity::Present,
             None,
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-output_ts_offset 12.5s"));
@@ -6102,7 +6124,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-readrate 1.05 -i /media/test.mkv"));
@@ -6132,7 +6155,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity+latm"));
@@ -6397,7 +6421,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(
@@ -6429,7 +6454,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(!arguments.contains("-map 0:1"), "{arguments}");
@@ -6484,7 +6510,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
@@ -6535,7 +6562,8 @@ mod tests {
             subtitle_input,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(
@@ -6574,7 +6602,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(
@@ -6605,7 +6634,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-hls_segment_type fmp4"));
         assert!(arguments.contains("_init.mp4"));
@@ -6636,7 +6666,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
 
         assert!(command
             .arguments
@@ -6666,7 +6697,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
 
         let arguments = command.arguments.join(" ");
         assert!(
@@ -6701,7 +6733,8 @@ mod tests {
                 12,
                 "drawvg=file=/tmp/hls/1/graphics/item-1/title.vgs",
             )],
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-filter_complex"));
@@ -7110,7 +7143,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
 
         let mut process = Command::new(&command.executable);
         process
@@ -7195,7 +7229,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
 
         let mut process = Command::new(&command.executable);
         process
@@ -7345,7 +7380,8 @@ mod tests {
             )],
             Vec::new(),
             Some(clock),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
         eprintln!("HLS opacity clock proof argv: {arguments}");
         assert!(arguments.contains("format=yuva420p|yuva444p|yuva422p,geq="));
@@ -7489,7 +7525,8 @@ mod tests {
                 0,
                 format!("drawvg=file={}", script.to_string_lossy()),
             )],
-        );
+        )
+        .expect("the fixture source is playable");
 
         let mut process = Command::new(&command.executable);
         process

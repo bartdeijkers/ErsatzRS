@@ -26,11 +26,11 @@ use ersatzrs_domain::{
     StreamingMode,
 };
 use ersatzrs_ffmpeg::{
-    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
-    build_pipeline_for_acceleration, ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions,
-    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream,
-    SourceVideoCodec, SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
+    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command, ConcatPlaylist,
+    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FrameRate, FrameSize,
+    GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat, OutputMetadata,
+    PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream,
+    WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
@@ -612,7 +612,7 @@ async fn serve_channel_stream_with_channel(
         remote_stream_input_file,
     );
     let remote_stream = active.remote_stream.clone();
-    let command = build_stream_command_with_input_and_opacity_clock(
+    let command = match build_stream_command_with_input_and_opacity_clock(
         media_input.clone(),
         output_format,
         start_position,
@@ -629,7 +629,21 @@ async fn serve_channel_stream_with_channel(
         watermark_inputs.clone(),
         graphics_overlays.clone(),
         Some(opacity_clock),
-    );
+    ) {
+        Ok(command) => command,
+        Err(error) => {
+            // ADR 0064: refuse rather than transcode a source whose colour
+            // ErsatzRS cannot render correctly. No FFmpeg child is spawned and
+            // the reason reaches the operator.
+            tracing::error!(
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                reason = %error,
+                "refusing to transcode an unsupported source"
+            );
+            return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
+        }
+    };
     let slate_metadata = metadata.clone();
     let slate_runtime_capabilities = runtime_capabilities.clone();
     let retry_playback_profile = playback_profile.clone();
@@ -673,6 +687,7 @@ async fn serve_channel_stream_with_channel(
                     graphics_overlays,
                     Some(opacity_clock),
                 )
+                .ok()
             })
         },
     };
@@ -1795,7 +1810,7 @@ fn build_stream_command(
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let audio_selection = audio_selection.into();
     build_stream_command_with_opacity_clock(
         path,
@@ -1836,7 +1851,7 @@ fn build_stream_command_with_opacity_clock(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     build_stream_command_with_input_and_opacity_clock(
         InputFile::video(path.to_string()),
         output_format,
@@ -1875,7 +1890,7 @@ fn build_stream_command_with_input_and_opacity_clock(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
-) -> FfmpegCommand {
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
         output_format,
@@ -1962,8 +1977,7 @@ fn build_stream_command_with_input_and_opacity_clock(
     } else {
         playback_profile.profile.hardware_acceleration
     };
-    let pipeline = build_pipeline_for_acceleration(acceleration, request.clone());
-    pipeline.command(&request.inputs)
+    ersatzrs_ffmpeg::build_pipeline_command(acceleration, request)
 }
 
 fn hls_direct_mpegts_needs_transcode(
@@ -2273,7 +2287,12 @@ struct StreamDenialRetry {
     runtime_capabilities: FfmpegCapabilityReport,
     acceleration: ersatzrs_domain::HardwareAccelerationKind,
     source_stream: Option<SourceVideoStream>,
-    rebuild: Box<dyn FnOnce(StreamRetryMode) -> FfmpegCommand + Send>,
+    /// Rebuild for a hardware-denial retry.
+    ///
+    /// `None` when the rebuilt command would be refused. Unreachable in
+    /// practice — the initial build already accepted this source — but the
+    /// retry must fail terminally rather than panic if that ever changes.
+    rebuild: Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>,
 }
 
 enum StreamRetryMode {
@@ -2526,7 +2545,20 @@ async fn supervise_stream_command_with_retry(
                 );
             }
             match spawn_stream_process(
-                &rebuild(StreamRetryMode::HardwareDecodeDenied(capabilities)),
+                &{
+                    let Some(command) =
+                        rebuild(StreamRetryMode::HardwareDecodeDenied(capabilities))
+                    else {
+                        tracing::warn!(
+                            channel_number = %channel_number,
+                            "rebuilt command was refused; not retrying after hardware decode denial"
+                        );
+                        return DirectStreamOutcome::Failed(
+                            "rebuilt command was refused".to_owned(),
+                        );
+                    };
+                    command
+                },
                 remote_stream.and_then(remote_stream_producer),
             ) {
                 Ok(next) => child = next,
@@ -2549,10 +2581,15 @@ async fn supervise_stream_command_with_retry(
             acceleration = ?acceleration,
             "retrying channel stream once with software video encode after runtime hardware encoder rejection"
         );
-        match spawn_stream_process(
-            &rebuild(StreamRetryMode::HardwareEncodeDenied(runtime_capabilities)),
-            remote_stream.and_then(remote_stream_producer),
-        ) {
+        let Some(rebuilt) = rebuild(StreamRetryMode::HardwareEncodeDenied(runtime_capabilities))
+        else {
+            tracing::warn!(
+                channel_number = %channel_number,
+                "rebuilt command was refused; not retrying after hardware encoder rejection"
+            );
+            return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+        };
+        match spawn_stream_process(&rebuilt, remote_stream.and_then(remote_stream_producer)) {
             Ok(next) => child = next,
             Err(error) => {
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
@@ -3026,7 +3063,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
@@ -3051,7 +3089,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
         assert!(
@@ -3092,7 +3131,10 @@ mod tests {
         };
 
         // First spawn: the probe rows allow hardware AV1 decode.
-        let first = build(report.clone()).arguments.join(" ");
+        let first = build(report.clone())
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
         assert!(first.contains("-hwaccel cuda"), "{first}");
         assert!(first.contains("-codec:v h264_nvenc"), "{first}");
 
@@ -3109,7 +3151,10 @@ mod tests {
         // The retried spawn selects software input decode, NVENC encode stays.
         let mut denied = report;
         denied.deny_hardware_decode(denial);
-        let second = build(denied).arguments.join(" ");
+        let second = build(denied)
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
         assert!(second.contains("-hwaccel none -c:v libdav1d"), "{second}");
         assert!(second.contains("-codec:v h264_nvenc"), "{second}");
         assert!(!second.contains("-hwaccel cuda"), "{second}");
@@ -3150,6 +3195,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )
+        .expect("the fixture source is playable")
         .arguments
         .join(" ");
         assert!(first.contains("-codec:v h264_nvenc"), "{first}");
@@ -3172,6 +3218,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )
+        .expect("the fixture source is playable")
         .arguments
         .join(" ");
         assert!(second.contains("-codec:v libx264"), "{second}");
@@ -3200,7 +3247,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
     }
@@ -3228,7 +3278,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(arguments.contains("-codec:v libx264"), "{arguments}");
         assert!(arguments.contains("-preset:v veryfast"), "{arguments}");
@@ -3261,7 +3314,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(arguments.contains("-codec:v copy"), "{arguments}");
         assert!(arguments.contains("-codec:a copy"), "{arguments}");
@@ -3286,7 +3342,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(!arguments.contains("-map 0:1"), "{arguments}");
         assert!(!arguments.contains("-map 0:a"), "{arguments}");
@@ -3312,7 +3371,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
         // ErsatzTV emits the seek as an input-side option (`StreamSeekInputOption`,
         // added before the decoder in `PipelineBuilderBase`), so the seek precedes
         // the `-i` input with the source decoder option in between. Assert the
@@ -3355,7 +3417,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
         assert!(arguments.contains("-metadata service_name=\"Cinema One\""));
@@ -3402,7 +3467,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(
             arguments.contains("subtitles=/tmp/ersatzrs/music-video-credits-generated.ass"),
@@ -3437,7 +3505,10 @@ mod tests {
                 "drawvg=file=/tmp/iptv-graphics/title.vgs",
             )],
         );
-        let arguments = command.arguments.join(" ");
+        let arguments = command
+            .expect("the fixture source is playable")
+            .arguments
+            .join(" ");
 
         assert!(arguments.contains("-filter_complex"));
         assert!(
@@ -3531,7 +3602,8 @@ mod tests {
             Vec::new(),
             Vec::new(),
             None,
-        );
+        )
+        .expect("the fixture source is playable");
 
         assert!(
             command
@@ -4259,7 +4331,8 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)
@@ -4337,7 +4410,8 @@ mod tests {
                 },
             )],
             Vec::new(),
-        );
+        )
+        .expect("the fixture source is playable");
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)
@@ -4441,7 +4515,8 @@ mod tests {
             )],
             Vec::new(),
             Some(clock),
-        );
+        )
+        .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
         eprintln!("IPTV opacity clock proof argv: {arguments}");
         assert!(arguments.contains("format=yuva420p|yuva444p|yuva422p,geq="));
@@ -4543,7 +4618,8 @@ mod tests {
                 0,
                 format!("drawvg=file={}", script.to_string_lossy()),
             )],
-        );
+        )
+        .expect("the fixture source is playable");
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)

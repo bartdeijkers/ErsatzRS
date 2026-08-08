@@ -221,6 +221,31 @@ adr         = '0064'
 description = 'P1: Make the production HLS segmenter and direct IPTV command boundaries reject unsupported transcoded Dolby Vision sources before FFmpeg is spawned. Route `unsupported_source_reason` through a typed command-build result so profile 5, profile 7, and unrecognised profiles reach the existing visible playback/health error path, while stream copy and characterized compatible profile 8 remain allowed. Closure requires HLS and IPTV regressions that assert the rejection reason, prove no child process starts, cover the stream-copy exception, and exercise profile 5, 7, 8.1, and unknown records.'
 discovered  = '2026-08-07'
 evidence    = '`unsupported_source_reason` exists in `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`, but its only call sites are pipeline tests; the production builders in `hls_worker.rs` and `transport/iptv/stream.rs` still return commands and proceed to spawn.'
+remediation = '''
+Fixed 2026-08-08. `ersatzrs_ffmpeg::build_pipeline_command` returns
+`Result<FfmpegCommand, UnsupportedSource>` and is now the builder both
+production boundaries use: `build_hls_command_with_input_explicit_discontinuity`
+and `build_stream_command_with_input_and_opacity_clock` both return that
+Result, so a refused source produces no command and therefore cannot be
+spawned.
+
+The HLS worker logs the reason and backs off with the same delay-and-continue
+idiom it already uses for an unmappable pinned subtitle; the direct IPTV path
+returns HTTP 415 with the reason. Troubleshooting propagates it through
+`ApiResult`, which is where an operator would look. The hardware-denial retry
+closure now returns `Option<FfmpegCommand>` and treats a refusal as terminal
+rather than panicking.
+
+Regressions: `the_command_builder_refuses_unplayable_dolby_vision_profiles`
+(profiles 5, 7, unrecognised, and profile 8 with no base-layer compatibility),
+`the_command_builder_allows_a_compatible_dolby_vision_profile`,
+`the_command_builder_allows_stream_copy_of_any_dolby_vision_profile`, and
+`a_source_without_dolby_vision_is_never_refused`. `cargo xtask smoke` passes.
+
+Narrower than closed: the regressions assert at the command boundary, which is
+where the refusal is enforced — there is no command to spawn. Supervisor-level
+tests that assert no child process starts were not added.
+'''
 resolved    = false
 
 [[debt]]

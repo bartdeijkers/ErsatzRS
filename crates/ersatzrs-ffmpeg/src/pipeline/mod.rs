@@ -1843,6 +1843,39 @@ fn apply_hdr10_output_conversion(
     }
 }
 
+/// A source ErsatzRS refuses to transcode, carrying the operator-facing reason.
+///
+/// ADR 0064 requires an unproven Dolby Vision path to fail visibly. Returning
+/// this from the command builder is what makes the refusal real: a caller
+/// cannot accidentally spawn `FFmpeg` on a source that would decode to
+/// plausible but incorrect colour, because there is no command to spawn.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{reason}")]
+pub struct UnsupportedSource {
+    pub reason: String,
+}
+
+/// Build a playback command, refusing sources ErsatzRS cannot render correctly.
+///
+/// Prefer this over [`build_pipeline_for_acceleration`] at any boundary that
+/// goes on to spawn a child process.
+///
+/// # Errors
+///
+/// Returns [`UnsupportedSource`] when the selected source carries a Dolby
+/// Vision configuration with no characterized conversion.
+pub fn build_pipeline_command(
+    acceleration: HardwareAccelerationKind,
+    request: PipelineRequest,
+) -> Result<FfmpegCommand, UnsupportedSource> {
+    if let Some(reason) = unsupported_source_reason(&request) {
+        return Err(UnsupportedSource { reason });
+    }
+    let inputs = request.inputs.clone();
+    let pipeline = build_pipeline_for_acceleration(acceleration, request);
+    Ok(pipeline.command(&inputs))
+}
+
 /// Why a source cannot be played, when ErsatzRS refuses rather than guessing.
 ///
 /// ADR 0064 requires an unproven Dolby Vision path to fail visibly instead of
