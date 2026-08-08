@@ -19,6 +19,9 @@ fn ffprobe_args_match_ersatztv_invocation_shape() {
         "-show_format",
         "-show_streams",
         "-show_chapters",
+        "-read_intervals",
+        "%+#1",
+        "-show_frames",
         "-i",
         "/media/movie.mkv"
       ]

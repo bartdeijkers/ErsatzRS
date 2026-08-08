@@ -17,7 +17,9 @@ executable paths and URL arguments survive the platform process boundary. The
 standalone Beeld & Geluid wrappers follow the pinned yt-dlp extractor's fresh
 Server Action and CloudFront-cookie flow, then select one HLS video/audio
 rendition pair so their MPEG-TS output has the stable video-then-audio stream
-order.
+order. The Windows YouTube wrapper keeps yt-dlp an optional manual tool while
+requiring the ErsatzRS-managed FFmpeg runtime and preserving yt-dlp's
+extractor-specific request headers.
 IPTV and HLS
 share this resolver and cancellation ownership; producer stderr and signed URL
 details are redacted from normal diagnostics. Consumer exit and ffprobe timeouts
@@ -29,7 +31,9 @@ live inputs start at zero without read-rate pacing, and current live Remote
 Streams force HLS realtime admission instead of work-ahead. Liveness is
 evaluated at the actual HLS transcode cursor so a future live item is not
 captured before its scheduled start. Script-backed VOD uses post-input seeking
-for its non-seekable pipe. Configured or probed duration feeds scheduling.
+for its non-seekable pipe by default. A standalone `{seek}` command argument
+opts a finite producer into source-side seeking without changing existing
+unmarked definitions. Configured or probed duration feeds scheduling.
 Classic Flood expands a zero-duration Remote Stream to the next fixed boundary
 or hard stop and persists the expanded duration on the PlayoutItem.
 
@@ -40,8 +44,12 @@ sources, and warns when a finite source has no usable duration.
 Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
   producer-container auto-detection, Windows batch quoting, single-pair Beeld &
-Geluid mapping, stalled-producer cancellation, and bounded-stderr tests:
+  Geluid mapping, managed-FFmpeg YouTube extraction, producer-side seeking,
+  stalled-producer cancellation, and bounded-stderr tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
+- Windows runtime proof: the canonical YouTube wrapper tuned a finite video at
+  its midpoint in under four seconds, and the actual HLS channel returned a
+  12-second H.264/AC-3 sample with valid video and six-channel audio.
 - ADR 0063 FFmpeg 9 compatibility: Beeld & Geluid remains a stream-copy
   producer and the shared consumer pipeline emits `-fps_mode` rather than the
   removed `-vsync` option.

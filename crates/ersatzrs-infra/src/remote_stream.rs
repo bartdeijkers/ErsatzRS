@@ -1103,6 +1103,42 @@ content_rating: PG
         assert!(batch.contains("-ss \"%SEEK_POSITION%\""));
     }
 
+    #[test]
+    fn youtube_extractor_uses_managed_ffmpeg_and_producer_seek() {
+        let batch = include_str!("../../../assets/extractors/youtube/youtube.bat");
+        let example =
+            include_str!("../../../assets/extractors/youtube/youtube-windows.yml.example");
+
+        assert!(batch.contains("if not defined FFMPEG_BIN"));
+        assert!(batch.contains("YT_DLP_BIN"));
+        assert!(batch.contains("best[ext=mp4][vcodec*=avc1][acodec*=mp4a]"));
+        assert!(batch.contains("--ffmpeg-location \"%FFMPEG_BIN%\""));
+        assert!(batch.contains("--downloader ffmpeg"));
+        assert!(batch.contains("--downloader-args \"ffmpeg_i:-ss %SEEK_POSITION%\""));
+        assert!(batch.contains("--hls-use-mpegts"));
+        assert!(batch.contains("--output -"));
+        assert!(example.contains("\"{seek}\""));
+
+        let definition = parse_remote_stream_definition(example).expect("example definition");
+        assert!(definition.url.is_none());
+        assert!(!definition.is_live);
+        assert_eq!(definition.duration.as_deref(), Some("00:20:00"));
+        let resolved = resolve_remote_stream(
+            &definition,
+            Path::new("assets/extractors/youtube/youtube-windows.yml"),
+        )
+        .expect("example source");
+        let producer = remote_stream_producer(&resolved).expect("script producer");
+        assert_eq!(
+            producer.args,
+            [
+                "https://www.youtube.com/watch?v=<video-id>",
+                REMOTE_STREAM_SEEK_PLACEHOLDER,
+            ]
+        );
+        assert!(producer.accepts_seek());
+    }
+
     #[cfg(windows)]
     #[tokio::test]
     async fn launches_windows_batch_producer_with_raw_cmd_arguments() {

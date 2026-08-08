@@ -1,0 +1,10 @@
+# Canonical finite YouTube Remote Stream definition for Windows.
+# Keep the complete command single-quoted at YAML level, quote every command
+# argument, and keep {seek} as a standalone argument so ErsatzRS can replace it.
+script: '"C:\path\to\assets\extractors\youtube\youtube.bat" "https://www.youtube.com/watch?v=<video-id>" "{seek}"'
+# Do not add url: it takes precedence over script and bypasses the wrapper.
+# YouTube videos are finite VOD sources, not continuously running live feeds.
+is_live: false
+# Supply the exact duration so scheduling and midpoint tuning stay deterministic.
+duration: "00:20:00"
+title: "Example YouTube video"

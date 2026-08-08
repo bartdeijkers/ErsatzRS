@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-29)
+Accepted (2026-07-29; revised 2026-08-09)
 
 ## Implementation
 
@@ -14,7 +14,9 @@ from its bytes as ErsatzTV does. The Remote Streams browser exposes Add To
 Playlist on each card and persists ErsatzTV `CollectionType` value 70. HLS
 evaluates liveness at its transcode cursor, consumer termination cancels and
 reaps stalled producers independently of stdout, and producer diagnostics use
-a bounded rolling stderr tail.
+a bounded rolling stderr tail. Finite producers can opt into source-side
+seeking with a standalone `{seek}` command argument; unmarked scripts retain
+the original consumer-side behavior.
 
 ## Context
 
@@ -49,8 +51,12 @@ commands remain direct child processes.
 
 The FFmpeg process, producer process, cancellation signal, stderr drains, and
 response/HLS worker share one ownership chain. Script VOD seeking is emitted
-after the non-seekable input. Live Remote Streams start at zero, disable input
-read-rate pacing, and force HLS realtime admission instead of work-ahead.
+after the non-seekable input by default. A producer can opt into source-side
+seeking by accepting a standalone `{seek}` command argument. ErsatzRS replaces
+that exact argument with the current playout offset and removes the matching
+consumer seek; unmarked commands are unchanged. Live Remote Streams start at
+zero, disable input read-rate pacing, and force HLS realtime admission instead
+of work-ahead.
 Liveness is evaluated at the HLS transcode cursor rather than wall-clock time,
 so work-ahead never opens a scheduled live source early. Consumer exit,
 cancellation, and ffprobe timeout signal the producer independently of stdout
@@ -77,6 +83,9 @@ expansion, pipelines, redirection, or environment interpolation; operators who
 need those features must put them in a script file and invoke that file.
 Producer containers must be readable from a non-seekable pipe, and diagnostic
 text must remain on standard error instead of contaminating the media bytes.
+For seek-aware producers, source-side seeking avoids draining the skipped
+prefix through the pipe and makes late tune-in proportional to startup latency
+rather than elapsed programme time.
 
 Per-card playlist insertion is an ErsatzRS usability extension over the pinned
 ErsatzTV Remote Stream list. Persisted playlist rows remain compatible with
@@ -92,6 +101,11 @@ ErsatzTV's existing `RemoteStream = 70` collection type.
 - Keep playlist insertion bulk-only. Rejected because a single-card workflow
   should not require entering selection mode when the model already supports
   Remote Stream playlist items.
+
+## Revision history
+
+- **2026-08-09.** Added the opt-in standalone `{seek}` producer contract for
+  finite sources. Existing unmarked scripts keep consumer-side seeking.
 
 ## References
 

@@ -58,6 +58,33 @@ Commands are not evaluated by a shell. Put pipelines, redirection, variable
 expansion, or other shell features inside a `.sh`, `.bat`, or `.cmd` file and
 invoke that file from `script`.
 
+### Seek finite producer streams
+
+For a finite producer that can seek its own remote input, pass `{seek}` as one
+complete, quoted argument:
+
+```yaml
+script: '"C:\path\to\assets\extractors\youtube\youtube.bat" "https://www.youtube.com/watch?v=<video-id>" "{seek}"'
+is_live: false
+duration: "00:20:00"
+title: "Example YouTube video"
+```
+
+ErsatzRS replaces that exact argument with the current playout offset and
+removes the corresponding seek from the consumer. This lets the producer open
+the source at the requested position instead of making FFmpeg discard the
+beginning of a non-seekable pipe. Scripts without the marker keep the original
+consumer-side behavior. The producer must accept `0` and timestamps in
+`HH:MM:SS[.fraction]` form.
+
+The bundled
+[`youtube-windows.yml.example`](../../assets/extractors/youtube/youtube-windows.yml.example)
+is the canonical Windows template. Its wrapper requires the managed
+`FFMPEG_BIN` supplied by ErsatzRS and discovers a manually installed,
+unbundled `yt-dlp.exe`; see the adjacent
+[`readme.md`](../../assets/extractors/youtube/readme.md) for the supported
+locations and a manual test procedure.
+
 Remote Stream scripts are trusted local configuration. They run with the same
 operating-system permissions as ErsatzRS. Keep credentials outside the YAML
 when the producer can load them from a protected file or environment variable.

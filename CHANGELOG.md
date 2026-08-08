@@ -160,6 +160,9 @@ release section when tagging a release.
   non-seekable pipe from the start; unmarked scripts retain their existing
   behavior. The bundled Beeld & Geluid wrappers use this contract, so tuning
   into a long Schatkamer episode starts promptly even well after its beginning.
+  A canonical Windows YouTube wrapper and YAML template now apply the same
+  contract while keeping `yt-dlp` an optional manual install, preserving its
+  request headers, and forcing downloads through ErsatzRS's managed FFmpeg.
 
 - Fixed HDR content keeping its HDR metadata after being converted to SDR. The
   mastering-display and MaxCLL/MaxFALL values survived tone-mapping and were
