@@ -278,8 +278,24 @@ discovered  = '2026-08-07'
 evidence    = '`upsert_config` currently emits `INSERT ... ON CONFLICT("Key") DO UPDATE ... excluded`, while the shared capability, health, maintenance, and repository persistence paths use `REPLACE INTO "ConfigElement"`; MySQL 8 rejects the graph statement.'
 remediation = '''
 Fixed 2026-08-08: `upsert_config` now uses the repository-wide `REPLACE INTO "ConfigElement"` pattern. Compiles under `--features mysql`; no live MySQL was available to execute the persist/overwrite/clear/reload path, so the backend coverage this debt asks for is still outstanding.
+
+Closed 2026-08-08. `upsert_config` uses the repository-wide
+`REPLACE INTO "ConfigElement"` pattern, and both backends now have the
+lifecycle coverage this debt asked for.
+
+SQLite (runs everywhere):
+`graph_state_persists_overwrites_clears_and_reloads` walks persist, overwrite
+(asserting replace rather than append), startup reload, and clear;
+`a_changed_ffmpeg_path_clears_stored_denials_at_startup` proves the ADR 0014
+binary-identity invalidation.
+
+MySQL: `mysql_persists_and_clears_hardware_graph_state` in
+`crates/ersatzrs-infra/tests/mysql_backend.rs` performs the same walk and is
+gated on `ERSATZRS_MYSQL_TEST_URL`, matching the existing harness. It compiles
+under `--features mysql-integration` but was not executed here — no MySQL
+server was available on this machine — so it runs wherever one is.
 '''
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'failed-hardware-graph-probes-can-count-as-positive-evidence'

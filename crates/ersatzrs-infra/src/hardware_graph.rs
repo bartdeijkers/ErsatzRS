@@ -574,4 +574,108 @@ mod tests {
         assert!(!outcome.is_proven());
         assert!(outcome.denial().is_some(), "a timeout is persistable");
     }
+
+    async fn test_pool() -> DbPool {
+        let dir = std::env::temp_dir().join(format!("ersatzrs-graph-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp db dir");
+        crate::db::init(&format!("sqlite:{}", dir.join("ErsatzRS.db").display()))
+            .await
+            .expect("initialize test database")
+    }
+
+    fn denial() -> HardwareGraphDenial {
+        HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            "NVIDIA GeForce RTX 3080 Ti",
+            GraphFailureKind::CudaInterop,
+        )
+    }
+
+    /// The full persist/overwrite/clear/reload lifecycle on SQLite.
+    ///
+    /// This row is written at startup and on every FFmpeg settings save, so a
+    /// backend-specific statement here breaks both. The MySQL half of this
+    /// lifecycle lives in `tests/mysql_backend.rs`.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn graph_state_persists_overwrites_clears_and_reloads() {
+        let pool = test_pool().await;
+        let mut report = FfmpegCapabilityReport::default();
+
+        // Nothing stored yet.
+        assert!(load_hardware_graph_denials(&pool)
+            .await
+            .expect("load empty")
+            .is_empty());
+
+        // Persist.
+        report.deny_hardware_graph(denial());
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &report)
+            .await
+            .expect("persist");
+        assert_eq!(
+            load_hardware_graph_denials(&pool).await.expect("reload"),
+            vec![denial()]
+        );
+
+        // Overwrite: the same key is rewritten, not appended to.
+        let mut second = FfmpegCapabilityReport::default();
+        second.deny_hardware_graph(HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencCudaScale,
+            "NVIDIA GeForce RTX 3080 Ti",
+            GraphFailureKind::EncoderInit,
+        ));
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &second)
+            .await
+            .expect("overwrite");
+        let reloaded = load_hardware_graph_denials(&pool).await.expect("reload");
+        assert_eq!(reloaded.len(), 1, "overwrite must replace, not append");
+        assert_eq!(
+            reloaded[0].operation,
+            HardwareGraphOperation::NvencCudaScale
+        );
+
+        // Startup reload applies the stored rows to a fresh report.
+        let mut startup = FfmpegCapabilityReport::default();
+        apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut startup)
+            .await
+            .expect("apply");
+        assert_eq!(startup.hardware_graph_denials.len(), 1);
+
+        // Clear.
+        clear_hardware_graph_denials(&pool).await.expect("clear");
+        assert!(load_hardware_graph_denials(&pool)
+            .await
+            .expect("load cleared")
+            .is_empty());
+    }
+
+    /// ADR 0014: denials are keyed to the binary they were learned against.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn a_changed_ffmpeg_path_clears_stored_denials_at_startup() {
+        let pool = test_pool().await;
+        let mut report = FfmpegCapabilityReport::default();
+        report.deny_hardware_graph(denial());
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg-9.0", &report)
+            .await
+            .expect("persist");
+
+        let mut startup = FfmpegCapabilityReport::default();
+        apply_hardware_graph_denials(&pool, "/opt/ffmpeg-9.1", &mut startup)
+            .await
+            .expect("apply after upgrade");
+
+        assert!(
+            startup.hardware_graph_denials.is_empty(),
+            "a different binary must re-probe rather than inherit a denial"
+        );
+        assert!(
+            load_hardware_graph_denials(&pool)
+                .await
+                .expect("reload")
+                .is_empty(),
+            "the stale rows are cleared, not just ignored"
+        );
+    }
 }

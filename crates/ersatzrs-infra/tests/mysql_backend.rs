@@ -283,3 +283,82 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
     assert_eq!(fill_group_ids.len(), 2);
     assert_ne!(fill_group_ids[0], fill_group_ids[1]);
 }
+
+/// The graph-state row's persist/overwrite/clear/reload lifecycle on MySQL.
+///
+/// This row is written at startup and on every FFmpeg settings save, so a
+/// SQLite-only upsert (`ON CONFLICT ... excluded`) breaks both paths on MySQL.
+/// The SQLite half of this lifecycle lives in the `hardware_graph` unit tests;
+/// this is the backend that actually rejects the wrong statement.
+#[tokio::test]
+async fn mysql_persists_and_clears_hardware_graph_state() {
+    #[allow(clippy::disallowed_methods)]
+    let Ok(database_url) = std::env::var("ERSATZRS_MYSQL_TEST_URL") else {
+        eprintln!("skipping MySQL graph-state test: ERSATZRS_MYSQL_TEST_URL is not set");
+        return;
+    };
+
+    let pool = db::init(&database_url)
+        .await
+        .expect("initialize MySQL test database");
+
+    let denial = ersatzrs_ffmpeg::HardwareGraphDenial::new(
+        ersatzrs_ffmpeg::HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "NVIDIA GeForce RTX 3080 Ti",
+        ersatzrs_ffmpeg::GraphFailureKind::CudaInterop,
+    );
+
+    ersatzrs_infra::hardware_graph::clear_hardware_graph_denials(&pool)
+        .await
+        .expect("clear any prior state");
+
+    let mut report = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
+    report.deny_hardware_graph(denial.clone());
+    ersatzrs_infra::hardware_graph::persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &report)
+        .await
+        .expect("persist graph denial on MySQL");
+
+    assert_eq!(
+        ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("reload"),
+        vec![denial]
+    );
+
+    // Overwriting the same key must replace, which is what the upsert statement
+    // has to get right on both backends.
+    let mut second = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
+    second.deny_hardware_graph(ersatzrs_ffmpeg::HardwareGraphDenial::new(
+        ersatzrs_ffmpeg::HardwareGraphOperation::NvencCudaScale,
+        "NVIDIA GeForce RTX 3080 Ti",
+        ersatzrs_ffmpeg::GraphFailureKind::EncoderInit,
+    ));
+    ersatzrs_infra::hardware_graph::persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &second)
+        .await
+        .expect("overwrite graph denial on MySQL");
+    let reloaded = ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+        .await
+        .expect("reload after overwrite");
+    assert_eq!(reloaded.len(), 1, "overwrite must replace, not append");
+
+    // Startup reload, then the settings-save clear.
+    let mut startup = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
+    ersatzrs_infra::hardware_graph::apply_hardware_graph_denials(
+        &pool,
+        "/opt/ffmpeg",
+        &mut startup,
+    )
+    .await
+    .expect("apply at startup");
+    assert_eq!(startup.hardware_graph_denials.len(), 1);
+
+    ersatzrs_infra::hardware_graph::clear_hardware_graph_denials(&pool)
+        .await
+        .expect("clear on capability refresh");
+    assert!(
+        ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("reload after clear")
+            .is_empty()
+    );
+}
