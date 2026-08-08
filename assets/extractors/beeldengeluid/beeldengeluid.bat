@@ -5,9 +5,14 @@ rem Resolve and stream a Beeld & Geluid "Schatkamer" episode to stdout for an
 rem ErsatzRS Remote Stream definition.
 
 if "%~1"=="" goto :usage
-if not "%~2"=="" goto :usage
+if not "%~3"=="" goto :usage
 
 set "EPISODE_URL=%~1"
+set "SEEK_POSITION=%~2"
+if not defined SEEK_POSITION set "SEEK_POSITION=0"
+rem Keep definitions backward compatible with builds that do not substitute
+rem the opt-in marker yet.
+if "%SEEK_POSITION%"=="{seek}" set "SEEK_POSITION=0"
 if /i "%EPISODE_URL:~0,42%"=="https://schatkamer.beeldengeluid.nl/serie/" goto :url_valid
 if /i "%EPISODE_URL:~0,41%"=="http://schatkamer.beeldengeluid.nl/serie/" goto :url_valid
 >&2 echo beeldengeluid.bat: unsupported Schatkamer episode URL
@@ -23,6 +28,11 @@ call :require_program "%FFMPEG_BIN%" FFmpeg
 if errorlevel 1 exit /b 69
 call :require_program "powershell.exe" PowerShell
 if errorlevel 1 exit /b 69
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if ($env:SEEK_POSITION -notmatch '^(0|[0-9]+:[0-9]{2}:[0-9]{2}([.][0-9]+)?)$') { exit 1 }"
+if errorlevel 1 (
+    >&2 echo beeldengeluid.bat: the seek timestamp is invalid
+    exit /b 64
+)
 
 set "WORK_ID=%RANDOM%-%RANDOM%"
 set "PAYLOAD_FILE=%TEMP%\ersatzrs-beeldengeluid-%WORK_ID%-payload.json"
@@ -145,7 +155,7 @@ if errorlevel 1 (
 set "STREAM_COUNT=0"
 for /f "usebackq tokens=1,* delims=	" %%A in ("%STREAMS_FILE%") do (
     set /a STREAM_COUNT+=1 >nul
-    "%FFMPEG_BIN%" -nostdin -hide_banner -loglevel error -headers "Cookie: %%B" -i "%%A" -map 0:v:0? -map 0:a:0? -c copy -f mpegts pipe:1
+    "%FFMPEG_BIN%" -nostdin -hide_banner -loglevel error -ss "%SEEK_POSITION%" -headers "Cookie: %%B" -i "%%A" -map 0:v:0? -map 0:a:0? -c copy -f mpegts pipe:1
     if errorlevel 1 goto :ffmpeg_failed
 )
 
@@ -182,6 +192,6 @@ if not errorlevel 1 exit /b 0
 exit /b 1
 
 :usage
->&2 echo Usage: beeldengeluid.bat ^<Schatkamer episode URL^>
+>&2 echo Usage: beeldengeluid.bat ^<Schatkamer episode URL^> [seek timestamp]
 >&2 echo Expected URL: https://schatkamer.beeldengeluid.nl/serie/.../.../aflevering/...
 exit /b 64

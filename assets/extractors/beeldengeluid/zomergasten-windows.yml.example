@@ -1,4 +1,4 @@
-script: '"C:\path\to\assets\extractors\beeldengeluid\beeldengeluid.bat" "https://schatkamer.beeldengeluid.nl/serie/2101608030021559531/zomergasten/aflevering/2101608040029776531"'
+script: '"C:\path\to\assets\extractors\beeldengeluid\beeldengeluid.bat" "https://schatkamer.beeldengeluid.nl/serie/2101608030021559531/zomergasten/aflevering/2101608040029776531" "{seek}"'
 is_live: false
 duration: "03:41:00"
 title: "ZOMERGASTEN - Peter van Ingen met Inez de Beaufort"

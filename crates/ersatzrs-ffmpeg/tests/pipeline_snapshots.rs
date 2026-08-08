@@ -828,6 +828,47 @@ fn nvenc_pipeline_scale_and_pad_near_16_9_source_snapshot() {
 }
 
 #[test]
+fn nvenc_pipeline_anamorphic_source_scales_directly_to_square_pixels_snapshot() {
+    let mut source = source_1080p(SourceVideoCodec::H264, 708, 480);
+    source.pixel_format = Some(PixelFormat::Yuv420P);
+    source.sample_aspect_ratio = Some("157:177".to_owned());
+    source.display_aspect_ratio = Some("157:120".to_owned());
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Ac3,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    assert_eq!(desired.scaled_size, FrameSize::new(1412, 1080));
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments.contains("scale_cuda=1412:1080:format=nv12,setsar=1"),
+        "NVENC must scale anamorphic input directly to its square-pixel size: {arguments}"
+    );
+    assert!(
+        !arguments.contains("scale_cuda=iw*sar"),
+        "NVENC must not create the shrinking anamorphic CUDA intermediate that can turn green: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn software_pipeline_seeking_dts_uses_core_only_decoder_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request =

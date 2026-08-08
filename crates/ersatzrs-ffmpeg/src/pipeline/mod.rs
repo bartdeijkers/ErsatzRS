@@ -3447,6 +3447,17 @@ fn scale_cuda_filter(
         return format!("scale_cuda=format={format}");
     }
 
+    if current.is_anamorphic {
+        // `scaled_size` already incorporates the source sample-aspect ratio.
+        // Scaling there in one pass avoids an FFmpeg 9 `scale_cuda` defect
+        // where a shrinking `iw*sar` intermediate can silently become a
+        // solid-green frame before the second scale runs.
+        return format!(
+            "scale_cuda={}:{}:format={format},setsar=1",
+            scaled_size.width, scaled_size.height
+        );
+    }
+
     let aspect_ratio = if scaled_size == padded_size {
         ",setsar=1"
     } else if current.cropped_size.is_some() {
@@ -3455,17 +3466,10 @@ fn scale_cuda_filter(
         ":force_original_aspect_ratio=decrease,setsar=1"
     };
 
-    if current.is_anamorphic {
-        format!(
-            "scale_cuda=iw*sar:ih:format={format},setsar=1,scale_cuda={}:{}:format={format}{}",
-            padded_size.width, padded_size.height, aspect_ratio
-        )
-    } else {
-        format!(
-            "scale_cuda={}:{}:format={format}{}",
-            padded_size.width, padded_size.height, aspect_ratio
-        )
-    }
+    format!(
+        "scale_cuda={}:{}:format={format}{}",
+        padded_size.width, padded_size.height, aspect_ratio
+    )
 }
 
 fn scale_vaapi_filter(

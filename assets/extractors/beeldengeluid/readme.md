@@ -15,7 +15,8 @@ Each wrapper implements the complete site-specific flow itself:
 4. Parse the exact-length React Server Component response chunks.
 5. Move the signed CloudFront parameters from the HLS query string into
    request cookies.
-6. Remux every returned HLS asset's first video/audio rendition pair to
+6. Apply an optional VOD seek before downloading media.
+7. Remux every returned HLS asset's first video/audio rendition pair to
    MPEG-TS on standard output.
 
 No yt-dlp installation, Python runtime, browser cookies, or manually copied
@@ -63,12 +64,14 @@ On Linux or macOS:
 
 ```sh
 ./beeldengeluid.sh "<episode-url>" > episode.ts
+./beeldengeluid.sh "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
 ```
 
 On Windows:
 
 ```batch
 beeldengeluid.bat "<episode-url>" > episode.ts
+beeldengeluid.bat "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
 ```
 
 Open `episode.ts` with a media player or inspect it with `ffprobe`. Diagnostics
@@ -91,7 +94,7 @@ any later transcoding uses ErsatzRS's FFmpeg 9 playback pipeline.
 Linux or macOS definition:
 
 ```yaml
-script: '"/path/to/beeldengeluid.sh" "https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>"'
+script: '"/path/to/beeldengeluid.sh" "https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>" "{seek}"'
 is_live: false
 title: "Episode title"
 ```
@@ -99,13 +102,18 @@ title: "Episode title"
 Windows definition:
 
 ```yaml
-script: '"C:\path\to\beeldengeluid.bat" "https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>"'
+script: '"C:\path\to\beeldengeluid.bat" "https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>" "{seek}"'
 is_live: false
 title: "Episode title"
 ```
 
 Schatkamer episodes are video on demand, so `is_live` must be `false`.
 `duration` is optional for VOD. If supplied, use `HH:MM:SS`.
+Keep `{seek}` as its own quoted argument. ErsatzRS replaces that opt-in marker
+with the current playout offset and lets the extractor seek the signed HLS
+source directly; this keeps channel tune-in fast even halfway through a long
+episode. Definitions without the marker retain the original non-seekable pipe
+behavior.
 
 The command path and the required executables must be visible to the ErsatzRS
 process itself. For a container deployment, extend the image with `curl` and

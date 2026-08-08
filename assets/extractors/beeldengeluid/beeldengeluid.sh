@@ -7,7 +7,7 @@ set -eu
 set -f
 
 usage() {
-    echo "Usage: beeldengeluid.sh <Schatkamer episode URL>" >&2
+    echo "Usage: beeldengeluid.sh <Schatkamer episode URL> [seek timestamp]" >&2
     echo "Expected URL: https://schatkamer.beeldengeluid.nl/serie/.../.../aflevering/..." >&2
 }
 
@@ -56,12 +56,16 @@ decode_cloudfront_value() {
         -e 's/%25/%/g'
 }
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     usage
     exit 64
 fi
 
 episode_url=$1
+seek_position=${2:-0}
+# An older ErsatzRS build passes the opt-in marker through literally. Treat it
+# as zero so definitions remain backward compatible while upgrading.
+[ "$seek_position" = "{seek}" ] && seek_position=0
 case "$episode_url" in
     https://schatkamer.beeldengeluid.nl/serie/*/*/aflevering/* | \
         http://schatkamer.beeldengeluid.nl/serie/*/*/aflevering/*)
@@ -88,6 +92,10 @@ find_program grep "grep"
 find_program dd "dd"
 find_program sed "sed"
 find_program mktemp "mktemp"
+if ! printf '%s\n' "$seek_position" \
+    | LC_ALL=C grep -Eq '^(0|[0-9]+:[0-9]{2}:[0-9]{2}([.][0-9]+)?)$'; then
+    fail "the seek timestamp is invalid" 64
+fi
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-beeldengeluid.XXXXXX") \
     || fail "unable to create a temporary directory"
@@ -244,6 +252,7 @@ while IFS= read -r signed_url; do
         -nostdin \
         -hide_banner \
         -loglevel error \
+        -ss "$seek_position" \
         -headers "$cookie_header" \
         -i "$base_url" \
         -map 0:v:0? \

@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
+const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -34,6 +35,24 @@ pub struct RemoteStreamCommand {
     pub program: String,
     pub args: Vec<String>,
     pub working_directory: PathBuf,
+}
+
+impl RemoteStreamCommand {
+    fn accepts_seek(&self) -> bool {
+        self.args
+            .iter()
+            .any(|argument| argument == REMOTE_STREAM_SEEK_PLACEHOLDER)
+    }
+
+    fn with_seek(&self, seek_position: &str) -> Self {
+        let mut command = self.clone();
+        for argument in &mut command.args {
+            if argument == REMOTE_STREAM_SEEK_PLACEHOLDER {
+                seek_position.clone_into(argument);
+            }
+        }
+        command
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -454,7 +473,8 @@ pub fn spawn_remote_stream_producer(
     ffmpeg_path: &str,
     ffprobe_path: Option<&str>,
 ) -> Result<Child, RemoteStreamError> {
-    let mut process = platform_script_process(command);
+    let command = command.with_seek("0");
+    let mut process = platform_script_process(&command);
     process
         .current_dir(&command.working_directory)
         .env("FFMPEG_BIN", ffmpeg_path)
@@ -480,7 +500,9 @@ pub fn spawn_ffmpeg_with_remote_input(
     working_directory: Option<&Path>,
     producer: Option<&RemoteStreamCommand>,
 ) -> Result<RemoteStreamProcess, RemoteStreamError> {
+    let (arguments, producer) = prepare_remote_stream_spawn(command, producer);
     let mut producer_child = producer
+        .as_ref()
         .map(|producer| spawn_remote_stream_producer(producer, &command.executable, None))
         .transpose()?;
     // ADR 0003: move an oversized graph out of argv before spawning, so a
@@ -488,7 +510,7 @@ pub fn spawn_ffmpeg_with_remote_input(
     // command-line limit.
     let (arguments, filter_graph_file) = crate::filter_graph_file::apply_filter_graph_transport(
         &command.executable,
-        &command.arguments,
+        &arguments,
         &crate::file_system_layout::filter_graph_folder(),
         false,
     );
@@ -520,7 +542,7 @@ pub fn spawn_ffmpeg_with_remote_input(
                 "ffmpeg did not expose stdin for the remote stream producer".to_owned(),
             ));
         };
-        let label = producer.map_or_else(
+        let label = producer.as_ref().map_or_else(
             || "script".to_owned(),
             |producer| {
                 Path::new(&producer.program)
@@ -543,6 +565,43 @@ pub fn spawn_ffmpeg_with_remote_input(
         producer_pipe,
         filter_graph_file,
     })
+}
+
+fn prepare_remote_stream_spawn(
+    command: &FfmpegCommand,
+    producer: Option<&RemoteStreamCommand>,
+) -> (Vec<String>, Option<RemoteStreamCommand>) {
+    let mut arguments = command.arguments.clone();
+    let producer = producer.map(|producer| {
+        if producer.accepts_seek() {
+            let seek_position =
+                take_remote_stream_output_seek(&mut arguments).unwrap_or_else(|| "0".to_owned());
+            producer.with_seek(&seek_position)
+        } else {
+            producer.clone()
+        }
+    });
+    (arguments, producer)
+}
+
+fn take_remote_stream_output_seek(arguments: &mut Vec<String>) -> Option<String> {
+    arguments
+        .windows(2)
+        .any(|pair| pair == ["-i", "pipe:0"])
+        .then_some(())?;
+    let last_input_index = arguments
+        .windows(2)
+        .enumerate()
+        .filter_map(|(index, pair)| (pair[0] == "-i").then_some(index))
+        .max()?;
+    let seek_index = arguments
+        .windows(2)
+        .enumerate()
+        .skip(last_input_index + 2)
+        .find_map(|(index, pair)| (pair[0] == "-ss").then_some(index))?;
+    let seek_position = arguments[seek_index + 1].clone();
+    arguments.drain(seek_index..seek_index + 2);
+    Some(seek_position)
 }
 
 pub(crate) fn pipe_remote_stream_producer(
@@ -941,6 +1000,91 @@ content_rating: PG
     }
 
     #[test]
+    fn seek_placeholder_moves_non_seekable_output_seek_to_producer() {
+        let producer = RemoteStreamCommand {
+            program: "producer".to_owned(),
+            args: vec![
+                "https://example.test/watch".to_owned(),
+                REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
+            ],
+            working_directory: PathBuf::from("."),
+        };
+        let consumer = FfmpegCommand {
+            executable: "ffmpeg".to_owned(),
+            environment: Vec::new(),
+            arguments: vec![
+                "-i".to_owned(),
+                "pipe:0".to_owned(),
+                "-ss".to_owned(),
+                "00:00:05.0000000".to_owned(),
+                "-i".to_owned(),
+                "overlay.png".to_owned(),
+                "-ss".to_owned(),
+                "00:26:00.5000000".to_owned(),
+                "-map".to_owned(),
+                "0:v:0".to_owned(),
+            ],
+        };
+
+        let (arguments, producer) = prepare_remote_stream_spawn(&consumer, Some(&producer));
+        let producer = producer.expect("producer");
+
+        assert_eq!(
+            producer.args,
+            ["https://example.test/watch", "00:26:00.5000000"]
+        );
+        assert_eq!(
+            arguments,
+            [
+                "-i",
+                "pipe:0",
+                "-ss",
+                "00:00:05.0000000",
+                "-i",
+                "overlay.png",
+                "-map",
+                "0:v:0"
+            ]
+        );
+    }
+
+    #[test]
+    fn unmarked_producer_keeps_consumer_seek_and_marked_zero_start_gets_zero() {
+        let consumer = FfmpegCommand {
+            executable: "ffmpeg".to_owned(),
+            environment: Vec::new(),
+            arguments: vec!["-i".to_owned(), "pipe:0".to_owned()],
+        };
+        let unmarked = RemoteStreamCommand {
+            program: "producer".to_owned(),
+            args: vec!["https://example.test/watch".to_owned()],
+            working_directory: PathBuf::from("."),
+        };
+        let marked = RemoteStreamCommand {
+            args: vec![
+                "https://example.test/watch".to_owned(),
+                REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
+            ],
+            ..unmarked.clone()
+        };
+
+        let (unmarked_arguments, unmarked) =
+            prepare_remote_stream_spawn(&consumer, Some(&unmarked));
+        let (marked_arguments, marked) = prepare_remote_stream_spawn(&consumer, Some(&marked));
+
+        assert_eq!(unmarked_arguments, consumer.arguments);
+        assert_eq!(
+            unmarked.expect("unmarked producer").args,
+            ["https://example.test/watch"]
+        );
+        assert_eq!(marked_arguments, consumer.arguments);
+        assert_eq!(
+            marked.expect("marked producer").args,
+            ["https://example.test/watch", "0"]
+        );
+    }
+
+    #[test]
     fn beeldengeluid_extractors_emit_one_video_audio_pair() {
         let shell = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.sh");
         let batch = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.bat");
@@ -955,6 +1099,8 @@ content_rating: PG
         assert!(!batch.contains("-vsync"));
         assert!(shell.contains("-c copy"));
         assert!(batch.contains("-c copy -f mpegts pipe:1"));
+        assert!(shell.contains("-ss \"$seek_position\""));
+        assert!(batch.contains("-ss \"%SEEK_POSITION%\""));
     }
 
     #[cfg(windows)]

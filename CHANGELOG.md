@@ -148,6 +148,19 @@ release section when tagging a release.
   Dolby Vision HLS items now emit an error slate and advance instead of looping
   on the same item, and early HLS/IPTV refusal removes any rendered graphics.
 
+- Fixed NVENC playback turning anamorphic sources into a solid-green frame on
+  FFmpeg 9 when CUDA first shrank the video by its sample-aspect ratio and then
+  scaled it to the channel. ErsatzRS now performs one CUDA scale directly to
+  the computed square-pixel size, preserving the intended aspect ratio without
+  the broken intermediate surface.
+
+- Fixed late tune-in for script-backed Remote Streams by adding opt-in
+  source-side seeking. Extractors that accept a standalone `{seek}` argument now
+  receive the current playout offset instead of forcing FFmpeg to drain a
+  non-seekable pipe from the start; unmarked scripts retain their existing
+  behavior. The bundled Beeld & Geluid wrappers use this contract, so tuning
+  into a long Schatkamer episode starts promptly even well after its beginning.
+
 - Fixed HDR content keeping its HDR metadata after being converted to SDR. The
   mastering-display and MaxCLL/MaxFALL values survived tone-mapping and were
   written onto the BT.709 output, so a display was told to expect a 1000-nit
