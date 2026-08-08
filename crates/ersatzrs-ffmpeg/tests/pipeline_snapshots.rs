@@ -4523,6 +4523,27 @@ fn stream_copy_never_refuses_a_dolby_vision_source() {
 }
 
 #[test]
+fn a_proven_vulkan_graph_is_selected_snapshot() {
+    // Baseline for the graph-state matrix: both graphs probed and proved, so
+    // the preferred Vulkan/libplacebo path is used.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, "");
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(args.contains("libplacebo"), "got: {args}");
+    assert!(args.contains("h264_nvenc"), "got: {args}");
+    insta::assert_snapshot!(args);
+}
+
+#[test]
 fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
     // ADR 0014: NvencCudaScale has no further hardware fallback, so a runtime
     // that probed and did not prove it must not emit CUDA/NVENC arguments.
@@ -4543,6 +4564,8 @@ fn an_unproven_cuda_graph_demotes_nvenc_to_software() {
     assert!(!args.contains("nvenc"), "got: {args}");
     assert!(!args.contains("scale_cuda"), "got: {args}");
     assert!(!args.contains("hwupload_cuda"), "got: {args}");
+    assert!(!args.contains("-init_hw_device cuda"), "got: {args}");
+    insta::assert_snapshot!(args);
 }
 
 #[test]

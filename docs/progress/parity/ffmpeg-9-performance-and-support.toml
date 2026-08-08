@@ -299,9 +299,16 @@ description = 'P1: Make NVENC acceleration selection consult the `NvencCudaScale
 discovered  = '2026-08-07'
 evidence    = '`HardwareGraphOperation::NvencCudaScale::fallback()` correctly returns `None`, but `effective_video_acceleration` checks encoder/decode capabilities only and never consults that operation denial, so the denied graph is still generated.'
 remediation = '''
-Fixed 2026-08-08: `effective_video_acceleration` consults `nvenc_cuda_graph_unusable` and returns software encoding when the CUDA graph is denied or unproven after probing, so no CUDA upload/scale/NVENC arguments are emitted. Regression: `an_unproven_cuda_graph_demotes_nvenc_to_software`, plus the existing Vulkan-denial-falls-through-to-CUDA snapshot.
+Resolved 2026-08-08: `effective_video_acceleration` consults `nvenc_cuda_graph_unusable` and returns software encoding when the CUDA graph is denied or unproven after probing, so no CUDA upload/scale/NVENC arguments are emitted. Regression: `an_unproven_cuda_graph_demotes_nvenc_to_software`, plus the existing Vulkan-denial-falls-through-to-CUDA snapshot.
+
+The closure gate's three snapshots now exist:
+`a_proven_vulkan_graph_is_selected_snapshot` (both graphs proved, Vulkan path
+selected), `a_denied_vulkan_graph_falls_back_to_the_proven_cuda_path` (Vulkan
+denied, proven CUDA/NVENC used), and `an_unproven_cuda_graph_demotes_nvenc_to_software`
+(CUDA denied, no CUDA or NVENC arguments at all — the command demotes to
+libx264).
 '''
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'runtime-hardware-graph-failures-bypass-stream-retry'
