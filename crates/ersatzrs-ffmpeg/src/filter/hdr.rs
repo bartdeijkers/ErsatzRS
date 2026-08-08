@@ -105,86 +105,12 @@ fn tag_or(value: Option<&str>, fallback: &str) -> String {
     }
 }
 
-/// SMPTE ST 2086 mastering-display colour volume.
+/// ST 2086 mastering-display colour volume and CTA-861.3 content light level.
 ///
-/// Chromaticity values are in `FFmpeg`'s `G(x,y)B(x,y)R(x,y)WP(x,y)` units of
-/// 1/50000, and luminance in `L(max,min)` units of 1/10000 cd/m², matching the
-/// `-mastering_display` option and x265's `master-display` parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MasteringDisplayMetadata {
-    pub green_x: u32,
-    pub green_y: u32,
-    pub blue_x: u32,
-    pub blue_y: u32,
-    pub red_x: u32,
-    pub red_y: u32,
-    pub white_point_x: u32,
-    pub white_point_y: u32,
-    pub max_luminance: u32,
-    pub min_luminance: u32,
-}
-
-impl MasteringDisplayMetadata {
-    /// Documented seeded default: BT.2020 container primaries with a D65 white
-    /// point, 1000 cd/m² peak and 0.0001 cd/m² black.
-    ///
-    /// ADR 0064 forbids hidden guessed values. This is the value ErsatzRS emits
-    /// when a transform changed the meaning of the source metadata or the
-    /// source carried none, and it is stated here rather than buried in a
-    /// format string so it can be reviewed and later made editable.
-    pub const BT2020_1000_NITS: Self = Self {
-        green_x: 8_500,
-        green_y: 39_850,
-        blue_x: 6_550,
-        blue_y: 2_300,
-        red_x: 35_400,
-        red_y: 14_600,
-        white_point_x: 15_635,
-        white_point_y: 16_450,
-        max_luminance: 10_000_000,
-        min_luminance: 1,
-    };
-
-    /// Render the `-mastering_display` / x265 `master-display` value.
-    #[must_use]
-    pub fn to_ffmpeg_value(self) -> String {
-        format!(
-            "G({},{})B({},{})R({},{})WP({},{})L({},{})",
-            self.green_x,
-            self.green_y,
-            self.blue_x,
-            self.blue_y,
-            self.red_x,
-            self.red_y,
-            self.white_point_x,
-            self.white_point_y,
-            self.max_luminance,
-            self.min_luminance,
-        )
-    }
-}
-
-/// CTA-861.3 content light level: `MaxCLL` and `MaxFALL` in cd/m².
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ContentLightLevel {
-    pub max_cll: u32,
-    pub max_fall: u32,
-}
-
-impl ContentLightLevel {
-    /// Documented seeded default paired with
-    /// [`MasteringDisplayMetadata::BT2020_1000_NITS`].
-    pub const DEFAULT: Self = Self {
-        max_cll: 1_000,
-        max_fall: 400,
-    };
-
-    /// Render the `-content_light` value.
-    #[must_use]
-    pub fn to_ffmpeg_value(self) -> String {
-        format!("{},{}", self.max_cll, self.max_fall)
-    }
-}
+/// Both live in `ersatzrs-domain` because they are per-profile configuration an
+/// operator can edit (ADR 0064), not pipeline-internal detail. Re-exported here
+/// so the filter and pipeline code reads as one HDR vocabulary.
+pub use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 
 /// Drop Dolby Vision side data while keeping HDR10 static metadata.
 ///

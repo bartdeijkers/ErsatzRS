@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FilterMode, GraphicsElement, GraphicsElementConfig,
@@ -4469,6 +4470,62 @@ fn hdr10_conversion_falls_back_to_the_documented_default_when_the_source_is_sile
         "got: {args}"
     );
     assert!(args.contains("-content_light 1000,400"), "got: {args}");
+}
+
+#[test]
+fn the_profile_override_replaces_the_documented_default_but_never_a_real_grade() {
+    // ADR 0064 requires the seeded defaults to be editable. The override is the
+    // seeded default made editable, so it stands in only where the default
+    // would have, and a source that carried its own grade still wins.
+    let operator_grade = MasteringDisplayMetadata {
+        green_x: 13_250,
+        green_y: 34_500,
+        blue_x: 7_500,
+        blue_y: 3_000,
+        red_x: 34_000,
+        red_y: 16_000,
+        white_point_x: 15_635,
+        white_point_y: 16_450,
+        max_luminance: 10_000_000,
+        min_luminance: 50,
+    };
+    let mut desired = hdr10_desired();
+    desired.hdr_mastering_display = Some(operator_grade);
+    desired.hdr_content_light = ContentLightLevel::new(600, 120);
+
+    let silent_source = PipelineRequest::new(InputFile::video("/media/sdr.mkv"), desired.clone())
+        .with_source_video_stream(source_with_transfer(Some("bt709"), false));
+    let args = SoftwarePipelineBuilder
+        .build(silent_source.clone())
+        .command(&silent_source.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        args.contains(
+            "-mastering_display G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"
+        ),
+        "the operator's configured display must be signalled, got: {args}"
+    );
+    assert!(args.contains("-content_light 600,120"), "got: {args}");
+
+    let mut graded = source_with_transfer(Some("arib-std-b67"), true);
+    graded.mastering_display = Some("G(1,2)B(3,4)R(5,6)WP(7,8)L(9,1)".to_owned());
+    graded.max_cll = Some(4000);
+    graded.max_fall = Some(600);
+    let graded_source = PipelineRequest::new(InputFile::video("/media/hlg.mkv"), desired)
+        .with_source_video_stream(graded);
+    let args = SoftwarePipelineBuilder
+        .build(graded_source.clone())
+        .command(&graded_source.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(
+        args.contains("-mastering_display G(1,2)B(3,4)R(5,6)WP(7,8)L(9,1)"),
+        "a real grade must outrank the profile override, got: {args}"
+    );
+    assert!(args.contains("-content_light 4000,600"), "got: {args}");
 }
 
 #[test]

@@ -185,8 +185,7 @@ accurate values with less accurate ones. Regressions:
 `a_pq_source_still_emits_no_metadata_options_even_when_it_has_them`, and the
 real-ffprobe gate `source_hdr_metadata_is_parsed_from_a_real_hdr10_file`.
 
-Still open: the seeded defaults are documented constants rather than
-per-profile editable fields, which ADR 0064 ultimately wants. Tracked as
+The seeded defaults later became per-profile editable fields; see
 `hdr10-profile-metadata-is-not-operator-editable`.
 '''
 resolved    = true
@@ -197,7 +196,33 @@ adr         = '0064'
 description = 'ADR 0064 requires the seeded HDR10 mastering-display and content-light defaults to be documented and editable. They are documented constants in `MasteringDisplayMetadata::BT2020_1000_NITS` and `ContentLightLevel::DEFAULT`, used only when a converted source carried no metadata of its own, but there is no profile field an operator can change.'
 discovered  = '2026-08-07'
 evidence    = 'The constants are stated explicitly in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` and covered by tests, so they are not hidden guesses, but `FFmpegProfile` has no mastering-display or content-light column and the profile editor exposes no control.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. `FFmpegProfile` gained `HdrMasteringDisplay`, `HdrMaxCll`,
+and `HdrMaxFall` (nullable; NULL means the documented default, so every existing
+profile keeps signalling exactly what it signalled before).
+
+`MasteringDisplayMetadata` and `ContentLightLevel` moved to `ersatzrs-domain`
+with a parser and ST 2086 / CTA-861.3 bounds, and are re-exported from
+`ersatzrs-ffmpeg::filter::hdr`. The editor shows the documented default as the
+mastering-display placeholder, so the effective value is visible rather than
+implied, and validates client-side against the same rules the application layer
+enforces. Overrides are normalized away for a non-HDR10 profile rather than
+persisted as dormant state.
+
+Precedence is unchanged from ADR 0064: a source that carried its own grade still
+wins. The override replaces only the documented default, which is what the debt
+asked for.
+
+Evidence: real FFmpeg 9 encode with a DCI-P3-style grade
+(`G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)`,
+`600,120`) decoded back as exactly those values; a SQLite round trip covering
+persist, copy-profile, and clearing; argv coverage for both precedence
+directions; and a domain parser suite covering the paste-back round trip and the
+malformed forms FFmpeg would reject. The Output Dynamic Range health check now
+warns when a stored override is unusable and the documented default is being
+signalled in its place.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'dolby-vision-playback-is-not-fixture-proven'

@@ -17,12 +17,12 @@ use ersatzrs_core::scheduling::{
 };
 use ersatzrs_domain::{
     BlockStopScheduling, ChannelWatermark, ChannelWatermarkImageSource, ChannelWatermarkMode,
-    CollectionType, DecoBreakPlacement, DecoMode, EntityId, FFmpegProfile,
+    CollectionType, ContentLightLevel, DecoBreakPlacement, DecoMode, EntityId, FFmpegProfile,
     FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FillerKind, FillerMode, FillerPreset, FilterMode,
-    HardwareAccelerationKind, LibraryMediaKind, MediaSourceKind, NormalizeLoudnessMode,
-    OutputDynamicRange, PlaybackOrder, ScalingBehavior, VaapiDriver, WatermarkLocation,
-    WatermarkSize,
+    HardwareAccelerationKind, LibraryMediaKind, MasteringDisplayMetadata, MediaSourceKind,
+    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, ScalingBehavior, VaapiDriver,
+    WatermarkLocation, WatermarkSize,
 };
 
 use crate::operations::OperationCoordinator;
@@ -85,6 +85,13 @@ pub struct FfmpegProfileAdminForm {
     pub tonemap_algorithm: i32,
     /// ADR 0064 `OutputDynamicRange`: 0 = `SdrBt709`, 1 = `Hdr10Bt2020Pq`.
     pub output_dynamic_range: i32,
+    /// ADR 0064 mastering-display override in `G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min)`
+    /// form. Blank means the documented default.
+    pub hdr_mastering_display: String,
+    /// ADR 0064 `MaxCLL` override in cd/m². `0` means the documented default.
+    pub hdr_max_cll: i32,
+    /// ADR 0064 `MaxFALL` override in cd/m². `0` means the documented default.
+    pub hdr_max_fall: i32,
     pub audio_format: i32,
     pub audio_bitrate: i32,
     pub audio_buffer_size: i32,
@@ -772,6 +779,8 @@ async fn normalize_ffmpeg_profile(
     } else {
         OutputDynamicRange::SdrBt709
     };
+    let (hdr_mastering_display, hdr_content_light) =
+        normalized_hdr_metadata(output_dynamic_range, &form)?;
     let bit_depth = if video_format == FFmpegProfileVideoFormat::Mpeg2Video {
         FFmpegProfileBitDepth::EightBit
     } else {
@@ -849,6 +858,8 @@ async fn normalize_ffmpeg_profile(
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: parse_tonemap_algorithm(form.tonemap_algorithm)?,
         output_dynamic_range,
+        hdr_mastering_display,
+        hdr_content_light,
         audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -908,6 +919,85 @@ fn validate_ffmpeg_profile_options(
         );
     }
     Ok(())
+}
+
+/// Resolve the profile's HDR10 static-metadata overrides (ADR 0064).
+///
+/// The overrides only mean something for an HDR10 output, so they are
+/// normalized away otherwise rather than persisted as dormant state that
+/// silently takes effect when the profile is later switched to HDR10.
+fn normalized_hdr_metadata(
+    output_dynamic_range: OutputDynamicRange,
+    form: &FfmpegProfileAdminForm,
+) -> crate::Result<(Option<MasteringDisplayMetadata>, Option<ContentLightLevel>)> {
+    if !output_dynamic_range.is_hdr10() {
+        return Ok((None, None));
+    }
+    Ok((
+        parse_hdr_mastering_display(&form.hdr_mastering_display)?,
+        parse_hdr_content_light(form.hdr_max_cll, form.hdr_max_fall)?,
+    ))
+}
+
+/// Rejection message for an unparseable mastering-display override.
+pub const HDR10_MASTERING_DISPLAY_ERROR: &str =
+    "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min";
+/// Rejection message for content light levels outside CTA-861.3.
+pub const HDR10_CONTENT_LIGHT_ERROR: &str =
+    "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL";
+
+/// Parse the operator's mastering-display override (ADR 0064).
+///
+/// Blank keeps the documented default. Anything else has to parse and be in
+/// range, because an invalid value would make every HDR10 spawn fail rather
+/// than degrade.
+fn parse_hdr_mastering_display(value: &str) -> crate::Result<Option<MasteringDisplayMetadata>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    match MasteringDisplayMetadata::parse(trimmed) {
+        Some(parsed) => Ok(Some(parsed)),
+        None => {
+            validation_error("hdr_mastering_display", HDR10_MASTERING_DISPLAY_ERROR).map(|()| None)
+        }
+    }
+}
+
+/// Parse the operator's content-light override (ADR 0064).
+///
+/// Both halves are required together: `MaxFALL` alone is not a CTA-861.3 pair,
+/// and a half-configured override would be silently completed from the default,
+/// which is exactly the hidden value ADR 0064 forbids.
+fn parse_hdr_content_light(
+    max_cll: i32,
+    max_fall: i32,
+) -> crate::Result<Option<ContentLightLevel>> {
+    if max_cll <= 0 && max_fall <= 0 {
+        return Ok(None);
+    }
+    // CTA-861.3 does let 0 mean "not indicated", but in a form where empty is
+    // also 0 the two are indistinguishable. Requiring both to be positive here
+    // keeps "I left it blank" from being persisted as "I measured zero"; the
+    // domain type stays faithful to the standard for values read back from the
+    // database.
+    let levels = positive_content_light_level(max_cll)
+        .zip(positive_content_light_level(max_fall))
+        .and_then(|(max_cll, max_fall)| ContentLightLevel::new(max_cll, max_fall));
+    match levels {
+        Some(levels) => Ok(Some(levels)),
+        None => validation_error("hdr_content_light", HDR10_CONTENT_LIGHT_ERROR).map(|()| None),
+    }
+}
+
+/// A content light level an operator actually entered, as opposed to a blank
+/// field that the form reports as `0`.
+const fn positive_content_light_level(level: i32) -> Option<u32> {
+    if level > 0 {
+        Some(level.unsigned_abs())
+    } else {
+        None
+    }
 }
 
 /// Rejection message for an HDR10 profile on a codec without a metadata path.
@@ -5583,6 +5673,7 @@ mod tests {
         add_default_collection_item, add_media_item_to_collection, create_playlist_group,
         delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
         normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
+        normalized_hdr_metadata, parse_hdr_content_light, parse_hdr_mastering_display,
         request_library_scan, request_playout_build, request_scheduled_library_scan,
         request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
         save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
@@ -5602,6 +5693,7 @@ mod tests {
         PlayoutBuildQueue, PlayoutBuildQueueError, ScanWorkQueue, ScanWorkQueueError,
         SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     };
+    use ersatzrs_domain::ffmpeg::{ContentLightLevel, OutputDynamicRange};
 
     #[derive(Default)]
     struct RecordingSettingsRepository {
@@ -6576,6 +6668,75 @@ mod tests {
         assert!(format!("{error}").contains("10-bit"), "{error}");
     }
 
+    #[test]
+    fn a_blank_hdr_override_selects_the_documented_default() {
+        assert_eq!(
+            parse_hdr_mastering_display("   ").expect("blank is not an error"),
+            None,
+            "blank must mean the documented default, not an empty override"
+        );
+        assert_eq!(
+            parse_hdr_content_light(0, 0).expect("blank is not an error"),
+            None
+        );
+    }
+
+    #[test]
+    fn an_unusable_hdr_override_is_rejected_at_save_time() {
+        let error = parse_hdr_mastering_display("G(8500,39850)")
+            .expect_err("a partial mastering display would fail every HDR10 spawn");
+        assert!(format!("{error}").contains("Mastering display"), "{error}");
+
+        // Half a CTA-861.3 pair would be silently completed from the default,
+        // which is exactly the hidden value ADR 0064 forbids.
+        let error = parse_hdr_content_light(1_000, 0)
+            .expect_err("MaxCLL without MaxFALL must not be half-applied");
+        assert!(format!("{error}").contains("MaxCLL"), "{error}");
+
+        let error = parse_hdr_content_light(400, 1_000)
+            .expect_err("MaxFALL above MaxCLL describes no real content");
+        assert!(format!("{error}").contains("MaxFALL"), "{error}");
+    }
+
+    #[test]
+    fn hdr_overrides_are_normalized_away_for_an_sdr_profile() {
+        let mut form = existing_ffmpeg_profile_form();
+        form.hdr_mastering_display = "this would never parse".to_owned();
+        form.hdr_max_cll = 4_000;
+        form.hdr_max_fall = 100;
+
+        let (mastering_display, content_light) =
+            normalized_hdr_metadata(OutputDynamicRange::SdrBt709, &form)
+                .expect("an SDR profile must not be rejected for its dormant HDR fields");
+
+        assert_eq!(mastering_display, None);
+        assert_eq!(content_light, None);
+    }
+
+    #[test]
+    fn an_hdr10_profile_keeps_the_operators_overrides() {
+        let mut form = existing_ffmpeg_profile_form();
+        form.hdr_mastering_display =
+            "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)".to_owned();
+        form.hdr_max_cll = 4_000;
+        form.hdr_max_fall = 100;
+
+        let (mastering_display, content_light) =
+            normalized_hdr_metadata(OutputDynamicRange::Hdr10Bt2020Pq, &form)
+                .expect("a valid DCI-P3-style grade must be accepted");
+
+        assert_eq!(
+            mastering_display.expect("override kept").green_x,
+            13_250,
+            "the operator's own grade must survive, not be replaced by the default"
+        );
+        assert_eq!(
+            content_light,
+            ContentLightLevel::new(4_000, 100),
+            "MaxCLL/MaxFALL must survive together"
+        );
+    }
+
     fn existing_ffmpeg_profile_form() -> FfmpegProfileAdminForm {
         FfmpegProfileAdminForm {
             id: 7,
@@ -6601,6 +6762,9 @@ mod tests {
             video_buffer_size: 0,
             tonemap_algorithm: 0,
             output_dynamic_range: 0,
+            hdr_mastering_display: String::new(),
+            hdr_max_cll: 0,
+            hdr_max_fall: 0,
             audio_format: 99,
             audio_bitrate: 0,
             audio_buffer_size: 0,

@@ -1,3 +1,4 @@
+use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +52,12 @@ pub struct FfmpegProfileForm {
     pub tonemap_algorithm: i32,
     /// ADR 0064 output dynamic range: 0 = SDR BT.709, 1 = HDR10 BT.2020/PQ.
     pub output_dynamic_range: i32,
+    /// ADR 0064 mastering-display override; blank uses the documented default.
+    pub hdr_mastering_display: String,
+    /// ADR 0064 `MaxCLL` override in cd/m²; 0 uses the documented default.
+    pub hdr_max_cll: i32,
+    /// ADR 0064 `MaxFALL` override in cd/m²; 0 uses the documented default.
+    pub hdr_max_fall: i32,
     pub audio_format: i32,
     pub audio_bitrate: i32,
     pub audio_buffer_size: i32,
@@ -98,7 +105,10 @@ impl FfmpegProfileForm {
             video_buffer_size: 4000,
             tonemap_algorithm: 0,    // Linear
             output_dynamic_range: 0, // SdrBt709
-            audio_format: 1,         // Aac
+            hdr_mastering_display: String::new(),
+            hdr_max_cll: 0,
+            hdr_max_fall: 0,
+            audio_format: 1, // Aac
             audio_bitrate: 192,
             audio_buffer_size: 384,
             normalize_loudness_mode: 0, // Off
@@ -140,6 +150,9 @@ fn ffmpeg_profile_form_into_admin(
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: form.tonemap_algorithm,
         output_dynamic_range: form.output_dynamic_range,
+        hdr_mastering_display: form.hdr_mastering_display,
+        hdr_max_cll: form.hdr_max_cll,
+        hdr_max_fall: form.hdr_max_fall,
         audio_format: form.audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -181,6 +194,9 @@ fn ffmpeg_profile_form_from_admin(
         video_buffer_size: form.video_buffer_size,
         tonemap_algorithm: form.tonemap_algorithm,
         output_dynamic_range: form.output_dynamic_range,
+        hdr_mastering_display: form.hdr_mastering_display,
+        hdr_max_cll: form.hdr_max_cll,
+        hdr_max_fall: form.hdr_max_fall,
         audio_format: form.audio_format,
         audio_bitrate: form.audio_bitrate,
         audio_buffer_size: form.audio_buffer_size,
@@ -286,6 +302,67 @@ pub fn output_dynamic_range_validation_error(
     None
 }
 
+/// The documented ADR 0064 default, shown as the mastering-display placeholder
+/// so an operator can see the effective value without having to guess what a
+/// blank field means.
+pub const DOCUMENTED_MASTERING_DISPLAY: &str =
+    "G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1)";
+
+/// Client-side mirror of the application layer's mastering-display rule.
+///
+/// Kept in lockstep with `parse_hdr_mastering_display` in `ersatzrs-app`.
+/// Blank is always accepted: it selects the documented default.
+#[must_use]
+pub fn hdr_mastering_display_validation_error(
+    output_dynamic_range: i32,
+    value: &str,
+) -> Option<&'static str> {
+    let trimmed = value.trim();
+    if output_dynamic_range != 1 || trimmed.is_empty() {
+        return None;
+    }
+    MasteringDisplayMetadata::parse(trimmed)
+        .is_none()
+        .then_some(HDR10_MASTERING_DISPLAY_ERROR)
+}
+
+/// Client-side mirror of the application layer's content-light rule.
+///
+/// Kept in lockstep with `parse_hdr_content_light` in `ersatzrs-app`. Both
+/// levels empty is accepted: that selects the documented default.
+#[must_use]
+pub fn hdr_content_light_validation_error(
+    output_dynamic_range: i32,
+    max_cll: i32,
+    max_fall: i32,
+) -> Option<&'static str> {
+    if output_dynamic_range != 1 || (max_cll <= 0 && max_fall <= 0) {
+        return None;
+    }
+    // Both must be positive: in a form, a blank field and a measured zero are
+    // the same value. Kept in step with `parse_hdr_content_light`.
+    let valid = positive_content_light_level(max_cll)
+        .zip(positive_content_light_level(max_fall))
+        .is_some_and(|(max_cll, max_fall)| ContentLightLevel::new(max_cll, max_fall).is_some());
+    (!valid).then_some(HDR10_CONTENT_LIGHT_ERROR)
+}
+
+/// A content light level an operator actually entered, as opposed to a blank
+/// field that the form reports as `0`.
+const fn positive_content_light_level(level: i32) -> Option<u32> {
+    if level > 0 {
+        Some(level.unsigned_abs())
+    } else {
+        None
+    }
+}
+
+/// Shared with `ersatzrs-app` so both sides render the same message.
+pub const HDR10_MASTERING_DISPLAY_ERROR: &str =
+    "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min";
+/// Shared with `ersatzrs-app` so both sides render the same message.
+pub const HDR10_CONTENT_LIGHT_ERROR: &str =
+    "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL";
 /// Shared with `ersatzrs-app` so both sides render the same message.
 pub const HDR10_CODEC_ERROR: &str =
     "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata";

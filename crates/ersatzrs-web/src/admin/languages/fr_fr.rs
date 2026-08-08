@@ -1223,6 +1223,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ThreadCountAuto => "Nombre de threads (0 = auto)",
         TextKey::OutputDynamicRange => "Plage dynamique de sortie",
         TextKey::OutputDynamicRangeCopyHint => "La vidéo est copiée, la sortie conserve donc la plage dynamique de la source.",
+        TextKey::HdrStaticMetadataHint => "Laissez vide pour utiliser les valeurs HDR10 documentées par défaut. Elles ne s'appliquent que si la source ne porte aucune métadonnée HDR ; l'écran de mastering et les niveaux de la source priment toujours.",
+        TextKey::HdrMasteringDisplay => "Écran de mastering",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
         TextKey::TonemapAlgorithm => "Algorithme de tonemapping",
         TextKey::VaapiDevicePath => "Chemin du périphérique VAAPI",
         TextKey::VaapiDisplay => "Affichage VAAPI",
@@ -2457,6 +2461,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         }
         "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
             "La sortie HDR10 nécessite 10 bits ; 8 bits ne peut pas représenter un signal PQ sans bandes.".to_owned()
+        }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "L'écran de mastering doit ressembler à G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), avec des chromaticités jusqu'à 50000 et une luminance max supérieure à la min.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL et MaxFALL doivent être renseignés tous les deux (ou laissés vides tous les deux), au maximum 65535, avec MaxFALL au plus égal à MaxCLL.".to_owned()
         }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video ne prend pas en charge le contenu 10 bits.".to_owned()

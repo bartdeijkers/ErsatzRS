@@ -20,10 +20,12 @@ use crate::admin::i18n::{
     TextKey,
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
-    copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
+    copy_ffmpeg_profile, get_ffmpeg_profile_form, hdr_content_light_validation_error,
+    hdr_mastering_display_validation_error, list_resolutions_for_select,
     list_supported_hw_accelerations, output_dynamic_range_validation_error, presets_for_profile,
     save_ffmpeg_profile, tunes_for_profile, video_format_validation_error, video_profile_options,
-    FfmpegProfileForm, HardwareAccelerationOption, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
+    FfmpegProfileForm, HardwareAccelerationOption, DOCUMENTED_MASTERING_DISPLAY,
+    VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -356,6 +358,9 @@ fn FfmpegProfileEditorForm(
     let video_buffer_size = RwSignal::new(i64::from(initial_form.video_buffer_size));
     let tonemap_algorithm = RwSignal::new(initial_form.tonemap_algorithm);
     let output_dynamic_range = RwSignal::new(initial_form.output_dynamic_range);
+    let hdr_mastering_display = RwSignal::new(initial_form.hdr_mastering_display.clone());
+    let hdr_max_cll = RwSignal::new(i64::from(initial_form.hdr_max_cll));
+    let hdr_max_fall = RwSignal::new(i64::from(initial_form.hdr_max_fall));
     let audio_format = RwSignal::new(initial_form.audio_format);
     let audio_bitrate = RwSignal::new(i64::from(initial_form.audio_bitrate));
     let audio_buffer_size = RwSignal::new(i64::from(initial_form.audio_buffer_size));
@@ -390,6 +395,36 @@ fn FfmpegProfileEditorForm(
                     output_dynamic_range.get(),
                     video_format.get(),
                     bit_depth.get(),
+                )
+            })
+            .flatten()
+            .map(ffmpeg_profile_error_message)
+    });
+    // ADR 0064: the HDR10 metadata overrides only mean something for an HDR10
+    // output, so they are shown only there. Rendered, not removed, so the DOM
+    // shape stays stable across hydration.
+    let show_hdr_metadata =
+        Signal::derive(move || transcode_video.get() && output_dynamic_range.get() == 1);
+    let hdr_mastering_display_error = Signal::derive(move || {
+        show_hdr_metadata
+            .get()
+            .then(|| {
+                hdr_mastering_display_validation_error(
+                    output_dynamic_range.get(),
+                    &hdr_mastering_display.get(),
+                )
+            })
+            .flatten()
+            .map(ffmpeg_profile_error_message)
+    });
+    let hdr_content_light_error = Signal::derive(move || {
+        show_hdr_metadata
+            .get()
+            .then(|| {
+                hdr_content_light_validation_error(
+                    output_dynamic_range.get(),
+                    i32::try_from(hdr_max_cll.get()).unwrap_or(i32::MAX),
+                    i32::try_from(hdr_max_fall.get()).unwrap_or(i32::MAX),
                 )
             })
             .flatten()
@@ -551,6 +586,9 @@ fn FfmpegProfileEditorForm(
         video_buffer_size: i32::try_from(video_buffer_size.get_untracked()).unwrap_or(4000),
         tonemap_algorithm: tonemap_algorithm.get_untracked(),
         output_dynamic_range: output_dynamic_range.get_untracked(),
+        hdr_mastering_display: hdr_mastering_display.get_untracked(),
+        hdr_max_cll: i32::try_from(hdr_max_cll.get_untracked()).unwrap_or(0),
+        hdr_max_fall: i32::try_from(hdr_max_fall.get_untracked()).unwrap_or(0),
         audio_format: audio_format.get_untracked(),
         audio_bitrate: i32::try_from(audio_bitrate.get_untracked()).unwrap_or(192),
         audio_buffer_size: i32::try_from(audio_buffer_size.get_untracked()).unwrap_or(384),
@@ -850,6 +888,36 @@ fn FfmpegProfileEditorForm(
                                 (1i32, ffmpeg_output_dynamic_range_label(1)),
                             ]
                         />
+                    </div>
+                    // ADR 0064: the values ErsatzRS signals when it has to
+                    // synthesize HDR10 metadata must be documented and editable.
+                    <div
+                        class=style::section_fields
+                        style:display=move || if show_hdr_metadata.get() { "" } else { "none" }
+                    >
+                        <p class=style::copy_hint>{tr(TextKey::HdrStaticMetadataHint)}</p>
+                        <TextField
+                            label=tr(TextKey::HdrMasteringDisplay)
+                            value=hdr_mastering_display
+                            name=Some("hdr_mastering_display")
+                            placeholder=DOCUMENTED_MASTERING_DISPLAY
+                            error=Some(hdr_mastering_display_error)
+                        />
+                        <div class=style::form_row>
+                            <NumberField
+                                label=tr(TextKey::HdrMaxCll)
+                                value=hdr_max_cll
+                                min=Some(0)
+                                max=Some(65535)
+                                error=Some(hdr_content_light_error)
+                            />
+                            <NumberField
+                                label=tr(TextKey::HdrMaxFall)
+                                value=hdr_max_fall
+                                min=Some(0)
+                                max=Some(65535)
+                            />
+                        </div>
                     </div>
                     <CheckBox label=tr(TextKey::AllowBFrames) value=allow_b_frames/>
                 </div>

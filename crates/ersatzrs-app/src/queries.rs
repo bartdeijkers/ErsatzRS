@@ -326,6 +326,18 @@ fn ffmpeg_profile_admin_form(profile: ersatzrs_domain::FFmpegProfile) -> FfmpegP
         video_buffer_size: profile.video_buffer_size,
         tonemap_algorithm: tonemap_value(profile.tonemap_algorithm),
         output_dynamic_range: output_dynamic_range_value(profile.output_dynamic_range),
+        // Blank and zero mean "use the documented default", which is what the
+        // editor shows as a placeholder rather than pre-filling (ADR 0064).
+        hdr_mastering_display: profile
+            .hdr_mastering_display
+            .map(ersatzrs_domain::ffmpeg::MasteringDisplayMetadata::to_ffmpeg_value)
+            .unwrap_or_default(),
+        hdr_max_cll: profile
+            .hdr_content_light
+            .map_or(0, |light| i32::try_from(light.max_cll).unwrap_or(0)),
+        hdr_max_fall: profile
+            .hdr_content_light
+            .map_or(0, |light| i32::try_from(light.max_fall).unwrap_or(0)),
         audio_format: audio_format_value(profile.audio_format),
         audio_bitrate: profile.audio_bitrate,
         audio_buffer_size: profile.audio_buffer_size,

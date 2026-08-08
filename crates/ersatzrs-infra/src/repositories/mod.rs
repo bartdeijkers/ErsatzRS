@@ -31,6 +31,7 @@ pub use collection::SqliteCollectionRepository;
 pub use config::SqliteConfigRepository;
 pub use deco::SqliteDecoRepository;
 pub use ffmpeg_profile::SqliteFfmpegProfileRepository;
+pub(crate) use ffmpeg_profile::{decode_hdr_content_light, decode_hdr_mastering_display};
 pub use filler::SqliteFillerRepository;
 pub use graphics::SqliteGraphicsRepository;
 pub use library::SqliteLibraryRepository;

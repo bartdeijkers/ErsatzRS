@@ -1201,6 +1201,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ThreadCountAuto => "Thread Count (0 = auto)",
         TextKey::OutputDynamicRange => "Output Dynamic Range",
         TextKey::OutputDynamicRangeCopyHint => "Video is copied, so the output keeps the source dynamic range.",
+        TextKey::HdrStaticMetadataHint => "Leave blank to use the documented HDR10 defaults. These apply only when the source carries no HDR metadata of its own; a source's own mastering display and light levels always win.",
+        TextKey::HdrMasteringDisplay => "Mastering Display",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
         TextKey::TonemapAlgorithm => "Tonemap Algorithm",
         TextKey::VaapiDevicePath => "VAAPI Device Path",
         TextKey::VaapiDisplay => "VAAPI Display",
@@ -2318,6 +2322,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         }
         "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
             "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding.".to_owned()
+        }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL.".to_owned()
         }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video does not support 10-bit content.".to_owned()

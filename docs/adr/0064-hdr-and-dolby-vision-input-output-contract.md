@@ -30,14 +30,18 @@ content-light metadata survived the tone-map and was written onto BT.709 frames
 — the exact "never copy source HDR metadata onto transformed SDR frames" rule
 this ADR states.
 
+The seeded HDR10 metadata defaults are now operator-editable per profile: an
+`FFmpegProfile` carries an optional mastering display and MaxCLL/MaxFALL pair,
+validated at save time and shown in the editor with the documented default as
+its placeholder. They stand in only where the default would have — a source
+that carried its own grade still wins — so the field is the seeded default made
+editable, not a way to relabel a real grade.
+
 Not implemented, tracked as parity debt in
 `docs/progress/parity/hdr-dolby-vision-metadata.toml` and
 `docs/progress/parity/ffmpeg-9-performance-and-support.toml`: HDR10 is
-uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M; the seeded HDR10
-metadata defaults are constants rather than operator-editable profile fields;
-Dolby Vision profiles 5 and 7 remain rejected because no fixture of either was
-available; and Dolby Vision overlay, subtitle, and seek behavior was not
-re-exercised with Dolby Vision input specifically.
+uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M, and Dolby Vision
+profiles 5 and 7 remain rejected because no fixture of either was available.
 
 ## Context
 

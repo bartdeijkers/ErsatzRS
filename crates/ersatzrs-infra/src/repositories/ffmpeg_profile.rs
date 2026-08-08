@@ -2,6 +2,7 @@ use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{FfmpegProfileRepository, Result};
+use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_domain::{EntityId, FFmpegProfile, Resolution};
 use sqlx::{Pool, Row};
 
@@ -51,11 +52,12 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
                 "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+                "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
                 "AudioFormat",
                 "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
                 "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
                 "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
         )
         .bind(profile.id)
         .bind(&profile.name)
@@ -80,6 +82,13 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.video_buffer_size)
         .bind(encode_enum(profile.tonemap_algorithm))
         .bind(encode_enum(profile.output_dynamic_range))
+        .bind(
+            profile
+                .hdr_mastering_display
+                .map(MasteringDisplayMetadata::to_ffmpeg_value),
+        )
+        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_cll)))
+        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_fall)))
         .bind(encode_enum(profile.audio_format))
         .bind(profile.audio_bitrate)
         .bind(profile.audio_buffer_size)
@@ -149,11 +158,12 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                 "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
                 "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+                "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
                 "AudioFormat",
                 "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
                 "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
                 "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(&profile.name)
         .bind(profile.thread_count)
@@ -177,6 +187,13 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.video_buffer_size)
         .bind(encode_enum(profile.tonemap_algorithm))
         .bind(encode_enum(profile.output_dynamic_range))
+        .bind(
+            profile
+                .hdr_mastering_display
+                .map(MasteringDisplayMetadata::to_ffmpeg_value),
+        )
+        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_cll)))
+        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_fall)))
         .bind(encode_enum(profile.audio_format))
         .bind(profile.audio_bitrate)
         .bind(profile.audio_buffer_size)
@@ -201,6 +218,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+               "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
                "AudioFormat", "AudioBitrate", "AudioBufferSize",
                "NormalizeLoudnessMode", "TargetLoudness",
                "AudioChannels", "AudioSampleRate",
@@ -211,6 +229,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+               "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
                "AudioFormat", "AudioBitrate", "AudioBufferSize",
                "NormalizeLoudnessMode", "TargetLoudness",
                "AudioChannels", "AudioSampleRate",
@@ -230,6 +249,59 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         }
         Ok(crate::db::last_insert_id(result))
     }
+}
+
+/// Widen a CTA-861.3 level for the signed integer column.
+///
+/// `ContentLightLevel` caps both levels at 65535, so this never saturates; the
+/// clamp is there so a future bound change cannot wrap into a negative column.
+fn content_light_column(level: u32) -> i32 {
+    i32::try_from(level).unwrap_or(i32::MAX)
+}
+
+/// Decode the operator-editable HDR10 mastering display (ADR 0064).
+///
+/// A value that no longer parses is dropped rather than failing the whole
+/// profile load: the documented default then applies, so a bad row degrades to
+/// the previous behavior instead of taking channels off the air.
+pub(crate) fn decode_hdr_mastering_display(
+    row: &DbRow,
+) -> Result<Option<MasteringDisplayMetadata>> {
+    let raw = decode_optional_string_column(row, "HdrMasteringDisplay")?;
+    Ok(raw.as_deref().and_then(|value| {
+        let parsed = MasteringDisplayMetadata::parse(value);
+        if parsed.is_none() {
+            tracing::warn!(
+                value,
+                "ignoring unparseable FFmpegProfile.HdrMasteringDisplay; using the documented default"
+            );
+        }
+        parsed
+    }))
+}
+
+/// Decode the operator-editable HDR10 content light levels (ADR 0064).
+///
+/// Both halves are required: `MaxFALL` without `MaxCLL` is not a valid
+/// CTA-861.3 pair, so a partial row falls back to the documented default.
+pub(crate) fn decode_hdr_content_light(row: &DbRow) -> Result<Option<ContentLightLevel>> {
+    let max_cll: Option<i32> = row.try_get("HdrMaxCll").repository()?;
+    let max_fall: Option<i32> = row.try_get("HdrMaxFall").repository()?;
+    let (Some(max_cll), Some(max_fall)) = (max_cll, max_fall) else {
+        return Ok(None);
+    };
+    let levels = u32::try_from(max_cll)
+        .ok()
+        .zip(u32::try_from(max_fall).ok())
+        .and_then(|(max_cll, max_fall)| ContentLightLevel::new(max_cll, max_fall));
+    if levels.is_none() {
+        tracing::warn!(
+            max_cll,
+            max_fall,
+            "ignoring invalid FFmpegProfile content light levels; using the documented default"
+        );
+    }
+    Ok(levels)
 }
 
 fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
@@ -273,6 +345,8 @@ fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
             row,
             "OutputDynamicRange",
         )?,
+        hdr_mastering_display: decode_hdr_mastering_display(row)?,
+        hdr_content_light: decode_hdr_content_light(row)?,
         audio_format: decode_enum_column("ffmpeg profile audio_format", row, "AudioFormat")?,
         audio_bitrate: row.try_get("AudioBitrate").repository()?,
         audio_buffer_size: row.try_get("AudioBufferSize").repository()?,

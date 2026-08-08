@@ -2,6 +2,7 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
     Row,
 };
+use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 
 /// `OutputDynamicRange` = `Hdr10Bt2020Pq`.
 const OUTPUT_DYNAMIC_RANGE_HDR10: i32 = 1;
@@ -49,12 +50,14 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
             // any case. Ordering by the projected tuple is a total order over
             // the distinct rows, so the message stays deterministic.
             r#"SELECT DISTINCT p."Name", p."VideoFormat", p."BitDepth", p."TranscodeVideo",
-                      p."HardwareAcceleration"
+                      p."HardwareAcceleration", p."HdrMasteringDisplay", p."HdrMaxCll",
+                      p."HdrMaxFall"
                FROM "Channel" c
                INNER JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
                WHERE p."OutputDynamicRange" = ?
                ORDER BY p."Name", p."VideoFormat", p."BitDepth", p."TranscodeVideo",
-                        p."HardwareAcceleration""#,
+                        p."HardwareAcceleration", p."HdrMasteringDisplay", p."HdrMaxCll",
+                        p."HdrMaxFall""#,
         )
         .bind(OUTPUT_DYNAMIC_RANGE_HDR10)
         .fetch_all(&self.pool)
@@ -68,6 +71,7 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
         let mut invalid = Vec::new();
         let mut inert = Vec::new();
         let mut demoted = Vec::new();
+        let mut unusable_metadata = Vec::new();
         for row in &rows {
             let name = row.try_get::<String, _>("Name").unwrap_or_default();
             let video_format = row.try_get::<i32, _>("VideoFormat").unwrap_or_default();
@@ -97,12 +101,35 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
                 .try_get::<i32, _>("HardwareAcceleration")
                 .unwrap_or_default();
             if !HDR10_PROVEN_ACCELERATIONS.contains(&acceleration) {
-                demoted.push(name);
+                demoted.push(name.clone());
+            }
+
+            // ADR 0064 requires the signalled values to be documented. A stored
+            // override that no longer parses is silently replaced by the
+            // documented default at load time, which keeps channels on the air
+            // but means the operator's edit is not what gets signalled.
+            if !hdr_metadata_override_is_usable(row) {
+                unusable_metadata.push(name);
             }
         }
 
+        Ok(self.report(&invalid, &inert, &unusable_metadata, &demoted))
+    }
+}
+
+impl OutputDynamicRangeHealthCheck {
+    /// Report the most serious finding, in the order an operator should act on
+    /// them: wrong output first, then inert selections, then metadata that is
+    /// silently ignored, then a performance demotion.
+    fn report(
+        &self,
+        invalid: &[String],
+        inert: &[String],
+        unusable_metadata: &[String],
+        demoted: &[String],
+    ) -> HealthCheckResult {
         if !invalid.is_empty() {
-            return Ok(HealthCheckResult::new(
+            return HealthCheckResult::new(
                 self.title(),
                 HealthCheckStatus::Fail,
                 format!(
@@ -112,11 +139,11 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
                     invalid.join(", ")
                 ),
                 "HDR10 output is configured but cannot be produced",
-            ));
+            );
         }
 
         if !inert.is_empty() {
-            return Ok(HealthCheckResult::new(
+            return HealthCheckResult::new(
                 self.title(),
                 HealthCheckStatus::Info,
                 format!(
@@ -126,11 +153,25 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
                     inert.join(", ")
                 ),
                 "HDR10 selection does not apply to copied video",
-            ));
+            );
+        }
+
+        if !unusable_metadata.is_empty() {
+            return HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Warning,
+                format!(
+                    "{} FFmpeg Profile{} an HDR10 mastering display or content light level that cannot be used, so the documented defaults are signalled instead: {}. Re-enter the values in the profile editor.",
+                    unusable_metadata.len(),
+                    if unusable_metadata.len() > 1 { "s store" } else { " stores" },
+                    unusable_metadata.join(", ")
+                ),
+                "Stored HDR10 metadata is not usable",
+            );
         }
 
         if !demoted.is_empty() {
-            return Ok(HealthCheckResult::new(
+            return HealthCheckResult::new(
                 self.title(),
                 HealthCheckStatus::Warning,
                 format!(
@@ -140,9 +181,41 @@ impl HealthCheck for OutputDynamicRangeHealthCheck {
                     demoted.join(", ")
                 ),
                 "HDR10 output falls back to software encoding",
-            ));
+            );
         }
 
-        Ok(HealthCheckResult::pass(self.title()))
+        HealthCheckResult::pass(self.title())
+    }
+}
+
+/// True when the profile's stored HDR10 metadata override is either absent
+/// (use the documented default) or fully usable.
+///
+/// Mirrors the repository's decode fallback, so the check reports exactly the
+/// rows whose stored values are being discarded.
+fn hdr_metadata_override_is_usable(row: &crate::db::DbRow) -> bool {
+    let mastering_display = row
+        .try_get::<Option<String>, _>("HdrMasteringDisplay")
+        .unwrap_or_default();
+    if let Some(value) = mastering_display.as_deref().map(str::trim) {
+        if !value.is_empty() && MasteringDisplayMetadata::parse(value).is_none() {
+            return false;
+        }
+    }
+
+    let max_cll = row
+        .try_get::<Option<i32>, _>("HdrMaxCll")
+        .unwrap_or_default();
+    let max_fall = row
+        .try_get::<Option<i32>, _>("HdrMaxFall")
+        .unwrap_or_default();
+    match (max_cll, max_fall) {
+        (None, None) => true,
+        (Some(max_cll), Some(max_fall)) => u32::try_from(max_cll)
+            .ok()
+            .zip(u32::try_from(max_fall).ok())
+            .is_some_and(|(max_cll, max_fall)| ContentLightLevel::new(max_cll, max_fall).is_some()),
+        // A half-configured pair is not a valid CTA-861.3 override.
+        _ => false,
     }
 }

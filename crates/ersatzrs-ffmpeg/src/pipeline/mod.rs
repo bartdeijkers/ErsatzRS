@@ -654,6 +654,13 @@ pub struct DesiredVideoState {
     /// ADR 0064 output dynamic-range contract. Describes the output stream, so
     /// it does not change when an SDR item follows an HDR item.
     pub output_dynamic_range: OutputDynamicRange,
+    /// Operator override for the HDR10 mastering display ErsatzRS signals when
+    /// it has to synthesize metadata, or `None` for the documented default
+    /// (ADR 0064). Never overrides metadata the source itself carried.
+    pub hdr_mastering_display: Option<MasteringDisplayMetadata>,
+    /// Operator override for the HDR10 content light levels, or `None` for the
+    /// documented default (ADR 0064).
+    pub hdr_content_light: Option<ContentLightLevel>,
     pub video_profile: Option<String>,
     pub video_preset: Option<String>,
     pub video_tune: Option<String>,
@@ -692,6 +699,8 @@ impl DesiredVideoState {
             bit_depth: FFmpegProfileBitDepth::EightBit,
             tonemap_algorithm: FFmpegProfileTonemapAlgorithm::Hable,
             output_dynamic_range: OutputDynamicRange::SdrBt709,
+            hdr_mastering_display: None,
+            hdr_content_light: None,
             video_profile: Some("high".to_owned()),
             video_preset: Some("veryfast".to_owned()),
             video_tune: None,
@@ -752,6 +761,8 @@ impl DesiredVideoState {
             bit_depth: effective_bit_depth(profile),
             tonemap_algorithm: profile.tonemap_algorithm,
             output_dynamic_range: profile.output_dynamic_range,
+            hdr_mastering_display: profile.hdr_mastering_display,
+            hdr_content_light: profile.hdr_content_light,
             video_profile: non_empty_string(profile.video_profile.as_deref()),
             video_preset: normalized_video_preset(profile.video_preset.as_deref()),
             video_tune: normalized_video_tune(
@@ -804,6 +815,8 @@ impl DesiredVideoState {
             // Video copy preserves the source elementary stream, so ADR 0064's
             // output contract does not apply and must not drive filters.
             output_dynamic_range: OutputDynamicRange::SdrBt709,
+            hdr_mastering_display: None,
+            hdr_content_light: None,
             video_profile: None,
             video_preset: None,
             video_tune: None,
@@ -1969,13 +1982,22 @@ pub fn hdr10_static_metadata_input_options(request: &PipelineRequest) -> Vec<Str
     // ADR 0064 prefers validated source metadata over a profile default, but
     // only when the source actually carried it. A converted picture keeps the
     // source's mastering display because that describes the display the content
-    // was graded on, which the transfer conversion does not change; the seeded
-    // default stands in when the source is silent.
+    // was graded on, which the transfer conversion does not change.
+    //
+    // When the source is silent the profile override stands in, and the
+    // documented default stands in for that. The operator field is therefore
+    // the seeded default made editable, not a way to relabel a real grade.
     let source = request.source_video_stream.as_ref();
     let mastering_display = source
         .and_then(|source| source.mastering_display.clone())
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| MasteringDisplayMetadata::BT2020_1000_NITS.to_ffmpeg_value());
+        .unwrap_or_else(|| {
+            request
+                .desired
+                .hdr_mastering_display
+                .unwrap_or(MasteringDisplayMetadata::BT2020_1000_NITS)
+                .to_ffmpeg_value()
+        });
     let content_light = match (
         source.and_then(|source| source.max_cll),
         source.and_then(|source| source.max_fall),
@@ -1984,7 +2006,10 @@ pub fn hdr10_static_metadata_input_options(request: &PipelineRequest) -> Vec<Str
             max_cll: max_cll.unsigned_abs(),
             max_fall: max_fall.unsigned_abs(),
         },
-        _ => ContentLightLevel::DEFAULT,
+        _ => request
+            .desired
+            .hdr_content_light
+            .unwrap_or(ContentLightLevel::DEFAULT),
     }
     .to_ffmpeg_value();
 

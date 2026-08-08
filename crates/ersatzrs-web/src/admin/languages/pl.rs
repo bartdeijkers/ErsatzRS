@@ -724,6 +724,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
             "Wyjście HDR10 wymaga 10 bitów; 8 bitów nie odwzoruje sygnału PQ bez pasmowania.".to_owned()
         }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "Monitor masteringowy musi mieć postać G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), z chromatycznością do 50000 i luminancją maksymalną większą od minimalnej.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL i MaxFALL muszą być ustawione oba (albo oba puste), maksymalnie 65535, przy czym MaxFALL nie może przekraczać MaxCLL.".to_owned()
+        }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video nie obsługuje treści 10-bitowych.".to_owned()
         }
@@ -1890,6 +1896,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ThreadCountAuto => "Liczba wątków (0 = auto)",
         TextKey::OutputDynamicRange => "Zakres dynamiki wyjścia",
         TextKey::OutputDynamicRangeCopyHint => "Wideo jest kopiowane, więc wyjście zachowuje zakres dynamiki źródła.",
+        TextKey::HdrStaticMetadataHint => "Pozostaw puste, aby użyć udokumentowanych wartości domyślnych HDR10. Mają zastosowanie tylko wtedy, gdy źródło nie zawiera własnych metadanych HDR; monitor masteringowy i poziomy jasności źródła zawsze mają pierwszeństwo.",
+        TextKey::HdrMasteringDisplay => "Monitor masteringowy",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
         TextKey::TonemapAlgorithm => "Algorytm tonemappingu",
         TextKey::VaapiDevicePath => "Ścieżka urządzenia VAAPI",
         TextKey::VaapiDisplay => "Ekran VAAPI",

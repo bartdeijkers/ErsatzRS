@@ -722,6 +722,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
             "HDR10-uitvoer vereist 10-bit; 8-bit kan een PQ-signaal niet zonder banding weergeven.".to_owned()
         }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "Het masteringscherm moet eruitzien als G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), met chromaticiteiten tot 50000 en een max-luminantie boven de min.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL en MaxFALL moeten allebei ingevuld zijn (of allebei leeg blijven), maximaal 65535, met MaxFALL niet groter dan MaxCLL.".to_owned()
+        }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video ondersteunt geen 10-bit-content.".to_owned()
         }
@@ -1879,6 +1885,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ThreadCountAuto => "Aantal threads (0 = auto)",
         TextKey::OutputDynamicRange => "Dynamisch bereik van uitvoer",
         TextKey::OutputDynamicRangeCopyHint => "Video wordt gekopieerd, dus de uitvoer behoudt het dynamisch bereik van de bron.",
+        TextKey::HdrStaticMetadataHint => "Laat leeg om de gedocumenteerde HDR10-standaardwaarden te gebruiken. Ze gelden alleen wanneer de bron zelf geen HDR-metadata bevat; het masteringscherm en de lichtniveaus van de bron winnen altijd.",
+        TextKey::HdrMasteringDisplay => "Masteringscherm",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
         TextKey::TonemapAlgorithm => "Tonemap-algoritme",
         TextKey::VaapiDevicePath => "VAAPI-apparaatpad",
         TextKey::VaapiDisplay => "VAAPI-display",

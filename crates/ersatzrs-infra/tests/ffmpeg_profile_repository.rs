@@ -2,6 +2,7 @@
 mod common;
 
 use ersatzrs_core::repositories::FfmpegProfileRepository;
+use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_infra::repositories::make_repositories;
 
 #[tokio::test]
@@ -69,4 +70,57 @@ async fn ffmpeg_profile_admin_reads_report_closed_pool_errors() {
     assert!(repos.ffmpeg_profile.list_resolutions().await.is_err());
     assert!(repos.ffmpeg_profile.name_exists(0, "name").await.is_err());
     assert!(repos.ffmpeg_profile.get_optional_admin(1).await.is_err());
+}
+
+#[tokio::test]
+async fn hdr10_static_metadata_overrides_survive_a_round_trip_and_a_copy() {
+    // ADR 0064: the values ErsatzRS signals must be editable, which means they
+    // have to persist. NULL columns keep meaning "use the documented default".
+    let repos = make_repositories(common::test_db().await);
+
+    let mut profile = common::profile(1, "default");
+    assert_eq!(
+        profile.hdr_mastering_display, None,
+        "a profile that never set an override must read back as the documented default"
+    );
+
+    let operator_grade = MasteringDisplayMetadata {
+        green_x: 13_250,
+        green_y: 34_500,
+        blue_x: 7_500,
+        blue_y: 3_000,
+        red_x: 34_000,
+        red_y: 16_000,
+        white_point_x: 15_635,
+        white_point_y: 16_450,
+        max_luminance: 10_000_000,
+        min_luminance: 50,
+    };
+    profile.hdr_mastering_display = Some(operator_grade);
+    profile.hdr_content_light = ContentLightLevel::new(600, 120);
+    repos.ffmpeg_profile.upsert(&profile).await.unwrap();
+
+    let stored = repos.ffmpeg_profile.get(1).await.unwrap();
+    assert_eq!(stored.hdr_mastering_display, Some(operator_grade));
+    assert_eq!(stored.hdr_content_light, ContentLightLevel::new(600, 120));
+
+    // Copying a profile must carry the grade with it, or the copy would
+    // silently signal different metadata than the profile it came from.
+    let copy_id = repos
+        .ffmpeg_profile
+        .copy_admin(1, "graded copy")
+        .await
+        .unwrap();
+    let copied = repos.ffmpeg_profile.get(copy_id).await.unwrap();
+    assert_eq!(copied.hdr_mastering_display, Some(operator_grade));
+    assert_eq!(copied.hdr_content_light, ContentLightLevel::new(600, 120));
+
+    // Clearing the override returns to the documented default rather than
+    // leaving the previous value behind.
+    profile.hdr_mastering_display = None;
+    profile.hdr_content_light = None;
+    repos.ffmpeg_profile.upsert(&profile).await.unwrap();
+    let cleared = repos.ffmpeg_profile.get(1).await.unwrap();
+    assert_eq!(cleared.hdr_mastering_display, None);
+    assert_eq!(cleared.hdr_content_light, None);
 }

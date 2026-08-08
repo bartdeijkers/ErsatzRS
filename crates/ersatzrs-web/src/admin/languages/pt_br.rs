@@ -734,6 +734,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
             "A saída HDR10 requer 10 bits; 8 bits não representam um sinal PQ sem banding.".to_owned()
         }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "O monitor de masterização deve ter a forma G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), com cromaticidades até 50000 e luminância máxima acima da mínima.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL e MaxFALL devem estar ambos preenchidos (ou ambos vazios), no máximo 65535, com MaxFALL não maior que MaxCLL.".to_owned()
+        }
         "Mpeg2Video does not support 10-bit content" => {
             "Mpeg2Video não oferece suporte a conteúdo de 10 bits.".to_owned()
         }
@@ -1906,6 +1912,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ThreadCountAuto => "Quantidade de threads (0 = auto)",
         TextKey::OutputDynamicRange => "Faixa dinâmica de saída",
         TextKey::OutputDynamicRangeCopyHint => "O vídeo é copiado, portanto a saída mantém a faixa dinâmica da origem.",
+        TextKey::HdrStaticMetadataHint => "Deixe em branco para usar os padrões HDR10 documentados. Eles se aplicam apenas quando a origem não traz metadados HDR próprios; o monitor de masterização e os níveis de luz da origem sempre prevalecem.",
+        TextKey::HdrMasteringDisplay => "Monitor de masterização",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
         TextKey::TonemapAlgorithm => "Algoritmo de tonemapping",
         TextKey::VaapiDevicePath => "Caminho do dispositivo VAAPI",
         TextKey::VaapiDisplay => "Display VAAPI",

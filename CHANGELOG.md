@@ -15,6 +15,18 @@ release section when tagging a release.
 
 ### Added
 
+- FFmpeg profiles set for HDR10 output can now carry their own **mastering
+  display** and **MaxCLL/MaxFALL** values (ADR 0064). ErsatzRS has always had to
+  signal something when an HDR10 encode has no source metadata to carry
+  forward — converting HLG, or mapping SDR in — and until now that was a fixed
+  documented constant. Leaving the fields blank keeps that constant, which the
+  editor shows as the placeholder so the effective value is visible rather than
+  implied. The override never displaces metadata a source carried itself: a
+  graded source still wins, because it describes the display the content was
+  actually mastered on. Values are validated at save time, so a typo is refused
+  instead of failing every stream later, and the Output Dynamic Range health
+  check reports profiles whose stored values are being ignored.
+
 - Added an **Output Dynamic Range** choice to FFmpeg profiles (ADR 0064), so
   SDR and HDR10 output is now an explicit operator decision instead of being
   inferred from a profile name, codec, or bit depth. `SDR (BT.709)` keeps the
