@@ -10,10 +10,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use ersatzrs_ffmpeg::{
-    FfmpegCapabilityReport, GraphFailureKind, HardwareGraphDenial, HardwareGraphOperation,
+    FfmpegCapabilityReport, FfmpegRuntimeReport, GraphFailureKind, HardwareGraphDenial,
+    HardwareGraphOperation,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use tokio::sync::RwLock;
 
 use crate::db::DbPool;
 
@@ -85,6 +87,11 @@ struct PersistedHardwareGraphState {
     /// completion was tracked, which is treated as incomplete.
     #[serde(default)]
     proven: Option<Vec<String>>,
+    /// Operations whose probe was attempted, including unclassified failures.
+    /// This preserves the distinction between "never probed" and "probed but
+    /// unproven" without making a partial cache reusable on the next startup.
+    #[serde(default)]
+    attempted: Option<Vec<String>>,
     #[serde(default)]
     denials: Vec<PersistedHardwareGraphDenial>,
 }
@@ -266,6 +273,7 @@ pub async fn refresh_hardware_graph_capabilities(
     let device = report.hardware_graph_device();
 
     for operation in operations {
+        report.record_hardware_graph_probe_attempt(operation, &device);
         match probe_hardware_graph(ffmpeg_path, operation, &device).await {
             HardwareGraphProbe::Proven => report.prove_hardware_graph(operation, &device),
             HardwareGraphProbe::Denied(denial) => report.deny_hardware_graph(denial),
@@ -391,6 +399,32 @@ pub async fn persist_hardware_graph_denial(
     persist_hardware_graph_denials(pool, ffmpeg_path, report).await
 }
 
+/// Learn one graph denial in a worker snapshot and the process-wide runtime,
+/// then persist the merged runtime state.
+///
+/// Stream supervisors build from local snapshots that can become stale while
+/// another stream is learning a different denial. The shared write guard is
+/// deliberately held through persistence so two supervisors cannot overwrite
+/// each other's complete database snapshots. The local and shared reports stay
+/// updated even if persistence fails, so the current process still avoids the
+/// failed graph.
+///
+/// # Errors
+///
+/// Returns an error when encoding or the database write fails.
+pub async fn persist_hardware_graph_denial_into_runtime(
+    pool: &DbPool,
+    ffmpeg_path: &str,
+    report: &mut FfmpegCapabilityReport,
+    runtime: &RwLock<FfmpegRuntimeReport>,
+    denial: HardwareGraphDenial,
+) -> Result<(), HardwareGraphDenialError> {
+    report.deny_hardware_graph(denial.clone());
+    let mut runtime = runtime.write().await;
+    runtime.capabilities.deny_hardware_graph(denial);
+    persist_hardware_graph_denials(pool, ffmpeg_path, &runtime.capabilities).await
+}
+
 /// Persist the report's graph denials against the current `ffmpeg` path.
 ///
 /// # Errors
@@ -407,6 +441,13 @@ pub async fn persist_hardware_graph_denials(
         proven: Some(
             report
                 .proven_hardware_graphs
+                .iter()
+                .map(|(operation, _)| operation.id().to_owned())
+                .collect(),
+        ),
+        attempted: Some(
+            report
+                .attempted_hardware_graphs
                 .iter()
                 .map(|(operation, _)| operation.id().to_owned())
                 .collect(),
@@ -478,6 +519,12 @@ mod tests {
             ffmpeg_path: Some("/opt/ffmpeg/bin/ffmpeg".to_owned()),
             device: Some("NVIDIA GeForce RTX 3080 Ti".to_owned()),
             proven: Some(vec![HardwareGraphOperation::NvencCudaScale.id().to_owned()]),
+            attempted: Some(vec![
+                HardwareGraphOperation::NvencHdrVulkanLibplacebo
+                    .id()
+                    .to_owned(),
+                HardwareGraphOperation::NvencCudaScale.id().to_owned(),
+            ]),
             denials: vec![PersistedHardwareGraphDenial::from(&denial)],
         };
 
@@ -626,6 +673,29 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn wholly_unproven_refresh_records_every_probe_attempt() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let ffmpeg = write_fake_ffmpeg(dir.path(), 1, "No space left on device");
+        let mut report = FfmpegCapabilityReport {
+            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
+                .into_iter()
+                .collect(),
+            filters: ["libplacebo".to_owned()].into_iter().collect(),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        refresh_hardware_graph_capabilities(&ffmpeg, &mut report).await;
+
+        assert!(report.has_probed_hardware_graphs());
+        assert!(report
+            .hardware_graph_probe_attempted(HardwareGraphOperation::NvencHdrVulkanLibplacebo, ""));
+        assert!(report.hardware_graph_probe_attempted(HardwareGraphOperation::NvencCudaScale, ""));
+        assert!(report.proven_hardware_graphs.is_empty());
+        assert!(report.hardware_graph_denials.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn a_spawn_failure_is_unproven_and_not_persisted() {
         let outcome = probe_hardware_graph(
             Path::new("/nonexistent/ffmpeg-does-not-exist"),
@@ -681,6 +751,73 @@ mod tests {
             "NVIDIA GeForce RTX 3080 Ti",
             GraphFailureKind::CudaInterop,
         )
+    }
+
+    /// A concurrent worker can still hold the startup snapshot after another
+    /// worker has published its denial. Persisting the stale snapshot must not
+    /// erase the first denial from the restart state.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn stale_worker_snapshot_persists_shared_denials_for_restart() {
+        let pool = test_pool().await;
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+        let mut initial = FfmpegCapabilityReport {
+            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
+                .into_iter()
+                .collect(),
+            filters: ["libplacebo".to_owned()].into_iter().collect(),
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            ..FfmpegCapabilityReport::default()
+        };
+        initial.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu);
+        initial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+
+        let first_denial = denial();
+        let mut shared_report = FfmpegRuntimeReport::for_tests();
+        shared_report.capabilities = initial.clone();
+        shared_report
+            .capabilities
+            .deny_hardware_graph(first_denial.clone());
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &shared_report.capabilities)
+            .await
+            .expect("persist first worker denial");
+        let shared_runtime = RwLock::new(shared_report);
+
+        // This worker started before `first_denial` was learned, so its local
+        // snapshot contains only startup proof when it learns another denial.
+        let mut stale_worker = initial.clone();
+        let second_denial = HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencCudaScale,
+            gpu,
+            GraphFailureKind::HardwareMap,
+        );
+        persist_hardware_graph_denial_into_runtime(
+            &pool,
+            "/opt/ffmpeg",
+            &mut stale_worker,
+            &shared_runtime,
+            second_denial.clone(),
+        )
+        .await
+        .expect("persist merged worker denials");
+
+        let persisted = load_hardware_graph_denials(&pool)
+            .await
+            .expect("reload persisted denials");
+        assert_eq!(persisted.len(), 2);
+        assert!(persisted.contains(&first_denial));
+        assert!(persisted.contains(&second_denial));
+
+        let mut restarted = initial;
+        assert!(
+            apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut restarted)
+                .await
+                .expect("apply persisted denials after restart")
+        );
+        assert!(
+            restarted.hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu)
+        );
+        assert!(restarted.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
     }
 
     /// The full persist/overwrite/clear/reload lifecycle on `SQLite`.
@@ -801,7 +938,11 @@ mod tests {
         // What a live transcode dies with when the Vulkan device cannot bridge
         // to CUDA, captured from FFmpeg 9.
         let stderr = "[CUDA @ 0x1] Could not derive CUDA device.";
-        let kind = GraphFailureKind::classify(stderr).expect("a known runtime signature");
+        let kind = GraphFailureKind::classify_runtime(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            stderr,
+        )
+        .expect("a known runtime signature");
         let device = report.hardware_graph_device();
         assert_eq!(device, "NVIDIA GeForce RTX 3080 Ti");
 
@@ -844,15 +985,23 @@ mod tests {
     /// An arbitrary runtime failure must stay terminal.
     #[test]
     fn an_unrecognised_runtime_failure_produces_no_denial_and_no_retry() {
-        // The supervisors only enter the retry ladder when `classify` returns
+        // The supervisors only enter the retry ladder when `classify_runtime`
+        // returns
         // Some, so an unclassified failure never learns a denial and never
         // respawns — it fails the stream, as ADR 0014 requires.
         for stderr in [
             "No space left on device",
             "Connection timed out",
             "Invalid data found when processing input",
+            "Error reinitializing filters!",
+            "Failed to configure output pad on Parsed_overlay_3",
+            "Error while opening encoder for output stream #0:0",
         ] {
-            assert_eq!(GraphFailureKind::classify(stderr), None, "{stderr}");
+            assert_eq!(
+                GraphFailureKind::classify_runtime(HardwareGraphOperation::NvencCudaScale, stderr),
+                None,
+                "{stderr}"
+            );
         }
     }
 

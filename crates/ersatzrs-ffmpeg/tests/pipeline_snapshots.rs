@@ -4729,6 +4729,29 @@ fn a_probed_runtime_requires_positive_proof_for_the_vulkan_graph() {
 }
 
 #[test]
+fn wholly_unproven_probe_attempts_demote_nvenc_to_software() {
+    // Both functional probes ran and failed without classifiable evidence.
+    // This must not look like a legacy runtime that never probed.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report
+        .record_hardware_graph_probe_attempt(HardwareGraphOperation::NvencHdrVulkanLibplacebo, "");
+    report.record_hardware_graph_probe_attempt(HardwareGraphOperation::NvencCudaScale, "");
+    assert!(report.has_probed_hardware_graphs());
+    let request = hdr_nvenc_request(report);
+
+    let args = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("libplacebo"), "got: {args}");
+    assert!(!args.contains("nvenc"), "got: {args}");
+    assert!(!args.contains("scale_cuda"), "got: {args}");
+}
+
+#[test]
 fn a_runtime_that_never_probed_keeps_its_previous_behavior() {
     // An older database has neither proofs nor denials. Demoting it would be a
     // silent regression, so the advertised hwaccel still decides.

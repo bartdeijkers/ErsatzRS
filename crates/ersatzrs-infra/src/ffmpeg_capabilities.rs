@@ -1,9 +1,11 @@
 use ersatzrs_domain::HardwareAccelerationKind;
 use ersatzrs_ffmpeg::{
-    FfmpegCapabilityReport, HardwareDecodeDenial, PixelFormat, SourceVideoCodec, SourceVideoStream,
+    FfmpegCapabilityReport, FfmpegRuntimeReport, HardwareDecodeDenial, PixelFormat,
+    SourceVideoCodec, SourceVideoStream,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use tokio::sync::RwLock;
 
 use crate::db::DbPool;
 
@@ -162,6 +164,35 @@ pub async fn persist_hardware_decode_denial(
     denial: HardwareDecodeDenial,
 ) -> Result<(), HardwareDecodeDenialError> {
     report.deny_hardware_decode(denial);
+    persist_hardware_decode_denials(pool, report).await
+}
+
+/// Learn one decode denial in a worker snapshot and the process-wide runtime,
+/// then persist the merged runtime state.
+///
+/// The shared write guard is held through persistence so concurrent stream
+/// supervisors cannot overwrite one another's complete denial snapshots.
+/// Both in-memory reports remain updated if the database write fails.
+///
+/// # Errors
+///
+/// Returns an error when the denials cannot be encoded or the upsert fails.
+pub async fn persist_hardware_decode_denial_into_runtime(
+    pool: &DbPool,
+    report: &mut FfmpegCapabilityReport,
+    runtime: &RwLock<FfmpegRuntimeReport>,
+    denial: HardwareDecodeDenial,
+) -> Result<(), HardwareDecodeDenialError> {
+    report.deny_hardware_decode(denial.clone());
+    let mut runtime = runtime.write().await;
+    runtime.capabilities.deny_hardware_decode(denial);
+    persist_hardware_decode_denials(pool, &runtime.capabilities).await
+}
+
+async fn persist_hardware_decode_denials(
+    pool: &DbPool,
+    report: &FfmpegCapabilityReport,
+) -> Result<(), HardwareDecodeDenialError> {
     let state = PersistedHardwareDecodeDenialState {
         ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
         denials: report
@@ -299,6 +330,25 @@ fn acceleration_from_name(value: &str) -> Option<HardwareAccelerationKind> {
 mod tests {
     use super::*;
 
+    #[cfg(not(feature = "mysql"))]
+    async fn test_pool() -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open decode denial database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create config table");
+        pool
+    }
+
     #[test]
     fn parses_legacy_denial_array_without_stored_path() {
         let raw = r#"[{"acceleration":"nvenc","codec":"av1","bit_depth":10}]"#;
@@ -378,5 +428,55 @@ mod tests {
             "Connection refused",
         )
         .is_none());
+    }
+
+    /// A concurrent worker can still hold the startup snapshot after another
+    /// worker has published its denial. Persisting the stale snapshot must not
+    /// erase the first denial from the restart state.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn stale_worker_snapshot_persists_shared_decode_denials() {
+        let pool = test_pool().await;
+        let initial = FfmpegCapabilityReport::default();
+        let first_denial = HardwareDecodeDenial::new(HardwareAccelerationKind::Nvenc, "av1", 10);
+        let second_denial = HardwareDecodeDenial::new(HardwareAccelerationKind::Nvenc, "hevc", 10);
+
+        let mut shared_report = FfmpegRuntimeReport::for_tests();
+        shared_report.capabilities = initial.clone();
+        shared_report
+            .capabilities
+            .deny_hardware_decode(first_denial.clone());
+        persist_hardware_decode_denials(&pool, &shared_report.capabilities)
+            .await
+            .expect("persist first worker denial");
+        let shared_runtime = RwLock::new(shared_report);
+
+        let mut stale_worker = initial;
+        persist_hardware_decode_denial_into_runtime(
+            &pool,
+            &mut stale_worker,
+            &shared_runtime,
+            second_denial.clone(),
+        )
+        .await
+        .expect("persist merged worker denials");
+
+        let persisted = load_hardware_decode_denials(&pool)
+            .await
+            .expect("reload persisted denials");
+        assert_eq!(persisted.len(), 2);
+        assert!(persisted.contains(&first_denial));
+        assert!(persisted.contains(&second_denial));
+        let shared = shared_runtime.read().await;
+        assert!(shared.capabilities.hardware_decode_denied(
+            HardwareAccelerationKind::Nvenc,
+            "av1",
+            10
+        ));
+        assert!(shared.capabilities.hardware_decode_denied(
+            HardwareAccelerationKind::Nvenc,
+            "hevc",
+            10
+        ));
     }
 }

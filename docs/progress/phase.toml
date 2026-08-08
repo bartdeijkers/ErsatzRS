@@ -26,14 +26,19 @@ packaging, selection, or output work. It then proves six-RID FFmpeg/libzvbi
 capability, scanner persistence, selectable delivery, localized management,
 health reporting, and runtime fixtures.
 
-The 2026-08-07 follow-up review's eleven defects are all closed, as are the
-Phase 8 residue debts that this machine can prove: portable graph-state
+The 2026-08-07 follow-up review's eleven defects and the 2026-08-08 second
+review's six supervisor/state corrections are all closed, as are the Phase 8
+residue debts that this machine can prove: portable graph-state
 persistence, positive/unproven probe evidence, CUDA-fallback demotion, one-shot
 HLS/IPTV graph fallback, pre-spawn Dolby Vision rejection, exact selected-device
 probing with identity-aware cache validity, stream-indexed frame metadata,
 Dolby Vision stripping from HDR10, the MySQL health query, structural GIF/WebP
 animation parsing, Dolby Vision overlay/subtitle/seek characterization,
 operator-editable HDR10 static metadata, and stream-copy rotation reporting.
+The second review added explicit attempted-but-unproven graph state, strict
+operation-specific live-failure classification, process-wide denial updates,
+fallback-denial persistence after the retry is spent, HLS refusal advancement
+through the error-slate path, and early rendered-graphics cleanup.
 
 Five Phase 8 debts stay open because they need hardware or fixtures this machine
 does not have, not because the work was skipped. Measured 2026-08-08: `ffmpeg

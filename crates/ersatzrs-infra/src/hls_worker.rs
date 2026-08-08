@@ -26,9 +26,10 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
-    OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec,
-    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
+    FfmpegCommand, FfmpegRuntimeReport, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput,
+    InputFile, InputKind, OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode,
+    SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
+    WatermarkOpacityClock,
 };
 
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
@@ -57,7 +58,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::time::MissedTickBehavior;
 
 const PLAYLIST_MAX_SEGMENTS: usize = 10;
@@ -218,6 +219,7 @@ pub struct HlsSessionWorker {
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
     runtime_capabilities: FfmpegCapabilityReport,
+    shared_ffmpeg_runtime: Option<Arc<RwLock<FfmpegRuntimeReport>>>,
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
     working_dir_ready: AtomicBool,
@@ -262,6 +264,74 @@ impl HlsSessionWorker {
         path_replacements: Vec<PathReplacement>,
         runtime_capabilities: FfmpegCapabilityReport,
     ) -> Arc<Self> {
+        Self::new_internal(
+            channel_number,
+            channel_id,
+            options,
+            output_format,
+            path_replacements,
+            runtime_capabilities,
+            None,
+        )
+    }
+
+    /// Construct a standard worker that also publishes runtime-learned hardware
+    /// denials to the process-wide capability report.
+    #[must_use]
+    pub fn new_with_shared_runtime(
+        channel_number: String,
+        channel_id: i64,
+        working_dir: PathBuf,
+        output_format: OutputFormat,
+        path_replacements: Vec<PathReplacement>,
+        runtime_capabilities: FfmpegCapabilityReport,
+        shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    ) -> Arc<Self> {
+        let options = HlsSessionOptions::standard(&channel_number, working_dir);
+        Self::new_internal(
+            channel_number,
+            channel_id,
+            options,
+            output_format,
+            path_replacements,
+            runtime_capabilities,
+            Some(shared_ffmpeg_runtime),
+        )
+    }
+
+    /// Construct an options-based worker with access to the process-wide
+    /// runtime capability report.
+    #[must_use]
+    pub fn new_with_options_and_shared_runtime(
+        channel_number: String,
+        channel_id: i64,
+        options: HlsSessionOptions,
+        output_format: OutputFormat,
+        path_replacements: Vec<PathReplacement>,
+        runtime_capabilities: FfmpegCapabilityReport,
+        shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    ) -> Arc<Self> {
+        Self::new_internal(
+            channel_number,
+            channel_id,
+            options,
+            output_format,
+            path_replacements,
+            runtime_capabilities,
+            Some(shared_ffmpeg_runtime),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_internal(
+        channel_number: String,
+        channel_id: i64,
+        options: HlsSessionOptions,
+        output_format: OutputFormat,
+        path_replacements: Vec<PathReplacement>,
+        runtime_capabilities: FfmpegCapabilityReport,
+        shared_ffmpeg_runtime: Option<Arc<RwLock<FfmpegRuntimeReport>>>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             channel_number,
             channel_id,
@@ -272,6 +342,7 @@ impl HlsSessionWorker {
             output_format,
             path_replacements,
             runtime_capabilities,
+            shared_ffmpeg_runtime,
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             working_dir_ready: AtomicBool::new(false),
@@ -343,7 +414,11 @@ impl HlsSessionWorker {
         let mut transcoded_until = Utc::now();
         let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
-        let mut runtime_capabilities = self.runtime_capabilities.clone();
+        let mut runtime_capabilities = if let Some(runtime) = &self.shared_ffmpeg_runtime {
+            runtime.read().await.capabilities.clone()
+        } else {
+            self.runtime_capabilities.clone()
+        };
         let mut learned_decode_retry_used = false;
         // ADR 0014 allows exactly one graph retry per session, mirroring the
         // decode-denial bound above.
@@ -1076,7 +1151,7 @@ impl HlsSessionWorker {
                 remote_stream_input_file,
             );
             let remote_stream = active.remote_stream.clone();
-            let command = match build_hls_command_with_input_explicit_discontinuity(
+            let command = build_hls_command_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
                 is_first,
@@ -1097,46 +1172,49 @@ impl HlsSessionWorker {
                 graphics_overlays,
                 HlsDiscontinuity::from(discontinuity),
                 Some(opacity_clock),
-            ) {
-                Ok(command) => command,
+            );
+            let (outcome, selected_graph_for_denial) = match command {
+                Ok(command) => {
+                    // Attributed from the command that actually ran, so a
+                    // runtime failure cannot be blamed on a graph this spawn
+                    // did not use.
+                    let selected_graph_for_denial =
+                        ersatzrs_ffmpeg::selected_hardware_graph(&command)
+                            .map(|operation| (operation, command.executable.clone()));
+                    log_hls_av1_spawn_diagnostics(
+                        &self.channel_number,
+                        &command,
+                        &runtime_capabilities,
+                        source_stream_for_denial.as_ref(),
+                        active.remote_stream.as_ref(),
+                    );
+                    let _ = self.trim_playlist_for_append(discontinuity).await;
+                    let outcome = self
+                        .run_hls_process_with_remote(
+                            command,
+                            &mut cleanup_interval,
+                            idle_timeout,
+                            watch_idle_timeout,
+                            Some(active_transcode_slot_id),
+                            remote_stream,
+                        )
+                        .await;
+                    (outcome, selected_graph_for_denial)
+                }
                 Err(error) => {
                     // ADR 0064: refuse rather than transcode a source whose
-                    // colour ErsatzRS cannot render correctly. No child is
-                    // spawned, and the reason reaches the operator. Matches the
-                    // pinned-subtitle idiom above: log, back off, and move on
-                    // rather than spinning on an item that cannot play.
+                    // colour ErsatzRS cannot render correctly. Route the
+                    // refusal through the normal error-slate path below so the
+                    // HLS cursor advances instead of selecting this item again.
                     tracing::error!(
                         channel_id = self.channel_id,
                         media_item_id = active.media_item_id,
                         reason = %error,
                         "refusing to transcode an unsupported source"
                     );
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
+                    (refused_hls_process_outcome(&error), None)
                 }
             };
-            // Attributed from the command that actually ran, so a runtime
-            // failure cannot be blamed on a graph this spawn did not use.
-            let selected_graph_for_denial = ersatzrs_ffmpeg::selected_hardware_graph(&command);
-            let ffmpeg_path_for_denial = command.executable.clone();
-            log_hls_av1_spawn_diagnostics(
-                &self.channel_number,
-                &command,
-                &runtime_capabilities,
-                source_stream_for_denial.as_ref(),
-                active.remote_stream.as_ref(),
-            );
-            let _ = self.trim_playlist_for_append(discontinuity).await;
-            let outcome = self
-                .run_hls_process_with_remote(
-                    command,
-                    &mut cleanup_interval,
-                    idle_timeout,
-                    watch_idle_timeout,
-                    Some(active_transcode_slot_id),
-                    remote_stream,
-                )
-                .await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }
@@ -1172,37 +1250,57 @@ impl HlsSessionWorker {
                     // by startup probing, so the denial is learned from the
                     // failure and the retry goes through the next proven graph.
                     // Checked first because it is the more specific diagnosis.
-                    if !learned_graph_retry_used {
-                        if let (Some(operation), Some(kind)) = (
-                            selected_graph_for_denial,
-                            ersatzrs_ffmpeg::GraphFailureKind::classify(&error_message),
+                    if let Some((operation, ffmpeg_path_for_denial)) = selected_graph_for_denial {
+                        if let Some(kind) = ersatzrs_ffmpeg::GraphFailureKind::classify_runtime(
+                            operation,
+                            &error_message,
                         ) {
-                            learned_graph_retry_used = true;
                             let device = runtime_capabilities.hardware_graph_device();
                             let denial =
                                 ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
-                            tracing::warn!(
-                                channel_number = %self.channel_number,
-                                evidence = %denial.evidence(),
-                                "retrying hls segmenter once through the next proven graph after a runtime graph failure"
-                            );
-                            if let Err(error) =
+                            let evidence = denial.evidence();
+                            let persist_result = if let Some(runtime) = &self.shared_ffmpeg_runtime
+                            {
+                                crate::hardware_graph::persist_hardware_graph_denial_into_runtime(
+                                    &pool,
+                                    &ffmpeg_path_for_denial,
+                                    &mut runtime_capabilities,
+                                    runtime,
+                                    denial.clone(),
+                                )
+                                .await
+                            } else {
                                 crate::hardware_graph::persist_hardware_graph_denial(
                                     &pool,
                                     &ffmpeg_path_for_denial,
                                     &mut runtime_capabilities,
-                                    denial,
+                                    denial.clone(),
                                 )
                                 .await
-                            {
+                            };
+                            if let Err(error) = persist_result {
                                 tracing::warn!(
                                     %error,
                                     channel_number = %self.channel_number,
                                     "failed to persist runtime-learned hardware graph denial"
                                 );
                             }
-                            self.set_admission_status(HlsAdmissionStatus::Waiting);
-                            continue;
+                            if learned_graph_retry_used {
+                                tracing::warn!(
+                                    channel_number = %self.channel_number,
+                                    evidence,
+                                    "learned fallback graph denial after the hls retry was already used"
+                                );
+                            } else {
+                                learned_graph_retry_used = true;
+                                tracing::warn!(
+                                    channel_number = %self.channel_number,
+                                        evidence,
+                                    "retrying hls segmenter once through the next proven graph after a runtime graph failure"
+                                );
+                                self.set_admission_status(HlsAdmissionStatus::Waiting);
+                                continue;
+                            }
                         }
                     }
                     if let Some(denial) = learned_hardware_decode_denial(
@@ -1219,14 +1317,23 @@ impl HlsSessionWorker {
                             bit_depth = denial.bit_depth,
                             "retrying hls segmenter once with software input decode after runtime hardware decode rejection"
                         );
-                        if let Err(error) =
+                        let persist_result = if let Some(runtime) = &self.shared_ffmpeg_runtime {
+                            crate::ffmpeg_capabilities::persist_hardware_decode_denial_into_runtime(
+                                &pool,
+                                &mut runtime_capabilities,
+                                runtime,
+                                denial,
+                            )
+                            .await
+                        } else {
                             crate::ffmpeg_capabilities::persist_hardware_decode_denial(
                                 &pool,
                                 &mut runtime_capabilities,
                                 denial,
                             )
                             .await
-                        {
+                        };
+                        if let Err(error) = persist_result {
                             tracing::warn!(
                                 %error,
                                 channel_number = %self.channel_number,
@@ -1278,17 +1385,18 @@ impl HlsSessionWorker {
                     {
                         HlsProcessOutcome::Success => {
                             self.set_admission_status(HlsAdmissionStatus::Waiting);
-                            transcoded_until = add_std_duration(decision.request_time, duration);
-                            self.set_session_state(next_hls_session_state(
-                                self.session_state(),
-                                false,
-                                has_slug,
-                            ));
-                            next_mpegts_output_ts_offset = advance_mpegts_output_ts_offset(
-                                self.output_format,
-                                next_mpegts_output_ts_offset,
-                                duration,
-                            );
+                            let (next_cursor, next_state, next_output_offset) =
+                                advance_after_hls_error_slate(
+                                    decision.request_time,
+                                    duration,
+                                    self.session_state(),
+                                    has_slug,
+                                    self.output_format,
+                                    next_mpegts_output_ts_offset,
+                                );
+                            transcoded_until = next_cursor;
+                            self.set_session_state(next_state);
+                            next_mpegts_output_ts_offset = next_output_offset;
                             last_playout_item_id = None;
                         }
                         HlsProcessOutcome::Reclaimed => {
@@ -2732,6 +2840,25 @@ fn advance_mpegts_output_ts_offset(
         current
             .unwrap_or(Duration::ZERO)
             .saturating_add(appended_duration),
+    )
+}
+
+fn refused_hls_process_outcome(error: &ersatzrs_ffmpeg::UnsupportedSource) -> HlsProcessOutcome {
+    HlsProcessOutcome::Failed(error.to_string())
+}
+
+fn advance_after_hls_error_slate(
+    request_time: DateTime<Utc>,
+    duration: Duration,
+    state: HlsSessionState,
+    has_slug: bool,
+    output_format: OutputFormat,
+    current_output_offset: Option<Duration>,
+) -> (DateTime<Utc>, HlsSessionState, Option<Duration>) {
+    (
+        add_std_duration(request_time, duration),
+        next_hls_session_state(state, false, has_slug),
+        advance_mpegts_output_ts_offset(output_format, current_output_offset, duration),
     )
 }
 
@@ -8401,6 +8528,33 @@ mod tests {
                 "profile {profile} must carry an operator-facing reason"
             );
         }
+    }
+
+    #[test]
+    fn refused_hls_source_enters_error_slate_path_and_advances_the_cursor() {
+        let error =
+            hls_command_for(dolby_vision_source_320p(5, 0)).expect_err("profile 5 must be refused");
+        assert!(matches!(
+            refused_hls_process_outcome(&error),
+            HlsProcessOutcome::Failed(_)
+        ));
+
+        let request_time = DateTime::parse_from_rfc3339("2026-08-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let duration = Duration::from_secs(10);
+        let (cursor, state, output_offset) = advance_after_hls_error_slate(
+            request_time,
+            duration,
+            HlsSessionState::ZeroAndWorkAhead,
+            false,
+            OutputFormat::Hls,
+            Some(Duration::from_secs(20)),
+        );
+
+        assert_eq!(cursor, add_std_duration(request_time, duration));
+        assert_eq!(state, HlsSessionState::SeekAndRealtime);
+        assert_eq!(output_offset, Some(Duration::from_secs(30)));
     }
 
     #[test]

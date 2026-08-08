@@ -321,6 +321,15 @@ Writing these also confirmed a related behavior: an HEVC Dolby Vision source in
 a *direct MPEG-TS* stream is refused rather than copied, because only H.264 is
 copy-safe there, so that path genuinely transcodes. The stream-copy exception
 is proven with fMP4, where HEVC really is copied.
+
+Second-review correction, 2026-08-08: the HLS worker no longer sleeps and
+re-selects a refused item indefinitely. A typed refusal enters the normal
+error-slate failure path; when the slate succeeds, `transcoded_until`, session
+state, and MPEG-TS timestamp offset advance together. Both HLS and direct IPTV
+remove graphics rendered before command construction on this early-refusal
+path. Regressions:
+`refused_hls_source_enters_error_slate_path_and_advances_the_cursor` and
+`early_stream_refusal_cleanup_removes_rendered_graphics_directories`.
 '''
 resolved    = true
 

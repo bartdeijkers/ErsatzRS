@@ -307,6 +307,11 @@ pub struct FfmpegCapabilityReport {
     /// Graph operations a functional probe positively proved, with the device
     /// they were proved on. Empty on a runtime that has not probed yet.
     pub proven_hardware_graphs: Vec<(crate::graph_probe::HardwareGraphOperation, String)>,
+    /// Graph operations whose functional probe was attempted, including probes
+    /// that failed without a classifiable denial. This is deliberately
+    /// separate from proofs and denials: an attempted-but-unproven graph must
+    /// not fall back to the legacy "never probed" selection behavior.
+    pub attempted_hardware_graphs: Vec<(crate::graph_probe::HardwareGraphOperation, String)>,
     /// `VideoToolbox` hardware decoder `FourCC` values reported by the macOS
     /// framework probe, such as `avc1` or `hvc1`.
     pub videotoolbox_decoders: BTreeSet<String>,
@@ -403,6 +408,41 @@ impl FfmpegCapabilityReport {
             .any(|denial| denial.matches(operation, device))
     }
 
+    /// Record that a functional graph probe was attempted on this device.
+    pub fn record_hardware_graph_probe_attempt(
+        &mut self,
+        operation: crate::graph_probe::HardwareGraphOperation,
+        device: &str,
+    ) {
+        if !self
+            .attempted_hardware_graphs
+            .iter()
+            .any(|(attempted, attempted_device)| {
+                *attempted == operation && attempted_device == device
+            })
+        {
+            self.attempted_hardware_graphs
+                .push((operation, device.to_owned()));
+        }
+    }
+
+    /// Whether this graph's functional probe was attempted on this device.
+    #[must_use]
+    pub fn hardware_graph_probe_attempted(
+        &self,
+        operation: crate::graph_probe::HardwareGraphOperation,
+        device: &str,
+    ) -> bool {
+        self.attempted_hardware_graphs
+            .iter()
+            .any(|(attempted, attempted_device)| {
+                *attempted == operation
+                    && (attempted_device.is_empty()
+                        || device.is_empty()
+                        || attempted_device.eq_ignore_ascii_case(device))
+            })
+    }
+
     /// Record that a graph operation demonstrably ran on this device.
     ///
     /// Positive evidence is tracked explicitly rather than inferred from the
@@ -413,6 +453,7 @@ impl FfmpegCapabilityReport {
         operation: crate::graph_probe::HardwareGraphOperation,
         device: &str,
     ) {
+        self.record_hardware_graph_probe_attempt(operation, device);
         if !self
             .proven_hardware_graphs
             .iter()
@@ -447,7 +488,9 @@ impl FfmpegCapabilityReport {
     /// that every graph failed.
     #[must_use]
     pub fn has_probed_hardware_graphs(&self) -> bool {
-        !self.proven_hardware_graphs.is_empty() || !self.hardware_graph_denials.is_empty()
+        !self.attempted_hardware_graphs.is_empty()
+            || !self.proven_hardware_graphs.is_empty()
+            || !self.hardware_graph_denials.is_empty()
     }
 
     /// Add a runtime-learned graph denial row if it is not already present.
@@ -457,6 +500,7 @@ impl FfmpegCapabilityReport {
     /// the newer evidence — a startup probe can pass while the graph still
     /// fails under real media.
     pub fn deny_hardware_graph(&mut self, denial: crate::graph_probe::HardwareGraphDenial) {
+        self.record_hardware_graph_probe_attempt(denial.operation, &denial.device);
         self.proven_hardware_graphs.retain(|(operation, device)| {
             !(*operation == denial.operation
                 && (denial.device.is_empty()
@@ -853,6 +897,7 @@ impl FfmpegRuntimeReport {
             hardware_decode_denials: Vec::new(),
             hardware_graph_denials: Vec::new(),
             proven_hardware_graphs: Vec::new(),
+            attempted_hardware_graphs: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };
@@ -1283,6 +1328,7 @@ async fn collect_ffmpeg_capabilities(
         hardware_decode_denials: Vec::new(),
         hardware_graph_denials: Vec::new(),
         proven_hardware_graphs: Vec::new(),
+        attempted_hardware_graphs: Vec::new(),
         videotoolbox_decoders: BTreeSet::new(),
         videotoolbox_encoders: BTreeSet::new(),
     };
@@ -2605,6 +2651,7 @@ h264_nvenc AVOptions:
             hardware_decode_denials: Vec::new(),
             hardware_graph_denials: Vec::new(),
             proven_hardware_graphs: Vec::new(),
+            attempted_hardware_graphs: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };

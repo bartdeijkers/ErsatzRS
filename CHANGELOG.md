@@ -132,6 +132,18 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fixed hardware-graph fallback state and unsupported Dolby Vision handling in
+  live streams. A graph probe that ran but produced no classifiable result now
+  remains non-selectable instead of being mistaken for an older, never-probed
+  runtime; live failures are learned only from operation-specific evidence and
+  are published to future HLS and IPTV sessions immediately. Hardware-decode
+  failures now use the same process-wide publication path. Concurrent HLS and
+  IPTV failures persist merged graph and decode denial snapshots, so one worker
+  cannot erase another worker's learned fallback on restart. The one-retry
+  limit no longer suppresses learning a failed CUDA fallback. Unsupported
+  Dolby Vision HLS items now emit an error slate and advance instead of looping
+  on the same item, and early HLS/IPTV refusal removes any rendered graphics.
+
 - Fixed HDR content keeping its HDR metadata after being converted to SDR. The
   mastering-display and MaxCLL/MaxFALL values survived tone-mapping and were
   written onto the BT.709 output, so a display was told to expect a 1000-nit

@@ -27,15 +27,15 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::{
     build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command, ConcatPlaylist,
-    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FrameRate, FrameSize,
-    GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat, OutputMetadata,
-    PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream,
-    WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
+    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate,
+    FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat,
+    OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
+    SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
-    learned_hardware_decode_denial, persist_hardware_decode_denial,
+    learned_hardware_decode_denial, persist_hardware_decode_denial_into_runtime,
 };
 use ersatzrs_infra::ffmpeg_config::playback_language_preferences;
 use ersatzrs_infra::file_system_layout;
@@ -67,7 +67,7 @@ use sqlx::Row;
 use tokio::io::AsyncReadExt;
 #[cfg(test)]
 use tokio::process::Command;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, RwLock};
 use tokio_util::io::ReaderStream;
 
 use crate::host::state::AppState;
@@ -641,6 +641,7 @@ async fn serve_channel_stream_with_channel(
                 reason = %error,
                 "refusing to transcode an unsupported source"
             );
+            cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
             return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
         }
     };
@@ -649,12 +650,13 @@ async fn serve_channel_stream_with_channel(
     let retry_playback_profile = playback_profile.clone();
     let retry = StreamDenialRetry {
         pool: state.pool.clone(),
+        shared_ffmpeg_runtime: Arc::clone(&state.ffmpeg_runtime),
         runtime_capabilities,
         acceleration: effective_acceleration,
         source_stream: source_stream.clone(),
         graph_operation: ersatzrs_ffmpeg::selected_hardware_graph(&command),
         ffmpeg_path: command.executable.clone(),
-        rebuild: {
+        rebuild: Some({
             let media_input = media_input.clone();
             let channel_number = channel.number.clone();
             Box::new(move |mode| {
@@ -692,7 +694,7 @@ async fn serve_channel_stream_with_channel(
                 )
                 .ok()
             })
-        },
+        }),
     };
     let capacity_reservation =
         if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
@@ -2287,6 +2289,8 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 /// failures force software encoding for this stream.
 struct StreamDenialRetry {
     pool: DbPool,
+    /// Process-wide runtime state used by future direct and HLS sessions.
+    shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     runtime_capabilities: FfmpegCapabilityReport,
     acceleration: ersatzrs_domain::HardwareAccelerationKind,
     source_stream: Option<SourceVideoStream>,
@@ -2300,7 +2304,7 @@ struct StreamDenialRetry {
     /// `None` when the rebuilt command would be refused. Unreachable in
     /// practice — the initial build already accepted this source — but the
     /// retry must fail terminally rather than panic if that ever changes.
-    rebuild: Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>,
+    rebuild: Option<Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>>,
 }
 
 // The three variants share a prefix because they are three flavours of the same
@@ -2532,43 +2536,33 @@ async fn supervise_stream_command_with_retry(
         let DirectStreamOutcome::Failed(stderr) = outcome else {
             return outcome;
         };
-        let Some(context) = retry.take() else {
+        let Some(mut context) = retry.take() else {
             return DirectStreamOutcome::Failed(stderr);
         };
-        let StreamDenialRetry {
-            pool,
-            runtime_capabilities,
-            acceleration,
-            source_stream,
-            graph_operation,
-            ffmpeg_path,
-            rebuild,
-        } = context;
 
         // ADR 0014: a graph that only fails under real media cannot be caught by
         // startup probing, so the denial is learned from the failure itself and
-        // the retry goes through the next proven graph. Checked before the
-        // decode classifier because a graph failure is the more specific
-        // diagnosis.
+        // published even when the session has already spent its one retry.
+        // Checked before the decode classifier because a graph failure is the
+        // more specific diagnosis.
         if let (Some(operation), Some(kind)) = (
-            graph_operation,
-            ersatzrs_ffmpeg::GraphFailureKind::classify(&stderr),
+            context.graph_operation,
+            context.graph_operation.and_then(|operation| {
+                ersatzrs_ffmpeg::GraphFailureKind::classify_runtime(operation, &stderr)
+            }),
         ) {
-            let mut capabilities = runtime_capabilities;
-            let device = capabilities.hardware_graph_device();
+            let device = context.runtime_capabilities.hardware_graph_device();
             let denial = ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
-            tracing::warn!(
-                channel_number = %channel_number,
-                evidence = %denial.evidence(),
-                "retrying channel stream once through the next proven graph after a runtime graph failure"
-            );
-            if let Err(error) = ersatzrs_infra::hardware_graph::persist_hardware_graph_denial(
-                &pool,
-                &ffmpeg_path,
-                &mut capabilities,
-                denial,
-            )
-            .await
+            let evidence = denial.evidence();
+            if let Err(error) =
+                ersatzrs_infra::hardware_graph::persist_hardware_graph_denial_into_runtime(
+                    &context.pool,
+                    &context.ffmpeg_path,
+                    &mut context.runtime_capabilities,
+                    &context.shared_ffmpeg_runtime,
+                    denial.clone(),
+                )
+                .await
             {
                 tracing::warn!(
                     %error,
@@ -2576,15 +2570,44 @@ async fn supervise_stream_command_with_retry(
                     "failed to persist runtime-learned hardware graph denial"
                 );
             }
-            let Some(rebuilt) = rebuild(StreamRetryMode::HardwareGraphDenied(capabilities)) else {
+
+            let Some(build_retry_command) = context.rebuild.take() else {
+                tracing::warn!(
+                    channel_number = %channel_number,
+                    evidence,
+                    "learned fallback graph denial after the session retry was already used"
+                );
+                return DirectStreamOutcome::Failed(stderr);
+            };
+            tracing::warn!(
+                channel_number = %channel_number,
+                evidence,
+                "retrying channel stream once through the next proven graph after a runtime graph failure"
+            );
+            let Some(retry_command) = build_retry_command(StreamRetryMode::HardwareGraphDenied(
+                context.runtime_capabilities.clone(),
+            )) else {
                 tracing::warn!(
                     channel_number = %channel_number,
                     "rebuilt command was refused; not retrying after graph denial"
                 );
                 return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
             };
-            match spawn_stream_process(&rebuilt, remote_stream.and_then(remote_stream_producer)) {
-                Ok(next) => child = next,
+            let next_graph_operation = ersatzrs_ffmpeg::selected_hardware_graph(&retry_command);
+            let next_ffmpeg_path = retry_command.executable.clone();
+            match spawn_stream_process(
+                &retry_command,
+                remote_stream.and_then(remote_stream_producer),
+            ) {
+                Ok(next) => {
+                    child = next;
+                    context.graph_operation = next_graph_operation;
+                    context.ffmpeg_path = next_ffmpeg_path;
+                    // Keep an observer for the fallback spawn. It may learn a
+                    // second denial, but cannot trigger another retry.
+                    context.rebuild = None;
+                    *retry = Some(context);
+                }
                 Err(error) => {
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after graph denial");
                     return DirectStreamOutcome::Failed(error.to_string());
@@ -2593,9 +2616,12 @@ async fn supervise_stream_command_with_retry(
             continue;
         }
 
-        if let Some(denial) =
-            learned_hardware_decode_denial(false, acceleration, source_stream.as_ref(), &stderr)
-        {
+        if let Some(denial) = learned_hardware_decode_denial(
+            context.rebuild.is_none(),
+            context.acceleration,
+            context.source_stream.as_ref(),
+            &stderr,
+        ) {
             tracing::warn!(
                 channel_number = %channel_number,
                 acceleration = ?denial.acceleration,
@@ -2603,9 +2629,13 @@ async fn supervise_stream_command_with_retry(
                 bit_depth = denial.bit_depth,
                 "retrying channel stream once with software input decode after runtime hardware decode rejection"
             );
-            let mut capabilities = runtime_capabilities;
-            if let Err(error) =
-                persist_hardware_decode_denial(&pool, &mut capabilities, denial).await
+            if let Err(error) = persist_hardware_decode_denial_into_runtime(
+                &context.pool,
+                &mut context.runtime_capabilities,
+                &context.shared_ffmpeg_runtime,
+                denial,
+            )
+            .await
             {
                 tracing::warn!(
                     %error,
@@ -2613,24 +2643,33 @@ async fn supervise_stream_command_with_retry(
                     "failed to persist runtime-learned hardware decode denial"
                 );
             }
+            let Some(rebuild) = context.rebuild.take() else {
+                return DirectStreamOutcome::Failed(stderr);
+            };
+            let Some(retry_command) = rebuild(StreamRetryMode::HardwareDecodeDenied(
+                context.runtime_capabilities.clone(),
+            )) else {
+                tracing::warn!(
+                    channel_number = %channel_number,
+                    "rebuilt command was refused; not retrying after hardware decode denial"
+                );
+                return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+            };
+            let next_graph_operation = ersatzrs_ffmpeg::selected_hardware_graph(&retry_command);
+            let next_ffmpeg_path = retry_command.executable.clone();
             match spawn_stream_process(
-                &{
-                    let Some(command) =
-                        rebuild(StreamRetryMode::HardwareDecodeDenied(capabilities))
-                    else {
-                        tracing::warn!(
-                            channel_number = %channel_number,
-                            "rebuilt command was refused; not retrying after hardware decode denial"
-                        );
-                        return DirectStreamOutcome::Failed(
-                            "rebuilt command was refused".to_owned(),
-                        );
-                    };
-                    command
-                },
+                &retry_command,
                 remote_stream.and_then(remote_stream_producer),
             ) {
-                Ok(next) => child = next,
+                Ok(next) => {
+                    child = next;
+                    context.graph_operation = next_graph_operation;
+                    context.ffmpeg_path = next_ffmpeg_path;
+                    // The retry is spent, but its hardware graph can still
+                    // produce new evidence that future sessions must learn.
+                    context.rebuild = None;
+                    *retry = Some(context);
+                }
                 Err(error) => {
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
                     return DirectStreamOutcome::Failed(error.to_string());
@@ -2639,26 +2678,38 @@ async fn supervise_stream_command_with_retry(
             continue;
         }
 
-        if acceleration == ersatzrs_domain::HardwareAccelerationKind::None
+        if context.acceleration == ersatzrs_domain::HardwareAccelerationKind::None
             || !ffmpeg_stderr_is_hardware_encoder_open_failure(&stderr)
         {
             return DirectStreamOutcome::Failed(stderr);
         }
 
+        let Some(build_retry_command) = context.rebuild.take() else {
+            tracing::warn!(
+                channel_number = %channel_number,
+                acceleration = ?context.acceleration,
+                "hardware encoder rejection observed after the session retry was already used"
+            );
+            return DirectStreamOutcome::Failed(stderr);
+        };
         tracing::warn!(
             channel_number = %channel_number,
-            acceleration = ?acceleration,
+            acceleration = ?context.acceleration,
             "retrying channel stream once with software video encode after runtime hardware encoder rejection"
         );
-        let Some(rebuilt) = rebuild(StreamRetryMode::HardwareEncodeDenied(runtime_capabilities))
-        else {
+        let Some(retry_command) = build_retry_command(StreamRetryMode::HardwareEncodeDenied(
+            context.runtime_capabilities,
+        )) else {
             tracing::warn!(
                 channel_number = %channel_number,
                 "rebuilt command was refused; not retrying after hardware encoder rejection"
             );
             return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
         };
-        match spawn_stream_process(&rebuilt, remote_stream.and_then(remote_stream_producer)) {
+        match spawn_stream_process(
+            &retry_command,
+            remote_stream.and_then(remote_stream_producer),
+        ) {
             Ok(next) => child = next,
             Err(error) => {
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
@@ -2766,6 +2817,12 @@ async fn cleanup_stream_artifact(path: &std::path::Path) {
     }
 }
 
+async fn cleanup_stream_artifacts(paths: &[PathBuf]) {
+    for path in paths {
+        cleanup_stream_artifact(path).await;
+    }
+}
+
 struct DirectStreamHandle {
     channel_number: String,
     cancel: Arc<Notify>,
@@ -2868,6 +2925,10 @@ mod tests {
         StreamingMode, WatermarkLocation, WatermarkSize,
     };
     use ersatzrs_ffmpeg::{FfmpegCapabilityReport, GraphicsPipelineOverlay, WatermarkOverlay};
+    #[cfg(all(unix, not(feature = "mysql")))]
+    use ersatzrs_ffmpeg::{
+        FfmpegRuntimeReport, GraphFailureKind, HardwareGraphDenial, HardwareGraphOperation,
+    };
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, OnceLock};
     use std::time::Duration;
@@ -3951,6 +4012,19 @@ mod tests {
         cleanup_stream_artifact(rendered_path).await;
     }
 
+    #[tokio::test]
+    async fn early_stream_refusal_cleanup_removes_rendered_graphics_directories() {
+        let root = tempfile::tempdir().expect("temp root");
+        let graphics_dir = root.path().join("rendered-graphics");
+        std::fs::create_dir_all(&graphics_dir).expect("create graphics directory");
+        std::fs::write(graphics_dir.join("overlay.vgs"), "rect 0 0 1 1 fill\n")
+            .expect("write rendered graphics");
+
+        cleanup_stream_artifacts(std::slice::from_ref(&graphics_dir)).await;
+
+        assert!(!graphics_dir.exists());
+    }
+
     #[test]
     fn legacy_concat_url_matches_internal_endpoint_shape() {
         assert_eq!(
@@ -5001,5 +5075,233 @@ mod tests {
             Vec::new(),
         )
         .is_ok());
+    }
+
+    #[cfg(all(unix, not(feature = "mysql")))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn graph_fallback_failure_is_learned_without_a_second_retry() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let primary = dir.path().join("primary-ffmpeg");
+        let fallback = dir.path().join("fallback-ffmpeg");
+        std::fs::write(
+            &primary,
+            "#!/bin/sh\necho 'Could not derive CUDA device' >&2\nexit 1\n",
+        )
+        .expect("write primary tool");
+        std::fs::write(
+            &fallback,
+            "#!/bin/sh\necho '[Parsed_scale_cuda_4] Failed to configure output pad' >&2\nexit 1\n",
+        )
+        .expect("write fallback tool");
+        for path in [&primary, &fallback] {
+            let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(path, permissions).expect("make executable");
+        }
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open graph retry database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create config table");
+
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+        let mut capabilities = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            ..FfmpegCapabilityReport::default()
+        };
+        capabilities.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu);
+        capabilities.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.capabilities = capabilities.clone();
+        let shared_runtime = Arc::new(RwLock::new(runtime));
+
+        let initial_command =
+            FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
+        let fallback_path = fallback.to_string_lossy().into_owned();
+        let mut retry = Some(StreamDenialRetry {
+            pool: pool.clone(),
+            shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
+            runtime_capabilities: capabilities,
+            acceleration: ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            source_stream: None,
+            graph_operation: Some(HardwareGraphOperation::NvencHdrVulkanLibplacebo),
+            ffmpeg_path: primary.to_string_lossy().into_owned(),
+            rebuild: Some(Box::new(move |_| {
+                Some(FfmpegCommand::new_with_executable(
+                    fallback_path,
+                    Vec::new(),
+                    vec!["-vf".to_owned(), "scale_cuda=256:144".to_owned()],
+                ))
+            })),
+        });
+        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let (_reader, mut writer) = tokio::io::duplex(1024);
+
+        let outcome = supervise_stream_command_with_retry(
+            child,
+            &mut writer,
+            &Arc::new(Notify::new()),
+            "1",
+            &mut retry,
+            None,
+        )
+        .await;
+
+        assert!(matches!(outcome, DirectStreamOutcome::Failed(_)));
+        let persisted = ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("load persisted denials");
+        assert_eq!(persisted.len(), 2, "both failed graphs must be learned");
+        assert!(persisted.iter().any(|denial| {
+            denial
+                == &HardwareGraphDenial::new(
+                    HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+                    gpu,
+                    GraphFailureKind::CudaInterop,
+                )
+        }));
+        assert!(persisted.iter().any(|denial| {
+            denial
+                == &HardwareGraphDenial::new(
+                    HardwareGraphOperation::NvencCudaScale,
+                    gpu,
+                    GraphFailureKind::HardwareMap,
+                )
+        }));
+        let shared = shared_runtime.read().await;
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+    }
+
+    #[cfg(all(unix, not(feature = "mysql")))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn graph_failure_after_decode_retry_is_learned_without_a_second_retry() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let primary = dir.path().join("decode-failing-ffmpeg");
+        let fallback = dir.path().join("graph-failing-ffmpeg");
+        std::fs::write(
+            &primary,
+            "#!/bin/sh\necho \"Your platform doesn't support hardware accelerated AV1 decoding.\" >&2\nexit 1\n",
+        )
+        .expect("write primary tool");
+        std::fs::write(
+            &fallback,
+            "#!/bin/sh\necho '[Parsed_scale_cuda_4] Failed to configure output pad' >&2\nexit 1\n",
+        )
+        .expect("write fallback tool");
+        for path in [&primary, &fallback] {
+            let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(path, permissions).expect("make executable");
+        }
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open denial retry database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create config table");
+
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+        let mut capabilities = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            ..FfmpegCapabilityReport::default()
+        };
+        capabilities.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.capabilities = capabilities.clone();
+        let shared_runtime = Arc::new(RwLock::new(runtime));
+
+        let initial_command =
+            FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
+        let fallback_path = fallback.to_string_lossy().into_owned();
+        let mut retry = Some(StreamDenialRetry {
+            pool: pool.clone(),
+            shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
+            runtime_capabilities: capabilities,
+            acceleration: ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            source_stream: Some(SourceVideoStream::new(SourceVideoCodec::Av1)),
+            graph_operation: Some(HardwareGraphOperation::NvencCudaScale),
+            ffmpeg_path: primary.to_string_lossy().into_owned(),
+            rebuild: Some(Box::new(move |_| {
+                Some(FfmpegCommand::new_with_executable(
+                    fallback_path,
+                    Vec::new(),
+                    vec!["-vf".to_owned(), "scale_cuda=256:144".to_owned()],
+                ))
+            })),
+        });
+        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let (_reader, mut writer) = tokio::io::duplex(1024);
+
+        let outcome = supervise_stream_command_with_retry(
+            child,
+            &mut writer,
+            &Arc::new(Notify::new()),
+            "1",
+            &mut retry,
+            None,
+        )
+        .await;
+
+        assert!(matches!(outcome, DirectStreamOutcome::Failed(_)));
+        let graph_denials = ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("load graph denials");
+        assert_eq!(
+            graph_denials,
+            vec![HardwareGraphDenial::new(
+                HardwareGraphOperation::NvencCudaScale,
+                gpu,
+                GraphFailureKind::HardwareMap,
+            )]
+        );
+        let decode_denials =
+            ersatzrs_infra::ffmpeg_capabilities::load_hardware_decode_denials(&pool)
+                .await
+                .expect("load decode denials");
+        assert_eq!(decode_denials.len(), 1);
+        assert!(decode_denials[0].matches(
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            "av1",
+            8
+        ));
+        let shared = shared_runtime.read().await;
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        assert!(shared.capabilities.hardware_decode_denied(
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            "av1",
+            8
+        ));
     }
 }

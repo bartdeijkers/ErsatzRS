@@ -381,6 +381,14 @@ the probe bounds itself instead of hanging startup).
 Command-generation assertions that only proven graphs are selected:
 `a_probed_runtime_requires_positive_proof_for_the_vulkan_graph` and
 `a_runtime_that_never_probed_keeps_its_previous_behavior`.
+
+Second-review correction, 2026-08-08: the report now also records every probe
+attempt independently from proof and denial. Thus a refresh where *all* probes
+return `Unproven` no longer looks like a legacy runtime that never probed and
+cannot select advertised CUDA/NVENC graphs. The partial persisted record remains
+non-reusable and is re-probed at startup. Regressions:
+`wholly_unproven_refresh_records_every_probe_attempt` and
+`wholly_unproven_probe_attempts_demote_nvenc_to_software`.
 '''
 resolved    = true
 
@@ -451,6 +459,29 @@ themselves, which need a live child process and a duplex stream. Rebuild
 selection from the resulting state is covered separately by
 `a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph`, and
 attribution by `the_selected_graph_is_derived_from_the_command_that_actually_ran`.
+
+Second-review correction, 2026-08-08: live classification is now deliberately
+narrower than synthetic-probe classification. `classify_runtime` requires
+selected-operation filter/device evidence and rejects generic filter
+reinitialization, output-pad, subtitle-filter, and encoder-open failures. Learned
+denials are merged into the process-wide runtime report as well as the local
+snapshot and database, so new HLS workers and direct requests use them without a
+restart. Learning is independent from retry permission: a failed CUDA fallback
+is persisted and published after the single Vulkan-to-CUDA retry, but is not
+retried again. `graph_fallback_failure_is_learned_without_a_second_retry` drives
+the direct supervisor through two failing child processes and asserts both
+denials in persistence and shared state; the classifier controls and shared
+merge have focused regressions in `graph_probe.rs` and `hardware_graph.rs`.
+
+Review follow-up, 2026-08-08: publishing and persistence now share one runtime
+write guard, and the database is written from that merged process-wide report.
+Therefore a stale HLS or direct-IPTV worker snapshot cannot replace a denial
+learned by another worker. The analogous hardware-decode path now has the same
+process-wide contract, and direct IPTV retains a no-more-retries observer after
+a decode fallback so a subsequent graph failure is still learned. Regressions:
+`stale_worker_snapshot_persists_shared_denials_for_restart`,
+`stale_worker_snapshot_persists_shared_decode_denials`, and
+`graph_failure_after_decode_retry_is_learned_without_a_second_retry`.
 '''
 resolved    = true
 

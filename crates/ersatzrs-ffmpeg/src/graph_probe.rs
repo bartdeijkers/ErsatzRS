@@ -249,6 +249,96 @@ impl GraphFailureKind {
 
         None
     }
+
+    /// Classify a live playback failure as belonging to the selected hardware
+    /// graph.
+    ///
+    /// Playback stderr contains failures from inputs, subtitles, overlays,
+    /// muxers, and encoders as well as the hardware graph. The broader probe
+    /// classifier is safe only for the synthetic one-graph probe. Runtime
+    /// learning therefore requires operation-specific filter or device
+    /// evidence and deliberately excludes generic filter-reinitialization and
+    /// encoder-open messages.
+    #[must_use]
+    pub fn classify_runtime(operation: HardwareGraphOperation, stderr: &str) -> Option<Self> {
+        let lower = stderr.to_ascii_lowercase();
+        let lines = lower.lines().collect::<Vec<_>>();
+        let is_cuda_filter_line = |line: &str| {
+            line.contains("scale_cuda")
+                || line.contains("hwupload_cuda")
+                || line.contains("parsed_scale_cuda")
+                || line.contains("parsed_hwupload_cuda")
+        };
+        let is_vulkan_graph_line = |line: &str| {
+            line.contains("libplacebo")
+                || line.contains("hwmap")
+                || line.contains("derive_device=cuda")
+                || line.contains("vulkan=vk@nv")
+        };
+        let line_is_cuda_context_failure = |line: &str| {
+            line.contains("cuctxpushcurrent") || line.contains("cuda_error_invalid_value")
+        };
+        let line_is_filter_failure = |line: &str| {
+            line.contains("failed to configure output pad") || line_is_cuda_context_failure(line)
+        };
+
+        match operation {
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo => {
+                if lower.contains("could not derive cuda device")
+                    || lines.iter().any(|line| {
+                        is_vulkan_graph_line(line) && line_is_cuda_context_failure(line)
+                    })
+                {
+                    return Some(Self::CudaInterop);
+                }
+                if lower.contains("failed initializing vulkan device")
+                    || lower.contains("failed creating vulkan device")
+                    || lower.contains("found no suitable device")
+                    || (lower.contains("vulkan")
+                        && (lower.contains("unable to find device with index")
+                            || lower.contains("device creation failed")
+                            || lower.contains("no such device")))
+                {
+                    return Some(Self::VulkanDevice);
+                }
+                if lines.iter().any(|line| {
+                    line.contains("no such filter")
+                        && (is_vulkan_graph_line(line) || is_cuda_filter_line(line))
+                }) {
+                    return Some(Self::MissingFilter);
+                }
+                if lines.iter().any(|line| {
+                    line.contains("libplacebo")
+                        && (line.contains("failed to initialize")
+                            || line.contains("error initializing"))
+                }) {
+                    return Some(Self::Libplacebo);
+                }
+                if lines.iter().any(|line| {
+                    (is_vulkan_graph_line(line) || is_cuda_filter_line(line))
+                        && line_is_filter_failure(line)
+                }) {
+                    return Some(Self::HardwareMap);
+                }
+            }
+            HardwareGraphOperation::NvencCudaScale => {
+                if lines
+                    .iter()
+                    .any(|line| line.contains("no such filter") && is_cuda_filter_line(line))
+                {
+                    return Some(Self::MissingFilter);
+                }
+                if lines
+                    .iter()
+                    .any(|line| is_cuda_filter_line(line) && line_is_filter_failure(line))
+                {
+                    return Some(Self::HardwareMap);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 /// A runtime-learned denial of one hardware graph operation.
@@ -448,6 +538,61 @@ mod tests {
         ] {
             assert_eq!(GraphFailureKind::classify(stderr), None, "{stderr}");
         }
+    }
+
+    #[test]
+    fn runtime_classification_requires_operation_specific_evidence() {
+        for operation in [
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            HardwareGraphOperation::NvencCudaScale,
+        ] {
+            for stderr in [
+                "Error reinitializing filters!",
+                "Failed to configure output pad on Parsed_overlay_3",
+                "Error while opening encoder for output stream #0:0",
+                "InitializeEncoder failed: invalid param",
+                "No such filter: 'subtitles'",
+                "[Parsed_libplacebo_1] using vulkan device\n[Parsed_overlay_3] Failed to configure output pad",
+            ] {
+                assert_eq!(
+                    GraphFailureKind::classify_runtime(operation, stderr),
+                    None,
+                    "{operation:?}: {stderr}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn runtime_classification_accepts_selected_graph_evidence() {
+        assert_eq!(
+            GraphFailureKind::classify_runtime(
+                HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+                "[CUDA @ 0x1] Could not derive CUDA device."
+            ),
+            Some(GraphFailureKind::CudaInterop)
+        );
+        assert_eq!(
+            GraphFailureKind::classify_runtime(
+                HardwareGraphOperation::NvencCudaScale,
+                "[Parsed_scale_cuda_4] Failed to configure output pad"
+            ),
+            Some(GraphFailureKind::HardwareMap)
+        );
+        assert_eq!(
+            GraphFailureKind::classify_runtime(
+                HardwareGraphOperation::NvencCudaScale,
+                "No such filter: 'hwupload_cuda'"
+            ),
+            Some(GraphFailureKind::MissingFilter)
+        );
+        assert_eq!(
+            GraphFailureKind::classify_runtime(
+                HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+                "[Parsed_hwmap_3] Failed to configure output pad"
+            ),
+            Some(GraphFailureKind::HardwareMap)
+        );
     }
 
     #[test]

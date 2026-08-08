@@ -7,9 +7,10 @@ have**. Written 2026-08-08 as a hand-off so this work can proceed independently
 of Phase 9 (teletext) and Phase 10 (video jukebox).
 
 Phase 8 itself is complete: all seven required milestones (`p8a-01`, `p8a-02`,
-`p8b-01`, `p8b-02`, `p8c-01`, `p8c-02`, `p8c-03`) shipped, and the follow-up
-review's eleven defects plus fourteen residue debts are closed. What remains is
-five parity debts that could not be closed on an NVIDIA-only machine, plus the
+`p8b-01`, `p8b-02`, `p8c-01`, `p8c-02`, `p8c-03`) shipped. The first follow-up
+review's eleven defects, its fourteen residue debts, and the second review's six
+stream-supervisor and graph-state corrections are closed. What remains is five
+parity debts that could not be closed on an NVIDIA-only machine, plus the
 deferred milestone `p8c-04`.
 
 Nothing here blocks Phase 9. Every item is additive hardening or an
