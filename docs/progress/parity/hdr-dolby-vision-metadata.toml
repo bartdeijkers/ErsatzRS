@@ -151,7 +151,24 @@ id          = 'hdr10-is-uncharacterized-on-non-nvidia-hardware'
 adr         = '0064'
 description = 'QSV, VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M have no characterized HDR10 output graph, so an HDR10 profile on those backends encodes in software. Correct but slow. Characterize each against real hardware and add its graph, or record that the backend genuinely cannot signal HDR10.'
 discovered  = '2026-08-07'
-evidence    = '`hdr10_output_support` in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` marks only `None` and `Nvenc` as `Proven`. No Intel, AMD, Apple, or Rockchip hardware was available during p8a-01; only an NVIDIA RTX 3080 Ti was.'
+evidence    = '''
+`hdr10_output_support` in `crates/ersatzrs-ffmpeg/src/filter/hdr.rs` marks only `None` and `Nvenc` as `Proven`. No Intel, AMD, Apple, or Rockchip hardware was available during p8a-01; only an NVIDIA RTX 3080 Ti was.
+
+
+Measured on the development machine 2026-08-08, which is why these paths could
+not be characterized here rather than merely "no hardware was available":
+`ffmpeg -hwaccels` advertises cuda, vaapi, qsv, drm, opencl, vulkan, and amf,
+and `hevc_vaapi`, `hevc_qsv`, and `hevc_amf` are all listed by `-encoders`, but
+only cuda creates a device. `-init_hw_device vaapi` and `qsv` both fail with
+-542398533, opencl reports no platforms (-1001), `hevc_qsv` cannot open an MFX
+session (-9), and `hevc_amf` cannot load `libamfrt64.so.1`. There is no
+`/dev/dri`. This is itself the advertised-but-nonfunctional class the graph
+probe exists to catch, so it confirms the design while leaving the non-NVIDIA
+graphs unproven.
+
+Missing manual gate: a machine with a working Intel (QSV), AMD (VAAPI/AMF),
+Apple (VideoToolbox), or Rockchip (RKMPP) device.
+'''
 resolved    = false
 
 [[debt]]

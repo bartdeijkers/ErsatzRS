@@ -260,7 +260,24 @@ id          = 'hardware-graph-probes-cover-only-the-nvidia-graphs'
 adr         = '0014'
 description = 'The operation-scoped functional probe covers the two NVENC graphs. QSV, VAAPI/OpenCL, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from advertised capabilities alone, so the same advertised-but-nonfunctional class of failure remains possible there. Extend `HardwareGraphOperation` as those paths gain evidence.'
 discovered  = '2026-08-07'
-evidence    = '`HardwareGraphOperation` in `crates/ersatzrs-ffmpeg/src/graph_probe.rs` defines only `NvencHdrVulkanLibplacebo` and `NvencCudaScale`, and `refresh_hardware_graph_capabilities` returns early unless the `cuda` hwaccel is advertised. Only NVIDIA hardware was available to characterize during p8b-01.'
+evidence    = '''
+`HardwareGraphOperation` in `crates/ersatzrs-ffmpeg/src/graph_probe.rs` defines only `NvencHdrVulkanLibplacebo` and `NvencCudaScale`, and `refresh_hardware_graph_capabilities` returns early unless the `cuda` hwaccel is advertised. Only NVIDIA hardware was available to characterize during p8b-01.
+
+
+Measured on the development machine 2026-08-08, which is why these paths could
+not be characterized here rather than merely "no hardware was available":
+`ffmpeg -hwaccels` advertises cuda, vaapi, qsv, drm, opencl, vulkan, and amf,
+and `hevc_vaapi`, `hevc_qsv`, and `hevc_amf` are all listed by `-encoders`, but
+only cuda creates a device. `-init_hw_device vaapi` and `qsv` both fail with
+-542398533, opencl reports no platforms (-1001), `hevc_qsv` cannot open an MFX
+session (-9), and `hevc_amf` cannot load `libamfrt64.so.1`. There is no
+`/dev/dri`. This is itself the advertised-but-nonfunctional class the graph
+probe exists to catch, so it confirms the design while leaving the non-NVIDIA
+graphs unproven.
+
+Missing manual gate: a machine with a working Intel (QSV), AMD (VAAPI/AMF),
+Apple (VideoToolbox), or Rockchip (RKMPP) device.
+'''
 resolved    = false
 
 [[debt]]
@@ -295,7 +312,24 @@ id          = 'hardware-hdr-candidates-need-real-gpu-measurement'
 adr         = '0064'
 description = 'Three of the four p8b-02 candidates could not be measured: fused libplacebo tone-map/scale and libplacebo peak detection need a real Vulkan GPU (only llvmpipe was available), native tonemap_vaapi needs a VAAPI device, and the AMF colour-conversion path needs AMD hardware. Re-run `scripts/bench/hdr-graph-bench.sh` on each and adopt only measured wins.'
 discovered  = '2026-08-07'
-evidence    = 'The harness reports device availability: cuda and vulkan available (vulkan resolving to `llvmpipe (software)`), vaapi/amf/qsv unavailable. Fused libplacebo measured 12.03s against the current path`s 3.95s on llvmpipe, which is a software-rasterizer artefact rather than a verdict on the graph.'
+evidence    = '''
+The harness reports device availability: cuda and vulkan available (vulkan resolving to `llvmpipe (software)`), vaapi/amf/qsv unavailable. Fused libplacebo measured 12.03s against the current path`s 3.95s on llvmpipe, which is a software-rasterizer artefact rather than a verdict on the graph.
+
+
+Measured on the development machine 2026-08-08, which is why these paths could
+not be characterized here rather than merely "no hardware was available":
+`ffmpeg -hwaccels` advertises cuda, vaapi, qsv, drm, opencl, vulkan, and amf,
+and `hevc_vaapi`, `hevc_qsv`, and `hevc_amf` are all listed by `-encoders`, but
+only cuda creates a device. `-init_hw_device vaapi` and `qsv` both fail with
+-542398533, opencl reports no platforms (-1001), `hevc_qsv` cannot open an MFX
+session (-9), and `hevc_amf` cannot load `libamfrt64.so.1`. There is no
+`/dev/dri`. This is itself the advertised-but-nonfunctional class the graph
+probe exists to catch, so it confirms the design while leaving the non-NVIDIA
+graphs unproven.
+
+Missing manual gate: a machine with a working Intel (QSV), AMD (VAAPI/AMF),
+Apple (VideoToolbox), or Rockchip (RKMPP) device.
+'''
 resolved    = false
 
 [[debt]]
