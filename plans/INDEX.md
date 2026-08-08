@@ -111,6 +111,12 @@ changelog, and git history for evidence. The authoritative live state is always
   characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
   libplacebo improvements, safe long-filtergraph transport, source orientation,
   animated WebP, and the deferred evidence gate for first-class Vulkan encoding.
+- `phase-8-hardware-residue.md` — hand-off plan for the five Phase 8 parity
+  debts that an NVIDIA-only machine cannot close: HDR10 characterization and
+  functional graph probes on QSV/VAAPI/AMF/VideoToolbox/RKMPP, the three
+  unmeasured `p8b-02` benchmark candidates, Dolby Vision profiles 5 and 7, and
+  the evidence-gated `p8c-04` Vulkan-encoding decision. Independent of Phases 9
+  and 10; includes the measured proof that each item is hardware-blocked.
 - `teletext-support.md` — Phase 9 plan to decide the teletext product and
   standards contract, prove optional FFmpeg/libzvbi support on all six release
   targets, persist stream/page metadata, deliver selectable pages, and add

@@ -17,12 +17,15 @@ Vulkan-encoder decision `p8c-04` remains deferred, as anticipated: no
 multi-vendor runtime evidence was produced, so the separate ADR it requires does
 not exist.
 
-Residual gaps are tracked as visible parity debt rather than left in this plan:
-HDR10 is uncharacterized on non-NVIDIA hardware, hardware graph probes model only
-the NVIDIA graphs, three of the four `p8b-02` benchmark candidates need a real
-GPU to measure, seeded HDR10 metadata is not operator-editable, Dolby Vision
-profiles 5 and 7 stay rejected until fixtures exist, and MPEG-TS cannot carry a
-display matrix through a stream copy.
+Residual gaps are tracked as visible parity debt rather than left in this plan.
+The follow-up review's defects and the residue debts an NVIDIA-only machine
+could close are done, including operator-editable HDR10 metadata, Dolby Vision
+overlay/subtitle/seek characterization, and stream-copy rotation reporting. The
+five that need hardware or Dolby Vision fixtures are handed off in
+[`phase-8-hardware-residue.md`](phase-8-hardware-residue.md): HDR10 on
+non-NVIDIA backends, graph probes beyond the NVIDIA graphs, the three unmeasured
+`p8b-02` candidates, Dolby Vision profiles 5 and 7, and the `p8c-04` Vulkan
+decision.
 
 ## Goal
 
