@@ -200,13 +200,6 @@ td {
 }
 .btn-delete:hover { background-color: var(--color-danger-20); }
 
-.empty {
-    padding: 2rem;
-    text-align: center;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-}
-
 .modal-backdrop {
     position: fixed;
     inset: 0;

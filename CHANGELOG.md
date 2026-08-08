@@ -55,6 +55,8 @@ release section when tagging a release.
 
 - Removed the unused `.empty-cell` CSS rule from the rerun collections admin
   page's module stylesheet (dead-code cleanup, no visible change).
+- Removed the unused `.empty` CSS rule from the blocks admin page's module
+  stylesheet (dead-code cleanup, no visible change).
 
 ### Fixed
 
