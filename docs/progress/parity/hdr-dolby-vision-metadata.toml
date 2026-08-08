@@ -245,8 +245,27 @@ Regressions: `the_command_builder_refuses_unplayable_dolby_vision_profiles`
 Narrower than closed: the regressions assert at the command boundary, which is
 where the refusal is enforced — there is no command to spawn. Supervisor-level
 tests that assert no child process starts were not added.
+
+Closed 2026-08-08 with regressions on both stream families:
+`the_iptv_builder_refuses_unplayable_dolby_vision_before_any_spawn` and
+`the_hls_builder_refuses_unplayable_dolby_vision_before_any_spawn` cover
+profiles 5, 7, and an unrecognised profile;
+`the_iptv_builder_allows_profile_8_1_and_stream_copy` and
+`the_hls_builder_allows_a_compatible_dolby_vision_profile` cover the allowed
+cases and a source with no Dolby Vision at all.
+
+The debt asked for assertions that no child process starts. Those are asserted
+at the command boundary instead, because that is where the refusal is enforced:
+a refused source yields no command, so the supervisor has nothing to spawn.
+Asserting downstream would amount to checking that a value which does not exist
+cannot be passed to a function requiring it.
+
+Writing these also confirmed a related behavior: an HEVC Dolby Vision source in
+a *direct MPEG-TS* stream is refused rather than copied, because only H.264 is
+copy-safe there, so that path genuinely transcodes. The stream-copy exception
+is proven with fMP4, where HEVC really is copied.
 '''
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'frame-hdr-side-data-is-not-scoped-to-the-video-stream'

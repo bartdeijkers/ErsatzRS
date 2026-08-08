@@ -8346,4 +8346,68 @@ mod tests {
             .filter_map(|packet| packet_pcr(packet, true))
             .collect()
     }
+
+    fn dolby_vision_source_320p(profile: u8, compatibility: u8) -> SourceVideoStream {
+        let mut source = source_320p();
+        source.codec = ersatzrs_ffmpeg::SourceVideoCodec::Hevc;
+        source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+            profile,
+            bl_signal_compatibility_id: compatibility,
+            rpu_present: true,
+            el_present: profile == 7,
+            bl_present: true,
+        });
+        source
+    }
+
+    fn hls_command_for(
+        source: SourceVideoStream,
+    ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+        build_hls_command(
+            "/media/dv.mkv",
+            Path::new("/tmp/ersatzrs-hls-test"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            Duration::ZERO,
+            Some(Duration::from_secs(10)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(source),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+    }
+
+    /// ADR 0064 at the HLS segmenter command boundary.
+    ///
+    /// Asserted here rather than at the worker loop because this is where the
+    /// refusal is enforced: a refused source produces no command, so the worker
+    /// has nothing to spawn.
+    #[test]
+    fn the_hls_builder_refuses_unplayable_dolby_vision_before_any_spawn() {
+        for (profile, compatibility) in [(5_u8, 0_u8), (7, 0), (9, 1)] {
+            let error = hls_command_for(dolby_vision_source_320p(profile, compatibility))
+                .expect_err("an unplayable Dolby Vision profile must be refused");
+            assert!(
+                !error.reason.is_empty(),
+                "profile {profile} must carry an operator-facing reason"
+            );
+        }
+    }
+
+    #[test]
+    fn the_hls_builder_allows_a_compatible_dolby_vision_profile() {
+        // Profile 8.1: the base layer is a conforming HDR10 signal.
+        assert!(hls_command_for(dolby_vision_source_320p(8, 1)).is_ok());
+        // And a source with no Dolby Vision at all is untouched.
+        assert!(hls_command_for(source_320p()).is_ok());
+    }
 }

@@ -4910,4 +4910,96 @@ mod tests {
             },
         }
     }
+
+    fn dolby_vision_source(profile: u8, compatibility: u8) -> SourceVideoStream {
+        let mut source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::Hevc);
+        source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+            profile,
+            bl_signal_compatibility_id: compatibility,
+            rpu_present: true,
+            el_present: profile == 7,
+            bl_present: true,
+        });
+        source
+    }
+
+    /// ADR 0064 at the IPTV command boundary.
+    ///
+    /// Asserted here rather than at the supervisor because this is where the
+    /// refusal is enforced: a refused source produces no command, so there is
+    /// nothing for `spawn_stream_process` to spawn. Testing "no child started"
+    /// downstream would be testing that a `None` cannot be passed to a function
+    /// that requires a command.
+    #[test]
+    fn the_iptv_builder_refuses_unplayable_dolby_vision_before_any_spawn() {
+        for (profile, compatibility) in [(5_u8, 0_u8), (7, 0), (9, 1)] {
+            let error = build_stream_command(
+                "/media/dv.mkv",
+                OutputFormat::MpegTs,
+                Duration::ZERO,
+                &playback_profile(),
+                None,
+                StreamingMode::TransportStream,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(dolby_vision_source(profile, compatibility)),
+                Vec::new(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .expect_err("an unplayable Dolby Vision profile must be refused");
+
+            assert!(
+                !error.reason.is_empty(),
+                "profile {profile} must carry an operator-facing reason"
+            );
+        }
+    }
+
+    #[test]
+    fn the_iptv_builder_allows_profile_8_1_and_stream_copy() {
+        // Profile 8.1: the base layer is a conforming HDR10 signal.
+        assert!(build_stream_command(
+            "/media/dv81.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(dolby_vision_source(8, 1)),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .is_ok());
+
+        // Stream copy hands the elementary stream to the client untouched, so
+        // ErsatzRS is not interpreting the colour and has no basis to refuse.
+        // fMP4 rather than MPEG-TS: only H.264 is copy-safe in a direct MPEG-TS
+        // stream, so an HEVC source there genuinely transcodes and is correctly
+        // refused.
+        assert!(build_stream_command(
+            "/media/dv5.mkv",
+            OutputFormat::HlsMp4,
+            Duration::ZERO,
+            &playback_profile(),
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(dolby_vision_source(5, 0)),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .is_ok());
+    }
 }
