@@ -429,12 +429,131 @@ async fn mysql_output_dynamic_range_health_check_classifies_every_row_shape() {
 }
 
 async fn reset_hdr10_channels(pool: &db::DbPool) {
-    for table in ["Channel", "FFmpegProfile"] {
+    // Child rows first: the orientation seed hangs media and playout rows off
+    // the same ids.
+    for table in [
+        "PlayoutItem",
+        "Playout",
+        "MediaStream",
+        "MediaFile",
+        "MediaVersion",
+        "Movie",
+        "MediaItem",
+        "Channel",
+        "FFmpegProfile",
+    ] {
         let sql = format!(r#"DELETE FROM `{table}` WHERE `Id` >= 900"#);
         sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
             .execute(pool)
             .await
             .expect("reset seeded rows");
+    }
+}
+
+/// ADR 0003 / `p8c-02`: the Source Orientation query joins `MediaVersion`'s
+/// per-type id columns through `COALESCE` under `SELECT DISTINCT`, which is the
+/// shape `MySQL` and `SQLite` have disagreed about before. Assert the same
+/// classification on both.
+#[tokio::test]
+async fn mysql_source_orientation_health_check_reports_only_copied_rotated_items() {
+    #[allow(clippy::disallowed_methods)]
+    let Ok(database_url) = std::env::var("ERSATZRS_MYSQL_TEST_URL") else {
+        eprintln!("skipping MySQL orientation test: ERSATZRS_MYSQL_TEST_URL is not set");
+        return;
+    };
+
+    let pool = db::init(&database_url)
+        .await
+        .expect("initialize MySQL test database");
+    reset_hdr10_channels(&pool).await;
+
+    // Rotated, but transcoded: autorotation bakes it into the pixels.
+    seed_rotated_item_on_channel(&pool, 910, 1, 1, 90).await;
+    let result = ersatzrs_infra::health::run_source_orientation_check(&pool)
+        .await
+        .expect("check with a transcoded rotated item");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::NotApplicable
+    );
+
+    // Copied and rotated: MPEG-TS drops the display matrix.
+    reset_hdr10_channels(&pool).await;
+    seed_rotated_item_on_channel(&pool, 911, 99, 0, 270).await;
+    let result = ersatzrs_infra::health::run_source_orientation_check(&pool)
+        .await
+        .expect("check with a copied rotated item");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::Warning
+    );
+    assert!(
+        result.message.contains("portrait-911.mp4"),
+        "{}",
+        result.message
+    );
+
+    reset_hdr10_channels(&pool).await;
+}
+
+/// Seed a channel whose playout holds one rotated video item.
+async fn seed_rotated_item_on_channel(
+    pool: &db::DbPool,
+    id: i64,
+    video_format: i32,
+    transcode_video: i32,
+    rotation: i32,
+) {
+    seed_hdr10_channel(pool, id, "orientation", video_format, 0, transcode_video, 0).await;
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(
+        r#"INSERT IGNORE INTO `Library` (`Id`, `Name`, `MediaKind`, `MediaSourceId`)
+           SELECT 900, 'orientation', 1, MIN(`Id`) FROM `LocalMediaSource`"#
+            .to_owned(),
+    ))
+    .execute(pool)
+    .await
+    .ok();
+
+    for statement in [
+        format!(r#"INSERT INTO `MediaItem` (`Id`, `State`) VALUES ({id}, 0)"#),
+        format!(r#"INSERT INTO `Movie` (`Id`) VALUES ({id})"#),
+        format!(
+            r#"INSERT INTO `MediaVersion` (
+                   `Id`, `DateAdded`, `DateUpdated`, `Duration`, `Height`,
+                   `MovieId`, `VideoScanKind`, `Width`
+               ) VALUES (
+                   {id}, '2026-08-08T00:00:00Z', '2026-08-08T00:00:00Z',
+                   '01:00:00', 1920, {id}, 1, 1080
+               )"#
+        ),
+        format!(
+            r#"INSERT INTO `MediaStream` (
+                   `Id`, `Index`, `Codec`, `MediaStreamKind`, `Channels`,
+                   `Default`, `Forced`, `MediaVersionId`, `Rotation`
+               ) VALUES ({id}, 0, 'h264', 2, 0, 1, 0, {id}, {rotation})"#
+        ),
+        format!(
+            r#"INSERT INTO `MediaFile` (`MediaVersionId`, `Path`, `PathHash`)
+               VALUES ({id}, '/media/portrait-{id}.mp4', 'hash-{id}')"#
+        ),
+        format!(
+            r#"INSERT INTO `Playout` (`Id`, `ChannelId`, `ScheduleKind`, `Seed`)
+               VALUES ({id}, {id}, 1, 0)"#
+        ),
+        format!(
+            r#"INSERT INTO `PlayoutItem` (
+                   `Id`, `DisableWatermarks`, `FillerKind`, `Finish`, `GuideGroup`,
+                   `InPoint`, `MediaItemId`, `OutPoint`, `PlayoutId`, `Start`
+               ) VALUES (
+                   {id}, 0, 0, '2026-08-08T01:00:00Z', 0, '00:00:00', {id},
+                   '01:00:00', {id}, '2026-08-08T00:00:00Z'
+               )"#
+        ),
+    ] {
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(statement))
+            .execute(pool)
+            .await
+            .expect("seed rotated playout item");
     }
 }
 

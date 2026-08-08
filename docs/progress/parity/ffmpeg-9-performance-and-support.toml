@@ -218,7 +218,35 @@ adr         = '0003'
 description = 'MPEG-TS has no display-matrix container field, so a stream-copied portrait item loses its rotation metadata and a client shows it sideways. MP4 and Matroska preserve it. Decide whether such items should be forced to transcode, flagged in troubleshooting, or documented as a client-side limitation.'
 discovered  = '2026-08-07'
 evidence    = 'Measured with FFmpeg 9: copying a 90-degree-tagged stream to MP4 and MKV preserves `rotation=90`, while the same copy to MPEG-TS reports no rotation side data. Transcoded output is unaffected because autorotation bakes the rotation into the pixels.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. Decision: report, do not force a transcode.
+
+Re-measured on the FFmpeg 9 runtime across every output ErsatzRS serves, using a
+display matrix written with `-display_rotation 90`:
+
+  copy -> MP4                    rotation=90 preserved
+  copy -> Matroska               rotation=90 preserved
+  copy -> HLS, fMP4 segments     rotation=90 preserved
+  copy -> MPEG-TS                lost
+  copy -> HLS, MPEG-TS segments  lost
+  transcode -> MPEG-TS           no side data needed; 320x180 became 180x320,
+                                 so autorotation baked it into the pixels
+
+Every default serving path carries MPEG-TS; fMP4 is opt-in per request
+(`mode=segmenter-fmp4`). Forcing a transcode was rejected: copy is an explicit
+operator choice with a large CPU cost attached, and overriding it to fix
+geometry trades one surprise for a bigger one. ErsatzTV has no rotation handling
+at all, so there is no parity constraint here.
+
+Added the `Source Orientation` health check, which names the rotated items
+scheduled on copy-video channels along with their rotation and channel number,
+and points at the two real fixes. Covered on SQLite and MySQL — its query joins
+`MediaVersion`'s per-type id columns through COALESCE under SELECT DISTINCT,
+the shape the two backends have disagreed about before. Documented in
+`docs/how-to/troubleshoot-startup-and-playback.md` with the measured table and a
+reproduction.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'first-class-vulkan-encoding-is-undecided'

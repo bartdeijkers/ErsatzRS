@@ -100,6 +100,45 @@ If software playback works but hardware playback fails, switch the channel to a
 software FFmpeg profile, restart the stream, and inspect health results for the
 hardware probe.
 
+## Resolve portrait video that plays sideways
+
+A rotated recording — most phone video — carries its orientation as a *display
+matrix* in the container, not in the encoded pixels. MPEG-TS has no field for
+one. Measured with the FFmpeg 9 runtime ErsatzRS ships, copying a 90°-tagged
+stream:
+
+| Output | Rotation after `-c copy` |
+|---|---|
+| MP4 | preserved |
+| Matroska | preserved |
+| HLS with fMP4 segments | preserved |
+| MPEG-TS | **lost** |
+| HLS with MPEG-TS segments | **lost** |
+
+Reproduce it with any file FFmpeg reports a rotation for:
+
+```bash
+ffmpeg -y -i rotated.mp4 -c copy -f mpegts out.ts
+ffprobe -select_streams v:0 -show_entries stream_side_data=rotation \
+  -of csv=p=0 out.ts      # prints nothing
+```
+
+Transcoding is unaffected: FFmpeg autorotates, so the rotation ends up in the
+pixels and the frame dimensions swap. Only a channel whose FFmpeg profile
+**copies** video is affected, and the **Source Orientation** health check names
+the specific items and channels.
+
+Two fixes, in order of preference:
+
+1. Give the channel a transcoding FFmpeg profile. The rotation is then baked in
+   and every client is correct.
+2. Have the client request the fMP4 HLS variant
+   (`/iptv/channel/<number>.m3u8?mode=segmenter-fmp4`), which keeps the display
+   matrix. This only helps clients you control.
+
+ErsatzRS does not silently force a transcode to fix the geometry: copy is an
+explicit operator choice with a large CPU cost attached, so it reports instead.
+
 ## Resolve a rendered but unresponsive admin UI
 
 If pages render but buttons and dialogs do nothing, the browser hydration bundle

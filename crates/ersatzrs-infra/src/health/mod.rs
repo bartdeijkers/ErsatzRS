@@ -26,8 +26,9 @@ use checks::{
     MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
     PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -51,7 +52,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 29] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 30] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -77,6 +78,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 29] = [
     "Mirror Channels",
     "Output Dynamic Range",
     "Dolby Vision",
+    "Source Orientation",
     "VAAPI Driver",
     "VAAPI Device",
     "Provider Connectivity",
@@ -95,6 +97,22 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 29] = [
 /// Returns an error when the database read fails.
 pub async fn run_output_dynamic_range_check(pool: &Pool<Db>) -> Result<HealthCheckResult> {
     checks::OutputDynamicRangeHealthCheck::new(pool.clone())
+        .check()
+        .await
+}
+
+/// Run the Source Orientation check alone (ADR 0003, milestone `p8c-02`).
+///
+/// Exposed for the same reason as the Output Dynamic Range runner: its query
+/// combines `SELECT DISTINCT` with a `COALESCE` join across `MediaVersion`'s
+/// per-type id columns, which is exactly the shape `MySQL` and `SQLite` have
+/// disagreed about before.
+///
+/// # Errors
+///
+/// Returns an error when the database read fails.
+pub async fn run_source_orientation_check(pool: &Pool<Db>) -> Result<HealthCheckResult> {
+    checks::SourceOrientationHealthCheck::new(pool.clone())
         .check()
         .await
 }
@@ -220,6 +238,7 @@ fn registered_health_checks(
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
         Box::new(DolbyVisionHealthCheck::new(pool.clone())),
+        Box::new(SourceOrientationHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),
@@ -1477,6 +1496,124 @@ mod tests {
         );
         assert!(
             result.message.contains("HDR10 requires 10-bit"),
+            "{}",
+            result.message
+        );
+    }
+
+    /// Seed a channel with a playout containing one rotated video item.
+    ///
+    /// `transcode_video`/`video_format` decide whether the channel copies, which
+    /// is the whole condition the check keys on.
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_rotated_item_on_channel(
+        pool: &Pool<Db>,
+        id: i64,
+        video_format: i32,
+        transcode_video: i32,
+        rotation: i32,
+    ) {
+        seed_library_path(pool).await;
+        seed_hdr10_profile_with_acceleration(
+            pool,
+            id,
+            "orientation",
+            video_format,
+            0,
+            transcode_video,
+            0,
+        )
+        .await;
+        for statement in [
+            format!(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES ({id}, 10, 0)"#
+            ),
+            format!(r#"INSERT INTO "Movie" ("Id") VALUES ({id})"#),
+            format!(
+                r#"INSERT INTO "MediaVersion" (
+                       "Id", "DateAdded", "DateUpdated", "Duration", "Height",
+                       "MovieId", "VideoScanKind", "Width"
+                   ) VALUES (
+                       {id}, '2026-08-08T00:00:00Z', '2026-08-08T00:00:00Z',
+                       '01:00:00', 1920, {id}, 1, 1080
+                   )"#
+            ),
+            format!(
+                r#"INSERT INTO "MediaStream" (
+                       "Id", "Index", "Codec", "MediaStreamKind", "Channels",
+                       "Default", "Forced", "MediaVersionId", "Rotation"
+                   ) VALUES ({id}, 0, 'h264', 2, 0, 1, 0, {id}, {rotation})"#
+            ),
+            format!(
+                r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+                   VALUES ({id}, '/media/portrait-{id}.mp4', 'hash-{id}')"#
+            ),
+            format!(
+                r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+                   VALUES ({id}, {id}, 1, 0)"#
+            ),
+            format!(
+                r#"INSERT INTO "PlayoutItem" (
+                       "Id", "DisableWatermarks", "FillerKind", "Finish", "GuideGroup",
+                       "InPoint", "MediaItemId", "OutPoint", "PlayoutId", "Start"
+                   ) VALUES (
+                       {id}, 0, 0, '2026-08-08T01:00:00Z', 0, '00:00:00', {id},
+                       '01:00:00', {id}, '2026-08-08T00:00:00Z'
+                   )"#
+            ),
+        ] {
+            sqlx::query(crate::db::assert_sql_safe(statement))
+                .execute(pool)
+                .await
+                .expect("seed rotated playout item");
+        }
+    }
+
+    /// ADR 0003 / `p8c-02`: MPEG-TS cannot carry a display matrix, so a
+    /// stream-copied rotated item reaches clients sideways. Transcoding bakes
+    /// the rotation into the pixels, so it must not be reported.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn source_orientation_check_reports_only_copied_rotated_items() {
+        let pool = test_pool().await;
+        assert_eq!(
+            super::run_source_orientation_check(&pool)
+                .await
+                .expect("no rotated items")
+                .status,
+            HealthCheckStatus::NotApplicable
+        );
+
+        // Rotated item on a transcoding channel: autorotation handles it.
+        seed_rotated_item_on_channel(&pool, 90, 1, 1, 90).await;
+        assert_eq!(
+            super::run_source_orientation_check(&pool)
+                .await
+                .expect("transcoded rotation")
+                .status,
+            HealthCheckStatus::NotApplicable
+        );
+
+        // Unrotated item on a copy channel: nothing to lose.
+        let pool = test_pool().await;
+        seed_rotated_item_on_channel(&pool, 91, 99, 0, 0).await;
+        assert_eq!(
+            super::run_source_orientation_check(&pool)
+                .await
+                .expect("unrotated copy")
+                .status,
+            HealthCheckStatus::NotApplicable
+        );
+
+        // Rotated item on a copy channel: the reportable case.
+        let pool = test_pool().await;
+        seed_rotated_item_on_channel(&pool, 92, 99, 0, 270).await;
+        let result = super::run_source_orientation_check(&pool)
+            .await
+            .expect("copied rotation");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(
+            result.message.contains("portrait-92.mp4") && result.message.contains("270"),
             "{}",
             result.message
         );

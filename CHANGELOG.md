@@ -15,6 +15,17 @@ release section when tagging a release.
 
 ### Added
 
+- Added a **Source Orientation** health check. Rotated video — most phone
+  recordings — carries its orientation as a container display matrix, and
+  MPEG-TS has no field for one, so a channel that *copies* video delivers
+  portrait content sideways. The check names the affected items and channels and
+  points at the two real fixes: transcode the channel, or use the fMP4 HLS
+  variant. Transcoding channels are unaffected, because FFmpeg autorotates and
+  the rotation ends up in the pixels. ErsatzRS reports rather than silently
+  forcing a transcode, since copy is an explicit choice with a large CPU cost
+  attached. The measured behavior of every output format is documented in the
+  troubleshooting guide.
+
 - FFmpeg profiles set for HDR10 output can now carry their own **mastering
   display** and **MaxCLL/MaxFALL** values (ADR 0064). ErsatzRS has always had to
   signal something when an HDR10 encode has no source metadata to carry
