@@ -101,12 +101,9 @@ impl HardwareGraphOperation {
 
         match self {
             Self::NvencHdrVulkanLibplacebo => {
+                args.extend(NVENC_HDR_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
                 args.extend(
                     [
-                        "-init_hw_device",
-                        "vulkan=vk",
-                        "-filter_hw_device",
-                        "vk",
                         "-f",
                         "lavfi",
                         "-i",
@@ -121,12 +118,9 @@ impl HardwareGraphOperation {
                 );
             }
             Self::NvencCudaScale => {
+                args.extend(NVENC_CUDA_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
                 args.extend(
                     [
-                        "-init_hw_device",
-                        "cuda=cu",
-                        "-filter_hw_device",
-                        "cu",
                         "-f",
                         "lavfi",
                         "-i",
@@ -154,6 +148,27 @@ impl HardwareGraphOperation {
 /// `lavfi` source shared by every probe. See `probe_arguments` for why the
 /// size matters.
 const PROBE_SOURCE: &str = "testsrc2=size=320x240:duration=0.2:rate=5";
+
+/// Device-initialization prefix the NVENC HDR graph uses, shared by the probe
+/// and the playback pipeline.
+///
+/// The Vulkan device is *derived from the selected CUDA device* (`vk@nv`)
+/// rather than opened by default. That distinction is the whole point: on a
+/// host with an NVIDIA GPU and a software Vulkan rasterizer, a bare
+/// `-init_hw_device vulkan` opens llvmpipe, so a probe using it would approve
+/// or deny a device playback never touches.
+pub const NVENC_HDR_DEVICE_PREFIX: [&str; 6] = [
+    "-init_hw_device",
+    "cuda=nv",
+    "-init_hw_device",
+    "vulkan=vk@nv",
+    "-filter_hw_device",
+    "vk",
+];
+
+/// Device-initialization prefix the CUDA-only NVENC graph uses.
+pub const NVENC_CUDA_DEVICE_PREFIX: [&str; 4] =
+    ["-init_hw_device", "cuda=nv", "-filter_hw_device", "nv"];
 
 /// Why a functional graph probe failed.
 ///
@@ -351,7 +366,11 @@ mod tests {
 
         // Every component that has to interoperate must appear, or the probe
         // proves nothing that the advertised hwaccel list did not already.
-        assert!(joined.contains("-init_hw_device vulkan=vk"), "{joined}");
+        // The Vulkan device is derived from the selected CUDA device, exactly
+        // as playback does it — not a default Vulkan device.
+        assert!(joined.contains("-init_hw_device cuda=nv"), "{joined}");
+        assert!(joined.contains("-init_hw_device vulkan=vk@nv"), "{joined}");
+        assert!(joined.contains("-filter_hw_device vk"), "{joined}");
         assert!(joined.contains("libplacebo"), "{joined}");
         assert!(joined.contains("hwmap=derive_device=cuda"), "{joined}");
         assert!(joined.contains("scale_cuda"), "{joined}");

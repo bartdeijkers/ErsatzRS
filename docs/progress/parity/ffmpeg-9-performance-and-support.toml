@@ -398,7 +398,28 @@ adr         = '0014'
 description = 'P2: Generate the Vulkan probe from the same selected-device initialization used by playback: initialize `cuda=nv`, derive `vulkan=vk@nv`, use the same filter device and graph operations, and key the result to that selected GPU. Keep probe and pipeline argv construction coupled so they cannot drift. Closure requires exact-argv tests comparing the shared device prefix and a multi-device/llvmpipe regression proving that a standalone default Vulkan device cannot approve or deny the NVIDIA playback graph.'
 discovered  = '2026-08-07'
 evidence    = 'Playback emits `-init_hw_device cuda=nv` followed by `-init_hw_device vulkan=vk@nv`, while `HardwareGraphOperation::NvencHdrVulkanLibplacebo::probe_arguments` initializes standalone `vulkan=vk`; the two commands may select different physical devices.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. `NVENC_HDR_DEVICE_PREFIX` is a single shared constant used by
+both the probe command and the playback pipeline, so they cannot drift: both
+initialize `cuda=nv`, derive `vulkan=vk@nv` from it, and set `-filter_hw_device vk`.
+The probe previously opened a bare `-init_hw_device vulkan`, which selects the
+default Vulkan device.
+
+That distinction is not academic. On the maintainer's WSL2 host the default
+Vulkan device is `llvmpipe`, a software rasterizer that is not the playback GPU
+at all — so the old probe was answering for a device playback never touches.
+
+Re-running the real-hardware gate with the corrected chain returns the same
+verdict for the right reason: `nvenc-hdr-vulkan-libplacebo` is denied with
+"no usable Vulkan device" — the NVIDIA GPU genuinely exposes no Vulkan device
+here — rather than the downstream `cuda-interop` symptom the llvmpipe path
+produced. `nvenc-cuda-scale` remains proven.
+
+Regressions: `the_vulkan_probe_and_the_pipeline_share_one_device_chain`
+(exact-fragment comparison in both directions, and neither opens a default
+Vulkan device) and `a_default_vulkan_device_cannot_stand_in_for_the_playback_gpu`.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'hardware-graph-cache-conflates-completion-with-denials'

@@ -28,7 +28,7 @@ use crate::{
     HardwareCapabilitiesFactory, HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind,
     MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
     SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -3198,13 +3198,16 @@ fn configure_hardware_acceleration(
         }
         HardwareAccelerationKind::Nvenc => {
             if nvidia_vulkan_hdr_tonemap(request) {
+                // Shared with the functional probe so the two cannot drift: a
+                // probe that opened a different Vulkan device would approve or
+                // deny a graph playback never runs.
                 steps.push(PipelineStep::global(
                     "cuda_hw_device",
-                    ["-init_hw_device", "cuda=nv"],
+                    NVENC_HDR_DEVICE_PREFIX[0..2].iter().copied(),
                 ));
                 steps.push(PipelineStep::global(
                     "vulkan_hw_device",
-                    ["-init_hw_device", "vulkan=vk@nv"],
+                    NVENC_HDR_DEVICE_PREFIX[2..4].iter().copied(),
                 ));
             } else {
                 steps.push(PipelineStep::global(

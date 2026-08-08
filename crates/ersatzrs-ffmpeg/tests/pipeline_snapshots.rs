@@ -5016,3 +5016,58 @@ fn stream_copy_of_a_dolby_vision_source_is_left_alone() {
 
     assert!(!args.contains("sidedata=mode=delete"), "got: {args}");
 }
+
+#[test]
+fn the_vulkan_probe_and_the_pipeline_share_one_device_chain() {
+    // The probe must open the device playback opens. A bare
+    // `-init_hw_device vulkan` picks the default Vulkan device, which on a host
+    // with an NVIDIA GPU and a software rasterizer is llvmpipe — so such a
+    // probe would approve or deny a device playback never touches.
+    let probe = HardwareGraphOperation::NvencHdrVulkanLibplacebo
+        .probe_arguments()
+        .join(" ");
+
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    let request = hdr_nvenc_request(report);
+    let pipeline = NvencPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    // Both derive the Vulkan device from the selected CUDA device.
+    for fragment in ["-init_hw_device cuda=nv", "-init_hw_device vulkan=vk@nv"] {
+        assert!(
+            probe.contains(fragment),
+            "probe missing {fragment}: {probe}"
+        );
+        assert!(
+            pipeline.contains(fragment),
+            "pipeline missing {fragment}: {pipeline}"
+        );
+    }
+
+    // And neither opens a default Vulkan device.
+    assert!(!probe.contains("-init_hw_device vulkan "), "{probe}");
+    assert!(!pipeline.contains("-init_hw_device vulkan "), "{pipeline}");
+}
+
+#[test]
+fn a_default_vulkan_device_cannot_stand_in_for_the_playback_gpu() {
+    // Regression for the llvmpipe case: the probe command must name the
+    // selected GPU chain, so a machine whose default Vulkan device is a
+    // software rasterizer cannot silently answer for the NVIDIA graph.
+    let probe = HardwareGraphOperation::NvencHdrVulkanLibplacebo
+        .probe_arguments()
+        .join(" ");
+
+    assert!(
+        probe.contains("vk@nv"),
+        "the probe must derive its Vulkan device from the CUDA device: {probe}"
+    );
+    assert!(
+        !probe.contains("vulkan=vk "),
+        "a standalone default Vulkan device must not be used: {probe}"
+    );
+}
