@@ -17,9 +17,9 @@ use crate::{
     realtime_filter, reset_pts_filter, scale_subtitle_image_filter, sdr_to_hdr10_cuda_filter,
     sdr_to_hdr10_filter, select_forced_software_video_decoder, select_software_video_decoder,
     select_video_decoder, standard_format_flags, still_image_loop_filter,
-    subtitle_overlay_cuda_filter, subtitle_overlay_filter, subtitle_overlay_vaapi_filter,
-    subtitle_scale_npp_filter, subtitles_filter, time_limit, tonemap_filter_for,
-    vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
+    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
+    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
     watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
     watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
     yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
@@ -1817,13 +1817,25 @@ fn apply_hdr10_output_conversion(
         })
         .unwrap_or_default();
 
-    let filter = match (transfer, uses_cuda) {
+    let mut filter = match (transfer, uses_cuda) {
         (SourceTransferKind::Pq, _) => preserve_hdr10_filter(),
         (SourceTransferKind::Hlg, false) => hlg_to_hdr10_filter(download),
         (SourceTransferKind::Hlg, true) => hlg_to_hdr10_cuda_filter(download),
         (SourceTransferKind::Sdr, false) => sdr_to_hdr10_filter(download, &source_tags),
         (SourceTransferKind::Sdr, true) => sdr_to_hdr10_cuda_filter(download, &source_tags),
     };
+
+    // ADR 0064: a transcoded HDR10 stream is HDR10, not Dolby Vision. Its base
+    // layer has been re-encoded and no RPU accompanies it, so retaining the
+    // Dolby Vision record would describe a stream that no longer exists.
+    // HDR10's own mastering-display and content-light metadata stays.
+    if request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(|source| source.dolby_vision.is_some())
+    {
+        filter = format!("{filter},{}", strip_dolby_vision_metadata_filter());
+    }
     let converts_frames = transfer != SourceTransferKind::Pq;
 
     filter_chain.video.push(filter);

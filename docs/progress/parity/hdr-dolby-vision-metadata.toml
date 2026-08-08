@@ -296,4 +296,25 @@ adr         = '0064'
 description = 'P2: Add a Dolby-Vision-only side-data deletion filter and apply it to every transcoded HDR10 branch (PQ preserve, HLG conversion, and SDR conversion; software and NVENC) when the selected source carries a Dolby Vision record. Preserve valid mastering-display and content-light HDR10 metadata, and leave stream copy untouched. Closure requires argv/snapshot coverage for profile 8 PQ and HLG sources on software/NVENC plus the real profile 8.1 output gate proving that ffprobe reports HDR10 signalling and no DOVI record.'
 discovered  = '2026-08-07'
 evidence    = '`apply_hdr10_output_conversion` uses `preserve_hdr10_filter` for PQ and conversion filters for HLG/SDR without deleting `DOVI_RPU_BUFFER` or `DOVI_METADATA`; the existing HDR10 test explicitly rejects every `sidedata=mode=delete` filter even for a Dolby Vision source.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. `strip_dolby_vision_metadata_filter` deletes only
+`DOVI_RPU_BUFFER` and `DOVI_METADATA`, and `apply_hdr10_output_conversion`
+appends it to every transcoded HDR10 branch — PQ preserve, HLG conversion, and
+SDR conversion, on both the software and NVENC paths — when the selected source
+carries a Dolby Vision record.
+
+Deliberately narrower than the SDR strip in `filter::tonemap`, which also
+removes mastering display and content light: those stay valid for an HDR10
+output and are the whole point of it. Stream copy is untouched, since adding a
+filter there would force a transcode.
+
+Regressions: `hdr10_transcode_strips_dolby_vision_but_keeps_hdr10_metadata`
+(PQ and HLG sources, software and NVENC, asserting the DV deletions are present
+and the HDR10 ones are not), `hdr10_transcode_of_a_non_dolby_vision_source_adds_no_strip`,
+and `stream_copy_of_a_dolby_vision_source_is_left_alone`.
+
+Runtime proof against the real profile 8.1 file: the transcoded output reports
+`yuv420p10le / bt2020nc / smpte2084 / bt2020` with mastering display and content
+light present and no DOVI configuration record.
+'''
+resolved    = true

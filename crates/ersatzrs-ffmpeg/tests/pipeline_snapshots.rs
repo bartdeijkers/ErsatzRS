@@ -4923,3 +4923,96 @@ fn detection_agrees_with_ffmpeg_about_which_loop_option_opens_the_input() {
         );
     }
 }
+
+#[test]
+fn hdr10_transcode_strips_dolby_vision_but_keeps_hdr10_metadata() {
+    // ADR 0064: HDR10 output must not retain Dolby Vision signalling the muxed
+    // stream no longer satisfies. The base layer has been re-encoded and no RPU
+    // accompanies it, so the record would describe a stream that does not exist
+    // — and a client could select a Dolby Vision decode path for it.
+    for (transfer, is_hdr) in [(Some("smpte2084"), true), (Some("arib-std-b67"), true)] {
+        let mut source = source_with_transfer(transfer, is_hdr);
+        source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+            profile: 8,
+            bl_signal_compatibility_id: 1,
+            rpu_present: true,
+            el_present: false,
+            bl_present: true,
+        });
+        let request = PipelineRequest::new(InputFile::video("/media/dv81.mkv"), hdr10_desired())
+            .with_source_video_stream(source);
+
+        for args in [
+            SoftwarePipelineBuilder
+                .build(request.clone())
+                .command(&request.inputs)
+                .arguments
+                .join(" "),
+            NvencPipelineBuilder
+                .build(request.clone())
+                .command(&request.inputs)
+                .arguments
+                .join(" "),
+        ] {
+            assert!(
+                args.contains("sidedata=mode=delete:type=DOVI_RPU_BUFFER"),
+                "{transfer:?}: {args}"
+            );
+            assert!(
+                args.contains("sidedata=mode=delete:type=DOVI_METADATA"),
+                "{transfer:?}: {args}"
+            );
+            // HDR10's own metadata is the point of the output and must stay.
+            assert!(
+                !args.contains("sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA"),
+                "{transfer:?}: {args}"
+            );
+            assert!(
+                !args.contains("sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL"),
+                "{transfer:?}: {args}"
+            );
+            assert!(args.contains("color_trc=smpte2084"), "{transfer:?}: {args}");
+        }
+    }
+}
+
+#[test]
+fn hdr10_transcode_of_a_non_dolby_vision_source_adds_no_strip() {
+    let request = PipelineRequest::new(InputFile::video("/media/hdr10.mkv"), hdr10_desired())
+        .with_source_video_stream(source_with_transfer(Some("smpte2084"), true));
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("sidedata=mode=delete"), "got: {args}");
+}
+
+#[test]
+fn stream_copy_of_a_dolby_vision_source_is_left_alone() {
+    // Copy preserves the elementary stream; adding a filter would force a
+    // transcode and change what the client receives.
+    let mut source = source_with_transfer(Some("smpte2084"), true);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 8,
+        bl_signal_compatibility_id: 1,
+        rpu_present: true,
+        el_present: false,
+        bl_present: true,
+    });
+    let desired = DesiredVideoState {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        ..DesiredVideoState::h264_1080p()
+    };
+    let request = PipelineRequest::new(InputFile::video("/media/dv81.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let args = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs)
+        .arguments
+        .join(" ");
+
+    assert!(!args.contains("sidedata=mode=delete"), "got: {args}");
+}

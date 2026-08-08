@@ -186,6 +186,22 @@ impl ContentLightLevel {
     }
 }
 
+/// Drop Dolby Vision side data while keeping HDR10 static metadata.
+///
+/// ADR 0064: HDR10 output "must not retain Dolby Vision signalling that the
+/// muxed stream no longer satisfies". A transcoded HDR10 stream is HDR10, not
+/// Dolby Vision — its base layer has been re-encoded and no RPU accompanies it
+/// — so carrying the record forward would describe a stream that does not
+/// exist, and a client could select a Dolby Vision decode path for it.
+///
+/// Distinct from the SDR strip in [`super::tonemap`], which also removes
+/// mastering display and content light: those stay valid here and are the whole
+/// point of an HDR10 output.
+#[must_use]
+pub fn strip_dolby_vision_metadata_filter() -> &'static str {
+    "sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA"
+}
+
 /// Pin the output frame tags to the HDR10 contract.
 ///
 /// The pipeline appends this after every transform that establishes HDR10
