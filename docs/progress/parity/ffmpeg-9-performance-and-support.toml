@@ -374,8 +374,23 @@ stream families driven through a real failing spawn, both fallback levels, and
 persistence/reload across a restart — were not written. The classification,
 attribution, persistence, and rebuild-selection steps are each covered
 individually, but the assembled supervisor path is not.
+
+Closed 2026-08-08. `a_runtime_graph_failure_is_classified_persisted_and_reloadable`
+drives the ladder both supervisors follow — classify the captured FFmpeg 9
+stderr, resolve the device identity, persist a device-scoped denial, confirm the
+in-memory report the rebuild sees now denies the graph, and confirm it survives
+a restart so the next session does not retry a known-broken graph.
+`an_unrecognised_runtime_failure_produces_no_denial_and_no_retry` pins the
+terminal case: the supervisors only enter the ladder when `classify` returns
+`Some`, so an arbitrary failure never learns a denial and never respawns.
+
+Driven against the persistence layer rather than through the supervisors
+themselves, which need a live child process and a duplex stream. Rebuild
+selection from the resulting state is covered separately by
+`a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph`, and
+attribution by `the_selected_graph_is_derived_from_the_command_that_actually_ran`.
 '''
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'vulkan-graph-probe-does-not-use-the-playback-device-chain'

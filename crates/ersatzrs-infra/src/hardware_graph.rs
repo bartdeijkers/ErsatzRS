@@ -678,4 +678,73 @@ mod tests {
             "the stale rows are cleared, not just ignored"
         );
     }
+
+    /// The retry ladder both stream supervisors follow, exercised end to end
+    /// against the persistence layer.
+    ///
+    /// The supervisors themselves need a live child process and a duplex
+    /// stream, so the steps they perform are driven here instead: classify the
+    /// failing stderr, persist a device-scoped denial, and confirm the reloaded
+    /// state is what a rebuilt command would select from.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn a_runtime_graph_failure_is_classified_persisted_and_reloadable() {
+        let pool = test_pool().await;
+        let mut report = FfmpegCapabilityReport::default();
+        report.nvidia_gpu_list =
+            Some("[ GPU #0 - < NVIDIA GeForce RTX 3080 Ti > has Compute SM 8.6 ]".to_owned());
+        report.prove_hardware_graph(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            "NVIDIA GeForce RTX 3080 Ti",
+        );
+
+        // What a live transcode dies with when the Vulkan device cannot bridge
+        // to CUDA, captured from FFmpeg 9.
+        let stderr = "[CUDA @ 0x1] Could not derive CUDA device.";
+        let kind = GraphFailureKind::classify(stderr).expect("a known runtime signature");
+        let device = report.hardware_graph_device();
+        assert_eq!(device, "NVIDIA GeForce RTX 3080 Ti");
+
+        persist_hardware_graph_denial(
+            &pool,
+            "/opt/ffmpeg",
+            &mut report,
+            HardwareGraphDenial::new(
+                HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+                &device,
+                kind,
+            ),
+        )
+        .await
+        .expect("persist the runtime-learned denial");
+
+        // The in-memory report the rebuild sees now denies the graph.
+        assert!(
+            report.hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device)
+        );
+
+        // And it survives a restart, so the next session does not retry a
+        // known-broken graph.
+        let mut next_session = FfmpegCapabilityReport::default();
+        apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut next_session)
+            .await
+            .expect("reload after restart");
+        assert!(next_session
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device));
+    }
+
+    /// An arbitrary runtime failure must stay terminal.
+    #[test]
+    fn an_unrecognised_runtime_failure_produces_no_denial_and_no_retry() {
+        // The supervisors only enter the retry ladder when `classify` returns
+        // Some, so an unclassified failure never learns a denial and never
+        // respawns — it fails the stream, as ADR 0014 requires.
+        for stderr in [
+            "No space left on device",
+            "Connection timed out",
+            "Invalid data found when processing input",
+        ] {
+            assert_eq!(GraphFailureKind::classify(stderr), None, "{stderr}");
+        }
+    }
 }
