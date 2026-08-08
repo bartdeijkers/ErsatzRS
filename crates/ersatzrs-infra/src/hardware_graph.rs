@@ -467,18 +467,111 @@ mod tests {
         );
     }
 
+    /// Write a fake `ffmpeg` that exits with `code` after printing `stderr`.
+    ///
+    /// The probe only cares about exit status and the stderr signature, so a
+    /// shell script is a faithful stand-in and keeps these tests hermetic —
+    /// they assert the classifier and the outcome shape, not FFmpeg itself.
+    #[cfg(unix)]
+    fn write_fake_ffmpeg(dir: &Path, code: i32, stderr: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let path = dir.join("fake-ffmpeg");
+        let body = format!("#!/bin/sh\ncat >&2 <<'EOF'\n{stderr}\nEOF\nexit {code}\n");
+        std::fs::write(&path, body).expect("write fake ffmpeg");
+        let mut permissions = std::fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).expect("chmod");
+        path
+    }
+
+    #[cfg(unix)]
     #[tokio::test]
-    async fn a_missing_binary_is_unproven_rather_than_hanging_or_denying() {
+    async fn a_successful_probe_is_the_only_positive_evidence() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let ffmpeg = write_fake_ffmpeg(dir.path(), 0, "");
+
+        let outcome =
+            probe_hardware_graph(&ffmpeg, HardwareGraphOperation::NvencCudaScale, "gpu").await;
+
+        assert_eq!(outcome, HardwareGraphProbe::Proven);
+        assert!(outcome.is_proven());
+        assert_eq!(outcome.denial(), None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_classified_failure_is_denied_and_persistable() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        // The measured WSL2 signature.
+        let ffmpeg = write_fake_ffmpeg(dir.path(), 1, "[CUDA @ 0x1] Could not derive CUDA device.");
+
         let outcome = probe_hardware_graph(
-            Path::new("/nonexistent/ffmpeg-does-not-exist"),
-            HardwareGraphOperation::NvencCudaScale,
-            "test device",
+            &ffmpeg,
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            "gpu",
         )
         .await;
 
-        // Not proven, so not selectable — but not persisted either, because a
-        // missing binary is an environment problem, not a property of the graph.
-        assert!(!outcome.is_proven(), "an unspawnable probe is not evidence");
+        assert!(!outcome.is_proven());
+        let denial = outcome.denial().expect("a classified failure is a denial");
+        assert_eq!(denial.kind, GraphFailureKind::CudaInterop);
+        assert_eq!(denial.device, "gpu");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_unclassified_failure_is_unproven_and_not_persisted() {
+        // ADR 0014 forbids learning a denial from an arbitrary FFmpeg failure:
+        // a full disk must not permanently disable a working graph. But it is
+        // also not evidence the graph works, so it must not be selectable.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let ffmpeg = write_fake_ffmpeg(dir.path(), 1, "No space left on device");
+
+        let outcome =
+            probe_hardware_graph(&ffmpeg, HardwareGraphOperation::NvencCudaScale, "gpu").await;
+
+        assert_eq!(outcome, HardwareGraphProbe::Unproven);
+        assert!(!outcome.is_proven());
+        assert_eq!(outcome.denial(), None, "nothing to persist");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_spawn_failure_is_unproven_and_not_persisted() {
+        let outcome = probe_hardware_graph(
+            Path::new("/nonexistent/ffmpeg-does-not-exist"),
+            HardwareGraphOperation::NvencCudaScale,
+            "gpu",
+        )
+        .await;
+
+        assert_eq!(outcome, HardwareGraphProbe::Unproven);
         assert_eq!(outcome.denial(), None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_probe_that_hangs_is_denied_rather_than_blocking_startup() {
+        // A hung driver is exactly what the probe exists to catch, and it
+        // recurs, so unlike the other failures a timeout *is* persistable.
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("hanging-ffmpeg");
+        std::fs::write(&path, "#!/bin/sh\nsleep 600\n").expect("write script");
+        let mut permissions = std::fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).expect("chmod");
+
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(PROBE_TIMEOUT.as_secs() + 10),
+            probe_hardware_graph(&path, HardwareGraphOperation::NvencCudaScale, "gpu"),
+        )
+        .await
+        .expect("the probe must bound itself, not hang startup");
+
+        assert!(!outcome.is_proven());
+        assert!(outcome.denial().is_some(), "a timeout is persistable");
     }
 }

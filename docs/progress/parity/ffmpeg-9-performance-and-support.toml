@@ -289,8 +289,22 @@ discovered  = '2026-08-07'
 evidence    = '`probe_hardware_graph` applies `GraphFailureKind::classify(&stderr)?`; an unclassified non-zero exit therefore returns `None`, the same value used for a successful probe, and `nvidia_vulkan_hdr_tonemap` treats absence of a denial as sufficient evidence.'
 remediation = '''
 Fixed 2026-08-08: `probe_hardware_graph` returns an explicit `HardwareGraphProbe::{Proven, Denied, Unproven}`. Only a classified failure is persisted; an unclassified failure, spawn failure, or timeout-without-signature leaves the graph non-selectable without writing a denial. `FfmpegCapabilityReport` tracks positive proof separately, and selection requires it once a runtime has probed. A runtime that never probed keeps its previous advertised-hwaccel behavior so older databases are not silently demoted. Regressions: `a_probed_runtime_requires_positive_proof_for_the_vulkan_graph`, `a_runtime_that_never_probed_keeps_its_previous_behavior`, `a_missing_binary_is_unproven_rather_than_hanging_or_denying`. The full fake-FFmpeg matrix this debt asks for is not yet written.
+
+Closed 2026-08-08. The closure gate's fake-FFmpeg matrix now exists in
+`crates/ersatzrs-infra/src/hardware_graph.rs`, using a shell-script stand-in so
+the tests are hermetic and assert the outcome shape rather than FFmpeg itself:
+`a_successful_probe_is_the_only_positive_evidence`,
+`a_classified_failure_is_denied_and_persistable`,
+`an_unclassified_failure_is_unproven_and_not_persisted`,
+`a_spawn_failure_is_unproven_and_not_persisted`, and
+`a_probe_that_hangs_is_denied_rather_than_blocking_startup` (which also proves
+the probe bounds itself instead of hanging startup).
+
+Command-generation assertions that only proven graphs are selected:
+`a_probed_runtime_requires_positive_proof_for_the_vulkan_graph` and
+`a_runtime_that_never_probed_keeps_its_previous_behavior`.
 '''
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'nvenc-cuda-scale-denial-does-not-demote-to-software'
