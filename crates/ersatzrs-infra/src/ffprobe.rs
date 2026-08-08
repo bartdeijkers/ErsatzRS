@@ -303,15 +303,23 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
         version.duration = duration;
     }
 
-    let frame_side_data: Vec<&FfprobeSideData> = probe
-        .frames
+    // Only one video stream? ffprobe sometimes omits `stream_index` on frames,
+    // and with a single video stream there is no ambiguity about who they
+    // belong to. With more than one, an unindexed frame is dropped rather than
+    // attributed to the wrong stream.
+    let single_video_stream = probe
+        .streams
         .iter()
-        .flat_map(|frame| &frame.side_data_list)
-        .collect();
+        .filter(|stream| stream.codec_type.as_deref() == Some("video"))
+        .count()
+        == 1;
     let streams = probe
         .streams
         .iter()
-        .filter_map(|stream| stream_to_domain(stream, 0, &frame_side_data))
+        .filter_map(|stream| {
+            let frame_side_data = frame_side_data_for_stream(probe, stream, single_video_stream);
+            stream_to_domain(stream, 0, &frame_side_data)
+        })
         .collect();
 
     if let Some(video_stream) = probe
@@ -366,6 +374,26 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
             })
             .unwrap_or_default(),
     }
+}
+
+/// Frame side data belonging to one stream.
+fn frame_side_data_for_stream<'a>(
+    probe: &'a FfprobeOutput,
+    stream: &FfprobeStream,
+    single_video_stream: bool,
+) -> Vec<&'a FfprobeSideData> {
+    probe
+        .frames
+        .iter()
+        .filter(|frame| match (frame.stream_index, stream.index) {
+            (Some(frame_index), Some(stream_index)) => frame_index == stream_index,
+            // Unindexed frames are usable only when there is nothing to confuse
+            // them with.
+            (None, _) => single_video_stream,
+            (Some(_), None) => false,
+        })
+        .flat_map(|frame| &frame.side_data_list)
+        .collect()
 }
 
 fn stream_to_domain(
@@ -523,6 +551,11 @@ struct FfprobeOutput {
 
 #[derive(Debug, Deserialize)]
 struct FfprobeFrame {
+    /// Stream this frame belongs to.
+    ///
+    /// Without it, a file with two video streams would have the first stream's
+    /// mastering display and Dolby Vision record broadcast onto the second.
+    stream_index: Option<i32>,
     #[serde(default)]
     side_data_list: Vec<FfprobeSideData>,
 }
@@ -974,6 +1007,91 @@ mod tests {
             );
         } else {
             assert!(!configuration.is_playable(), "{}", configuration.evidence());
+        }
+    }
+
+    #[test]
+    fn frame_side_data_is_scoped_to_its_own_video_stream() {
+        // Two video streams with distinct HDR and Dolby Vision metadata. Before
+        // scoping, the first stream's data was broadcast onto both, so pinning
+        // the second stream produced another stream's colour metadata.
+        let json = br#"{
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "hevc"},
+                {"index": 1, "codec_type": "video", "codec_name": "hevc"}
+            ],
+            "frames": [
+                {"stream_index": 0, "side_data_list": [
+                    {"side_data_type": "Mastering display metadata",
+                     "red_x": "34000/50000", "red_y": "16000/50000",
+                     "green_x": "13250/50000", "green_y": "34500/50000",
+                     "blue_x": "7500/50000", "blue_y": "3000/50000",
+                     "white_point_x": "15635/50000", "white_point_y": "16450/50000",
+                     "max_luminance": "10000000/10000", "min_luminance": "50/10000"},
+                    {"side_data_type": "Content light level metadata",
+                     "max_content": 1000, "max_average": 400},
+                    {"side_data_type": "DOVI configuration record",
+                     "dv_profile": 8, "rpu_present_flag": 1, "el_present_flag": 0,
+                     "bl_present_flag": 1, "dv_bl_signal_compatibility_id": 1}
+                ]},
+                {"stream_index": 1, "side_data_list": [
+                    {"side_data_type": "Content light level metadata",
+                     "max_content": 4000, "max_average": 600}
+                ]}
+            ]
+        }"#;
+
+        let probed = super::parse_ffprobe_json("two-video-streams.mkv", json).expect("parse");
+        let first = &probed.streams[0];
+        let second = &probed.streams[1];
+
+        assert_eq!(first.max_cll, Some(1_000));
+        assert_eq!(first.dolby_vision_profile, Some(8));
+        assert!(first.mastering_display.is_some());
+
+        // The second stream keeps only its own values.
+        assert_eq!(second.max_cll, Some(4_000));
+        assert_eq!(second.max_fall, Some(600));
+        assert_eq!(
+            second.mastering_display, None,
+            "the first stream's mastering display must not leak"
+        );
+        assert_eq!(
+            second.dolby_vision_profile, None,
+            "the first stream's Dolby Vision record must not leak"
+        );
+    }
+
+    #[test]
+    fn unindexed_frames_are_used_only_when_there_is_one_video_stream() {
+        // ffprobe can omit stream_index. With a single video stream that is
+        // unambiguous; with two it would be a guess, so the data is dropped.
+        let single = br#"{
+            "streams": [{"index": 0, "codec_type": "video", "codec_name": "hevc"}],
+            "frames": [{"side_data_list": [
+                {"side_data_type": "Content light level metadata",
+                 "max_content": 1000, "max_average": 400}
+            ]}]
+        }"#;
+        let probed = super::parse_ffprobe_json("single.mkv", single).expect("parse");
+        assert_eq!(probed.streams[0].max_cll, Some(1_000));
+
+        let multiple = br#"{
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "hevc"},
+                {"index": 1, "codec_type": "video", "codec_name": "hevc"}
+            ],
+            "frames": [{"side_data_list": [
+                {"side_data_type": "Content light level metadata",
+                 "max_content": 1000, "max_average": 400}
+            ]}]
+        }"#;
+        let probed = super::parse_ffprobe_json("multiple.mkv", multiple).expect("parse");
+        for stream in &probed.streams {
+            assert_eq!(
+                stream.max_cll, None,
+                "an unindexed frame must not be attributed by guesswork"
+            );
         }
     }
 }

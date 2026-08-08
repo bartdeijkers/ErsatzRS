@@ -273,7 +273,22 @@ adr         = '0064'
 description = 'P2: Retain `stream_index` on each `FfprobeFrame`, group frame side data by stream, and pass only the matching group into `stream_to_domain`; if ffprobe omits an index, allow a fallback only when the media has exactly one video stream rather than broadcasting metadata to every stream. Closure requires a two-video-stream JSON regression with distinct mastering display, MaxCLL/MaxFALL, and Dolby Vision data plus a pinned-secondary-stream playback assertion.'
 discovered  = '2026-08-07'
 evidence    = '`FfprobeFrame` stores only `side_data_list`, and `project_to_media_version` flattens side data from every probed frame into one vector passed to every stream, so a selected secondary stream can inherit or lose metadata from another video stream.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. `FfprobeFrame` retains `stream_index`, and
+`frame_side_data_for_stream` passes each stream only its own frames.
+
+An unindexed frame — ffprobe sometimes omits the field — is used only when the
+media has exactly one video stream, where there is nothing to confuse it with.
+With more than one it is dropped rather than attributed by guesswork, because a
+wrong attribution is worse than a missing value: it would give a pinned
+secondary stream another stream's colour metadata.
+
+Regressions: `frame_side_data_is_scoped_to_its_own_video_stream` (two video
+streams with distinct mastering display, MaxCLL/MaxFALL, and Dolby Vision
+records, asserting neither leaks into the other) and
+`unindexed_frames_are_used_only_when_there_is_one_video_stream`.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'hdr10-transcode-does-not-strip-dolby-vision-side-data'
