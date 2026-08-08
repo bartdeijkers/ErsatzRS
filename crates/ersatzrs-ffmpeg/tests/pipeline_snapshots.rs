@@ -3970,6 +3970,88 @@ fn graphics_fixture(name: &str) -> String {
 }
 
 #[test]
+fn animation_detection_parses_container_structure_not_marker_bytes() {
+    use ersatzrs_ffmpeg::image_file_is_animated as animated;
+    let f = |name: &str| std::path::PathBuf::from(graphics_fixture(name));
+
+    // Positive controls.
+    assert!(animated(&f("animated-alpha.webp")), "animated WebP");
+    assert!(
+        animated(&f("animated-no-loop-extension.gif")),
+        "a valid multi-frame GIF need not carry a NETSCAPE2.0 loop extension; \
+         keying on that extension under-detects"
+    );
+    assert!(
+        animated(&f("animated-large-metadata.webp")),
+        "chunk ordering can place ANIM past any fixed prefix when a file carries \
+         large EXIF/XMP/ICCP metadata first"
+    );
+
+    // Negative controls.
+    assert!(!animated(&f("static-alpha.webp")), "still WebP");
+    assert!(!animated(&f("does-not-exist.webp")), "missing file");
+}
+
+#[test]
+fn animation_detection_fails_closed_on_hostile_and_truncated_input() {
+    use ersatzrs_ffmpeg::image_file_is_animated as animated;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let write = |name: &str, bytes: &[u8]| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).expect("write fixture");
+        path
+    };
+
+    // Misleading marker bytes: the literals the old scan keyed on, in a file
+    // that is not an animation. A still misclassified as animated would break
+    // playback outright, so this is the direction that must not fail.
+    let mut still = std::fs::read(graphics_fixture("static-alpha.webp")).expect("read still");
+    still.extend_from_slice(b"ANIM NETSCAPE2.0");
+    assert!(!animated(&write("misleading.webp", &still)));
+
+    // A plain text file that merely contains the markers.
+    assert!(!animated(&write("markers.txt", b"ANIM ANMF NETSCAPE2.0")));
+
+    // Truncations at each structural boundary.
+    let gif = std::fs::read(graphics_fixture("animated-no-loop-extension.gif")).expect("read gif");
+    for cut in [0, 6, 13, 20, gif.len() / 2] {
+        assert!(
+            !animated(&write(&format!("cut{cut}.gif"), &gif[..cut.min(gif.len())])),
+            "truncated GIF at {cut} must fail closed"
+        );
+    }
+    // Truncated before the VP8X flags byte at offset 20, so the file no longer
+    // declares anything. A truncation *after* it is deliberately not tested as
+    // "still": the animation flag is intact and truthful there, so reading it
+    // as animated is correct — the same conclusion FFmpeg reaches.
+    let webp = std::fs::read(graphics_fixture("animated-alpha.webp")).expect("read webp");
+    for cut in [0, 8, 12, 16, 20] {
+        assert!(
+            !animated(&write(
+                &format!("cut{cut}.webp"),
+                &webp[..cut.min(webp.len())]
+            )),
+            "WebP truncated at {cut}, before the VP8X flags, must fail closed"
+        );
+    }
+
+    // A chunk declaring a size far larger than the file must not allocate it.
+    let mut liar = webp[..12].to_vec();
+    liar.extend_from_slice(b"XMP ");
+    liar.extend_from_slice(&u32::MAX.to_le_bytes());
+    liar.extend_from_slice(b"only a few bytes follow");
+    assert!(!animated(&write("oversized-chunk.webp", &liar)));
+
+    // A GIF sub-block chain that never terminates.
+    let mut runaway = gif[..13].to_vec();
+    runaway.push(0x21); // extension
+    runaway.push(0xF9); // label
+    runaway.extend(std::iter::repeat_n(0xFF_u8, 64)); // length bytes, never zero
+    assert!(!animated(&write("runaway.gif", &runaway)));
+}
+
+#[test]
 fn animated_webp_is_detected_from_its_header() {
     // The `ANIM` chunk in an extended RIFF/WEBP file is the animation marker.
     assert!(ersatzrs_ffmpeg::image_file_is_animated(
@@ -4779,4 +4861,65 @@ fn a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph() {
         .join(" ");
     assert!(!after_args.contains("libplacebo"), "{after_args}");
     assert!(after_args.contains("h264_nvenc"), "{after_args}");
+}
+
+/// Real-`FFmpeg` gate: detection must agree with which loop option `FFmpeg`
+/// accepts, because disagreeing is fatal rather than cosmetic.
+///
+/// Run with:
+/// `ERSATZRS_FFMPEG=<path to ffmpeg> ./run.sh test -p ersatzrs-ffmpeg \
+///  --run-ignored ignored-only detection_agrees_with_ffmpeg`
+// Test-only opt-in path; the configuration layer is for the application.
+#[allow(clippy::disallowed_methods)]
+#[test]
+#[ignore = "requires a real ffmpeg binary"]
+fn detection_agrees_with_ffmpeg_about_which_loop_option_opens_the_input() {
+    let Some(ffmpeg) = std::env::var_os("ERSATZRS_FFMPEG") else {
+        eprintln!("set ERSATZRS_FFMPEG to run this gate");
+        return;
+    };
+
+    let opens = |fixture: &str, option: &[&str]| -> bool {
+        std::process::Command::new(&ffmpeg)
+            .args(["-nostdin", "-hide_banner", "-loglevel", "error"])
+            .args(option)
+            .args(["-i", &graphics_fixture(fixture)])
+            .args(["-frames:v", "1", "-f", "null", "-"])
+            .status()
+            .expect("run ffmpeg")
+            .success()
+    };
+
+    for fixture in [
+        "animated-alpha.webp",
+        "animated-no-loop-extension.gif",
+        "animated-large-metadata.webp",
+        "static-alpha.webp",
+    ] {
+        let detected = ersatzrs_ffmpeg::image_file_is_animated(std::path::Path::new(
+            &graphics_fixture(fixture),
+        ));
+        // The option ErsatzRS would emit for this file must open it, and the
+        // other one must not — that asymmetry is exactly why the detection has
+        // to be right.
+        let chosen: &[&str] = if detected {
+            &["-ignore_loop", "0"]
+        } else {
+            &["-loop", "1"]
+        };
+        let rejected: &[&str] = if detected {
+            &["-loop", "1"]
+        } else {
+            &["-ignore_loop", "0"]
+        };
+
+        assert!(
+            opens(fixture, chosen),
+            "{fixture}: detected animated={detected}, but the option ErsatzRS picks does not open it"
+        );
+        assert!(
+            !opens(fixture, rejected),
+            "{fixture}: the other loop option unexpectedly opened it, so the demuxers are not as assumed"
+        );
+    }
 }

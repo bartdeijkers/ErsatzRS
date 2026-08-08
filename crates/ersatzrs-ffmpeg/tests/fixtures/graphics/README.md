@@ -36,6 +36,23 @@ broken decode (fewer than eight distinct hashes).
 `static-alpha.webp` exists so the "more than one frame means animated" probe has
 a negative case that is the same container and codec family.
 
+## Structure-detection fixtures
+
+`animated-no-loop-extension.gif` and `animated-large-metadata.webp` exist
+because a byte-marker scan gets both wrong.
+
+```bash
+# Two frames, and -loop -1 suppresses the NETSCAPE2.0 application extension.
+# A valid multi-frame GIF need not carry one, so keying on it under-detects.
+ffmpeg -y -f lavfi -i "testsrc2=size=32x32:rate=2:duration=1" \
+  -frames:v 2 -loop -1 animated-no-loop-extension.gif
+```
+
+`animated-large-metadata.webp` is `animated-alpha.webp` with a 6000-byte `XMP `
+chunk spliced in after `VP8X` and the RIFF size corrected, which pushes `ANIM`
+to offset 6038 — past any fixed prefix a scan would read. Valid chunk ordering
+allows this whenever a file carries large EXIF/XMP/ICCP metadata.
+
 ## Measured behavior (FFmpeg 9.0)
 
 - ffprobe `-count_frames` reports 8 for the animated file and 1 for the static

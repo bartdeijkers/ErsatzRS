@@ -253,43 +253,187 @@ impl InputFile {
     }
 }
 
-/// Whether an image file contains an animation, decided from its header.
+/// Whether an image file contains an animation.
 ///
 /// `ffprobe -count_frames` is the authoritative check and is what the watermark
 /// path uses, but it is async and costs a process spawn. Graphics elements are
-/// built synchronously, and the two formats that matter both announce animation
-/// in their first few kilobytes:
+/// built synchronously, so the container structure is parsed directly instead.
 ///
-/// * `WebP` animations are an extended (`VP8X`) RIFF file carrying an `ANIM`
-///   chunk;
-/// * animated `GIF`s carry the `NETSCAPE2.0` application extension that holds
-///   the loop count.
+/// The answer matters: the loop option is demuxer-specific and a mismatch is
+/// fatal. `-loop 1` on an animated `GIF`/`WebP` fails with
+/// `Option loop not found` and the input never opens, taking the channel down.
 ///
-/// Anything unreadable or unrecognised is treated as a still image, which is
-/// the pre-existing behavior.
+/// Reading is bounded and fails closed — anything unreadable, truncated,
+/// malformed, or unrecognised is treated as a still image, which is the
+/// pre-existing behavior and the safe direction: a still misclassified as
+/// animated would break, a genuinely animated file misclassified as still only
+/// fails to loop.
 #[must_use]
 pub fn image_file_is_animated(path: &std::path::Path) -> bool {
-    use std::io::Read as _;
-
-    // The markers live in the header. Reading a bounded prefix keeps this cheap
-    // and stops a large image from being pulled into memory.
-    const HEADER_BYTES: usize = 4_096;
-
     let Ok(mut file) = std::fs::File::open(path) else {
         return false;
     };
-    let mut header = vec![0_u8; HEADER_BYTES];
-    let Ok(read) = file.read(&mut header) else {
+    let mut header = [0_u8; 16];
+    if std::io::Read::read_exact(&mut file, &mut header).is_err() {
         return false;
-    };
-    header.truncate(read);
+    }
 
-    contains(&header, b"RIFF") && contains(&header, b"WEBP") && contains(&header, b"ANIM")
-        || contains(&header, b"NETSCAPE2.0")
+    if header.starts_with(b"GIF87a") || header.starts_with(b"GIF89a") {
+        return gif_is_animated(&mut file, &header);
+    }
+    if header.starts_with(b"RIFF") && header[8..12] == *b"WEBP" {
+        return webp_is_animated(&mut file, &header);
+    }
+    false
 }
 
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|window| window == needle)
+/// Total bytes any single reader will pull from a file.
+///
+/// Generous enough for a large colour table plus many small frames, small
+/// enough that a hostile or corrupt file cannot be used to read a whole disk
+/// into memory. Hitting it means "stop looking", not "animated".
+const MAX_STRUCTURE_BYTES: u64 = 1 << 20;
+
+/// Count `GIF` image descriptors, stopping at the second.
+///
+/// Deliberately does not rely on the `NETSCAPE2.0` application extension: that
+/// carries the loop count, and a valid multi-frame `GIF` need not have one, so
+/// keying on it under-detects. Extension blocks are skipped through their
+/// sub-block chain, which is the part a naive scan gets wrong — sub-block data
+/// can contain any byte, including the `0x2C` image separator.
+fn gif_is_animated(file: &mut std::fs::File, header: &[u8; 16]) -> bool {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+
+    // Logical screen descriptor is bytes 6..13; bit 7 of the packed field marks
+    // a global colour table whose size is 3 * 2^(N+1).
+    let packed = header[10];
+    let mut position = 13_u64;
+    if packed & 0x80 != 0 {
+        position += 3 * (1_u64 << ((packed & 0x07) + 1));
+    }
+    if file.seek(SeekFrom::Start(position)).is_err() {
+        return false;
+    }
+
+    let mut reader = std::io::BufReader::new(file.take(MAX_STRUCTURE_BYTES));
+    let mut frames = 0_u32;
+    loop {
+        let mut marker = [0_u8; 1];
+        if reader.read_exact(&mut marker).is_err() {
+            return false; // truncated: fail closed
+        }
+        match marker[0] {
+            // Image descriptor: 9 bytes, then an optional local colour table,
+            // then LZW-compressed sub-blocks.
+            0x2C => {
+                frames += 1;
+                if frames > 1 {
+                    return true;
+                }
+                let mut descriptor = [0_u8; 9];
+                if reader.read_exact(&mut descriptor).is_err() {
+                    return false;
+                }
+                let local = descriptor[8];
+                if local & 0x80 != 0 {
+                    let table = 3 * (1_usize << ((local & 0x07) + 1));
+                    if skip_exact(&mut reader, table).is_err() {
+                        return false;
+                    }
+                }
+                // LZW minimum code size, then the sub-block chain.
+                if skip_exact(&mut reader, 1).is_err() || skip_sub_blocks(&mut reader).is_err() {
+                    return false;
+                }
+            }
+            // Extension: label byte, then a sub-block chain.
+            0x21 => {
+                if skip_exact(&mut reader, 1).is_err() || skip_sub_blocks(&mut reader).is_err() {
+                    return false;
+                }
+            }
+            // Trailer, or anything else — a byte that is neither an image
+            // descriptor nor an extension means the structure is not what it
+            // claims, and a trailer means we reached the end having seen at
+            // most one frame. Both are "not animated".
+            _ => return false,
+        }
+    }
+}
+
+/// Skip a `GIF` sub-block chain: length-prefixed runs ending with a zero length.
+fn skip_sub_blocks(reader: &mut impl std::io::Read) -> std::io::Result<()> {
+    loop {
+        let mut length = [0_u8; 1];
+        reader.read_exact(&mut length)?;
+        if length[0] == 0 {
+            return Ok(());
+        }
+        skip_exact(reader, length[0] as usize)?;
+    }
+}
+
+fn skip_exact(reader: &mut impl std::io::Read, count: usize) -> std::io::Result<()> {
+    // Read in bounded chunks rather than allocating `count` bytes: a corrupt
+    // file can declare a chunk size far larger than the file itself.
+    let mut remaining = count;
+    let mut scratch = [0_u8; 4096];
+    while remaining > 0 {
+        let want = remaining.min(scratch.len());
+        reader.read_exact(&mut scratch[..want])?;
+        remaining -= want;
+    }
+    Ok(())
+}
+
+/// Walk `RIFF`/`WebP` chunks looking for the animation flag or an `ANIM` chunk.
+///
+/// Chunk-accurate rather than a byte scan: each chunk declares its size and is
+/// padded to an even boundary, so `ANIM` can legitimately sit beyond any fixed
+/// prefix when a file carries large `EXIF`, `XMP`, or `ICCP` metadata first.
+/// The `VP8X` extended-format chunk also states animation in a flag bit, which
+/// is authoritative and usually appears first.
+fn webp_is_animated(file: &mut std::fs::File, header: &[u8; 16]) -> bool {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+
+    // A plain `VP8 ` or `VP8L` file is a single still image by definition.
+    if header[12..16] == *b"VP8 " || header[12..16] == *b"VP8L" {
+        return false;
+    }
+    if file.seek(SeekFrom::Start(12)).is_err() {
+        return false;
+    }
+
+    let mut reader = std::io::BufReader::new(file.take(MAX_STRUCTURE_BYTES));
+    loop {
+        let mut chunk = [0_u8; 8];
+        if reader.read_exact(&mut chunk).is_err() {
+            return false; // truncated or no more chunks
+        }
+        let fourcc = &chunk[0..4];
+        let size = u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]);
+
+        if fourcc == b"VP8X" {
+            let mut flags = [0_u8; 1];
+            if reader.read_exact(&mut flags).is_err() {
+                return false;
+            }
+            // Bit 1 of the VP8X flags is the animation flag.
+            if flags[0] & 0x02 != 0 {
+                return true;
+            }
+            if skip_exact(&mut reader, size.saturating_sub(1) as usize).is_err() {
+                return false;
+            }
+        } else if fourcc == b"ANIM" || fourcc == b"ANMF" {
+            return true;
+        } else if skip_exact(&mut reader, size as usize).is_err() {
+            return false;
+        }
+
+        // Chunks are padded to an even length.
+        if size % 2 == 1 && skip_exact(&mut reader, 1).is_err() {
+            return false;
+        }
+    }
 }

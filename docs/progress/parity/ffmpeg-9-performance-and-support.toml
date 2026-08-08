@@ -414,4 +414,39 @@ adr         = '0003'
 description = 'P2: Replace the 4 KiB marker scan with bounded structural readers. Count GIF image descriptors while correctly skipping extension sub-blocks so multi-frame GIFs do not depend on a `NETSCAPE2.0` loop extension; walk RIFF/WebP chunks (including padding and declared sizes) or read the VP8X animation flag so metadata before `ANIM` is safe. Corrupt/truncated/oversized inputs must fail closed without unbounded allocation. Closure requires static controls, a two-frame GIF without a loop extension, a WebP with more than 4 KiB of leading metadata, misleading marker bytes, truncation cases, argv assertions, and a real FFmpeg input-open/loop smoke test.'
 discovered  = '2026-08-07'
 evidence    = '`image_file_is_animated` reads only 4,096 bytes and searches for `ANIM` or `NETSCAPE2.0`; valid animated GIFs need not carry the loop extension, and valid WebP chunk ordering can place `ANIM` beyond that prefix, causing `graphics_image` to emit the fatal image2-only `-loop 1` option.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. `image_file_is_animated` now parses container structure
+instead of scanning a 4 KiB prefix for marker bytes.
+
+GIF: counts image descriptors and stops at the second, skipping extension and
+image sub-block chains properly. It deliberately does not consult
+`NETSCAPE2.0`, which only carries the loop count — a valid multi-frame GIF need
+not have one. Sub-block skipping is the part a scan gets wrong, since compressed
+sub-block data can contain any byte including the `0x2C` image separator.
+
+WebP: walks RIFF chunks by declared size with even-boundary padding, reads the
+authoritative `VP8X` animation flag, and recognises `ANIM`/`ANMF` wherever they
+legitimately sit. A plain `VP8 `/`VP8L` file is a still by definition.
+
+Bounded and fails closed: at most 1 MiB is read, `skip_exact` advances in 4 KiB
+chunks so a chunk declaring `u32::MAX` cannot allocate, and anything
+unreadable, truncated, malformed, or unrecognised reads as a still — the safe
+direction, since a still misclassified as animated breaks playback outright
+while the reverse merely fails to loop.
+
+Coverage: `animation_detection_parses_container_structure_not_marker_bytes`
+(positive and negative controls, plus the two new fixtures a scan gets wrong —
+a two-frame GIF with no loop extension, and a WebP whose `ANIM` sits at offset
+6038 behind a 6000-byte XMP chunk) and
+`animation_detection_fails_closed_on_hostile_and_truncated_input` (misleading
+marker bytes appended to a still, a text file containing the markers,
+truncations at each structural boundary, an oversized declared chunk, and a
+non-terminating GIF sub-block chain).
+
+Runtime proof:
+`detection_agrees_with_ffmpeg_about_which_loop_option_opens_the_input` asserts
+for every fixture that the option ErsatzRS would emit opens the input under real
+FFmpeg 9 and that the other option does not — the asymmetry that makes a
+detection mistake fatal.
+'''
+resolved    = true
