@@ -63,15 +63,67 @@ impl PersistedHardwareGraphDenial {
     }
 }
 
-/// Persisted graph-denial state, keyed by the identities ADR 0014 requires:
-/// the `ffmpeg` binary the probe ran against and the device it ran on. The
-/// per-row device lives on the denial itself; the binary path is shared.
+/// Persisted graph-probe record.
+///
+/// Carries completion state and positively proven operations, not just
+/// denials. An empty denial list is ambiguous on its own — it means both "every
+/// graph worked" and "nothing has been probed" — so reusing it as a cache would
+/// treat an unprobed machine as fully proven.
+///
+/// Keyed by the identities ADR 0014 requires: the `ffmpeg` binary and the
+/// device. A record whose identities do not match the current runtime is not
+/// reusable, and every applicable operation must have terminal evidence
+/// (proven or denied) before the record counts as complete.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 struct PersistedHardwareGraphState {
     #[serde(default)]
     ffmpeg_path: Option<String>,
+    /// Device the probes ran against, so a GPU swap re-probes.
+    #[serde(default)]
+    device: Option<String>,
+    /// Operations that ran to completion. `None` on a legacy row written before
+    /// completion was tracked, which is treated as incomplete.
+    #[serde(default)]
+    proven: Option<Vec<String>>,
     #[serde(default)]
     denials: Vec<PersistedHardwareGraphDenial>,
+}
+
+impl PersistedHardwareGraphState {
+    /// Whether this record can be reused instead of re-probing.
+    ///
+    /// Requires matching identities and terminal evidence for every operation
+    /// that applies. A partial record — one where a probe returned `Unproven`
+    /// and so recorded neither proof nor denial — is deliberately not reusable.
+    fn is_reusable_for(
+        &self,
+        ffmpeg_path: &str,
+        device: &str,
+        applicable: &[HardwareGraphOperation],
+    ) -> bool {
+        if self.ffmpeg_path.as_deref() != Some(ffmpeg_path) {
+            return false;
+        }
+        // A record written before device identity was tracked cannot be
+        // attributed, so it is not reusable.
+        let Some(recorded_device) = self.device.as_deref() else {
+            return false;
+        };
+        if !recorded_device.eq_ignore_ascii_case(device) {
+            return false;
+        }
+        let Some(proven) = self.proven.as_ref() else {
+            return false;
+        };
+
+        applicable.iter().all(|operation| {
+            proven.iter().any(|id| id == operation.id())
+                || self
+                    .denials
+                    .iter()
+                    .any(|denial| denial.operation == operation.id())
+        })
+    }
 }
 
 const fn failure_kind_name(kind: GraphFailureKind) -> &'static str {
@@ -208,16 +260,10 @@ pub async fn refresh_hardware_graph_capabilities(
     ffmpeg_path: &Path,
     report: &mut FfmpegCapabilityReport,
 ) {
-    if !report.has_hwaccel("cuda") {
+    let Some(operations) = applicable_graph_operations(report) else {
         return;
-    }
+    };
     let device = report.hardware_graph_device();
-
-    let mut operations = Vec::new();
-    if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
-        operations.push(HardwareGraphOperation::NvencHdrVulkanLibplacebo);
-    }
-    operations.push(HardwareGraphOperation::NvencCudaScale);
 
     for operation in operations {
         match probe_hardware_graph(ffmpeg_path, operation, &device).await {
@@ -228,6 +274,26 @@ pub async fn refresh_hardware_graph_capabilities(
             HardwareGraphProbe::Unproven => {}
         }
     }
+}
+
+/// Graphs worth probing on this runtime, or `None` when none apply.
+///
+/// Only graphs whose prerequisites are advertised are probed: a build without
+/// the `vulkan` hwaccel or the libplacebo filter cannot run that graph, and a
+/// platform without Vulkan must stay a normal capability result rather than a
+/// denial.
+fn applicable_graph_operations(
+    report: &FfmpegCapabilityReport,
+) -> Option<Vec<HardwareGraphOperation>> {
+    if !report.has_hwaccel("cuda") {
+        return None;
+    }
+    let mut operations = Vec::new();
+    if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
+        operations.push(HardwareGraphOperation::NvencHdrVulkanLibplacebo);
+    }
+    operations.push(HardwareGraphOperation::NvencCudaScale);
+    Some(operations)
 }
 
 /// Load persisted graph denials, ignoring malformed rows.
@@ -249,8 +315,12 @@ pub async fn load_hardware_graph_denials(
         .collect())
 }
 
-/// Apply persisted graph denials to a startup report, clearing them when the
-/// `ffmpeg` binary changed since they were learned (ADR 0014 lifecycle).
+/// Apply a persisted graph record to a startup report.
+///
+/// Returns `true` when a complete, identity-matching record was reused, and
+/// `false` when the caller should re-probe. A stale, partial, or legacy record
+/// is cleared rather than partially applied — an empty denial list is not proof
+/// that every graph works.
 ///
 /// # Errors
 ///
@@ -259,20 +329,23 @@ pub async fn apply_hardware_graph_denials(
     pool: &DbPool,
     ffmpeg_path: &str,
     report: &mut FfmpegCapabilityReport,
-) -> Result<(), HardwareGraphDenialError> {
+) -> Result<bool, HardwareGraphDenialError> {
     let Some(raw) = load_config(pool).await? else {
-        return Ok(());
+        return Ok(false);
     };
     let state: PersistedHardwareGraphState = serde_json::from_str(&raw).unwrap_or_default();
 
-    if state
-        .ffmpeg_path
-        .as_deref()
-        .is_some_and(|stored| stored != ffmpeg_path)
-    {
-        tracing::info!("ffmpeg path changed since hardware graph denials were learned; clearing");
+    let device = report.hardware_graph_device();
+    let applicable = applicable_graph_operations(report).unwrap_or_default();
+
+    if !state.is_reusable_for(ffmpeg_path, &device, &applicable) {
+        // Stale identity, a partial record, or a legacy row. Discard it so the
+        // caller re-probes rather than trusting incomplete evidence.
+        tracing::info!(
+            "stored hardware graph record is not reusable for this runtime; clearing to re-probe"
+        );
         clear_hardware_graph_denials(pool).await?;
-        return Ok(());
+        return Ok(false);
     }
 
     for denial in state
@@ -282,7 +355,12 @@ pub async fn apply_hardware_graph_denials(
     {
         report.deny_hardware_graph(denial);
     }
-    Ok(())
+    for operation in applicable {
+        if !report.hardware_graph_denied(operation, &device) {
+            report.prove_hardware_graph(operation, &device);
+        }
+    }
+    Ok(true)
 }
 
 /// Clear persisted graph denials after an explicit capability refresh.
@@ -325,6 +403,14 @@ pub async fn persist_hardware_graph_denials(
 ) -> Result<(), HardwareGraphDenialError> {
     let state = PersistedHardwareGraphState {
         ffmpeg_path: Some(ffmpeg_path.to_owned()),
+        device: Some(report.hardware_graph_device()),
+        proven: Some(
+            report
+                .proven_hardware_graphs
+                .iter()
+                .map(|(operation, _)| operation.id().to_owned())
+                .collect(),
+        ),
         denials: report
             .hardware_graph_denials
             .iter()
@@ -390,6 +476,8 @@ mod tests {
         );
         let state = PersistedHardwareGraphState {
             ffmpeg_path: Some("/opt/ffmpeg/bin/ffmpeg".to_owned()),
+            device: Some("NVIDIA GeForce RTX 3080 Ti".to_owned()),
+            proven: Some(vec![HardwareGraphOperation::NvencCudaScale.id().to_owned()]),
             denials: vec![PersistedHardwareGraphDenial::from(&denial)],
         };
 
@@ -700,8 +788,13 @@ mod tests {
             ),
             ..FfmpegCapabilityReport::default()
         };
+        // Startup probed both graphs and proved them.
         report.prove_hardware_graph(
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            "NVIDIA GeForce RTX 3080 Ti",
+        );
+        report.prove_hardware_graph(
+            HardwareGraphOperation::NvencCudaScale,
             "NVIDIA GeForce RTX 3080 Ti",
         );
 
@@ -731,8 +824,16 @@ mod tests {
         );
 
         // And it survives a restart, so the next session does not retry a
-        // known-broken graph.
-        let mut next_session = FfmpegCapabilityReport::default();
+        // known-broken graph. The restarted report carries the same runtime
+        // identity, as a real restart on the same machine would.
+        let mut next_session = FfmpegCapabilityReport {
+            nvidia_gpu_list: report.nvidia_gpu_list.clone(),
+            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
+                .into_iter()
+                .collect(),
+            filters: ["libplacebo".to_owned()].into_iter().collect(),
+            ..FfmpegCapabilityReport::default()
+        };
         apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut next_session)
             .await
             .expect("reload after restart");
@@ -753,5 +854,117 @@ mod tests {
         ] {
             assert_eq!(GraphFailureKind::classify(stderr), None, "{stderr}");
         }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn probed_report(gpu: &str) -> FfmpegCapabilityReport {
+        FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
+                .into_iter()
+                .collect(),
+            filters: ["libplacebo".to_owned()].into_iter().collect(),
+            ..FfmpegCapabilityReport::default()
+        }
+    }
+
+    /// A record is reusable only with matching identities and terminal evidence
+    /// for every applicable operation.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn only_a_complete_identity_matching_record_is_reused() {
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+
+        // A fully successful probe records zero denials. That must still count
+        // as a valid cache — the bug this guards against is treating an empty
+        // denial list as "never probed" and re-probing forever, or worse, as
+        // "everything works" when nothing ran.
+        let pool = test_pool().await;
+        let mut complete = probed_report(gpu);
+        complete.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu);
+        complete.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &complete)
+            .await
+            .expect("persist");
+
+        let mut reload = probed_report(gpu);
+        assert!(
+            apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut reload)
+                .await
+                .expect("apply"),
+            "success with zero denials is a valid cache"
+        );
+        assert!(reload.hardware_graph_proven(HardwareGraphOperation::NvencCudaScale, gpu));
+
+        // A partial record: one operation returned Unproven, so it has neither
+        // proof nor denial and the record must not be reused.
+        let pool = test_pool().await;
+        let mut partial = probed_report(gpu);
+        partial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &partial)
+            .await
+            .expect("persist");
+        let mut reload = probed_report(gpu);
+        assert!(
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut reload)
+                .await
+                .expect("apply"),
+            "a partial record must re-probe"
+        );
+
+        // A different GPU at the same ffmpeg path.
+        let pool = test_pool().await;
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &complete)
+            .await
+            .expect("persist");
+        let mut other_gpu = probed_report("NVIDIA GeForce RTX 4090");
+        assert!(
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut other_gpu)
+                .await
+                .expect("apply"),
+            "a GPU swap must re-probe"
+        );
+
+        // FFmpeg replaced at the same path.
+        let pool = test_pool().await;
+        persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &complete)
+            .await
+            .expect("persist");
+        let mut new_binary = probed_report(gpu);
+        assert!(
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg-9.1", &mut new_binary)
+                .await
+                .expect("apply"),
+            "a different ffmpeg must re-probe"
+        );
+    }
+
+    /// A row written before completion tracking existed cannot be attributed.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn a_legacy_record_is_discarded_rather_than_trusted() {
+        let pool = test_pool().await;
+        // Shape written by the previous implementation: path and denials only.
+        upsert_config(
+            &pool,
+            r#"{"ffmpeg_path":"/opt/ffmpeg","denials":[{"operation":"nvenc-cuda-scale","device":"","kind":"cuda-interop"}]}"#,
+        )
+        .await
+        .expect("seed legacy row");
+
+        let mut report = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        assert!(
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut report)
+                .await
+                .expect("apply"),
+            "a legacy record carries no completion or device evidence"
+        );
+        assert!(
+            load_hardware_graph_denials(&pool)
+                .await
+                .expect("reload")
+                .is_empty(),
+            "and is cleared rather than partially applied"
+        );
     }
 }

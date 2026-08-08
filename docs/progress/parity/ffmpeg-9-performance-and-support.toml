@@ -427,7 +427,33 @@ adr         = '0014'
 description = 'P2: Persist an explicit graph-probe cache record containing completion state, positively proven operations, classified denials, FFmpeg binary identity, and selected device/driver identity. Startup may reuse it only when every identity matches and all applicable operations have terminal evidence; an all-successful empty denial list must remain a valid cache, while a copied/stale/partial record must re-probe and stay non-selectable until proven. Closure requires success-with-zero-denials, partial/unclassified failure, FFmpeg replacement-at-same-path, GPU/driver change, malformed legacy row, and settings-refresh invalidation tests.'
 discovered  = '2026-08-07'
 evidence    = '`bootstrap.rs` uses `hardware_graph_denials.is_empty()` as the probe-completion marker. All-successful probes therefore run every startup, while any denial can suppress probing even when it belongs to another device; persistence records only the FFmpeg path and denial list.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08. The persisted record now carries completion state, positively
+proven operations, and the device identity alongside the ffmpeg path and the
+classified denials. `is_reusable_for` requires matching identities and terminal
+evidence — proven or denied — for every applicable operation, and
+`apply_hardware_graph_denials` returns whether the record was reused so startup
+re-probes when it was not.
+
+This removes the conflation at both ends. Startup previously re-probed based on
+`hardware_graph_denials.is_empty()`, which reads a fully successful probe as
+"never probed"; and an empty list from an unprobed machine was
+indistinguishable from one where every graph passed.
+
+`deny_hardware_graph` now also drops any earlier proof of the same operation on
+the same device. A graph cannot be simultaneously proven and denied, and the
+denial is the newer evidence — a startup probe can pass while the graph still
+fails under real media.
+
+Regressions: `only_a_complete_identity_matching_record_is_reused` covers
+success-with-zero-denials (a valid cache), a partial record left by an
+unclassified probe failure, a GPU swap, and FFmpeg replaced at the same path;
+`a_legacy_record_is_discarded_rather_than_trusted` covers the pre-existing row
+shape, which carries neither completion nor device evidence and is cleared
+rather than partially applied. Settings-refresh invalidation is covered by
+`graph_state_persists_overwrites_clears_and_reloads`.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'graphics-animation-detection-does-not-parse-container-structure'

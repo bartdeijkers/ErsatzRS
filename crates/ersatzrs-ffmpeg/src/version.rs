@@ -451,7 +451,18 @@ impl FfmpegCapabilityReport {
     }
 
     /// Add a runtime-learned graph denial row if it is not already present.
+    ///
+    /// Also drops any earlier proof of the same operation on the same device:
+    /// a graph cannot be simultaneously proven and denied, and the denial is
+    /// the newer evidence — a startup probe can pass while the graph still
+    /// fails under real media.
     pub fn deny_hardware_graph(&mut self, denial: crate::graph_probe::HardwareGraphDenial) {
+        self.proven_hardware_graphs.retain(|(operation, device)| {
+            !(*operation == denial.operation
+                && (denial.device.is_empty()
+                    || device.is_empty()
+                    || denial.device.eq_ignore_ascii_case(device)))
+        });
         if !self
             .hardware_graph_denials
             .iter()

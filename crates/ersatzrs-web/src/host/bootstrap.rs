@@ -782,16 +782,21 @@ async fn finish_startup_ffmpeg_runtime(
     // does not pay for the probes again; a fresh install (or one whose ffmpeg
     // path changed, which clears the rows above) probes once and persists the
     // result. An advertised hwaccel is not evidence the graph works.
-    if let Err(error) = ersatzrs_infra::hardware_graph::apply_hardware_graph_denials(
+    // A reusable record means every applicable graph already has terminal
+    // evidence for this binary and device. Anything else — stale identity,
+    // a partial record from an unclassified probe failure, or a legacy row —
+    // re-probes. An empty denial list is not proof that every graph works.
+    let reused = ersatzrs_infra::hardware_graph::apply_hardware_graph_denials(
         pool,
         &report.ffmpeg.path,
         &mut report.capabilities,
     )
     .await
-    {
+    .unwrap_or_else(|error| {
         tracing::warn!(%error, "failed to apply runtime-learned hardware graph denials");
-    }
-    if report.capabilities.hardware_graph_denials.is_empty() {
+        false
+    });
+    if !reused {
         ersatzrs_infra::hardware_graph::refresh_hardware_graph_capabilities(
             std::path::Path::new(&report.ffmpeg.path),
             &mut report.capabilities,
