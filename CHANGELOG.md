@@ -121,6 +121,8 @@ release section when tagging a release.
 
 - Removed the unused `.empty-cell` CSS rule from the rerun collections admin
   page's module stylesheet (dead-code cleanup, no visible change).
+- Removed the unused `.empty` CSS rule from the blocks admin page's module
+  stylesheet (dead-code cleanup, no visible change).
 
 - Added Dolby Vision input support. Profile 8.1 sources — the common case for
   streaming-service 4K releases — now play from their HDR10-compatible base

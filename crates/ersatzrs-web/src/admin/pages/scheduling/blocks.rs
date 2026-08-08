@@ -1,5 +1,4 @@
 //! Block groups and blocks list — ports `Pages/Blocks.razor`.
-#![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
 use crate::admin::i18n::{delete_failed, scheduling_content_error_message, tr, TextKey};

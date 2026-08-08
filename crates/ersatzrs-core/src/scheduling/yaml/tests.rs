@@ -1,5 +1,3 @@
-#![allow(clippy::needless_raw_string_hashes)]
-
 use super::*;
 use crate::scheduling::{
     SchedulingCollectionKey, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
@@ -300,10 +298,10 @@ playout:
 #[test]
 fn yaml_all_instruction_snapshot() {
     assert_yaml_json_snapshot!(snapshot(
-        r#"
+        r"
 playout:
   - all: main
-"#
+"
     ));
 }
 
@@ -416,7 +414,7 @@ fn yaml_show_and_guid_content_source_resolution_snapshot() {
     );
 
     let definition = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: named_show
     show: Top Gear
@@ -429,7 +427,7 @@ content:
 playout:
   - all: named_show
   - all: guided_show
-"#,
+",
     )
     .expect("valid yaml");
     let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
@@ -465,12 +463,12 @@ playout:
 #[test]
 fn yaml_pad_to_next_instruction_snapshot() {
     assert_yaml_json_snapshot!(snapshot(
-        r#"
+        r"
 playout:
   - pad_to_next: 15
     content: bumpers
     trim: true
-"#
+"
     ));
 }
 
@@ -941,7 +939,7 @@ fn yaml_marathon_grouping_by_show_and_season_snapshot() {
     );
 
     let definition = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: by_show
     marathon: Sitcom Marathon
@@ -958,7 +956,7 @@ content:
 playout:
   - all: by_show
   - all: by_season
-"#,
+",
     )
     .expect("valid yaml");
     let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
@@ -1059,7 +1057,7 @@ fn yaml_marathon_play_all_items_and_item_order_snapshot() {
     );
 
     let definition = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: by_show
     marathon: Sitcom Marathon
@@ -1077,7 +1075,7 @@ content:
 playout:
   - all: by_show
   - all: by_show_all
-"#,
+",
     )
     .expect("valid yaml");
     let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
@@ -1307,10 +1305,10 @@ playout:
 #[test]
 fn yaml_repeat_instruction_detects_empty_loop() {
     let (definition, request) = request(
-        r#"
+        r"
 playout:
   - repeat: true
-"#,
+",
     );
     let result = YamlPlayoutEngine.schedule_definition(definition, request);
     assert!(result.is_err());
@@ -1454,21 +1452,21 @@ playout:
 #[test]
 fn yaml_import_merge_adds_content_from_imported_definition() {
     let mut base = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: main
     collection: Movies
-"#,
+",
     )
     .unwrap();
     let imported = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: bumpers
     collection: Bumpers
   - key: main
     collection: Ignored
-"#,
+",
     )
     .unwrap();
 
@@ -1524,19 +1522,19 @@ sequence:
 #[test]
 fn yaml_import_merge_case_insensitive_key_comparison() {
     let mut base = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: Main
     collection: Movies
-"#,
+",
     )
     .unwrap();
     let imported = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: main
     collection: ShouldBeIgnored
-"#,
+",
     )
     .unwrap();
 
@@ -1562,11 +1560,11 @@ playout:
     )
     .unwrap();
     let imported_content = YamlPlayoutEngine::definition_from_str(
-        r#"
+        r"
 content:
   - key: imported
     collection: Movies
-"#,
+",
     )
     .unwrap();
     YamlPlayoutEngine::merge_import(&mut definition, imported_content);
@@ -1620,7 +1618,7 @@ fn yaml_marathon_shuffle_groups_produces_deterministic_order_snapshot() {
         ],
     );
 
-    let yaml = r#"
+    let yaml = r"
 content:
   - key: by_show_shuffled
     marathon: Sitcom Marathon
@@ -1631,7 +1629,7 @@ content:
     shuffle_groups: true
 playout:
   - all: by_show_shuffled
-"#;
+";
     let definition = YamlPlayoutEngine::definition_from_str(yaml).expect("valid yaml");
     let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
         .unwrap()
