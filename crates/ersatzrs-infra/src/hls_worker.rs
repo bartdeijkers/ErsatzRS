@@ -345,6 +345,9 @@ impl HlsSessionWorker {
         *self.playlist_start.lock().await = transcoded_until;
         let mut runtime_capabilities = self.runtime_capabilities.clone();
         let mut learned_decode_retry_used = false;
+        // ADR 0014 allows exactly one graph retry per session, mirroring the
+        // decode-denial bound above.
+        let mut learned_graph_retry_used = false;
         let slug_duration = match load_channel_slug_seconds(&pool, self.channel_id).await {
             Ok(seconds) => seconds
                 .filter(|seconds| *seconds > 0.0)
@@ -1112,6 +1115,10 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
+            // Attributed from the command that actually ran, so a runtime
+            // failure cannot be blamed on a graph this spawn did not use.
+            let selected_graph_for_denial = ersatzrs_ffmpeg::selected_hardware_graph(&command);
+            let ffmpeg_path_for_denial = command.executable.clone();
             log_hls_av1_spawn_diagnostics(
                 &self.channel_number,
                 &command,
@@ -1161,6 +1168,43 @@ impl HlsSessionWorker {
                     }
                 }
                 HlsProcessOutcome::Failed(error_message) => {
+                    // A graph that only fails under real media cannot be caught
+                    // by startup probing, so the denial is learned from the
+                    // failure and the retry goes through the next proven graph.
+                    // Checked first because it is the more specific diagnosis.
+                    if !learned_graph_retry_used {
+                        if let (Some(operation), Some(kind)) = (
+                            selected_graph_for_denial,
+                            ersatzrs_ffmpeg::GraphFailureKind::classify(&error_message),
+                        ) {
+                            learned_graph_retry_used = true;
+                            let device = runtime_capabilities.hardware_graph_device();
+                            let denial =
+                                ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
+                            tracing::warn!(
+                                channel_number = %self.channel_number,
+                                evidence = %denial.evidence(),
+                                "retrying hls segmenter once through the next proven graph after a runtime graph failure"
+                            );
+                            if let Err(error) =
+                                crate::hardware_graph::persist_hardware_graph_denial(
+                                    &pool,
+                                    &ffmpeg_path_for_denial,
+                                    &mut runtime_capabilities,
+                                    denial,
+                                )
+                                .await
+                            {
+                                tracing::warn!(
+                                    %error,
+                                    channel_number = %self.channel_number,
+                                    "failed to persist runtime-learned hardware graph denial"
+                                );
+                            }
+                            self.set_admission_status(HlsAdmissionStatus::Waiting);
+                            continue;
+                        }
+                    }
                     if let Some(denial) = learned_hardware_decode_denial(
                         learned_decode_retry_used,
                         playback_profile.profile.hardware_acceleration,

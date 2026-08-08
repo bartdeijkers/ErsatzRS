@@ -294,6 +294,25 @@ pub async fn clear_hardware_graph_denials(pool: &DbPool) -> Result<(), HardwareG
     upsert_config(pool, "").await
 }
 
+/// Learn one graph denial at runtime and persist it.
+///
+/// Used by the stream supervisors when a live transcode dies with a recognised
+/// graph signature: startup probing cannot catch a graph that only fails under
+/// real media, so the denial is learned from the failure itself.
+///
+/// # Errors
+///
+/// Returns an error when encoding or the database write fails.
+pub async fn persist_hardware_graph_denial(
+    pool: &DbPool,
+    ffmpeg_path: &str,
+    report: &mut FfmpegCapabilityReport,
+    denial: HardwareGraphDenial,
+) -> Result<(), HardwareGraphDenialError> {
+    report.deny_hardware_graph(denial);
+    persist_hardware_graph_denials(pool, ffmpeg_path, report).await
+}
+
 /// Persist the report's graph denials against the current `ffmpeg` path.
 ///
 /// # Errors

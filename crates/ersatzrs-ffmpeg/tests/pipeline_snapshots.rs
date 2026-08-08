@@ -4672,3 +4672,88 @@ fn a_source_without_dolby_vision_is_never_refused() {
         ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).is_ok()
     );
 }
+
+#[test]
+fn the_selected_graph_is_derived_from_the_command_that_actually_ran() {
+    // Derived from argv rather than tracked alongside it, so a runtime failure
+    // cannot be attributed to a graph the spawned command did not use.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    let vulkan = hdr_nvenc_request(report);
+    let vulkan_command = NvencPipelineBuilder
+        .build(vulkan.clone())
+        .command(&vulkan.inputs);
+    assert_eq!(
+        ersatzrs_ffmpeg::selected_hardware_graph(&vulkan_command),
+        Some(HardwareGraphOperation::NvencHdrVulkanLibplacebo)
+    );
+
+    // Vulkan denied: the same source falls through to the CUDA graph, and the
+    // attribution follows.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "",
+        GraphFailureKind::CudaInterop,
+    ));
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
+    let cuda = hdr_nvenc_request(report);
+    let cuda_command = NvencPipelineBuilder
+        .build(cuda.clone())
+        .command(&cuda.inputs);
+    assert_eq!(
+        ersatzrs_ffmpeg::selected_hardware_graph(&cuda_command),
+        Some(HardwareGraphOperation::NvencCudaScale)
+    );
+
+    // A pure software command belongs to no hardware graph.
+    let software = PipelineRequest::new(
+        InputFile::video("/media/movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264));
+    let software_command = SoftwarePipelineBuilder
+        .build(software.clone())
+        .command(&software.inputs);
+    assert_eq!(
+        ersatzrs_ffmpeg::selected_hardware_graph(&software_command),
+        None
+    );
+}
+
+#[test]
+fn a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph() {
+    // This is what the supervisor retry relies on: folding the learned denial
+    // into the capability report is enough for the rebuilt command to pick the
+    // fallback, with no separate graph-selection plumbing.
+    // Startup probing proved both graphs on this machine.
+    let mut report = capability_report_for_tests();
+    report.hwaccels.insert("vulkan".to_owned());
+    report.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, "");
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
+
+    let before = hdr_nvenc_request(report.clone());
+    let before_args = NvencPipelineBuilder
+        .build(before.clone())
+        .command(&before.inputs)
+        .arguments
+        .join(" ");
+    assert!(before_args.contains("libplacebo"), "{before_args}");
+
+    // The supervisor learns this from the failing stderr.
+    report.deny_hardware_graph(HardwareGraphDenial::new(
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+        "",
+        GraphFailureKind::CudaInterop,
+    ));
+
+    let after = hdr_nvenc_request(report);
+    let after_args = NvencPipelineBuilder
+        .build(after.clone())
+        .command(&after.inputs)
+        .arguments
+        .join(" ");
+    assert!(!after_args.contains("libplacebo"), "{after_args}");
+    assert!(after_args.contains("h264_nvenc"), "{after_args}");
+}

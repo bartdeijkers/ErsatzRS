@@ -1843,6 +1843,32 @@ fn apply_hdr10_output_conversion(
     }
 }
 
+/// The hardware graph a built command actually selected.
+///
+/// Derived from the generated argv rather than tracked separately, so it cannot
+/// drift from what was really spawned. Used by the stream supervisors to
+/// attribute a runtime failure to the right graph.
+#[must_use]
+pub fn selected_hardware_graph(command: &FfmpegCommand) -> Option<HardwareGraphOperation> {
+    let uses_vulkan_libplacebo = command
+        .arguments
+        .iter()
+        .any(|argument| argument.contains("libplacebo"))
+        && command
+            .arguments
+            .windows(2)
+            .any(|pair| pair[0] == "-init_hw_device" && pair[1].starts_with("vulkan"));
+    if uses_vulkan_libplacebo {
+        return Some(HardwareGraphOperation::NvencHdrVulkanLibplacebo);
+    }
+
+    command
+        .arguments
+        .iter()
+        .any(|argument| argument.contains("scale_cuda") || argument.contains("hwupload_cuda"))
+        .then_some(HardwareGraphOperation::NvencCudaScale)
+}
+
 /// A source ErsatzRS refuses to transcode, carrying the operator-facing reason.
 ///
 /// ADR 0064 requires an unproven Dolby Vision path to fail visibly. Returning

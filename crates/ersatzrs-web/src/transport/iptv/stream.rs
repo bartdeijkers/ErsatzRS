@@ -652,12 +652,15 @@ async fn serve_channel_stream_with_channel(
         runtime_capabilities,
         acceleration: effective_acceleration,
         source_stream: source_stream.clone(),
+        graph_operation: ersatzrs_ffmpeg::selected_hardware_graph(&command),
+        ffmpeg_path: command.executable.clone(),
         rebuild: {
             let media_input = media_input.clone();
             let channel_number = channel.number.clone();
             Box::new(move |mode| {
                 let (capabilities, force_software_encode) = match mode {
-                    StreamRetryMode::HardwareDecodeDenied(capabilities) => (capabilities, false),
+                    StreamRetryMode::HardwareDecodeDenied(capabilities)
+                    | StreamRetryMode::HardwareGraphDenied(capabilities) => (capabilities, false),
                     StreamRetryMode::HardwareEncodeDenied(capabilities) => (capabilities, true),
                 };
                 let mut playback_profile = retry_playback_profile;
@@ -2287,6 +2290,11 @@ struct StreamDenialRetry {
     runtime_capabilities: FfmpegCapabilityReport,
     acceleration: ersatzrs_domain::HardwareAccelerationKind,
     source_stream: Option<SourceVideoStream>,
+    /// Graph the spawned command actually selected, so a runtime failure is
+    /// attributed to the right operation.
+    graph_operation: Option<ersatzrs_ffmpeg::HardwareGraphOperation>,
+    /// `ffmpeg` path the denial is keyed to (ADR 0014).
+    ffmpeg_path: String,
     /// Rebuild for a hardware-denial retry.
     ///
     /// `None` when the rebuilt command would be refused. Unreachable in
@@ -2295,9 +2303,15 @@ struct StreamDenialRetry {
     rebuild: Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>,
 }
 
+// The three variants share a prefix because they are three flavours of the same
+// thing: a hardware capability the runtime rejected.
+#[allow(clippy::enum_variant_names)]
 enum StreamRetryMode {
     HardwareDecodeDenied(FfmpegCapabilityReport),
     HardwareEncodeDenied(FfmpegCapabilityReport),
+    /// A hardware *graph* failed at runtime. The rebuilt capabilities carry the
+    /// new denial, so the pipeline selects the next proven graph on its own.
+    HardwareGraphDenied(FfmpegCapabilityReport),
 }
 
 const STREAM_BODY_BUFFER_BYTES: usize = 256 * 1024;
@@ -2498,6 +2512,11 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     guarded_stream_body(reader, handle_cancel)
 }
 
+// One linear failure-classification ladder: graph denial, then decode denial,
+// then encoder rejection, each with its own persist-and-respawn. Splitting it
+// would mean threading the FnOnce rebuild and the &mut child through helpers
+// for no gain in clarity.
+#[allow(clippy::too_many_lines)]
 async fn supervise_stream_command_with_retry(
     mut child: RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
@@ -2521,8 +2540,58 @@ async fn supervise_stream_command_with_retry(
             runtime_capabilities,
             acceleration,
             source_stream,
+            graph_operation,
+            ffmpeg_path,
             rebuild,
         } = context;
+
+        // ADR 0014: a graph that only fails under real media cannot be caught by
+        // startup probing, so the denial is learned from the failure itself and
+        // the retry goes through the next proven graph. Checked before the
+        // decode classifier because a graph failure is the more specific
+        // diagnosis.
+        if let (Some(operation), Some(kind)) = (
+            graph_operation,
+            ersatzrs_ffmpeg::GraphFailureKind::classify(&stderr),
+        ) {
+            let mut capabilities = runtime_capabilities;
+            let device = capabilities.hardware_graph_device();
+            let denial = ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
+            tracing::warn!(
+                channel_number = %channel_number,
+                evidence = %denial.evidence(),
+                "retrying channel stream once through the next proven graph after a runtime graph failure"
+            );
+            if let Err(error) = ersatzrs_infra::hardware_graph::persist_hardware_graph_denial(
+                &pool,
+                &ffmpeg_path,
+                &mut capabilities,
+                denial,
+            )
+            .await
+            {
+                tracing::warn!(
+                    %error,
+                    channel_number = %channel_number,
+                    "failed to persist runtime-learned hardware graph denial"
+                );
+            }
+            let Some(rebuilt) = rebuild(StreamRetryMode::HardwareGraphDenied(capabilities)) else {
+                tracing::warn!(
+                    channel_number = %channel_number,
+                    "rebuilt command was refused; not retrying after graph denial"
+                );
+                return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+            };
+            match spawn_stream_process(&rebuilt, remote_stream.and_then(remote_stream_producer)) {
+                Ok(next) => child = next,
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after graph denial");
+                    return DirectStreamOutcome::Failed(error.to_string());
+                }
+            }
+            continue;
+        }
 
         if let Some(denial) =
             learned_hardware_decode_denial(false, acceleration, source_stream.as_ref(), &stderr)

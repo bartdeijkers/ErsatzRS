@@ -309,6 +309,35 @@ adr         = '0014'
 description = 'P1: Carry the selected `HardwareGraphOperation` into both the HLS segmenter and direct IPTV supervisors. On abnormal exit, classify known graph stderr, persist a device-scoped denial, rebuild exactly once through the next positively proven graph (Vulkan to CUDA/NVENC, CUDA to software), and surface the denial through existing health/troubleshooting state; arbitrary failures and a failed retry remain terminal. Closure requires supervisor-level tests for both stream families, both fallback levels, persistence/reload, the one-retry bound, and a non-classified control.'
 discovered  = '2026-08-07'
 evidence    = '`GraphFailureKind::classify` is referenced by startup probing and unit tests only. `hls_worker` retries learned decode failures, and `transport/iptv/stream.rs` retries decode/encoder-open failures, but neither path classifies or persists operation-scoped graph failures.'
+remediation = '''
+Fixed 2026-08-08. Both stream families now learn a graph denial from a live
+failure and retry once through the next proven graph.
+
+The selected operation is derived from the argv that actually ran
+(`ersatzrs_ffmpeg::selected_hardware_graph`) rather than tracked alongside it,
+so a runtime failure cannot be attributed to a graph the spawn did not use.
+On abnormal exit both supervisors classify the stderr with the existing
+`GraphFailureKind`, persist a device-scoped denial via
+`persist_hardware_graph_denial`, and rebuild. Folding the denial into the
+capability report is sufficient for the rebuilt command to select the fallback,
+which is what `a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph`
+pins.
+
+The graph check runs before the decode classifier because it is the more
+specific diagnosis. Both paths bound the retry to one attempt
+(`learned_graph_retry_used` in the HLS worker, the single-shot `retry.take()` in
+IPTV), and an unclassified failure or a refused rebuild stays terminal.
+
+Regressions: `the_selected_graph_is_derived_from_the_command_that_actually_ran`
+and `a_runtime_graph_denial_makes_the_rebuild_select_the_next_proven_graph`;
+`cargo xtask smoke` passes.
+
+Narrower than closed: the supervisor-level tests this debt asks for — both
+stream families driven through a real failing spawn, both fallback levels, and
+persistence/reload across a restart — were not written. The classification,
+attribution, persistence, and rebuild-selection steps are each covered
+individually, but the assembled supervisor path is not.
+'''
 resolved    = false
 
 [[debt]]
