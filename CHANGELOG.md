@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.21-beta] - 2026-08-08
+
 ### Added
 
 - Added a **Source Orientation** health check. Rotated video — most phone
@@ -80,6 +82,14 @@ release section when tagging a release.
   misleading database flag. Linux remains service-manager owned and now has a
   systemd installation guide modeled on Jellyfin's package behavior.
 
+- Added Dolby Vision input support. Profile 8.1 sources — the common case for
+  streaming-service 4K releases — now play from their HDR10-compatible base
+  layer to both SDR and HDR10 channels, verified against a real file. Profile 5
+  and dual-layer profile 7 are rejected with a health entry naming the reason
+  rather than played with visibly wrong colour, because neither has a
+  characterized conversion. Scanning records each source's Dolby Vision
+  configuration. Dolby Vision output is not supported.
+
 ### Changed
 
 - Re-sequenced the long-term roadmap: FFmpeg 9 HDR/Dolby Vision, Vulkan, and
@@ -123,14 +133,6 @@ release section when tagging a release.
   page's module stylesheet (dead-code cleanup, no visible change).
 - Removed the unused `.empty` CSS rule from the blocks admin page's module
   stylesheet (dead-code cleanup, no visible change).
-
-- Added Dolby Vision input support. Profile 8.1 sources — the common case for
-  streaming-service 4K releases — now play from their HDR10-compatible base
-  layer to both SDR and HDR10 channels, verified against a real file. Profile 5
-  and dual-layer profile 7 are rejected with a health entry naming the reason
-  rather than played with visibly wrong colour, because neither has a
-  characterized conversion. Scanning records each source's Dolby Vision
-  configuration. Dolby Vision output is not supported.
 
 ### Fixed
 
@@ -1473,7 +1475,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...HEAD
+[1.0.21-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...v1.0.21-beta
 [1.0.17-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...v1.0.17-beta
 [1.0.15-beta.9]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.8...v1.0.15-beta.9
 [1.0.15-beta.8]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.7...v1.0.15-beta.8
