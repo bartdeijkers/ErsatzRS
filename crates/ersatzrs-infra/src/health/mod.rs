@@ -83,6 +83,22 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 29] = [
     "TSDuck MPEG-TS Troubleshooting",
 ];
 
+/// Run the Output Dynamic Range check alone (ADR 0064).
+///
+/// Exposed so both backends can assert the same classification results. Its
+/// query uses `SELECT DISTINCT`, which `MySQL` and `SQLite` disagree about when an
+/// `ORDER BY` column is absent from the projection, so the check needs coverage
+/// on both rather than on whichever one the unit tests happen to use.
+///
+/// # Errors
+///
+/// Returns an error when the database read fails.
+pub async fn run_output_dynamic_range_check(pool: &Pool<Db>) -> Result<HealthCheckResult> {
+    checks::OutputDynamicRangeHealthCheck::new(pool.clone())
+        .check()
+        .await
+}
+
 /// Persisted view of a health run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersistedHealthCheckRun {
@@ -1463,6 +1479,55 @@ mod tests {
             result.message.contains("HDR10 requires 10-bit"),
             "{}",
             result.message
+        );
+    }
+
+    /// The same classification contract the `MySQL` integration test asserts.
+    ///
+    /// Duplicate profile names are seeded on purpose: they are what makes the
+    /// `SELECT DISTINCT` meaningful, and they are the case the dropped `Id`
+    /// tie-breaker existed for.
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn output_dynamic_range_check_classifies_every_row_shape_on_sqlite() {
+        let pool = test_pool().await;
+        assert_eq!(
+            super::run_output_dynamic_range_check(&pool)
+                .await
+                .expect("no hdr10 profiles")
+                .status,
+            HealthCheckStatus::NotApplicable
+        );
+
+        // Two channels sharing one profile name.
+        seed_hdr10_profile_with_acceleration(&pool, 80, "shared name", 1, 1, 1, 0).await;
+        seed_hdr10_profile_with_acceleration(&pool, 81, "shared name", 1, 1, 1, 0).await;
+        assert_eq!(
+            super::run_output_dynamic_range_check(&pool)
+                .await
+                .expect("h264 hdr10")
+                .status,
+            HealthCheckStatus::Fail
+        );
+
+        let pool = test_pool().await;
+        seed_hdr10_profile_with_acceleration(&pool, 82, "vaapi hdr10", 2, 1, 1, 3).await;
+        assert_eq!(
+            super::run_output_dynamic_range_check(&pool)
+                .await
+                .expect("vaapi hdr10")
+                .status,
+            HealthCheckStatus::Warning
+        );
+
+        let pool = test_pool().await;
+        seed_hdr10_profile_with_acceleration(&pool, 83, "copy hdr10", 99, 0, 0, 0).await;
+        assert_eq!(
+            super::run_output_dynamic_range_check(&pool)
+                .await
+                .expect("copy hdr10")
+                .status,
+            HealthCheckStatus::Info
         );
     }
 

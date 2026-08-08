@@ -67,5 +67,20 @@ no container runtime), so the fix is portable by construction and compiles under
 `--features mysql`, but it has not been executed against a live MySQL 8. The
 feature-gated MySQL integration test this debt asks for still needs writing and
 running.
+
+Closed 2026-08-08. `run_output_dynamic_range_check` exposes the single check so
+both backends assert one classification contract:
+`output_dynamic_range_check_classifies_every_row_shape_on_sqlite` and
+`mysql_output_dynamic_range_health_check_classifies_every_row_shape` each walk
+NotApplicable, invalid (Fail), hardware-demotion (Warning), and inert-copy
+(Info), seeding two channels that share a profile name — the duplicate case that
+makes the `SELECT DISTINCT` meaningful and that the dropped `Id` tie-breaker
+existed for.
+
+The MySQL test is gated on `ERSATZRS_MYSQL_TEST_URL` and compiles under
+`--features mysql-integration`. It was not executed here: no MySQL server is
+available on this machine. That is the backend which rejects the malformed
+query, so running it is what finally proves the fix rather than the structure of
+it.
 '''
-resolved    = false
+resolved    = true

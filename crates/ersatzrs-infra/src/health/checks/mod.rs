@@ -45,7 +45,7 @@ pub(super) use local_television_identity::LocalTelevisionIdentityHealthCheck;
 pub(super) use migration_checksum::MigrationChecksumHealthCheck;
 pub(super) use mirror_channel::MirrorChannelHealthCheck;
 pub(super) use movie_metadata::MovieMetadataHealthCheck;
-pub(super) use output_dynamic_range::OutputDynamicRangeHealthCheck;
+pub(crate) use output_dynamic_range::OutputDynamicRangeHealthCheck;
 pub(super) use pinned_stream_selection::PinnedStreamSelectionHealthCheck;
 pub(super) use playback_data_access::PlaybackDataAccessHealthCheck;
 pub(super) use provider_connectivity::ProviderConnectivityHealthCheck;

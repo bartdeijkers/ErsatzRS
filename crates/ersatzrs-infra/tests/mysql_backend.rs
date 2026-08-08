@@ -362,3 +362,126 @@ async fn mysql_persists_and_clears_hardware_graph_state() {
             .is_empty()
     );
 }
+
+/// The Output Dynamic Range health check on `MySQL`.
+///
+/// `MySQL` rejects an `ORDER BY` column absent from a `SELECT DISTINCT`
+/// projection (error 3065), so this check used to fail on every health run
+/// against `MySQL` while passing on `SQLite`. Duplicate profile names are seeded
+/// deliberately: they are what makes the `DISTINCT` meaningful and what the
+/// dropped `Id` tie-breaker was there for.
+#[tokio::test]
+async fn mysql_output_dynamic_range_health_check_classifies_every_row_shape() {
+    #[allow(clippy::disallowed_methods)]
+    let Ok(database_url) = std::env::var("ERSATZRS_MYSQL_TEST_URL") else {
+        eprintln!("skipping MySQL health-check test: ERSATZRS_MYSQL_TEST_URL is not set");
+        return;
+    };
+
+    let pool = db::init(&database_url)
+        .await
+        .expect("initialize MySQL test database");
+
+    // No HDR10 profiles at all.
+    let result = ersatzrs_infra::health::run_output_dynamic_range_check(&pool)
+        .await
+        .expect("check with no HDR10 profiles");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::NotApplicable
+    );
+
+    // Two channels sharing one profile name, so the DISTINCT projection has
+    // duplicates to collapse.
+    seed_hdr10_channel(&pool, 900, "shared name", 1, 1, 1, 0).await;
+    seed_hdr10_channel(&pool, 901, "shared name", 1, 1, 1, 0).await;
+    let result = ersatzrs_infra::health::run_output_dynamic_range_check(&pool)
+        .await
+        .expect("check with an h264 HDR10 profile");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::Fail
+    );
+
+    // Hardware without a proven HDR10 graph demotes to software.
+    reset_hdr10_channels(&pool).await;
+    seed_hdr10_channel(&pool, 902, "vaapi hdr10", 2, 1, 1, 3).await;
+    let result = ersatzrs_infra::health::run_output_dynamic_range_check(&pool)
+        .await
+        .expect("check with a VAAPI HDR10 profile");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::Warning
+    );
+
+    // Video copy makes the selection inert rather than wrong.
+    reset_hdr10_channels(&pool).await;
+    seed_hdr10_channel(&pool, 903, "copy hdr10", 99, 0, 0, 0).await;
+    let result = ersatzrs_infra::health::run_output_dynamic_range_check(&pool)
+        .await
+        .expect("check with a copy HDR10 profile");
+    assert_eq!(
+        result.status,
+        ersatzrs_core::health::HealthCheckStatus::Info
+    );
+
+    reset_hdr10_channels(&pool).await;
+}
+
+async fn reset_hdr10_channels(pool: &db::DbPool) {
+    for table in ["Channel", "FFmpegProfile"] {
+        let sql = format!(r#"DELETE FROM `{table}` WHERE `Id` >= 900"#);
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+            .execute(pool)
+            .await
+            .expect("reset seeded rows");
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_hdr10_channel(
+    pool: &db::DbPool,
+    id: i64,
+    name: &str,
+    video_format: i32,
+    bit_depth: i32,
+    transcode_video: i32,
+    acceleration: i32,
+) {
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(
+        r#"INSERT IGNORE INTO `Resolution` (`Id`, `Name`, `IsCustom`, `Width`, `Height`)
+           VALUES (900, '1920x1080', 0, 1920, 1080)"#
+            .to_owned(),
+    ))
+    .execute(pool)
+    .await
+    .expect("seed resolution");
+
+    let profile = format!(
+        r#"INSERT INTO `FFmpegProfile` (
+            `Id`, `AudioBitrate`, `AudioBufferSize`, `AudioChannels`, `AudioFormat`,
+            `AudioSampleRate`, `BitDepth`, `HardwareAcceleration`, `Name`,
+            `NormalizeFramerate`, `NormalizeLoudnessMode`, `ResolutionId`,
+            `ScalingBehavior`, `ThreadCount`, `VaapiDriver`, `VideoBitrate`,
+            `VideoBufferSize`, `VideoFormat`, `TranscodeVideo`, `OutputDynamicRange`
+           ) VALUES ({id}, 192, 384, 2, 1, 48, {bit_depth}, {acceleration}, '{name}',
+            0, 0, 900, 0, 0, 0, 2000, 4000, {video_format}, {transcode_video}, 1)"#
+    );
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(profile))
+        .execute(pool)
+        .await
+        .expect("seed hdr10 profile");
+
+    let channel = format!(
+        r#"INSERT INTO `Channel` (
+            `Id`, `UniqueId`, `Number`, `SortNumber`, `Name`, `FFmpegProfileId`,
+            `IdleBehavior`, `MusicVideoCreditsMode`, `PlayoutMode`, `PlayoutSource`,
+            `SongVideoMode`, `StreamingMode`, `StreamSelectorMode`, `SubtitleMode`,
+            `TranscodeMode`
+           ) VALUES ({id}, UUID(), '{id}', {id}.0, '{name}', {id}, 0, 0, 1, 0, 0, 1, 0, 0, 0)"#
+    );
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(channel))
+        .execute(pool)
+        .await
+        .expect("seed channel");
+}
