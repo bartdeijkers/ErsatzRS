@@ -259,6 +259,21 @@ The Dolby Vision configuration record is absent from both outputs, which is
 correct: neither output is Dolby Vision, so retaining its signalling would
 describe a stream that no longer exists.
 
+## Finding 11: Dolby Vision 8.1 with overlays, subtitles, seeking, and HLS
+
+Run against the real profile 8.1 file, seeking 3 s in so the decode does not
+start at a keyframe boundary:
+
+| Output | Graph | Result |
+|---|---|---|
+| HDR10 MPEG-TS | seek, `setparams`, DV strip, scale, alpha overlay, burned subtitles | `bt2020nc/smpte2084/bt2020`, HDR10 metadata kept, no DOVI record, 69 frames |
+| SDR MPEG-TS | seek, tonemap, SDR strip, scale, alpha overlay, burned subtitles | `bt709/bt709/bt709`, no HDR or DV side data at all |
+| HDR10 HLS (fMP4) | `setparams`, DV strip, scale | `bt2020nc/smpte2084/bt2020`, no DOVI record |
+
+The SDR case is the one worth noting: both strips apply, so a tone-mapped
+Dolby Vision source carries neither its HDR10 static metadata nor its Dolby
+Vision record — which is what ADR 0064 requires of an SDR output.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,

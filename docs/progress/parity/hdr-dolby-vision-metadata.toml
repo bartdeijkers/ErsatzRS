@@ -213,7 +213,22 @@ adr         = '0064'
 description = 'Profile 8.1 SDR and HDR10 outputs are characterized, but overlays, burned subtitles, seeking, and restart/fallback were not exercised on a Dolby Vision source specifically. They are proven on plain HDR10 sources, and a profile 8.1 base layer is an HDR10 signal, so the risk is low — but it is not measured.'
 discovered  = '2026-08-07'
 evidence    = 'The p8a-02 characterization covered stream copy, SDR transcode, and HDR10 transcode of a real profile 8.1 file. Overlay, subtitle, seek, and restart proofs exist for plain HDR10 sources (see `docs/how-to/hdr-output-characterization.md` finding 7) but were not repeated with Dolby Vision input.'
-resolved    = false
+remediation = '''
+Closed 2026-08-08 against the real profile 8.1 file, seeking 3 s in so the
+decode does not begin at a keyframe boundary.
+
+HDR10 MPEG-TS with a scale, an alpha overlay, and burned subtitles:
+`bt2020nc/smpte2084/bt2020`, mastering display and content light kept, no DOVI
+record, 69 frames decoded. HDR10 over HLS (fMP4): same signalling, no DOVI
+record. SDR MPEG-TS with the same overlay and subtitles: `bt709/bt709/bt709`
+with no HDR or Dolby Vision side data at all — both strips apply, which is what
+ADR 0064 requires of an SDR output from a Dolby Vision source.
+
+Recorded as finding 11 in `docs/how-to/hdr-output-characterization.md`.
+Restart/fallback was not re-exercised with Dolby Vision input specifically; it is
+source-agnostic and covered by the hardware-graph retry tests.
+'''
+resolved    = true
 
 [[debt]]
 id          = 'unplayable-dolby-vision-rejection-is-not-enforced-before-spawn'
