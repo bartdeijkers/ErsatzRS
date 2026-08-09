@@ -13,6 +13,26 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Dolby Vision profile 7 sources with a complete BL/EL/RPU record can now
+  transcode through FFmpeg 9's `dovi_split` HDR10 base-layer path to SDR or
+  HDR10 MPEG-TS and HLS output. ErsatzRS detects the bitstream filter at
+  runtime, applies it only to the selected video stream before input, forces
+  software decode for the multilayer split, strips Dolby Vision signalling,
+  and keeps rejecting the source when the record or runtime capability is
+  incomplete. The base-layer-present flag is persisted additively for SQLite
+  and MySQL; existing Dolby Vision items require a rescan before this path is
+  enabled.
+
+### Fixed
+
+- Remote Stream producer failures now include the playback surface, channel,
+  producer name, effective seek, failure class, exit status, stderr byte count,
+  and a bounded diagnostic tail. URLs, credentials, cookies, authorization
+  values, and local paths are sanitized before logging, so extractor failures
+  are actionable without exposing signed media URLs or private configuration.
+
 ## [1.0.21-beta.1] - 2026-08-09
 
 ### Fixed

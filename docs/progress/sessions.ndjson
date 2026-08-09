@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-09","summary":"Implemented sanitized Remote Stream producer diagnostics and runtime-gated Dolby Vision profile 7 base-layer playback with full local playback gates."}
 {"agent":"Codex","date":"2026-08-09","summary":"Hardened shared HLS runtime denials and finite remote producers; validated the Windows YouTube midpoint flow and full release gates."}
 {"agent":"Codex","date":"2026-08-08","summary":"Hardened seek-aware YouTube Remote Streams, repaired phase 8 playback test contracts, and completed release playback validation."}
 {"agent":"Codex","date":"2026-08-08","summary":"Closed Phase 8 runtime fallback persistence, fixed FFmpeg 9 anamorphic NVENC green frames, added opt-in Remote Stream producer seeking, and completed real Stinkfist and Beeld & Geluid playback gates for v1.0.21-beta."}

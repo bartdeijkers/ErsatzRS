@@ -274,6 +274,33 @@ The SDR case is the one worth noting: both strips apply, so a tone-mapped
 Dolby Vision source carries neither its HDR10 static metadata nor its Dolby
 Vision record — which is what ADR 0064 requires of an SDR output.
 
+## Finding 12: Dolby Vision profile 7 requires an explicit base-layer split
+
+A real dual-layer profile 7 HEVC file was used through the ignored
+`real_profile_7_fixture_*` gates. The fixture is operator-supplied through
+`ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE` and is never committed. The active
+FFmpeg 9 runtime advertises `dovi_split`, and a one-frame decode first proved
+that `-bsf:0 dovi_split=mode=bl` exposes the HDR10 base layer.
+
+The production command builder now applies that filter before the selected
+video input, only for a complete BL+EL+RPU record and only when runtime
+capability discovery confirms the filter. Profile 7 decode is forced to
+software; hardware encode may still be used after the split and upload. A
+missing flag, an older database row not yet rescanned, or a runtime without the
+filter stays visibly rejected.
+
+Bounded runtime results with a 3-second seek, 1080p scaling, a drawvg overlay,
+and a burned PGS subtitle:
+
+| Output | Result |
+|---|---|
+| SDR MPEG-TS | `bt709/bt709/bt709`, no HDR or DOVI side data |
+| HDR10 MPEG-TS | `bt2020nc/smpte2084/bt2020`, no DOVI record |
+| HDR10 HLS (MPEG-TS segments) | `bt2020nc/smpte2084/bt2020`, no DOVI record |
+
+The HLS gate writes six seconds to a temporary directory, probes the generated
+playlist, and deletes the directory when the test ends.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,
@@ -281,4 +308,5 @@ Vision record — which is what ADR 0064 requires of an SDR output.
   to software encoding* for HDR10 profiles rather than allowed to emit SDR, and
   the `Output Dynamic Range` health check warns when that happens. See
   `docs/progress/parity/ffmpeg-9-performance-and-support.toml`.
-- Dolby Vision inputs (milestone `p8a-02`).
+- Dolby Vision profile 5 conversion. It has no conventional base-layer
+  fallback and remains rejected rather than decoded with guessed colour.

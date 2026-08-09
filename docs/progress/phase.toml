@@ -47,8 +47,10 @@ cuda creates a device — vaapi and qsv fail with -542398533, opencl reports no
 platforms, `hevc_qsv` cannot open an MFX session, `hevc_amf` cannot load
 `libamfrt64.so.1`, and there is no `/dev/dri`. The missing manual gates are a
 working Intel/AMD/Apple/Rockchip device for the non-NVIDIA graph probes, HDR10
-characterization, and hardware HDR benchmarks; a Dolby Vision profile 5 and
-profile 7 fixture; and multi-vendor Vulkan encoding evidence plus its own ADR.
+characterization, and hardware HDR benchmarks; a Dolby Vision profile 5
+fixture; and multi-vendor Vulkan encoding evidence plus its own ADR. Profile 7
+closed on 2026-08-09 with a real dual-layer fixture, runtime-gated
+`dovi_split=mode=bl`, and decoded SDR/HDR10 MPEG-TS plus HDR10 HLS evidence.
 See the structured debt in `ffmpeg-9-performance-and-support.toml` and
 `hdr-dolby-vision-metadata.toml`.
 

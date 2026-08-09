@@ -281,6 +281,8 @@ pub struct FfmpegCapabilityReport {
     pub encoders: BTreeSet<String>,
     /// Decoder names from `ffmpeg -decoders`.
     pub decoders: BTreeSet<String>,
+    /// Bitstream filter names from `ffmpeg -bsfs`.
+    pub bitstream_filters: BTreeSet<String>,
     /// Hardware accelerator names from `ffmpeg -hwaccels`.
     pub hwaccels: BTreeSet<String>,
     /// Configure flags parsed from `ffmpeg -version`.
@@ -337,6 +339,12 @@ impl FfmpegCapabilityReport {
     #[must_use]
     pub fn has_decoder(&self, name: &str) -> bool {
         self.decoders.contains(name)
+    }
+
+    /// Returns whether a named bitstream filter is present.
+    #[must_use]
+    pub fn has_bitstream_filter(&self, name: &str) -> bool {
+        self.bitstream_filters.contains(name)
     }
 
     /// Returns whether a named hardware accelerator is present.
@@ -887,6 +895,7 @@ impl FfmpegRuntimeReport {
             filters: BTreeSet::from_iter(to_owned_vec(REQUIRED_FILTERS)),
             encoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_ENCODERS)),
             decoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_DECODERS)),
+            bitstream_filters: BTreeSet::from(["dovi_split".to_owned()]),
             hwaccels: BTreeSet::new(),
             configuration_flags: flags.clone(),
             vaapi_profiles: Vec::new(),
@@ -1047,6 +1056,21 @@ pub fn parse_hwaccels(output: &str) -> BTreeSet<String> {
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with("Hardware acceleration methods"))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Parse names from `ffmpeg -bsfs` output.
+#[must_use]
+pub fn parse_bitstream_filters(output: &str) -> BTreeSet<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with("Bitstream filters:")
+                && !line.chars().any(char::is_whitespace)
+        })
         .map(str::to_owned)
         .collect()
 }
@@ -1301,6 +1325,13 @@ async fn collect_ffmpeg_capabilities(
         tool: "ffmpeg",
         output: error.to_string(),
     })?;
+    let bitstream_filters = String::from_utf8(
+        run_tool("ffmpeg", &config.ffmpeg_path, &["-hide_banner", "-bsfs"]).await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
     let hwaccels = String::from_utf8(
         run_tool(
             "ffmpeg",
@@ -1318,6 +1349,7 @@ async fn collect_ffmpeg_capabilities(
         filters: parse_capability_names(&filters),
         encoders: parse_capability_names(&encoders),
         decoders: parse_capability_names(&decoders),
+        bitstream_filters: parse_bitstream_filters(&bitstream_filters),
         hwaccels: parse_hwaccels(&hwaccels),
         configuration_flags: BTreeSet::new(),
         vaapi_profiles: Vec::new(),
@@ -2300,12 +2332,13 @@ fn to_owned_vec(values: &[&str]) -> Vec<String> {
 mod tests {
     use super::{
         collect_runtime_issues, dedupe_vaapi_profiles, nvidia_decoder_probe_specs,
-        nvidia_gpu_list_summary, parse_capability_names, parse_configuration_flags, parse_hwaccels,
-        parse_nvidia_decoder_capabilities, parse_nvidia_encoder_capability,
-        parse_vaapi_profile_entrypoints, parse_version, preferred_default_profile_acceleration,
-        videotoolbox_decoder_probe_specs, FfmpegCapabilityReport, FfmpegHardwareProbeDevice,
-        FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion, HardwareAccelerationKind,
-        NvidiaDecoderCapability, VaapiProfileEntrypoint, REQUIRED_MAJOR, REQUIRED_MINOR,
+        nvidia_gpu_list_summary, parse_bitstream_filters, parse_capability_names,
+        parse_configuration_flags, parse_hwaccels, parse_nvidia_decoder_capabilities,
+        parse_nvidia_encoder_capability, parse_vaapi_profile_entrypoints, parse_version,
+        preferred_default_profile_acceleration, videotoolbox_decoder_probe_specs,
+        FfmpegCapabilityReport, FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig,
+        FfmpegRuntimeIssue, FfmpegVersion, HardwareAccelerationKind, NvidiaDecoderCapability,
+        VaapiProfileEntrypoint, REQUIRED_MAJOR, REQUIRED_MINOR,
     };
     use std::collections::BTreeSet;
 
@@ -2404,6 +2437,20 @@ Encoders:
         assert_eq!(
             names,
             BTreeSet::from(["cuda".to_owned(), "vaapi".to_owned(), "vulkan".to_owned()])
+        );
+    }
+
+    #[test]
+    fn parses_bitstream_filter_names() {
+        let output = "Bitstream filters:\naac_adtstoasc\ndovi_rpu\ndovi_split\n";
+
+        assert_eq!(
+            parse_bitstream_filters(output),
+            BTreeSet::from([
+                "aac_adtstoasc".to_owned(),
+                "dovi_rpu".to_owned(),
+                "dovi_split".to_owned(),
+            ])
         );
     }
 
@@ -2641,6 +2688,7 @@ h264_nvenc AVOptions:
             filters: BTreeSet::new(),
             encoders: BTreeSet::from(["libx264".to_owned()]),
             decoders: BTreeSet::from(["h264".to_owned()]),
+            bitstream_filters: BTreeSet::new(),
             hwaccels: BTreeSet::new(),
             configuration_flags: BTreeSet::new(),
             vaapi_profiles: Vec::new(),
@@ -3038,6 +3086,9 @@ Decoders:
  V....D h264            H.264 decoder
 EOF
     ;;
+  "-hide_banner -bsfs")
+    printf 'Bitstream filters:\ndovi_split\n'
+    ;;
   "-hide_banner -hwaccels")
     printf 'Hardware acceleration methods:\n{hwaccel_lines}\n'
     ;;
@@ -3078,6 +3129,9 @@ Decoders:
  V....D h264_cuvid      Nvidia CUVID H264 decoder
  V....D hevc_cuvid      Nvidia CUVID HEVC decoder
 EOF
+    ;;
+  "-hide_banner -bsfs")
+    printf 'Bitstream filters:\ndovi_split\n'
     ;;
   "-hide_banner -hwaccels")
     printf 'Hardware acceleration methods:\ncuda\n'

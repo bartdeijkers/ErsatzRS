@@ -37,6 +37,11 @@ pub enum DolbyVisionHandling {
     Hdr10CompatibleBaseLayer,
     /// The base layer is a conforming HLG signal; same reasoning.
     HlgCompatibleBaseLayer,
+    /// Profile 7 carries an HDR10 base layer interleaved with its enhancement
+    /// layer. Playback may use that base layer only after `FFmpeg`'s
+    /// `dovi_split=mode=bl` input bitstream filter has removed the enhancement
+    /// layer and RPU.
+    Hdr10BaseLayerAfterSeparation,
     /// No conventional-signal fallback is guaranteed, and no fixture has proven
     /// the conversion produces correct colour. Reject visibly.
     Unproven { reason: &'static str },
@@ -51,24 +56,30 @@ impl DolbyVisionConfiguration {
     /// * Profile 8 declares its base-layer compatibility explicitly, so a
     ///   compatibility id of 1 (HDR10) or 4 (HLG) is a standard guarantee that
     ///   the base layer decodes correctly on its own.
-    /// * Profile 7 is dual layer. Its base layer is HDR10, but only after the
-    ///   enhancement layer is separated; that requires `dovi_split` and a
-    ///   fixture, so it stays unproven here.
+    /// * Profile 7 is dual layer. A complete BL+EL+RPU record is eligible for
+    ///   the fixture-proven `dovi_split=mode=bl` path; runtime capability is
+    ///   checked separately at the command boundary.
     /// * Profile 5 uses IPT-PQ-C2 colour with no conventional fallback at all.
     ///   Decoding it as if it were BT.2020 produces visibly wrong colour, which
     ///   is exactly the outcome ADR 0064 forbids.
     #[must_use]
     pub const fn handling(&self) -> DolbyVisionHandling {
         match self.profile {
-            8 => match self.bl_signal_compatibility_id {
+            8 if self.bl_present => match self.bl_signal_compatibility_id {
                 1 => DolbyVisionHandling::Hdr10CompatibleBaseLayer,
                 4 => DolbyVisionHandling::HlgCompatibleBaseLayer,
                 _ => DolbyVisionHandling::Unproven {
                     reason: "Dolby Vision profile 8 with no conventional base-layer compatibility",
                 },
             },
+            8 => DolbyVisionHandling::Unproven {
+                reason: "Dolby Vision profile 8 has no base layer",
+            },
+            7 if self.bl_present && self.el_present && self.rpu_present => {
+                DolbyVisionHandling::Hdr10BaseLayerAfterSeparation
+            }
             7 => DolbyVisionHandling::Unproven {
-                reason: "Dolby Vision profile 7 needs dual-layer separation, which is unproven",
+                reason: "Dolby Vision profile 7 has an incomplete BL, EL, or RPU record",
             },
             5 => DolbyVisionHandling::Unproven {
                 reason:
@@ -87,6 +98,7 @@ impl DolbyVisionConfiguration {
             self.handling(),
             DolbyVisionHandling::Hdr10CompatibleBaseLayer
                 | DolbyVisionHandling::HlgCompatibleBaseLayer
+                | DolbyVisionHandling::Hdr10BaseLayerAfterSeparation
         )
     }
 
@@ -100,6 +112,10 @@ impl DolbyVisionConfiguration {
             ),
             DolbyVisionHandling::HlgCompatibleBaseLayer => format!(
                 "Dolby Vision profile {} plays from its HLG-compatible base layer; Dolby Vision signalling is removed",
+                self.profile
+            ),
+            DolbyVisionHandling::Hdr10BaseLayerAfterSeparation => format!(
+                "Dolby Vision profile {} plays from its HDR10 base layer after dovi_split removes the enhancement layer and Dolby Vision signalling",
                 self.profile
             ),
             DolbyVisionHandling::Unproven { reason } => reason.to_owned(),
@@ -156,17 +172,24 @@ mod tests {
     }
 
     #[test]
-    fn profile_7_stays_unproven_until_dual_layer_separation_is_characterized() {
-        // `dovi_split` is a profile-7 multilayer tool, not a general decoder,
-        // and no fixture has proven the separated base layer yet.
-        let config = configuration(7, 0);
+    fn complete_profile_7_record_uses_the_separated_hdr10_base_layer() {
+        let mut config = configuration(7, 6);
+        config.el_present = true;
+
+        assert_eq!(
+            config.handling(),
+            DolbyVisionHandling::Hdr10BaseLayerAfterSeparation
+        );
+        assert!(config.is_playable());
+        assert!(config.evidence().contains("dovi_split"));
+    }
+
+    #[test]
+    fn incomplete_profile_7_record_stays_unproven() {
+        let config = configuration(7, 6);
 
         assert!(!config.is_playable());
-        assert!(
-            config.evidence().contains("dual-layer"),
-            "{}",
-            config.evidence()
-        );
+        assert!(config.evidence().contains("incomplete"));
     }
 
     #[test]
@@ -174,6 +197,15 @@ mod tests {
         // Compatibility id 0 means "no conventional signal", so the base layer
         // carries no standard guarantee even though the profile usually does.
         assert!(!configuration(8, 0).is_playable());
+    }
+
+    #[test]
+    fn profile_8_without_a_base_layer_is_not_assumed_playable() {
+        let mut config = configuration(8, 1);
+        config.bl_present = false;
+
+        assert!(!config.is_playable());
+        assert!(config.evidence().contains("no base layer"));
     }
 
     #[test]

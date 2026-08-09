@@ -55,7 +55,7 @@ use ersatzrs_infra::playback::{
 use ersatzrs_infra::remote_stream::{
     redact_remote_stream_output, remote_stream_input_file, remote_stream_producer,
     resolve_remote_stream, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
-    RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+    RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
@@ -2349,9 +2349,15 @@ enum DirectStreamOutcome {
 fn spawn_stream_process(
     command: &FfmpegCommand,
     remote_producer: Option<&RemoteStreamCommand>,
+    channel_number: &str,
 ) -> Result<RemoteStreamProcess, StreamSpawnError> {
-    spawn_ffmpeg_with_remote_input(command, None, remote_producer)
-        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
+    spawn_ffmpeg_with_remote_input(
+        command,
+        None,
+        remote_producer,
+        RemoteStreamSpawnContext::mpeg_ts(channel_number),
+    )
+    .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
 }
 
 fn spawn_stream_body(
@@ -2366,6 +2372,7 @@ fn spawn_stream_body(
     let child = spawn_stream_process(
         command,
         remote_stream.as_ref().and_then(remote_stream_producer),
+        &channel_number,
     )?;
     if child.stdout.is_none() {
         return Err(StreamSpawnError::MissingStdout);
@@ -2435,10 +2442,8 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
             ) {
                 let _capacity_reservation = reservation;
-                match spawn_stream_process(
-                    &command,
-                    remote_stream.as_ref().and_then(remote_stream_producer),
-                ) {
+                let producer = remote_stream.as_ref().and_then(remote_stream_producer);
+                match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(child) => {
                         let _ = supervise_stream_command_with_retry(
                             child,
@@ -2471,7 +2476,8 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 limit,
                 "serving MPEG-TS all-streams-in-use slate without reserving transcode capacity"
             );
-            let mut slate_child = match spawn_stream_process(&slate_command, None) {
+            let mut slate_child = match spawn_stream_process(&slate_command, None, &channel_number)
+            {
                 Ok(child) => child,
                 Err(error) => {
                     tracing::warn!(
@@ -2598,6 +2604,7 @@ async fn supervise_stream_command_with_retry(
             match spawn_stream_process(
                 &retry_command,
                 remote_stream.and_then(remote_stream_producer),
+                channel_number,
             ) {
                 Ok(next) => {
                     child = next;
@@ -2660,6 +2667,7 @@ async fn supervise_stream_command_with_retry(
             match spawn_stream_process(
                 &retry_command,
                 remote_stream.and_then(remote_stream_producer),
+                channel_number,
             ) {
                 Ok(next) => {
                     child = next;
@@ -2709,6 +2717,7 @@ async fn supervise_stream_command_with_retry(
         match spawn_stream_process(
             &retry_command,
             remote_stream.and_then(remote_stream_producer),
+            channel_number,
         ) {
             Ok(next) => child = next,
             Err(error) => {
@@ -5147,7 +5156,8 @@ mod tests {
                 ))
             })),
         });
-        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let child =
+            spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
         let (_reader, mut writer) = tokio::io::duplex(1024);
 
         let outcome = supervise_stream_command_with_retry(
@@ -5259,7 +5269,8 @@ mod tests {
                 ))
             })),
         });
-        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let child =
+            spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
         let (_reader, mut writer) = tokio::io::duplex(1024);
 
         let outcome = supervise_stream_command_with_retry(

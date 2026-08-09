@@ -23,12 +23,13 @@ use crate::{
     watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
     watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
     yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
-    ContentLightLevel, DolbyVisionConfiguration, FfmpegCapability, FfmpegCapabilityReport,
-    FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
-    HardwareCapabilitiesFactory, HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind,
-    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
-    SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
+    ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
+    GraphicsOverlayFilter, HardwareCapabilitiesFactory, HardwareGraphOperation, Hdr10OutputSupport,
+    InputFile, InputKind, MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat,
+    SourceColorTags, SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod,
+    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    NVENC_HDR_DEVICE_PREFIX,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -1153,6 +1154,7 @@ fn build_transcode_pipeline(
     // decode is forced explicit (`-hwaccel none -c:v …`), mirroring ErsatzTV.
     add_video_decoder(&request, &mut steps, encoder_acceleration);
     add_audio_decoder_input_options(&mut request);
+    add_dolby_vision_input_options(&mut request);
     add_hdr10_static_metadata_input_options(&mut request);
     add_realtime_input_options(&mut request);
     let uploaded_cuda_fallback =
@@ -1939,9 +1941,6 @@ pub fn unsupported_source_reason(request: &PipelineRequest) -> Option<String> {
         .as_ref()
         .and_then(|source| source.dolby_vision)?;
 
-    if dolby_vision.is_playable() {
-        return None;
-    }
     // Stream copy hands the elementary stream to the client untouched, so
     // ErsatzRS is not the one interpreting the colour and has no basis to
     // refuse.
@@ -1949,7 +1948,59 @@ pub fn unsupported_source_reason(request: &PipelineRequest) -> Option<String> {
         return None;
     }
 
+    if matches!(
+        dolby_vision.handling(),
+        DolbyVisionHandling::Hdr10BaseLayerAfterSeparation
+    ) && !request
+        .runtime_capabilities
+        .as_ref()
+        .is_some_and(|report| report.has_bitstream_filter("dovi_split"))
+    {
+        return Some(
+            "Dolby Vision profile 7 requires the FFmpeg dovi_split bitstream filter, but the active runtime does not provide it"
+                .to_owned(),
+        );
+    }
+
+    if dolby_vision.is_playable() {
+        return None;
+    }
+
     Some(dolby_vision.evidence())
+}
+
+fn profile_7_base_layer_separation_required(request: &PipelineRequest) -> bool {
+    request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.dolby_vision)
+            .is_some_and(|configuration| {
+                matches!(
+                    configuration.handling(),
+                    DolbyVisionHandling::Hdr10BaseLayerAfterSeparation
+                )
+            })
+}
+
+/// Selected-stream input options that expose a plain HDR10 base layer from a
+/// complete Dolby Vision profile 7 source.
+#[must_use]
+pub fn dolby_vision_input_options(request: &PipelineRequest) -> Vec<String> {
+    if !profile_7_base_layer_separation_required(request) {
+        return Vec::new();
+    }
+    let Some(stream_index) = request
+        .source_video_stream
+        .as_ref()
+        .map(|source| source.index)
+    else {
+        return Vec::new();
+    };
+    vec![
+        format!("-bsf:{stream_index}"),
+        "dovi_split=mode=bl".to_owned(),
+    ]
 }
 
 /// Classify the selected source video stream's transfer characteristics.
@@ -2501,6 +2552,9 @@ fn effective_decode_acceleration(
     requested_acceleration: HardwareAccelerationKind,
     effective_acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    if profile_7_base_layer_separation_required(request) {
+        return HardwareAccelerationKind::None;
+    }
     let Some(source) = &request.source_video_stream else {
         return effective_acceleration;
     };
@@ -2549,20 +2603,20 @@ fn add_video_decoder(
         return;
     };
 
-    let decode_acceleration =
-        if qsv_multiple_profile_decode_workaround(request, acceleration, source) {
-            HardwareAccelerationKind::None
-        } else if let Some(report) = &request.runtime_capabilities {
-            let capabilities =
-                HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
-            if capabilities.can_decode(source) == FfmpegCapability::Hardware {
-                capabilities.acceleration()
-            } else {
-                HardwareAccelerationKind::None
-            }
+    let decode_acceleration = if profile_7_base_layer_separation_required(request)
+        || qsv_multiple_profile_decode_workaround(request, acceleration, source)
+    {
+        HardwareAccelerationKind::None
+    } else if let Some(report) = &request.runtime_capabilities {
+        let capabilities = HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
+        if capabilities.can_decode(source) == FfmpegCapability::Hardware {
+            capabilities.acceleration()
         } else {
-            acceleration
-        };
+            HardwareAccelerationKind::None
+        }
+    } else {
+        acceleration
+    };
 
     let decoder = if decode_acceleration == HardwareAccelerationKind::None {
         if acceleration == HardwareAccelerationKind::Nvenc {
@@ -2635,6 +2689,21 @@ fn add_hdr10_static_metadata_input_options(request: &mut PipelineRequest) {
         .filter(|input| input.kind == InputKind::Video)
     {
         input.input_options.extend(options.iter().cloned());
+    }
+}
+
+fn add_dolby_vision_input_options(request: &mut PipelineRequest) {
+    let options = dolby_vision_input_options(request);
+    if options.is_empty() {
+        return;
+    }
+
+    if let Some(input) = request
+        .inputs
+        .iter_mut()
+        .find(|input| input.kind == InputKind::Video)
+    {
+        input.input_options.extend(options);
     }
 }
 

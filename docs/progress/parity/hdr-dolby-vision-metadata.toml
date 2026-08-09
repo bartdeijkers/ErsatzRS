@@ -45,6 +45,16 @@ and HDR10 transcodes do not explicitly remove Dolby Vision side data. The active
 sequence and runtime acceptance matrix live in
 `plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
 `p8a-01`/`p8a-02`.
+
+A 2026-08-09 follow-up characterized a real dual-layer profile 7 fixture.
+Complete BL+EL+RPU records now use the selected-stream FFmpeg 9 input filter
+`dovi_split=mode=bl`, gated by runtime bitstream-filter discovery and forced to
+software decode. SDR and HDR10 MPEG-TS plus HDR10 HLS outputs were decoded and
+probed with a nonzero seek, scaling, drawvg, and a burned PGS subtitle; their
+output signalling remained stable and no DOVI record survived. The scanner now
+persists `bl_present_flag` through a new additive SQLite/MySQL column, so an old
+row remains rejected until a rescan supplies the complete record. Profile 5
+remains unproven and visibly rejected.
 '''
 
 [[debt]]
@@ -80,8 +90,8 @@ additive SQLite/MySQL migration, and carried to playback. The policy follows the
 profile definitions rather than a guess: profile 8 with base-layer compatibility
 id 1 (HDR10) or 4 (HLG) may play from that base layer with Dolby Vision
 signalling removed, because the compatibility id is a standard guarantee;
-profile 7 stays unproven because separating its enhancement layer needs
-`dovi_split` plus a fixture; profile 5 stays unproven because it has no
+profile 7 requires a complete persisted BL+EL+RPU record plus an active runtime
+that advertises `dovi_split`; profile 5 stays unproven because it has no
 conventional fallback at all and decoding it as BT.2020 yields visibly wrong
 colour. A `Dolby Vision` health check names every rejected stream and its
 reason. Dolby Vision output is not advertised anywhere.
@@ -104,9 +114,18 @@ which is correct because neither output is Dolby Vision.
 transcoding rather than producing plausible but incorrect colour, and returns
 `None` for stream copy, where ErsatzRS is not the one interpreting the colour.
 
-Still unproven, and tracked as `dolby-vision-profiles-5-and-7-are-unproven`:
-profiles 5 and 7 remain rejected because no fixture of either was available.
-That is the safe default rather than a gap in behavior.
+Characterized 2026-08-09 against a real dual-layer profile 7 file. Runtime
+capability discovery now includes `ffmpeg -bsfs`; a complete record receives
+`dovi_split=mode=bl` on the selected video stream before input and uses software
+decode. The operator-supplied fixture gates prove SDR and HDR10 MPEG-TS plus
+HDR10 HLS, including seek, scaling, drawvg, and burned PGS subtitles. All output
+has the selected SDR or HDR10 tags and no DOVI record. `bl_present_flag` is now
+persisted by an additive SQLite/MySQL migration; NULL from an existing row is
+fail-closed until a rescan.
+
+Profile 5 remains unproven and rejected because it has no conventional fallback.
+That remaining fixture debt is tracked by
+`dolby-vision-playback-is-not-fixture-proven`.
 '''
 resolved    = true
 
@@ -244,9 +263,9 @@ resolved    = true
 [[debt]]
 id          = 'dolby-vision-playback-is-not-fixture-proven'
 adr         = '0064'
-description = 'Dolby Vision profile 8.1 is characterized against a real file, but profiles 5 and 7 are not: no fixture of either was available. Both remain rejected, which is the safe default. To enable them, obtain fixtures and characterize profile 5 conversion (it has no conventional fallback) and profile 7 dual-layer separation via dovi_split, for SDR and HDR10 targets.'
+description = 'Dolby Vision profiles 8.1 and 7 are characterized against real files, but profile 5 is not. Profile 5 remains rejected, which is the safe default. To enable it, obtain a fixture and characterize a colour-correct conversion for SDR and HDR10 targets; it has no conventional base-layer fallback.'
 discovered  = '2026-08-07'
-evidence    = 'A real profile 8.1 file was characterized end to end (see the feature summary). No profile 5 or profile 7 file was available, and neither can be generated locally: libx265 accepts `dolby-vision-profile` but a genuine RPU needs an external file only Dolby tooling produces, and `dolby-vision-rpu=none` silently yields plain HDR10 with no DOVI record. `DolbyVisionConfiguration::handling` therefore returns `Unproven` for both, and the Dolby Vision health check names them.'
+evidence    = 'Profile 7 closed on 2026-08-09: a real dual-layer fixture proved selected-stream `dovi_split=mode=bl` for stable SDR/HDR10 MPEG-TS and HDR10 HLS output, including seek, scaling, drawvg, and a burned PGS subtitle. No profile 5 fixture is available, and it cannot be generated locally: libx265 accepts `dolby-vision-profile` but a genuine RPU needs an external file only Dolby tooling produces, while `dolby-vision-rpu=none` silently yields plain HDR10 with no DOVI record. `DolbyVisionConfiguration::handling` therefore still returns `Unproven` for profile 5, and the Dolby Vision health check names it.'
 resolved    = false
 
 [[debt]]

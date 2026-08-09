@@ -447,6 +447,8 @@ pub struct MediaStream {
     /// Dolby Vision base-layer signal compatibility id: 1 = HDR10, 4 = HLG,
     /// 0 = none.
     pub dolby_vision_bl_compatibility_id: Option<i32>,
+    /// Whether the Dolby Vision base layer is present.
+    pub dolby_vision_bl_present: Option<bool>,
     /// Whether a Dolby Vision enhancement layer is present (profile 7).
     pub dolby_vision_el_present: Option<bool>,
     /// Whether Dolby Vision RPU metadata is present.

@@ -13,7 +13,7 @@ use tokio::process::Command;
 use crate::remote_stream::{
     pipe_remote_stream_producer, redacted_source_label, remote_stream_input_file,
     spawn_remote_stream_producer, RemoteStreamProducerPipe, RemoteStreamSource,
-    ResolvedRemoteStream,
+    RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,12 +159,17 @@ impl FfprobeExtractor {
                 });
             };
             Some(
-                pipe_remote_stream_producer(producer, consumer_stdin, label.clone()).map_err(
-                    |error| FfprobeError::Spawn {
-                        path: label.clone(),
-                        source: std::io::Error::other(error),
-                    },
-                )?,
+                pipe_remote_stream_producer(
+                    producer,
+                    consumer_stdin,
+                    label.clone(),
+                    RemoteStreamSpawnContext::probe(),
+                    Some("0".to_owned()),
+                )
+                .map_err(|error| FfprobeError::Spawn {
+                    path: label.clone(),
+                    source: std::io::Error::other(error),
+                })?,
             )
         } else {
             None
@@ -489,6 +494,7 @@ fn stream_to_domain(
         dolby_vision_profile: dolby_vision.map(|config| i32::from(config.profile)),
         dolby_vision_bl_compatibility_id: dolby_vision
             .map(|config| i32::from(config.bl_signal_compatibility_id)),
+        dolby_vision_bl_present: dolby_vision.map(|config| config.bl_present),
         dolby_vision_el_present: dolby_vision.map(|config| config.el_present),
         dolby_vision_rpu_present: dolby_vision.map(|config| config.rpu_present),
         ..MediaStream::default()
@@ -876,6 +882,7 @@ mod tests {
 
         assert_eq!(video.dolby_vision_profile, Some(8));
         assert_eq!(video.dolby_vision_bl_compatibility_id, Some(1));
+        assert_eq!(video.dolby_vision_bl_present, Some(true));
         assert_eq!(video.dolby_vision_rpu_present, Some(true));
         assert_eq!(video.dolby_vision_el_present, Some(false));
     }
@@ -902,6 +909,7 @@ mod tests {
         let video = probed.streams.first().expect("stream");
 
         assert_eq!(video.dolby_vision_profile, Some(7));
+        assert_eq!(video.dolby_vision_bl_present, Some(true));
         assert_eq!(video.dolby_vision_el_present, Some(true));
     }
 
@@ -919,6 +927,7 @@ mod tests {
         let video = probed.streams.first().expect("stream");
 
         assert_eq!(video.dolby_vision_profile, None);
+        assert_eq!(video.dolby_vision_bl_present, None);
         assert_eq!(video.dolby_vision_rpu_present, None);
     }
 
@@ -993,8 +1002,10 @@ mod tests {
             "a Dolby Vision stream has an RPU"
         );
 
-        // A profile 8 stream declaring HDR10 base-layer compatibility is the
-        // one case ADR 0064 allows to play; anything else must be rejected.
+        // Profile 8.1 can use its declared HDR10-compatible base layer.
+        // Profile 7 can use its HDR10 base layer only when the complete
+        // dual-layer record is present; the command boundary separately
+        // requires FFmpeg's dovi_split capability.
         if configuration.profile == 8 && configuration.bl_signal_compatibility_id == 1 {
             assert!(configuration.is_playable());
             assert!(!configuration.el_present, "profile 8 is single layer");
@@ -1005,9 +1016,62 @@ mod tests {
                 video.mastering_display.is_some(),
                 "an HDR10-compatible base layer should carry mastering display"
             );
+        } else if configuration.profile == 7 {
+            assert!(
+                configuration.el_present,
+                "profile 7 needs an enhancement layer"
+            );
+            assert!(configuration.is_playable(), "{}", configuration.evidence());
+            assert_eq!(video.color_transfer.as_deref(), Some("smpte2084"));
+            assert_eq!(video.color_primaries.as_deref(), Some("bt2020"));
         } else {
             assert!(!configuration.is_playable(), "{}", configuration.evidence());
         }
+    }
+
+    /// Real-file gate for `FFmpeg` 9 profile-7 base-layer separation.
+    ///
+    /// The fixture is operator-supplied and never committed. This test does
+    /// not write an output file; it seeks into the source, applies the exact
+    /// selected-stream input bitstream filter emitted by the pipeline, and
+    /// requires one decoded frame.
+    // Test-only opt-in paths; the configuration layer is for the application.
+    #[allow(clippy::disallowed_methods)]
+    #[tokio::test]
+    #[ignore = "requires a real Dolby Vision profile 7 file and FFmpeg 9"]
+    async fn real_profile_7_base_layer_is_decodable() {
+        let (Some(ffmpeg), Some(fixture)) = (
+            std::env::var_os("ERSATZRS_FFMPEG"),
+            std::env::var_os("ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE"),
+        ) else {
+            eprintln!(
+                "set ERSATZRS_FFMPEG and ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE to run this gate"
+            );
+            return;
+        };
+
+        let output = tokio::process::Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                "3",
+                "-bsf:0",
+                "dovi_split=mode=bl",
+                "-i",
+            ])
+            .arg(fixture)
+            .args(["-frames:v", "1", "-f", "null", "-"])
+            .output()
+            .await
+            .expect("run FFmpeg profile 7 base-layer decode");
+
+        assert!(
+            output.status.success(),
+            "profile 7 base-layer decode failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

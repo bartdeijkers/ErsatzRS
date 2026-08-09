@@ -30,6 +30,16 @@ content-light metadata survived the tone-map and was written onto BT.709 frames
 — the exact "never copy source HDR metadata onto transformed SDR frames" rule
 this ADR states.
 
+Dolby Vision profile 7 is characterized against a real dual-layer file
+(2026-08-09). A complete persisted BL/EL/RPU record is accepted only when the
+active FFmpeg runtime advertises `dovi_split`; the selected video stream then
+receives `dovi_split=mode=bl` as an input bitstream filter and is decoded in
+software. Generated SDR and HDR10 MPEG-TS plus HDR10 HLS output were decoded and
+probed with scaling, drawvg, a burned PGS subtitle, and a nonzero seek. The
+outputs retain their selected BT.709 or BT.2020/PQ contract and carry no Dolby
+Vision record. Existing rows whose newly added base-layer-present field is NULL
+remain rejected until a rescan proves the complete record.
+
 The seeded HDR10 metadata defaults are now operator-editable per profile: an
 `FFmpegProfile` carries an optional mastering display and MaxCLL/MaxFALL pair,
 validated at save time and shown in the editor with the documented default as
@@ -41,7 +51,8 @@ Not implemented, tracked as parity debt in
 `docs/progress/parity/hdr-dolby-vision-metadata.toml` and
 `docs/progress/parity/ffmpeg-9-performance-and-support.toml`: HDR10 is
 uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M, and Dolby Vision
-profiles 5 and 7 remain rejected because no fixture of either was available.
+profile 5 remains rejected because it has no conventional fallback and no
+characterized conversion.
 
 ## Context
 

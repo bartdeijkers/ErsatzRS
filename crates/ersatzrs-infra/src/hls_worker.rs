@@ -47,7 +47,8 @@ use crate::playback::{
 use crate::remote_stream::{
     redact_remote_stream_output, redacted_source_label, remote_stream_input_file,
     remote_stream_producer, resolve_remote_stream, spawn_ffmpeg_with_remote_input,
-    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext,
+    ResolvedRemoteStream,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -1559,8 +1560,13 @@ impl HlsSessionWorker {
         command: &FfmpegCommand,
         remote_producer: Option<&RemoteStreamCommand>,
     ) -> std::io::Result<RemoteStreamProcess> {
-        spawn_ffmpeg_with_remote_input(command, Some(&self.working_dir), remote_producer)
-            .map_err(std::io::Error::other)
+        spawn_ffmpeg_with_remote_input(
+            command,
+            Some(&self.working_dir),
+            remote_producer,
+            RemoteStreamSpawnContext::hls(&self.channel_number),
+        )
+        .map_err(std::io::Error::other)
     }
 
     async fn reclaim_hls_child_for_admission(
@@ -8443,6 +8449,13 @@ mod tests {
     fn hls_command_for(
         source: SourceVideoStream,
     ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+        hls_command_for_with_capabilities(source, FfmpegCapabilityReport::default())
+    }
+
+    fn hls_command_for_with_capabilities(
+        source: SourceVideoStream,
+        runtime_capabilities: FfmpegCapabilityReport,
+    ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
         build_hls_command(
             "/media/dv.mkv",
             Path::new("/tmp/ersatzrs-hls-test"),
@@ -8456,7 +8469,7 @@ mod tests {
             &playback_profile(),
             None,
             OutputMetadata::default(),
-            FfmpegCapabilityReport::default(),
+            runtime_capabilities,
             Some(source),
             Vec::new(),
             None,
@@ -8516,5 +8529,29 @@ mod tests {
         assert!(hls_command_for(dolby_vision_source_320p(8, 1)).is_ok());
         // And a source with no Dolby Vision at all is untouched.
         assert!(hls_command_for(source_320p()).is_ok());
+    }
+
+    #[test]
+    fn the_hls_builder_separates_a_profile_7_base_layer_when_supported() {
+        let mut capabilities = FfmpegCapabilityReport::default();
+        capabilities
+            .bitstream_filters
+            .insert("dovi_split".to_owned());
+
+        let command =
+            hls_command_for_with_capabilities(dolby_vision_source_320p(7, 6), capabilities)
+                .expect("profile 7 HLS command");
+        let input = command
+            .arguments
+            .iter()
+            .position(|argument| argument == "-i")
+            .expect("video input");
+        let filter = command
+            .arguments
+            .windows(2)
+            .position(|pair| pair == ["-bsf:0", "dovi_split=mode=bl"])
+            .expect("profile 7 input bitstream filter");
+
+        assert!(filter < input, "got: {}", command.arguments.join(" "));
     }
 }

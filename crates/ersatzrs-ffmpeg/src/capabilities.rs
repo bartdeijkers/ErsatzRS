@@ -985,6 +985,7 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
                 "av1_qsv".to_owned(),
             ])
             .collect(),
+        bitstream_filters: BTreeSet::from(["dovi_split".to_owned()]),
         hwaccels: BTreeSet::from([
             "cuda".to_owned(),
             "qsv".to_owned(),

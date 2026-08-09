@@ -16,6 +16,7 @@ use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
+const STDERR_EXCERPT_LIMIT: usize = 2 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -69,6 +70,65 @@ pub struct ResolvedRemoteStream {
     pub configured_duration: Option<String>,
     pub fallback_query: Option<String>,
     pub url_overrides_script: bool,
+}
+
+/// Playback surface that owns a Remote Stream producer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteStreamSurface {
+    /// HLS segmenter playback.
+    Hls,
+    /// Direct MPEG-TS playback.
+    MpegTs,
+    /// Scanner or metadata probe without a playback channel.
+    Probe,
+}
+
+impl RemoteStreamSurface {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hls => "hls",
+            Self::MpegTs => "mpeg-ts",
+            Self::Probe => "probe",
+        }
+    }
+}
+
+/// Safe identifiers attached to Remote Stream producer lifecycle logs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteStreamSpawnContext {
+    /// Playback or probe surface that started the producer.
+    pub surface: RemoteStreamSurface,
+    /// Stable channel number when playback owns the producer.
+    pub channel_number: Option<String>,
+}
+
+impl RemoteStreamSpawnContext {
+    /// Context for one HLS channel.
+    #[must_use]
+    pub fn hls(channel_number: impl Into<String>) -> Self {
+        Self {
+            surface: RemoteStreamSurface::Hls,
+            channel_number: Some(channel_number.into()),
+        }
+    }
+
+    /// Context for one direct MPEG-TS channel.
+    #[must_use]
+    pub fn mpeg_ts(channel_number: impl Into<String>) -> Self {
+        Self {
+            surface: RemoteStreamSurface::MpegTs,
+            channel_number: Some(channel_number.into()),
+        }
+    }
+
+    /// Context for a scanner or metadata probe.
+    #[must_use]
+    pub const fn probe() -> Self {
+        Self {
+            surface: RemoteStreamSurface::Probe,
+            channel_number: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -458,10 +518,208 @@ pub fn redacted_source_label(source: &RemoteStreamSource) -> String {
 
 #[must_use]
 pub fn redact_remote_stream_output(value: &str, stream: &ResolvedRemoteStream) -> String {
-    match &stream.source {
+    let source_redacted = match &stream.source {
         RemoteStreamSource::Url(url) => value.replace(url, &redacted_source_label(&stream.source)),
         RemoteStreamSource::Script(_) => value.to_owned(),
+    };
+    sanitize_remote_stream_diagnostic(&source_redacted)
+}
+
+/// Sanitize and bound an operator-facing Remote Stream diagnostic excerpt.
+///
+/// Producer tools can echo signed media URLs, authentication headers, cookie
+/// paths, or local filesystem locations to stderr. This helper keeps the error
+/// class useful while ensuring those values never reach a log field.
+#[must_use]
+pub fn sanitize_remote_stream_diagnostic(value: &str) -> String {
+    let normalized = value
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let urls_redacted = redact_diagnostic_urls(&normalized);
+    let mut sanitized = Vec::new();
+    let mut redact_following = 0_u8;
+
+    for word in urls_redacted.split_whitespace() {
+        if redact_following > 0 {
+            sanitized.push("[redacted]".to_owned());
+            redact_following = redact_following.saturating_sub(1);
+            continue;
+        }
+
+        let key = diagnostic_assignment_key(word);
+        if key.is_some_and(is_sensitive_diagnostic_key) {
+            let has_inline_value = word.contains('=')
+                || word
+                    .split_once(':')
+                    .is_some_and(|(_, value)| !value.is_empty());
+            sanitized.push(format!(
+                "{}=[redacted]",
+                key.unwrap_or("secret").to_ascii_lowercase()
+            ));
+            if !has_inline_value {
+                redact_following =
+                    if key.is_some_and(|value| value.eq_ignore_ascii_case("authorization")) {
+                        2
+                    } else {
+                        1
+                    };
+            }
+        } else if looks_like_private_path(word) {
+            sanitized.push("[redacted path]".to_owned());
+        } else if let Some((key, value)) = diagnostic_assignment(word) {
+            if looks_like_private_path(value) {
+                sanitized.push(format!("{key}=[redacted path]"));
+            } else {
+                sanitized.push(word.to_owned());
+            }
+        } else {
+            sanitized.push(word.to_owned());
+        }
     }
+
+    bounded_tail(&sanitized.join(" "), STDERR_EXCERPT_LIMIT)
+}
+
+fn diagnostic_assignment_key(word: &str) -> Option<&str> {
+    let word = word.trim_matches(|character: char| {
+        matches!(
+            character,
+            '\'' | '"' | '[' | ']' | '(' | ')' | '{' | '}' | ','
+        )
+    });
+    let separator = word.find(['=', ':']).unwrap_or(word.len());
+    let key = word[..separator].trim_start_matches('-');
+    (!key.is_empty()).then_some(key)
+}
+
+fn diagnostic_assignment(word: &str) -> Option<(&str, &str)> {
+    let word = word.trim_matches(|character: char| {
+        matches!(
+            character,
+            '\'' | '"' | '[' | ']' | '(' | ')' | '{' | '}' | ',' | ';'
+        )
+    });
+    if word.contains("://") {
+        None
+    } else {
+        word.split_once(['=', ':'])
+    }
+}
+
+fn is_sensitive_diagnostic_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase().replace('-', "_");
+    matches!(
+        normalized.as_str(),
+        "access_token"
+            | "api_key"
+            | "apikey"
+            | "auth"
+            | "authorization"
+            | "bearer"
+            | "cookie"
+            | "cookie_file"
+            | "cookies"
+            | "cookies_from_browser"
+            | "password"
+            | "passwd"
+            | "refresh_token"
+            | "secret"
+            | "set_cookie"
+            | "signature"
+            | "token"
+            | "x_api_key"
+            | "x_auth_token"
+    )
+}
+
+fn looks_like_private_path(word: &str) -> bool {
+    let word = word.trim_matches(|character: char| {
+        matches!(
+            character,
+            '\'' | '"' | '[' | ']' | '(' | ')' | '{' | '}' | ',' | ';'
+        )
+    });
+    let bytes = word.as_bytes();
+    let windows_drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    let unc_path = word.starts_with("\\\\") || word.starts_with("//");
+    let unix_path = word.starts_with('/') && word.len() > 1;
+    windows_drive || unc_path || unix_path
+}
+
+fn redact_diagnostic_urls(value: &str) -> String {
+    const SCHEMES: [&str; 5] = ["https://", "http://", "rtsps://", "rtsp://", "file://"];
+    let mut result = String::with_capacity(value.len());
+    let mut remaining = value;
+
+    loop {
+        let lowercase = remaining.to_ascii_lowercase();
+        let Some((start, _)) = SCHEMES
+            .iter()
+            .filter_map(|scheme| lowercase.find(scheme).map(|index| (index, *scheme)))
+            .min_by_key(|(index, _)| *index)
+        else {
+            result.push_str(remaining);
+            break;
+        };
+        result.push_str(&remaining[..start]);
+        let candidate = &remaining[start..];
+        let end = candidate
+            .char_indices()
+            .find_map(|(index, character)| {
+                (index > 0
+                    && (character.is_whitespace()
+                        || matches!(character, '\'' | '"' | '<' | '>' | '[' | ']' | '(' | ')')))
+                .then_some(index)
+            })
+            .unwrap_or(candidate.len());
+        let (url_text, rest) = candidate.split_at(end);
+        result.push_str(&redacted_diagnostic_url(url_text));
+        remaining = rest;
+    }
+
+    result
+}
+
+fn redacted_diagnostic_url(value: &str) -> String {
+    let Ok(url) = reqwest::Url::parse(value.trim_end_matches(['.', ',', ';'])) else {
+        return "[redacted URL]".to_owned();
+    };
+    if url.scheme() == "file" {
+        return "[redacted URL]".to_owned();
+    }
+    let Some(host) = url.host_str() else {
+        return "[redacted URL]".to_owned();
+    };
+    let host = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_owned()
+    };
+    match url.port() {
+        Some(port) => format!("{}://{host}:{port}", url.scheme()),
+        None => format!("{}://{host}", url.scheme()),
+    }
+}
+
+fn bounded_tail(value: &str, limit: usize) -> String {
+    if value.len() <= limit {
+        return value.to_owned();
+    }
+    let mut start = value.len().saturating_sub(limit);
+    while !value.is_char_boundary(start) {
+        start = start.saturating_add(1);
+    }
+    value[start..].to_owned()
 }
 
 /// Start a configured Remote Stream script producer.
@@ -500,8 +758,9 @@ pub fn spawn_ffmpeg_with_remote_input(
     command: &FfmpegCommand,
     working_directory: Option<&Path>,
     producer: Option<&RemoteStreamCommand>,
+    context: RemoteStreamSpawnContext,
 ) -> Result<RemoteStreamProcess, RemoteStreamError> {
-    let (arguments, producer) = prepare_remote_stream_spawn(command, producer);
+    let (arguments, producer, producer_seek) = prepare_remote_stream_spawn(command, producer);
     let mut producer_child = producer
         .as_ref()
         .map(|producer| spawn_remote_stream_producer(producer, &command.executable, None))
@@ -557,6 +816,8 @@ pub fn spawn_ffmpeg_with_remote_input(
             producer_child,
             consumer_stdin,
             label,
+            context,
+            producer_seek,
         )?)
     } else {
         None
@@ -571,18 +832,20 @@ pub fn spawn_ffmpeg_with_remote_input(
 fn prepare_remote_stream_spawn(
     command: &FfmpegCommand,
     producer: Option<&RemoteStreamCommand>,
-) -> (Vec<String>, Option<RemoteStreamCommand>) {
+) -> (Vec<String>, Option<RemoteStreamCommand>, Option<String>) {
     let mut arguments = command.arguments.clone();
+    let mut producer_seek = None;
     let producer = producer.map(|producer| {
         if producer.accepts_seek() {
             let seek_position =
                 take_remote_stream_output_seek(&mut arguments).unwrap_or_else(|| "0".to_owned());
+            producer_seek = Some(seek_position.clone());
             producer.with_seek(&seek_position)
         } else {
             producer.clone()
         }
     });
-    (arguments, producer)
+    (arguments, producer, producer_seek)
 }
 
 fn take_remote_stream_output_seek(arguments: &mut Vec<String>) -> Option<String> {
@@ -609,6 +872,8 @@ pub(crate) fn pipe_remote_stream_producer(
     mut producer: Child,
     consumer_stdin: ChildStdin,
     label: String,
+    context: RemoteStreamSpawnContext,
+    effective_seek: Option<String>,
 ) -> Result<RemoteStreamProducerPipe, RemoteStreamError> {
     let stdout = producer
         .stdout
@@ -619,18 +884,29 @@ pub(crate) fn pipe_remote_stream_producer(
         .take()
         .map(|stderr| tokio::spawn(read_stderr_tail(stderr)));
     let (cancel, cancellation) = oneshot::channel();
+    let diagnostics = RemoteStreamProducerDiagnostics {
+        label,
+        context,
+        effective_seek,
+    };
     let task = tokio::spawn(run_remote_stream_producer(
         producer,
         stdout,
         consumer_stdin,
         stderr_task,
         cancellation,
-        label,
+        diagnostics,
     ));
     Ok(RemoteStreamProducerPipe {
         cancel: Some(cancel),
         task: Some(task),
     })
+}
+
+struct RemoteStreamProducerDiagnostics {
+    label: String,
+    context: RemoteStreamSpawnContext,
+    effective_seek: Option<String>,
 }
 
 async fn run_remote_stream_producer(
@@ -639,8 +915,13 @@ async fn run_remote_stream_producer(
     consumer_stdin: ChildStdin,
     stderr_task: Option<JoinHandle<String>>,
     mut cancellation: oneshot::Receiver<()>,
-    label: String,
+    diagnostics: RemoteStreamProducerDiagnostics,
 ) {
+    let RemoteStreamProducerDiagnostics {
+        label,
+        context,
+        effective_seek,
+    } = diagnostics;
     let copy_result = tokio::select! {
         result = copy_remote_producer_to_stdin(stdout, consumer_stdin) => Some(result),
         _ = &mut cancellation => None,
@@ -686,19 +967,35 @@ async fn run_remote_stream_producer(
             copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
             "remote stream producer stopped after the consumer closed its input"
         ),
-        Ok(status) => tracing::warn!(
-            producer = %label,
-            %status,
-            stderr_bytes = stderr.len(),
-            copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
-            "remote stream producer stopped"
-        ),
-        Err(error) => tracing::warn!(
-            producer = %label,
-            %error,
-            stderr_bytes = stderr.len(),
-            "failed to wait for remote stream producer"
-        ),
+        Ok(status) => {
+            let stderr_excerpt = sanitize_remote_stream_diagnostic(&stderr);
+            tracing::warn!(
+                surface = context.surface.as_str(),
+                channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
+                producer = %label,
+                seek = effective_seek.as_deref().unwrap_or("not-configured"),
+                %status,
+                failure_kind = "producer-exit",
+                stderr_bytes = stderr.len(),
+                stderr_excerpt = %stderr_excerpt,
+                copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
+                "remote stream producer stopped"
+            );
+        }
+        Err(error) => {
+            let stderr_excerpt = sanitize_remote_stream_diagnostic(&stderr);
+            tracing::warn!(
+                surface = context.surface.as_str(),
+                channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
+                producer = %label,
+                seek = effective_seek.as_deref().unwrap_or("not-configured"),
+                %error,
+                failure_kind = "producer-wait",
+                stderr_bytes = stderr.len(),
+                stderr_excerpt = %stderr_excerpt,
+                "failed to wait for remote stream producer"
+            );
+        }
     }
 }
 
@@ -1054,13 +1351,15 @@ content_rating: PG
             ],
         };
 
-        let (arguments, producer) = prepare_remote_stream_spawn(&consumer, Some(&producer));
+        let (arguments, producer, effective_seek) =
+            prepare_remote_stream_spawn(&consumer, Some(&producer));
         let producer = producer.expect("producer");
 
         assert_eq!(
             producer.args,
             ["https://example.test/watch", "00:26:00.5000000"]
         );
+        assert_eq!(effective_seek.as_deref(), Some("00:26:00.5000000"));
         assert_eq!(
             arguments,
             [
@@ -1096,16 +1395,19 @@ content_rating: PG
             ..unmarked.clone()
         };
 
-        let (unmarked_arguments, unmarked) =
+        let (unmarked_arguments, unmarked, unmarked_seek) =
             prepare_remote_stream_spawn(&consumer, Some(&unmarked));
-        let (marked_arguments, marked) = prepare_remote_stream_spawn(&consumer, Some(&marked));
+        let (marked_arguments, marked, marked_seek) =
+            prepare_remote_stream_spawn(&consumer, Some(&marked));
 
         assert_eq!(unmarked_arguments, consumer.arguments);
+        assert_eq!(unmarked_seek, None);
         assert_eq!(
             unmarked.expect("unmarked producer").args,
             ["https://example.test/watch"]
         );
         assert_eq!(marked_arguments, consumer.arguments);
+        assert_eq!(marked_seek.as_deref(), Some("0"));
         assert_eq!(
             marked.expect("marked producer").args,
             ["https://example.test/watch", "0"]
@@ -1286,6 +1588,40 @@ content_rating: PG
     }
 
     #[test]
+    fn sanitizes_signed_urls_secrets_paths_and_multiline_output() {
+        let stderr = concat!(
+            "ERROR: source https://user:placeholder@example.test/media/file.m3u8?sig=placeholder#part\n",
+            "Authorization: Bearer placeholder cookie=placeholder ",
+            "X-API-Key: placeholder Set-Cookie: placeholder ",
+            r"X:\private\cookies.txt /tmp cache=/srv/cache/item file:///srv/private/cookies.txt",
+        );
+
+        let sanitized = sanitize_remote_stream_diagnostic(stderr);
+
+        assert!(sanitized.contains("ERROR: source https://example.test"));
+        assert!(sanitized.contains("authorization=[redacted] [redacted] [redacted]"));
+        assert!(sanitized.contains("cookie=[redacted]"));
+        assert!(sanitized.contains("x-api-key=[redacted]"));
+        assert!(sanitized.contains("set-cookie=[redacted]"));
+        assert!(sanitized.contains("[redacted path]"));
+        assert!(sanitized.contains("cache=[redacted path]"));
+        assert!(sanitized.contains("[redacted URL]"));
+        assert!(!sanitized.contains("placeholder"));
+        assert!(!sanitized.contains("private"));
+        assert!(!sanitized.contains('\n'));
+    }
+
+    #[test]
+    fn diagnostic_excerpt_is_a_bounded_utf8_tail() {
+        let stderr = format!("{}final error �", "x".repeat(STDERR_EXCERPT_LIMIT * 2));
+
+        let sanitized = sanitize_remote_stream_diagnostic(&stderr);
+
+        assert!(sanitized.len() <= STDERR_EXCERPT_LIMIT);
+        assert!(sanitized.ends_with("final error �"));
+    }
+
+    #[test]
     fn only_consumer_disconnect_errors_are_expected_pipe_teardown() {
         for kind in [
             io::ErrorKind::BrokenPipe,
@@ -1354,8 +1690,13 @@ content_rating: PG
         use tokio::io::AsyncReadExt as _;
 
         let (producer, consumer) = producer_and_consumer();
-        let mut process = spawn_ffmpeg_with_remote_input(&consumer, None, Some(&producer))
-            .expect("spawn producer and consumer");
+        let mut process = spawn_ffmpeg_with_remote_input(
+            &consumer,
+            None,
+            Some(&producer),
+            RemoteStreamSpawnContext::probe(),
+        )
+        .expect("spawn producer and consumer");
         let mut stdout = process.stdout.take().expect("consumer stdout");
         let output_task = tokio::spawn(async move {
             let mut output = Vec::new();
@@ -1375,8 +1716,13 @@ content_rating: PG
     #[tokio::test]
     async fn killing_consumer_cancels_stalled_producer_without_stdout() {
         let (producer, consumer) = stalled_producer_and_consumer();
-        let mut process = spawn_ffmpeg_with_remote_input(&consumer, None, Some(&producer))
-            .expect("spawn stalled producer and consumer");
+        let mut process = spawn_ffmpeg_with_remote_input(
+            &consumer,
+            None,
+            Some(&producer),
+            RemoteStreamSpawnContext::probe(),
+        )
+        .expect("spawn stalled producer and consumer");
 
         tokio::time::timeout(std::time::Duration::from_secs(2), process.kill())
             .await

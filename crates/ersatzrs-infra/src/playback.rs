@@ -220,6 +220,7 @@ pub async fn load_source_video_stream_by_index(
                   ms."MaxFall" AS "MaxFall",
                   ms."DolbyVisionProfile" AS "DolbyVisionProfile",
                   ms."DolbyVisionBlCompatibilityId" AS "DolbyVisionBlCompatibilityId",
+                  ms."DolbyVisionBlPresent" AS "DolbyVisionBlPresent",
                   ms."DolbyVisionElPresent" AS "DolbyVisionElPresent",
                   ms."DolbyVisionRpuPresent" AS "DolbyVisionRpuPresent",
                   mv."VideoScanKind" AS "VideoScanKind",
@@ -2715,7 +2716,7 @@ fn decode_dolby_vision_configuration(
         .unwrap_or_default(),
         rpu_present: flag("DolbyVisionRpuPresent"),
         el_present: flag("DolbyVisionElPresent"),
-        bl_present: true,
+        bl_present: flag("DolbyVisionBlPresent"),
     })
 }
 
@@ -2802,6 +2803,7 @@ mod tests {
                 "MaxFall" INTEGER NULL,
                 "DolbyVisionProfile" INTEGER NULL,
                 "DolbyVisionBlCompatibilityId" INTEGER NULL,
+                "DolbyVisionBlPresent" INTEGER NULL,
                 "DolbyVisionElPresent" INTEGER NULL,
                 "DolbyVisionRpuPresent" INTEGER NULL,
                 "MediaVersionId" INTEGER NOT NULL,
@@ -2904,6 +2906,53 @@ mod tests {
             load_source_video_stream_by_index(&pool, 12, Some(9)).await,
             Err(RepositoryError::Decode { .. })
         ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn source_video_loader_requires_the_persisted_dolby_vision_base_layer_flag() {
+        let pool = source_stream_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "VideoScanKind", "Width", "Height", "RFrameRate"
+            ) VALUES (13, 1, 3840, 2160, '24000/1001')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                "Id", "Index", "Codec", "MediaVersionId", "MediaStreamKind",
+                "Channels", "Default", "DolbyVisionProfile",
+                "DolbyVisionBlCompatibilityId", "DolbyVisionBlPresent",
+                "DolbyVisionElPresent", "DolbyVisionRpuPresent"
+            ) VALUES (13, 0, 'hevc', 13, 1, 0, 0, 7, 6, 1, 1, 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed profile 7 stream");
+
+        let source = load_source_video_stream(&pool, 13)
+            .await
+            .expect("load profile 7 source")
+            .expect("source video");
+        let configuration = source.dolby_vision.expect("Dolby Vision record");
+        assert!(configuration.bl_present);
+        assert!(configuration.el_present);
+        assert!(configuration.rpu_present);
+        assert!(configuration.is_playable());
+
+        sqlx::query(r#"UPDATE "MediaStream" SET "DolbyVisionBlPresent" = NULL WHERE "Id" = 13"#)
+            .execute(&pool)
+            .await
+            .expect("clear profile 7 base-layer evidence");
+        let source = load_source_video_stream(&pool, 13)
+            .await
+            .expect("load incomplete profile 7 source")
+            .expect("source video");
+        let configuration = source.dolby_vision.expect("Dolby Vision record");
+        assert!(!configuration.bl_present);
+        assert!(!configuration.is_playable());
     }
 
     #[cfg(not(feature = "mysql"))]

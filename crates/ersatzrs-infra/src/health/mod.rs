@@ -237,7 +237,10 @@ fn registered_health_checks(
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
-        Box::new(DolbyVisionHealthCheck::new(pool.clone())),
+        Box::new(DolbyVisionHealthCheck::new(
+            pool.clone(),
+            ffmpeg_runtime.clone(),
+        )),
         Box::new(SourceOrientationHealthCheck::new(pool.clone())),
         Box::new(VaapiDriverHealthCheck::new(
             pool.clone(),
