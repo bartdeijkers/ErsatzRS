@@ -111,6 +111,35 @@ pub enum MediaStreamKind {
     ExternalSubtitle,
 }
 
+/// Completeness of Dolby Vision metadata reported for a media stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[repr(i32)]
+pub enum DolbyVisionMetadataState {
+    /// The provider or local probe did not report Dolby Vision.
+    #[default]
+    NotDetected,
+    /// Profile, compatibility, and BL/EL/RPU flags are all available.
+    Complete,
+    /// Dolby Vision was detected but the provider omitted required fields.
+    Incomplete,
+}
+
+impl DolbyVisionMetadataState {
+    #[must_use]
+    pub const fn as_i32(self) -> i32 {
+        self as i32
+    }
+
+    #[must_use]
+    pub const fn from_i32(value: i32) -> Self {
+        match value {
+            1 => Self::Complete,
+            2 => Self::Incomplete,
+            _ => Self::NotDetected,
+        }
+    }
+}
+
 /// Exact media-version and stream tuple selected for one reusable playback
 /// entry. A present selection pins the video stream; absent audio means the
 /// source is silent and absent subtitle means subtitles are explicitly off.
@@ -447,10 +476,18 @@ pub struct MediaStream {
     /// Dolby Vision base-layer signal compatibility id: 1 = HDR10, 4 = HLG,
     /// 0 = none.
     pub dolby_vision_bl_compatibility_id: Option<i32>,
+    /// Whether the Dolby Vision base layer is present.
+    pub dolby_vision_bl_present: Option<bool>,
     /// Whether a Dolby Vision enhancement layer is present (profile 7).
     pub dolby_vision_el_present: Option<bool>,
     /// Whether Dolby Vision RPU metadata is present.
     pub dolby_vision_rpu_present: Option<bool>,
+    /// Whether the provider supplied enough Dolby Vision metadata for the
+    /// strict playback policy to make a decision.
+    pub dolby_vision_metadata_state: DolbyVisionMetadataState,
+    /// Provider-neutral explanation retained for incomplete positive
+    /// detections so playback and health can reject them visibly.
+    pub dolby_vision_metadata_hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

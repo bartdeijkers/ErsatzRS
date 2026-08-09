@@ -406,7 +406,7 @@ pub(super) fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStr
     };
 
     let is_video = matches!(kind, MediaStreamKind::Video);
-    Some(MediaStream {
+    let mut projected = MediaStream {
         index: stream.index,
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
@@ -456,5 +456,52 @@ pub(super) fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStr
             0
         },
         ..MediaStream::default()
-    })
+    };
+    if is_video {
+        let detected_range = stream
+            .video_range_type
+            .as_deref()
+            .or(stream.extended_video_type.as_deref())
+            .or(stream.extended_video_sub_type.as_deref());
+        crate::media_server::jellyfin_emby::apply_provider_dolby_vision_metadata(
+            &mut projected,
+            "Emby",
+            detected_range,
+            stream.dv_profile,
+            stream.dv_bl_signal_compatibility_id,
+            stream.bl_present_flag,
+            stream.el_present_flag,
+            stream.rpu_present_flag,
+        );
+    }
+    Some(projected)
+}
+
+#[cfg(test)]
+mod tests {
+    use ersatzrs_domain::DolbyVisionMetadataState;
+
+    use super::{project_stream, EmbyMediaStreamResponse};
+
+    #[test]
+    fn emby_extended_video_type_fixture_is_preserved_as_incomplete_evidence() {
+        let response: EmbyMediaStreamResponse = serde_json::from_str(
+            r#"{
+                "Type":"Video", "Codec":"hevc", "Profile":"Main 10",
+                "ExtendedVideoType":"DolbyVision",
+                "ExtendedVideoSubType":"DoviProfile5"
+            }"#,
+        )
+        .expect("deserialize Emby stream");
+
+        let stream = project_stream(response).expect("project video stream");
+        assert_eq!(
+            stream.dolby_vision_metadata_state,
+            DolbyVisionMetadataState::Incomplete
+        );
+        assert!(stream
+            .dolby_vision_metadata_hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("Emby")));
+    }
 }

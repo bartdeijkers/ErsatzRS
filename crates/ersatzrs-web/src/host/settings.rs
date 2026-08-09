@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 use ersatzrs_app::{
     SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError, WindowsStartupStatus,
 };
+use ersatzrs_core::repositories::{AdminSettingsRepository, SettingsMutation};
 use ersatzrs_domain::EntityId;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
 use ersatzrs_infra::db::DbPool;
@@ -63,49 +64,56 @@ impl SettingsRuntime for NativeSettingsRuntime {
         Ok(SettingsFfmpegPaths { ffmpeg, ffprobe })
     }
 
-    async fn refresh_ffmpeg_runtime(
+    async fn commit_ffmpeg_settings(
         &self,
         ffmpeg_path: &str,
         ffprobe_path: &str,
+        mut mutations: Vec<SettingsMutation>,
     ) -> Result<(), SettingsRuntimeError> {
-        ersatzrs_ffmpeg::set_resolved_ffmpeg_path(ffmpeg_path.to_owned());
-        ersatzrs_ffmpeg::set_resolved_ffprobe_path(ffprobe_path.to_owned());
         let config = crate::host::bootstrap::ffmpeg_runtime_config_with_profile_probes(
             &self.pool,
             ffmpeg_path,
             ffprobe_path,
         )
         .await;
-        let report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
-            .await
-            .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
-        ersatzrs_infra::ffmpeg_capabilities::clear_hardware_decode_denials(&self.pool)
+        let mut report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
             .await
             .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
 
         // Saving FFmpeg settings is an explicit capability refresh (ADR 0014),
         // so learned graph denials are discarded and re-probed against the
         // runtime the operator just selected.
-        let mut report = report;
-        ersatzrs_infra::hardware_graph::clear_hardware_graph_denials(&self.pool)
-            .await
-            .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
         ersatzrs_infra::hardware_graph::refresh_hardware_graph_capabilities(
             std::path::Path::new(ffmpeg_path),
             &mut report.capabilities,
         )
         .await;
-        if let Err(error) = ersatzrs_infra::hardware_graph::persist_hardware_graph_denials(
-            &self.pool,
+
+        // Hold publication closed while the database transaction commits. A
+        // failure leaves both the old settings and old runtime active.
+        let mut active = self.ffmpeg_runtime.write().await;
+        report.set_generation(active.generation.saturating_add(1));
+        let graph_state = ersatzrs_infra::hardware_graph::encode_hardware_graph_state(
             ffmpeg_path,
             &report.capabilities,
         )
-        .await
-        {
-            tracing::warn!(%error, "failed to persist runtime-learned hardware graph denials");
-        }
+        .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
+        mutations.push(SettingsMutation::Delete {
+            key: ersatzrs_infra::ffmpeg_capabilities::CONFIG_KEY_HARDWARE_DECODE_DENIALS.to_owned(),
+        });
+        mutations.push(SettingsMutation::Set {
+            key: ersatzrs_infra::hardware_graph::CONFIG_KEY_HARDWARE_GRAPH_DENIALS.to_owned(),
+            value: graph_state,
+        });
+        let repository =
+            ersatzrs_infra::repositories::SqliteAdminSettingsRepository(self.pool.clone());
+        repository
+            .apply_mutations(mutations)
+            .await
+            .map_err(|error| SettingsRuntimeError::unavailable(error.to_string()))?;
 
-        *self.ffmpeg_runtime.write().await = report;
+        *active = report;
+        ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(ffmpeg_path, ffprobe_path);
         Ok(())
     }
 

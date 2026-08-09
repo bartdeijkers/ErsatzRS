@@ -123,4 +123,15 @@ When playback fails:
    non-seekable pipe and that diagnostic text goes to stderr, not stdout.
 
 Playback logs redact full Remote Stream URLs. A scheme and host, or the producer
-executable name, remains visible so failures can still be correlated safely.
+executable name, remains visible so failures can still be correlated safely. A
+producer failure also records the playback surface, channel number, effective
+source-side seek, failure class, exit status, stderr byte count, and a sanitized
+stderr tail of at most 2 KiB. Authentication values, cookies, signed URL
+details, control characters, and local paths are removed before the excerpt is
+logged.
+
+The health check and diagnostic logging do not run the producer or contact its
+source. They also do not add a retry. For rate-limited extractors such as
+YouTube, inspect the first captured failure and validate the wrapper manually
+once before trying channel playback again; repeated playback attempts can turn
+a configuration error into a provider cooldown or ban.

@@ -18,8 +18,9 @@ use sqlx::Row;
 use tokio::sync::RwLock;
 
 use crate::db::DbPool;
+use crate::runtime_identity::PersistedRuntimeIdentity;
 
-const CONFIG_KEY_HARDWARE_GRAPH_DENIALS: &str = "ffmpeg.hardware.graph_denials";
+pub const CONFIG_KEY_HARDWARE_GRAPH_DENIALS: &str = "ffmpeg.hardware.graph_denials";
 
 /// Upper bound for one functional probe.
 ///
@@ -78,6 +79,9 @@ impl PersistedHardwareGraphDenial {
 /// (proven or denied) before the record counts as complete.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 struct PersistedHardwareGraphState {
+    /// Complete runtime identity. Legacy path/device-only records never match.
+    #[serde(default)]
+    runtime_identity: Option<PersistedRuntimeIdentity>,
     #[serde(default)]
     ffmpeg_path: Option<String>,
     /// Device the probes ran against, so a GPU swap re-probes.
@@ -104,11 +108,15 @@ impl PersistedHardwareGraphState {
     /// and so recorded neither proof nor denial — is deliberately not reusable.
     fn is_reusable_for(
         &self,
-        ffmpeg_path: &str,
+        report: &FfmpegCapabilityReport,
         device: &str,
         applicable: &[HardwareGraphOperation],
     ) -> bool {
-        if self.ffmpeg_path.as_deref() != Some(ffmpeg_path) {
+        if !self
+            .runtime_identity
+            .as_ref()
+            .is_some_and(|identity| identity.matches(report))
+        {
             return false;
         }
         // A record written before device identity was tracked cannot be
@@ -298,6 +306,12 @@ fn applicable_graph_operations(
     }
     let mut operations = Vec::new();
     if report.has_hwaccel("vulkan") && report.filters.contains("libplacebo") {
+        if report.has_encoder("h264_nvenc") {
+            operations.push(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr);
+        }
+        if report.has_encoder("hevc_nvenc") {
+            operations.push(HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10);
+        }
         operations.push(HardwareGraphOperation::NvencHdrVulkanLibplacebo);
     }
     operations.push(HardwareGraphOperation::NvencCudaScale);
@@ -346,7 +360,8 @@ pub async fn apply_hardware_graph_denials(
     let device = report.hardware_graph_device();
     let applicable = applicable_graph_operations(report).unwrap_or_default();
 
-    if !state.is_reusable_for(ffmpeg_path, &device, &applicable) {
+    let _ = ffmpeg_path;
+    if !state.is_reusable_for(report, &device, &applicable) {
         // Stale identity, a partial record, or a legacy row. Discard it so the
         // caller re-probes rather than trusting incomplete evidence.
         tracing::info!(
@@ -400,8 +415,21 @@ pub async fn persist_hardware_graph_denial_into_runtime(
     runtime: &RwLock<FfmpegRuntimeReport>,
     denial: HardwareGraphDenial,
 ) -> Result<(), HardwareGraphDenialError> {
-    report.deny_hardware_graph(denial.clone());
     let mut runtime = runtime.write().await;
+    if report
+        .runtime_identity
+        .as_ref()
+        .is_some_and(|identity| identity.generation != runtime.generation)
+    {
+        tracing::info!(
+            observed_generation = ?report.runtime_identity.as_ref().map(|identity| identity.generation),
+            active_generation = runtime.generation,
+            "ignoring stale hardware graph denial and rebuilding from the active runtime"
+        );
+        report.clone_from(&runtime.capabilities);
+        return Ok(());
+    }
+    report.deny_hardware_graph(denial.clone());
     runtime.capabilities.deny_hardware_graph(denial);
     report.clone_from(&runtime.capabilities);
     persist_hardware_graph_denials(pool, ffmpeg_path, &runtime.capabilities).await
@@ -417,7 +445,22 @@ pub async fn persist_hardware_graph_denials(
     ffmpeg_path: &str,
     report: &FfmpegCapabilityReport,
 ) -> Result<(), HardwareGraphDenialError> {
+    let encoded = encode_hardware_graph_state(ffmpeg_path, report)?;
+    upsert_config(pool, &encoded).await
+}
+
+/// Encode fresh graph-probe evidence for inclusion in a larger settings
+/// transaction.
+///
+/// # Errors
+///
+/// Returns an error when the report cannot be encoded.
+pub fn encode_hardware_graph_state(
+    ffmpeg_path: &str,
+    report: &FfmpegCapabilityReport,
+) -> Result<String, HardwareGraphDenialError> {
     let state = PersistedHardwareGraphState {
+        runtime_identity: PersistedRuntimeIdentity::from_capabilities(report),
         ffmpeg_path: Some(ffmpeg_path.to_owned()),
         device: Some(report.hardware_graph_device()),
         proven: Some(
@@ -440,8 +483,7 @@ pub async fn persist_hardware_graph_denials(
             .map(PersistedHardwareGraphDenial::from)
             .collect(),
     };
-    let encoded = serde_json::to_string(&state).map_err(HardwareGraphDenialError::Encode)?;
-    upsert_config(pool, &encoded).await
+    serde_json::to_string(&state).map_err(HardwareGraphDenialError::Encode)
 }
 
 async fn load_config(pool: &DbPool) -> Result<Option<String>, HardwareGraphDenialError> {
@@ -498,6 +540,7 @@ mod tests {
             GraphFailureKind::CudaInterop,
         );
         let state = PersistedHardwareGraphState {
+            runtime_identity: None,
             ffmpeg_path: Some("/opt/ffmpeg/bin/ffmpeg".to_owned()),
             device: Some("NVIDIA GeForce RTX 3080 Ti".to_owned()),
             proven: Some(vec![HardwareGraphOperation::NvencCudaScale.id().to_owned()]),
@@ -727,12 +770,39 @@ mod tests {
 
     // Only used by the SQLite-backed lifecycle tests below.
     #[cfg(not(feature = "mysql"))]
-    fn denial() -> HardwareGraphDenial {
+    fn denial(device: &str) -> HardwareGraphDenial {
         HardwareGraphDenial::new(
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
-            "NVIDIA GeForce RTX 3080 Ti",
+            device,
             GraphFailureKind::CudaInterop,
         )
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn probed_report(gpu: &str) -> FfmpegCapabilityReport {
+        let selected = ersatzrs_ffmpeg::NvidiaDeviceIdentity {
+            index: 0,
+            model: gpu.to_owned(),
+            uuid: Some(format!("GPU-{}", gpu.replace(' ', "-"))),
+            driver_version: Some("12.7".to_owned()),
+        };
+        FfmpegCapabilityReport {
+            runtime_identity: Some(ersatzrs_ffmpeg::FfmpegRuntimeIdentity {
+                generation: 1,
+                ffmpeg_path: "/opt/ffmpeg".to_owned(),
+                ffmpeg_sha256: Some("ffmpeg-digest-a".to_owned()),
+                ffprobe_path: "/opt/ffprobe".to_owned(),
+                ffprobe_sha256: Some("ffprobe-digest-a".to_owned()),
+                selected_nvidia_device: Some(selected.clone()),
+            }),
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            selected_nvidia_device: Some(selected),
+            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
+                .into_iter()
+                .collect(),
+            filters: ["libplacebo".to_owned()].into_iter().collect(),
+            ..FfmpegCapabilityReport::default()
+        }
     }
 
     /// A concurrent worker can still hold the startup snapshot after another
@@ -743,20 +813,15 @@ mod tests {
     async fn stale_worker_snapshot_persists_shared_denials_for_restart() {
         let pool = test_pool().await;
         let gpu = "NVIDIA GeForce RTX 3080 Ti";
-        let mut initial = FfmpegCapabilityReport {
-            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
-                .into_iter()
-                .collect(),
-            filters: ["libplacebo".to_owned()].into_iter().collect(),
-            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
-            ..FfmpegCapabilityReport::default()
-        };
-        initial.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu);
-        initial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        let mut initial = probed_report(gpu);
+        let device = initial.hardware_graph_device();
+        initial.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device);
+        initial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
 
-        let first_denial = denial();
+        let first_denial = denial(&device);
         let mut shared_report = FfmpegRuntimeReport::for_tests();
         shared_report.capabilities = initial.clone();
+        shared_report.generation = 1;
         shared_report
             .capabilities
             .deny_hardware_graph(first_denial.clone());
@@ -770,7 +835,7 @@ mod tests {
         let mut stale_worker = initial.clone();
         let second_denial = HardwareGraphDenial::new(
             HardwareGraphOperation::NvencCudaScale,
-            gpu,
+            &device,
             GraphFailureKind::HardwareMap,
         );
         persist_hardware_graph_denial_into_runtime(
@@ -784,16 +849,16 @@ mod tests {
         .expect("persist merged worker denials");
 
         assert!(stale_worker
-            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
-        assert!(stale_worker.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device));
+        assert!(stale_worker.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, &device));
         {
             let shared = shared_runtime.read().await;
             assert!(shared
                 .capabilities
-                .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
+                .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device));
             assert!(shared
                 .capabilities
-                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, &device));
         }
 
         let persisted = load_hardware_graph_denials(&pool)
@@ -809,10 +874,49 @@ mod tests {
                 .await
                 .expect("apply persisted denials after restart")
         );
-        assert!(
-            restarted.hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu)
+        assert!(restarted
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device));
+        assert!(restarted.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, &device));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn a_previous_runtime_generation_cannot_poison_the_active_graph_state() {
+        let pool = test_pool().await;
+        let mut stale_worker = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = stale_worker.hardware_graph_device();
+
+        let mut active = FfmpegRuntimeReport::for_tests();
+        active.capabilities = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        active.set_generation(2);
+        let active_runtime = RwLock::new(active);
+
+        persist_hardware_graph_denial_into_runtime(
+            &pool,
+            "/opt/ffmpeg",
+            &mut stale_worker,
+            &active_runtime,
+            HardwareGraphDenial::new(
+                HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+                &device,
+                GraphFailureKind::Libplacebo,
+            ),
+        )
+        .await
+        .expect("stale feedback is ignored");
+
+        assert_eq!(
+            stale_worker
+                .runtime_identity
+                .as_ref()
+                .map(|identity| identity.generation),
+            Some(2)
         );
-        assert!(restarted.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        assert!(stale_worker.hardware_graph_denials.is_empty());
+        assert!(load_hardware_graph_denials(&pool)
+            .await
+            .expect("load graph state")
+            .is_empty());
     }
 
     /// The full persist/overwrite/clear/reload lifecycle on `SQLite`.
@@ -824,7 +928,8 @@ mod tests {
     #[tokio::test]
     async fn graph_state_persists_overwrites_clears_and_reloads() {
         let pool = test_pool().await;
-        let mut report = FfmpegCapabilityReport::default();
+        let mut report = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = report.hardware_graph_device();
 
         // Nothing stored yet.
         assert!(load_hardware_graph_denials(&pool)
@@ -833,20 +938,22 @@ mod tests {
             .is_empty());
 
         // Persist.
-        report.deny_hardware_graph(denial());
+        report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
+        report.deny_hardware_graph(denial(&device));
         persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &report)
             .await
             .expect("persist");
         assert_eq!(
             load_hardware_graph_denials(&pool).await.expect("reload"),
-            vec![denial()]
+            vec![denial(&device)]
         );
 
         // Overwrite: the same key is rewritten, not appended to.
-        let mut second = FfmpegCapabilityReport::default();
+        let mut second = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        second.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device);
         second.deny_hardware_graph(HardwareGraphDenial::new(
             HardwareGraphOperation::NvencCudaScale,
-            "NVIDIA GeForce RTX 3080 Ti",
+            &device,
             GraphFailureKind::EncoderInit,
         ));
         persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &second)
@@ -860,10 +967,12 @@ mod tests {
         );
 
         // Startup reload applies the stored rows to a fresh report.
-        let mut startup = FfmpegCapabilityReport::default();
-        apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut startup)
-            .await
-            .expect("apply");
+        let mut startup = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        assert!(
+            apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut startup)
+                .await
+                .expect("apply")
+        );
         assert_eq!(startup.hardware_graph_denials.len(), 1);
 
         // Clear.
@@ -874,19 +983,26 @@ mod tests {
             .is_empty());
     }
 
-    /// ADR 0014: denials are keyed to the binary they were learned against.
+    /// ADR 0014: denials are keyed to the binary digest they were learned against.
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
-    async fn a_changed_ffmpeg_path_clears_stored_denials_at_startup() {
+    async fn a_changed_ffmpeg_digest_clears_stored_denials_at_startup() {
         let pool = test_pool().await;
-        let mut report = FfmpegCapabilityReport::default();
-        report.deny_hardware_graph(denial());
+        let mut report = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = report.hardware_graph_device();
+        report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
+        report.deny_hardware_graph(denial(&device));
         persist_hardware_graph_denials(&pool, "/opt/ffmpeg-9.0", &report)
             .await
             .expect("persist");
 
-        let mut startup = FfmpegCapabilityReport::default();
-        apply_hardware_graph_denials(&pool, "/opt/ffmpeg-9.1", &mut startup)
+        let mut startup = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        startup
+            .runtime_identity
+            .as_mut()
+            .expect("identity")
+            .ffmpeg_sha256 = Some("ffmpeg-digest-b".to_owned());
+        apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut startup)
             .await
             .expect("apply after upgrade");
 
@@ -914,21 +1030,11 @@ mod tests {
     #[tokio::test]
     async fn a_runtime_graph_failure_is_classified_persisted_and_reloadable() {
         let pool = test_pool().await;
-        let mut report = FfmpegCapabilityReport {
-            nvidia_gpu_list: Some(
-                "[ GPU #0 - < NVIDIA GeForce RTX 3080 Ti > has Compute SM 8.6 ]".to_owned(),
-            ),
-            ..FfmpegCapabilityReport::default()
-        };
+        let mut report = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = report.hardware_graph_device();
         // Startup probed both graphs and proved them.
-        report.prove_hardware_graph(
-            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
-            "NVIDIA GeForce RTX 3080 Ti",
-        );
-        report.prove_hardware_graph(
-            HardwareGraphOperation::NvencCudaScale,
-            "NVIDIA GeForce RTX 3080 Ti",
-        );
+        report.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device);
+        report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
 
         // What a live transcode dies with when the Vulkan device cannot bridge
         // to CUDA, captured from FFmpeg 9.
@@ -938,11 +1044,11 @@ mod tests {
             stderr,
         )
         .expect("a known runtime signature");
-        let device = report.hardware_graph_device();
-        assert_eq!(device, "NVIDIA GeForce RTX 3080 Ti");
+        assert!(device.starts_with("cuda:0:GPU-"), "{device}");
 
         let mut shared_report = FfmpegRuntimeReport::for_tests();
         shared_report.capabilities = report.clone();
+        shared_report.generation = 1;
         let shared_runtime = RwLock::new(shared_report);
         persist_hardware_graph_denial_into_runtime(
             &pool,
@@ -966,14 +1072,7 @@ mod tests {
         // And it survives a restart, so the next session does not retry a
         // known-broken graph. The restarted report carries the same runtime
         // identity, as a real restart on the same machine would.
-        let mut next_session = FfmpegCapabilityReport {
-            nvidia_gpu_list: report.nvidia_gpu_list.clone(),
-            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
-                .into_iter()
-                .collect(),
-            filters: ["libplacebo".to_owned()].into_iter().collect(),
-            ..FfmpegCapabilityReport::default()
-        };
+        let mut next_session = probed_report("NVIDIA GeForce RTX 3080 Ti");
         apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut next_session)
             .await
             .expect("reload after restart");
@@ -1004,18 +1103,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
-    fn probed_report(gpu: &str) -> FfmpegCapabilityReport {
-        FfmpegCapabilityReport {
-            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
-            hwaccels: ["cuda".to_owned(), "vulkan".to_owned()]
-                .into_iter()
-                .collect(),
-            filters: ["libplacebo".to_owned()].into_iter().collect(),
-            ..FfmpegCapabilityReport::default()
-        }
-    }
-
     /// A record is reusable only with matching identities and terminal evidence
     /// for every applicable operation.
     #[cfg(not(feature = "mysql"))]
@@ -1029,8 +1116,9 @@ mod tests {
         // "everything works" when nothing ran.
         let pool = test_pool().await;
         let mut complete = probed_report(gpu);
-        complete.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu);
-        complete.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        let device = complete.hardware_graph_device();
+        complete.prove_hardware_graph(HardwareGraphOperation::NvencHdrVulkanLibplacebo, &device);
+        complete.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
         persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &complete)
             .await
             .expect("persist");
@@ -1042,13 +1130,13 @@ mod tests {
                 .expect("apply"),
             "success with zero denials is a valid cache"
         );
-        assert!(reload.hardware_graph_proven(HardwareGraphOperation::NvencCudaScale, gpu));
+        assert!(reload.hardware_graph_proven(HardwareGraphOperation::NvencCudaScale, &device));
 
         // A partial record: one operation returned Unproven, so it has neither
         // proof nor denial and the record must not be reused.
         let pool = test_pool().await;
         let mut partial = probed_report(gpu);
-        partial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, gpu);
+        partial.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
         persist_hardware_graph_denials(&pool, "/opt/ffmpeg", &partial)
             .await
             .expect("persist");
@@ -1079,8 +1167,13 @@ mod tests {
             .await
             .expect("persist");
         let mut new_binary = probed_report(gpu);
+        new_binary
+            .runtime_identity
+            .as_mut()
+            .expect("identity")
+            .ffmpeg_sha256 = Some("ffmpeg-digest-b".to_owned());
         assert!(
-            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg-9.1", &mut new_binary)
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut new_binary)
                 .await
                 .expect("apply"),
             "a different ffmpeg must re-probe"

@@ -29,6 +29,7 @@ pub mod playback;
 pub mod plex;
 pub mod remote_stream;
 pub mod repositories;
+pub(crate) mod runtime_identity;
 pub mod startup_config;
 pub mod subtitles;
 pub mod trakt;

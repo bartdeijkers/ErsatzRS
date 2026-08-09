@@ -1055,17 +1055,63 @@ fn normalized_ffmpeg_video_profile(
     matches!(requested, "main" | "high" | "high10" | "high444p").then(|| requested.to_owned())
 }
 
-fn ffmpeg_presets(hw: i32, format: i32, depth: i32) -> Vec<&'static str> {
+/// `libx264` / `libx265` preset ladder, fastest to slowest (ADR 0017 v5).
+///
+/// `placebo` is deliberately omitted: it is unusable in a realtime encoder at
+/// any resolution and x264 documents it as not recommended.
+pub const SOFTWARE_VIDEO_PRESETS: [&str; 9] = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+];
+
+/// QSV target-usage ladder, fastest (TU7) to slowest (TU1) (ADR 0017 v5).
+pub const QSV_VIDEO_PRESETS: [&str; 7] = [
+    "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow",
+];
+
+/// NVENC performance presets (ADR 0063).
+pub const NVENC_VIDEO_PRESETS: [&str; 7] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+
+/// Valid `VideoPreset` values for a profile.
+///
+/// Widens ErsatzTV's `AvailablePresets.ForAccelAndFormat`, which offered only
+/// `veryfast` for software and QSV. That single value contradicted ADR 0017's
+/// promise that an admin on a strong CPU can pick a slower preset, and pinned
+/// QSV to its lowest-quality target usage. The values here are the domains
+/// `FFmpeg` 9 actually accepts.
+///
+/// Must stay in sync with `presets_for_profile` in `ersatzrs-web`, which cannot
+/// call this function because `ersatzrs-app` is excluded from the wasm32 build.
+#[must_use]
+pub fn ffmpeg_presets(hw: i32, format: i32, depth: i32) -> Vec<&'static str> {
     match (hw, format, depth) {
-        (2, 1 | 2 | 4, _) => vec!["p1", "p2", "p3", "p4", "p5", "p6", "p7"],
-        (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
+        (2, 1 | 2 | 4, _) => NVENC_VIDEO_PRESETS.to_vec(),
+        // 10-bit H.264 always encodes through libx264, whatever the profile's
+        // acceleration says.
+        (_, 1, 1) | (0, 1 | 2, _) => SOFTWARE_VIDEO_PRESETS.to_vec(),
+        (1, 1 | 2, _) => QSV_VIDEO_PRESETS.to_vec(),
         _ => Vec::new(),
     }
 }
 
-fn ffmpeg_tunes(hw: i32, format: i32) -> Vec<&'static str> {
+/// Valid NVENC `VideoTune` values for a profile.
+///
+/// `uhq` is codec-gated, not universal: `FFmpeg` 9's `hevc_nvenc` and `av1_nvenc`
+/// advertise it, `h264_nvenc` does not (its tune range is 1-4).
+///
+/// Must stay in sync with `tunes_for_profile` in `ersatzrs-web`.
+#[must_use]
+pub fn ffmpeg_tunes(hw: i32, format: i32) -> Vec<&'static str> {
     match (hw, format) {
-        (2, 1 | 2 | 4) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 1) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 2 | 4) => vec!["hq", "uhq", "ll", "ull", "lossless"],
         _ => Vec::new(),
     }
 }
@@ -4205,7 +4251,13 @@ pub async fn save_ffmpeg_settings(
         ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
         command.global_fallback_filler_id,
     ));
-    repository.apply_mutations(mutations).await?;
+    runtime
+        .commit_ffmpeg_settings(&paths.ffmpeg, &paths.ffprobe, mutations)
+        .await
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "commit FFmpeg settings",
+            message: error.to_string(),
+        })?;
 
     if command.save_reports {
         runtime.ensure_ffmpeg_report_directory();
@@ -4213,13 +4265,7 @@ pub async fn save_ffmpeg_settings(
     if command.extract_embedded_subtitles {
         runtime.request_embedded_subtitle_extraction(repository.list_playout_ids().await?);
     }
-    runtime
-        .refresh_ffmpeg_runtime(&paths.ffmpeg, &paths.ffprobe)
-        .await
-        .map_err(|error| ApplicationError::Unavailable {
-            operation: "refresh FFmpeg runtime",
-            message: error.to_string(),
-        })
+    Ok(())
 }
 
 async fn request_settings_playout_builds(
@@ -5785,6 +5831,8 @@ mod tests {
     #[derive(Default)]
     struct RecordingSettingsRuntime {
         events: Mutex<Vec<String>>,
+        committed_mutations: Mutex<Vec<SettingsMutation>>,
+        fail_ffmpeg_commit: bool,
     }
 
     #[async_trait]
@@ -5824,15 +5872,25 @@ mod tests {
             })
         }
 
-        async fn refresh_ffmpeg_runtime(
+        async fn commit_ffmpeg_settings(
             &self,
             ffmpeg_path: &str,
             ffprobe_path: &str,
+            mutations: Vec<SettingsMutation>,
         ) -> Result<(), SettingsRuntimeError> {
             self.events
                 .lock()
                 .expect("settings runtime events")
-                .push(format!("refresh:{ffmpeg_path}:{ffprobe_path}"));
+                .push(format!("commit:{ffmpeg_path}:{ffprobe_path}"));
+            if self.fail_ffmpeg_commit {
+                return Err(SettingsRuntimeError::unavailable(
+                    "simulated commit failure",
+                ));
+            }
+            self.committed_mutations
+                .lock()
+                .expect("committed settings mutations")
+                .extend(mutations);
             Ok(())
         }
 
@@ -6901,27 +6959,41 @@ mod tests {
             .await
             .expect("save FFmpeg settings");
 
-        let values = repository.values.lock().expect("settings values");
-        assert_eq!(
-            values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES),
-            Some(&"False".to_owned())
-        );
-        assert_eq!(
-            values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
-            Some(&"false".to_owned())
-        );
-        assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID));
-        assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID));
-        drop(values);
-        assert_eq!(
-            repository.batches.lock().expect("settings batches").len(),
-            1
-        );
+        let mutations = runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations");
+        assert!(mutations.iter().any(|mutation| matches!(
+            mutation,
+            SettingsMutation::Set { key, value }
+                if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES
+                    && value == "False"
+        )));
+        assert!(mutations.iter().any(|mutation| matches!(
+            mutation,
+            SettingsMutation::Set { key, value }
+                if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED && value == "false"
+        )));
+        for key in [
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+        ] {
+            assert!(mutations.iter().any(|mutation| matches!(
+                mutation,
+                SettingsMutation::Delete { key: deleted } if deleted == key
+            )));
+        }
+        drop(mutations);
+        assert!(repository
+            .batches
+            .lock()
+            .expect("settings batches")
+            .is_empty());
         assert_eq!(
             *runtime.events.lock().expect("settings runtime events"),
             [
                 "validate:ffmpeg-custom:ffprobe-custom",
-                "refresh:resolved-ffmpeg:resolved-ffprobe"
+                "commit:resolved-ffmpeg:resolved-ffprobe"
             ]
         );
     }
@@ -6946,21 +7018,66 @@ mod tests {
             ..RecordingSettingsRepository::default()
         };
 
-        save_ffmpeg_settings(
-            ffmpeg_settings(),
-            &repository,
-            &RecordingSettingsRuntime::default(),
-        )
-        .await
-        .expect("save unchanged managed FFmpeg settings");
+        let runtime = RecordingSettingsRuntime::default();
+        save_ffmpeg_settings(ffmpeg_settings(), &repository, &runtime)
+            .await
+            .expect("save unchanged managed FFmpeg settings");
 
+        assert!(runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations")
+            .iter()
+            .any(|mutation| matches!(
+                mutation,
+                SettingsMutation::Set { key, value }
+                    if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED
+                        && value == "true"
+            )));
+    }
+
+    #[tokio::test]
+    async fn failed_ffmpeg_commit_keeps_persistence_and_side_effects_untouched() {
+        let repository = RecordingSettingsRepository {
+            playout_ids: vec![2, 3],
+            ..RecordingSettingsRepository::default()
+        };
+        let runtime = RecordingSettingsRuntime {
+            fail_ffmpeg_commit: true,
+            ..RecordingSettingsRuntime::default()
+        };
+        let mut settings = ffmpeg_settings();
+        settings.save_reports = true;
+        settings.use_embedded_subtitles = true;
+        settings.extract_embedded_subtitles = true;
+
+        let error = save_ffmpeg_settings(settings, &repository, &runtime)
+            .await
+            .expect_err("commit failure");
+
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Unavailable {
+                operation: "commit FFmpeg settings",
+                ..
+            }
+        ));
+        assert!(repository
+            .batches
+            .lock()
+            .expect("settings batches")
+            .is_empty());
+        assert!(runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations")
+            .is_empty());
         assert_eq!(
-            repository
-                .values
-                .lock()
-                .expect("settings values")
-                .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
-            Some(&"true".to_owned())
+            *runtime.events.lock().expect("settings runtime events"),
+            [
+                "validate:ffmpeg-custom:ffprobe-custom",
+                "commit:resolved-ffmpeg:resolved-ffprobe"
+            ]
         );
     }
 

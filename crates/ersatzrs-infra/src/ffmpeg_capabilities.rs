@@ -8,8 +8,9 @@ use sqlx::Row;
 use tokio::sync::RwLock;
 
 use crate::db::DbPool;
+use crate::runtime_identity::PersistedRuntimeIdentity;
 
-const CONFIG_KEY_HARDWARE_DECODE_DENIALS: &str = "ffmpeg.hardware.decode_denials";
+pub const CONFIG_KEY_HARDWARE_DECODE_DENIALS: &str = "ffmpeg.hardware.decode_denials";
 
 #[derive(Debug, thiserror::Error)]
 pub enum HardwareDecodeDenialError {
@@ -54,6 +55,10 @@ impl PersistedHardwareDecodeDenial {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct PersistedHardwareDecodeDenialState {
     #[serde(default)]
+    runtime_identity: Option<PersistedRuntimeIdentity>,
+    /// Legacy path-only identity. Retained solely for backwards-compatible
+    /// deserialization; it is intentionally never considered reusable.
+    #[serde(default)]
     ffmpeg_path: Option<String>,
     denials: Vec<PersistedHardwareDecodeDenial>,
 }
@@ -66,15 +71,10 @@ fn parse_persisted_denial_state(raw: &str) -> PersistedHardwareDecodeDenialState
     // them as learned against the current binary so existing installs keep
     // their rows until the next explicit refresh.
     PersistedHardwareDecodeDenialState {
+        runtime_identity: None,
         ffmpeg_path: None,
         denials: serde_json::from_str(raw).unwrap_or_default(),
     }
-}
-
-/// Whether persisted denial rows still apply for the current `ffmpeg` path.
-/// Legacy rows without a stored path are treated as matching.
-fn persisted_denials_apply(stored_path: Option<&str>, current_path: &str) -> bool {
-    stored_path.is_none_or(|stored| stored == current_path)
 }
 
 /// Load persisted runtime-learned hardware decode denials.
@@ -110,18 +110,19 @@ pub async fn load_hardware_decode_denials(
 pub async fn apply_hardware_decode_denials(
     pool: &DbPool,
     report: &mut FfmpegCapabilityReport,
-    current_ffmpeg_path: &str,
 ) -> Result<(), HardwareDecodeDenialError> {
     let Some(raw) = load_config(pool, CONFIG_KEY_HARDWARE_DECODE_DENIALS).await? else {
         return Ok(());
     };
 
     let state = parse_persisted_denial_state(&raw);
-    if !persisted_denials_apply(state.ffmpeg_path.as_deref(), current_ffmpeg_path) {
+    if !state
+        .runtime_identity
+        .as_ref()
+        .is_some_and(|identity| identity.matches(report))
+    {
         tracing::info!(
-            stored_path = ?state.ffmpeg_path,
-            current_path = %current_ffmpeg_path,
-            "ffmpeg path changed since hardware decode denials were learned; clearing them"
+            "ffmpeg runtime identity changed since hardware decode denials were learned; clearing them"
         );
         clear_hardware_decode_denials(pool).await?;
         return Ok(());
@@ -169,11 +170,27 @@ pub async fn persist_hardware_decode_denial_into_runtime(
     runtime: &RwLock<FfmpegRuntimeReport>,
     denial: HardwareDecodeDenial,
 ) -> Result<(), HardwareDecodeDenialError> {
-    report.deny_hardware_decode(denial.clone());
     let mut runtime = runtime.write().await;
+    if runtime_generation(report).is_some_and(|generation| generation != runtime.generation) {
+        tracing::info!(
+            observed_generation = ?runtime_generation(report),
+            active_generation = runtime.generation,
+            "ignoring stale hardware decode denial and rebuilding from the active runtime"
+        );
+        report.clone_from(&runtime.capabilities);
+        return Ok(());
+    }
+    report.deny_hardware_decode(denial.clone());
     runtime.capabilities.deny_hardware_decode(denial);
     report.clone_from(&runtime.capabilities);
     persist_hardware_decode_denials(pool, &runtime.capabilities).await
+}
+
+fn runtime_generation(report: &FfmpegCapabilityReport) -> Option<u64> {
+    report
+        .runtime_identity
+        .as_ref()
+        .map(|identity| identity.generation)
 }
 
 async fn persist_hardware_decode_denials(
@@ -181,7 +198,11 @@ async fn persist_hardware_decode_denials(
     report: &FfmpegCapabilityReport,
 ) -> Result<(), HardwareDecodeDenialError> {
     let state = PersistedHardwareDecodeDenialState {
-        ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+        runtime_identity: PersistedRuntimeIdentity::from_capabilities(report),
+        ffmpeg_path: report
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
         denials: report
             .hardware_decode_denials
             .iter()
@@ -337,34 +358,23 @@ mod tests {
     }
 
     #[test]
-    fn parses_legacy_denial_array_without_stored_path() {
+    fn parses_legacy_denial_array_as_non_reusable_state() {
         let raw = r#"[{"acceleration":"nvenc","codec":"av1","bit_depth":10}]"#;
         let state = parse_persisted_denial_state(raw);
 
         assert_eq!(state.ffmpeg_path, None);
         assert_eq!(state.denials.len(), 1);
         assert_eq!(state.denials[0].codec, "av1");
-        // Legacy rows apply regardless of the current path.
-        assert!(persisted_denials_apply(
-            state.ffmpeg_path.as_deref(),
-            "/usr/bin/ffmpeg"
-        ));
+        assert_eq!(state.runtime_identity, None);
     }
 
     #[test]
-    fn denials_are_invalidated_when_ffmpeg_path_changes() {
+    fn path_only_denials_are_non_reusable_even_when_the_path_matches() {
         let raw = r#"{"ffmpeg_path":"/opt/old/ffmpeg","denials":[{"acceleration":"nvenc","codec":"av1","bit_depth":8}]}"#;
         let state = parse_persisted_denial_state(raw);
 
         assert_eq!(state.ffmpeg_path.as_deref(), Some("/opt/old/ffmpeg"));
-        assert!(persisted_denials_apply(
-            state.ffmpeg_path.as_deref(),
-            "/opt/old/ffmpeg"
-        ));
-        assert!(!persisted_denials_apply(
-            state.ffmpeg_path.as_deref(),
-            "/opt/new/ffmpeg"
-        ));
+        assert_eq!(state.runtime_identity, None);
     }
 
     #[test]
@@ -468,5 +478,46 @@ mod tests {
             "hevc",
             10
         ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn a_previous_runtime_generation_cannot_poison_active_decode_capabilities() {
+        let pool = test_pool().await;
+        let identity = ersatzrs_ffmpeg::FfmpegRuntimeIdentity {
+            generation: 1,
+            ffmpeg_path: "/opt/ffmpeg".to_owned(),
+            ffmpeg_sha256: Some("ffmpeg-digest".to_owned()),
+            ffprobe_path: "/opt/ffprobe".to_owned(),
+            ffprobe_sha256: Some("ffprobe-digest".to_owned()),
+            selected_nvidia_device: None,
+        };
+        let mut stale_worker = FfmpegCapabilityReport {
+            runtime_identity: Some(identity.clone()),
+            ..FfmpegCapabilityReport::default()
+        };
+        let mut active = FfmpegRuntimeReport::for_tests();
+        active.capabilities.runtime_identity = Some(ersatzrs_ffmpeg::FfmpegRuntimeIdentity {
+            generation: 2,
+            ..identity
+        });
+        active.generation = 2;
+        let active_runtime = RwLock::new(active);
+
+        persist_hardware_decode_denial_into_runtime(
+            &pool,
+            &mut stale_worker,
+            &active_runtime,
+            HardwareDecodeDenial::new(HardwareAccelerationKind::Nvenc, "hevc", 10),
+        )
+        .await
+        .expect("stale feedback is ignored");
+
+        assert_eq!(runtime_generation(&stale_worker), Some(2));
+        assert!(stale_worker.hardware_decode_denials.is_empty());
+        assert!(load_hardware_decode_denials(&pool)
+            .await
+            .expect("load decode state")
+            .is_empty());
     }
 }

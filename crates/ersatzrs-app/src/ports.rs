@@ -8,8 +8,8 @@ use ersatzrs_core::repositories::{
     AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository, BlockRepository,
     ChannelRepository, CollectionRepository, DecoRepository, FfmpegProfileRepository,
     FillerRepository, LibraryRepository, MediaItemRepository, MediaSourceRepository,
-    PlayoutRepository, ProgramScheduleRepository, TelevisionRepository, TemplateRepository,
-    TraktRepository, TroubleshootingRepository, WatermarkRepository,
+    PlayoutRepository, ProgramScheduleRepository, SettingsMutation, TelevisionRepository,
+    TemplateRepository, TraktRepository, TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -108,11 +108,12 @@ pub trait SettingsRuntime: Send + Sync {
         ffprobe_path: &str,
     ) -> Result<SettingsFfmpegPaths, SettingsRuntimeError>;
 
-    /// Refresh tool capabilities after `FFmpeg` path settings change.
-    async fn refresh_ffmpeg_runtime(
+    /// Atomically persist `FFmpeg` settings and publish the fully-probed runtime.
+    async fn commit_ffmpeg_settings(
         &self,
         ffmpeg_path: &str,
         ffprobe_path: &str,
+        mutations: Vec<SettingsMutation>,
     ) -> Result<(), SettingsRuntimeError>;
 
     /// Admit background embedded-subtitle extraction.

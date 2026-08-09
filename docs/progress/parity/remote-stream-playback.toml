@@ -20,11 +20,11 @@ rendition pair so their MPEG-TS output has the stable video-then-audio stream
 order. The Windows YouTube wrapper keeps yt-dlp an optional manual tool while
 requiring the ErsatzRS-managed FFmpeg runtime and preserving yt-dlp's
 extractor-specific request headers.
-IPTV and HLS
-share this resolver and cancellation ownership; producer stderr and signed URL
-details are redacted from normal diagnostics. Consumer exit and ffprobe timeouts
-cancel and reap producers even when stdout is stalled, while stderr is retained
-as a bounded rolling tail.
+IPTV and HLS share this resolver and cancellation ownership. Producer failures
+log safe surface/channel/seek context and a sanitized 2 KiB stderr tail; URLs,
+credentials, cookies, control characters, and local paths are removed. Consumer
+exit and ffprobe timeouts reap stalled producers; cancellation and consumer pipe
+closure remain debug events. Diagnostics never run or retry the producer.
 
 Live and finite sources have distinct timing behavior. RTSP is forced live,
 live inputs start at zero without read-rate pacing, and current live Remote
@@ -45,7 +45,8 @@ Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
   producer-container auto-detection, Windows batch quoting, single-pair Beeld &
   Geluid mapping, managed-FFmpeg YouTube extraction, producer-side seeking,
-  stalled-producer cancellation, and bounded-stderr tests:
+  stalled-producer cancellation, structured context, secret/path sanitation,
+  and bounded UTF-8 stderr-tail tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
 - Windows runtime proof: the canonical YouTube wrapper tuned a finite video at
   its midpoint in under four seconds, and the actual HLS channel returned a
@@ -55,8 +56,6 @@ Evidence:
   removed `-vsync` option.
 - ffprobe timeout cancellation:
   `./run.sh test -p ersatzrs-infra remote_probe_timeout_cancels_stalled_producer`.
-- Historical managed FFmpeg 8.1 pipe proof: generated H.264/AAC fragmented MP4 and MPEG-TS
-  samples were both auto-detected by `ffprobe -i pipe:0`.
 - Scanner persistence and invalid-sibling isolation: `./run.sh test -p ersatzrs-scanner remote_stream_scan_persists_definition_metadata_and_continues_after_invalid_yaml`.
 - Flood duration regression: `./run.sh test -p ersatzrs-core classic_flood_expands_zero_duration_remote_stream_to_hard_stop`.
 - Playlist type and UI proof are tracked by `remote-streams-browser.toml`.

@@ -55,7 +55,7 @@ use ersatzrs_infra::playback::{
 use ersatzrs_infra::remote_stream::{
     redact_remote_stream_output, remote_stream_input_file, remote_stream_producer,
     resolve_remote_stream, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
-    RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+    RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
@@ -1926,7 +1926,10 @@ fn build_stream_command_with_input_and_opacity_clock(
         if desired.audio_format == FFmpegProfileAudioFormat::Copy {
             desired.audio_format = FFmpegProfileAudioFormat::Ac3;
         }
-        normalize_hls_direct_mpegts_h264_preset(&mut desired);
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            playback_profile.profile.hardware_acceleration,
+        );
     }
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
@@ -2035,8 +2038,21 @@ fn hls_direct_mpegts_audio_copy_safe(
     )
 }
 
-fn normalize_hls_direct_mpegts_h264_preset(desired: &mut DesiredVideoState) {
+fn normalize_hls_direct_mpegts_h264_preset(
+    desired: &mut DesiredVideoState,
+    acceleration: ersatzrs_domain::HardwareAccelerationKind,
+) {
     if desired.video_format != FFmpegProfileVideoFormat::H264 {
+        return;
+    }
+
+    // Only a software encode gets a substituted preset. Hardware encoders have
+    // their own option domains — FFmpeg 9's `h264_nvenc` accepts `p1`-`p7`
+    // plus legacy `slow`/`medium`/`fast` and would reject `veryfast` outright —
+    // and a profile that carries a preset at all already had it validated
+    // against its own acceleration. A profile forced here from video format
+    // Copy carries no preset, so the encoder default applies.
+    if acceleration != ersatzrs_domain::HardwareAccelerationKind::None {
         return;
     }
 
@@ -2047,22 +2063,36 @@ fn normalize_hls_direct_mpegts_h264_preset(desired: &mut DesiredVideoState) {
 }
 
 fn force_software_h264_encoding(playback_profile: &mut PlaybackProfile) {
+    let was_hardware = playback_profile.profile.hardware_acceleration
+        != ersatzrs_domain::HardwareAccelerationKind::None;
     playback_profile.profile.hardware_acceleration =
         ersatzrs_domain::HardwareAccelerationKind::None;
     if playback_profile.profile.video_format != FFmpegProfileVideoFormat::H264 {
         return;
     }
 
-    if !playback_profile
-        .profile
-        .video_preset
-        .as_deref()
-        .is_some_and(is_x264_preset)
-    {
+    // A hardware profile's preset never carries over to libx264, even when the
+    // string happens to be a valid x264 preset name. The ladders collide by
+    // name only: QSV spells target usage 4 as `medium` and TU7 as `veryfast`,
+    // which are fixed-function quality points, not CPU budgets. Reusing the
+    // name would silently hand libx264 a far more expensive preset than the
+    // hardware encoder was doing (ADR 0014 demotion must stay realtime).
+    let keeps_preset = !was_hardware
+        && playback_profile
+            .profile
+            .video_preset
+            .as_deref()
+            .is_some_and(is_x264_preset);
+    if !keeps_preset {
         playback_profile.profile.video_preset = Some("veryfast".to_owned());
     }
 }
 
+/// True when `value` is a preset the software `libx264` / `libx265` encoders
+/// understand.
+///
+/// Name membership alone never justifies reusing a *hardware* profile's preset
+/// for a software encode — see [`force_software_h264_encoding`].
 fn is_x264_preset(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -2349,9 +2379,15 @@ enum DirectStreamOutcome {
 fn spawn_stream_process(
     command: &FfmpegCommand,
     remote_producer: Option<&RemoteStreamCommand>,
+    channel_number: &str,
 ) -> Result<RemoteStreamProcess, StreamSpawnError> {
-    spawn_ffmpeg_with_remote_input(command, None, remote_producer)
-        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
+    spawn_ffmpeg_with_remote_input(
+        command,
+        None,
+        remote_producer,
+        RemoteStreamSpawnContext::mpeg_ts(channel_number),
+    )
+    .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
 }
 
 fn spawn_stream_body(
@@ -2366,6 +2402,7 @@ fn spawn_stream_body(
     let child = spawn_stream_process(
         command,
         remote_stream.as_ref().and_then(remote_stream_producer),
+        &channel_number,
     )?;
     if child.stdout.is_none() {
         return Err(StreamSpawnError::MissingStdout);
@@ -2435,10 +2472,8 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
             ) {
                 let _capacity_reservation = reservation;
-                match spawn_stream_process(
-                    &command,
-                    remote_stream.as_ref().and_then(remote_stream_producer),
-                ) {
+                let producer = remote_stream.as_ref().and_then(remote_stream_producer);
+                match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(child) => {
                         let _ = supervise_stream_command_with_retry(
                             child,
@@ -2471,7 +2506,8 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 limit,
                 "serving MPEG-TS all-streams-in-use slate without reserving transcode capacity"
             );
-            let mut slate_child = match spawn_stream_process(&slate_command, None) {
+            let mut slate_child = match spawn_stream_process(&slate_command, None, &channel_number)
+            {
                 Ok(child) => child,
                 Err(error) => {
                     tracing::warn!(
@@ -2598,6 +2634,7 @@ async fn supervise_stream_command_with_retry(
             match spawn_stream_process(
                 &retry_command,
                 remote_stream.and_then(remote_stream_producer),
+                channel_number,
             ) {
                 Ok(next) => {
                     child = next;
@@ -2660,6 +2697,7 @@ async fn supervise_stream_command_with_retry(
             match spawn_stream_process(
                 &retry_command,
                 remote_stream.and_then(remote_stream_producer),
+                channel_number,
             ) {
                 Ok(next) => {
                     child = next;
@@ -2709,6 +2747,7 @@ async fn supervise_stream_command_with_retry(
         match spawn_stream_process(
             &retry_command,
             remote_stream.and_then(remote_stream_producer),
+            channel_number,
         ) {
             Ok(next) => child = next,
             Err(error) => {
@@ -3356,6 +3395,74 @@ mod tests {
         assert!(!second.contains("h264_nvenc"), "{second}");
         assert!(!second.contains("-tune:v"), "{second}");
         assert!(!second.contains("-hwaccel cuda"), "{second}");
+    }
+
+    #[test]
+    fn hardware_encode_retry_does_not_carry_a_qsv_preset_into_libx264() {
+        // ADR 0017 v5 seeds QSV at `medium`, which is target usage 4 on a
+        // fixed-function encoder. libx264's `medium` is a far more expensive
+        // CPU preset that shares nothing but the name, so an ADR 0014 demotion
+        // must fall back to `veryfast` rather than reuse it.
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::Qsv;
+        profile.profile.video_preset = Some("medium".to_owned());
+
+        force_software_h264_encoding(&mut profile);
+
+        assert_eq!(profile.profile.video_preset.as_deref(), Some("veryfast"));
+        assert_eq!(
+            profile.profile.hardware_acceleration,
+            ersatzrs_domain::HardwareAccelerationKind::None
+        );
+    }
+
+    #[test]
+    fn hls_direct_mpegts_transcode_does_not_substitute_an_x264_preset_for_nvenc() {
+        // FFmpeg 9's h264_nvenc preset domain is p1-p7 plus legacy
+        // slow/medium/fast — it has no `veryfast`, so forcing an H.264
+        // transcode for HLS-direct MPEG-TS must not inject one. A profile
+        // forced here from video format Copy carries no preset at all and
+        // inherits the encoder default.
+        let mut desired = DesiredVideoState {
+            video_preset: None,
+            ..DesiredVideoState::h264_1080p()
+        };
+
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+        );
+
+        assert_eq!(desired.video_preset, None);
+    }
+
+    #[test]
+    fn hls_direct_mpegts_transcode_still_defaults_software_encodes_to_veryfast() {
+        let mut desired = DesiredVideoState {
+            video_preset: None,
+            ..DesiredVideoState::h264_1080p()
+        };
+
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            ersatzrs_domain::HardwareAccelerationKind::None,
+        );
+
+        assert_eq!(desired.video_preset.as_deref(), Some("veryfast"));
+    }
+
+    #[test]
+    fn software_profiles_keep_their_operator_chosen_x264_preset() {
+        // A profile that was already software carries a real libx264 preset,
+        // so a forced-software rebuild must not overwrite the operator's
+        // choice with `veryfast`.
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::None;
+        profile.profile.video_preset = Some("slow".to_owned());
+
+        force_software_h264_encoding(&mut profile);
+
+        assert_eq!(profile.profile.video_preset.as_deref(), Some("slow"));
     }
 
     #[test]
@@ -5033,7 +5140,7 @@ mod tests {
     }
 
     #[test]
-    fn the_iptv_builder_allows_profile_8_1_and_stream_copy() {
+    fn the_iptv_builder_allows_profile_8_1_transcode_but_rejects_unproven_stream_copy() {
         // Profile 8.1: the base layer is a conforming HDR10 signal.
         assert!(build_stream_command(
             "/media/dv81.mkv",
@@ -5053,11 +5160,8 @@ mod tests {
         )
         .is_ok());
 
-        // Stream copy hands the elementary stream to the client untouched, so
-        // ErsatzRS is not interpreting the colour and has no basis to refuse.
-        // fMP4 rather than MPEG-TS: only H.264 is copy-safe in a direct MPEG-TS
-        // stream, so an HEVC source there genuinely transcodes and is correctly
-        // refused.
+        // ADR 0064 has no proven source/container/client passthrough matrix,
+        // so even a low-level copy candidate is refused before spawn.
         assert!(build_stream_command(
             "/media/dv5.mkv",
             OutputFormat::HlsMp4,
@@ -5074,7 +5178,102 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )
-        .is_ok());
+        .is_err());
+    }
+
+    #[cfg(all(unix, not(feature = "mysql")))]
+    #[tokio::test]
+    async fn profile_5_graph_failure_is_learned_without_a_wrong_colour_respawn() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let ffmpeg = dir.path().join("profile5-failing-ffmpeg");
+        std::fs::write(
+            &ffmpeg,
+            "#!/bin/sh\necho '[libplacebo] Failed to initialize renderer' >&2\nexit 1\n",
+        )
+        .expect("write profile 5 tool");
+        let mut permissions = std::fs::metadata(&ffmpeg).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&ffmpeg, permissions).expect("make executable");
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open profile 5 retry database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create config table");
+
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+        let mut capabilities = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            ..FfmpegCapabilityReport::default()
+        };
+        capabilities.prove_hardware_graph(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr, gpu);
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.capabilities = capabilities.clone();
+        let shared_runtime = Arc::new(RwLock::new(runtime));
+        let rebuild_called = Arc::new(AtomicBool::new(false));
+        let rebuild_observer = Arc::clone(&rebuild_called);
+
+        let command =
+            FfmpegCommand::new_with_executable(ffmpeg.to_string_lossy(), Vec::new(), Vec::new());
+        let mut retry = Some(StreamDenialRetry {
+            pool: pool.clone(),
+            shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
+            runtime_capabilities: capabilities,
+            acceleration: ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            source_stream: None,
+            graph_operation: Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr),
+            ffmpeg_path: ffmpeg.to_string_lossy().into_owned(),
+            rebuild: Some(Box::new(move |retry_mode| {
+                rebuild_observer.store(true, Ordering::SeqCst);
+                let StreamRetryMode::HardwareGraphDenied(runtime_capabilities) = retry_mode else {
+                    panic!("profile 5 graph failure must use the graph retry mode");
+                };
+                assert!(runtime_capabilities.hardware_graph_denied(
+                    HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+                    gpu
+                ));
+                None
+            })),
+        });
+        let child = spawn_stream_process(&command, None, "test").expect("spawn profile 5 tool");
+        let (_reader, mut writer) = tokio::io::duplex(1024);
+
+        let outcome = supervise_stream_command_with_retry(
+            child,
+            &mut writer,
+            &Arc::new(Notify::new()),
+            "1",
+            &mut retry,
+            None,
+        )
+        .await;
+
+        assert!(matches!(outcome, DirectStreamOutcome::Failed(_)));
+        assert!(rebuild_called.load(Ordering::SeqCst));
+        assert!(retry.is_none(), "there must be no fallback spawn observer");
+        let persisted = ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("load profile 5 denial");
+        assert_eq!(
+            persisted,
+            vec![HardwareGraphDenial::new(
+                HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+                gpu,
+                GraphFailureKind::Libplacebo,
+            )]
+        );
     }
 
     #[cfg(all(unix, not(feature = "mysql")))]
@@ -5147,7 +5346,8 @@ mod tests {
                 ))
             })),
         });
-        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let child =
+            spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
         let (_reader, mut writer) = tokio::io::duplex(1024);
 
         let outcome = supervise_stream_command_with_retry(
@@ -5259,7 +5459,8 @@ mod tests {
                 ))
             })),
         });
-        let child = spawn_stream_process(&initial_command, None).expect("spawn primary tool");
+        let child =
+            spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
         let (_reader, mut writer) = tokio::io::duplex(1024);
 
         let outcome = supervise_stream_command_with_retry(

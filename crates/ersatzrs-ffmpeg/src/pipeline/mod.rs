@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
-    cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
+    cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter,
+    dolby_vision_profile_5_hdr10_filter, dolby_vision_profile_5_sdr_filter, fast_start,
     format_time_limit, graphics_overlay_vaapi_filter, hardware_download_filter,
     hardware_surface_download_format, hardware_upload_filter, hardware_upload_vaapi_filter,
     hdr10_output_support, hide_banner, hlg_to_hdr10_cuda_filter, hlg_to_hdr10_filter,
@@ -23,9 +24,10 @@ use crate::{
     watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
     watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
     yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
-    ContentLightLevel, DolbyVisionConfiguration, FfmpegCapability, FfmpegCapabilityReport,
-    FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
-    HardwareCapabilitiesFactory, HardwareGraphOperation, Hdr10OutputSupport, InputFile, InputKind,
+    ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain, FrameRate, FrameSize,
+    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, HardwareGraphOperation,
+    Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile, InputKind,
     MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
     SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
     VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
@@ -102,6 +104,11 @@ pub struct PipelineRequest {
     pub source_video_stream: Option<SourceVideoStream>,
     pub source_audio_streams: Vec<SourceAudioStream>,
     pub runtime_capabilities: Option<FfmpegCapabilityReport>,
+    /// Executable path from the same immutable runtime snapshot as
+    /// `runtime_capabilities`.
+    pub ffmpeg_executable: Option<String>,
+    /// Publication generation for runtime-learned retry/denial feedback.
+    pub runtime_generation: Option<u64>,
     pub watermark: Option<WatermarkOverlay>,
     pub watermarks: Vec<WatermarkOverlay>,
     pub watermark_opacity_clock: WatermarkOpacityClock,
@@ -124,6 +131,8 @@ impl PipelineRequest {
             source_video_stream: None,
             source_audio_streams: Vec::new(),
             runtime_capabilities: None,
+            ffmpeg_executable: None,
+            runtime_generation: None,
             watermark: None,
             watermarks: Vec::new(),
             watermark_opacity_clock: WatermarkOpacityClock::default(),
@@ -158,7 +167,20 @@ impl PipelineRequest {
 
     #[must_use]
     pub fn with_runtime_capabilities(mut self, report: FfmpegCapabilityReport) -> Self {
+        if let Some(identity) = &report.runtime_identity {
+            self.ffmpeg_executable = Some(identity.ffmpeg_path.clone());
+            self.runtime_generation = Some(identity.generation);
+        }
         self.runtime_capabilities = Some(report);
+        self
+    }
+
+    /// Bind command generation to one coherent runtime publication.
+    #[must_use]
+    pub fn with_runtime_report(mut self, report: &FfmpegRuntimeReport) -> Self {
+        self.runtime_capabilities = Some(report.capabilities.clone());
+        self.ffmpeg_executable = Some(report.ffmpeg.path.clone());
+        self.runtime_generation = Some(report.generation);
         self
     }
 
@@ -245,6 +267,9 @@ pub struct SourceVideoStream {
     pub max_fall: Option<i32>,
     /// Dolby Vision configuration record (ADR 0064), when the source has one.
     pub dolby_vision: Option<DolbyVisionConfiguration>,
+    /// Positive provider detection that lacked the complete configuration
+    /// record required by the strict playback policy.
+    pub incomplete_dolby_vision: Option<IncompleteDolbyVisionMetadata>,
 }
 
 impl SourceVideoStream {
@@ -275,6 +300,7 @@ impl SourceVideoStream {
             max_cll: None,
             max_fall: None,
             dolby_vision: None,
+            incomplete_dolby_vision: None,
         }
     }
 
@@ -1251,8 +1277,9 @@ fn build_transcode_pipeline(
             && !input.is_image_based_subtitle
             && input.subtitle_method == Some(SubtitleMethod::Burn)
     });
-    let use_cuda_overlay =
-        uses_cuda_overlay(effective_acceleration, &request.desired) && !has_text_subtitle_burn;
+    let use_cuda_overlay = uses_cuda_overlay(effective_acceleration, &request.desired)
+        && profile_5_operation(&request).is_none()
+        && !has_text_subtitle_burn;
     let force_vaapi_software_overlay = force_vaapi_software_overlay(
         &request.desired,
         has_watermark_overlay,
@@ -1659,27 +1686,17 @@ fn apply_source_video_filters(
     filter_chain: &mut FilterChain,
 ) {
     let is_transcode = request.desired.video_format != FFmpegProfileVideoFormat::Copy;
+    let profile_5_operation = profile_5_operation(request);
+    initialize_source_video_state(request, is_transcode, target_state);
 
-    if let Some(source) = &request.source_video_stream {
-        target_state.should_deinterlace = request.desired.deinterlace
-            && source.scan_kind == VideoScanKind::Interlaced
-            && is_transcode;
-        target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
-        target_state.colors_are_bt709 = source.color_params.is_bt709();
-
-        // Track the true source pixel format while the frame lives in software
-        // memory so `SetPixelFormat` can decide whether an output `-pix_fmt`
-        // conversion is required (e.g. 10-bit source into an 8-bit H.264 high
-        // profile). Hardware paths manage their own surface format in
-        // `configure_hardware_acceleration`, so only override for software.
-        if target_state.frame_data_location == crate::FrameDataLocation::Software {
-            if let Some(pixel_format) = source.pixel_format {
-                target_state.pixel_format = pixel_format;
-            }
-        }
+    if let Some(operation) = profile_5_operation {
+        apply_profile_5_conversion(request, operation, target_state, filter_chain);
     }
 
-    if target_state.should_deinterlace && !target_state.deinterlaced {
+    if profile_5_operation.is_none()
+        && target_state.should_deinterlace
+        && !target_state.deinterlaced
+    {
         if acceleration == HardwareAccelerationKind::Nvenc
             && uploaded_cuda_fallback
             && target_state.frame_data_location == crate::FrameDataLocation::Software
@@ -1711,10 +1728,12 @@ fn apply_source_video_filters(
     // source's dynamic range. `SdrBt709` keeps ErsatzTV's tonemap-to-BT.709
     // behavior exactly; `Hdr10Bt2020Pq` is the beyond-parity branch and applies
     // to every item so a linear stream never changes its signalling mid-flight.
-    let used_hdr_tonemap = target_state.is_hdr && is_transcode && !request.desired.produces_hdr10();
-    if is_transcode && request.desired.produces_hdr10() {
+    let used_hdr_tonemap = profile_5_operation
+        == Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr)
+        || target_state.is_hdr && is_transcode && !request.desired.produces_hdr10();
+    if profile_5_operation.is_none() && is_transcode && request.desired.produces_hdr10() {
         apply_hdr10_output_conversion(request, acceleration, target_state, filter_chain);
-    } else if used_hdr_tonemap {
+    } else if profile_5_operation.is_none() && used_hdr_tonemap {
         filter_chain.video.push(tonemap_filter_for(
             acceleration,
             target_state,
@@ -1739,19 +1758,21 @@ fn apply_source_video_filters(
         target_state.cropped_size = Some(cropped_size);
     }
 
-    let scale = video_scale_filter(
-        acceleration,
-        target_state,
-        request.desired.scaled_size,
-        request.desired.frame_size,
-        request.desired.bit_depth,
-        request.desired.qsv_extra_hardware_frames,
-    );
-    if !scale.trim().is_empty() {
-        filter_chain.video.push(scale);
-        target_state.scaled_size = request.desired.scaled_size;
-        target_state.padded_size = request.desired.scaled_size;
-        track_hardware_scale_output(acceleration, request.desired.bit_depth, target_state);
+    if profile_5_operation.is_none() {
+        let scale = video_scale_filter(
+            acceleration,
+            target_state,
+            request.desired.scaled_size,
+            request.desired.frame_size,
+            request.desired.bit_depth,
+            request.desired.qsv_extra_hardware_frames,
+        );
+        if !scale.trim().is_empty() {
+            filter_chain.video.push(scale);
+            target_state.scaled_size = request.desired.scaled_size;
+            target_state.padded_size = request.desired.scaled_size;
+            track_hardware_scale_output(acceleration, request.desired.bit_depth, target_state);
+        }
     }
 
     if request.desired.cropped_size.is_none()
@@ -1775,8 +1796,59 @@ fn apply_source_video_filters(
         target_state.padded_size = cropped_size;
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
-        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+        if profile_5_operation.is_none() {
+            upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+        }
     }
+}
+
+fn initialize_source_video_state(
+    request: &PipelineRequest,
+    is_transcode: bool,
+    target_state: &mut FrameState,
+) {
+    let Some(source) = &request.source_video_stream else {
+        return;
+    };
+    target_state.should_deinterlace = request.desired.deinterlace
+        && source.scan_kind == VideoScanKind::Interlaced
+        && is_transcode;
+    target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
+    target_state.colors_are_bt709 = source.color_params.is_bt709();
+
+    // Track the source pixel format while frames live in software so the
+    // output conversion is added only when needed. Hardware setup owns its
+    // surface format and must not be overwritten here.
+    if target_state.frame_data_location == crate::FrameDataLocation::Software {
+        if let Some(pixel_format) = source.pixel_format {
+            target_state.pixel_format = pixel_format;
+        }
+    }
+}
+
+fn apply_profile_5_conversion(
+    request: &PipelineRequest,
+    operation: HardwareGraphOperation,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    let filter = match operation {
+        HardwareGraphOperation::NvencDolbyVisionProfile5Sdr => {
+            dolby_vision_profile_5_sdr_filter(request.desired.scaled_size)
+        }
+        HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10 => {
+            dolby_vision_profile_5_hdr10_filter(request.desired.scaled_size)
+        }
+        HardwareGraphOperation::NvencHdrVulkanLibplacebo
+        | HardwareGraphOperation::NvencCudaScale => unreachable!("profile 5 operation"),
+    };
+    filter_chain.video.push(filter);
+    target_state.frame_data_location = crate::FrameDataLocation::Software;
+    target_state.pixel_format = request.desired.pixel_format();
+    target_state.scaled_size = request.desired.scaled_size;
+    target_state.padded_size = request.desired.scaled_size;
+    target_state.is_hdr = request.desired.produces_hdr10();
+    target_state.colors_are_bt709 = !request.desired.produces_hdr10();
 }
 
 /// Establish the ADR 0064 `Hdr10Bt2020Pq` output contract for one item.
@@ -1875,6 +1947,22 @@ fn apply_hdr10_output_conversion(
 /// attribute a runtime failure to the right graph.
 #[must_use]
 pub fn selected_hardware_graph(command: &FfmpegCommand) -> Option<HardwareGraphOperation> {
+    let applies_dolby_vision = command
+        .arguments
+        .iter()
+        .any(|argument| argument.contains("apply_dolbyvision=true"));
+    if applies_dolby_vision {
+        let produces_hdr10 = command
+            .arguments
+            .iter()
+            .any(|argument| argument.contains("format=rgba64le") || argument == "hevc_nvenc");
+        return Some(if produces_hdr10 {
+            HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10
+        } else {
+            HardwareGraphOperation::NvencDolbyVisionProfile5Sdr
+        });
+    }
+
     let uses_vulkan_libplacebo = command
         .arguments
         .iter()
@@ -1919,12 +2007,17 @@ pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
 ) -> Result<FfmpegCommand, UnsupportedSource> {
-    if let Some(reason) = unsupported_source_reason(&request) {
+    if let Some(reason) = unsupported_source_reason_for_acceleration(Some(acceleration), &request) {
         return Err(UnsupportedSource { reason });
     }
     let inputs = request.inputs.clone();
+    let executable = request.ffmpeg_executable.clone();
     let pipeline = build_pipeline_for_acceleration(acceleration, request);
-    Ok(pipeline.command(&inputs))
+    let mut command = pipeline.command(&inputs);
+    if let Some(executable) = executable {
+        command.executable = executable;
+    }
+    Ok(command)
 }
 
 /// Why a source cannot be played, when ErsatzRS refuses rather than guessing.
@@ -1934,22 +2027,172 @@ pub fn build_pipeline_command(
 /// troubleshooting rather than starting a transcode that would look wrong.
 #[must_use]
 pub fn unsupported_source_reason(request: &PipelineRequest) -> Option<String> {
+    unsupported_source_reason_for_acceleration(None, request)
+}
+
+fn unsupported_source_reason_for_acceleration(
+    acceleration: Option<HardwareAccelerationKind>,
+    request: &PipelineRequest,
+) -> Option<String> {
+    if let Some(incomplete) = request
+        .source_video_stream
+        .as_ref()
+        .and_then(|source| source.incomplete_dolby_vision.as_ref())
+    {
+        return Some(format!(
+            "Dolby Vision metadata is incomplete: {}",
+            incomplete.reason
+        ));
+    }
     let dolby_vision = request
         .source_video_stream
         .as_ref()
         .and_then(|source| source.dolby_vision)?;
 
-    if dolby_vision.is_playable() {
-        return None;
-    }
-    // Stream copy hands the elementary stream to the client untouched, so
-    // ErsatzRS is not the one interpreting the colour and has no basis to
-    // refuse.
     if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return Some(
+            "Dolby Vision stream copy is disabled until the client/container/profile compatibility matrix is proven"
+                .to_owned(),
+        );
+    }
+
+    if matches!(
+        dolby_vision.handling(),
+        DolbyVisionHandling::LibplaceboRequired
+    ) {
+        return profile_5_admission_reason(acceleration, request);
+    }
+
+    if matches!(
+        dolby_vision.handling(),
+        DolbyVisionHandling::Hdr10BaseLayerDirectDecode
+    ) && !request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(is_hevc_main10_source)
+    {
+        return Some(
+            "Dolby Vision profile 7 support requires HEVC Main10 yuv420p10le input".to_owned(),
+        );
+    }
+
+    if dolby_vision.is_playable() {
         return None;
     }
 
     Some(dolby_vision.evidence())
+}
+
+fn profile_5_operation(request: &PipelineRequest) -> Option<HardwareGraphOperation> {
+    let configuration = request
+        .source_video_stream
+        .as_ref()
+        .and_then(|source| source.dolby_vision)?;
+    if !matches!(
+        configuration.handling(),
+        DolbyVisionHandling::LibplaceboRequired
+    ) {
+        return None;
+    }
+    if request.desired.produces_hdr10()
+        && request.desired.video_format == FFmpegProfileVideoFormat::Hevc
+        && request.desired.bit_depth == FFmpegProfileBitDepth::TenBit
+    {
+        return Some(HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10);
+    }
+    if !request.desired.produces_hdr10()
+        && request.desired.video_format == FFmpegProfileVideoFormat::H264
+        && request.desired.bit_depth == FFmpegProfileBitDepth::EightBit
+    {
+        return Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr);
+    }
+    None
+}
+
+fn profile_5_admission_reason(
+    acceleration: Option<HardwareAccelerationKind>,
+    request: &PipelineRequest,
+) -> Option<String> {
+    if acceleration != Some(HardwareAccelerationKind::Nvenc) {
+        return Some(
+            "Dolby Vision profile 5 requires the characterized NVIDIA CUDA/Vulkan/libplacebo/NVENC path"
+                .to_owned(),
+        );
+    }
+    let Some(source) = request.source_video_stream.as_ref() else {
+        return Some("Dolby Vision profile 5 source metadata is missing".to_owned());
+    };
+    if source.scan_kind == VideoScanKind::Interlaced {
+        return Some(
+            "interlaced Dolby Vision profile 5 is not supported because the deinterlace order has not been proven"
+                .to_owned(),
+        );
+    }
+    if !is_hevc_main10_source(source) {
+        return Some(
+            "Dolby Vision profile 5 support requires progressive HEVC Main10 yuv420p10le input"
+                .to_owned(),
+        );
+    }
+    let Some(operation) = profile_5_operation(request) else {
+        return Some(
+            "Dolby Vision profile 5 is characterized only for SDR H.264 8-bit and HDR10 HEVC Main10 output"
+                .to_owned(),
+        );
+    };
+    let Some(report) = request.runtime_capabilities.as_ref() else {
+        return Some(
+            "Dolby Vision profile 5 requires a positively proven runtime operation".to_owned(),
+        );
+    };
+    let device = report.hardware_graph_device();
+    if report.hardware_graph_denied(operation, &device) {
+        return Some(format!(
+            "Dolby Vision profile 5 operation {} is denied on the selected device",
+            operation.id()
+        ));
+    }
+    if !report.hardware_graph_proven(operation, &device) {
+        return Some(format!(
+            "Dolby Vision profile 5 operation {} has not been positively proven on the selected device",
+            operation.id()
+        ));
+    }
+    if !report.has_decoder("hevc_cuvid")
+        || !report
+            .nvidia_decoders
+            .iter()
+            .any(|decoder| decoder.supports("hevc", 10))
+    {
+        return Some(
+            "Dolby Vision profile 5 requires positively reported CUDA HEVC Main10 decode"
+                .to_owned(),
+        );
+    }
+    None
+}
+
+fn is_hevc_main10_source(source: &SourceVideoStream) -> bool {
+    source.codec == SourceVideoCodec::Hevc
+        && source.profile.as_deref().is_some_and(|profile| {
+            let normalized = profile.to_ascii_lowercase().replace([' ', '-'], "");
+            normalized.contains("main10")
+        })
+        && source.pixel_format == Some(PixelFormat::Yuv420P10Le)
+}
+
+fn profile_7_direct_base_layer_decode(request: &PipelineRequest) -> bool {
+    request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.dolby_vision)
+            .is_some_and(|configuration| {
+                matches!(
+                    configuration.handling(),
+                    DolbyVisionHandling::Hdr10BaseLayerDirectDecode
+                )
+            })
 }
 
 /// Classify the selected source video stream's transfer characteristics.
@@ -1975,7 +2218,9 @@ pub fn hdr10_static_metadata_input_options(request: &PipelineRequest) -> Vec<Str
     if !request.desired.produces_hdr10() {
         return Vec::new();
     }
-    if source_transfer_kind(request) == SourceTransferKind::Pq {
+    if source_transfer_kind(request) == SourceTransferKind::Pq
+        && profile_5_operation(request).is_none()
+    {
         return Vec::new();
     }
 
@@ -2074,7 +2319,9 @@ fn apply_pad_filter(
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
     }
-    upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    if profile_5_operation(request).is_none() {
+        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    }
 }
 
 fn apply_colorspace_normalization(
@@ -2443,6 +2690,11 @@ fn effective_video_acceleration(
     request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    // Profile 5 admission has already positively proved its exact operation.
+    // It must not inherit the unrelated NvencCudaScale gate.
+    if acceleration == HardwareAccelerationKind::Nvenc && profile_5_operation(request).is_some() {
+        return HardwareAccelerationKind::Nvenc;
+    }
     // ADR 0064: hardware acceleration may change performance, not colour
     // semantics. A backend with no proven HDR10 graph would otherwise emit SDR
     // from an HDR10 profile, which is the silent downgrade the ADR forbids, so
@@ -2501,6 +2753,14 @@ fn effective_decode_acceleration(
     requested_acceleration: HardwareAccelerationKind,
     effective_acceleration: HardwareAccelerationKind,
 ) -> HardwareAccelerationKind {
+    if requested_acceleration == HardwareAccelerationKind::Nvenc
+        && profile_5_operation(request).is_some()
+    {
+        return HardwareAccelerationKind::Nvenc;
+    }
+    if profile_7_direct_base_layer_decode(request) {
+        return HardwareAccelerationKind::None;
+    }
     let Some(source) = &request.source_video_stream else {
         return effective_acceleration;
     };
@@ -2549,20 +2809,24 @@ fn add_video_decoder(
         return;
     };
 
-    let decode_acceleration =
-        if qsv_multiple_profile_decode_workaround(request, acceleration, source) {
-            HardwareAccelerationKind::None
-        } else if let Some(report) = &request.runtime_capabilities {
-            let capabilities =
-                HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
-            if capabilities.can_decode(source) == FfmpegCapability::Hardware {
-                capabilities.acceleration()
-            } else {
-                HardwareAccelerationKind::None
-            }
+    let decode_acceleration = if acceleration == HardwareAccelerationKind::Nvenc
+        && profile_5_operation(request).is_some()
+    {
+        HardwareAccelerationKind::Nvenc
+    } else if profile_7_direct_base_layer_decode(request)
+        || qsv_multiple_profile_decode_workaround(request, acceleration, source)
+    {
+        HardwareAccelerationKind::None
+    } else if let Some(report) = &request.runtime_capabilities {
+        let capabilities = HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
+        if capabilities.can_decode(source) == FfmpegCapability::Hardware {
+            capabilities.acceleration()
         } else {
-            acceleration
-        };
+            HardwareAccelerationKind::None
+        }
+    } else {
+        acceleration
+    };
 
     let decoder = if decode_acceleration == HardwareAccelerationKind::None {
         if acceleration == HardwareAccelerationKind::Nvenc {
@@ -2724,6 +2988,7 @@ fn add_cuda_software_fallback_upload(
         || request.desired.video_format == FFmpegProfileVideoFormat::Copy
         || request.source_video_stream.is_none()
         || is_still_image
+        || profile_5_operation(request).is_some()
         || nvidia_vulkan_hdr_tonemap(request)
         // Both NVENC HDR tone-map branches end in hardware frames on their own:
         // the libplacebo branch uploads itself (handled above), and the
@@ -2787,6 +3052,9 @@ fn nvenc_software_hdr_tonemap(request: &PipelineRequest) -> bool {
 /// operation-scoped denial learned by the functional probe is what separates
 /// "advertised" from "works here".
 fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
+    if profile_5_operation(request).is_some() {
+        return false;
+    }
     if request.desired.vulkan_hdr_tonemap_mode != VulkanHdrTonemapMode::Auto {
         return false;
     }
@@ -3222,52 +3490,12 @@ fn configure_hardware_acceleration(
             }
         }
         HardwareAccelerationKind::Nvenc => {
-            if nvidia_vulkan_hdr_tonemap(request) {
-                // Shared with the functional probe so the two cannot drift: a
-                // probe that opened a different Vulkan device would approve or
-                // deny a graph playback never runs.
-                steps.push(PipelineStep::global(
-                    "cuda_hw_device",
-                    NVENC_HDR_DEVICE_PREFIX[0..2].iter().copied(),
-                ));
-                steps.push(PipelineStep::global(
-                    "vulkan_hw_device",
-                    NVENC_HDR_DEVICE_PREFIX[2..4].iter().copied(),
-                ));
-            } else {
-                steps.push(PipelineStep::global(
-                    "cuda_hw_device",
-                    ["-init_hw_device", "cuda"],
-                ));
-            }
-
-            if decode_acceleration != HardwareAccelerationKind::Nvenc {
-                return state;
-            }
-            if nvidia_vulkan_hdr_tonemap(request) {
-                steps.push(PipelineStep::global(
-                    "vulkan_hwaccel",
-                    ["-hwaccel", "vulkan"],
-                ));
-                steps.push(PipelineStep::global(
-                    "vulkan_hwaccel_output_format",
-                    ["-hwaccel_output_format", "vulkan"],
-                ));
-            } else {
-                steps.push(PipelineStep::global("cuda_hwaccel", ["-hwaccel", "cuda"]));
-                steps.push(PipelineStep::global(
-                    "cuda_hwaccel_output_format",
-                    ["-hwaccel_output_format", "cuda"],
-                ));
-            }
-            steps.push(no_autoscale());
-
-            state.frame_data_location = crate::FrameDataLocation::Hardware;
-            state.pixel_format = if request.desired.bit_depth == FFmpegProfileBitDepth::EightBit {
-                PixelFormat::Nv12
-            } else {
-                PixelFormat::Cuda
-            };
+            return configure_nvenc_hardware_acceleration(
+                request,
+                steps,
+                decode_acceleration,
+                state,
+            );
         }
         HardwareAccelerationKind::Vaapi => {
             add_vaapi_hardware_options(steps, &request.desired);
@@ -3300,6 +3528,72 @@ fn configure_hardware_acceleration(
         }
     }
 
+    state
+}
+
+fn configure_nvenc_hardware_acceleration(
+    request: &PipelineRequest,
+    steps: &mut Vec<PipelineStep>,
+    decode_acceleration: HardwareAccelerationKind,
+    mut state: FrameState,
+) -> FrameState {
+    let profile_5 = profile_5_operation(request).is_some();
+    let vulkan_hdr = nvidia_vulkan_hdr_tonemap(request);
+    if profile_5 {
+        steps.push(PipelineStep::global(
+            "cuda_hw_device",
+            crate::NVENC_PROFILE5_DEVICE_PREFIX[0..2].iter().copied(),
+        ));
+        steps.push(PipelineStep::global(
+            "vulkan_hw_device",
+            crate::NVENC_PROFILE5_DEVICE_PREFIX[2..4].iter().copied(),
+        ));
+        steps.push(PipelineStep::global(
+            "vulkan_filter_hw_device",
+            crate::NVENC_PROFILE5_DEVICE_PREFIX[4..6].iter().copied(),
+        ));
+    } else if vulkan_hdr {
+        // Shared with the functional probe so the two cannot drift: a probe
+        // that opened another device would answer for a graph playback never
+        // runs.
+        steps.push(PipelineStep::global(
+            "cuda_hw_device",
+            NVENC_HDR_DEVICE_PREFIX[0..2].iter().copied(),
+        ));
+        steps.push(PipelineStep::global(
+            "vulkan_hw_device",
+            NVENC_HDR_DEVICE_PREFIX[2..4].iter().copied(),
+        ));
+    } else {
+        steps.push(PipelineStep::global(
+            "cuda_hw_device",
+            ["-init_hw_device", "cuda=nv:0"],
+        ));
+    }
+
+    if decode_acceleration != HardwareAccelerationKind::Nvenc {
+        return state;
+    }
+    let (hwaccel_step, output_format_step, hwaccel) = if profile_5 {
+        ("cuda_hwaccel", "cuda_hwaccel_output_format", "cuda")
+    } else if vulkan_hdr {
+        ("vulkan_hwaccel", "vulkan_hwaccel_output_format", "vulkan")
+    } else {
+        ("cuda_hwaccel", "cuda_hwaccel_output_format", "cuda")
+    };
+    steps.push(PipelineStep::global(hwaccel_step, ["-hwaccel", hwaccel]));
+    steps.push(PipelineStep::global(
+        output_format_step,
+        ["-hwaccel_output_format", hwaccel],
+    ));
+    steps.push(no_autoscale());
+
+    state.frame_data_location = crate::FrameDataLocation::Hardware;
+    state.pixel_format = if request.desired.bit_depth == FFmpegProfileBitDepth::EightBit {
+        PixelFormat::Nv12
+    } else {
+        PixelFormat::Cuda
+    };
     state
 }
 

@@ -47,7 +47,8 @@ use crate::playback::{
 use crate::remote_stream::{
     redact_remote_stream_output, redacted_source_label, remote_stream_input_file,
     remote_stream_producer, resolve_remote_stream, spawn_ffmpeg_with_remote_input,
-    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, ResolvedRemoteStream,
+    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext,
+    ResolvedRemoteStream,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -1559,8 +1560,13 @@ impl HlsSessionWorker {
         command: &FfmpegCommand,
         remote_producer: Option<&RemoteStreamCommand>,
     ) -> std::io::Result<RemoteStreamProcess> {
-        spawn_ffmpeg_with_remote_input(command, Some(&self.working_dir), remote_producer)
-            .map_err(std::io::Error::other)
+        spawn_ffmpeg_with_remote_input(
+            command,
+            Some(&self.working_dir),
+            remote_producer,
+            RemoteStreamSpawnContext::hls(&self.channel_number),
+        )
+        .map_err(std::io::Error::other)
     }
 
     async fn reclaim_hls_child_for_admission(
@@ -2291,6 +2297,14 @@ pub fn build_hls_slug_command(
         desired,
         source_video_stream: Some(generated_slug_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -2511,6 +2525,16 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
         desired,
         source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(request.runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -2606,6 +2630,16 @@ fn build_mpeg_ts_slate_command_from_assets(
         desired,
         source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(request.runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -8430,6 +8464,10 @@ mod tests {
     fn dolby_vision_source_320p(profile: u8, compatibility: u8) -> SourceVideoStream {
         let mut source = source_320p();
         source.codec = ersatzrs_ffmpeg::SourceVideoCodec::Hevc;
+        if profile == 7 {
+            source.profile = Some("Main 10".to_owned());
+            source.pixel_format = Some(ersatzrs_ffmpeg::PixelFormat::Yuv420P10Le);
+        }
         source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
             profile,
             bl_signal_compatibility_id: compatibility,
@@ -8442,6 +8480,13 @@ mod tests {
 
     fn hls_command_for(
         source: SourceVideoStream,
+    ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+        hls_command_for_with_capabilities(source, FfmpegCapabilityReport::default())
+    }
+
+    fn hls_command_for_with_capabilities(
+        source: SourceVideoStream,
+        runtime_capabilities: FfmpegCapabilityReport,
     ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
         build_hls_command(
             "/media/dv.mkv",
@@ -8456,7 +8501,7 @@ mod tests {
             &playback_profile(),
             None,
             OutputMetadata::default(),
-            FfmpegCapabilityReport::default(),
+            runtime_capabilities,
             Some(source),
             Vec::new(),
             None,
@@ -8516,5 +8561,23 @@ mod tests {
         assert!(hls_command_for(dolby_vision_source_320p(8, 1)).is_ok());
         // And a source with no Dolby Vision at all is untouched.
         assert!(hls_command_for(source_320p()).is_ok());
+    }
+
+    #[test]
+    fn the_hls_builder_uses_direct_profile_7_base_layer_decode() {
+        let command = hls_command_for_with_capabilities(
+            dolby_vision_source_320p(7, 6),
+            FfmpegCapabilityReport::default(),
+        )
+        .expect("profile 7 HLS command");
+
+        assert!(
+            !command
+                .arguments
+                .iter()
+                .any(|argument| argument.contains("dovi_split")),
+            "got: {}",
+            command.arguments.join(" ")
+        );
     }
 }

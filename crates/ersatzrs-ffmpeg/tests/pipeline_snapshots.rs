@@ -4656,7 +4656,127 @@ fn an_unproven_dolby_vision_source_is_refused_before_transcoding() {
 
     let reason =
         ersatzrs_ffmpeg::unsupported_source_reason(&request).expect("profile 5 must be refused");
-    assert!(reason.contains("no HDR10 fallback"), "{reason}");
+    assert!(
+        reason.contains("NVIDIA CUDA/Vulkan/libplacebo/NVENC"),
+        "{reason}"
+    );
+}
+
+fn profile_5_request(
+    desired: DesiredVideoState,
+    operation: HardwareGraphOperation,
+) -> PipelineRequest {
+    let mut source = source_1080p(SourceVideoCodec::Hevc, 3840, 2160);
+    source.profile = Some("Main 10".to_owned());
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    source.scan_kind = VideoScanKind::Progressive;
+    source.color_params.color_transfer = Some("smpte2084".to_owned());
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 5,
+        bl_signal_compatibility_id: 0,
+        rpu_present: true,
+        el_present: false,
+        bl_present: true,
+    });
+
+    let mut report = capability_report_for_tests();
+    let device = report.hardware_graph_device();
+    report.prove_hardware_graph(operation, &device);
+
+    PipelineRequest::new(InputFile::video("/media/dv5.mkv"), desired)
+        .with_source_video_stream(source)
+        .with_runtime_capabilities(report)
+}
+
+#[test]
+fn proven_profile_5_sdr_uses_the_exact_copy_bearing_graph() {
+    let request = profile_5_request(
+        DesiredVideoState::h264_1080p(),
+        HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+    );
+    let command = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::Nvenc, request)
+        .expect("positively proven profile 5 SDR operation");
+    let args = command.arguments.join(" ");
+
+    assert!(args.contains("-init_hw_device cuda=nv:0"), "{args}");
+    assert!(args.contains("-init_hw_device vulkan=vk@nv"), "{args}");
+    assert!(args.contains("-filter_hw_device vk"), "{args}");
+    assert!(args.contains("-hwaccel cuda"), "{args}");
+    assert!(!args.contains("-hwaccel none"), "{args}");
+    assert!(args.contains("apply_dolbyvision=true"), "{args}");
+    assert!(args.contains("format=rgba,format=yuv420p"), "{args}");
+    assert!(args.contains("-codec:v h264_nvenc"), "{args}");
+    assert!(!args.contains("scale_cuda"), "{args}");
+    assert!(!args.contains("hwmap=derive_device=cuda"), "{args}");
+    assert_eq!(
+        ersatzrs_ffmpeg::selected_hardware_graph(&command),
+        Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr)
+    );
+}
+
+#[test]
+fn proven_profile_5_hdr10_uses_rgba64_main10_and_static_metadata() {
+    let request = profile_5_request(
+        hdr10_desired(),
+        HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10,
+    );
+    let command = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::Nvenc, request)
+        .expect("positively proven profile 5 HDR10 operation");
+    let args = command.arguments.join(" ");
+
+    assert!(args.contains("apply_dolbyvision=true"), "{args}");
+    assert!(args.contains("format=rgba64le"), "{args}");
+    assert!(args.contains("format=yuv420p10le"), "{args}");
+    assert!(args.contains("-codec:v hevc_nvenc"), "{args}");
+    assert!(args.contains("-profile:v main10"), "{args}");
+    assert!(args.contains("-mastering_display"), "{args}");
+    assert!(args.contains("-content_light 1000,400"), "{args}");
+    assert!(args.contains("DOVI_RPU_BUFFER"), "{args}");
+    assert_eq!(
+        ersatzrs_ffmpeg::selected_hardware_graph(&command),
+        Some(HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10)
+    );
+}
+
+#[test]
+fn profile_5_spatial_and_overlay_filters_remain_in_software_before_nvenc() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.scaled_size = FrameSize::new(1280, 720);
+    let mut request =
+        profile_5_request(desired, HardwareGraphOperation::NvencDolbyVisionProfile5Sdr);
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 12.5,
+        ..WatermarkOverlay::default()
+    });
+
+    let command = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::Nvenc, request)
+        .expect("profile 5 software post-conversion filters");
+    let args = command.arguments.join(" ");
+
+    assert!(args.contains("pad=1920:1080"), "{args}");
+    assert!(args.contains("overlay=x="), "{args}");
+    assert!(!args.contains("overlay_cuda"), "{args}");
+    assert!(!args.contains("hwupload_cuda"), "{args}");
+    assert!(args.contains("-codec:v h264_nvenc"), "{args}");
+}
+
+#[test]
+fn profile_5_requires_positive_operation_proof_and_never_uses_a_colour_fallback() {
+    let mut request = profile_5_request(
+        DesiredVideoState::h264_1080p(),
+        HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+    );
+    let report = request.runtime_capabilities.as_mut().expect("capabilities");
+    report.proven_hardware_graphs.clear();
+    report.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, "");
+
+    let error = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::Nvenc, request)
+        .expect_err("generic CUDA proof cannot admit profile 5");
+
+    assert!(error.reason.contains("has not been positively proven"));
 }
 
 #[test]
@@ -4680,10 +4800,298 @@ fn a_compatible_dolby_vision_source_is_played_from_its_base_layer() {
     assert_eq!(ersatzrs_ffmpeg::unsupported_source_reason(&request), None);
 }
 
+fn profile_7_request() -> PipelineRequest {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.index = 2;
+    source.profile = Some("Main 10".to_owned());
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    source.color_params = SourceColorParams {
+        color_range: Some("tv".to_owned()),
+        color_space: Some("bt2020nc".to_owned()),
+        color_transfer: Some("smpte2084".to_owned()),
+        color_primaries: Some("bt2020".to_owned()),
+        is_hdr: true,
+        is_bt2020_ten: true,
+    };
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 7,
+        bl_signal_compatibility_id: 6,
+        rpu_present: true,
+        el_present: true,
+        bl_present: true,
+    });
+    PipelineRequest::new(
+        InputFile::video("/media/dv7.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source)
+    .with_runtime_capabilities(capability_report_for_tests())
+}
+
 #[test]
-fn stream_copy_never_refuses_a_dolby_vision_source() {
-    // Copy hands the elementary stream to the client untouched, so ErsatzRS is
-    // not interpreting the colour and has no basis to refuse.
+fn profile_7_uses_direct_software_base_layer_decode_without_dovi_split() {
+    let request = profile_7_request();
+    let command = ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::Nvenc, request)
+        .expect("fixture-proven profile 7 base layer");
+
+    assert!(
+        !command
+            .arguments
+            .iter()
+            .any(|argument| argument.contains("dovi_split")),
+        "got: {}",
+        command.arguments.join(" ")
+    );
+    assert!(
+        command
+            .arguments
+            .windows(2)
+            .any(|pair| pair == ["-hwaccel", "none"]),
+        "profile 7 decode must stay in software: {}",
+        command.arguments.join(" ")
+    );
+}
+
+#[test]
+fn profile_7_is_refused_without_exact_hevc_main10_input_evidence() {
+    let mut request = profile_7_request();
+    request
+        .source_video_stream
+        .as_mut()
+        .expect("source")
+        .pixel_format = Some(PixelFormat::Yuv420P);
+
+    let reason = ersatzrs_ffmpeg::unsupported_source_reason(&request)
+        .expect("non-Main10 profile 7 must be refused");
+
+    assert!(reason.contains("HEVC Main10 yuv420p10le"), "{reason}");
+    assert!(
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).is_err()
+    );
+}
+
+#[allow(clippy::disallowed_methods)]
+fn profile_7_fixture_tools() -> Option<(std::path::PathBuf, std::path::PathBuf, String)> {
+    let (Some(ffmpeg), Some(fixture)) = (
+        std::env::var_os("ERSATZRS_FFMPEG"),
+        std::env::var_os("ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE"),
+    ) else {
+        eprintln!(
+            "set ERSATZRS_FFMPEG and ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE to run this gate"
+        );
+        return None;
+    };
+    let ffmpeg = std::path::PathBuf::from(ffmpeg);
+    let ffprobe_name = if ffmpeg
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+    let ffprobe = ffmpeg.with_file_name(ffprobe_name);
+    Some((ffmpeg, ffprobe, fixture.to_string_lossy().into_owned()))
+}
+
+fn profile_7_fixture_request(
+    fixture: &str,
+    desired: DesiredVideoState,
+    duration: Duration,
+) -> PipelineRequest {
+    let mut source = source_with_transfer(Some("smpte2084"), true);
+    source.index = 0;
+    source.profile = Some("Main 10".to_owned());
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+        profile: 7,
+        bl_signal_compatibility_id: 6,
+        rpu_present: true,
+        el_present: true,
+        bl_present: true,
+    });
+    let mut request = PipelineRequest::new(InputFile::video(fixture), desired)
+        .with_source_video_stream(source)
+        .with_runtime_capabilities(capability_report_for_tests())
+        .without_audio();
+    request.inputs.push(
+        InputFile::image_subtitle(fixture, ersatzrs_ffmpeg::SubtitleMethod::Burn)
+            .with_stream_index(10),
+    );
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawvg(
+            10,
+            "drawvg=script='rect 24 24 96 48 fill'",
+        ));
+    request.state.start = Some(Duration::from_secs(3));
+    request.state.duration = Some(duration);
+    request.state.report_progress = false;
+    request
+}
+
+fn probe_profile_7_mpeg_ts(ffprobe: &std::path::Path, bytes: &[u8]) -> String {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut probe = std::process::Command::new(ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-read_intervals",
+            "%+#1",
+            "-show_streams",
+            "-show_frames",
+            "-of",
+            "json",
+            "pipe:0",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn ffprobe for profile 7 output");
+    probe
+        .stdin
+        .take()
+        .expect("ffprobe stdin")
+        .write_all(bytes)
+        .expect("write profile 7 output to ffprobe");
+    let probe = probe.wait_with_output().expect("wait for ffprobe");
+    assert!(
+        probe.status.success(),
+        "profile 7 output probe failed: {}",
+        String::from_utf8_lossy(&probe.stderr)
+    );
+    String::from_utf8(probe.stdout).expect("ffprobe JSON is UTF-8")
+}
+
+fn assert_profile_7_tags(json: &str, expected_tags: [&str; 3]) {
+    for tag in expected_tags {
+        assert!(json.contains(tag), "missing {tag}: {json}");
+    }
+    assert!(
+        !json.contains("DOVI"),
+        "Dolby Vision side data leaked: {json}"
+    );
+}
+
+#[test]
+#[ignore = "requires a real Dolby Vision profile 7 file and FFmpeg 9"]
+fn real_profile_7_fixture_proves_sdr_and_hdr10_mpeg_ts_outputs() {
+    let Some((ffmpeg, ffprobe, fixture)) = profile_7_fixture_tools() else {
+        return;
+    };
+
+    for (dynamic_range, expected_tags) in [
+        (OutputDynamicRange::SdrBt709, ["bt709", "bt709", "bt709"]),
+        (
+            OutputDynamicRange::Hdr10Bt2020Pq,
+            ["bt2020nc", "smpte2084", "bt2020"],
+        ),
+    ] {
+        let desired = if dynamic_range == OutputDynamicRange::Hdr10Bt2020Pq {
+            hdr10_desired()
+        } else {
+            DesiredVideoState::h264_1080p()
+        };
+        let request = profile_7_fixture_request(&fixture, desired, Duration::from_secs(2));
+        let mut command =
+            ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+                .expect("build profile 7 fixture command");
+        command.executable = ffmpeg.to_string_lossy().into_owned();
+
+        let output = std::process::Command::new(&command.executable)
+            .args(&command.arguments)
+            .output()
+            .expect("run profile 7 fixture command");
+        assert!(
+            output.status.success(),
+            "profile 7 {dynamic_range:?} encode failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!output.stdout.is_empty(), "profile 7 output is empty");
+
+        let json = probe_profile_7_mpeg_ts(&ffprobe, &output.stdout);
+        assert_profile_7_tags(&json, expected_tags);
+        if dynamic_range == OutputDynamicRange::SdrBt709 {
+            assert!(!json.contains("Mastering display metadata"), "{json}");
+            assert!(!json.contains("Content light level metadata"), "{json}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires a real Dolby Vision profile 7 file and FFmpeg 9"]
+fn real_profile_7_fixture_proves_hdr10_hls_output() {
+    let Some((ffmpeg, ffprobe, fixture)) = profile_7_fixture_tools() else {
+        return;
+    };
+    let output_dir = tempfile::tempdir().expect("HLS output directory");
+    let playlist = output_dir.path().join("index.m3u8");
+    let mut request = profile_7_fixture_request(&fixture, hdr10_desired(), Duration::from_secs(6));
+    request.state.output_format = OutputFormat::Hls;
+    request.state.hls = Some(HlsOutput {
+        segment_template: output_dir
+            .path()
+            .join("%05d.ts")
+            .to_string_lossy()
+            .into_owned(),
+        init_template: None,
+        playlist_path: playlist.to_string_lossy().into_owned(),
+        segment_options: None,
+        is_first_transcode: true,
+        discontinuity: false,
+        troubleshooting: true,
+    });
+    let mut command =
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
+            .expect("build profile 7 HLS command");
+    command.executable = ffmpeg.to_string_lossy().into_owned();
+
+    let output = std::process::Command::new(&command.executable)
+        .args(&command.arguments)
+        .output()
+        .expect("run profile 7 HLS command");
+    assert!(
+        output.status.success(),
+        "profile 7 HLS encode failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(playlist.is_file(), "HLS playlist was not created");
+    assert!(
+        std::fs::read_dir(output_dir.path())
+            .expect("read HLS output directory")
+            .flatten()
+            .any(|entry| entry.path().extension().is_some_and(|value| value == "ts")),
+        "HLS segment was not created"
+    );
+
+    let probe = std::process::Command::new(&ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-read_intervals",
+            "%+#1",
+            "-show_streams",
+            "-show_frames",
+            "-of",
+            "json",
+        ])
+        .arg(&playlist)
+        .output()
+        .expect("probe profile 7 HLS output");
+    assert!(
+        probe.status.success(),
+        "profile 7 HLS probe failed: {}",
+        String::from_utf8_lossy(&probe.stderr)
+    );
+    let json = String::from_utf8(probe.stdout).expect("ffprobe JSON is UTF-8");
+    assert_profile_7_tags(&json, ["bt2020nc", "smpte2084", "bt2020"]);
+}
+
+#[test]
+fn stream_copy_refuses_dolby_vision_until_the_compatibility_matrix_is_proven() {
     let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
     source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
         profile: 5,
@@ -4699,7 +5107,9 @@ fn stream_copy_never_refuses_a_dolby_vision_source() {
     let request = PipelineRequest::new(InputFile::video("/media/dv5.mkv"), desired)
         .with_source_video_stream(source);
 
-    assert_eq!(ersatzrs_ffmpeg::unsupported_source_reason(&request), None);
+    assert!(ersatzrs_ffmpeg::unsupported_source_reason(&request)
+        .as_deref()
+        .is_some_and(|reason| reason.contains("compatibility matrix")));
 }
 
 #[test]
@@ -4814,6 +5224,8 @@ fn a_runtime_that_never_probed_keeps_its_previous_behavior() {
 
 fn dolby_vision_request(profile: u8, compatibility: u8, copy: bool) -> PipelineRequest {
     let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.profile = Some("Main 10".to_owned());
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
     source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
         profile,
         bl_signal_compatibility_id: compatibility,
@@ -4839,8 +5251,8 @@ fn the_command_builder_refuses_unplayable_dolby_vision_profiles() {
     // caller cannot accidentally start FFmpeg on a source that would decode to
     // plausible but incorrect colour.
     for (profile, compatibility, expected) in [
-        (5_u8, 0_u8, "no HDR10 fallback"),
-        (7, 0, "dual-layer"),
+        (5_u8, 0_u8, "NVIDIA CUDA/Vulkan/libplacebo/NVENC"),
+        (7, 0, "uncharacterized configuration record"),
         (9, 1, "unrecognised"),
         (8, 0, "no conventional base-layer compatibility"),
     ] {
@@ -4872,17 +5284,14 @@ fn the_command_builder_allows_a_compatible_dolby_vision_profile() {
 }
 
 #[test]
-fn the_command_builder_allows_stream_copy_of_any_dolby_vision_profile() {
-    // Copy hands the elementary stream to the client untouched, so ErsatzRS is
-    // not interpreting the colour and has no basis to refuse.
+fn the_command_builder_refuses_dolby_vision_stream_copy_without_matrix_evidence() {
     for profile in [5_u8, 7, 8] {
         let request = dolby_vision_request(profile, 0, true);
 
-        assert!(
+        let error =
             ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request)
-                .is_ok(),
-            "stream copy of profile {profile} must be allowed"
-        );
+                .expect_err("Dolby Vision stream copy must remain gated");
+        assert!(error.reason.contains("compatibility matrix"));
     }
 }
 
@@ -5111,9 +5520,9 @@ fn hdr10_transcode_of_a_non_dolby_vision_source_adds_no_strip() {
 }
 
 #[test]
-fn stream_copy_of_a_dolby_vision_source_is_left_alone() {
-    // Copy preserves the elementary stream; adding a filter would force a
-    // transcode and change what the client receives.
+fn low_level_dolby_vision_copy_is_unmodified_but_the_spawn_boundary_rejects_it() {
+    // The low-level builder never mutates a copied elementary stream, while
+    // the public spawn boundary refuses the unproven client/container matrix.
     let mut source = source_with_transfer(Some("smpte2084"), true);
     source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
         profile: 8,
@@ -5136,6 +5545,9 @@ fn stream_copy_of_a_dolby_vision_source_is_left_alone() {
         .join(" ");
 
     assert!(!args.contains("sidedata=mode=delete"), "got: {args}");
+    assert!(
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).is_err()
+    );
 }
 
 #[test]

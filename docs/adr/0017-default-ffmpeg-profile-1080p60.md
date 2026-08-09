@@ -6,15 +6,24 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Partial — fresh database bootstrap seeds the five default profiles, web
+Implemented — fresh database bootstrap seeds the five default profiles, web
 startup applies seed-time hardware-acceleration detection from the captured
 FFmpeg runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
 multichannel AC-3. The 2026-07-01 (v3) bitrate revision landed on 2026-07-02:
 seeded profile video bitrates are 4000, 8000, 10000, 22500, and 30000 kbit/s
 while video buffer sizes keep the v2 values (8000, 16000, 20000, 45000, and
-60000 kbit). The two HDR seeds are not yet truthful HDR10 outputs: the profile
-schema lacks ADR 0064's output dynamic-range policy and the current transcode
-path tone-maps HDR sources to BT.709.
+60000 kbit).
+
+The two HDR seeds became truthful HDR10 outputs on 2026-08-07, when
+[ADR 0064](0064-hdr-and-dolby-vision-input-output-contract.md) landed the
+persisted `OutputDynamicRange` contract and HDR10 output on the software and
+NVENC paths. Backends with no characterized HDR10 graph demote to software
+rather than emitting SDR, so an HDR-named seed no longer silently tone-maps to
+BT.709.
+
+The 2026-08-09 (v5) FFmpeg 9 preset retune landed the same day: seed-time
+encoder presets are `veryfast` for software, `medium` for QSV, and `p5` with
+tune `hq` for NVENC.
 
 ## Context
 
@@ -130,12 +139,45 @@ leave it `None` (software). Detection priority:
 [ADR 0014](0014-runtime-learned-hardware-capability-fallback.md): if a seeded
 hardware path turns out unusable at runtime, the learned-capability fallback
 demotes that spawn to software automatically, so an over-optimistic seed is
-self-correcting rather than fatal. The software fallback preset stays
-`veryfast`; under the FFmpeg 9 contract in
-[ADR 0063](0063-ffmpeg-9-runtime-and-profile-options.md), NVENC seeds use
-preset `p7` with tune `ll`, QSV keeps `veryfast`, and platforms whose FFmpeg
-encoders reject those software-style presets leave the preset unset.
-Admins on a strong CPU can pick a slower preset per channel.
+self-correcting rather than fatal.
+
+Seed-time presets are chosen per encoder against the option domains FFmpeg 9
+actually advertises:
+
+| Detected acceleration | Seeded preset | Seeded tune |
+| --- | --- | --- |
+| None (libx264 / libx265) | `veryfast` | — |
+| QSV | `medium` (target usage 4) | — |
+| NVENC | `p5` | `hq` |
+| VAAPI, VideoToolbox, AMF, V4L2M2M, RKMPP | unset | — |
+
+The NVENC pair is deliberately **not** the `p7` + `ll` that
+[ADR 0063](0063-ffmpeg-9-runtime-and-profile-options.md)'s legacy `llhq`
+migration produces. That mapping exists to preserve already-saved profiles
+bit-exactly; adopting it for fresh installs was a side effect, not a quality
+decision. ErsatzRS serves 4-second HLS segments, so encoder latency is never
+the constraint and `ll` only trades away compression efficiency. `p5` ("slow,
+good quality") sits one step above FFmpeg 9's own `p4` default and stays
+realtime at 2160p10 on Turing and newer, where `p7` is a genuine realtime risk
+for seed #5. `hq` is FFmpeg 9's default tune.
+
+QSV's `veryfast` is target usage 7 — the fastest and lowest-quality setting on
+a fixed-function encoder where TU4 costs almost nothing — so the seed uses
+`medium`. Software keeps `veryfast` so a CPU-only host stays realtime,
+including on the 2160p seeds.
+
+Admins can pick a different preset per channel. Making that true required
+widening the preset allowlist, which ErsatzTV's
+`AvailablePresets.ForAccelAndFormat` had pinned to the single value `veryfast`
+for both software and QSV: ErsatzRS offers the full `libx264`/`libx265` ladder
+(`ultrafast` … `veryslow`) and the full QSV target-usage ladder (`veryfast` …
+`veryslow`). `placebo` is never offered — it cannot sustain realtime at any
+resolution. This is a recorded ErsatzTV divergence.
+
+Because the two ladders share names while meaning different things, an ADR 0014
+demotion from hardware to software never reuses the hardware profile's preset
+even when the string is a valid x264 name; it falls back to `veryfast`. QSV
+`medium` is a fixed-function quality point, not a CPU budget.
 
 ### 3. Segmenter A/V interleaving
 
@@ -161,13 +203,13 @@ starting points an admin can edit or delete per channel.
   are heavy; such hosts should prefer the ≤1080p profiles or accept high CPU,
   and `N` (ADR 0016) is sized to the real encoder, not the network.
 - **Quality / features out of the box:** the five seeds provide 720p→4K and
-  6-channel surround. The HDR-named seeds become actual HDR10 output only when
-  ADR 0064's dynamic-range, color, and metadata pipeline is implemented.
+  6-channel surround. The HDR-named seeds produce actual HDR10 output as of
+  2026-08-07 on the software and NVENC paths (ADR 0064).
 - **Pipeline prerequisites:** the HDR profiles require stable HEVC Main 10
   BT.2020/PQ output across SDR/HDR item transitions, correct static metadata,
-  and equivalent software/hardware semantics. Open work is tracked under ADR
-  0064; this ADR sets the seed target and does not claim that current command
-  generation already supports it.
+  and equivalent software/hardware semantics. Software and NVENC satisfy this;
+  the remaining hardware backends have no characterized HDR10 graph and demote
+  to software rather than emitting SDR. Open work is tracked under ADR 0064.
 - **Correctness:** `-maxrate` remains effective while video buffer sizes keep
   the known v2 values; `-max_delay` removes a real multichannel-AC-3 seam
   artifact.
@@ -198,6 +240,17 @@ starting points an admin can edit or delete per channel.
 
 ## Revision history
 
+- **2026-08-09 (v5 — implemented 2026-08-09).** Retune the seed-time encoder
+  presets against the option domains FFmpeg 9 advertises. NVENC moves from
+  `p7` + `ll` to `p5` + `hq`, QSV from `veryfast` (TU7) to `medium` (TU4), and
+  software keeps `veryfast`. Widen the preset allowlist from ErsatzTV's
+  single `veryfast` to the real `libx264`/`libx265` and QSV ladders so the
+  "admins can pick a slower preset" promise is actually true, excluding
+  `placebo`. Expose FFmpeg 9's new NVENC `uhq` tune, which is codec-gated:
+  `hevc_nvenc` and `av1_nvenc` advertise it, `h264_nvenc` does not. Fix the
+  ADR 0014 demotion path so a hardware preset name is never reused for a
+  software encode. Existing saved profiles are untouched, and the ADR 0063
+  legacy `llhp`/`llhq` migration is unchanged.
 - **2026-08-07 (v4 — partially implemented).** Separate bit depth from output
   dynamic range through ADR 0064. Fresh SDR seeds target `SdrBt709`, fresh HDR
   seeds target `Hdr10Bt2020Pq`, and the additive migration preserves existing

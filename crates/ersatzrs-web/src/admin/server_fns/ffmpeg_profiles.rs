@@ -226,15 +226,34 @@ fn ffmpeg_profile_form_from_admin(
 pub fn presets_for_profile(hw: i32, vf: i32, bd: i32) -> Vec<&'static str> {
     match (hw, vf, bd) {
         (2, 1 | 2 | 4, _) => vec!["p1", "p2", "p3", "p4", "p5", "p6", "p7"],
-        (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
+        // 10-bit H.264 always encodes through libx264, whatever the profile's
+        // acceleration says.
+        (_, 1, 1) | (0, 1 | 2, _) => vec![
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ],
+        (1, 1 | 2, _) => vec![
+            "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow",
+        ],
         _ => vec![],
     }
 }
 
 /// Returns the valid `FFmpeg` 9 NVENC tune strings for a profile.
+///
+/// `uhq` is codec-gated: `FFmpeg` 9's `hevc_nvenc` and `av1_nvenc` advertise it,
+/// `h264_nvenc` does not.
 pub fn tunes_for_profile(hw: i32, vf: i32) -> Vec<&'static str> {
     match (hw, vf) {
-        (2, 1 | 2 | 4) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 1) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 2 | 4) => vec!["hq", "uhq", "ll", "ull", "lossless"],
         _ => vec![],
     }
 }
@@ -883,6 +902,55 @@ mod tests {
     use super::*;
     use ersatzrs_ffmpeg::FfmpegCapabilityReport;
     use std::collections::BTreeSet;
+
+    /// The editor's option lists and the application-layer validation lists are
+    /// separate copies — `ersatzrs-app` is excluded from the wasm32 build, so
+    /// the island code in `editor.rs` cannot call it. They must still agree:
+    /// `save_ffmpeg_profile` drops any preset or tune the validation list does
+    /// not contain, so an option offered here but missing there is silently
+    /// discarded on save with no error shown to the operator.
+    #[test]
+    fn editor_option_lists_match_application_validation() {
+        // 0=None, 1=QSV, 2=NVENC, 3=VAAPI, 4=VideoToolbox, 5=AMF, 6=v4l2m2m, 7=RKMPP
+        for hw in 0..=7 {
+            // 0=None, 1=H264, 2=HEVC, 3=Mpeg2Video, 4=AV1, 99=Copy
+            for vf in [0, 1, 2, 3, 4, 99] {
+                assert_eq!(
+                    tunes_for_profile(hw, vf),
+                    ersatzrs_app::commands::ffmpeg_tunes(hw, vf),
+                    "tune list drift at hw={hw} vf={vf}"
+                );
+                for bd in [0, 1] {
+                    assert_eq!(
+                        presets_for_profile(hw, vf, bd),
+                        ersatzrs_app::commands::ffmpeg_presets(hw, vf, bd),
+                        "preset list drift at hw={hw} vf={vf} bd={bd}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nvenc_uhq_tune_is_codec_gated() {
+        // FFmpeg 9 advertises `uhq` on hevc_nvenc and av1_nvenc but not on
+        // h264_nvenc, whose tune range is 1-4.
+        assert!(!tunes_for_profile(2, 1).contains(&"uhq"));
+        assert!(tunes_for_profile(2, 2).contains(&"uhq"));
+        assert!(tunes_for_profile(2, 4).contains(&"uhq"));
+    }
+
+    #[test]
+    fn software_and_qsv_presets_expose_the_full_ffmpeg_9_ladders() {
+        // ADR 0017 v5: ErsatzTV offered only `veryfast` here.
+        assert!(presets_for_profile(0, 1, 0).contains(&"slow"));
+        assert!(presets_for_profile(0, 2, 0).contains(&"veryslow"));
+        // `placebo` is never offered: unusable in a realtime encoder.
+        assert!(!presets_for_profile(0, 1, 0).contains(&"placebo"));
+        // QSV has no `ultrafast`/`superfast` target usage.
+        assert!(!presets_for_profile(1, 1, 0).contains(&"ultrafast"));
+        assert!(presets_for_profile(1, 2, 0).contains(&"medium"));
+    }
 
     #[test]
     fn qsv_extra_hardware_frames_persisted_only_for_qsv() {

@@ -13,6 +13,74 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- The FFmpeg profile editor now offers the full encoder preset ladders FFmpeg 9
+  accepts instead of the single `veryfast` value inherited from ErsatzTV:
+  `ultrafast` through `veryslow` for software `libx264`/`libx265`, and the
+  complete `veryfast` through `veryslow` target-usage ladder for QSV.
+  `placebo` is deliberately not offered, since it cannot sustain realtime
+  encoding at any resolution.
+- NVENC profiles for HEVC and AV1 can now select FFmpeg 9's `uhq` ("ultra high
+  quality") tune. H.264 NVENC does not advertise it, so the option is gated by
+  codec.
+- Dolby Vision profile 7 sources with a complete BL/EL/RPU record can now
+  transcode from their HDR10-compatible base layer to SDR or HDR10 MPEG-TS and
+  HLS output. The production path directly software-decodes only the exact
+  characterized HEVC Main 10/yuv420p10le, compatibility-id-6 tuple;
+  `dovi_split` remains a fixture oracle rather than an optional runtime
+  dependency. Dolby Vision signalling is stripped, and incomplete or
+  imprecisely identified sources remain rejected. Existing items whose
+  base-layer state predates the additive SQLite/MySQL field require a rescan.
+- Dolby Vision Profile 5 can now convert through two exact, capability-gated
+  NVIDIA operations: SDR/H.264 and HDR10/HEVC. Both use the selected CUDA
+  device, RPU-aware Vulkan/libplacebo processing, a software colour-contract
+  conversion, and NVENC. ErsatzRS selects the path only after a positive
+  functional proof for the current runtime identity; missing proof or a
+  learned live failure rejects the source instead of spawning a guessed-colour
+  fallback.
+- Jellyfin, Emby, and Plex scans now retain rotation, mastering-display,
+  MaxCLL/MaxFALL, and Dolby Vision configuration fields. Complete provider
+  tuples round-trip to playback, while positive partial metadata is persisted
+  as explicitly incomplete with a provider hint so rescans and restarts cannot
+  silently downgrade known Dolby Vision to ordinary HEVC/PQ.
+
+### Changed
+
+- FFmpeg settings now publish as one validated runtime generation. ErsatzRS
+  stages binaries and graph probes before one transactional settings/cache
+  commit, then atomically swaps the shared capability report and paired
+  FFmpeg/ffprobe paths; a failed candidate leaves the previous runtime and side
+  effects untouched. Cache reuse and learned denials are bound to both binary
+  digests plus the selected CUDA device UUID/model and driver, and late child
+  failures from an older generation cannot poison its replacement.
+- NVIDIA native capability probing and generated CUDA/Vulkan graphs now bind to
+  device index zero instead of unioning encoder/decoder support across all
+  installed GPUs. Dolby Vision admission is also stricter: only characterized
+  Profile 8.1 and Profile 7 tuples are accepted, and Dolby Vision stream copy
+  remains rejected until a source/container/output/client matrix is proven.
+- The FFmpeg profiles seeded into a **new** database are retuned for FFmpeg 9.
+  NVENC seeds now use preset `p5` with tune `hq` instead of `p7` with `ll`, and
+  QSV seeds use `medium` (target usage 4) instead of `veryfast` (target usage
+  7). The old NVENC pair came from the legacy `llhq` compatibility mapping,
+  which pairs the slowest preset with a low-latency tune that a 4-second-segment
+  HLS pipeline never benefits from. Software seeds keep `veryfast`. Existing
+  databases are not modified, and profiles migrated from `llhp`/`llhq` still
+  keep their exact original values.
+
+### Fixed
+
+- A runtime hardware-encoder demotion no longer reuses the hardware profile's
+  encoder preset for the software encode. The QSV and `libx264` ladders share
+  several names (`medium`, `slow`, `veryfast`) while meaning entirely different
+  cost points, so a demoted QSV profile could hand `libx264` a far more
+  expensive preset than the hardware encoder was using and lose realtime.
+- Remote Stream producer failures now include the playback surface, channel,
+  producer name, effective seek, failure class, exit status, stderr byte count,
+  and a bounded diagnostic tail. URLs, credentials, cookies, authorization
+  values, and local paths are sanitized before logging, so extractor failures
+  are actionable without exposing signed media URLs or private configuration.
+
 ## [1.0.21-beta.1] - 2026-08-09
 
 ### Fixed

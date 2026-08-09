@@ -99,22 +99,26 @@ pub fn resolve_ffprobe_on_path() -> Option<LocatedTool> {
     resolve_tool_on_path(DEFAULT_FFPROBE_PATH)
 }
 
-static RESOLVED_FFMPEG_PATH: RwLock<Option<String>> = RwLock::new(None);
-static RESOLVED_FFPROBE_PATH: RwLock<Option<String>> = RwLock::new(None);
-
-/// Store the resolved absolute `ffmpeg` path for spawn sites to read. Called by
-/// startup once the path is resolved from DB config, and by the settings save
-/// when the operator changes it (so a restart is not required).
-pub fn set_resolved_ffmpeg_path(path: impl Into<String>) {
-    if let Ok(mut guard) = RESOLVED_FFMPEG_PATH.write() {
-        *guard = Some(path.into());
-    }
+#[derive(Default)]
+struct ResolvedTools {
+    ffmpeg: Option<String>,
+    ffprobe: Option<String>,
 }
 
-/// Store the resolved absolute `ffprobe` path. See [`set_resolved_ffmpeg_path`].
-pub fn set_resolved_ffprobe_path(path: impl Into<String>) {
-    if let Ok(mut guard) = RESOLVED_FFPROBE_PATH.write() {
-        *guard = Some(path.into());
+static RESOLVED_TOOLS: RwLock<ResolvedTools> = RwLock::new(ResolvedTools {
+    ffmpeg: None,
+    ffprobe: None,
+});
+
+/// Publish a validated FFmpeg/ffprobe pair under one write lock.
+///
+/// Startup and settings refresh call this only after the complete runtime
+/// report and persisted cache state are ready, so spawn sites cannot observe a
+/// new executable paired with the previous runtime's companion tool.
+pub fn set_resolved_ffmpeg_tools(ffmpeg_path: impl Into<String>, ffprobe_path: impl Into<String>) {
+    if let Ok(mut guard) = RESOLVED_TOOLS.write() {
+        guard.ffmpeg = Some(ffmpeg_path.into());
+        guard.ffprobe = Some(ffprobe_path.into());
     }
 }
 
@@ -126,17 +130,26 @@ pub fn set_resolved_ffprobe_path(path: impl Into<String>) {
 /// `ffmpeg_path_from_env()` at spawn sites.
 #[must_use]
 pub fn ffmpeg_path() -> String {
-    resolved_or(&RESOLVED_FFMPEG_PATH, || resolve_ffmpeg_path(None).path)
+    resolved_or(
+        |tools| tools.ffmpeg.clone(),
+        || resolve_ffmpeg_path(None).path,
+    )
 }
 
 /// The `ffprobe` path every spawn site should use. See [`ffmpeg_path`].
 #[must_use]
 pub fn ffprobe_path() -> String {
-    resolved_or(&RESOLVED_FFPROBE_PATH, || resolve_ffprobe_path(None).path)
+    resolved_or(
+        |tools| tools.ffprobe.clone(),
+        || resolve_ffprobe_path(None).path,
+    )
 }
 
-fn resolved_or(slot: &RwLock<Option<String>>, fallback: impl FnOnce() -> String) -> String {
-    if let Some(path) = slot.read().ok().and_then(|guard| guard.clone()) {
+fn resolved_or(
+    select: impl FnOnce(&ResolvedTools) -> Option<String>,
+    fallback: impl FnOnce() -> String,
+) -> String {
+    if let Some(path) = RESOLVED_TOOLS.read().ok().and_then(|guard| select(&guard)) {
         return path;
     }
     fallback()

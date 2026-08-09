@@ -51,8 +51,18 @@ and do not perform their own frame-rate normalization.
 
 Add nullable `VideoTune` to `FFmpegProfile` in SQLite and MySQL. The admin
 editor presents NVENC preset and tune as separate localized fields. The
-supported preset values are `p1` through `p7`; tune values are `hq`, `ll`,
-`ull`, and `lossless`. Fresh NVENC defaults use `p7` with tune `ll`.
+supported preset values are `p1` through `p7`. Tune values are `hq`, `ll`,
+`ull`, and `lossless`, plus `uhq` on the encoders that advertise it — FFmpeg 9
+exposes `uhq` on `hevc_nvenc` and `av1_nvenc` but not on `h264_nvenc`, whose
+tune range is 1-4, so the option is gated by codec rather than offered
+uniformly.
+
+Fresh NVENC seed defaults are owned by
+[ADR 0017](0017-default-ffmpeg-profile-1080p60.md), not by this ADR. The
+migration table below deliberately does **not** set them: it exists to preserve
+already-saved profiles bit-exactly, and the `p7` + `ll` it produces is the
+slowest preset paired with the low-latency tune. ADR 0017 v5 seeds `p5` + `hq`
+instead.
 
 The additive migration and the command-generation boundary translate legacy
 values case-insensitively:
@@ -157,6 +167,11 @@ it never accepts FFmpeg 8.
 
 ## Revision history
 
+- **2026-08-09 (v3).** Expose FFmpeg 9's `uhq` NVENC tune, gated by codec
+  because `h264_nvenc` does not advertise it. Move ownership of the fresh
+  NVENC seed defaults to ADR 0017, which retunes them from `p7` + `ll` to
+  `p5` + `hq`; the legacy `llhp`/`llhq` migration table is unchanged and still
+  preserves saved profiles bit-exactly.
 - **2026-08-07 (v2 — documentation only).** Recorded the evidence and rationale
   behind the v1 migration table after an 8.1.2-vs-9.0 differential review:
   the `llhp`/`llhq` mapping follows FFmpeg's internal resolution rather than

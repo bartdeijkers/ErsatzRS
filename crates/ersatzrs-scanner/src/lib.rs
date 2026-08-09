@@ -3306,8 +3306,9 @@ pub(crate) async fn replace_streams(
                 "BitsPerRawSample", "AttachedPic", "FileName", "MimeType", "Rotation",
                 "MasteringDisplay", "MaxCll", "MaxFall",
                 "DolbyVisionProfile", "DolbyVisionBlCompatibilityId",
-                "DolbyVisionElPresent", "DolbyVisionRpuPresent"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "DolbyVisionBlPresent", "DolbyVisionElPresent", "DolbyVisionRpuPresent",
+                "DolbyVisionMetadataState", "DolbyVisionMetadataHint"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
@@ -3334,8 +3335,11 @@ pub(crate) async fn replace_streams(
         .bind(stream.max_fall)
         .bind(stream.dolby_vision_profile)
         .bind(stream.dolby_vision_bl_compatibility_id)
+        .bind(stream.dolby_vision_bl_present)
         .bind(stream.dolby_vision_el_present)
         .bind(stream.dolby_vision_rpu_present)
+        .bind(stream.dolby_vision_metadata_state.as_i32())
+        .bind(&stream.dolby_vision_metadata_hint)
         .execute(&mut **tx)
         .await?;
     }
