@@ -1,7 +1,11 @@
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 use std::process::ExitStatus;
 
 use ersatzrs_domain::HardwareAccelerationKind;
+pub use ersatzrs_hwprobe::NvidiaDeviceIdentity;
+use sha2::{Digest, Sha256};
+use tokio::io::AsyncReadExt;
 
 use crate::runtime::FfmpegRuntimeAcquisition;
 
@@ -270,11 +274,32 @@ pub struct FfmpegToolVersion {
     pub version: FfmpegVersion,
     /// Configure flags parsed from the version banner.
     pub configuration_flags: BTreeSet<String>,
+    /// SHA-256 digest of the executed binary. This is absent only when the
+    /// executable was resolved indirectly by the OS and could not be opened.
+    pub sha256: Option<String>,
+}
+
+/// Complete identity of one validated `FFmpeg` runtime publication.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FfmpegRuntimeIdentity {
+    /// Monotonic publication generation.
+    pub generation: u64,
+    /// Executed `FFmpeg` path and digest.
+    pub ffmpeg_path: String,
+    pub ffmpeg_sha256: Option<String>,
+    /// Executed ffprobe path and digest.
+    pub ffprobe_path: String,
+    pub ffprobe_sha256: Option<String>,
+    /// Device-zero identity used for NVIDIA capability and graph probes.
+    pub selected_nvidia_device: Option<NvidiaDeviceIdentity>,
 }
 
 /// Capability names reported by the local `ffmpeg` binary.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FfmpegCapabilityReport {
+    /// Runtime publication that produced these capabilities. Runtime-learned
+    /// denials and generated commands must remain scoped to this identity.
+    pub runtime_identity: Option<FfmpegRuntimeIdentity>,
     /// Filter names from `ffmpeg -filters`.
     pub filters: BTreeSet<String>,
     /// Encoder names from `ffmpeg -encoders`.
@@ -295,6 +320,8 @@ pub struct FfmpegCapabilityReport {
     /// NVIDIA native device details, or raw GPU-list probe output from
     /// `FFmpeg`'s `h264_nvenc -gpu list` fallback path.
     pub nvidia_gpu_list: Option<String>,
+    /// The exact NVIDIA adapter whose device-zero capabilities were probed.
+    pub selected_nvidia_device: Option<NvidiaDeviceIdentity>,
     /// NVIDIA encoder details parsed from `ffmpeg -h encoder=<name>` output.
     pub nvidia_encoders: Vec<NvidiaEncoderCapability>,
     /// NVIDIA decoder details reported by the native CUDA/NVDEC device probe.
@@ -392,6 +419,12 @@ impl FfmpegCapabilityReport {
     /// runtime reported no usable device line.
     #[must_use]
     pub fn hardware_graph_device(&self) -> String {
+        if let Some(device) = &self.selected_nvidia_device {
+            return device.uuid.as_ref().map_or_else(
+                || format!("cuda:{}:{}", device.index, device.model),
+                |uuid| format!("cuda:{}:{uuid}", device.index),
+            );
+        }
         self.nvidia_gpu_list
             .as_deref()
             .and_then(crate::capabilities::parse_nvidia_gpu_info)
@@ -843,6 +876,9 @@ impl FfmpegRuntimeIssue {
 /// Full `FFmpeg` runtime report used by startup, health, and the admin UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegRuntimeReport {
+    /// Monotonic publication generation. A settings refresh increments this
+    /// value only when the complete candidate runtime is ready to publish.
+    pub generation: u64,
     /// `ffmpeg` version details.
     pub ffmpeg: FfmpegToolVersion,
     /// `ffprobe` version details.
@@ -856,6 +892,19 @@ pub struct FfmpegRuntimeReport {
 }
 
 impl FfmpegRuntimeReport {
+    /// Assign the generation used for an atomic runtime publication.
+    pub fn set_generation(&mut self, generation: u64) {
+        self.generation = generation;
+        self.capabilities.runtime_identity = Some(FfmpegRuntimeIdentity {
+            generation,
+            ffmpeg_path: self.ffmpeg.path.clone(),
+            ffmpeg_sha256: self.ffmpeg.sha256.clone(),
+            ffprobe_path: self.ffprobe.path.clone(),
+            ffprobe_sha256: self.ffprobe.sha256.clone(),
+            selected_nvidia_device: self.capabilities.selected_nvidia_device.clone(),
+        });
+    }
+
     /// Returns true when the report contains any fatal issue.
     #[must_use]
     pub fn has_errors(&self) -> bool {
@@ -892,6 +941,7 @@ impl FfmpegRuntimeReport {
         };
         let flags = BTreeSet::from_iter(to_owned_vec(REQUIRED_CONFIGURATION_FLAGS));
         let capabilities = FfmpegCapabilityReport {
+            runtime_identity: None,
             filters: BTreeSet::from_iter(to_owned_vec(REQUIRED_FILTERS)),
             encoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_ENCODERS)),
             decoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_DECODERS)),
@@ -901,6 +951,7 @@ impl FfmpegRuntimeReport {
             vaapi_profiles: Vec::new(),
             qsv_profiles: Vec::new(),
             nvidia_gpu_list: None,
+            selected_nvidia_device: None,
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),
@@ -911,17 +962,20 @@ impl FfmpegRuntimeReport {
             videotoolbox_encoders: BTreeSet::new(),
         };
         Self {
+            generation: 0,
             ffmpeg: FfmpegToolVersion {
                 tool: "ffmpeg",
                 path: DEFAULT_FFMPEG_PATH.to_owned(),
                 version: version.clone(),
                 configuration_flags: flags.clone(),
+                sha256: None,
             },
             ffprobe: FfmpegToolVersion {
                 tool: "ffprobe",
                 path: DEFAULT_FFPROBE_PATH.to_owned(),
                 version,
                 configuration_flags: flags,
+                sha256: None,
             },
             capabilities,
             issues: Vec::new(),
@@ -1134,9 +1188,18 @@ pub async fn check_ffmpeg_runtime_with_config(
     capabilities
         .configuration_flags
         .clone_from(&ffmpeg.configuration_flags);
+    capabilities.runtime_identity = Some(FfmpegRuntimeIdentity {
+        generation: 0,
+        ffmpeg_path: ffmpeg.path.clone(),
+        ffmpeg_sha256: ffmpeg.sha256.clone(),
+        ffprobe_path: ffprobe.path.clone(),
+        ffprobe_sha256: ffprobe.sha256.clone(),
+        selected_nvidia_device: capabilities.selected_nvidia_device.clone(),
+    });
 
     let issues = collect_runtime_issues(config, &capabilities);
     let report = FfmpegRuntimeReport {
+        generation: 0,
         ffmpeg,
         ffprobe,
         capabilities,
@@ -1288,7 +1351,26 @@ async fn check_tool_version(
         path: path.to_owned(),
         version,
         configuration_flags: parse_configuration_flags(&stdout),
+        sha256: sha256_file(path).await,
     })
+}
+
+async fn sha256_file(path: &str) -> Option<String> {
+    let mut file = tokio::fs::File::open(path).await.ok()?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1_024];
+    loop {
+        let count = file.read(&mut buffer).await.ok()?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    let mut digest = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        write!(digest, "{byte:02x}").ok()?;
+    }
+    Some(digest)
 }
 
 async fn collect_ffmpeg_capabilities(
@@ -1346,6 +1428,7 @@ async fn collect_ffmpeg_capabilities(
     })?;
 
     let mut report = FfmpegCapabilityReport {
+        runtime_identity: None,
         filters: parse_capability_names(&filters),
         encoders: parse_capability_names(&encoders),
         decoders: parse_capability_names(&decoders),
@@ -1355,6 +1438,7 @@ async fn collect_ffmpeg_capabilities(
         vaapi_profiles: Vec::new(),
         qsv_profiles: Vec::new(),
         nvidia_gpu_list: None,
+        selected_nvidia_device: None,
         nvidia_encoders: Vec::new(),
         nvidia_decoders: Vec::new(),
         hardware_decode_denials: Vec::new(),
@@ -1385,6 +1469,9 @@ async fn enrich_device_profiles(
     if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
         let nvidia = ersatzrs_hwprobe::probe_nvidia();
         let nvidia_attempted = nvidia.attempted;
+        report
+            .selected_nvidia_device
+            .clone_from(&nvidia.selected_device);
         if nvidia_attempted {
             report.nvidia_gpu_list = match nvidia.device_details {
                 Some(details) => Some(details),
@@ -2685,6 +2772,7 @@ h264_nvenc AVOptions:
             ..FfmpegRuntimeCheckConfig::default()
         };
         let capabilities = FfmpegCapabilityReport {
+            runtime_identity: None,
             filters: BTreeSet::new(),
             encoders: BTreeSet::from(["libx264".to_owned()]),
             decoders: BTreeSet::from(["h264".to_owned()]),
@@ -2694,6 +2782,7 @@ h264_nvenc AVOptions:
             vaapi_profiles: Vec::new(),
             qsv_profiles: Vec::new(),
             nvidia_gpu_list: None,
+            selected_nvidia_device: None,
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
             hardware_decode_denials: Vec::new(),

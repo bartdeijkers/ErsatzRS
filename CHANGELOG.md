@@ -25,17 +25,40 @@ release section when tagging a release.
   quality") tune. H.264 NVENC does not advertise it, so the option is gated by
   codec.
 - Dolby Vision profile 7 sources with a complete BL/EL/RPU record can now
-  transcode through FFmpeg 9's `dovi_split` HDR10 base-layer path to SDR or
-  HDR10 MPEG-TS and HLS output. ErsatzRS detects the bitstream filter at
-  runtime, applies it only to the selected video stream before input, forces
-  software decode for the multilayer split, strips Dolby Vision signalling,
-  and keeps rejecting the source when the record or runtime capability is
-  incomplete. The base-layer-present flag is persisted additively for SQLite
-  and MySQL; existing Dolby Vision items require a rescan before this path is
-  enabled.
+  transcode from their HDR10-compatible base layer to SDR or HDR10 MPEG-TS and
+  HLS output. The production path directly software-decodes only the exact
+  characterized HEVC Main 10/yuv420p10le, compatibility-id-6 tuple;
+  `dovi_split` remains a fixture oracle rather than an optional runtime
+  dependency. Dolby Vision signalling is stripped, and incomplete or
+  imprecisely identified sources remain rejected. Existing items whose
+  base-layer state predates the additive SQLite/MySQL field require a rescan.
+- Dolby Vision Profile 5 can now convert through two exact, capability-gated
+  NVIDIA operations: SDR/H.264 and HDR10/HEVC. Both use the selected CUDA
+  device, RPU-aware Vulkan/libplacebo processing, a software colour-contract
+  conversion, and NVENC. ErsatzRS selects the path only after a positive
+  functional proof for the current runtime identity; missing proof or a
+  learned live failure rejects the source instead of spawning a guessed-colour
+  fallback.
+- Jellyfin, Emby, and Plex scans now retain rotation, mastering-display,
+  MaxCLL/MaxFALL, and Dolby Vision configuration fields. Complete provider
+  tuples round-trip to playback, while positive partial metadata is persisted
+  as explicitly incomplete with a provider hint so rescans and restarts cannot
+  silently downgrade known Dolby Vision to ordinary HEVC/PQ.
 
 ### Changed
 
+- FFmpeg settings now publish as one validated runtime generation. ErsatzRS
+  stages binaries and graph probes before one transactional settings/cache
+  commit, then atomically swaps the shared capability report and paired
+  FFmpeg/ffprobe paths; a failed candidate leaves the previous runtime and side
+  effects untouched. Cache reuse and learned denials are bound to both binary
+  digests plus the selected CUDA device UUID/model and driver, and late child
+  failures from an older generation cannot poison its replacement.
+- NVIDIA native capability probing and generated CUDA/Vulkan graphs now bind to
+  device index zero instead of unioning encoder/decoder support across all
+  installed GPUs. Dolby Vision admission is also stricter: only characterized
+  Profile 8.1 and Profile 7 tuples are accepted, and Dolby Vision stream copy
+  remains rejected until a source/container/output/client matrix is proven.
 - The FFmpeg profiles seeded into a **new** database are retuned for FFmpeg 9.
   NVENC seeds now use preset `p5` with tune `hq` instead of `p7` with `ll`, and
   QSV seeds use `medium` (target usage 4) instead of `veryfast` (target usage

@@ -15,8 +15,20 @@ visibility, and safe fallback decided in the 2026-08-07 revision now exist:
 `ersatzrs_ffmpeg::graph_probe` owns the operations, bounded functional probes,
 and the failure classifier built from captured FFmpeg 9 stderr;
 `ersatzrs_infra::hardware_graph` runs the probes and persists denials keyed by
-ffmpeg binary and device identity; the web host probes at startup and re-probes
-on an explicit capability refresh. Only the NVIDIA graphs are modelled; QSV,
+the complete FFmpeg/ffprobe binary and selected-device identity; the web host
+probes at startup and re-probes on an explicit capability refresh. Runtime
+publication is generation-scoped and atomic: a settings save validates and
+probes the complete candidate before one database transaction and one in-memory
+publication replace the active paths, report, graph state, and denial state.
+Failures leave the prior runtime intact, and feedback from a child built under
+an older generation cannot mutate the replacement runtime.
+
+The native NVIDIA probe and every generated NVIDIA graph are explicitly bound
+to CUDA device index zero. The report records that adapter's UUID, model, and
+driver version instead of unioning capabilities across adapters. The two
+profile-5 conversion operations are modelled separately because their SDR/H.264
+and HDR10/HEVC graphs have different encoders and output contracts. Only the
+NVIDIA graphs are modelled; QSV,
 VAAPI, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from
 advertised capabilities alone.
 
@@ -108,6 +120,22 @@ are cleared when the capability report is explicitly refreshed by an FFmpeg
 path change, a settings-save capability refresh, or a manual refresh — the
 situations in which the underlying hardware/driver/binary may have changed.
 
+Cached graph proofs and learned denials are reusable only for an exact runtime
+identity: FFmpeg and ffprobe paths plus SHA-256 digests, and the selected CUDA
+device index, UUID/model, and driver version. Legacy path-only/model-only rows,
+partial records, malformed identities, same-path binary replacements, and
+device or driver changes all force a new probe. Each accepted publication also
+receives a monotonically increasing in-process generation. Commands carry that
+generation from build through supervision, so late failures from an old child
+are ignored instead of poisoning the active report or consuming its retry.
+
+Settings changes use a staged commit boundary. Candidate binaries and graph
+operations are checked without touching the global locators. Once valid, one
+serialized commit persists the settings mutations and complete graph state,
+clears obsolete decode denials, swaps the shared report, and publishes the
+paired FFmpeg/ffprobe paths. Post-commit maintenance such as report-directory
+creation and subtitle extraction starts only after that boundary.
+
 ## Consequences
 
 A probe-vs-reality mismatch (the next AV1, a new codec, a driver quirk)
@@ -162,6 +190,10 @@ ErsatzTV architecture-table port in step 2.
   operation-scoped multi-device graphs, beginning with the existing NVENC
   Vulkan/libplacebo HDR path. Added bounded functional probing, typed graph
   denials, health visibility, and one safe fallback attempt.
+- **2026-08-09.** Made runtime state an atomic, generation-scoped publication;
+  keyed cached proof and denial state to binary digests plus selected-device and
+  driver identity; bound NVIDIA probing and execution to device zero; and added
+  distinct Profile 5 SDR and HDR10 graph operations.
 
 ## References
 

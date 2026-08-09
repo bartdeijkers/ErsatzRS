@@ -2297,6 +2297,14 @@ pub fn build_hls_slug_command(
         desired,
         source_video_stream: Some(generated_slug_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -2517,6 +2525,16 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
         desired,
         source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(request.runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -2612,6 +2630,16 @@ fn build_mpeg_ts_slate_command_from_assets(
         desired,
         source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        ffmpeg_executable: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.ffmpeg_path.clone()),
+        runtime_generation: request
+            .runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map(|identity| identity.generation),
         runtime_capabilities: Some(request.runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
@@ -8436,6 +8464,10 @@ mod tests {
     fn dolby_vision_source_320p(profile: u8, compatibility: u8) -> SourceVideoStream {
         let mut source = source_320p();
         source.codec = ersatzrs_ffmpeg::SourceVideoCodec::Hevc;
+        if profile == 7 {
+            source.profile = Some("Main 10".to_owned());
+            source.pixel_format = Some(ersatzrs_ffmpeg::PixelFormat::Yuv420P10Le);
+        }
         source.dolby_vision = Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
             profile,
             bl_signal_compatibility_id: compatibility,
@@ -8532,26 +8564,20 @@ mod tests {
     }
 
     #[test]
-    fn the_hls_builder_separates_a_profile_7_base_layer_when_supported() {
-        let mut capabilities = FfmpegCapabilityReport::default();
-        capabilities
-            .bitstream_filters
-            .insert("dovi_split".to_owned());
+    fn the_hls_builder_uses_direct_profile_7_base_layer_decode() {
+        let command = hls_command_for_with_capabilities(
+            dolby_vision_source_320p(7, 6),
+            FfmpegCapabilityReport::default(),
+        )
+        .expect("profile 7 HLS command");
 
-        let command =
-            hls_command_for_with_capabilities(dolby_vision_source_320p(7, 6), capabilities)
-                .expect("profile 7 HLS command");
-        let input = command
-            .arguments
-            .iter()
-            .position(|argument| argument == "-i")
-            .expect("video input");
-        let filter = command
-            .arguments
-            .windows(2)
-            .position(|pair| pair == ["-bsf:0", "dovi_split=mode=bl"])
-            .expect("profile 7 input bitstream filter");
-
-        assert!(filter < input, "got: {}", command.arguments.join(" "));
+        assert!(
+            !command
+                .arguments
+                .iter()
+                .any(|argument| argument.contains("dovi_split")),
+            "got: {}",
+            command.arguments.join(" ")
+        );
     }
 }

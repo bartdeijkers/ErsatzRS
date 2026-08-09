@@ -147,6 +147,12 @@ pub(super) struct JellyfinMediaStreamResponse {
     pub(super) color_transfer: Option<String>,
     pub(super) color_primaries: Option<String>,
     pub(super) bit_depth: Option<i32>,
+    pub(super) video_range_type: Option<String>,
+    pub(super) dv_profile: Option<i32>,
+    pub(super) dv_bl_signal_compatibility_id: Option<i32>,
+    pub(super) bl_present_flag: Option<i32>,
+    pub(super) el_present_flag: Option<i32>,
+    pub(super) rpu_present_flag: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]

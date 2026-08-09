@@ -7,7 +7,8 @@
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink, VideoScanKind,
+    DolbyVisionMetadataState, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink,
+    VideoScanKind,
 };
 use sqlx::{Row, Transaction};
 
@@ -18,6 +19,58 @@ use crate::repositories::SqlxResultExt as _;
 pub(crate) enum JellyfinEmbyProvider {
     Jellyfin,
     Emby,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_provider_dolby_vision_metadata(
+    stream: &mut MediaStream,
+    provider: &str,
+    video_range_type: Option<&str>,
+    profile: Option<i32>,
+    compatibility_id: Option<i32>,
+    bl_present: Option<i32>,
+    el_present: Option<i32>,
+    rpu_present: Option<i32>,
+) {
+    let range_detected = video_range_type.is_some_and(|value| {
+        let normalized = value.trim().to_ascii_lowercase();
+        normalized.contains("dovi") || normalized.contains("dolby")
+    });
+    let detected = range_detected
+        || profile.is_some()
+        || compatibility_id.is_some()
+        || bl_present.is_some()
+        || el_present.is_some()
+        || rpu_present.is_some();
+    if !detected {
+        return;
+    }
+
+    if let (Some(profile), Some(compatibility_id), Some(bl), Some(el), Some(rpu)) = (
+        profile,
+        compatibility_id,
+        bl_present,
+        el_present,
+        rpu_present,
+    ) {
+        stream.dolby_vision_profile = Some(profile);
+        stream.dolby_vision_bl_compatibility_id = Some(compatibility_id);
+        stream.dolby_vision_bl_present = Some(bl != 0);
+        stream.dolby_vision_el_present = Some(el != 0);
+        stream.dolby_vision_rpu_present = Some(rpu != 0);
+        stream.dolby_vision_metadata_state = DolbyVisionMetadataState::Complete;
+        return;
+    }
+
+    stream.dolby_vision_profile = profile;
+    stream.dolby_vision_bl_compatibility_id = compatibility_id;
+    stream.dolby_vision_bl_present = bl_present.map(|value| value != 0);
+    stream.dolby_vision_el_present = el_present.map(|value| value != 0);
+    stream.dolby_vision_rpu_present = rpu_present.map(|value| value != 0);
+    stream.dolby_vision_metadata_state = DolbyVisionMetadataState::Incomplete;
+    stream.dolby_vision_metadata_hint = Some(format!(
+        "{provider} reported Dolby Vision but omitted one or more required profile, compatibility, BL, EL, or RPU fields"
+    ));
 }
 
 impl JellyfinEmbyProvider {
@@ -309,8 +362,12 @@ pub(crate) async fn replace_streams(
                 "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
                 "Title", "Default", "Forced", "MediaVersionId",
                 "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
-                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType",
+                "Rotation", "MasteringDisplay", "MaxCll", "MaxFall",
+                "DolbyVisionProfile", "DolbyVisionBlCompatibilityId",
+                "DolbyVisionBlPresent", "DolbyVisionElPresent", "DolbyVisionRpuPresent",
+                "DolbyVisionMetadataState", "DolbyVisionMetadataHint"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
@@ -331,6 +388,17 @@ pub(crate) async fn replace_streams(
         .bind(stream.attached_pic)
         .bind(&stream.file_name)
         .bind(&stream.mime_type)
+        .bind(stream.rotation)
+        .bind(&stream.mastering_display)
+        .bind(stream.max_cll)
+        .bind(stream.max_fall)
+        .bind(stream.dolby_vision_profile)
+        .bind(stream.dolby_vision_bl_compatibility_id)
+        .bind(stream.dolby_vision_bl_present)
+        .bind(stream.dolby_vision_el_present)
+        .bind(stream.dolby_vision_rpu_present)
+        .bind(stream.dolby_vision_metadata_state.as_i32())
+        .bind(&stream.dolby_vision_metadata_hint)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -458,9 +526,13 @@ impl PageProgress {
 mod tests {
     use std::sync::Mutex;
 
-    use ersatzrs_domain::ScanProgressSink;
+    use ersatzrs_domain::{DolbyVisionMetadataState, MediaStream, ScanProgressSink};
 
-    use super::{sort_title, PageProgress, ProviderItemTable};
+    #[cfg(not(feature = "mysql"))]
+    use super::replace_streams;
+    use super::{
+        apply_provider_dolby_vision_metadata, sort_title, PageProgress, ProviderItemTable,
+    };
 
     #[derive(Default)]
     struct RecordingProgress(Mutex<Vec<f32>>);
@@ -503,5 +575,137 @@ mod tests {
         assert_eq!(pages.start_index(), 100);
         assert!(!pages.advance(0, 250));
         assert_eq!(*sink.0.lock().expect("progress lock"), [0.0, 0.25]);
+    }
+
+    #[test]
+    fn complete_provider_dolby_vision_metadata_is_typed() {
+        let mut stream = MediaStream::default();
+        apply_provider_dolby_vision_metadata(
+            &mut stream,
+            "Jellyfin",
+            Some("DOVI"),
+            Some(8),
+            Some(1),
+            Some(1),
+            Some(0),
+            Some(1),
+        );
+
+        assert_eq!(
+            stream.dolby_vision_metadata_state,
+            DolbyVisionMetadataState::Complete
+        );
+        assert_eq!(stream.dolby_vision_profile, Some(8));
+        assert_eq!(stream.dolby_vision_bl_present, Some(true));
+        assert_eq!(stream.dolby_vision_el_present, Some(false));
+        assert_eq!(stream.dolby_vision_rpu_present, Some(true));
+        assert!(stream.dolby_vision_metadata_hint.is_none());
+    }
+
+    #[test]
+    fn positive_provider_detection_without_all_fields_stays_incomplete() {
+        let mut stream = MediaStream::default();
+        apply_provider_dolby_vision_metadata(
+            &mut stream,
+            "Emby",
+            Some("DolbyVision"),
+            Some(8),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(
+            stream.dolby_vision_metadata_state,
+            DolbyVisionMetadataState::Incomplete
+        );
+        assert!(stream
+            .dolby_vision_metadata_hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("Emby")));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn provider_stream_persistence_round_trips_dolby_vision_and_hdr_fields() {
+        use ersatzrs_domain::MediaStreamKind;
+        use sqlx::Row as _;
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open provider stream database");
+        sqlx::query(
+            r#"CREATE TABLE "MediaStream" (
+                "Id" INTEGER PRIMARY KEY,
+                "Index" INTEGER NOT NULL, "Codec" TEXT, "Profile" TEXT,
+                "MediaStreamKind" INTEGER NOT NULL, "Language" TEXT,
+                "Channels" INTEGER NOT NULL, "Title" TEXT, "Default" INTEGER NOT NULL,
+                "Forced" INTEGER NOT NULL, "MediaVersionId" INTEGER NOT NULL,
+                "PixelFormat" TEXT, "ColorRange" TEXT, "ColorSpace" TEXT,
+                "ColorTransfer" TEXT, "ColorPrimaries" TEXT,
+                "BitsPerRawSample" INTEGER NOT NULL, "AttachedPic" INTEGER NOT NULL,
+                "FileName" TEXT, "MimeType" TEXT, "Rotation" INTEGER,
+                "MasteringDisplay" TEXT, "MaxCll" INTEGER, "MaxFall" INTEGER,
+                "DolbyVisionProfile" INTEGER, "DolbyVisionBlCompatibilityId" INTEGER,
+                "DolbyVisionBlPresent" INTEGER, "DolbyVisionElPresent" INTEGER,
+                "DolbyVisionRpuPresent" INTEGER,
+                "DolbyVisionMetadataState" INTEGER NOT NULL DEFAULT 0,
+                "DolbyVisionMetadataHint" TEXT
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create media stream table");
+
+        let stream = MediaStream {
+            index: 0,
+            kind: MediaStreamKind::Video,
+            codec: Some("hevc".to_owned()),
+            profile: Some("Main 10".to_owned()),
+            rotation: Some(90),
+            mastering_display: Some("G(8500,39850)".to_owned()),
+            max_cll: Some(1000),
+            max_fall: Some(400),
+            dolby_vision_profile: Some(8),
+            dolby_vision_bl_compatibility_id: Some(1),
+            dolby_vision_bl_present: Some(true),
+            dolby_vision_el_present: Some(false),
+            dolby_vision_rpu_present: Some(true),
+            dolby_vision_metadata_state: DolbyVisionMetadataState::Complete,
+            ..MediaStream::default()
+        };
+        let mut tx = pool.begin().await.expect("begin stream replacement");
+        replace_streams(&mut tx, 42, &[stream])
+            .await
+            .expect("replace provider streams");
+        tx.commit().await.expect("commit provider streams");
+
+        let row = sqlx::query(
+            r#"SELECT "Rotation", "MasteringDisplay", "MaxCll", "MaxFall",
+                      "DolbyVisionProfile", "DolbyVisionBlCompatibilityId",
+                      "DolbyVisionBlPresent", "DolbyVisionElPresent",
+                      "DolbyVisionRpuPresent", "DolbyVisionMetadataState"
+               FROM "MediaStream" WHERE "MediaVersionId" = 42"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("reload provider stream");
+
+        assert_eq!(row.get::<i32, _>("Rotation"), 90);
+        assert_eq!(row.get::<String, _>("MasteringDisplay"), "G(8500,39850)");
+        assert_eq!(row.get::<i32, _>("MaxCll"), 1000);
+        assert_eq!(row.get::<i32, _>("MaxFall"), 400);
+        assert_eq!(row.get::<i32, _>("DolbyVisionProfile"), 8);
+        assert_eq!(row.get::<i32, _>("DolbyVisionBlCompatibilityId"), 1);
+        assert_eq!(row.get::<i32, _>("DolbyVisionBlPresent"), 1);
+        assert_eq!(row.get::<i32, _>("DolbyVisionElPresent"), 0);
+        assert_eq!(row.get::<i32, _>("DolbyVisionRpuPresent"), 1);
+        assert_eq!(
+            row.get::<i32, _>("DolbyVisionMetadataState"),
+            DolbyVisionMetadataState::Complete.as_i32()
+        );
     }
 }

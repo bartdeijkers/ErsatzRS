@@ -4251,7 +4251,13 @@ pub async fn save_ffmpeg_settings(
         ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
         command.global_fallback_filler_id,
     ));
-    repository.apply_mutations(mutations).await?;
+    runtime
+        .commit_ffmpeg_settings(&paths.ffmpeg, &paths.ffprobe, mutations)
+        .await
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "commit FFmpeg settings",
+            message: error.to_string(),
+        })?;
 
     if command.save_reports {
         runtime.ensure_ffmpeg_report_directory();
@@ -4259,13 +4265,7 @@ pub async fn save_ffmpeg_settings(
     if command.extract_embedded_subtitles {
         runtime.request_embedded_subtitle_extraction(repository.list_playout_ids().await?);
     }
-    runtime
-        .refresh_ffmpeg_runtime(&paths.ffmpeg, &paths.ffprobe)
-        .await
-        .map_err(|error| ApplicationError::Unavailable {
-            operation: "refresh FFmpeg runtime",
-            message: error.to_string(),
-        })
+    Ok(())
 }
 
 async fn request_settings_playout_builds(
@@ -5831,6 +5831,8 @@ mod tests {
     #[derive(Default)]
     struct RecordingSettingsRuntime {
         events: Mutex<Vec<String>>,
+        committed_mutations: Mutex<Vec<SettingsMutation>>,
+        fail_ffmpeg_commit: bool,
     }
 
     #[async_trait]
@@ -5870,15 +5872,25 @@ mod tests {
             })
         }
 
-        async fn refresh_ffmpeg_runtime(
+        async fn commit_ffmpeg_settings(
             &self,
             ffmpeg_path: &str,
             ffprobe_path: &str,
+            mutations: Vec<SettingsMutation>,
         ) -> Result<(), SettingsRuntimeError> {
             self.events
                 .lock()
                 .expect("settings runtime events")
-                .push(format!("refresh:{ffmpeg_path}:{ffprobe_path}"));
+                .push(format!("commit:{ffmpeg_path}:{ffprobe_path}"));
+            if self.fail_ffmpeg_commit {
+                return Err(SettingsRuntimeError::unavailable(
+                    "simulated commit failure",
+                ));
+            }
+            self.committed_mutations
+                .lock()
+                .expect("committed settings mutations")
+                .extend(mutations);
             Ok(())
         }
 
@@ -6947,27 +6959,41 @@ mod tests {
             .await
             .expect("save FFmpeg settings");
 
-        let values = repository.values.lock().expect("settings values");
-        assert_eq!(
-            values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES),
-            Some(&"False".to_owned())
-        );
-        assert_eq!(
-            values.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
-            Some(&"false".to_owned())
-        );
-        assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID));
-        assert!(!values.contains_key(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID));
-        drop(values);
-        assert_eq!(
-            repository.batches.lock().expect("settings batches").len(),
-            1
-        );
+        let mutations = runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations");
+        assert!(mutations.iter().any(|mutation| matches!(
+            mutation,
+            SettingsMutation::Set { key, value }
+                if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES
+                    && value == "False"
+        )));
+        assert!(mutations.iter().any(|mutation| matches!(
+            mutation,
+            SettingsMutation::Set { key, value }
+                if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED && value == "false"
+        )));
+        for key in [
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+        ] {
+            assert!(mutations.iter().any(|mutation| matches!(
+                mutation,
+                SettingsMutation::Delete { key: deleted } if deleted == key
+            )));
+        }
+        drop(mutations);
+        assert!(repository
+            .batches
+            .lock()
+            .expect("settings batches")
+            .is_empty());
         assert_eq!(
             *runtime.events.lock().expect("settings runtime events"),
             [
                 "validate:ffmpeg-custom:ffprobe-custom",
-                "refresh:resolved-ffmpeg:resolved-ffprobe"
+                "commit:resolved-ffmpeg:resolved-ffprobe"
             ]
         );
     }
@@ -6992,21 +7018,66 @@ mod tests {
             ..RecordingSettingsRepository::default()
         };
 
-        save_ffmpeg_settings(
-            ffmpeg_settings(),
-            &repository,
-            &RecordingSettingsRuntime::default(),
-        )
-        .await
-        .expect("save unchanged managed FFmpeg settings");
+        let runtime = RecordingSettingsRuntime::default();
+        save_ffmpeg_settings(ffmpeg_settings(), &repository, &runtime)
+            .await
+            .expect("save unchanged managed FFmpeg settings");
 
+        assert!(runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations")
+            .iter()
+            .any(|mutation| matches!(
+                mutation,
+                SettingsMutation::Set { key, value }
+                    if key == ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED
+                        && value == "true"
+            )));
+    }
+
+    #[tokio::test]
+    async fn failed_ffmpeg_commit_keeps_persistence_and_side_effects_untouched() {
+        let repository = RecordingSettingsRepository {
+            playout_ids: vec![2, 3],
+            ..RecordingSettingsRepository::default()
+        };
+        let runtime = RecordingSettingsRuntime {
+            fail_ffmpeg_commit: true,
+            ..RecordingSettingsRuntime::default()
+        };
+        let mut settings = ffmpeg_settings();
+        settings.save_reports = true;
+        settings.use_embedded_subtitles = true;
+        settings.extract_embedded_subtitles = true;
+
+        let error = save_ffmpeg_settings(settings, &repository, &runtime)
+            .await
+            .expect_err("commit failure");
+
+        assert!(matches!(
+            error,
+            crate::ApplicationError::Unavailable {
+                operation: "commit FFmpeg settings",
+                ..
+            }
+        ));
+        assert!(repository
+            .batches
+            .lock()
+            .expect("settings batches")
+            .is_empty());
+        assert!(runtime
+            .committed_mutations
+            .lock()
+            .expect("committed settings mutations")
+            .is_empty());
         assert_eq!(
-            repository
-                .values
-                .lock()
-                .expect("settings values")
-                .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATHS_MANAGED),
-            Some(&"true".to_owned())
+            *runtime.events.lock().expect("settings runtime events"),
+            [
+                "validate:ffmpeg-custom:ffprobe-custom",
+                "commit:resolved-ffmpeg:resolved-ffprobe"
+            ]
         );
     }
 

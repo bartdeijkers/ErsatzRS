@@ -31,14 +31,35 @@ content-light metadata survived the tone-map and was written onto BT.709 frames
 this ADR states.
 
 Dolby Vision profile 7 is characterized against a real dual-layer file
-(2026-08-09). A complete persisted BL/EL/RPU record is accepted only when the
-active FFmpeg runtime advertises `dovi_split`; the selected video stream then
-receives `dovi_split=mode=bl` as an input bitstream filter and is decoded in
-software. Generated SDR and HDR10 MPEG-TS plus HDR10 HLS output were decoded and
-probed with scaling, drawvg, a burned PGS subtitle, and a nonzero seek. The
-outputs retain their selected BT.709 or BT.2020/PQ contract and carry no Dolby
-Vision record. Existing rows whose newly added base-layer-present field is NULL
-remain rejected until a rescan proves the complete record.
+(2026-08-09). The fixture established `dovi_split=mode=bl` as a useful oracle,
+but the production path does not depend on that optional bitstream filter: an
+exact HEVC Main 10/yuv420p10le source with a complete profile-7 BL/EL/RPU tuple
+is decoded in software directly from its HDR10-compatible base layer. Generated
+SDR and HDR10 MPEG-TS plus HDR10 HLS output were decoded and probed with scaling,
+drawvg, a burned PGS subtitle, and a nonzero seek. The outputs retain their
+selected BT.709 or BT.2020/PQ contract and carry no Dolby Vision record.
+Existing rows whose newly added base-layer-present field is NULL remain
+rejected until a rescan proves the complete record.
+
+Profile 5 now has distinct operation-gated NVENC conversions for SDR/H.264 and
+HDR10/HEVC. Both require an exact progressive HEVC Main 10/yuv420p10le input,
+CUDA decode support, a positively proven selected-device
+CUDA/Vulkan/libplacebo graph, and the matching encoder. The graph downloads the
+P010 surface, uploads it to Vulkan for RPU-aware libplacebo processing, reads an
+RGBA intermediate back to software, converts to the selected YUV colour
+contract, strips Dolby Vision signaling, and encodes with NVENC. There is no
+unproven fallback: a missing proof or a learned graph denial rejects the source
+before spawn, and a classified live failure records the denial without spawning
+a guessed-colour replacement. Automated command, probe, refusal, health, HLS,
+and direct-IPTV tests cover this contract; the production path still needs the
+recorded public sample to be rerun end to end on matching NVIDIA hardware before
+the fixture-acceptance debt closes.
+
+Jellyfin, Emby, and Plex scans now persist rotation, HDR static metadata, and
+Dolby Vision configuration. A provider record is marked complete only when all
+six tuple fields are present. Positive but partial provider metadata is retained
+as explicitly incomplete with its provider hint, so restart and rescan cannot
+silently downgrade known Dolby Vision to ordinary HEVC/PQ.
 
 The seeded HDR10 metadata defaults are now operator-editable per profile: an
 `FFmpegProfile` carries an optional mastering display and MaxCLL/MaxFALL pair,
@@ -50,9 +71,10 @@ editable, not a way to relabel a real grade.
 Not implemented, tracked as parity debt in
 `docs/progress/parity/hdr-dolby-vision-metadata.toml` and
 `docs/progress/parity/ffmpeg-9-performance-and-support.toml`: HDR10 is
-uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M, and Dolby Vision
-profile 5 remains rejected because it has no conventional fallback and no
-characterized conversion.
+uncharacterized on QSV/VAAPI/AMF/VideoToolbox/RKMPP/V4L2M2M; Dolby Vision
+passthrough remains disabled pending a source/container/client matrix; and the
+Profile 5 production path still needs end-to-end sample and live-hardware
+acceptance even though its exact graph is now implemented and capability-gated.
 
 ## Context
 
@@ -95,10 +117,12 @@ initial values are:
 The enum applies only when video is transcoded.
 `FFmpegProfileVideoFormat::Copy` preserves the source elementary stream and
 ignores the selected output dynamic range; the editor must communicate that
-distinction. Bit depth stays a separate field. Selecting HDR10 requires a
-compatible codec, 10-bit pixel format, container, and output path, and invalid
-combinations are rejected during profile validation rather than silently
-downgraded.
+distinction. Known or positively detected incomplete Dolby Vision is still
+rejected at the public command boundary because no source/codec/container/
+output/client passthrough matrix has been proven. Bit depth stays a separate
+field. Selecting HDR10 requires a compatible codec, 10-bit pixel format,
+container, and output path, and invalid combinations are rejected during
+profile validation rather than silently downgraded.
 
 The tonemap-algorithm field is meaningful for conversions that compress a
 higher dynamic range. It does not select the output color space and must not be
@@ -138,16 +162,18 @@ pipeline must never copy source HDR metadata onto transformed SDR frames.
 Dolby Vision support is introduced from characterized fixtures, not inferred
 from codec names:
 
-- Profile 7 and compatible profile 8.1 sources may use their HDR10-compatible
-  base layer for HDR10 output. Enhancement-layer and RPU handling must be
-  explicit; HDR10 output must not retain Dolby Vision signaling that the muxed
-  stream no longer satisfies.
-- Profile 5 has no assumed HDR10 fallback. It may be converted to SDR or HDR10
-  only after a fixture proves the selected libplacebo/FFmpeg path produces
-  correct color. Until then it is rejected with troubleshooting and health
-  evidence rather than played with wrong colors.
-- `dovi_split` is treated as a profile-7 multilayer tool, not as a general
-  Dolby Vision decoder or encoder.
+- Only the characterized profile 8.1 tuple is admitted: compatibility id 1,
+  BL and RPU present, and EL absent. Profile 8.4/HLG and every partial tuple
+  remain rejected until separately characterized.
+- Profile 7 requires compatibility id 6 with BL, EL, and RPU present, plus an
+  exact progressive HEVC Main 10/yuv420p10le source. It uses direct software
+  decode of the HDR10-compatible base layer. `dovi_split` remains an oracle for
+  fixture characterization, not a production dependency.
+- Profile 5 requires compatibility id 0 with BL and RPU present and EL absent.
+  It has no assumed conventional fallback and may be converted only through the
+  exact output-specific CUDA/Vulkan/libplacebo/NVENC operation that current
+  runtime proof has established. If that proof is missing or later denied, the
+  source remains visibly rejected rather than entering a generic fallback.
 - Dolby Vision output is not supported by this ADR. Passthrough may be enabled
   later only for a proven source/codec/container/output/client matrix; Dolby
   Vision transcoding or a general output mode requires a separate decision.
@@ -207,6 +233,13 @@ exists. Those costs are preferable to silent wrong-color playback.
   not characterized.
 - Make Vulkan the universal processing and encoding backend: deferred to a
   separate ADR after cross-platform capability and quality benchmarks.
+
+## Revision history
+
+- **2026-08-09.** Tightened admission to exact characterized Dolby Vision
+  tuples, rejected unproven stream copy, made Profile 7 direct base-layer
+  software decode independent of `dovi_split`, added provider completeness
+  state, and accepted output-specific capability-gated Profile 5 conversions.
 
 ## References
 

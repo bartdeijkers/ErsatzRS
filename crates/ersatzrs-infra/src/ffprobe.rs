@@ -4,7 +4,10 @@ use std::process::{ExitStatus, Stdio};
 use std::time::Duration as StdDuration;
 
 use chrono::{Duration, Utc};
-use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, MediaVersion, VideoScanKind};
+use ersatzrs_domain::{
+    DolbyVisionMetadataState, MediaChapter, MediaStream, MediaStreamKind, MediaVersion,
+    VideoScanKind,
+};
 use ersatzrs_ffmpeg::DolbyVisionConfiguration;
 use serde::Deserialize;
 use thiserror::Error;
@@ -497,6 +500,11 @@ fn stream_to_domain(
         dolby_vision_bl_present: dolby_vision.map(|config| config.bl_present),
         dolby_vision_el_present: dolby_vision.map(|config| config.el_present),
         dolby_vision_rpu_present: dolby_vision.map(|config| config.rpu_present),
+        dolby_vision_metadata_state: if dolby_vision.is_some() {
+            DolbyVisionMetadataState::Complete
+        } else {
+            DolbyVisionMetadataState::NotDetected
+        },
         ..MediaStream::default()
     })
 }
@@ -1004,8 +1012,8 @@ mod tests {
 
         // Profile 8.1 can use its declared HDR10-compatible base layer.
         // Profile 7 can use its HDR10 base layer only when the complete
-        // dual-layer record is present; the command boundary separately
-        // requires FFmpeg's dovi_split capability.
+        // dual-layer record and exact HEVC Main 10 stream shape are present;
+        // the command boundary forces direct software decode.
         if configuration.profile == 8 && configuration.bl_signal_compatibility_id == 1 {
             assert!(configuration.is_playable());
             assert!(!configuration.el_present, "profile 8 is single layer");

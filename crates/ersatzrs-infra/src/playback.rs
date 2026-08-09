@@ -206,44 +206,13 @@ pub async fn load_source_video_stream_by_index(
     media_version_id: i64,
     stream_index: Option<i32>,
 ) -> Result<Option<SourceVideoStream>> {
-    let row = sqlx::query(
-        r#"SELECT ms."Index" AS "Index",
-                  ms."Codec" AS "Codec",
-                  ms."PixelFormat" AS "PixelFormat",
-                  ms."ColorRange" AS "ColorRange",
-                  ms."ColorTransfer" AS "ColorTransfer",
-                  ms."ColorPrimaries" AS "ColorPrimaries",
-                  ms."ColorSpace" AS "ColorSpace",
-                  ms."Rotation" AS "Rotation",
-                  ms."MasteringDisplay" AS "MasteringDisplay",
-                  ms."MaxCll" AS "MaxCll",
-                  ms."MaxFall" AS "MaxFall",
-                  ms."DolbyVisionProfile" AS "DolbyVisionProfile",
-                  ms."DolbyVisionBlCompatibilityId" AS "DolbyVisionBlCompatibilityId",
-                  ms."DolbyVisionBlPresent" AS "DolbyVisionBlPresent",
-                  ms."DolbyVisionElPresent" AS "DolbyVisionElPresent",
-                  ms."DolbyVisionRpuPresent" AS "DolbyVisionRpuPresent",
-                  mv."VideoScanKind" AS "VideoScanKind",
-                  mv."Width" AS "Width",
-                  mv."Height" AS "Height",
-                  mv."RFrameRate" AS "RFrameRate",
-                  mv."SampleAspectRatio" AS "SampleAspectRatio",
-                  mv."DisplayAspectRatio" AS "DisplayAspectRatio",
-                  mv."ImageId" IS NOT NULL AS "IsStillImage"
-           FROM "MediaVersion" mv
-           JOIN "MediaStream" ms
-               ON ms."MediaVersionId" = mv."Id" AND ms."MediaStreamKind" = 1
-           WHERE mv."Id" = ?
-             AND (? IS NULL OR ms."Index" = ?)
-           ORDER BY ms."Index"
-           LIMIT 1"#,
-    )
-    .bind(media_version_id)
-    .bind(stream_index)
-    .bind(stream_index)
-    .fetch_optional(pool)
-    .await
-    .repository()?;
+    let row = sqlx::query(SOURCE_VIDEO_STREAM_QUERY)
+        .bind(media_version_id)
+        .bind(stream_index)
+        .bind(stream_index)
+        .fetch_optional(pool)
+        .await
+        .repository()?;
     let Some(row) = row else {
         if let Some(stream_index) = stream_index {
             return Err(RepositoryError::Decode {
@@ -308,6 +277,39 @@ pub async fn load_source_video_stream_by_index(
 
     Ok(Some(stream))
 }
+
+const SOURCE_VIDEO_STREAM_QUERY: &str = r#"SELECT ms."Index" AS "Index",
+              ms."Codec" AS "Codec",
+              ms."PixelFormat" AS "PixelFormat",
+              ms."ColorRange" AS "ColorRange",
+              ms."ColorTransfer" AS "ColorTransfer",
+              ms."ColorPrimaries" AS "ColorPrimaries",
+              ms."ColorSpace" AS "ColorSpace",
+              ms."Rotation" AS "Rotation",
+              ms."MasteringDisplay" AS "MasteringDisplay",
+              ms."MaxCll" AS "MaxCll",
+              ms."MaxFall" AS "MaxFall",
+              ms."DolbyVisionProfile" AS "DolbyVisionProfile",
+              ms."DolbyVisionBlCompatibilityId" AS "DolbyVisionBlCompatibilityId",
+              ms."DolbyVisionBlPresent" AS "DolbyVisionBlPresent",
+              ms."DolbyVisionElPresent" AS "DolbyVisionElPresent",
+              ms."DolbyVisionRpuPresent" AS "DolbyVisionRpuPresent",
+              ms."DolbyVisionMetadataState" AS "DolbyVisionMetadataState",
+              ms."DolbyVisionMetadataHint" AS "DolbyVisionMetadataHint",
+              mv."VideoScanKind" AS "VideoScanKind",
+              mv."Width" AS "Width",
+              mv."Height" AS "Height",
+              mv."RFrameRate" AS "RFrameRate",
+              mv."SampleAspectRatio" AS "SampleAspectRatio",
+              mv."DisplayAspectRatio" AS "DisplayAspectRatio",
+              mv."ImageId" IS NOT NULL AS "IsStillImage"
+       FROM "MediaVersion" mv
+       JOIN "MediaStream" ms
+           ON ms."MediaVersionId" = mv."Id" AND ms."MediaStreamKind" = 1
+       WHERE mv."Id" = ?
+         AND (? IS NULL OR ms."Index" = ?)
+       ORDER BY ms."Index"
+       LIMIT 1"#;
 
 /// Load every persisted source audio stream for a media version.
 ///
@@ -2679,16 +2681,38 @@ fn decode_source_display_metadata(
     stream.mastering_display = decode_playback_column(row, "MasteringDisplay")?;
     stream.max_cll = decode_playback_column(row, "MaxCll")?;
     stream.max_fall = decode_playback_column(row, "MaxFall")?;
-    stream.dolby_vision = decode_dolby_vision_configuration(row);
+    let metadata_state = decode_playback_column::<Option<i32>>(row, "DolbyVisionMetadataState")
+        .ok()
+        .flatten()
+        .map(ersatzrs_domain::DolbyVisionMetadataState::from_i32)
+        .unwrap_or_default();
+    let metadata_hint = decode_playback_column::<Option<String>>(row, "DolbyVisionMetadataHint")
+        .ok()
+        .flatten();
+    if metadata_state == ersatzrs_domain::DolbyVisionMetadataState::Incomplete {
+        stream.incomplete_dolby_vision = Some(ersatzrs_ffmpeg::IncompleteDolbyVisionMetadata {
+            reason: metadata_hint.unwrap_or_else(|| {
+                "the media provider omitted required Dolby Vision fields".to_owned()
+            }),
+        });
+    } else if let Some(configuration) = decode_dolby_vision_configuration(row) {
+        stream.dolby_vision = Some(configuration);
+    } else if metadata_state == ersatzrs_domain::DolbyVisionMetadataState::Complete {
+        stream.incomplete_dolby_vision = Some(
+            ersatzrs_ffmpeg::IncompleteDolbyVisionMetadata {
+                reason: "the persisted Dolby Vision record is marked complete but required fields are missing"
+                    .to_owned(),
+            },
+        );
+    }
     Ok(())
 }
 
 /// Rebuild the persisted Dolby Vision configuration record (ADR 0064).
 ///
-/// Returns `None` when the stream is not Dolby Vision. A row missing its
-/// companion columns still yields a configuration with the profile, because the
-/// profile alone is enough for the policy in
-/// `ersatzrs_ffmpeg::DolbyVisionConfiguration::handling` to reject or allow it.
+/// Returns `None` when the stream is not Dolby Vision or any required
+/// companion field is absent. The caller turns a positively detected partial
+/// record into an explicit incomplete-metadata rejection.
 fn decode_dolby_vision_configuration(
     row: &crate::db::DbRow,
 ) -> Option<ersatzrs_ffmpeg::DolbyVisionConfiguration> {
@@ -2701,7 +2725,6 @@ fn decode_dolby_vision_configuration(
         decode_playback_column::<Option<bool>>(row, column)
             .ok()
             .flatten()
-            .unwrap_or_default()
     };
 
     Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
@@ -2712,11 +2735,10 @@ fn decode_dolby_vision_configuration(
         )
         .ok()
         .flatten()
-        .and_then(|value| u8::try_from(value).ok())
-        .unwrap_or_default(),
-        rpu_present: flag("DolbyVisionRpuPresent"),
-        el_present: flag("DolbyVisionElPresent"),
-        bl_present: flag("DolbyVisionBlPresent"),
+        .and_then(|value| u8::try_from(value).ok())?,
+        rpu_present: flag("DolbyVisionRpuPresent")?,
+        el_present: flag("DolbyVisionElPresent")?,
+        bl_present: flag("DolbyVisionBlPresent")?,
     })
 }
 
@@ -2806,6 +2828,8 @@ mod tests {
                 "DolbyVisionBlPresent" INTEGER NULL,
                 "DolbyVisionElPresent" INTEGER NULL,
                 "DolbyVisionRpuPresent" INTEGER NULL,
+                "DolbyVisionMetadataState" INTEGER NOT NULL DEFAULT 0,
+                "DolbyVisionMetadataHint" TEXT NULL,
                 "MediaVersionId" INTEGER NOT NULL,
                 "MediaStreamKind" INTEGER NOT NULL,
                 "Channels" INTEGER NOT NULL,
@@ -2925,8 +2949,9 @@ mod tests {
                 "Id", "Index", "Codec", "MediaVersionId", "MediaStreamKind",
                 "Channels", "Default", "DolbyVisionProfile",
                 "DolbyVisionBlCompatibilityId", "DolbyVisionBlPresent",
-                "DolbyVisionElPresent", "DolbyVisionRpuPresent"
-            ) VALUES (13, 0, 'hevc', 13, 1, 0, 0, 7, 6, 1, 1, 1)"#,
+                "DolbyVisionElPresent", "DolbyVisionRpuPresent",
+                "DolbyVisionMetadataState"
+            ) VALUES (13, 0, 'hevc', 13, 1, 0, 0, 7, 6, 1, 1, 1, 1)"#,
         )
         .execute(&pool)
         .await
@@ -2950,9 +2975,11 @@ mod tests {
             .await
             .expect("load incomplete profile 7 source")
             .expect("source video");
-        let configuration = source.dolby_vision.expect("Dolby Vision record");
-        assert!(!configuration.bl_present);
-        assert!(!configuration.is_playable());
+        assert!(source.dolby_vision.is_none());
+        let incomplete = source
+            .incomplete_dolby_vision
+            .expect("missing base-layer flag must be a visible rejection");
+        assert!(incomplete.reason.contains("required fields are missing"));
     }
 
     #[cfg(not(feature = "mysql"))]

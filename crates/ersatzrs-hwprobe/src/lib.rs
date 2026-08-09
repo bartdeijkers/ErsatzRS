@@ -20,6 +20,23 @@ pub struct NvidiaProbe {
     /// Human-readable native device detail text, matching ErsatzTV's
     /// troubleshooting shape where practical.
     pub device_details: Option<String>,
+    /// Identity of the device whose capabilities were probed. ErsatzRS binds
+    /// CUDA/NVENC graphs to device index zero, so capabilities must never be a
+    /// union of multiple adapters.
+    pub selected_device: Option<NvidiaDeviceIdentity>,
+}
+
+/// Stable identity for the NVIDIA device selected by the runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvidiaDeviceIdentity {
+    /// Zero-based CUDA device index.
+    pub index: u32,
+    /// Driver-reported model name.
+    pub model: String,
+    /// CUDA device UUID when the installed driver exports it.
+    pub uuid: Option<String>,
+    /// CUDA driver API version, formatted as `major.minor`.
+    pub driver_version: Option<String>,
 }
 
 /// One NVIDIA native encoder capability row.
@@ -139,13 +156,19 @@ mod nvidia {
     use std::fmt::Write;
     use std::ptr;
 
-    use crate::{NvidiaDecoderProbe, NvidiaEncoderProbe, NvidiaProbe};
+    use crate::{NvidiaDecoderProbe, NvidiaDeviceIdentity, NvidiaEncoderProbe, NvidiaProbe};
 
     type CuDevice = c_int;
     type CuContext = *mut c_void;
     type CuResult = c_int;
     type NvEncStatus = c_int;
     type NvEncoder = *mut c_void;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CuUuid {
+        bytes: [u8; 16],
+    }
 
     const CUDA_SUCCESS: CuResult = 0;
     const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
@@ -585,6 +608,8 @@ mod nvidia {
         cu_device_get: unsafe extern "C" fn(*mut CuDevice, c_int) -> CuResult,
         cu_device_get_name: unsafe extern "C" fn(*mut c_char, c_int, CuDevice) -> CuResult,
         cu_device_get_attribute: unsafe extern "C" fn(*mut c_int, c_int, CuDevice) -> CuResult,
+        cu_device_get_uuid: Option<unsafe extern "C" fn(*mut CuUuid, CuDevice) -> CuResult>,
+        cu_driver_get_version: Option<unsafe extern "C" fn(*mut c_int) -> CuResult>,
         cu_ctx_create: unsafe extern "C" fn(*mut CuContext, c_uint, CuDevice) -> CuResult,
         cu_ctx_destroy: unsafe extern "C" fn(CuContext) -> CuResult,
         cuvid_get_decoder_caps: unsafe extern "C" fn(*mut CuvidDecodeCaps) -> CuResult,
@@ -619,13 +644,15 @@ mod nvidia {
         let mut encoders = Vec::new();
         let mut decoders = Vec::new();
         let mut details = String::new();
-        for index in 0..device_count {
-            let Some(device) = api.device(index) else {
-                continue;
-            };
+        let mut selected_device = None;
+        // Command generation binds CUDA/NVENC to device index zero. Probe that
+        // exact adapter instead of unioning capabilities across all devices.
+        let index = 0;
+        if let Some(device) = api.device(index) {
             let name = api.device_name(device);
             let major = api.device_attribute(device, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR);
             let minor = api.device_attribute(device, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR);
+            selected_device = Some(api.device_identity(index, device, name.clone()));
             let _ = writeln!(
                 details,
                 "GPU #{index} < {name} > has Compute SM {}.{}",
@@ -635,7 +662,13 @@ mod nvidia {
             let _ = writeln!(details);
 
             let Some(context) = api.create_context(device) else {
-                continue;
+                return NvidiaProbe {
+                    attempted: true,
+                    encoders_attempted,
+                    device_details: (!details.trim().is_empty()).then_some(details),
+                    selected_device,
+                    ..NvidiaProbe::default()
+                };
             };
 
             let _ = writeln!(details, "  Encoding:");
@@ -672,6 +705,22 @@ mod nvidia {
             }
         }
 
+        normalize_probe_rows(&mut encoders, &mut decoders);
+
+        NvidiaProbe {
+            attempted: true,
+            encoders_attempted,
+            encoders,
+            decoders,
+            device_details: (!details.trim().is_empty()).then_some(details),
+            selected_device,
+        }
+    }
+
+    fn normalize_probe_rows(
+        encoders: &mut Vec<NvidiaEncoderProbe>,
+        decoders: &mut Vec<NvidiaDecoderProbe>,
+    ) {
         encoders.sort_by(|left, right| left.encoder.cmp(&right.encoder));
         encoders.dedup_by(|left, right| {
             left.encoder == right.encoder
@@ -685,17 +734,23 @@ mod nvidia {
                 .then(left.bit_depth.cmp(&right.bit_depth))
         });
         decoders.dedup();
-
-        NvidiaProbe {
-            attempted: true,
-            encoders_attempted,
-            encoders,
-            decoders,
-            device_details: (!details.trim().is_empty()).then_some(details),
-        }
     }
 
     impl CudaApi {
+        fn device_identity(
+            &self,
+            index: c_int,
+            device: CuDevice,
+            model: String,
+        ) -> NvidiaDeviceIdentity {
+            NvidiaDeviceIdentity {
+                index: index.cast_unsigned(),
+                model,
+                uuid: self.device_uuid(device),
+                driver_version: self.driver_version(),
+            }
+        }
+
         fn load() -> Option<Self> {
             let cuda = Library::open_any(cuda_library_names())?;
             let cuvid = Library::open_any(cuvid_library_names())?;
@@ -706,6 +761,8 @@ mod nvidia {
                 cu_device_get: cuda.symbol("cuDeviceGet\0")?,
                 cu_device_get_name: cuda.symbol("cuDeviceGetName\0")?,
                 cu_device_get_attribute: cuda.symbol("cuDeviceGetAttribute\0")?,
+                cu_device_get_uuid: cuda.symbol_any(&["cuDeviceGetUuid_v2\0", "cuDeviceGetUuid\0"]),
+                cu_driver_get_version: cuda.symbol("cuDriverGetVersion\0"),
                 cu_ctx_create: cuda.symbol_any(&["cuCtxCreate_v2\0", "cuCtxCreate\0"])?,
                 cu_ctx_destroy: cuda.symbol_any(&["cuCtxDestroy_v2\0", "cuCtxDestroy\0"])?,
                 cuvid_get_decoder_caps: cuvid.symbol("cuvidGetDecoderCaps\0")?,
@@ -733,6 +790,47 @@ mod nvidia {
                 }
             }
             "Unknown NVIDIA GPU".to_owned()
+        }
+
+        fn device_uuid(&self, device: CuDevice) -> Option<String> {
+            let get_uuid = self.cu_device_get_uuid?;
+            let mut uuid = CuUuid { bytes: [0; 16] };
+            unsafe {
+                if get_uuid(&raw mut uuid, device) != CUDA_SUCCESS {
+                    return None;
+                }
+            }
+            let bytes = uuid.bytes;
+            Some(format!(
+                "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                bytes[0],
+                bytes[1],
+                bytes[2],
+                bytes[3],
+                bytes[4],
+                bytes[5],
+                bytes[6],
+                bytes[7],
+                bytes[8],
+                bytes[9],
+                bytes[10],
+                bytes[11],
+                bytes[12],
+                bytes[13],
+                bytes[14],
+                bytes[15],
+            ))
+        }
+
+        fn driver_version(&self) -> Option<String> {
+            let get_version = self.cu_driver_get_version?;
+            let mut version = 0;
+            unsafe {
+                if get_version(&raw mut version) != CUDA_SUCCESS || version <= 0 {
+                    return None;
+                }
+            }
+            Some(format!("{}.{}", version / 1_000, (version % 1_000) / 10))
         }
 
         fn device_attribute(&self, device: CuDevice, attribute: c_int) -> Option<c_int> {

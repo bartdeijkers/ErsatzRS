@@ -441,8 +441,10 @@ async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> anyhow::Result<Stri
     )
     .await
     .context("resolve FFmpeg runtime for scanner")?;
-    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(report.ffmpeg.path.clone());
-    ersatzrs_ffmpeg::set_resolved_ffprobe_path(report.ffprobe.path.clone());
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(
+        report.ffmpeg.path.clone(),
+        report.ffprobe.path.clone(),
+    );
     Ok(report.ffprobe.path)
 }
 

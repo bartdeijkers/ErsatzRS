@@ -274,20 +274,22 @@ The SDR case is the one worth noting: both strips apply, so a tone-mapped
 Dolby Vision source carries neither its HDR10 static metadata nor its Dolby
 Vision record — which is what ADR 0064 requires of an SDR output.
 
-## Finding 12: Dolby Vision profile 7 requires an explicit base-layer split
+## Finding 12: Dolby Vision profile 7 can decode the base layer directly
 
 A real dual-layer profile 7 HEVC file was used through the ignored
 `real_profile_7_fixture_*` gates. The fixture is operator-supplied through
 `ERSATZRS_DOLBY_VISION_PROFILE7_FIXTURE` and is never committed. The active
 FFmpeg 9 runtime advertises `dovi_split`, and a one-frame decode first proved
-that `-bsf:0 dovi_split=mode=bl` exposes the HDR10 base layer.
+that `-bsf:0 dovi_split=mode=bl` exposes the HDR10 base layer. A direct software
+decode of the same exact HEVC Main 10/yuv420p10le input produced the same stable
+base-layer output, so `dovi_split` is retained as a characterization oracle
+rather than made an optional production dependency.
 
-The production command builder now applies that filter before the selected
-video input, only for a complete BL+EL+RPU record and only when runtime
-capability discovery confirms the filter. Profile 7 decode is forced to
-software; hardware encode may still be used after the split and upload. A
-missing flag, an older database row not yet rescanned, or a runtime without the
-filter stays visibly rejected.
+The production command builder accepts only compatibility id 6 with a complete
+BL+EL+RPU record and exact progressive HEVC Main 10/yuv420p10le stream metadata.
+Profile 7 decode is forced to software; hardware encode may still be used after
+decode and upload. A missing flag, an older database row not yet rescanned, or
+an imprecisely identified input stays visibly rejected.
 
 Bounded runtime results with a 3-second seek, 1080p scaling, a drawvg overlay,
 and a burned PGS subtitle:
@@ -301,6 +303,34 @@ and a burned PGS subtitle:
 The HLS gate writes six seconds to a temporary directory, probes the generated
 playlist, and deletes the directory when the test ends.
 
+## Finding 13: Profile 5 needs an output-specific RPU-aware operation
+
+A public Profile 5 sample was characterized on native Windows with an RTX 3080
+Ti. Profile 5 has no conventional HDR10 base layer: interpreting its decoded
+P010 frames as ordinary BT.2020/PQ produces wrong colour. The working graph is
+therefore an explicit conversion, not a generic HDR fallback:
+
+1. Decode progressive HEVC Main 10/yuv420p10le on CUDA device zero.
+2. Download P010, upload it to the Vulkan device derived from that same CUDA
+   adapter, and let libplacebo consume the Dolby Vision RPU.
+3. Read back RGBA for SDR or RGBA64 for HDR10, convert in software to BT.709
+   yuv420p or BT.2020/PQ yuv420p10le, and delete Dolby Vision side data.
+4. Encode the selected stable output contract with H.264 or HEVC NVENC.
+
+Both outputs decoded with the expected signalling and no surviving Dolby Vision
+record at sustained realtime speed on that one machine. ErsatzRS now models the
+SDR/H.264 and HDR10/HEVC shapes as separate functional graph operations. Command
+selection requires a positive proof of the exact operation for the selected
+runtime identity and refuses the source when the operation is missing or
+denied. A classified live graph failure is learned once and cannot trigger an
+unproven wrong-colour respawn.
+
+Automated tests pin the exact probe and production graph shapes, admission,
+static metadata, overlay/padding behavior, health, HLS refusal, and direct-IPTV
+one-shot denial behavior. Before closing the fixture-acceptance debt, rerun the
+full production HLS and MPEG-TS paths with the public sample on matching NVIDIA
+hardware and inspect decoded frames as well as ffprobe metadata.
+
 ## What is not yet characterized
 
 - QSV, VAAPI, AMF, `VideoToolbox`, RKMPP, and V4L2M2M HDR10 output. No Intel,
@@ -308,5 +338,7 @@ playlist, and deletes the directory when the test ends.
   to software encoding* for HDR10 profiles rather than allowed to emit SDR, and
   the `Output Dynamic Range` health check warns when that happens. See
   `docs/progress/parity/ffmpeg-9-performance-and-support.toml`.
-- Dolby Vision profile 5 conversion. It has no conventional base-layer
-  fallback and remains rejected rather than decoded with guessed colour.
+- Dolby Vision Profile 5 production acceptance on matching NVIDIA hardware.
+  The exact capability-gated conversion is implemented and remains fail-closed,
+  but the public sample still needs a full ErsatzRS HLS/MPEG-TS run with decoded
+  image comparison before the fixture debt is closed.

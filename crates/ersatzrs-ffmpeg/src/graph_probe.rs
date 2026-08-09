@@ -30,6 +30,13 @@ use ersatzrs_domain::HardwareAccelerationKind;
 /// components that each initialize successfully on their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HardwareGraphOperation {
+    /// CUDA decode/readback, Vulkan/libplacebo Dolby Vision profile 5 to SDR,
+    /// RGBA readback, software YUV conversion, and H.264 NVENC.
+    NvencDolbyVisionProfile5Sdr,
+    /// CUDA decode/readback, Vulkan/libplacebo Dolby Vision profile 5 to
+    /// HDR10, RGBA64 readback, software ten-bit YUV conversion, and HEVC
+    /// Main10 NVENC.
+    NvencDolbyVisionProfile5Hdr10,
     /// Vulkan decode/upload, libplacebo tone-mapping, `hwmap` into CUDA, a CUDA
     /// scale, and an NVENC encode — the HDR path ErsatzRS prefers on NVIDIA.
     NvencHdrVulkanLibplacebo,
@@ -43,6 +50,8 @@ impl HardwareGraphOperation {
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
+            Self::NvencDolbyVisionProfile5Sdr => "nvenc-dolby-vision-profile5-sdr",
+            Self::NvencDolbyVisionProfile5Hdr10 => "nvenc-dolby-vision-profile5-hdr10",
             Self::NvencHdrVulkanLibplacebo => "nvenc-hdr-vulkan-libplacebo",
             Self::NvencCudaScale => "nvenc-cuda-scale",
         }
@@ -52,6 +61,8 @@ impl HardwareGraphOperation {
     #[must_use]
     pub fn from_id(value: &str) -> Option<Self> {
         match value {
+            "nvenc-dolby-vision-profile5-sdr" => Some(Self::NvencDolbyVisionProfile5Sdr),
+            "nvenc-dolby-vision-profile5-hdr10" => Some(Self::NvencDolbyVisionProfile5Hdr10),
             "nvenc-hdr-vulkan-libplacebo" => Some(Self::NvencHdrVulkanLibplacebo),
             "nvenc-cuda-scale" => Some(Self::NvencCudaScale),
             _ => None,
@@ -75,7 +86,9 @@ impl HardwareGraphOperation {
     pub const fn fallback(self) -> Option<Self> {
         match self {
             Self::NvencHdrVulkanLibplacebo => Some(Self::NvencCudaScale),
-            Self::NvencCudaScale => None,
+            Self::NvencDolbyVisionProfile5Sdr
+            | Self::NvencDolbyVisionProfile5Hdr10
+            | Self::NvencCudaScale => None,
         }
     }
 
@@ -100,6 +113,42 @@ impl HardwareGraphOperation {
             .collect();
 
         match self {
+            Self::NvencDolbyVisionProfile5Sdr => {
+                args.extend(NVENC_PROFILE5_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
+                let filter = format!(
+                    "format=yuv420p10le,hwupload_cuda=device=0,{}",
+                    crate::dolby_vision_profile_5_sdr_filter(crate::FrameSize::new(256, 144))
+                );
+                args.extend(
+                    ["-f", "lavfi", "-i", PROBE_SOURCE, "-vf"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
+                );
+                args.push(filter);
+                args.extend(
+                    ["-c:v", "h264_nvenc"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
+                );
+            }
+            Self::NvencDolbyVisionProfile5Hdr10 => {
+                args.extend(NVENC_PROFILE5_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
+                let filter = format!(
+                    "format=yuv420p10le,hwupload_cuda=device=0,{}",
+                    crate::dolby_vision_profile_5_hdr10_filter(crate::FrameSize::new(256, 144))
+                );
+                args.extend(
+                    ["-f", "lavfi", "-i", PROBE_SOURCE, "-vf"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
+                );
+                args.push(filter);
+                args.extend(
+                    ["-c:v", "hevc_nvenc", "-profile:v", "main10"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
+                );
+            }
             Self::NvencHdrVulkanLibplacebo => {
                 args.extend(NVENC_HDR_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
                 args.extend(
@@ -159,7 +208,7 @@ const PROBE_SOURCE: &str = "testsrc2=size=320x240:duration=0.2:rate=5";
 /// or deny a device playback never touches.
 pub const NVENC_HDR_DEVICE_PREFIX: [&str; 6] = [
     "-init_hw_device",
-    "cuda=nv",
+    "cuda=nv:0",
     "-init_hw_device",
     "vulkan=vk@nv",
     "-filter_hw_device",
@@ -168,7 +217,10 @@ pub const NVENC_HDR_DEVICE_PREFIX: [&str; 6] = [
 
 /// Device-initialization prefix the CUDA-only NVENC graph uses.
 pub const NVENC_CUDA_DEVICE_PREFIX: [&str; 4] =
-    ["-init_hw_device", "cuda=nv", "-filter_hw_device", "nv"];
+    ["-init_hw_device", "cuda=nv:0", "-filter_hw_device", "nv"];
+
+/// Device initialization shared by both characterized profile 5 operations.
+pub const NVENC_PROFILE5_DEVICE_PREFIX: [&str; 6] = NVENC_HDR_DEVICE_PREFIX;
 
 /// Why a functional graph probe failed.
 ///
@@ -283,6 +335,10 @@ impl GraphFailureKind {
         };
 
         match operation {
+            HardwareGraphOperation::NvencDolbyVisionProfile5Sdr
+            | HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10 => {
+                return Self::classify_profile_5_runtime(&lower);
+            }
             HardwareGraphOperation::NvencHdrVulkanLibplacebo => {
                 if lower.contains("could not derive cuda device")
                     || lines.iter().any(|line| {
@@ -337,6 +393,52 @@ impl GraphFailureKind {
             }
         }
 
+        None
+    }
+
+    fn classify_profile_5_runtime(lower: &str) -> Option<Self> {
+        let lines = lower.lines().collect::<Vec<_>>();
+        let is_graph_line = |line: &str| {
+            line.contains("libplacebo")
+                || line.contains("hwmap")
+                || line.contains("derive_device=cuda")
+                || line.contains("vulkan=vk@nv")
+                || line.contains("apply_dolbyvision")
+                || line.contains("rgba64")
+                || line.contains("hwdownload")
+                || line.contains("hwupload")
+                || line.contains("zscale")
+        };
+        if lower.contains("failed initializing vulkan device")
+            || lower.contains("failed creating vulkan device")
+            || lower.contains("found no suitable device")
+            || (lower.contains("vulkan")
+                && (lower.contains("unable to find device with index")
+                    || lower.contains("device creation failed")
+                    || lower.contains("no such device")))
+        {
+            return Some(Self::VulkanDevice);
+        }
+        if lines
+            .iter()
+            .any(|line| line.contains("no such filter") && is_graph_line(line))
+        {
+            return Some(Self::MissingFilter);
+        }
+        if lines.iter().any(|line| {
+            line.contains("libplacebo")
+                && (line.contains("failed to initialize") || line.contains("error initializing"))
+        }) {
+            return Some(Self::Libplacebo);
+        }
+        if lines.iter().any(|line| {
+            is_graph_line(line)
+                && (line.contains("failed to configure output pad")
+                    || line.contains("cuctxpushcurrent")
+                    || line.contains("cuda_error_invalid_value"))
+        }) {
+            return Some(Self::HardwareMap);
+        }
         None
     }
 }
@@ -409,6 +511,8 @@ mod tests {
     #[test]
     fn operation_ids_round_trip() {
         for operation in [
+            HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+            HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10,
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
             HardwareGraphOperation::NvencCudaScale,
         ] {
@@ -433,6 +537,8 @@ mod tests {
     #[test]
     fn probe_commands_are_bounded_and_touch_no_user_media() {
         for operation in [
+            HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+            HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10,
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
             HardwareGraphOperation::NvencCudaScale,
         ] {
@@ -444,8 +550,40 @@ mod tests {
             assert!(joined.ends_with("-f null -"), "{joined}");
             assert!(joined.contains("-nostdin"), "{joined}");
             // NVENC's minimum frame dimension, learned the hard way.
-            assert!(joined.contains("256:144"), "{joined}");
+            assert!(
+                joined.contains("256:144") || joined.contains("w=256:h=144"),
+                "{joined}"
+            );
         }
+    }
+
+    #[test]
+    fn profile_5_probes_match_the_copy_bearing_playback_graphs() {
+        let sdr = HardwareGraphOperation::NvencDolbyVisionProfile5Sdr
+            .probe_arguments()
+            .join(" ");
+        let hdr10 = HardwareGraphOperation::NvencDolbyVisionProfile5Hdr10
+            .probe_arguments()
+            .join(" ");
+
+        for graph in [&sdr, &hdr10] {
+            assert!(graph.contains("-init_hw_device cuda=nv:0"), "{graph}");
+            assert!(graph.contains("-init_hw_device vulkan=vk@nv"), "{graph}");
+            assert!(graph.contains("-filter_hw_device vk"), "{graph}");
+            assert!(graph.contains("hwupload_cuda=device=0"), "{graph}");
+            assert!(
+                graph.contains("hwdownload,format=p010le,hwupload"),
+                "{graph}"
+            );
+            assert!(graph.contains("apply_dolbyvision=true"), "{graph}");
+            assert!(!graph.contains("hwmap=derive_device=cuda"), "{graph}");
+            assert!(!graph.contains("scale_cuda"), "{graph}");
+        }
+        assert!(sdr.contains("format=rgba,format=yuv420p"), "{sdr}");
+        assert!(sdr.contains("h264_nvenc"), "{sdr}");
+        assert!(hdr10.contains("format=rgba64le"), "{hdr10}");
+        assert!(hdr10.contains("format=yuv420p10le"), "{hdr10}");
+        assert!(hdr10.contains("hevc_nvenc -profile:v main10"), "{hdr10}");
     }
 
     #[test]

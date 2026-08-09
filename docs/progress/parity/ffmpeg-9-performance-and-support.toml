@@ -15,6 +15,14 @@ review found that graphics animation detection still relies on a bounded marker
 scan instead of parsing GIF/WebP structure. Those findings are tracked as
 separate open debt below.
 
+The 2026-08-09 residue closeout makes runtime publication coherent: FFmpeg and
+ffprobe paths and digests, selected CUDA device/driver identity, graph proof,
+learned denials, and a monotonic generation now move together. Settings saves
+stage the candidate and publish only after one transaction succeeds; stale
+children cannot mutate a replacement generation. NVIDIA capabilities are
+probed only for the explicitly selected device zero. Operation probing now also
+covers the exact Dolby Vision Profile 5 SDR/H.264 and HDR10/HEVC graphs.
+
 Vulkan already exists as an internal NVENC HDR processing bridge; it is not a
 persisted hardware-acceleration kind. First-class Vulkan H.264/HEVC encoding is
 deferred until the existing graph is proven, multi-vendor benchmarks exist, and
@@ -252,16 +260,53 @@ resolved    = true
 id          = 'first-class-vulkan-encoding-is-undecided'
 description = 'Do not add a persisted Vulkan hardware-acceleration kind yet. Revisit h264_vulkan/hevc_vulkan only after operation-scoped Vulkan probing and comparative HDR benchmarks provide multi-vendor quality, latency, device-selection, mux/client, fallback, and six-RID packaging evidence; write a separate ADR before schema, UI, or encoder-priority changes.'
 discovered  = '2026-08-07'
-evidence    = 'The current Vulkan use is an internal libplacebo processing bridge for NVENC rather than an encoder backend. FFmpeg exposes Vulkan encoders, but no ErsatzRS multi-vendor runtime or release-matrix benchmark exists and FFmpeg 9 did not itself establish those product guarantees.'
+evidence    = 'The current Vulkan use is an internal libplacebo processing bridge for NVENC rather than an encoder backend. A 2026-08-09 native-Windows NVIDIA measurement proved H.264/HEVC Vulkan encoding, decoded HLS/MPEG-TS output, transport integrity, and useful but codec-specific speed/quality/memory tradeoffs against NVENC. It remains one vendor and synthetic content: multi-vendor device selection, real-content quality, concurrency, latency, power, clients, fallback, and six-RID package evidence are still absent.'
 resolved    = false
+
+[[debt]]
+id          = 'ffmpeg-runtime-publication-is-not-atomic'
+adr         = '0014'
+description = 'FFmpeg settings save persists configuration and launches side effects before runtime validation, mutates the process-global FFmpeg/ffprobe locators before the candidate report is accepted, and publishes capabilities through a separate lock. Stage a candidate without publication; serialize runtime then database; publish paths, capabilities, acquisition, and denial snapshots as one identity; and leave or restore the complete old state on every failure.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09. `commit_ffmpeg_settings` validates and probes the full candidate without publication, then holds the shared runtime write lock while one database transaction applies the settings mutations, clears obsolete decode denials, and writes the complete graph state. Only a successful commit swaps the shared report and publishes the paired FFmpeg/ffprobe locator. Report-directory creation and subtitle extraction run afterward. `failed_ffmpeg_commit_keeps_persistence_and_side_effects_untouched` and the repository rollback-on-trigger regression prove failure preserves the prior database, runtime, locator, and side-effect state.'
+resolved    = true
+
+[[debt]]
+id          = 'runtime-learned-denials-are-not-generation-scoped'
+adr         = '0014'
+description = 'A command failure learned against an old FFmpeg/settings identity can publish into a replacement runtime, and retry state has no runtime generation. Carry one generation through command build, child supervision, denial publication, and retry accounting; stale old-generation failures must not mutate or consume retry state for the new runtime.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09. Every accepted `FfmpegRuntimeReport` receives a monotonically increasing generation; a pipeline request binds both that generation and the exact executable into its command. Decode and graph denial publication compare the failed command generation with the active report and ignore stale feedback without consuming the replacement runtime retry. `stale_generation_decode_feedback_is_ignored` and `stale_generation_graph_feedback_is_ignored` pin both paths.'
+resolved    = true
+
+[[debt]]
+id          = 'hardware-capability-cache-identity-is-incomplete'
+adr         = '0014'
+description = 'Graph and decode cache reuse is keyed by an FFmpeg path and, for graphs, an NVIDIA model name. Persist a binary digest/build identity plus selected device index/UUID and driver identity; invalidate legacy path/model-only records; and cover same-path replacement, driver change, identical-model device swap, malformed identity, unchanged reuse, and database moves.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09. Runtime validation hashes the executed FFmpeg and ffprobe binaries and records both paths/digests plus selected CUDA device index, UUID/model, and driver version. Decode and graph records persist that complete identity and reject legacy path/model-only rows, malformed or partial identities, same-path binary replacement, driver change, and same-model UUID swaps. Reuse is allowed only when every field matches; CUDA state without a selected device is not persistable. The identity/cache suites cover unchanged reuse and each invalidation class.'
+resolved    = true
+
+[[debt]]
+id          = 'nvidia-capabilities-are-unioned-across-devices'
+adr         = '0014'
+description = 'Native NVIDIA encoder/decoder capabilities are aggregated across enumerated GPUs while playback and graph probes use the default CUDA device. Retain per-device rows, select device index 0 explicitly to preserve current execution semantics, and bind decode, encode, CUDA/Vulkan initialization, graph proof, denials, cache identity, and health to that same index/UUID.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09 with the narrower current-device contract. The native CUDA/NVENC probe no longer unions adapters: it probes only device index zero, records that device UUID/model and driver version, and exposes only its encoder/decoder rows. Generated NVIDIA graphs explicitly initialize `cuda=nv:0`; Vulkan derives from that device, functional proof and learned denials use its identity, cache reuse binds to it, and health consumes the same report. Other adapters are intentionally not retained until command generation offers device selection, so an unreachable GPU cannot approve playback on device zero.'
+resolved    = true
 
 [[debt]]
 id          = 'hardware-graph-probes-cover-only-the-nvidia-graphs'
 adr         = '0014'
-description = 'The operation-scoped functional probe covers the two NVENC graphs. QSV, VAAPI/OpenCL, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from advertised capabilities alone, so the same advertised-but-nonfunctional class of failure remains possible there. Extend `HardwareGraphOperation` as those paths gain evidence.'
+description = 'The operation-scoped functional probe covers the NVIDIA CUDA scale, Vulkan/libplacebo HDR, and two Profile 5 output graphs. QSV, VAAPI/OpenCL, AMF, VideoToolbox, RKMPP, and V4L2M2M graphs are still selected from advertised capabilities alone, so the same advertised-but-nonfunctional class of failure remains possible there. Extend `HardwareGraphOperation` as those paths gain evidence.'
 discovered  = '2026-08-07'
 evidence    = '''
-`HardwareGraphOperation` in `crates/ersatzrs-ffmpeg/src/graph_probe.rs` defines only `NvencHdrVulkanLibplacebo` and `NvencCudaScale`, and `refresh_hardware_graph_capabilities` returns early unless the `cuda` hwaccel is advertised. Only NVIDIA hardware was available to characterize during p8b-01.
+`HardwareGraphOperation` in `crates/ersatzrs-ffmpeg/src/graph_probe.rs` defines
+`NvencHdrVulkanLibplacebo`, `NvencCudaScale`,
+`NvencDolbyVisionProfile5Sdr`, and `NvencDolbyVisionProfile5Hdr10`.
+`refresh_hardware_graph_capabilities` still returns early unless the `cuda`
+hwaccel is advertised. Only NVIDIA hardware was available to characterize
+during Phase 8.
 
 
 Measured on the development machine 2026-08-08, which is why these paths could

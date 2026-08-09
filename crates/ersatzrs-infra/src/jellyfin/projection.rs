@@ -404,7 +404,7 @@ pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<Medi
     };
 
     let is_video = matches!(kind, MediaStreamKind::Video);
-    Some(MediaStream {
+    let mut projected = MediaStream {
         index: stream.index,
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
@@ -454,5 +454,49 @@ pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<Medi
             0
         },
         ..MediaStream::default()
-    })
+    };
+    if is_video {
+        crate::media_server::jellyfin_emby::apply_provider_dolby_vision_metadata(
+            &mut projected,
+            "Jellyfin",
+            stream.video_range_type.as_deref(),
+            stream.dv_profile,
+            stream.dv_bl_signal_compatibility_id,
+            stream.bl_present_flag,
+            stream.el_present_flag,
+            stream.rpu_present_flag,
+        );
+    }
+    Some(projected)
+}
+
+#[cfg(test)]
+mod tests {
+    use ersatzrs_domain::DolbyVisionMetadataState;
+
+    use super::{project_stream, JellyfinMediaStreamResponse};
+
+    #[test]
+    fn jellyfin_profile_8_1_fixture_projects_a_complete_record() {
+        let response: JellyfinMediaStreamResponse = serde_json::from_str(
+            r#"{
+                "Type":"Video", "Codec":"hevc", "Profile":"Main 10",
+                "VideoRangeType":"DOVIWithHDR10", "DvProfile":8,
+                "DvBlSignalCompatibilityId":1, "BlPresentFlag":1,
+                "ElPresentFlag":0, "RpuPresentFlag":1
+            }"#,
+        )
+        .expect("deserialize Jellyfin stream");
+
+        let stream = project_stream(response).expect("project video stream");
+        assert_eq!(
+            stream.dolby_vision_metadata_state,
+            DolbyVisionMetadataState::Complete
+        );
+        assert_eq!(stream.dolby_vision_profile, Some(8));
+        assert_eq!(stream.dolby_vision_bl_compatibility_id, Some(1));
+        assert_eq!(stream.dolby_vision_bl_present, Some(true));
+        assert_eq!(stream.dolby_vision_el_present, Some(false));
+        assert_eq!(stream.dolby_vision_rpu_present, Some(true));
+    }
 }

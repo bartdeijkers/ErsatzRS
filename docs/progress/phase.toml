@@ -40,17 +40,31 @@ operation-specific live-failure classification, process-wide denial updates,
 fallback-denial persistence after the retry is spent, HLS refusal advancement
 through the error-slate path, and early rendered-graphics cleanup.
 
-Five Phase 8 debts stay open because they need hardware or fixtures this machine
-does not have, not because the work was skipped. Measured 2026-08-08: `ffmpeg
--hwaccels` advertises cuda, vaapi, qsv, drm, opencl, vulkan, and amf, but only
-cuda creates a device — vaapi and qsv fail with -542398533, opencl reports no
+The 2026-08-09 residue closeout also made FFmpeg settings publication atomic,
+carried a monotonic runtime generation through command supervision and learned
+denials, keyed caches to FFmpeg/ffprobe digests plus the selected CUDA
+device/driver identity, and stopped unioning NVIDIA capabilities across GPUs.
+Remote Jellyfin/Emby/Plex scans now preserve complete or explicitly incomplete
+Dolby Vision state, strict admission matches only characterized Profile 8.1 and
+Profile 7 tuples, unproven Dolby Vision stream copy is rejected, health counts
+and names every affected stream, and Profile 5 has exact capability-gated SDR
+and HDR10 operations with no guessed-colour fallback.
+
+Phase 8 acceptance debts stay open where they need hardware, fixtures, or a
+client matrix this machine does not have, not because the work was skipped.
+Measured 2026-08-08: `ffmpeg -hwaccels` advertises cuda, vaapi, qsv, drm,
+opencl, vulkan, and amf, but only cuda creates a device — vaapi and qsv fail
+with -542398533, opencl reports no
 platforms, `hevc_qsv` cannot open an MFX session, `hevc_amf` cannot load
 `libamfrt64.so.1`, and there is no `/dev/dri`. The missing manual gates are a
 working Intel/AMD/Apple/Rockchip device for the non-NVIDIA graph probes, HDR10
-characterization, and hardware HDR benchmarks; a Dolby Vision profile 5
-fixture; and multi-vendor Vulkan encoding evidence plus its own ADR. Profile 7
-closed on 2026-08-09 with a real dual-layer fixture, runtime-gated
-`dovi_split=mode=bl`, and decoded SDR/HDR10 MPEG-TS plus HDR10 HLS evidence.
+characterization, and hardware HDR benchmarks; a full production-path rerun of
+the public Dolby Vision Profile 5 sample on matching NVIDIA/Vulkan hardware; a
+Dolby Vision passthrough source/container/client matrix; and multi-vendor
+Vulkan encoding evidence plus its own ADR. Profile 7 closed on 2026-08-09 with
+a real dual-layer fixture, exact-tuple direct software base-layer decode, and
+decoded SDR/HDR10 MPEG-TS plus HDR10 HLS evidence; `dovi_split=mode=bl` remains
+its characterization oracle rather than a production dependency.
 See the structured debt in `ffmpeg-9-performance-and-support.toml` and
 `hdr-dolby-vision-metadata.toml`.
 

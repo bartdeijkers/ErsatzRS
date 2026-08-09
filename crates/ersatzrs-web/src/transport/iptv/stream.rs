@@ -5140,7 +5140,7 @@ mod tests {
     }
 
     #[test]
-    fn the_iptv_builder_allows_profile_8_1_and_stream_copy() {
+    fn the_iptv_builder_allows_profile_8_1_transcode_but_rejects_unproven_stream_copy() {
         // Profile 8.1: the base layer is a conforming HDR10 signal.
         assert!(build_stream_command(
             "/media/dv81.mkv",
@@ -5160,11 +5160,8 @@ mod tests {
         )
         .is_ok());
 
-        // Stream copy hands the elementary stream to the client untouched, so
-        // ErsatzRS is not interpreting the colour and has no basis to refuse.
-        // fMP4 rather than MPEG-TS: only H.264 is copy-safe in a direct MPEG-TS
-        // stream, so an HEVC source there genuinely transcodes and is correctly
-        // refused.
+        // ADR 0064 has no proven source/container/client passthrough matrix,
+        // so even a low-level copy candidate is refused before spawn.
         assert!(build_stream_command(
             "/media/dv5.mkv",
             OutputFormat::HlsMp4,
@@ -5181,7 +5178,102 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )
-        .is_ok());
+        .is_err());
+    }
+
+    #[cfg(all(unix, not(feature = "mysql")))]
+    #[tokio::test]
+    async fn profile_5_graph_failure_is_learned_without_a_wrong_colour_respawn() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let ffmpeg = dir.path().join("profile5-failing-ffmpeg");
+        std::fs::write(
+            &ffmpeg,
+            "#!/bin/sh\necho '[libplacebo] Failed to initialize renderer' >&2\nexit 1\n",
+        )
+        .expect("write profile 5 tool");
+        let mut permissions = std::fs::metadata(&ffmpeg).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&ffmpeg, permissions).expect("make executable");
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open profile 5 retry database");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create config table");
+
+        let gpu = "NVIDIA GeForce RTX 3080 Ti";
+        let mut capabilities = FfmpegCapabilityReport {
+            nvidia_gpu_list: Some(format!("[ GPU #0 - < {gpu} > has Compute SM 8.6 ]")),
+            ..FfmpegCapabilityReport::default()
+        };
+        capabilities.prove_hardware_graph(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr, gpu);
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.capabilities = capabilities.clone();
+        let shared_runtime = Arc::new(RwLock::new(runtime));
+        let rebuild_called = Arc::new(AtomicBool::new(false));
+        let rebuild_observer = Arc::clone(&rebuild_called);
+
+        let command =
+            FfmpegCommand::new_with_executable(ffmpeg.to_string_lossy(), Vec::new(), Vec::new());
+        let mut retry = Some(StreamDenialRetry {
+            pool: pool.clone(),
+            shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
+            runtime_capabilities: capabilities,
+            acceleration: ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            source_stream: None,
+            graph_operation: Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr),
+            ffmpeg_path: ffmpeg.to_string_lossy().into_owned(),
+            rebuild: Some(Box::new(move |retry_mode| {
+                rebuild_observer.store(true, Ordering::SeqCst);
+                let StreamRetryMode::HardwareGraphDenied(runtime_capabilities) = retry_mode else {
+                    panic!("profile 5 graph failure must use the graph retry mode");
+                };
+                assert!(runtime_capabilities.hardware_graph_denied(
+                    HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+                    gpu
+                ));
+                None
+            })),
+        });
+        let child = spawn_stream_process(&command, None, "test").expect("spawn profile 5 tool");
+        let (_reader, mut writer) = tokio::io::duplex(1024);
+
+        let outcome = supervise_stream_command_with_retry(
+            child,
+            &mut writer,
+            &Arc::new(Notify::new()),
+            "1",
+            &mut retry,
+            None,
+        )
+        .await;
+
+        assert!(matches!(outcome, DirectStreamOutcome::Failed(_)));
+        assert!(rebuild_called.load(Ordering::SeqCst));
+        assert!(retry.is_none(), "there must be no fallback spawn observer");
+        let persisted = ersatzrs_infra::hardware_graph::load_hardware_graph_denials(&pool)
+            .await
+            .expect("load profile 5 denial");
+        assert_eq!(
+            persisted,
+            vec![HardwareGraphDenial::new(
+                HardwareGraphOperation::NvencDolbyVisionProfile5Sdr,
+                gpu,
+                GraphFailureKind::Libplacebo,
+            )]
+        );
     }
 
     #[cfg(all(unix, not(feature = "mysql")))]

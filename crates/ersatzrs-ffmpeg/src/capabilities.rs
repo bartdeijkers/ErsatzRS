@@ -931,6 +931,7 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
     use std::collections::BTreeSet;
 
     FfmpegCapabilityReport {
+        runtime_identity: None,
         filters: BTreeSet::from([
             "scale_cuda".to_owned(),
             "yadif_cuda".to_owned(),
@@ -997,23 +998,8 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
         vaapi_profiles: Vec::new(),
         qsv_profiles: Vec::new(),
         nvidia_gpu_list: None,
-        nvidia_encoders: vec![
-            crate::NvidiaEncoderCapability::new(
-                "h264_nvenc",
-                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
-                BTreeSet::from(["main".to_owned(), "high".to_owned(), "high444p".to_owned()]),
-            ),
-            crate::NvidiaEncoderCapability::new(
-                "hevc_nvenc",
-                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
-                BTreeSet::from(["main".to_owned(), "main10".to_owned()]),
-            ),
-            crate::NvidiaEncoderCapability::new(
-                "av1_nvenc",
-                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
-                BTreeSet::from(["main".to_owned()]),
-            ),
-        ],
+        selected_nvidia_device: None,
+        nvidia_encoders: nvidia_encoders_for_tests(),
         nvidia_decoders: nvidia_decoders_for_tests(),
         hardware_decode_denials: Vec::new(),
         hardware_graph_denials: Vec::new(),
@@ -1029,6 +1015,28 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
         ]),
         videotoolbox_encoders: BTreeSet::from(["H.264 (HW)".to_owned(), "HEVC (HW)".to_owned()]),
     }
+}
+
+fn nvidia_encoders_for_tests() -> Vec<crate::NvidiaEncoderCapability> {
+    use std::collections::BTreeSet;
+
+    vec![
+        crate::NvidiaEncoderCapability::new(
+            "h264_nvenc",
+            BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+            BTreeSet::from(["main".to_owned(), "high".to_owned(), "high444p".to_owned()]),
+        ),
+        crate::NvidiaEncoderCapability::new(
+            "hevc_nvenc",
+            BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+            BTreeSet::from(["main".to_owned(), "main10".to_owned()]),
+        ),
+        crate::NvidiaEncoderCapability::new(
+            "av1_nvenc",
+            BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+            BTreeSet::from(["main".to_owned()]),
+        ),
+    ]
 }
 
 fn nvidia_decoders_for_tests() -> Vec<crate::NvidiaDecoderCapability> {

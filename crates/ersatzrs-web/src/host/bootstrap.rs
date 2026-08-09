@@ -761,8 +761,7 @@ async fn finish_startup_ffmpeg_runtime(
         tracing::warn!(%error, "failed to persist managed FFmpeg runtime paths");
     }
 
-    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(report.ffmpeg.path.clone());
-    ersatzrs_ffmpeg::set_resolved_ffprobe_path(report.ffprobe.path.clone());
+    report.set_generation(1);
 
     // Startup is not an explicit capability refresh (ADR 0014): denials learned
     // against this same ffmpeg binary are reapplied, but a path change since the
@@ -770,7 +769,6 @@ async fn finish_startup_ffmpeg_runtime(
     if let Err(error) = ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
         pool,
         &mut report.capabilities,
-        &report.ffmpeg.path,
     )
     .await
     {
@@ -815,6 +813,10 @@ async fn finish_startup_ffmpeg_runtime(
     for denial in &report.capabilities.hardware_graph_denials {
         tracing::warn!(evidence = %denial.evidence(), "hardware graph unavailable; using fallback");
     }
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(
+        report.ffmpeg.path.clone(),
+        report.ffprobe.path.clone(),
+    );
     tracing::info!(
         ffmpeg = %report.ffmpeg.version,
         ffprobe = %report.ffprobe.version,

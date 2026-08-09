@@ -1727,7 +1727,7 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         _ => return None,
     };
     let is_video = matches!(kind, MediaStreamKind::Video);
-    Some(MediaStream {
+    let mut projected = MediaStream {
         index: stream.index.unwrap_or(stream.id),
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
@@ -1773,7 +1773,26 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
             0
         },
         ..MediaStream::default()
-    })
+    };
+    if is_video {
+        let detected_range = stream.video_range_type.as_deref().or_else(|| {
+            stream
+                .dovi_present
+                .is_some_and(|value| value != 0)
+                .then_some("DOVI")
+        });
+        crate::media_server::jellyfin_emby::apply_provider_dolby_vision_metadata(
+            &mut projected,
+            "Plex",
+            detected_range,
+            stream.dovi_profile,
+            stream.dovi_bl_compat_id,
+            stream.dovi_bl_present,
+            stream.dovi_el_present,
+            stream.dovi_rpu_present,
+        );
+    }
+    Some(projected)
 }
 
 fn resolve_plex_external_subtitle_paths(
@@ -2795,8 +2814,12 @@ async fn replace_streams(
                 "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
                 "Title", "Default", "Forced", "MediaVersionId",
                 "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
-                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType",
+                "Rotation", "MasteringDisplay", "MaxCll", "MaxFall",
+                "DolbyVisionProfile", "DolbyVisionBlCompatibilityId",
+                "DolbyVisionBlPresent", "DolbyVisionElPresent", "DolbyVisionRpuPresent",
+                "DolbyVisionMetadataState", "DolbyVisionMetadataHint"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
@@ -2817,6 +2840,17 @@ async fn replace_streams(
         .bind(stream.attached_pic)
         .bind(&stream.file_name)
         .bind(&stream.mime_type)
+        .bind(stream.rotation)
+        .bind(&stream.mastering_display)
+        .bind(stream.max_cll)
+        .bind(stream.max_fall)
+        .bind(stream.dolby_vision_profile)
+        .bind(stream.dolby_vision_bl_compatibility_id)
+        .bind(stream.dolby_vision_bl_present)
+        .bind(stream.dolby_vision_el_present)
+        .bind(stream.dolby_vision_rpu_present)
+        .bind(stream.dolby_vision_metadata_state.as_i32())
+        .bind(&stream.dolby_vision_metadata_hint)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -3498,4 +3532,46 @@ struct PlexStreamResponse {
     color_space: Option<String>,
     color_trc: Option<String>,
     color_primaries: Option<String>,
+    video_range_type: Option<String>,
+    #[serde(rename = "DOVIPresent")]
+    dovi_present: Option<i32>,
+    #[serde(rename = "DOVIProfile")]
+    dovi_profile: Option<i32>,
+    #[serde(rename = "DOVIBLCompatID")]
+    dovi_bl_compat_id: Option<i32>,
+    #[serde(rename = "DOVIBLPresent")]
+    dovi_bl_present: Option<i32>,
+    #[serde(rename = "DOVIELPresent")]
+    dovi_el_present: Option<i32>,
+    #[serde(rename = "DOVIRPUPresent")]
+    dovi_rpu_present: Option<i32>,
+}
+
+#[cfg(test)]
+mod stream_projection_tests {
+    use ersatzrs_domain::DolbyVisionMetadataState;
+
+    use super::{project_stream, PlexStreamResponse};
+
+    #[test]
+    fn plex_positive_but_partial_dolby_fixture_is_rejected_safely() {
+        let response: PlexStreamResponse = serde_json::from_str(
+            r#"{
+                "streamType":1, "codec":"hevc", "profile":"main 10",
+                "DOVIPresent":1, "DOVIProfile":5
+            }"#,
+        )
+        .expect("deserialize Plex stream");
+
+        let stream = project_stream(response).expect("project video stream");
+        assert_eq!(
+            stream.dolby_vision_metadata_state,
+            DolbyVisionMetadataState::Incomplete
+        );
+        assert_eq!(stream.dolby_vision_profile, Some(5));
+        assert!(stream
+            .dolby_vision_metadata_hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("Plex")));
+    }
 }
