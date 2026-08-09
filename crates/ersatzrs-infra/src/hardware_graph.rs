@@ -380,25 +380,6 @@ pub async fn clear_hardware_graph_denials(pool: &DbPool) -> Result<(), HardwareG
     upsert_config(pool, "").await
 }
 
-/// Learn one graph denial at runtime and persist it.
-///
-/// Used by the stream supervisors when a live transcode dies with a recognised
-/// graph signature: startup probing cannot catch a graph that only fails under
-/// real media, so the denial is learned from the failure itself.
-///
-/// # Errors
-///
-/// Returns an error when encoding or the database write fails.
-pub async fn persist_hardware_graph_denial(
-    pool: &DbPool,
-    ffmpeg_path: &str,
-    report: &mut FfmpegCapabilityReport,
-    denial: HardwareGraphDenial,
-) -> Result<(), HardwareGraphDenialError> {
-    report.deny_hardware_graph(denial);
-    persist_hardware_graph_denials(pool, ffmpeg_path, report).await
-}
-
 /// Learn one graph denial in a worker snapshot and the process-wide runtime,
 /// then persist the merged runtime state.
 ///
@@ -422,6 +403,7 @@ pub async fn persist_hardware_graph_denial_into_runtime(
     report.deny_hardware_graph(denial.clone());
     let mut runtime = runtime.write().await;
     runtime.capabilities.deny_hardware_graph(denial);
+    report.clone_from(&runtime.capabilities);
     persist_hardware_graph_denials(pool, ffmpeg_path, &runtime.capabilities).await
 }
 
@@ -801,6 +783,19 @@ mod tests {
         .await
         .expect("persist merged worker denials");
 
+        assert!(stale_worker
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
+        assert!(stale_worker.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        {
+            let shared = shared_runtime.read().await;
+            assert!(shared
+                .capabilities
+                .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
+            assert!(shared
+                .capabilities
+                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        }
+
         let persisted = load_hardware_graph_denials(&pool)
             .await
             .expect("reload persisted denials");
@@ -946,10 +941,14 @@ mod tests {
         let device = report.hardware_graph_device();
         assert_eq!(device, "NVIDIA GeForce RTX 3080 Ti");
 
-        persist_hardware_graph_denial(
+        let mut shared_report = FfmpegRuntimeReport::for_tests();
+        shared_report.capabilities = report.clone();
+        let shared_runtime = RwLock::new(shared_report);
+        persist_hardware_graph_denial_into_runtime(
             &pool,
             "/opt/ffmpeg",
             &mut report,
+            &shared_runtime,
             HardwareGraphDenial::new(
                 HardwareGraphOperation::NvencHdrVulkanLibplacebo,
                 &device,

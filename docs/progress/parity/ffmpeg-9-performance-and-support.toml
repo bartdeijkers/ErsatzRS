@@ -482,6 +482,17 @@ a decode fallback so a subsequent graph failure is still learned. Regressions:
 `stale_worker_snapshot_persists_shared_denials_for_restart`,
 `stale_worker_snapshot_persists_shared_decode_denials`, and
 `graph_failure_after_decode_retry_is_learned_without_a_second_retry`.
+
+Third-review correction, 2026-08-09: the public HLS constructors no longer
+permit a worker-local capability report or an optional process runtime. Every
+worker receives the shared `FfmpegRuntimeReport`, and capacity-slate, slug,
+content, and error-slate command builds each read a fresh capability snapshot.
+The shared graph/decode persistence helpers also copy the complete merged report
+back to the caller before an immediate retry. The stale-worker regressions now
+assert the caller, process-wide report, persisted row, and restart state all
+retain the union; `worker_capability_snapshots_follow_shared_runtime_updates`
+keeps the refresh contract covered even when SQLite-only tests are compiled out
+by the MySQL feature.
 '''
 resolved    = true
 

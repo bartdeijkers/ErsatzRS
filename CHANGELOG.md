@@ -13,6 +13,24 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.21-beta.1] - 2026-08-09
+
+### Fixed
+
+- Runtime-learned hardware graph and decode denials now merge through one
+  mandatory process-wide FFmpeg report before the complete snapshot is
+  persisted. Long-lived HLS and preview workers read that shared report before
+  every FFmpeg command build, and immediate IPTV retries receive the complete
+  merged denial set, so concurrent workers neither erase restart state nor
+  carry another worker's already-rejected graph into a later spawn or retry.
+- Finite Remote Stream producers now treat a bounded consumer closing its input
+  as normal debug-level teardown while preserving warnings for producer
+  failures and unrelated pipe errors.
+- The optional Windows YouTube wrapper keeps successful `yt-dlp` extraction
+  quiet while retaining source-side `{seek}` through the managed FFmpeg
+  runtime, preventing temporary signed media URLs from reaching normal console
+  or captured-log output.
+
 ## [1.0.21-beta] - 2026-08-08
 
 ### Added
@@ -1491,7 +1509,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta.1...HEAD
+[1.0.21-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...v1.0.21-beta.1
 [1.0.21-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...v1.0.21-beta
 [1.0.17-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...v1.0.17-beta
 [1.0.15-beta.9]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.8...v1.0.15-beta.9

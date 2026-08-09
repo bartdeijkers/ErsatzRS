@@ -48,7 +48,9 @@ that request context while still guaranteeing the managed FFmpeg executable.
 
 Do not add `url` to the same definition because `url` takes precedence over
 `script`. Keep diagnostics on standard error; standard output is reserved for
-media bytes.
+media bytes. Successful extraction is deliberately quiet so temporary signed
+media URLs do not leak into a console or captured log. Failures still return a
+non-zero exit code with a concise diagnostic on standard error.
 
 ## Test the wrapper manually
 

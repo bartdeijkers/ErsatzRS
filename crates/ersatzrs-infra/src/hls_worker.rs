@@ -218,8 +218,7 @@ pub struct HlsSessionWorker {
     playback_profile_override: Option<HlsPlaybackProfileOverride>,
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
-    runtime_capabilities: FfmpegCapabilityReport,
-    shared_ffmpeg_runtime: Option<Arc<RwLock<FfmpegRuntimeReport>>>,
+    ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
     working_dir_ready: AtomicBool,
@@ -242,7 +241,7 @@ impl HlsSessionWorker {
         working_dir: PathBuf,
         output_format: OutputFormat,
         path_replacements: Vec<PathReplacement>,
-        runtime_capabilities: FfmpegCapabilityReport,
+        ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     ) -> Arc<Self> {
         let options = HlsSessionOptions::standard(&channel_number, working_dir);
         Self::new_with_options(
@@ -251,7 +250,7 @@ impl HlsSessionWorker {
             options,
             output_format,
             path_replacements,
-            runtime_capabilities,
+            ffmpeg_runtime,
         )
     }
 
@@ -262,75 +261,7 @@ impl HlsSessionWorker {
         options: HlsSessionOptions,
         output_format: OutputFormat,
         path_replacements: Vec<PathReplacement>,
-        runtime_capabilities: FfmpegCapabilityReport,
-    ) -> Arc<Self> {
-        Self::new_internal(
-            channel_number,
-            channel_id,
-            options,
-            output_format,
-            path_replacements,
-            runtime_capabilities,
-            None,
-        )
-    }
-
-    /// Construct a standard worker that also publishes runtime-learned hardware
-    /// denials to the process-wide capability report.
-    #[must_use]
-    pub fn new_with_shared_runtime(
-        channel_number: String,
-        channel_id: i64,
-        working_dir: PathBuf,
-        output_format: OutputFormat,
-        path_replacements: Vec<PathReplacement>,
-        runtime_capabilities: FfmpegCapabilityReport,
-        shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
-    ) -> Arc<Self> {
-        let options = HlsSessionOptions::standard(&channel_number, working_dir);
-        Self::new_internal(
-            channel_number,
-            channel_id,
-            options,
-            output_format,
-            path_replacements,
-            runtime_capabilities,
-            Some(shared_ffmpeg_runtime),
-        )
-    }
-
-    /// Construct an options-based worker with access to the process-wide
-    /// runtime capability report.
-    #[must_use]
-    pub fn new_with_options_and_shared_runtime(
-        channel_number: String,
-        channel_id: i64,
-        options: HlsSessionOptions,
-        output_format: OutputFormat,
-        path_replacements: Vec<PathReplacement>,
-        runtime_capabilities: FfmpegCapabilityReport,
-        shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
-    ) -> Arc<Self> {
-        Self::new_internal(
-            channel_number,
-            channel_id,
-            options,
-            output_format,
-            path_replacements,
-            runtime_capabilities,
-            Some(shared_ffmpeg_runtime),
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn new_internal(
-        channel_number: String,
-        channel_id: i64,
-        options: HlsSessionOptions,
-        output_format: OutputFormat,
-        path_replacements: Vec<PathReplacement>,
-        runtime_capabilities: FfmpegCapabilityReport,
-        shared_ffmpeg_runtime: Option<Arc<RwLock<FfmpegRuntimeReport>>>,
+        ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             channel_number,
@@ -341,8 +272,7 @@ impl HlsSessionWorker {
             playback_profile_override: options.playback_profile_override,
             output_format,
             path_replacements,
-            runtime_capabilities,
-            shared_ffmpeg_runtime,
+            ffmpeg_runtime,
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             working_dir_ready: AtomicBool::new(false),
@@ -383,6 +313,10 @@ impl HlsSessionWorker {
             }))
     }
 
+    async fn runtime_capabilities(&self) -> FfmpegCapabilityReport {
+        self.ffmpeg_runtime.read().await.capabilities.clone()
+    }
+
     pub fn start(
         self: Arc<Self>,
         pool: DbPool,
@@ -414,11 +348,6 @@ impl HlsSessionWorker {
         let mut transcoded_until = Utc::now();
         let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
-        let mut runtime_capabilities = if let Some(runtime) = &self.shared_ffmpeg_runtime {
-            runtime.read().await.capabilities.clone()
-        } else {
-            self.runtime_capabilities.clone()
-        };
         let mut learned_decode_retry_used = false;
         // ADR 0014 allows exactly one graph retry per session, mirroring the
         // decode-denial bound above.
@@ -603,7 +532,6 @@ impl HlsSessionWorker {
                         idle_timeout,
                         is_first,
                         next_mpegts_output_ts_offset,
-                        runtime_capabilities.clone(),
                     )
                     .await
                 {
@@ -682,6 +610,7 @@ impl HlsSessionWorker {
                     .await;
                 let discontinuity =
                     hls_output_discontinuity(self.output_format, is_first, output_ts_offset, true);
+                let runtime_capabilities = self.runtime_capabilities().await;
                 let command = build_hls_slug_command(
                     self.output_format,
                     is_first,
@@ -695,7 +624,7 @@ impl HlsSessionWorker {
                         service_name: Some(channel_name),
                         ..OutputMetadata::default()
                     },
-                    runtime_capabilities.clone(),
+                    runtime_capabilities,
                 );
                 let _ = self.trim_playlist_for_append(discontinuity).await;
                 let outcome = self
@@ -1151,6 +1080,7 @@ impl HlsSessionWorker {
                 remote_stream_input_file,
             );
             let remote_stream = active.remote_stream.clone();
+            let mut runtime_capabilities = self.runtime_capabilities().await;
             let command = build_hls_command_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
@@ -1259,25 +1189,15 @@ impl HlsSessionWorker {
                             let denial =
                                 ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
                             let evidence = denial.evidence();
-                            let persist_result = if let Some(runtime) = &self.shared_ffmpeg_runtime
-                            {
+                            let persist_result =
                                 crate::hardware_graph::persist_hardware_graph_denial_into_runtime(
                                     &pool,
                                     &ffmpeg_path_for_denial,
                                     &mut runtime_capabilities,
-                                    runtime,
+                                    &self.ffmpeg_runtime,
                                     denial.clone(),
                                 )
-                                .await
-                            } else {
-                                crate::hardware_graph::persist_hardware_graph_denial(
-                                    &pool,
-                                    &ffmpeg_path_for_denial,
-                                    &mut runtime_capabilities,
-                                    denial.clone(),
-                                )
-                                .await
-                            };
+                                .await;
                             if let Err(error) = persist_result {
                                 tracing::warn!(
                                     %error,
@@ -1317,22 +1237,14 @@ impl HlsSessionWorker {
                             bit_depth = denial.bit_depth,
                             "retrying hls segmenter once with software input decode after runtime hardware decode rejection"
                         );
-                        let persist_result = if let Some(runtime) = &self.shared_ffmpeg_runtime {
+                        let persist_result =
                             crate::ffmpeg_capabilities::persist_hardware_decode_denial_into_runtime(
                                 &pool,
                                 &mut runtime_capabilities,
-                                runtime,
+                                &self.ffmpeg_runtime,
                                 denial,
                             )
-                            .await
-                        } else {
-                            crate::ffmpeg_capabilities::persist_hardware_decode_denial(
-                                &pool,
-                                &mut runtime_capabilities,
-                                denial,
-                            )
-                            .await
-                        };
+                            .await;
                         if let Err(error) = persist_result {
                             tracing::warn!(
                                 %error,
@@ -1346,6 +1258,7 @@ impl HlsSessionWorker {
                     let Some(duration) = duration else {
                         break;
                     };
+                    let fallback_runtime_capabilities = self.runtime_capabilities().await;
                     let Some(error_command) = build_hls_error_command(HlsErrorProcessRequest {
                         working_dir: &self.working_dir,
                         output_format: self.output_format,
@@ -1360,7 +1273,7 @@ impl HlsSessionWorker {
                             service_name: Some(active.channel_name.clone()),
                             ..OutputMetadata::default()
                         },
-                        runtime_capabilities: runtime_capabilities.clone(),
+                        runtime_capabilities: fallback_runtime_capabilities,
                         error_message: &error_message,
                     })
                     .await
@@ -1432,7 +1345,6 @@ impl HlsSessionWorker {
         idle_timeout: Option<Duration>,
         is_first_transcode: bool,
         next_mpegts_output_ts_offset: Option<Duration>,
-        runtime_capabilities: FfmpegCapabilityReport,
     ) -> HlsProcessOutcome {
         let playback_profile = match self.load_playback_profile(pool).await {
             Ok(Some(profile)) => profile,
@@ -1472,6 +1384,7 @@ impl HlsSessionWorker {
             output_ts_offset,
             true,
         );
+        let runtime_capabilities = self.runtime_capabilities().await;
         let Some(command) = build_hls_error_command(HlsErrorProcessRequest {
             working_dir: &self.working_dir,
             output_format: self.output_format,
@@ -4802,6 +4715,14 @@ mod tests {
         crate::transcode_capacity::reset_active_transcode_state_for_tests();
     }
 
+    fn test_ffmpeg_runtime(
+        capabilities: FfmpegCapabilityReport,
+    ) -> Arc<RwLock<FfmpegRuntimeReport>> {
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.capabilities = capabilities;
+        Arc::new(RwLock::new(runtime))
+    }
+
     #[test]
     fn browser_preview_override_changes_only_codec_compatibility_fields() {
         let mut configured = playback_profile();
@@ -4860,7 +4781,7 @@ mod tests {
             std::env::temp_dir().join("ersatzrs-hls-test-cancel"),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
 
         // `cancel` is requested while nothing is awaiting; `notify_one` must
@@ -4891,7 +4812,7 @@ mod tests {
             working_dir.clone(),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
 
         assert!(HlsSessionHandle::trim_playlist(&*worker).await.is_none());
@@ -4915,7 +4836,7 @@ mod tests {
             working_dir.clone(),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         worker.touch();
         let command = FfmpegCommand {
@@ -4956,7 +4877,7 @@ mod tests {
             working_dir.clone(),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         worker.touch();
         let command = FfmpegCommand {
@@ -4991,13 +4912,45 @@ mod tests {
             std::env::temp_dir().join("ersatzrs-hls-test-playout-updated"),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
 
         worker.set_session_state(HlsSessionState::ZeroAndRealtime);
         worker.playout_updated();
 
         assert_eq!(worker.session_state(), HlsSessionState::PlayoutUpdated);
+    }
+
+    #[tokio::test]
+    async fn worker_capability_snapshots_follow_shared_runtime_updates() {
+        let runtime = test_ffmpeg_runtime(FfmpegCapabilityReport::default());
+        let worker = HlsSessionWorker::new(
+            "42".to_owned(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-runtime-refresh"),
+            OutputFormat::Hls,
+            Vec::new(),
+            Arc::clone(&runtime),
+        );
+
+        assert!(!worker
+            .runtime_capabilities()
+            .await
+            .filters
+            .contains("runtime-refresh-marker"));
+
+        runtime
+            .write()
+            .await
+            .capabilities
+            .filters
+            .insert("runtime-refresh-marker".to_owned());
+
+        assert!(worker
+            .runtime_capabilities()
+            .await
+            .filters
+            .contains("runtime-refresh-marker"));
     }
 
     #[test]
@@ -5336,7 +5289,7 @@ mod tests {
             std::env::temp_dir().join("ersatzrs-hls-test-reclaim-deferral"),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         let reservation = try_reserve_active_transcode(
             1,
@@ -5381,7 +5334,7 @@ mod tests {
             std::env::temp_dir().join("ersatzrs-hls-test-stale-reclaim"),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         let first_slot = ActiveTranscodeSlot::new_hls(
             "42",
@@ -6122,7 +6075,7 @@ mod tests {
             std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4())),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         {
             let mut continuity = worker.ts_continuity.lock().await;
@@ -6159,7 +6112,7 @@ mod tests {
             working_dir.clone(),
             OutputFormat::Hls,
             Vec::new(),
-            FfmpegCapabilityReport::default(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
 
         assert_eq!(

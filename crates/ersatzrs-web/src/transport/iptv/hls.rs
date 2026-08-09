@@ -96,14 +96,12 @@ pub(crate) async fn ensure_segmenter_worker_running(
 
     let segmenter_timeout = load_segmenter_idle_timeout(state, idle_behavior).await;
     let working_dir = hls_working_dir(channel_number);
-    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let worker = HlsSessionWorker::new_with_shared_runtime(
+    let worker = HlsSessionWorker::new(
         channel_number.to_string(),
         channel_id,
         working_dir,
         output_format,
         path_replacements,
-        runtime_capabilities,
         Arc::clone(&state.ffmpeg_runtime),
     );
     if state.hls_sessions.try_insert(worker.clone()).await {
@@ -283,14 +281,12 @@ async fn ensure_preview_worker_running(
         return;
     }
 
-    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let worker = HlsSessionWorker::new_with_options_and_shared_runtime(
+    let worker = HlsSessionWorker::new_with_options(
         channel.number.clone(),
         channel.id,
         preview_hls_session_options(&channel.number),
         OutputFormat::Hls,
         path_replacements,
-        runtime_capabilities,
         Arc::clone(&state.ffmpeg_runtime),
     );
     if state.preview_hls_sessions.try_insert(worker.clone()).await {

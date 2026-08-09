@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
@@ -641,7 +642,7 @@ async fn run_remote_stream_producer(
     label: String,
 ) {
     let copy_result = tokio::select! {
-        result = pipe_remote_producer_to_stdin(stdout, consumer_stdin) => Some(result),
+        result = copy_remote_producer_to_stdin(stdout, consumer_stdin) => Some(result),
         _ = &mut cancellation => None,
     };
     let mut cancelled = copy_result.is_none();
@@ -669,17 +670,27 @@ async fn run_remote_stream_producer(
         None => String::new(),
     };
     match status {
-        Ok(status) if status.success() && copy_result.is_some_and(|result| result.is_ok()) => {}
+        Ok(status)
+            if status.success() && copy_result.as_ref().is_some_and(std::result::Result::is_ok) => {
+        }
         Ok(status) if cancelled => tracing::debug!(
             producer = %label,
             %status,
             stderr_bytes = stderr.len(),
             "remote stream producer cancelled"
         ),
+        Ok(status) if consumer_closed_remote_stream_pipe(copy_result.as_ref()) => tracing::debug!(
+            producer = %label,
+            %status,
+            stderr_bytes = stderr.len(),
+            copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
+            "remote stream producer stopped after the consumer closed its input"
+        ),
         Ok(status) => tracing::warn!(
             producer = %label,
             %status,
             stderr_bytes = stderr.len(),
+            copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
             "remote stream producer stopped"
         ),
         Err(error) => tracing::warn!(
@@ -689,6 +700,19 @@ async fn run_remote_stream_producer(
             "failed to wait for remote stream producer"
         ),
     }
+}
+
+fn consumer_closed_remote_stream_pipe(copy_result: Option<&io::Result<()>>) -> bool {
+    copy_result.is_some_and(|result| {
+        result.as_ref().is_err_and(|error| {
+            matches!(
+                error.kind(),
+                io::ErrorKind::BrokenPipe
+                    | io::ErrorKind::ConnectionAborted
+                    | io::ErrorKind::ConnectionReset
+            )
+        })
+    })
 }
 
 #[cfg(not(windows))]
@@ -739,16 +763,20 @@ fn quote_windows_batch_command(command: &RemoteStreamCommand) -> String {
 ///
 /// Returns an error when producer stdout is unavailable or copying fails.
 pub async fn pipe_remote_producer_to_stdin(
-    mut stdout: ChildStdout,
-    mut consumer_stdin: tokio::process::ChildStdin,
+    stdout: ChildStdout,
+    consumer_stdin: tokio::process::ChildStdin,
 ) -> Result<(), RemoteStreamError> {
-    tokio::io::copy(&mut stdout, &mut consumer_stdin)
-        .await
-        .map_err(|error| RemoteStreamError::Spawn(error.to_string()))?;
-    consumer_stdin
-        .shutdown()
+    copy_remote_producer_to_stdin(stdout, consumer_stdin)
         .await
         .map_err(|error| RemoteStreamError::Spawn(error.to_string()))
+}
+
+async fn copy_remote_producer_to_stdin(
+    mut stdout: ChildStdout,
+    mut consumer_stdin: tokio::process::ChildStdin,
+) -> io::Result<()> {
+    tokio::io::copy(&mut stdout, &mut consumer_stdin).await?;
+    consumer_stdin.shutdown().await
 }
 
 pub async fn read_stderr_tail(stderr: tokio::process::ChildStderr) -> String {
@@ -1117,6 +1145,9 @@ content_rating: PG
         assert!(batch.contains("--downloader-args \"ffmpeg_i:-ss %SEEK_POSITION%\""));
         assert!(batch.contains("--hls-use-mpegts"));
         assert!(batch.contains("--output -"));
+        assert!(batch.contains("--quiet"));
+        assert!(!batch.contains("--no-warnings"));
+        assert!(!batch.contains("--no-progress"));
         assert!(example.contains("\"{seek}\""));
 
         let definition = parse_remote_stream_definition(example).expect("example definition");
@@ -1252,6 +1283,70 @@ content_rating: PG
         assert_eq!(stderr, "Error opening https://example.test");
         assert!(!stderr.contains("secret"));
         assert!(!stderr.contains("token"));
+    }
+
+    #[test]
+    fn only_consumer_disconnect_errors_are_expected_pipe_teardown() {
+        for kind in [
+            io::ErrorKind::BrokenPipe,
+            io::ErrorKind::ConnectionAborted,
+            io::ErrorKind::ConnectionReset,
+        ] {
+            let result = Some(Err(io::Error::from(kind)));
+            assert!(
+                consumer_closed_remote_stream_pipe(result.as_ref()),
+                "{kind:?}"
+            );
+        }
+
+        for kind in [
+            io::ErrorKind::InvalidData,
+            io::ErrorKind::PermissionDenied,
+            io::ErrorKind::UnexpectedEof,
+        ] {
+            let result = Some(Err(io::Error::from(kind)));
+            assert!(
+                !consumer_closed_remote_stream_pipe(result.as_ref()),
+                "{kind:?}"
+            );
+        }
+        assert!(!consumer_closed_remote_stream_pipe(Some(&Ok(()))));
+        assert!(!consumer_closed_remote_stream_pipe(None));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn bounded_consumer_close_is_detected_from_a_real_process_pipe() {
+        let mut producer = Command::new("sh");
+        producer
+            .args(["-c", "while :; do printf remote-bytes; done"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        let mut producer = producer.spawn().expect("spawn producer");
+        let producer_stdout = producer.stdout.take().expect("producer stdout");
+
+        let mut consumer = Command::new("sh");
+        consumer
+            .args(["-c", "head -c 1 >/dev/null"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        let mut consumer = consumer.spawn().expect("spawn bounded consumer");
+        let consumer_stdin = consumer.stdin.take().expect("consumer stdin");
+
+        let copy_result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            copy_remote_producer_to_stdin(producer_stdout, consumer_stdin),
+        )
+        .await
+        .expect("producer pipe should observe the bounded consumer close");
+
+        assert!(consumer_closed_remote_stream_pipe(Some(&copy_result)));
+        assert!(consumer.wait().await.expect("consumer status").success());
+        let _ = producer.start_kill();
+        let _ = producer.wait().await;
     }
 
     #[tokio::test]

@@ -153,20 +153,6 @@ pub async fn clear_hardware_decode_denials(pool: &DbPool) -> Result<(), Hardware
     Ok(())
 }
 
-/// Persist a learned hardware decode denial and keep the in-memory report aligned.
-///
-/// # Errors
-///
-/// Returns an error when the denials cannot be encoded or the upsert fails.
-pub async fn persist_hardware_decode_denial(
-    pool: &DbPool,
-    report: &mut FfmpegCapabilityReport,
-    denial: HardwareDecodeDenial,
-) -> Result<(), HardwareDecodeDenialError> {
-    report.deny_hardware_decode(denial);
-    persist_hardware_decode_denials(pool, report).await
-}
-
 /// Learn one decode denial in a worker snapshot and the process-wide runtime,
 /// then persist the merged runtime state.
 ///
@@ -186,6 +172,7 @@ pub async fn persist_hardware_decode_denial_into_runtime(
     report.deny_hardware_decode(denial.clone());
     let mut runtime = runtime.write().await;
     runtime.capabilities.deny_hardware_decode(denial);
+    report.clone_from(&runtime.capabilities);
     persist_hardware_decode_denials(pool, &runtime.capabilities).await
 }
 
@@ -460,6 +447,9 @@ mod tests {
         )
         .await
         .expect("persist merged worker denials");
+
+        assert!(stale_worker.hardware_decode_denied(HardwareAccelerationKind::Nvenc, "av1", 10));
+        assert!(stale_worker.hardware_decode_denied(HardwareAccelerationKind::Nvenc, "hevc", 10));
 
         let persisted = load_hardware_decode_denials(&pool)
             .await

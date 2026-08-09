@@ -47,9 +47,8 @@ rem ffmpeg_i places the seek before the remote input is opened.
 "%YT_DLP_BIN%" ^
     --no-config ^
     --no-update ^
-    --no-warnings ^
+    --quiet ^
     --no-playlist ^
-    --no-progress ^
     --ffmpeg-location "%FFMPEG_BIN%" ^
     --downloader ffmpeg ^
     --downloader-args "ffmpeg_i:-ss %SEEK_POSITION%" ^

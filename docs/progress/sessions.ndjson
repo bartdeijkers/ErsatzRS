@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-09","summary":"Hardened shared HLS runtime denials and finite remote producers; validated the Windows YouTube midpoint flow and full release gates."}
 {"agent":"Codex","date":"2026-08-08","summary":"Hardened seek-aware YouTube Remote Streams, repaired phase 8 playback test contracts, and completed release playback validation."}
 {"agent":"Codex","date":"2026-08-08","summary":"Closed Phase 8 runtime fallback persistence, fixed FFmpeg 9 anamorphic NVENC green frames, added opt-in Remote Stream producer seeking, and completed real Stinkfist and Beeld & Geluid playback gates for v1.0.21-beta."}
 {"agent":"Codex","date":"2026-08-08","summary":"Closed the Phase 8 runtime hardware-fallback persistence review, preserved the five hardware/fixture-gated evidence debts, and prepared v1.0.21-beta after the full local release gate."}
