@@ -1926,7 +1926,10 @@ fn build_stream_command_with_input_and_opacity_clock(
         if desired.audio_format == FFmpegProfileAudioFormat::Copy {
             desired.audio_format = FFmpegProfileAudioFormat::Ac3;
         }
-        normalize_hls_direct_mpegts_h264_preset(&mut desired);
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            playback_profile.profile.hardware_acceleration,
+        );
     }
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
@@ -2035,8 +2038,21 @@ fn hls_direct_mpegts_audio_copy_safe(
     )
 }
 
-fn normalize_hls_direct_mpegts_h264_preset(desired: &mut DesiredVideoState) {
+fn normalize_hls_direct_mpegts_h264_preset(
+    desired: &mut DesiredVideoState,
+    acceleration: ersatzrs_domain::HardwareAccelerationKind,
+) {
     if desired.video_format != FFmpegProfileVideoFormat::H264 {
+        return;
+    }
+
+    // Only a software encode gets a substituted preset. Hardware encoders have
+    // their own option domains — FFmpeg 9's `h264_nvenc` accepts `p1`-`p7`
+    // plus legacy `slow`/`medium`/`fast` and would reject `veryfast` outright —
+    // and a profile that carries a preset at all already had it validated
+    // against its own acceleration. A profile forced here from video format
+    // Copy carries no preset, so the encoder default applies.
+    if acceleration != ersatzrs_domain::HardwareAccelerationKind::None {
         return;
     }
 
@@ -2047,22 +2063,36 @@ fn normalize_hls_direct_mpegts_h264_preset(desired: &mut DesiredVideoState) {
 }
 
 fn force_software_h264_encoding(playback_profile: &mut PlaybackProfile) {
+    let was_hardware = playback_profile.profile.hardware_acceleration
+        != ersatzrs_domain::HardwareAccelerationKind::None;
     playback_profile.profile.hardware_acceleration =
         ersatzrs_domain::HardwareAccelerationKind::None;
     if playback_profile.profile.video_format != FFmpegProfileVideoFormat::H264 {
         return;
     }
 
-    if !playback_profile
-        .profile
-        .video_preset
-        .as_deref()
-        .is_some_and(is_x264_preset)
-    {
+    // A hardware profile's preset never carries over to libx264, even when the
+    // string happens to be a valid x264 preset name. The ladders collide by
+    // name only: QSV spells target usage 4 as `medium` and TU7 as `veryfast`,
+    // which are fixed-function quality points, not CPU budgets. Reusing the
+    // name would silently hand libx264 a far more expensive preset than the
+    // hardware encoder was doing (ADR 0014 demotion must stay realtime).
+    let keeps_preset = !was_hardware
+        && playback_profile
+            .profile
+            .video_preset
+            .as_deref()
+            .is_some_and(is_x264_preset);
+    if !keeps_preset {
         playback_profile.profile.video_preset = Some("veryfast".to_owned());
     }
 }
 
+/// True when `value` is a preset the software `libx264` / `libx265` encoders
+/// understand.
+///
+/// Name membership alone never justifies reusing a *hardware* profile's preset
+/// for a software encode — see [`force_software_h264_encoding`].
 fn is_x264_preset(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -3365,6 +3395,74 @@ mod tests {
         assert!(!second.contains("h264_nvenc"), "{second}");
         assert!(!second.contains("-tune:v"), "{second}");
         assert!(!second.contains("-hwaccel cuda"), "{second}");
+    }
+
+    #[test]
+    fn hardware_encode_retry_does_not_carry_a_qsv_preset_into_libx264() {
+        // ADR 0017 v5 seeds QSV at `medium`, which is target usage 4 on a
+        // fixed-function encoder. libx264's `medium` is a far more expensive
+        // CPU preset that shares nothing but the name, so an ADR 0014 demotion
+        // must fall back to `veryfast` rather than reuse it.
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::Qsv;
+        profile.profile.video_preset = Some("medium".to_owned());
+
+        force_software_h264_encoding(&mut profile);
+
+        assert_eq!(profile.profile.video_preset.as_deref(), Some("veryfast"));
+        assert_eq!(
+            profile.profile.hardware_acceleration,
+            ersatzrs_domain::HardwareAccelerationKind::None
+        );
+    }
+
+    #[test]
+    fn hls_direct_mpegts_transcode_does_not_substitute_an_x264_preset_for_nvenc() {
+        // FFmpeg 9's h264_nvenc preset domain is p1-p7 plus legacy
+        // slow/medium/fast — it has no `veryfast`, so forcing an H.264
+        // transcode for HLS-direct MPEG-TS must not inject one. A profile
+        // forced here from video format Copy carries no preset at all and
+        // inherits the encoder default.
+        let mut desired = DesiredVideoState {
+            video_preset: None,
+            ..DesiredVideoState::h264_1080p()
+        };
+
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+        );
+
+        assert_eq!(desired.video_preset, None);
+    }
+
+    #[test]
+    fn hls_direct_mpegts_transcode_still_defaults_software_encodes_to_veryfast() {
+        let mut desired = DesiredVideoState {
+            video_preset: None,
+            ..DesiredVideoState::h264_1080p()
+        };
+
+        normalize_hls_direct_mpegts_h264_preset(
+            &mut desired,
+            ersatzrs_domain::HardwareAccelerationKind::None,
+        );
+
+        assert_eq!(desired.video_preset.as_deref(), Some("veryfast"));
+    }
+
+    #[test]
+    fn software_profiles_keep_their_operator_chosen_x264_preset() {
+        // A profile that was already software carries a real libx264 preset,
+        // so a forced-software rebuild must not overwrite the operator's
+        // choice with `veryfast`.
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::None;
+        profile.profile.video_preset = Some("slow".to_owned());
+
+        force_software_h264_encoding(&mut profile);
+
+        assert_eq!(profile.profile.video_preset.as_deref(), Some("slow"));
     }
 
     #[test]

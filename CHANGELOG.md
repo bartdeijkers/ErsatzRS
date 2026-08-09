@@ -15,6 +15,15 @@ release section when tagging a release.
 
 ### Added
 
+- The FFmpeg profile editor now offers the full encoder preset ladders FFmpeg 9
+  accepts instead of the single `veryfast` value inherited from ErsatzTV:
+  `ultrafast` through `veryslow` for software `libx264`/`libx265`, and the
+  complete `veryfast` through `veryslow` target-usage ladder for QSV.
+  `placebo` is deliberately not offered, since it cannot sustain realtime
+  encoding at any resolution.
+- NVENC profiles for HEVC and AV1 can now select FFmpeg 9's `uhq` ("ultra high
+  quality") tune. H.264 NVENC does not advertise it, so the option is gated by
+  codec.
 - Dolby Vision profile 7 sources with a complete BL/EL/RPU record can now
   transcode through FFmpeg 9's `dovi_split` HDR10 base-layer path to SDR or
   HDR10 MPEG-TS and HLS output. ErsatzRS detects the bitstream filter at
@@ -25,8 +34,24 @@ release section when tagging a release.
   and MySQL; existing Dolby Vision items require a rescan before this path is
   enabled.
 
+### Changed
+
+- The FFmpeg profiles seeded into a **new** database are retuned for FFmpeg 9.
+  NVENC seeds now use preset `p5` with tune `hq` instead of `p7` with `ll`, and
+  QSV seeds use `medium` (target usage 4) instead of `veryfast` (target usage
+  7). The old NVENC pair came from the legacy `llhq` compatibility mapping,
+  which pairs the slowest preset with a low-latency tune that a 4-second-segment
+  HLS pipeline never benefits from. Software seeds keep `veryfast`. Existing
+  databases are not modified, and profiles migrated from `llhp`/`llhq` still
+  keep their exact original values.
+
 ### Fixed
 
+- A runtime hardware-encoder demotion no longer reuses the hardware profile's
+  encoder preset for the software encode. The QSV and `libx264` ladders share
+  several names (`medium`, `slow`, `veryfast`) while meaning entirely different
+  cost points, so a demoted QSV profile could hand `libx264` a far more
+  expensive preset than the hardware encoder was using and lose realtime.
 - Remote Stream producer failures now include the playback surface, channel,
   producer name, effective seek, failure class, exit status, stderr byte count,
   and a bounded diagnostic tail. URLs, credentials, cookies, authorization

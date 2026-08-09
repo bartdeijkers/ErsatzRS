@@ -896,12 +896,29 @@ pub async fn apply_default_ffmpeg_profile_hardware_acceleration(
     Ok(())
 }
 
+/// Seed-time encoder preset and tune for a detected acceleration (ADR 0017 v5).
+///
+/// These are *fresh-database* values only. The `llhp`/`llhq` compatibility
+/// mapping in [ADR 0063](../../../docs/adr/0063-ffmpeg-9-runtime-and-profile-options.md)
+/// exists to preserve already-saved profiles bit-exactly and deliberately does
+/// **not** apply here: it produced `p7` + `ll`, which is the slowest NVENC
+/// preset paired with the low-latency tune. ErsatzRS serves 4-second HLS
+/// segments, so encoder latency is never the constraint, and `ll` trades away
+/// compression efficiency to buy latency that the segmenter does not spend.
 const fn default_profile_video_options_for_acceleration(
     acceleration: i32,
 ) -> (Option<&'static str>, Option<&'static str>) {
     match acceleration {
-        0 | 1 => (Some("veryfast"), None),
-        2 => (Some("p7"), Some("ll")),
+        // Software (libx264/libx265). `veryfast` keeps a software-only host
+        // realtime, including the 2160p seeds.
+        0 => (Some("veryfast"), None),
+        // QSV target usage. `veryfast` is TU7 — the fastest, lowest-quality
+        // setting on a fixed-function encoder where TU4 costs almost nothing.
+        1 => (Some("medium"), None),
+        // NVENC. `p5` ("slow, good quality") is one step above FFmpeg 9's own
+        // `p4` default and stays realtime at 2160p10 on Turing and newer;
+        // `hq` is FFmpeg 9's default tune.
+        2 => (Some("p5"), Some("hq")),
         _ => (None, None),
     }
 }
@@ -1794,15 +1811,64 @@ mod tests {
                     .expect("hardware acceleration"),
                 2
             );
+            // ADR 0017 v5: the fresh NVENC seed is `p5` + `hq`, not the
+            // `p7` + `ll` that ADR 0063's legacy `llhq` migration produces for
+            // already-saved profiles.
             assert_eq!(
                 row.try_get::<Option<String>, _>("VideoPreset")
                     .expect("video preset"),
-                Some("p7".to_owned())
+                Some("p5".to_owned())
             );
             assert_eq!(
                 row.try_get::<Option<String>, _>("VideoTune")
                     .expect("video tune"),
-                Some("ll".to_owned())
+                Some("hq".to_owned())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn default_ffmpeg_profile_qsv_seed_uses_balanced_target_usage() {
+        // ADR 0017 v5: `veryfast` is QSV target usage 7 — the fastest and
+        // lowest-quality setting on a fixed-function encoder. The fresh seed
+        // uses `medium` (TU4) instead, and QSV takes no tune.
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        let seeded = initialize_media_server_database(&pool)
+            .await
+            .expect("seed mediaserver defaults");
+        assert!(seeded);
+
+        apply_default_ffmpeg_profile_hardware_acceleration(&pool, HardwareAccelerationKind::Qsv)
+            .await
+            .expect("apply hardware acceleration");
+
+        let rows = sqlx::query(
+            r#"SELECT "HardwareAcceleration", "VideoPreset", "VideoTune"
+               FROM "FFmpegProfile"
+               ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load hardware rows");
+
+        assert_eq!(rows.len(), 5);
+        for row in rows {
+            assert_eq!(
+                row.try_get::<i32, _>("HardwareAcceleration")
+                    .expect("hardware acceleration"),
+                1
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("VideoPreset")
+                    .expect("video preset"),
+                Some("medium".to_owned())
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("VideoTune")
+                    .expect("video tune"),
+                None
             );
         }
     }

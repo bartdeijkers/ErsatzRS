@@ -1055,17 +1055,63 @@ fn normalized_ffmpeg_video_profile(
     matches!(requested, "main" | "high" | "high10" | "high444p").then(|| requested.to_owned())
 }
 
-fn ffmpeg_presets(hw: i32, format: i32, depth: i32) -> Vec<&'static str> {
+/// `libx264` / `libx265` preset ladder, fastest to slowest (ADR 0017 v5).
+///
+/// `placebo` is deliberately omitted: it is unusable in a realtime encoder at
+/// any resolution and x264 documents it as not recommended.
+pub const SOFTWARE_VIDEO_PRESETS: [&str; 9] = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+];
+
+/// QSV target-usage ladder, fastest (TU7) to slowest (TU1) (ADR 0017 v5).
+pub const QSV_VIDEO_PRESETS: [&str; 7] = [
+    "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow",
+];
+
+/// NVENC performance presets (ADR 0063).
+pub const NVENC_VIDEO_PRESETS: [&str; 7] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+
+/// Valid `VideoPreset` values for a profile.
+///
+/// Widens ErsatzTV's `AvailablePresets.ForAccelAndFormat`, which offered only
+/// `veryfast` for software and QSV. That single value contradicted ADR 0017's
+/// promise that an admin on a strong CPU can pick a slower preset, and pinned
+/// QSV to its lowest-quality target usage. The values here are the domains
+/// `FFmpeg` 9 actually accepts.
+///
+/// Must stay in sync with `presets_for_profile` in `ersatzrs-web`, which cannot
+/// call this function because `ersatzrs-app` is excluded from the wasm32 build.
+#[must_use]
+pub fn ffmpeg_presets(hw: i32, format: i32, depth: i32) -> Vec<&'static str> {
     match (hw, format, depth) {
-        (2, 1 | 2 | 4, _) => vec!["p1", "p2", "p3", "p4", "p5", "p6", "p7"],
-        (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
+        (2, 1 | 2 | 4, _) => NVENC_VIDEO_PRESETS.to_vec(),
+        // 10-bit H.264 always encodes through libx264, whatever the profile's
+        // acceleration says.
+        (_, 1, 1) | (0, 1 | 2, _) => SOFTWARE_VIDEO_PRESETS.to_vec(),
+        (1, 1 | 2, _) => QSV_VIDEO_PRESETS.to_vec(),
         _ => Vec::new(),
     }
 }
 
-fn ffmpeg_tunes(hw: i32, format: i32) -> Vec<&'static str> {
+/// Valid NVENC `VideoTune` values for a profile.
+///
+/// `uhq` is codec-gated, not universal: `FFmpeg` 9's `hevc_nvenc` and `av1_nvenc`
+/// advertise it, `h264_nvenc` does not (its tune range is 1-4).
+///
+/// Must stay in sync with `tunes_for_profile` in `ersatzrs-web`.
+#[must_use]
+pub fn ffmpeg_tunes(hw: i32, format: i32) -> Vec<&'static str> {
     match (hw, format) {
-        (2, 1 | 2 | 4) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 1) => vec!["hq", "ll", "ull", "lossless"],
+        (2, 2 | 4) => vec!["hq", "uhq", "ll", "ull", "lossless"],
         _ => Vec::new(),
     }
 }

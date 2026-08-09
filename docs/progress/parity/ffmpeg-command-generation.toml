@@ -90,6 +90,30 @@ evidence    = 'Resolved 2026-07-02: `ADR0017_DEFAULT_PROFILES` in `crates/ersatz
 resolved    = true
 
 [[debt]]
+id          = 'default-profile-ffmpeg-9-preset-retune'
+adr         = '0017'
+description = 'The fresh-database seed presets were never re-evaluated against the option domains FFmpeg 9 advertises. NVENC seeded `p7` + `ll` — the slowest preset paired with the low-latency tune — because ADR 0063 reused its legacy `llhq` migration mapping as the seed default; that mapping exists to preserve saved profiles bit-exactly, and `ll` only trades compression efficiency for latency a 4-second-segment HLS pipeline never spends. QSV seeded `veryfast`, which is target usage 7, the fastest and lowest-quality setting on a fixed-function encoder. The preset allowlist also offered only `veryfast` for software and QSV, contradicting ADR 0017 v2 text promising admins could pick a slower preset, and FFmpeg 9 NVENC tune `uhq` was unreachable.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09 (ADR 0017 v5, ADR 0063 v3). Measured against ErsatzRS-ffmpeg n9.0-20260805: `hevc_nvenc` advertises presets p1-p7 with default p4 and tunes hq/uhq/ll/ull/lossless, `h264_nvenc` advertises tunes 1-4 with NO uhq, `h264_qsv` advertises veryslow(TU1)-veryfast(TU7), and libx264/libx265 both accept the full ultrafast-placebo ladder (each of the ten verified by a real one-frame encode). `default_profile_video_options_for_acceleration` in `crates/ersatzrs-infra/src/db.rs` now seeds software `veryfast`, QSV `medium`, NVENC `p5` + `hq`; tests `default_ffmpeg_profile_hardware_update_targets_seeded_profiles` and the new `default_ffmpeg_profile_qsv_seed_uses_balanced_target_usage` prove it. `ffmpeg_presets`/`ffmpeg_tunes` in `ersatzrs-app` and `presets_for_profile`/`tunes_for_profile` in `ersatzrs-web` widen the ladders and codec-gate `uhq`; the new `editor_option_lists_match_application_validation` test walks the whole (hw x format x depth) matrix because the two copies cannot share code (`ersatzrs-app` is excluded from the wasm32 build) and a drifted option is silently dropped on save. The ADR 0063 legacy `llhp`/`llhq` migration and its test are unchanged.'
+resolved    = true
+
+[[debt]]
+id          = 'hardware-demotion-preset-name-collision'
+adr         = '0014'
+description = 'The ADR 0014 runtime demotion from hardware to software H.264 kept the profile preset whenever the string was a valid x264 preset name. The QSV target-usage ladder and the libx264 ladder share the names `veryfast`, `faster`, `fast`, `medium`, `slow`, `slower`, and `veryslow` while denoting completely different cost points, so a demoted QSV profile could hand libx264 a far more expensive preset than the fixed-function encoder had been using and lose realtime. Latent until the ADR 0017 v5 seed moved QSV to `medium`, which made it reachable from a default install.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09: `force_software_h264_encoding` in `crates/ersatzrs-web/src/transport/iptv/stream.rs` captures the pre-demotion acceleration and only retains an existing preset when the profile was already software. New test `hardware_encode_retry_does_not_carry_a_qsv_preset_into_libx264` fails against the previous behavior (which kept `medium`); `software_profiles_keep_their_operator_chosen_x264_preset` proves an operator-chosen software preset is still respected; the pre-existing `hardware_encode_retry_profile_selects_software_h264` still passes.'
+resolved    = true
+
+[[debt]]
+id          = 'hls-direct-mpegts-preset-normalization-nvenc'
+adr         = '0063'
+description = '`normalize_hls_direct_mpegts_h264_preset` in `crates/ersatzrs-web/src/transport/iptv/stream.rs` substituted `veryfast` whenever the desired preset was not an x264 preset name, without considering the acceleration it was substituting for. An NVENC profile whose video format is Copy and which is forced to H.264 for the HLS-direct MPEG-TS path therefore received `-preset:v veryfast` on `h264_nvenc`, which FFmpeg 9 NVENC does not advertise (its preset domain is p1-p7 plus legacy slow/medium/fast). Found while auditing the preset paths for the ADR 0017 v5 retune; it predates that change.'
+discovered  = '2026-08-09'
+evidence    = 'Resolved 2026-08-09: the helper now takes the profile acceleration and returns early for any hardware encoder, so only a software encode gets a substituted preset; a profile forced here from video format Copy carries no preset and inherits the encoder default. `hevc_nvenc`/`h264_nvenc` `-preset` enumerations from ErsatzRS-ffmpeg n9.0-20260805 contain no `veryfast`, which is what made the substitution invalid. New test `hls_direct_mpegts_transcode_does_not_substitute_an_x264_preset_for_nvenc` covers the hardware path and `hls_direct_mpegts_transcode_still_defaults_software_encodes_to_veryfast` pins the software behavior.'
+resolved    = true
+
+[[debt]]
 id          = 'ac3-segmenter-max-delay'
 adr         = '0017'
 description = 'Resolved 2026-06-19: HLS segmenter output emits `-max_delay 500000` for multichannel AC-3 only, so 6-channel AC-3 is interleaved more tightly at segment boundaries without changing stereo AC-3 or AAC output.'
