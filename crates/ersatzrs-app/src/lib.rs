@@ -19,7 +19,9 @@ pub use ports::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
     BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError, MediaSourceRuntime,
     MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
-    PlexPinFlow, RemoteServerInfo, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
+    PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
+    RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
+    RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
     ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     WindowsStartupStatus,
 };
@@ -53,6 +55,72 @@ impl ApplicationServices {
     #[must_use]
     pub const fn operations(&self) -> &OperationCoordinator {
         &self.operations
+    }
+
+    pub async fn list_remote_stream_playlists(
+        &self,
+        library_id: i64,
+    ) -> std::result::Result<Vec<RemoteStreamPlaylistRead>, RemoteStreamPlaylistRuntimeError> {
+        self.ports.remote_stream_playlists().list(library_id).await
+    }
+
+    pub async fn list_remote_stream_playlist_extractors(
+        &self,
+    ) -> std::result::Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
+        self.ports.remote_stream_playlists().extractor_names().await
+    }
+
+    pub async fn list_remote_stream_tags(
+        &self,
+    ) -> std::result::Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
+        self.ports.remote_stream_playlists().tags().await
+    }
+
+    pub async fn save_remote_stream_playlist(
+        &self,
+        editor: RemoteStreamPlaylistEdit,
+    ) -> std::result::Result<String, RemoteStreamPlaylistRuntimeError> {
+        self.ports.remote_stream_playlists().save(editor).await
+    }
+
+    pub async fn delete_remote_stream_playlist(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+    ) -> std::result::Result<(), RemoteStreamPlaylistRuntimeError> {
+        self.ports
+            .remote_stream_playlists()
+            .delete(library_id, root_index, relative_path)
+            .await
+    }
+
+    pub async fn exclude_remote_stream_playlist_entry(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+        entry_id: String,
+    ) -> std::result::Result<(), RemoteStreamPlaylistRuntimeError> {
+        self.ports
+            .remote_stream_playlists()
+            .exclude_entry(library_id, root_index, relative_path, entry_id)
+            .await
+    }
+
+    pub async fn troubleshoot_remote_stream_playlist(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+    ) -> std::result::Result<
+        RemoteStreamPlaylistTroubleshootingRead,
+        RemoteStreamPlaylistRuntimeError,
+    > {
+        self.ports
+            .remote_stream_playlists()
+            .troubleshoot(library_id, root_index, relative_path)
+            .await
     }
 
     /// Load the complete admin season-detail projection.

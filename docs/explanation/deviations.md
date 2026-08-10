@@ -128,6 +128,18 @@ shared collection type already defines Remote Stream playlist entries.
 
 ADR: [0057](../adr/0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 
+## Managed Remote Stream playlists
+
+ErsatzTV supports one YAML definition per Remote Stream but has no contract for
+enumerating an upstream series or playlist. ErsatzRS recognizes distinct
+playlist manifests, executes only named server-allowlisted extractors, owns
+generated definitions through a versioned sidecar, and can maintain an ordered
+read-only playlist through an explicit source marker. Playback still uses the
+ordinary Remote Stream producer contract and resolves media URLs only when an
+item plays.
+
+ADR: [0065](../adr/0065-managed-remote-stream-playlists.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

@@ -1,5 +1,8 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -33,6 +36,7 @@ type RemoteStreamSeed = {
   collectionId: number;
   playlistGroupId: number;
   playlistId: number;
+  tag: string;
 };
 
 function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
@@ -53,12 +57,17 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
     collectionId: base + 9_001,
     playlistGroupId: base + 9_002,
     playlistId: base + 9_003,
+    tag: `E2E playlist facet ${testInfo.project.name}`,
   };
 }
 
 function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
   const seed = seedForProject(testInfo);
   sqlite(`
+INSERT INTO "ConfigElement" ("Key", "Value") VALUES (
+  'settings.remote_stream_extractors',
+  '[{"name":"fixture","windows":"C:\\\\fixture.bat","unix":"/tmp/fixture"}]'
+) ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value";
 DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId};
 DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
@@ -93,6 +102,9 @@ INSERT OR IGNORE INTO "RemoteStreamMetadata" (
   ${seed.mediaItemId}, 0, 'Nurburgring broadcast', 'Racing',
   'nurburgring broadcast', '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z'
 );
+INSERT INTO "Tag" ("Name", "RemoteStreamMetadataId")
+  SELECT '${sqlEscape(seed.tag)}', "Id" FROM "RemoteStreamMetadata"
+  WHERE "RemoteStreamId" = ${seed.mediaItemId};
 
 INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (${seed.otherMediaSourceId});
 INSERT OR IGNORE INTO "LocalMediaSource" ("Id") VALUES (${seed.otherMediaSourceId});
@@ -181,6 +193,7 @@ test.describe('remote streams browser parity', () => {
     await expect(page.getByText(`library_id:${seed.libraryId}`)).toBeVisible();
     await expect(page.getByText('1 item')).toBeVisible();
     await expect(page.getByText('Visdeurbel')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: seed.tag })).toBeVisible();
 
     const actionBar = page.locator('div[class*="action-bar"]').first();
     const actionBox = await actionBar.boundingBox();
@@ -200,6 +213,52 @@ test.describe('remote streams browser parity', () => {
     expect(contentBox?.width).toBeLessThanOrEqual(1540);
 
     await page.screenshot({ path: screenshotPath(testInfo, 'remote-streams-list-desktop'), fullPage: true });
+  });
+
+  test('playlist management hydrates and preserves hand-authored manifests', async ({ page }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
+    const root = mkdtempSync(join(tmpdir(), 'ersatzrs-playlist-e2e-'));
+    try {
+      sqlite(`UPDATE "LibraryPath" SET "Path" = '${sqlEscape(root)}' WHERE "Id" = ${seed.libraryPathId};`);
+      writeFileSync(join(root, 'Hand.playlist.yml'), [
+        'name: Hand-authored E2E',
+        'url: https://example.test/hand',
+        'extractor: fixture',
+        'folder: Hand',
+        'create_playlist: true',
+        '',
+      ].join('\n'));
+      mkdirSync(join(root, 'Hand'));
+      writeFileSync(join(root, 'Hand', '.ersatzrs-playlist.json'), JSON.stringify({
+        version: 1,
+        manifest_etag: 'manifest',
+        playlist_etag: 'playlist',
+        last_sync: '2026-08-10T12:00:00Z',
+        last_result: { kind: 'ok', entries: 1, truncated: false },
+        managed_files: { one: 'one.yml' },
+        entries: [{ id: 'one', file: 'one.yml', title: 'Episode one', duration_seconds: 60, active: true }],
+        overrides: { excluded: [] },
+      }));
+
+      await page.goto(`/media/remote/streams/playlists/${seed.libraryId}`);
+      await expect(page.getByTestId('remote-stream-playlists-page')).toBeVisible();
+      const handRow = page.getByTestId('remote-playlist-row').filter({ hasText: 'Hand-authored E2E' });
+      await expect(handRow).toBeVisible();
+      await expect(handRow.getByRole('button', { name: /^edit$/i })).toBeDisabled();
+      await expect(handRow.getByText('Episode one')).toBeVisible();
+
+      await page.getByTestId('remote-playlist-add').click();
+      await expect(page.getByTestId('remote-playlist-editor')).toBeVisible();
+      await page.locator('#remote-playlist-name').fill('Managed E2E');
+      await page.locator('#remote-playlist-url').fill('https://example.test/managed');
+      await page.locator('#remote-playlist-extractor').selectOption('fixture');
+      await page.locator('#remote-playlist-folder').fill('Managed E2E');
+      await page.getByTestId('remote-playlist-save').click();
+      await expect(page.getByTestId('remote-playlist-row').filter({ hasText: 'Managed E2E' })).toBeVisible();
+      await expect(page.locator('#remote-playlist-name')).toBeHidden();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test('hydrated card add-to-collection action cancels and persists', async ({ page }, testInfo) => {

@@ -18,7 +18,8 @@ use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, Add
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
-    list_remote_streams, remote_stream_page_map, MediaBrowserKind, MediaCardRow,
+    list_remote_stream_tags, list_remote_streams, remote_stream_page_map, MediaBrowserKind,
+    MediaCardRow,
 };
 use crate::admin::ui::primitives::card::first_letter_placeholder;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -66,6 +67,7 @@ pub fn RemoteStreamsPage() -> impl IntoView {
     );
 
     view! {
+        <RemoteStreamTagFacets/>
         <RemoteStreamsNoScriptFallback query=query.clone() page=page/>
         <Suspense fallback=admin_loading_resource_view>
             {move || {
@@ -83,6 +85,23 @@ pub fn RemoteStreamsPage() -> impl IntoView {
                     }.into_any(),
                 ))
             }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn RemoteStreamTagFacets() -> impl IntoView {
+    let tags = Resource::new(|| (), |()| list_remote_stream_tags());
+    view! {
+        <Suspense fallback=|| ()>
+            {move || tags.get().map(|result| admin_result_view(result, |tags| view! {
+                <nav class=style::facet_chips aria-label=tr(TextKey::Tags)>
+                    {tags.into_iter().map(|tag| {
+                        let href = format!("{BASE_PATH}?query={}", urlencoding::encode(&format!("tag:\"{tag}\"")));
+                        view! { <a class=style::facet_chip href=href>{tag}</a> }
+                    }).collect_view()}
+                </nav>
+            }.into_any()))}
         </Suspense>
     }
 }

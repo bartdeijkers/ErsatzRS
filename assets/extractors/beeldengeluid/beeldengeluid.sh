@@ -1,14 +1,268 @@
 #!/bin/sh
 
-# Resolve and stream a Beeld & Geluid "Schatkamer" episode to stdout for an
-# ErsatzRS Remote Stream definition.
+# Enumerate or stream Beeld & Geluid "Schatkamer" media for ErsatzRS.
 
 set -eu
 set -f
 
 usage() {
-    echo "Usage: beeldengeluid.sh <Schatkamer episode URL> [seek timestamp]" >&2
-    echo "Expected URL: https://schatkamer.beeldengeluid.nl/serie/.../.../aflevering/..." >&2
+    echo "Usage: beeldengeluid.sh list <Schatkamer series URL>" >&2
+    echo "       beeldengeluid.sh play <Schatkamer episode URL> [seek timestamp]" >&2
+    echo "       beeldengeluid.sh <Schatkamer episode URL> [seek timestamp]" >&2
+}
+
+html_decode() {
+    sed \
+        -e 's/&amp;/\&/g' \
+        -e 's/&quot;/"/g' \
+        -e "s/&#x27;/'/g" \
+        -e 's/&#39;/'"'"'/g' \
+        -e 's/&lt;/</g' \
+        -e 's/&gt;/>/g'
+}
+
+json_escape() {
+    sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e 's/	/\\t/g' \
+        -e 's//\\r/g'
+}
+
+escaped_json_slice() {
+    start=$1
+    end=$2
+    file=$3
+    awk -v start_name="$start" -v end_name="$end" '
+        BEGIN {
+            slash = sprintf("%c", 92)
+            start = slash "\"" start_name slash "\":"
+            end = "," slash "\"" end_name slash "\":"
+        }
+        {
+            rest = $0
+            while ((found = index(rest, start)) > 0) {
+                candidate = substr(rest, found + length(start))
+                finish = index(candidate, end)
+                if (finish > 0) result = substr(candidate, 1, finish - 1)
+                rest = candidate
+            }
+        }
+        END {
+            if (length(result)) print result
+        }
+    ' "$file"
+}
+
+json_object_names() {
+    escaped_json_slice "$1" "$2" "$3" \
+        | grep -o '\\"name\\":\\"[^\"]*' \
+        | sed 's/^.*\\"//' \
+        | html_decode
+}
+
+json_array_values() {
+    escaped_json_slice "$1" "$2" "$3" \
+        | grep -o '\\"[^\"]*\\"' \
+        | sed -e 's/^\\"//' -e 's/\\"$//' \
+        | html_decode
+}
+
+json_scalar_value() {
+    escaped_json_slice "$1" "$2" "$3" \
+        | sed \
+            -e 's/^\\"//' \
+            -e 's/\\"$//' \
+            -e 's/\\\\n/ /g' \
+            -e 's/\\\\r/ /g' \
+            -e 's/\\\\t/ /g' \
+            -e 's/\\\\\\"/"/g' \
+            -e 's/\\u0026/\&/g' \
+        | html_decode
+}
+
+write_json_array() {
+    field=$1
+    file=$2
+    [ -s "$file" ] || return 0
+    printf ',"%s":[' "$field"
+    separator=
+    awk '!seen[tolower($0)]++' "$file" | while IFS= read -r value; do
+        [ -n "$value" ] || continue
+        escaped=$(printf '%s' "$value" | json_escape)
+        printf '%s"%s"' "$separator" "$escaped"
+        separator=,
+    done
+    printf ']'
+}
+
+list_series() {
+    [ "$#" -eq 1 ] || { usage; exit 64; }
+    series_url=$1
+    case "$series_url" in
+        https://schatkamer.beeldengeluid.nl/serie/*/* | \
+            http://schatkamer.beeldengeluid.nl/serie/*/*)
+            ;;
+        *)
+            fail "unsupported Schatkamer series URL" 64
+            ;;
+    esac
+    case "$series_url" in
+        */aflevering/*) fail "list requires a Schatkamer series URL" 64 ;;
+    esac
+
+    curl_bin=${CURL_BIN:-curl}
+    find_program "$curl_bin" "curl"
+    find_program grep "grep"
+    find_program sed "sed"
+    find_program awk "awk"
+    find_program mktemp "mktemp"
+
+    series_base=${series_url%%\?*}
+    series_base=${series_base%%\#*}
+    series_base=${series_base%/}
+    list_work_dir=$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-beeldengeluid-list.XXXXXX") \
+        || fail "unable to create a temporary directory"
+    list_cleanup() {
+        rm -f "$list_work_dir"/*
+        rmdir "$list_work_dir" 2>/dev/null || true
+    }
+    trap list_cleanup EXIT HUP INT TERM
+    : >"$list_work_dir/seen.txt"
+
+    page_number=1
+    while [ "$page_number" -le 100 ]; do
+        page_url="$series_base?pagina=$page_number"
+        "$curl_bin" --fail --silent --show-error --location \
+            --output "$list_work_dir/page.html" "$page_url" \
+            || fail "the Schatkamer series page request failed"
+        grep -o 'href="/serie/[0-9][0-9]*/[^"/]*/aflevering/[0-9][0-9]*"' \
+            "$list_work_dir/page.html" \
+            | sed -e 's/^href="//' -e 's/"$//' \
+            | awk '!seen[$0]++' >"$list_work_dir/page-links.txt"
+        : >"$list_work_dir/new-links.txt"
+        while IFS= read -r episode_path; do
+            if ! grep -Fqx "$episode_path" "$list_work_dir/seen.txt"; then
+                printf '%s\n' "$episode_path" >>"$list_work_dir/seen.txt"
+                printf '%s\n' "$episode_path" >>"$list_work_dir/new-links.txt"
+            fi
+        done <"$list_work_dir/page-links.txt"
+        [ -s "$list_work_dir/new-links.txt" ] || break
+        page_number=$((page_number + 1))
+    done
+
+    [ -s "$list_work_dir/seen.txt" ] \
+        || fail "the Schatkamer series did not contain playable episodes"
+    while IFS= read -r episode_path; do
+        episode_id=${episode_path##*/}
+        episode_url="https://schatkamer.beeldengeluid.nl$episode_path"
+        "$curl_bin" --fail --silent --show-error --location \
+            --output "$list_work_dir/episode.html" "$episode_url" \
+            || fail "a Schatkamer episode metadata request failed"
+        series_title=$(grep -o '<h1[^>]*>[^<]*' "$list_work_dir/episode.html" \
+            | sed -n '1{s/^.*>//;p;}')
+        episode_title=$(grep -o '<h3[^>]*>[^<]*' "$list_work_dir/episode.html" \
+            | sed -n '1{s/^.*>//;p;}')
+        [ -n "$episode_title" ] || episode_title=$episode_id
+        if [ -n "$series_title" ]; then
+            title="$series_title - $episode_title"
+        else
+            title=$episode_title
+        fi
+        title=$(printf '%s' "$title" | html_decode | json_escape)
+        plot=$(json_scalar_value description disclaimer \
+            "$list_work_dir/episode.html" | json_escape)
+        duration_seconds=$(grep -o '\\"durationNumber\\":[0-9][0-9]*' \
+            "$list_work_dir/episode.html" \
+            | sed -n '1{s/^.*://;p;}')
+        release_date=$(grep -o '\\"publishedAtISO\\":\\"[0-9][0-9][0-9][0-9]-[^\"]*' \
+            "$list_work_dir/episode.html" \
+            | sed -n '$ { s/^.*\\"//; p; }')
+        year=$(printf '%s' "$release_date" | sed -n 's/^\([0-9][0-9][0-9][0-9]\)-.*/\1/p')
+        age_rating=$(grep -o '\\"ageRating\\":\\"[^\"]*' \
+            "$list_work_dir/episode.html" \
+            | sed -n '$ { s/^.*\\"//; p; }' \
+            | html_decode)
+        case "$age_rating" in
+            'Leeftijdsadvies onbekend') content_rating='nl:unknown' ;;
+            'Alle leeftijden') content_rating='nl:AL' ;;
+            *'onder de '*[0-9]*' jaar')
+                content_rating=$(printf '%s' "$age_rating" \
+                    | sed -n 's/.*onder de \([0-9][0-9]*\) jaar.*/nl:\1/p')
+                ;;
+            *) content_rating=$age_rating ;;
+        esac
+
+        : >"$list_work_dir/genres.txt"
+        : >"$list_work_dir/subjects.txt"
+        json_array_values genres subjects "$list_work_dir/episode.html" \
+            >"$list_work_dir/genres.txt" || true
+        json_array_values subjects collection "$list_work_dir/episode.html" \
+            >"$list_work_dir/subjects.txt" || true
+        collection=$(grep -o 'href="/zoeken?collectie=[^"]*"[^>]*>[^<]*' \
+            "$list_work_dir/episode.html" \
+            | sed -n '1{s/^.*>//;p;}' | html_decode | json_escape)
+
+        : >"$list_work_dir/people.txt"
+        for role_and_list in \
+            'presenter:program-info-presenters-list' \
+            'actor:program-info-actors-list' \
+            'guest:program-info-guests-list' \
+            'director:program-info-directors-list' \
+            'performer:program-info-performers-list' \
+            'person:program-info-others-list'
+        do
+            role=${role_and_list%%:*}
+            case "$role" in
+                presenter) json_field=presenters; next_field=actors ;;
+                actor) json_field=actors; next_field=guests ;;
+                guest) json_field=guests; next_field=directors ;;
+                director) json_field=directors; next_field=performers ;;
+                performer) json_field=performers; next_field=others ;;
+                person) json_field=others; next_field=productionCompanies ;;
+            esac
+            json_object_names "$json_field" "$next_field" \
+                "$list_work_dir/episode.html" \
+                | while IFS= read -r person; do
+                    [ -n "$person" ] && printf '%s|%s\n' "$role" "$person"
+                done >>"$list_work_dir/people.txt"
+        done
+        json_array_values productionCompanies genres \
+            "$list_work_dir/episode.html" >"$list_work_dir/producers.txt" || true
+        json_object_names originalBroadcasters broadcaster \
+            "$list_work_dir/episode.html" >"$list_work_dir/original-broadcasters.txt" || true
+        json_object_names broadcasters url \
+            "$list_work_dir/episode.html" >"$list_work_dir/broadcasters.txt" || true
+
+        printf '{"id":"%s","url":"%s","title":"%s"' \
+            "$episode_id" "$episode_url" "$title"
+        [ -z "$duration_seconds" ] \
+            || printf ',"duration_seconds":%s' "$duration_seconds"
+        [ -z "$plot" ] || printf ',"plot":"%s"' "$plot"
+        [ -z "$year" ] || printf ',"year":%s' "$year"
+        [ -z "$release_date" ] || printf ',"release_date":"%s"' "$release_date"
+        [ -z "$content_rating" ] \
+            || printf ',"content_rating":"%s"' "$(printf '%s' "$content_rating" | json_escape)"
+        write_json_array genres "$list_work_dir/genres.txt"
+        write_json_array tags "$list_work_dir/subjects.txt"
+        [ -z "$collection" ] || printf ',"collection":"%s"' "$collection"
+        if [ -s "$list_work_dir/people.txt" ]; then
+            printf ',"people":['
+            separator=
+            while IFS='|' read -r role person; do
+                [ -n "$person" ] || continue
+                printf '%s{"name":"%s","role":"%s"}' "$separator" \
+                    "$(printf '%s' "$person" | json_escape)" "$role"
+                separator=,
+            done <"$list_work_dir/people.txt"
+            printf ']'
+        fi
+        write_json_array producers "$list_work_dir/producers.txt"
+        write_json_array original_broadcasters "$list_work_dir/original-broadcasters.txt"
+        write_json_array broadcasters "$list_work_dir/broadcasters.txt"
+        printf ',"is_live":false}\n'
+    done <"$list_work_dir/seen.txt"
+    exit 0
 }
 
 fail() {
@@ -56,6 +310,13 @@ decode_cloudfront_value() {
         -e 's/%25/%/g'
 }
 
+if [ "${1:-}" = "list" ]; then
+    shift
+    list_series "$@"
+fi
+if [ "${1:-}" = "play" ]; then
+    shift
+fi
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     usage
     exit 64

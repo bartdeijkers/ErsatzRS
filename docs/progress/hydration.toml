@@ -66,7 +66,13 @@ notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded
 name   = 'RemoteStreamsPage'
 status = '✅'
 routes = ['/media/remote/streams', '/media/remote/streams/page/:page']
-notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, card Add To Collection and direct Add To Playlist persistence (`CollectionType = 70`), mobile action menu, and geometry screenshots covered by focused Chromium `tests/e2e/remote-streams.spec.ts` proof on 2026-07-29.'
+notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, tag-backed playlist facets, card Add To Collection and direct Add To Playlist persistence (`CollectionType = 70`), mobile action menu, and geometry screenshots; focused Chromium and Firefox facet proof rerun on 2026-08-10.'
+
+[[page]]
+name   = 'RemoteStreamPlaylistsPage'
+status = '✅'
+routes = ['/media/remote/streams/playlists/:library_id']
+notes  = 'Focused Chromium and Firefox proof on 2026-08-10 covers hand-authored read-only state and hydrated managed-manifest creation; tag facets remain covered in the RemoteStreamsPage route family.'
 
 [[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'

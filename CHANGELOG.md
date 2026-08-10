@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Remote Stream playlist manifests can now enumerate an upstream series through
+  a named Windows/Unix extractor, synchronize stable generated definitions,
+  report health and bounded troubleshooting, expose localized management and
+  tag facets, and optionally maintain a read-only playlist in upstream order
+  with affected playout refresh.
 - The FFmpeg profile editor now offers the full encoder preset ladders FFmpeg 9
   accepts instead of the single `veryfast` value inherited from ErsatzTV:
   `ultrafast` through `veryslow` for software `libx264`/`libx265`, and the
@@ -47,6 +52,17 @@ release section when tagging a release.
 
 ### Changed
 
+- The remaining FFmpeg multi-vendor hardware and Dolby Vision fixture/client
+  evidence gaps are explicitly deferred beyond Phase 8 and no longer block
+  Phase 9; their unresolved acceptance evidence remains tracked for later
+  opportunistic closure.
+- CI now executes the Output Dynamic Range health classification against an
+  isolated MySQL 8 service instead of allowing that backend regression to skip
+  when no external test URL is configured.
+- Release guidance now distinguishes Windows-only beta artifacts from the
+  normal Linux/Windows/GHCR release matrix, and the remaining pre-publication
+  Windows candidate, workflow-hardening, and live-acceptance work is tracked in
+  one redacted plan instead of an uncommitted beta test diary.
 - FFmpeg settings now publish as one validated runtime generation. ErsatzRS
   stages binaries and graph probes before one transactional settings/cache
   commit, then atomically swaps the shared capability report and paired
@@ -70,6 +86,16 @@ release section when tagging a release.
 
 ### Fixed
 
+- Beeld & Geluid playlist-generated episode definitions now retain plot,
+  original broadcast timestamp, Kijkwijzer advice, genre and subject labels,
+  collection, role-aware people, producer, original broadcasters, and current
+  broadcasters. Remote Stream scans persist and index those facets, while
+  XMLTV/Kodi output now includes the compatible date, categories, rating, and
+  credits instead of dropping the metadata after enumeration.
+
+- Channel mirror source and playout offset controls are now available only
+  when the editor's Playout Source is Mirror; server-side normalization still
+  discards forged mirror-only values from Generated channels.
 - A runtime hardware-encoder demotion no longer reuses the hardware profile's
   encoder preset for the software encode. The QSV and `libx264` ladders share
   several names (`medium`, `slow`, `veryfast`) while meaning entirely different

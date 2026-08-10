@@ -3779,6 +3779,8 @@ async fn load_active_hls_item(
             plot: None,
             year: None,
             content_rating: None,
+            tags: Vec::new(),
+            ..RemoteStreamDefinition::default()
         };
         Some(
             resolve_remote_stream(&definition, Path::new(&media_path)).map_err(|error| {

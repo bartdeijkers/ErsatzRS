@@ -1,0 +1,57 @@
+feature    = 'Remote Stream playlists'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
+rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-domain`, `crates/ersatzrs-infra/src/remote_stream.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, `assets/extractors`'
+status     = 'In progress'
+adr        = ['0065']
+
+summary = '''
+Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
+owns the intentional ErsatzRS extension: strict playlist manifests reference a
+named, platform-specific extractor allowlist; serialized bounded enumeration
+materializes ordinary Remote Stream definitions and an atomic sidecar; stable
+identity, etags, safe removal, playout invalidation, health, troubleshooting,
+localized administration, and optional sync-owned ordered playlists are all
+implemented.
+
+Playback remains on the existing Remote Stream script and seek path. A
+network-free scanner regression proves generated definitions, tag facets, and
+upstream order through the real scheduling repository. The Beeld & Geluid
+wrapper was additionally exercised against the public Glamourland series as a
+local-only operator example; personal paths and database configuration were not
+added to the repository. Its enumeration now preserves plot, full original
+broadcast timestamp, Kijkwijzer advice, distinct genre/subject labels,
+collection, role-aware people, producer, and original/current broadcasters.
+Scanner and XMLTV regressions prove persistence, search facets, and compatible
+Kodi/EPG projection without flattening the lossless YAML source.
+'''
+
+[[debt]]
+id          = 'remote-stream-playlist-contract-is-undecided'
+description = 'Accept an ADR for Remote Stream playlist ingestion before implementation. It must own the manifest naming and folder-expansion contract, stable extractor identity, scan-time execution trust boundary, list/play protocol, synchronization and managed-file deletion safety, playout invalidation, and the optional managed Playlist schema deviation.'
+discovered  = '2026-08-10'
+evidence    = 'ADR 0065 records the ErsatzRS-only manifest, trust boundary, synchronization ownership, health, administration, and Playlist.ManagedSource contracts.'
+resolved    = true
+resolution  = 'ADR 0065 was accepted before the implementation and remains the canonical decision owner.'
+
+[[debt]]
+id          = 'remote-stream-playlist-extractors-are-not-cross-platform'
+description = 'Add a named, allowlisted extractor configuration with validated per-platform commands and identical list/play behavior on all six supported release targets. Ship Unix and Windows wrapper examples without bundling, downloading, or updating the third-party extractor.'
+discovered  = '2026-08-10'
+evidence    = 'The scanner resolves only validated native absolute executables from settings.remote_stream_extractors. Unix and Windows Beeld & Geluid wrappers expose the same list/play protocol, platform selection is compile-time portable, unknown or unavailable names fail visibly, and default plus MySQL-feature checks pass.'
+resolved    = true
+resolution  = 'Named per-platform commands are implemented as the scan-time execution boundary; ErsatzRS neither bundles nor updates third-party extractor dependencies.'
+
+[[debt]]
+id          = 'remote-stream-playlist-duration-guarantee-is-undecided'
+description = 'Decide how flat playlist enumeration handles entries without a reliable duration. Synchronization must remain bounded and rate-limit aware, health must expose missing durations, and scheduling must never silently accept an unknown-length finite item.'
+discovered  = '2026-08-10'
+evidence    = 'Enumeration is time, byte, line, and item bounded. Entries with missing or zero duration remain materialized and visible in sidecar/admin/health state but are excluded from the sync-owned schedulable Playlist. The scanner and health regressions cover both ordered scheduling and missing-duration reporting.'
+resolved    = true
+resolution  = 'Unknown-duration finite entries are retained for diagnosis but cannot enter the managed scheduling playlist.'
+
+[[debt]]
+id          = 'beeldengeluid-windows-rich-metadata-runtime-validation'
+description = 'Run the Windows Beeld & Geluid wrapper against a representative episode on a Windows or PowerShell host and confirm that its nested people and provider-label arrays match the Unix extractor output.'
+discovered  = '2026-08-10'
+evidence    = 'The Unix wrapper was exercised against the public Glamourland series and both wrappers are covered by shared source-contract tests, but this Linux host has no pwsh executable for an end-to-end Windows wrapper run.'
+resolved    = false

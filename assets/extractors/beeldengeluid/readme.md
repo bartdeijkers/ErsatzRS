@@ -1,12 +1,17 @@
 # Beeld & Geluid remote-stream extractor
 
-These standalone wrappers stream an episode from the Beeld & Geluid
+These standalone wrappers enumerate a series or stream an episode from the Beeld & Geluid
 [Schatkamer](https://schatkamer.beeldengeluid.nl/) to standard output as
 MPEG-TS. They are intended for an ErsatzRS Remote Streams library and implement
 the `script` behavior described by the
 [ErsatzTV Remote Stream documentation](https://ersatztv.org/docs/media/local/remotestreams/definition/).
 
-Each wrapper implements the complete site-specific flow itself:
+Each wrapper implements the complete site-specific flow itself. `list` follows
+the series pagination and emits one NDJSON object per episode in upstream
+order. Enumeration preserves the Schatkamer plot, original broadcast timestamp,
+Kijkwijzer advice, genre and subject labels, collection, role-aware people,
+producer, original broadcasters, and current broadcasters. `play` performs the
+streaming flow below:
 
 1. Extract the episode ID from the Schatkamer URL.
 2. Discover the current `getProgramStreamById` Server Action from the episode
@@ -63,15 +68,17 @@ https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<
 On Linux or macOS:
 
 ```sh
-./beeldengeluid.sh "<episode-url>" > episode.ts
-./beeldengeluid.sh "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
+./beeldengeluid.sh list "<series-url>" > episodes.ndjson
+./beeldengeluid.sh play "<episode-url>" > episode.ts
+./beeldengeluid.sh play "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
 ```
 
 On Windows:
 
 ```batch
-beeldengeluid.bat "<episode-url>" > episode.ts
-beeldengeluid.bat "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
+beeldengeluid.bat list "<series-url>" > episodes.ndjson
+beeldengeluid.bat play "<episode-url>" > episode.ts
+beeldengeluid.bat play "<episode-url>" "00:15:00.0000000" > episode-at-15m.ts
 ```
 
 Open `episode.ts` with a media player or inspect it with `ffprobe`. Diagnostics
@@ -114,6 +121,33 @@ with the current playout offset and lets the extractor seek the signed HLS
 source directly; this keeps channel tune-in fast even halfway through a long
 episode. Definitions without the marker retain the original non-seekable pipe
 behavior.
+
+## Add a series playlist to ErsatzRS
+
+Register the wrapper as a named Remote Stream playlist extractor and add a
+`.playlist.yml` manifest to the library root:
+
+```yaml
+name: Example series
+url: https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>
+extractor: beeldengeluid
+folder: episodes
+sync:
+  interval: 24h
+  order: upstream
+  on_removed: trash
+create_playlist: true
+```
+
+The [manifest reference](../../../docs/reference/remote-stream-playlist-manifests.md)
+defines the extractor setting and every optional field. The repository does
+not contain a real series manifest or a maintainer media path; those belong in
+the operator's Remote Streams library.
+
+Generated episode definitions retain the extracted fields as ordinary Remote
+Stream metadata. On scan, ErsatzRS indexes the compatible genre, tag, studio,
+and person facets and projects plot, original date, categories, rating, and
+credits into XMLTV for Kodi and other IPTV clients.
 
 The command path and the required executables must be visible to the ErsatzRS
 process itself. For a container deployment, extend the image with `curl` and

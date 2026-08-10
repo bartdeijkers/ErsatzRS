@@ -35,6 +35,7 @@ mod folder_etag;
 mod library_folder;
 pub mod local_television;
 pub mod nfo;
+pub mod remote_stream_playlist;
 
 const METADATA_KIND_FALLBACK: i32 = 0;
 const METADATA_KIND_SIDECAR: i32 = 1;
@@ -148,10 +149,17 @@ pub enum ScannerError {
     Repository(#[from] RepositoryError),
     #[error(transparent)]
     RemoteStream(#[from] RemoteStreamError),
+    #[error(transparent)]
+    RemoteStreamPlaylist(#[from] remote_stream_playlist::PlaylistError),
     #[error("local television reconciliation failed: {0}")]
     Reconciliation(String),
     #[error("failed to read remote stream definition {path}: {source}")]
     RemoteStreamRead {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("failed to read remote stream playlist manifest {path}: {source}")]
+    RemoteStreamPlaylistRead {
         path: String,
         source: std::io::Error,
     },
@@ -170,6 +178,7 @@ pub struct LocalScanReport {
     pub scanned_files: usize,
     pub failed_files: usize,
     pub issues: Vec<String>,
+    pub playout_ids_to_refresh: Vec<i64>,
 }
 
 /// One pre-enumerated unit of work for the local scanner. Materializing the
@@ -188,6 +197,9 @@ enum LocalScanWork {
         file_path: PathBuf,
     },
     RemoteStream {
+        path: PathBuf,
+    },
+    RemoteStreamPlaylist {
         path: PathBuf,
     },
     Generic {
@@ -290,10 +302,7 @@ async fn scan_local_library_with_progress_once(
                 LocalScanBucketKind::Items(items)
             }
             LibraryMediaKind::RemoteStreams => {
-                let items: Vec<LocalScanWork> = collect_remote_stream_files(&library_path.path)
-                    .into_iter()
-                    .map(|path| LocalScanWork::RemoteStream { path })
-                    .collect();
+                let items = collect_remote_stream_files(&library_path.path);
                 total_items = total_items.saturating_add(items.len());
                 LocalScanBucketKind::Items(items)
             }
@@ -327,7 +336,11 @@ async fn scan_local_library_with_progress_once(
         match bucket.kind {
             LocalScanBucketKind::Items(items) => {
                 for work in items {
-                    let is_remote_stream = matches!(&work, LocalScanWork::RemoteStream { .. });
+                    let is_remote_stream = matches!(
+                        &work,
+                        LocalScanWork::RemoteStream { .. }
+                            | LocalScanWork::RemoteStreamPlaylist { .. }
+                    );
                     match work {
                         LocalScanWork::ExtraVideo { path, extra } => {
                             let parent_media_item_id =
@@ -389,21 +402,25 @@ async fn scan_local_library_with_progress_once(
                             let result = match load_remote_stream_definition(&path) {
                                 Ok((definition, resolved)) => {
                                     let ffmpeg_path = paired_ffmpeg_path(&config.ffprobe_path);
-                                    let probed = match extractor
-                                        .extract_remote(&resolved, &ffmpeg_path)
-                                        .await
-                                    {
-                                        Ok(probed) => Some(probed),
-                                        Err(error) => {
-                                            warn!(
-                                                error = %error,
-                                                definition = %path
-                                                    .strip_prefix(&library_path.path)
-                                                    .unwrap_or(&path)
-                                                    .display(),
-                                                "remote stream probe failed; persisting definition with configured duration"
-                                            );
-                                            None
+                                    let probed = if is_managed_remote_stream_definition(&path) {
+                                        None
+                                    } else {
+                                        match extractor
+                                            .extract_remote(&resolved, &ffmpeg_path)
+                                            .await
+                                        {
+                                            Ok(probed) => Some(probed),
+                                            Err(error) => {
+                                                warn!(
+                                                    error = %error,
+                                                    definition = %path
+                                                        .strip_prefix(&library_path.path)
+                                                        .unwrap_or(&path)
+                                                        .display(),
+                                                    "remote stream probe failed; persisting definition with configured duration"
+                                                );
+                                                None
+                                            }
                                         }
                                     };
                                     retry_sqlite_busy(|| {
@@ -447,6 +464,35 @@ async fn scan_local_library_with_progress_once(
                                 );
                             } else {
                                 report.scanned_files += 1;
+                            }
+                        }
+                        LocalScanWork::RemoteStreamPlaylist { path } => {
+                            match synchronize_remote_stream_playlist(
+                                pool,
+                                config.library_id,
+                                &library_path,
+                                &path,
+                            )
+                            .await
+                            {
+                                Ok(playout_ids) => {
+                                    report.playout_ids_to_refresh.extend(playout_ids);
+                                    report.scanned_files += 1;
+                                }
+                                Err(error) => {
+                                    report.failed_files += 1;
+                                    let display_path = path
+                                        .strip_prefix(&library_path.path)
+                                        .unwrap_or(&path)
+                                        .display()
+                                        .to_string();
+                                    report.issues.push(format!("{display_path}: {error}"));
+                                    warn!(
+                                        error = %error,
+                                        manifest = %display_path,
+                                        "remote stream playlist validation failed; continuing"
+                                    );
+                                }
                             }
                         }
                     }
@@ -504,6 +550,8 @@ async fn scan_local_library_with_progress_once(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    report.playout_ids_to_refresh.sort_unstable();
+    report.playout_ids_to_refresh.dedup();
     Ok(report)
 }
 
@@ -595,9 +643,9 @@ fn collect_music_video_files(root: &str) -> Vec<(String, PathBuf)> {
     files
 }
 
-/// Walks the remote-stream library root and yields `.yml`/`.yaml` definition
-/// files. `ErsatzTV`'s `RemoteStreamFolderScanner` parses the same extensions.
-fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
+/// Walks the remote-stream library root and distinguishes playlist manifests
+/// from ordinary `.yml`/`.yaml` definitions before strict definition parsing.
+fn collect_remote_stream_files(root: &str) -> Vec<LocalScanWork> {
     let mut files = Vec::new();
     let mut queue = VecDeque::from([PathBuf::from(root)]);
     while let Some(path) = queue.pop_front() {
@@ -607,6 +655,13 @@ fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                if path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with('.'))
+                {
+                    continue;
+                }
                 queue.push_back(path);
                 continue;
             }
@@ -619,11 +674,15 @@ fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.starts_with("._"));
             if !is_dot_underscore && matches!(extension.as_deref(), Some("yml" | "yaml")) {
-                files.push(path);
+                if remote_stream_playlist::is_playlist_manifest(&path) {
+                    files.push(LocalScanWork::RemoteStreamPlaylist { path });
+                } else {
+                    files.push(LocalScanWork::RemoteStream { path });
+                }
             }
         }
     }
-    files.sort();
+    files.sort_by(|left, right| work_path(left).cmp(work_path(right)));
     files
 }
 
@@ -661,6 +720,7 @@ fn work_path(work: &LocalScanWork) -> &Path {
         LocalScanWork::MoviePrimary { path }
         | LocalScanWork::ExtraVideo { path, .. }
         | LocalScanWork::RemoteStream { path }
+        | LocalScanWork::RemoteStreamPlaylist { path }
         | LocalScanWork::Generic { path } => path,
         LocalScanWork::MusicVideo { file_path, .. } => file_path,
     }
@@ -1667,7 +1727,7 @@ async fn upsert_local_remote_stream(
     definition: &ersatzrs_infra::remote_stream::RemoteStreamDefinition,
     resolved: &ersatzrs_infra::remote_stream::ResolvedRemoteStream,
     probed: Option<&FfprobeMediaVersion>,
-) -> Result<()> {
+) -> Result<i64> {
     let mut tx = pool.begin().await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
@@ -1713,7 +1773,9 @@ async fn upsert_local_remote_stream(
             r#"UPDATE "RemoteStreamMetadata"
                SET "DateUpdated" = ?, "MetadataKind" = 1, "Title" = ?,
                    "OriginalTitle" = ?, "SortTitle" = ?, "Year" = ?,
-                   "ContentRating" = ?, "Plot" = ?
+                   "ReleaseDate" = ?, "ContentRating" = ?, "Plot" = ?,
+                   "CollectionName" = ?, "OriginalBroadcasters" = ?,
+                   "Broadcasters" = ?
                WHERE "Id" = ?"#,
         )
         .bind(encode_datetime(now))
@@ -1721,8 +1783,14 @@ async fn upsert_local_remote_stream(
         .bind(&original_title)
         .bind(&title)
         .bind(definition.year)
+        .bind(definition.release_date.as_deref())
         .bind(definition.content_rating.as_deref())
         .bind(definition.plot.as_deref())
+        .bind(definition.collection.as_deref())
+        .bind(encode_nonempty_string_list(
+            &definition.original_broadcasters,
+        ))
+        .bind(encode_nonempty_string_list(&definition.broadcasters))
         .bind(metadata_id)
         .execute(&mut *tx)
         .await?;
@@ -1736,8 +1804,10 @@ async fn upsert_local_remote_stream(
         let metadata_result = sqlx::query(
             r#"INSERT INTO "RemoteStreamMetadata" (
                 "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind",
-                "Title", "OriginalTitle", "SortTitle", "Year", "ContentRating", "Plot"
-            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)"#,
+                "Title", "OriginalTitle", "SortTitle", "Year", "ReleaseDate",
+                "ContentRating", "Plot", "CollectionName", "OriginalBroadcasters",
+                "Broadcasters"
+            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item_id)
         .bind(encode_datetime(now))
@@ -1746,8 +1816,14 @@ async fn upsert_local_remote_stream(
         .bind(&original_title)
         .bind(&title)
         .bind(definition.year)
+        .bind(definition.release_date.as_deref())
         .bind(definition.content_rating.as_deref())
         .bind(definition.plot.as_deref())
+        .bind(definition.collection.as_deref())
+        .bind(encode_nonempty_string_list(
+            &definition.original_broadcasters,
+        ))
+        .bind(encode_nonempty_string_list(&definition.broadcasters))
         .execute(&mut *tx)
         .await?;
         let metadata_id = ersatzrs_infra::db::last_insert_id(metadata_result);
@@ -1838,8 +1914,68 @@ async fn upsert_local_remote_stream(
     .execute(&mut *tx)
     .await?;
 
-    let tags = remote_stream_folder_tags(Path::new(&library_path.path), path);
+    let mut definition_tags = definition.tags.clone();
+    if let Some(collection) = definition.collection.as_deref() {
+        definition_tags.push(collection.to_owned());
+    }
+    let tags = union_facet_values(
+        &remote_stream_folder_tags(Path::new(&library_path.path), path),
+        &definition_tags,
+    );
+    replace_strings(
+        &mut tx,
+        "Genre",
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &definition.genres,
+    )
+    .await?;
     replace_strings(&mut tx, "Tag", "RemoteStreamMetadataId", metadata_id, &tags).await?;
+    let studios = union_facet_values(
+        &union_facet_values(&definition.broadcasters, &definition.original_broadcasters),
+        &definition.producers,
+    );
+    replace_strings(
+        &mut tx,
+        "Studio",
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &studios,
+    )
+    .await?;
+    let mut people = definition
+        .people
+        .iter()
+        .enumerate()
+        .map(|(index, person)| {
+            PersonRef::with_role(
+                person.name.clone(),
+                Some(person.role.clone()),
+                i32::try_from(index).ok(),
+            )
+        })
+        .collect::<Vec<_>>();
+    people.extend(
+        definition
+            .producers
+            .iter()
+            .enumerate()
+            .map(|(index, producer)| {
+                PersonRef::with_role(
+                    producer.clone(),
+                    Some("producer".to_owned()),
+                    i32::try_from(definition.people.len() + index).ok(),
+                )
+            }),
+    );
+    replace_people(
+        &mut tx,
+        "Actor",
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &people,
+    )
+    .await?;
     let artwork = locate_remote_stream_artwork(path)
         .map(|path| vec![artwork_ref(&path, artwork_kind::THUMBNAIL)])
         .unwrap_or_default();
@@ -1853,7 +1989,12 @@ async fn upsert_local_remote_stream(
     .await?;
 
     tx.commit().await?;
-    Ok(())
+    Ok(item_id)
+}
+
+fn encode_nonempty_string_list(values: &[String]) -> Option<String> {
+    (!values.is_empty())
+        .then(|| serde_json::to_string(values).expect("serializing a string list cannot fail"))
 }
 
 async fn flag_invalid_remote_stream(pool: &DbPool, path: &Path) -> Result<()> {
@@ -1888,6 +2029,202 @@ fn load_remote_stream_definition(
     let definition = parse_remote_stream_definition(&yaml)?;
     let resolved = resolve_remote_stream(&definition, path)?;
     Ok((definition, resolved))
+}
+
+async fn synchronize_remote_stream_playlist(
+    pool: &DbPool,
+    library_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+) -> Result<Vec<i64>> {
+    let yaml = std::fs::read(path).map_err(|source| ScannerError::RemoteStreamPlaylistRead {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let manifest_text = std::str::from_utf8(&yaml).map_err(|error| {
+        remote_stream_playlist::PlaylistError::Manifest(format!("manifest is not UTF-8: {error}"))
+    })?;
+    let manifest = remote_stream_playlist::parse_playlist_manifest(manifest_text, path)?;
+    let raw_settings: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(remote_stream_playlist::CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
+            .fetch_optional(pool)
+            .await?;
+    let settings =
+        remote_stream_playlist::parse_extractor_settings(raw_settings.as_deref().unwrap_or("[]"))?;
+    let resolved =
+        remote_stream_playlist::resolve_extractor(&settings, &manifest.manifest.extractor)?;
+    let sync =
+        remote_stream_playlist::sync_playlist_files(path, &yaml, &manifest, &resolved).await?;
+    let mut ordered_items = Vec::new();
+    for definition in &sync.definitions {
+        let (parsed, source) = load_remote_stream_definition(&definition.path)?;
+        let item_id = upsert_local_remote_stream(
+            pool,
+            library_path,
+            &definition.path,
+            &parsed,
+            &source,
+            None,
+        )
+        .await?;
+        if definition.active && definition.duration_seconds.is_some_and(|value| value > 0) {
+            ordered_items.push(item_id);
+        }
+    }
+    let relative = path
+        .strip_prefix(&library_path.path)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let managed_source = format!("remote-stream-playlist:v1:{library_id}:{relative}");
+    let mut affected = synchronize_managed_playlist(
+        pool,
+        &managed_source,
+        &manifest.name,
+        manifest.manifest.create_playlist,
+        &ordered_items,
+        sync.membership_changed,
+    )
+    .await?;
+    if sync.membership_changed {
+        affected.extend(affected_playouts_for_remote_stream_membership(pool).await?);
+    }
+    affected.sort_unstable();
+    affected.dedup();
+    Ok(affected)
+}
+
+fn is_managed_remote_stream_definition(path: &Path) -> bool {
+    const HEADER: &str = "# Generated by ErsatzRS from a Remote Stream playlist manifest.";
+    std::fs::read_to_string(path)
+        .ok()
+        .is_some_and(|value| value.starts_with(HEADER))
+}
+
+async fn synchronize_managed_playlist(
+    pool: &DbPool,
+    managed_source: &str,
+    name: &str,
+    enabled: bool,
+    ordered_items: &[i64],
+    membership_changed: bool,
+) -> Result<Vec<i64>> {
+    let mut tx = pool.begin().await?;
+    let existing: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
+            .bind(managed_source)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if !enabled {
+        if let Some(id) = existing {
+            let affected = affected_playouts_for_playlist(&mut tx, id).await?;
+            sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ? AND "ManagedSource" = ?"#)
+                .bind(id)
+                .bind(managed_source)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(affected);
+        }
+        tx.commit().await?;
+        return Ok(Vec::new());
+    }
+    let group_id: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "PlaylistGroup" WHERE "IsSystem" = 1 ORDER BY "Id" LIMIT 1"#,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let group_id = if let Some(id) = group_id {
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem")
+               VALUES ('System', 1)"#,
+        )
+        .execute(&mut *tx)
+        .await?;
+        ersatzrs_infra::db::last_insert_id(result)
+    };
+    let playlist_id = if let Some(id) = existing {
+        sqlx::query(
+            r#"UPDATE "Playlist"
+               SET "Name" = ?, "IsSystem" = 1, "PlaylistGroupId" = ?
+               WHERE "Id" = ? AND "ManagedSource" = ?"#,
+        )
+        .bind(name)
+        .bind(group_id)
+        .bind(id)
+        .bind(managed_source)
+        .execute(&mut *tx)
+        .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "Playlist" (
+                "IsSystem", "ManagedSource", "Name", "PlaylistGroupId"
+               ) VALUES (1, ?, ?, ?)"#,
+        )
+        .bind(managed_source)
+        .bind(name)
+        .bind(group_id)
+        .execute(&mut *tx)
+        .await?;
+        ersatzrs_infra::db::last_insert_id(result)
+    };
+    let replace_items = existing.is_none() || membership_changed;
+    let affected = if replace_items && existing.is_some() {
+        affected_playouts_for_playlist(&mut tx, playlist_id).await?
+    } else {
+        Vec::new()
+    };
+    if replace_items {
+        sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+            .bind(playlist_id)
+            .execute(&mut *tx)
+            .await?;
+        for (index, media_item_id) in ordered_items.iter().enumerate() {
+            sqlx::query(
+                r#"INSERT INTO "PlaylistItem" (
+                    "Index", "PlaylistId", "CollectionType", "CollectionId",
+                    "MediaItemId", "MultiCollectionId", "SmartCollectionId",
+                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll"
+                   ) VALUES (?, ?, 70, NULL, ?, NULL, NULL, 1, 1, 0)"#,
+            )
+            .bind(i32::try_from(index).unwrap_or(i32::MAX))
+            .bind(playlist_id)
+            .bind(media_item_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(affected)
+}
+
+async fn affected_playouts_for_playlist(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    playlist_id: i64,
+) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlaylistId" = ?
+           ORDER BY "PlayoutId""#,
+    )
+    .bind(playlist_id)
+    .fetch_all(&mut **tx)
+    .await?)
+}
+
+async fn affected_playouts_for_remote_stream_membership(pool: &DbPool) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           ORDER BY "PlayoutId""#,
+    )
+    .fetch_all(pool)
+    .await?)
 }
 
 fn paired_ffmpeg_path(ffprobe_path: &str) -> String {
@@ -4386,7 +4723,19 @@ fallback_query: tag:backup
 title: Example Live
 plot: Example plot
 year: 2024
-content_rating: TV-PG
+release_date: 2024-03-17T21:15:00+01:00
+content_rating: nl:12
+genres: [Magazine]
+tags: [Television]
+collection: Public broadcasters
+people:
+  - name: Example Presenter
+    role: presenter
+  - name: Example Director
+    role: director
+producers: [Example Productions]
+original_broadcasters: [AVRO]
+broadcasters: [AVROTROS]
 "#,
         )
         .expect("definition");
@@ -4421,7 +4770,9 @@ content_rating: TV-PG
 
         let row = sqlx::query(
             r#"SELECT rs."Url", rs."Script", rs."Duration", rs."FallbackQuery", rs."IsLive",
-                      rsm."Title", rsm."Plot", rsm."Year", rsm."ContentRating",
+                      rsm."Title", rsm."Plot", rsm."Year", rsm."ReleaseDate",
+                      rsm."ContentRating", rsm."CollectionName",
+                      rsm."OriginalBroadcasters", rsm."Broadcasters",
                       mv."Duration" AS "VersionDuration", mf."Path"
                FROM "RemoteStream" rs
                JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
@@ -4457,8 +4808,25 @@ content_rating: TV-PG
         );
         assert_eq!(row.get::<Option<i32>, _>("Year"), Some(2024));
         assert_eq!(
+            row.get::<Option<String>, _>("ReleaseDate").as_deref(),
+            Some("2024-03-17T21:15:00+01:00")
+        );
+        assert_eq!(
             row.get::<Option<String>, _>("ContentRating").as_deref(),
-            Some("TV-PG")
+            Some("nl:12")
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("CollectionName").as_deref(),
+            Some("Public broadcasters")
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("OriginalBroadcasters")
+                .as_deref(),
+            Some(r#"["AVRO"]"#)
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("Broadcasters").as_deref(),
+            Some(r#"["AVROTROS"]"#)
         );
         assert_eq!(row.get::<String, _>("VersionDuration"), "01:02:03");
         assert_eq!(
@@ -4471,6 +4839,8 @@ content_rating: TV-PG
             .await
             .expect("tags");
         assert!(tags.contains(&"News".to_owned()));
+        assert!(tags.contains(&"Television".to_owned()));
+        assert!(tags.contains(&"Public broadcasters".to_owned()));
         assert!(tags.contains(
             &temp
                 .path()
@@ -4486,6 +4856,51 @@ content_rating: TV-PG
                 .expect("artwork count"),
             1
         );
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                r#"SELECT CAST(GROUP_CONCAT("Name", '|') AS BLOB)
+                   FROM (SELECT "Name" FROM "Genre" ORDER BY "Name")"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("genres"),
+            b"Magazine"
+        );
+        let people = sqlx::query(r#"SELECT "Name", "Role" FROM "Actor" ORDER BY "Order", "Id""#)
+            .fetch_all(&pool)
+            .await
+            .expect("people");
+        assert_eq!(
+            people
+                .iter()
+                .map(|row| (row.get::<String, _>("Name"), row.get::<String, _>("Role")))
+                .collect::<Vec<_>>(),
+            [
+                ("Example Presenter".to_owned(), "presenter".to_owned()),
+                ("Example Director".to_owned(), "director".to_owned()),
+                ("Example Productions".to_owned(), "producer".to_owned()),
+            ]
+        );
+
+        let media_item_id = sqlx::query_scalar::<_, i64>(
+            r#"SELECT mi."Id"
+               FROM "MediaItem" mi
+               JOIN "RemoteStream" rs ON rs."Id" = mi."Id""#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("remote stream media item id");
+        let repository =
+            ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(pool.clone());
+        for query in [
+            "actor:\"Example Presenter\"",
+            "genre:Magazine",
+            "studio:AVROTROS",
+            "tag:Television",
+            "tag:\"Public broadcasters\"",
+        ] {
+            assert_eq!(search_ids(&repository, query).await, vec![media_item_id]);
+        }
 
         std::fs::write(&definition_path, "is_live: false\n").expect("invalidate definition");
         let second_report = super::scan_local_library(
@@ -4969,6 +5384,281 @@ content_rating: TV-PG
             .expect("count rows")
             .get("Count");
         assert_eq!(count, 2);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn managed_playlist_keeps_identity_and_replaces_upstream_order() {
+        use super::{affected_playouts_for_remote_stream_membership, synchronize_managed_playlist};
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::Row as _;
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&pool)
+            .await
+            .expect("disable fixture foreign keys");
+        let group_result =
+            sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES ('System', 1)"#)
+                .execute(&pool)
+                .await
+                .expect("system playlist group");
+        let system_group = ersatzrs_infra::db::last_insert_id(group_result);
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId", "ManagedSource")
+               VALUES (0, 'User playlist', ?, NULL)"#,
+        )
+        .bind(system_group)
+        .execute(&pool)
+        .await
+        .expect("user playlist");
+
+        let source = "remote-stream-playlist:v1:7:Glamourland.playlist.yml";
+        synchronize_managed_playlist(&pool, source, "Glamourland", true, &[101, 102, 103], true)
+            .await
+            .expect("initial materialization");
+        let playlist_id: i64 =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
+                .bind(source)
+                .fetch_one(&pool)
+                .await
+                .expect("managed playlist");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor"
+               ("CollectionType", "PlaylistId", "PlayoutId") VALUES (70, ?, 77)"#,
+        )
+        .bind(playlist_id)
+        .execute(&pool)
+        .await
+        .expect("playout anchor");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor"
+               ("CollectionType", "PlayoutId") VALUES (2, 88)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("non-playlist playout anchor");
+        assert_eq!(
+            affected_playouts_for_remote_stream_membership(&pool)
+                .await
+                .expect("affected membership playouts"),
+            [77, 88]
+        );
+        let affected =
+            synchronize_managed_playlist(&pool, source, "GLAMOURLAND", true, &[103, 101], true)
+                .await
+                .expect("reorder materialization");
+        assert_eq!(affected, vec![77]);
+        let unaffected =
+            synchronize_managed_playlist(&pool, source, "GLAMOURLAND", true, &[103, 101], false)
+                .await
+                .expect("unchanged materialization");
+        assert!(unaffected.is_empty());
+
+        let row = sqlx::query(
+            r#"SELECT "Id", "Name", "IsSystem" FROM "Playlist" WHERE "ManagedSource" = ?"#,
+        )
+        .bind(source)
+        .fetch_one(&pool)
+        .await
+        .expect("managed row");
+        assert_eq!(row.get::<i64, _>("Id"), playlist_id);
+        assert_eq!(row.get::<String, _>("Name"), "GLAMOURLAND");
+        assert_eq!(row.get::<i64, _>("IsSystem"), 1);
+        let items = sqlx::query(
+            r#"SELECT "Index", "MediaItemId", "CollectionType"
+               FROM "PlaylistItem" WHERE "PlaylistId" = ? ORDER BY "Index""#,
+        )
+        .bind(playlist_id)
+        .fetch_all(&pool)
+        .await
+        .expect("managed items");
+        assert_eq!(
+            items
+                .iter()
+                .map(|row| (
+                    row.get::<i64, _>("Index"),
+                    row.get::<i64, _>("MediaItemId"),
+                    row.get::<i64, _>("CollectionType")
+                ))
+                .collect::<Vec<_>>(),
+            [(0, 103, 70), (1, 101, 70)]
+        );
+
+        synchronize_managed_playlist(&pool, source, "GLAMOURLAND", false, &[], false)
+            .await
+            .expect("disable managed playlist");
+        let managed_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "ManagedSource" = ?"#)
+                .bind(source)
+                .fetch_one(&pool)
+                .await
+                .expect("managed count");
+        let user_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Name" = 'User playlist'"#)
+                .fetch_one(&pool)
+                .await
+                .expect("user count");
+        assert_eq!(managed_count, 0);
+        assert_eq!(user_count, 1);
+    }
+
+    #[cfg(all(not(feature = "mysql"), unix))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn remote_stream_playlist_scan_materializes_definitions_tags_and_order() {
+        use super::{scan_local_library, LocalScanConfig};
+        use crate::remote_stream_playlist::{
+            RemoteStreamExtractorConfig, CONFIG_KEY_REMOTE_STREAM_EXTRACTORS,
+        };
+        use ersatzrs_core::scheduling::SchedulingContentSource;
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::Row as _;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let library_root = temp.path().join("remote-streams");
+        std::fs::create_dir_all(&library_root).expect("library root");
+        let script = temp.path().join("fixture.sh");
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '%s\\n' \\\n",
+                "  '{\"id\":\"first\",\"url\":\"https://example.test/1\",\"title\":\"First\",\"duration_seconds\":60}' \\\n",
+                "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
+            ),
+        )
+        .expect("fixture extractor");
+        let mut permissions = std::fs::metadata(&script)
+            .expect("extractor metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).expect("extractor permissions");
+        std::fs::write(
+            library_root.join("Fixture.playlist.yml"),
+            r"name: Fixture order
+url: https://example.test/playlist
+extractor: fixture
+sync:
+  interval: 24h
+  max_items: 10
+  order: upstream
+  on_removed: trash
+create_playlist: true
+tags: [Fixture Tag]
+",
+        )
+        .expect("manifest");
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("media source");
+        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("local source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Remote Streams', 7, 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("library");
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("local library");
+        sqlx::query(r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#)
+            .bind(library_root.display().to_string())
+            .execute(&pool)
+            .await
+            .expect("library path");
+        let settings = serde_json::to_string(&[RemoteStreamExtractorConfig {
+            name: "fixture".to_owned(),
+            windows: r"C:\fixture.bat".to_owned(),
+            unix: script.display().to_string(),
+        }])
+        .expect("settings JSON");
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
+            .bind(settings)
+            .execute(&pool)
+            .await
+            .expect("extractor settings");
+
+        let report = scan_local_library(
+            &pool,
+            &LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("playlist scan");
+        assert_eq!(report.failed_files, 0, "issues: {:?}", report.issues);
+        assert_eq!(report.scanned_files, 1);
+        let rows = sqlx::query(
+            r#"SELECT "pi"."Index", "rsm"."Title"
+               FROM "Playlist" AS "p"
+               JOIN "PlaylistItem" AS "pi" ON "pi"."PlaylistId" = "p"."Id"
+               JOIN "RemoteStreamMetadata" AS "rsm" ON "rsm"."RemoteStreamId" = "pi"."MediaItemId"
+               WHERE "p"."ManagedSource" IS NOT NULL
+               ORDER BY "pi"."Index""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("playlist items");
+        assert_eq!(
+            rows.iter()
+                .map(|row| (row.get::<i64, _>("Index"), row.get::<String, _>("Title")))
+                .collect::<Vec<_>>(),
+            [(0, "First".to_owned()), (1, "Second".to_owned())]
+        );
+        let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+        let scheduled = repositories
+            .scheduling
+            .playlist_items_for_source(&SchedulingContentSource::Playlist {
+                group: Some("System".to_owned()),
+                name: "Fixture order".to_owned(),
+            })
+            .await
+            .expect("load managed playlist for scheduling")
+            .expect("managed playlist scheduling items");
+        assert_eq!(
+            scheduled
+                .iter()
+                .flat_map(|item| item.media_items.iter())
+                .filter_map(|item| item.title.as_deref())
+                .collect::<Vec<_>>(),
+            ["First", "Second"]
+        );
+        let tag_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Tag" WHERE "Name" IN ('Fixture', 'Fixture Tag')"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("tag count");
+        assert_eq!(tag_count, 4);
     }
 
     #[cfg(not(feature = "mysql"))]

@@ -6,21 +6,6 @@ adr        = ['0053', '0054', '0055']
 
 summary    = '''
 Ported in the current Phase 7 slice: `/channels` paged table + delete/show-disabled toggle; generated and stored logo images; disabled/hidden channel number markers; ErsatzTV-like top action bar/content/divider/icon row actions; per-row "Stop Transcode Session" button (between preview and edit) that ports `IFFmpegSegmenterService.IsActive`/`StopChannel` and `IHlsSessionWorker.Cancel` — visibility is driven by a client-side poll of the in-memory HLS session registry (mirrors ErsatzTV's `OnWorkersChanged` re-render) and clicking it cancels the live worker, which kills FFmpeg and removes itself so the icon clears on the next poll; Troubleshoot is visible and linked only when the channel is enabled and has a playout, with blank reserved action space otherwise, matching `Channels.razor`; `/channels/add` and `/channels/:id` SSR multipart editor exposing the full channel edit contract (basics, runtime behavior, playout source/mirror, flags, streaming, stream selection, subtitle/music-video behavior, logo, watermark, fallback filler); repository-backed defaults, supporting lists, validation, full-field persistence, stored/external/remove logo semantics, playlist/list logo preference, subtitle-extraction save side effect, and form-level validation errors. Visible list/editor labels, actions, help text, options, streaming-mode values, and preferred audio/subtitle language values now use the persisted-language i18n layer with per-culture translation modules; the shared language selector is populated from `MediaStream.Language`, `Subtitle.Language`, and `Channel.PreferredAudioLanguageCode` with ISO alias expansion, matching ErsatzTV's `GetAllLanguageCodes` path. Music Video Credits Template now lists the bundled ErsatzTV preset stems from `assets/templates` plus user-editable `data/templates/music-video-credits/*.sbntxt`, mirrors ErsatzTV's browser disabled state when Music Video Credits Mode is not `GenerateSubtitles` while preserving the SSR multipart fallback, persists the selected stem only when Music Video Credits Mode is `GenerateSubtitles`, and IPTV/HLS streaming renders the configured music-video credits template into an ephemeral forced/default ASS subtitle before FFmpeg command generation, falling back to `_default.ass` when the selected template is missing. Startup now extracts the bundled ErsatzTV fonts (`OPTIKabel-Heavy`, `Roboto`, `Sen`) into the FFmpeg `fontsdir`, so `_default.ass` and the other music-video credits presets burn with the same title font as ErsatzTV instead of a libass fallback.
-Closed 2026-06-24: `/channels/numbers` now routes to an ErsatzTV-shaped
-channel-number editor with localized desktop/mobile actions, SSR-rendered rows,
-HTML POST save/reset fallback, validation errors, and two-phase number-swap
-persistence that preserves the unique `Channel.Number` constraint while updating
-`SortNumber`. Browser proof in `tests/e2e/channels-edit-numbers.spec.ts`
-clicks Edit Numbers from `/channels`, rejects invalid input without mutating the
-database, saves a swap, verifies mobile actions, and proves the no-JS POST
-fallback.
-
-Reopened 2026-07-01: creating a new channel through `/channels/add` shows the
-default group as `ErsatzTV` again; fresh ErsatzRS channels should default to
-the `ErsatzRS` group. Closed 2026-07-02: `ChannelEditorForm::new_defaults`
-(core) and the web-side `ChannelForm::new_defaults` now default `Group` to
-`ErsatzRS`; existing channels keep their saved group values.
-
 Extended 2026-07-26 under ADRs 0053 and 0054: `/channels` and
 `/channels/:id/watch` share an isolated H.264/AAC preview, while `/epg` uses one
 batched 26-hour grid. Hardening covers safe paths, stale work, capacity, live
@@ -31,7 +16,22 @@ attempt per activation. Closing invalidates pending work, and viewport-bound
 16:9 sizing keeps the full modal visible on desktop and portrait/landscape
 mobile screens.
 
+Closed 2026-08-10: the SSR channel editor now disables Mirror Source Channel
+and Playout Offset unless Playout Source is Mirror, and its inline dependency
+script updates both controls when the operator switches modes. The repository
+continues to discard forged mirror-only values for Generated channels. The
+localized help contract covers every culture; the focused repository regression
+and Chromium/Firefox browser flow prove initial state, both transitions, save,
+and reload.
+
 '''
+
+[[debt]]
+id          = 'mirror-options-enabled-without-mirror-source'
+description = 'In the channel editor, the mirror source channel and playout offset controls remain editable while Playout Source is Generated. Disable these dependent controls unless Playout Source is Mirror, so operators cannot configure only the subordinate mirror values while overlooking the required source-mode selection.'
+discovered  = '2026-08-10'
+evidence    = 'Resolved 2026-08-10. `channel_editor_form` server-renders both mirror-only controls disabled for Generated channels and the stable-DOM inline dependency script enables them only for Mirror. `generated_channel_save_discards_submitted_mirror_options` proves the repository clears forged values. `channel-watch.spec.ts` proves the initial and switched states plus persisted mirror reload in Chromium and Firefox. `all_languages_translate_each_key` covers the new help text in every culture.'
+resolved    = true
 
 [[debt]]
 id          = 'watch-route-programme-guide-never-scrolled'

@@ -9,6 +9,7 @@ pub mod logs;
 pub mod media_browser;
 pub mod media_sources;
 pub mod playouts;
+pub mod remote_stream_playlists;
 pub mod schedules;
 pub mod search;
 pub mod settings;

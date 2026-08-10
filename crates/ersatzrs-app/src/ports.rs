@@ -16,6 +16,7 @@ use ersatzrs_core::scheduling::{
     SchedulingResult,
 };
 use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
+use serde::{Deserialize, Serialize};
 
 use crate::commands::ScanWorkRequest;
 use crate::operations::OperationGuard;
@@ -310,6 +311,120 @@ pub trait AdminTroubleshootingRuntime: Send + Sync {
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
 }
 
+/// One materialized entry shown by Remote Stream playlist administration.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamPlaylistEntryRead {
+    pub id: String,
+    pub title: String,
+    pub duration_seconds: Option<u64>,
+    pub state: String,
+}
+
+/// Effective manifest and synchronization state shown by administration.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamPlaylistRead {
+    pub library_id: i64,
+    pub root_index: usize,
+    pub relative_path: String,
+    pub name: String,
+    pub url: String,
+    pub extractor: String,
+    pub folder: String,
+    pub interval: String,
+    pub max_items: usize,
+    pub order: String,
+    pub on_removed: String,
+    pub create_playlist: bool,
+    pub tags: Vec<String>,
+    pub state: String,
+    pub last_sync: Option<String>,
+    pub item_count: usize,
+    pub truncated: bool,
+    pub managed_by_ersatzrs: bool,
+    pub entries: Vec<RemoteStreamPlaylistEntryRead>,
+}
+
+/// Editable values for an ErsatzRS-owned Remote Stream playlist manifest.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamPlaylistEdit {
+    pub library_id: i64,
+    pub root_index: usize,
+    pub relative_path: Option<String>,
+    pub name: String,
+    pub url: String,
+    pub extractor: String,
+    pub folder: String,
+    pub interval: String,
+    pub max_items: usize,
+    pub order: String,
+    pub on_removed: String,
+    pub create_playlist: bool,
+    pub tags: String,
+}
+
+/// Bounded result of one explicit playlist enumeration probe.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamPlaylistTroubleshootingRead {
+    pub entry_count: usize,
+    pub diagnostic_tail: String,
+}
+
+/// Failure from the native playlist administration adapter.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct RemoteStreamPlaylistRuntimeError {
+    message: String,
+}
+
+impl RemoteStreamPlaylistRuntimeError {
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// Native filesystem, storage, and extractor operations for playlist administration.
+#[async_trait]
+pub trait RemoteStreamPlaylistRuntime: Send + Sync {
+    async fn list(
+        &self,
+        library_id: i64,
+    ) -> Result<Vec<RemoteStreamPlaylistRead>, RemoteStreamPlaylistRuntimeError>;
+
+    async fn extractor_names(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError>;
+
+    async fn tags(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError>;
+
+    async fn save(
+        &self,
+        editor: RemoteStreamPlaylistEdit,
+    ) -> Result<String, RemoteStreamPlaylistRuntimeError>;
+
+    async fn delete(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+    ) -> Result<(), RemoteStreamPlaylistRuntimeError>;
+
+    async fn exclude_entry(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+        entry_id: String,
+    ) -> Result<(), RemoteStreamPlaylistRuntimeError>;
+
+    async fn troubleshoot(
+        &self,
+        library_id: i64,
+        root_index: usize,
+        relative_path: String,
+    ) -> Result<RemoteStreamPlaylistTroubleshootingRead, RemoteStreamPlaylistRuntimeError>;
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackPreviewRequest {
     pub media_item_id: Option<EntityId>,
@@ -428,6 +543,7 @@ pub struct ApplicationPorts {
     admin_health_runtime: Arc<dyn AdminHealthRuntime>,
     troubleshooting: Arc<dyn TroubleshootingRepository>,
     troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
+    remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -464,6 +580,7 @@ impl ApplicationPorts {
         admin_health_runtime: Arc<dyn AdminHealthRuntime>,
         troubleshooting: Arc<dyn TroubleshootingRepository>,
         troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
+        remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
         media_source_runtime: Arc<dyn MediaSourceRuntime>,
         admin_search: Arc<dyn AdminSearchRepository>,
         block_previews: Arc<dyn BlockPreviewRepository>,
@@ -495,6 +612,7 @@ impl ApplicationPorts {
             admin_health_runtime,
             troubleshooting,
             troubleshooting_runtime,
+            remote_stream_playlists,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -634,6 +752,12 @@ impl ApplicationPorts {
         self.troubleshooting_runtime.as_ref()
     }
 
+    /// Native Remote Stream playlist administration adapter.
+    #[must_use]
+    pub fn remote_stream_playlists(&self) -> &(dyn RemoteStreamPlaylistRuntime + 'static) {
+        self.remote_stream_playlists.as_ref()
+    }
+
     /// Remote media-source validation and synchronization effects.
     #[must_use]
     pub fn media_source_runtime(&self) -> &(dyn MediaSourceRuntime + 'static) {
@@ -699,6 +823,10 @@ impl std::fmt::Debug for ApplicationPorts {
             .field("media_sources", &"dyn MediaSourceRepository")
             .field("media_items", &"dyn MediaItemRepository")
             .field("admin_media", &"dyn AdminMediaRepository")
+            .field(
+                "remote_stream_playlists",
+                &"dyn RemoteStreamPlaylistRuntime",
+            )
             .field("media_source_runtime", &"dyn MediaSourceRuntime")
             .field("admin_search", &"dyn AdminSearchRepository")
             .field("block_previews", &"dyn BlockPreviewRepository")

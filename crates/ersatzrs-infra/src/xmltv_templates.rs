@@ -16,7 +16,7 @@
 //! overrides the bundled `_movie.jinja` when present, with no extraction
 //! step required for a fresh install to render the bundled defaults.
 //!
-//! Four deliberate deviations from ErsatzTV's own templates:
+//! Five deliberate deviations from ErsatzTV's own templates:
 //! - `<rating>` splitting (the `/`-delimited multi-value `ContentRating`
 //!   convention, `us:` prefix -> `MPAA`/`VCHIP` system) is resolved in Rust
 //!   ([`split_ratings`]) rather than via Scriban's `string.split`/
@@ -30,6 +30,9 @@
 //!   guide clients a usable image instead of an empty artwork slot.
 //! - The bundled Remote Stream template emits persisted genres that ErsatzTV
 //!   exposes to custom templates but omits from its own bundled template.
+//! - The Remote Stream template also emits provider publication date,
+//!   categories, Kijkwijzer rating, and credits when a rich playlist extractor
+//!   supplied them. ErsatzTV's YAML contract has no corresponding fields.
 
 use std::path::PathBuf;
 
@@ -209,6 +212,14 @@ pub fn split_ratings(
             if is_us {
                 RatingEntry {
                     system: Some(system_name.to_owned()),
+                    value: segment[3..].to_owned(),
+                }
+            } else if segment
+                .get(..3)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("nl:"))
+            {
+                RatingEntry {
+                    system: Some("Kijkwijzer".to_owned()),
                     value: segment[3..].to_owned(),
                 }
             } else {
@@ -415,7 +426,21 @@ pub fn render_programme(
                 remote_stream_plot: content.description.as_deref(),
                 remote_stream_has_year: content.year.is_some(),
                 remote_stream_year: content.year,
-                remote_stream_genres: &content.genres,
+                remote_stream_has_release_date: xmltv_date(content.release_date.as_deref())
+                    .is_some(),
+                remote_stream_release_date: xmltv_date(content.release_date.as_deref()),
+                remote_stream_categories: remote_stream_categories(content),
+                remote_stream_collection: content.collection.as_deref(),
+                remote_stream_people: content
+                    .people
+                    .iter()
+                    .map(|person| CreditEntry {
+                        name: &person.name,
+                        role: &person.role,
+                    })
+                    .collect(),
+                remote_stream_original_broadcasters: &content.original_broadcasters,
+                remote_stream_broadcasters: &content.broadcasters,
                 remote_stream_has_artwork: icon_url.is_some(),
                 remote_stream_artwork_url: icon_url,
                 remote_stream_has_content_rating: content.content_rating.is_some(),
@@ -428,6 +453,31 @@ pub fn render_programme(
             },
         ),
     }
+}
+
+fn xmltv_date(value: Option<&str>) -> Option<String> {
+    value
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.format("%Y%m%d").to_string())
+}
+
+fn remote_stream_categories(content: &XmltvProgrammeContent) -> Vec<String> {
+    let mut categories = Vec::new();
+    for value in content
+        .genres
+        .iter()
+        .chain(content.tags.iter())
+        .chain(content.collection.iter())
+    {
+        if !value.trim().is_empty()
+            && !categories
+                .iter()
+                .any(|existing: &String| existing.eq_ignore_ascii_case(value))
+        {
+            categories.push(value.clone());
+        }
+    }
+    categories
 }
 
 /// Render the `<channel>` element.
@@ -603,12 +653,24 @@ struct RemoteStreamContext<'a> {
     remote_stream_plot: Option<&'a str>,
     remote_stream_has_year: bool,
     remote_stream_year: Option<i32>,
-    remote_stream_genres: &'a [String],
+    remote_stream_has_release_date: bool,
+    remote_stream_release_date: Option<String>,
+    remote_stream_categories: Vec<String>,
+    remote_stream_collection: Option<&'a str>,
+    remote_stream_people: Vec<CreditEntry<'a>>,
+    remote_stream_original_broadcasters: &'a [String],
+    remote_stream_broadcasters: &'a [String],
     remote_stream_has_artwork: bool,
     remote_stream_artwork_url: Option<&'a str>,
     remote_stream_has_content_rating: bool,
     remote_stream_content_rating: Option<&'a str>,
     remote_stream_ratings: Vec<RatingEntry>,
+}
+
+#[derive(Serialize)]
+struct CreditEntry<'a> {
+    name: &'a str,
+    role: &'a str,
 }
 
 #[derive(Serialize)]
@@ -629,6 +691,7 @@ struct ChannelContext<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_core::xmltv::XmltvCredit;
 
     fn content(kind: XmltvItemKind) -> XmltvProgrammeContent {
         XmltvProgrammeContent {
@@ -668,6 +731,13 @@ mod tests {
         assert_eq!(entries[0].value, "PG-13");
         assert_eq!(entries[1].system, None);
         assert_eq!(entries[1].value, "de:12");
+    }
+
+    #[test]
+    fn split_ratings_maps_nl_prefix_to_kijkwijzer() {
+        let entries = split_ratings(Some("nl:12"), "MPAA", false);
+        assert_eq!(entries[0].system.as_deref(), Some("Kijkwijzer"));
+        assert_eq!(entries[0].value, "12");
     }
 
     #[test]
@@ -835,10 +905,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bundled_remote_stream_template_emits_persisted_genres() {
+    async fn bundled_remote_stream_template_emits_rich_consumer_metadata() {
         let templates = load_templates_from_empty_temp_folder().await;
         let remote_stream_content = XmltvProgrammeContent {
             genres: vec!["Documentary".to_owned(), "Culture".to_owned()],
+            tags: vec!["Television".to_owned()],
+            collection: Some("Public broadcasters".to_owned()),
+            release_date: Some("1992-05-30T21:15:00Z".to_owned()),
+            content_rating: Some("nl:12".to_owned()),
+            people: vec![
+                XmltvCredit {
+                    name: "Gert-Jan Dröge".to_owned(),
+                    role: "presenter".to_owned(),
+                },
+                XmltvCredit {
+                    name: "Richard Rietveld".to_owned(),
+                    role: "director".to_owned(),
+                },
+                XmltvCredit {
+                    name: "John de Mol Produkties".to_owned(),
+                    role: "producer".to_owned(),
+                },
+            ],
+            original_broadcasters: vec!["AVRO".to_owned()],
+            broadcasters: vec!["AVROTROS".to_owned()],
             ..content(XmltvItemKind::RemoteStream)
         };
         let input = RenderProgrammeInput {
@@ -857,6 +947,13 @@ mod tests {
 
         assert!(xml.contains("<category lang=\"en\">Documentary</category>"));
         assert!(xml.contains("<category lang=\"en\">Culture</category>"));
+        assert!(xml.contains("<category lang=\"en\">Television</category>"));
+        assert!(xml.contains("<category lang=\"en\">Public broadcasters</category>"));
+        assert!(xml.contains("<date>19920530</date>"));
+        assert!(xml.contains("<presenter>Gert-Jan Dröge</presenter>"));
+        assert!(xml.contains("<director>Richard Rietveld</director>"));
+        assert!(xml.contains("<producer>John de Mol Produkties</producer>"));
+        assert!(xml.contains("<rating system=\"Kijkwijzer\"><value>12</value></rating>"));
     }
 
     #[tokio::test]

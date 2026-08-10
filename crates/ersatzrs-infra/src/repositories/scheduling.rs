@@ -2065,6 +2065,7 @@ impl SqliteSchedulingContentRepository {
             "Artist" => "ArtistMetadataId",
             "OtherVideo" => "OtherVideoMetadataId",
             "Song" => "SongMetadataId",
+            "RemoteStream" => "RemoteStreamMetadataId",
             _ => return Ok(Vec::new()),
         };
         let sql =

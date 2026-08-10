@@ -849,6 +849,46 @@ async fn channel_number_editor_rejects_invalid_and_duplicate_numbers() {
 }
 
 #[tokio::test]
+async fn generated_channel_save_discards_submitted_mirror_options() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let source_id = repos
+        .channel
+        .save_editor_form(editor_form("53", "Source"))
+        .await
+        .unwrap()
+        .id;
+
+    let mut generated = editor_form("54", "Generated");
+    generated.playout_source = 0;
+    generated.mirror_source_channel_id = Some(source_id);
+    generated.playout_offset = Some(Duration::hours(4));
+    let result = repos.channel.save_editor_form(generated).await.unwrap();
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+
+    let row = sqlx::query(
+        r#"SELECT "MirrorSourceChannelId", "PlayoutOffset"
+           FROM "Channel"
+           WHERE "Id" = ?"#,
+    )
+    .bind(result.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row.try_get::<Option<i64>, _>("MirrorSourceChannelId")
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        row.try_get::<Option<String>, _>("PlayoutOffset").unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
 async fn channel_editor_save_replaces_logo_and_preserves_generated_source_with_playouts() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

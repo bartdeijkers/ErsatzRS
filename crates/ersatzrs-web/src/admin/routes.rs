@@ -29,6 +29,7 @@ use crate::admin::pages::media::multi_collections::{
 };
 use crate::admin::pages::media::other_videos::{OtherVideoPage, OtherVideosPage};
 use crate::admin::pages::media::playlists::{PlaylistEditorPage, PlaylistsPage};
+use crate::admin::pages::media::remote_stream_playlists::RemoteStreamPlaylistsPage;
 use crate::admin::pages::media::remote_streams::RemoteStreamsPage;
 use crate::admin::pages::media::rerun_collections::{
     RerunCollectionEditorPage, RerunCollectionsPage,
@@ -417,6 +418,16 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("media"), StaticSegment("remote"), StaticSegment("streams"))
                 view=RemoteStreamsPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("remote"),
+                    StaticSegment("streams"),
+                    StaticSegment("playlists"),
+                    ParamSegment("library_id"),
+                )
+                view=RemoteStreamPlaylistsPage
             />
             <Route
                 path=(

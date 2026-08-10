@@ -33,9 +33,13 @@ Metadata for all distinct scheduled IDs and their linked values/artwork is
 loaded in bounded batches rather than with per-item subtype probes. Episode
 icons use show artwork while the separate still uses episode artwork.
 Movie icons deliberately fall back to correctly sized thumbnail artwork when
-no poster exists, and bundled Remote Stream output emits persisted genres for
-EPG discovery; ADR 0058 records both end-user improvements over ErsatzTV's
-defaults. Rendered fragments are checked for balanced element structure at
+no poster exists, and bundled Remote Stream output emits persisted genres,
+provider labels, collection, release date, role-aware credits, and localized
+content rating for EPG discovery. Provider-specific collection and broadcaster
+fields remain available to custom templates while their compatible values are
+also indexed as tags and studios for Kodi/search consumers; ADR 0058 records
+the XMLTV end-user improvements over ErsatzTV's defaults. Rendered fragments
+are checked for balanced element structure at
 end-of-input, so token-complete unclosed custom templates also take the
 per-item fallback path instead of corrupting the full response.
 `xmltv.days_to_build`

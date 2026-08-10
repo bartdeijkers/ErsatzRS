@@ -166,6 +166,26 @@
     background: var(--color-border);
 }
 
+.facet-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem 0;
+}
+
+.facet-chip {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-gray-100);
+    text-decoration: none;
+    background: var(--color-surface);
+}
+
+.facet-chip:hover {
+    border-color: var(--color-primary);
+}
+
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(8.75rem, 8.75rem));

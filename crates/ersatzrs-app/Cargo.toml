@@ -11,6 +11,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 dunce = "1"
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }

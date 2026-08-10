@@ -25,8 +25,8 @@ use checks::{
     HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
     MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
     PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, SearchProjectionHealthCheck,
-    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck,
+    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
     TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
     VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
@@ -52,7 +52,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 30] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 31] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -71,6 +71,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 30] = [
     "Local television identity",
     "Zero Duration",
     "Remote Streams",
+    "Remote Stream playlists",
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
@@ -231,6 +232,7 @@ fn registered_health_checks(
         Box::new(LocalTelevisionIdentityHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
+        Box::new(RemoteStreamPlaylistHealthCheck::new(pool.clone())),
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),

@@ -5,6 +5,7 @@ use ersatzrs_app::{
     commands::{ExecuteScanOutcome, ScanWorkRequest},
     ApplicationServices, ScanRuntime, ScanRuntimeError, ScanWorkQueue, ScanWorkQueueError,
 };
+use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
 use ersatzrs_infra::db::DbPool;
 use tokio::sync::mpsc;
@@ -35,12 +36,19 @@ impl ScanWorkQueue for TokioScanWorkQueue {
 #[derive(Clone)]
 pub struct NativeScanRuntime {
     pool: DbPool,
+    playout_builds: mpsc::UnboundedSender<PlayoutBuildRequest>,
 }
 
 impl NativeScanRuntime {
     #[must_use]
-    pub const fn new(pool: DbPool) -> Self {
-        Self { pool }
+    pub const fn new(
+        pool: DbPool,
+        playout_builds: mpsc::UnboundedSender<PlayoutBuildRequest>,
+    ) -> Self {
+        Self {
+            pool,
+            playout_builds,
+        }
     }
 }
 
@@ -94,7 +102,21 @@ impl ScanRuntime for NativeScanRuntime {
                     Some(progress),
                 )
                 .await
-                .map(|_| ())
+                .and_then(|report| {
+                    for playout_id in report.playout_ids_to_refresh {
+                        self.playout_builds
+                            .send(PlayoutBuildRequest {
+                                playout_id,
+                                mode: PlayoutBuildMode::Refresh,
+                            })
+                            .map_err(|error| {
+                                ersatzrs_scanner::ScannerError::Reconciliation(format!(
+                                    "unable to enqueue affected playout {playout_id}: {error}"
+                                ))
+                            })?;
+                    }
+                    Ok(())
+                })
                 .map_err(scan_error)
             }
         }

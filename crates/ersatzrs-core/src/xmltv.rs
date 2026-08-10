@@ -98,6 +98,8 @@ pub struct XmltvProgrammeContent {
     pub description: Option<String>,
     pub year: Option<i32>,
     pub genres: Vec<String>,
+    /// Provider subject labels and other searchable keywords.
+    pub tags: Vec<String>,
     /// Artist-level genres, kept separate from music-video genres to match
     /// ErsatzTV's custom-template context.
     pub artist_genres: Vec<String>,
@@ -119,11 +121,22 @@ pub struct XmltvProgrammeContent {
     pub track: Option<String>,
     pub album: Option<String>,
     pub release_date: Option<String>,
+    pub collection: Option<String>,
+    pub people: Vec<XmltvCredit>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
     pub artists: Vec<String>,
     pub album_artists: Vec<String>,
     pub comment: Option<String>,
     pub studios: Vec<String>,
     pub directors: Vec<String>,
+}
+
+/// One credited person or production company projected into XMLTV.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmltvCredit {
+    pub name: String,
+    pub role: String,
 }
 
 /// Raw playout item data needed to project an XMLTV programme.

@@ -177,6 +177,13 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                 </div>
 
                 <div class=style::editor_form>
+                    <a
+                        href=format!("/media/remote/streams/playlists/{lib_id}")
+                        class=style::back_link
+                        style:display=if lib_id != 0 && initial_form.media_kind == 7 { "" } else { "none" }
+                    >
+                        {tr(TextKey::RemoteStreamPlaylists)}
+                    </a>
                     <div class=style::form_row>
                         <label class=style::form_label for="local-library-name">{tr(TextKey::Name)}</label>
                         <input

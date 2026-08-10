@@ -207,6 +207,15 @@ Use the admin UI for settings that can be loaded after database startup:
 
 These values live in the database and move with a database backup.
 
+### Remote Stream playlist extractors
+
+The internal database-backed key `settings.remote_stream_extractors` contains
+the named Windows/Unix command allowlist used by Remote Stream playlist
+manifests. Configure this deployment-level allowlist before using the Remote
+Stream playlist admin surface; that page deliberately offers only configured
+extractor names and never accepts an arbitrary command. The complete JSON and
+executable contract is in the [manifest reference](remote-stream-playlist-manifests.md).
+
 The Windows startup checkbox is the exception: it reflects
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on the current machine and
 is not persisted in the database. Linux automatic startup is configured by an

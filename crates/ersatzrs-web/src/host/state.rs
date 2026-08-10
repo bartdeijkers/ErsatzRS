@@ -21,6 +21,7 @@ use uuid::Uuid;
 use super::channels::NativeChannelRuntime;
 use super::health::NativeAdminHealthRuntime;
 use super::media_sources::NativeMediaSourceRuntime;
+use super::remote_stream_playlists::NativeRemoteStreamPlaylistRuntime;
 use super::scanning::{NativeScanRuntime, TokioScanWorkQueue};
 use super::settings::NativeSettingsRuntime;
 use super::troubleshooting::NativeAdminTroubleshootingRuntime;
@@ -174,15 +175,16 @@ impl AppState {
                     Arc::clone(&repositories),
                     Arc::clone(&ffmpeg_runtime),
                 )),
+                Arc::new(NativeRemoteStreamPlaylistRuntime::new(pool.clone())),
                 Arc::new(NativeMediaSourceRuntime::new(pool.clone())),
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(ersatzrs_core::playout_builder::PlayoutBuilder::default()),
                 Arc::new(TokioPlayoutBuildQueue {
-                    sender: playout_build_tx,
+                    sender: playout_build_tx.clone(),
                 }),
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
-                Arc::new(NativeScanRuntime::new(pool.clone())),
+                Arc::new(NativeScanRuntime::new(pool.clone(), playout_build_tx)),
             ),
             OperationCoordinator::new(
                 playout_locker,

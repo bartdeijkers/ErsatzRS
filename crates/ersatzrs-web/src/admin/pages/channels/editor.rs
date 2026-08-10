@@ -66,6 +66,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let transcode_mode = RwSignal::new(initial_form.transcode_mode);
     let idle_behavior = RwSignal::new(initial_form.idle_behavior);
     let playout_source = RwSignal::new(initial_form.playout_source);
+    let mirror_options_disabled = Signal::derive(move || playout_source.get() != 1);
     let playout_mode = RwSignal::new(initial_form.playout_mode);
     let mirror_source_channel_id = RwSignal::new(initial_form.mirror_source_channel_id);
     let playout_offset_hours = RwSignal::new(initial_form.playout_offset_hours);
@@ -242,10 +243,19 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                             mirror_source_channel_id,
                             mirror_options,
                             tr(TextKey::NoneOption),
-                            None,
+                            Some(mirror_options_disabled),
+                            false,
                         )}
-                        {number_field(tr(TextKey::PlayoutOffset), "playout_offset_hours", playout_offset_hours, tr(TextKey::Hours))}
+                        {number_field(
+                            tr(TextKey::PlayoutOffset),
+                            "playout_offset_hours",
+                            playout_offset_hours,
+                            tr(TextKey::Hours),
+                            Some(mirror_options_disabled),
+                        )}
+                        <span class=style::helper>{tr(TextKey::MirrorOptionsHelp)}</span>
                     </div>
+                    <script inner_html=playout_source_dependency_script()></script>
 
                     <div class=style::checkboxes>
                         {checkbox_field(tr(TextKey::IsEnabled), "is_enabled", is_enabled)}
@@ -273,6 +283,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         profile_items,
                         tr(TextKey::SelectProfile),
                         Some(is_hls_direct),
+                        true,
                     )}
                     <p class=style::no_profiles hidden=has_profiles>
                         {tr(TextKey::NoFfmpegProfiles)}
@@ -425,6 +436,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         watermark_items,
                         tr(TextKey::NoneOption),
                         Some(is_hls_direct),
+                        true,
                     )}
 
                     {select_i64_field(
@@ -434,6 +446,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         filler_items,
                         tr(TextKey::NoneOption),
                         None,
+                        true,
                     )}
                 </div>
 
@@ -496,7 +509,9 @@ fn number_field(
     name: &'static str,
     value: RwSignal<i32>,
     suffix: &'static str,
+    disabled: Option<Signal<bool>>,
 ) -> impl IntoView {
+    let disabled = disabled.unwrap_or_else(|| Signal::derive(|| false));
     view! {
         <div class=style::field>
             <label class=style::label inner_html=label></label>
@@ -506,6 +521,7 @@ fn number_field(
                     type="number"
                     class=style::input
                     value=value.get_untracked().to_string()
+                    disabled=move || disabled.get()
                     on:input=move |e| {
                         if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
                             value.set(parsed);
@@ -598,6 +614,7 @@ fn select_i64_field(
     options: Signal<Vec<(i64, String)>>,
     none_label: &'static str,
     disabled: Option<Signal<bool>>,
+    preserve_disabled_value: bool,
 ) -> impl IntoView {
     let select_class = format!("{} {}", style::input, style::select);
     let disabled = disabled.unwrap_or_else(|| Signal::derive(|| false));
@@ -605,7 +622,7 @@ fn select_i64_field(
     view! {
         <div class=style::field>
             <label class=style::label inner_html=label></label>
-            {disabled_initial.then(|| {
+            {(disabled_initial && preserve_disabled_value).then(|| {
                 view! {
                     <input
                         type="hidden"
@@ -696,6 +713,26 @@ fn select_string_field(
             <span class=style::error></span>
         </div>
     }
+}
+
+fn playout_source_dependency_script() -> &'static str {
+    r#"
+(() => {
+  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  if (!form) return;
+  const source = form.querySelector('select[name="playout_source"]');
+  const mirrorSource = form.querySelector('select[name="mirror_source_channel_id"]');
+  const offset = form.querySelector('input[name="playout_offset_hours"]');
+  if (!source || !mirrorSource || !offset) return;
+  const sync = () => {
+    const disabled = source.value !== "1";
+    mirrorSource.disabled = disabled;
+    offset.disabled = disabled;
+  };
+  sync();
+  source.addEventListener("change", sync);
+})();
+"#
 }
 
 fn music_video_credits_template_dependency_script() -> &'static str {

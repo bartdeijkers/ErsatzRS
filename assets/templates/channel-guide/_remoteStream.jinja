@@ -2,15 +2,18 @@
   Ports ErsatzTV's `_remoteStream.sbntxt` (Scriban) to minijinja/Jinja2 syntax.
   Available values: programme_start, programme_stop, channel_id,
   channel_number, remote_stream_title, remote_stream_plot,
-  remote_stream_year, remote_stream_artwork_url, remote_stream_ratings
-  (list of {system, value}).
+  remote_stream_year, remote_stream_release_date, remote_stream_categories,
+  remote_stream_collection, remote_stream_people (list of {name, role}),
+  remote_stream_original_broadcasters, remote_stream_broadcasters,
+  remote_stream_artwork_url, remote_stream_ratings (list of {system, value}).
 #}
 <programme start="{{ programme_start }}" stop="{{ programme_stop }}" channel="{{ channel_id }}">
   {% if has_custom_title %}<title lang="en">{{ custom_title }}</title>{% else %}
     <title lang="en">{{ remote_stream_title }}</title>
     {% if remote_stream_has_plot %}<desc lang="en">{{ remote_stream_plot }}</desc>{% endif %}
-    {% if remote_stream_has_year %}<date>{{ remote_stream_year }}</date>{% endif %}
-    {% for genre in remote_stream_genres %}<category lang="en">{{ genre }}</category>{% endfor %}
+    {% if remote_stream_has_release_date %}<date>{{ remote_stream_release_date }}</date>{% elif remote_stream_has_year %}<date>{{ remote_stream_year }}</date>{% endif %}
+    {% if remote_stream_people %}<credits>{% for person in remote_stream_people %}{% if person.role == "director" %}<director>{{ person.name }}</director>{% elif person.role == "presenter" %}<presenter>{{ person.name }}</presenter>{% elif person.role == "producer" %}<producer>{{ person.name }}</producer>{% elif person.role == "guest" %}<guest>{{ person.name }}</guest>{% else %}<actor role="{{ person.role }}">{{ person.name }}</actor>{% endif %}{% endfor %}</credits>{% endif %}
+    {% for category in remote_stream_categories %}<category lang="en">{{ category }}</category>{% endfor %}
     {% if remote_stream_has_artwork %}<icon src="{{ remote_stream_artwork_url }}" />{% endif %}
   {% endif %}
   {% for rating in remote_stream_ratings %}<rating{% if rating.system %} system="{{ rating.system }}"{% endif %}><value>{{ rating.value }}</value></rating>{% endfor %}

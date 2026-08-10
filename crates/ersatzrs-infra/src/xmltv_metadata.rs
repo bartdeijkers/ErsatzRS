@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use ersatzrs_core::xmltv::{IconSizeHint, XmltvItemKind, XmltvProgrammeContent};
+use ersatzrs_core::xmltv::{IconSizeHint, XmltvCredit, XmltvItemKind, XmltvProgrammeContent};
 use sqlx::{Pool, Row};
 
 use crate::db::{assert_sql_safe, Db, DbRow};
@@ -292,7 +292,9 @@ async fn load_remote_streams(
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
         pool,
-        r#"SELECT "RemoteStreamId" AS "ItemId", "Id" AS "MetadataId", "Title", "Plot", "Year", "ContentRating"
+        r#"SELECT "RemoteStreamId" AS "ItemId", "Id" AS "MetadataId", "Title", "Plot", "Year",
+                  "ReleaseDate", "ContentRating", "CollectionName",
+                  "OriginalBroadcasters", "Broadcasters"
            FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
@@ -301,11 +303,52 @@ async fn load_remote_streams(
     let refs = insert_base_rows(cache, rows, XmltvItemKind::RemoteStream, |row, content| {
         content.description = nonempty(row.try_get("Plot")?);
         content.year = row.try_get("Year")?;
+        content.release_date = nonempty(row.try_get("ReleaseDate")?);
         content.content_rating = nonempty(row.try_get("ContentRating")?);
+        content.collection = nonempty(row.try_get("CollectionName")?);
+        content.original_broadcasters = decode_string_list(row.try_get("OriginalBroadcasters")?);
+        content.broadcasters = decode_string_list(row.try_get("Broadcasters")?);
         Ok(nonempty(row.try_get("Title")?))
     })?;
+    hydrate_common(pool, cache, &refs, "RemoteStreamMetadataId", false).await?;
 
-    hydrate_common(pool, cache, &refs, "RemoteStreamMetadataId", false).await
+    let ids = metadata_ids(&refs);
+    let mut tags = load_string_map(pool, "Tag", "RemoteStreamMetadataId", "Name", &ids).await?;
+    let mut people = load_remote_stream_people(pool, &ids).await?;
+    for (item_id, metadata_id) in refs {
+        if let Some((_, content)) = cache.get_mut(&item_id) {
+            content.tags = tags.remove(&metadata_id).unwrap_or_default();
+            content.people = people.remove(&metadata_id).unwrap_or_default();
+        }
+    }
+    Ok(())
+}
+
+async fn load_remote_stream_people(
+    pool: &Pool<Db>,
+    ids: &[i64],
+) -> Result<HashMap<i64, Vec<XmltvCredit>>, sqlx::Error> {
+    let rows = fetch_rows_for_ids(
+        pool,
+        r#"SELECT "RemoteStreamMetadataId" AS "MetadataId", "Name", "Role"
+           FROM "Actor" WHERE "RemoteStreamMetadataId" IN"#,
+        ids,
+        r#"ORDER BY "MetadataId", "Order", "Id""#,
+    )
+    .await?;
+    let mut people: HashMap<i64, Vec<XmltvCredit>> = HashMap::new();
+    for row in rows {
+        let metadata_id: i64 = row.try_get("MetadataId")?;
+        let Some(name) = nonempty(row.try_get("Name")?) else {
+            continue;
+        };
+        let role = nonempty(row.try_get("Role")?).unwrap_or_else(|| "person".to_owned());
+        people
+            .entry(metadata_id)
+            .or_default()
+            .push(XmltvCredit { name, role });
+    }
+    Ok(people)
 }
 
 fn insert_base_rows<F>(
@@ -594,5 +637,47 @@ mod tests {
 
         assert_eq!(content.icon_path.as_deref(), Some("/movie/still.jpg"));
         assert_eq!(content.icon_size_hint, IconSizeHint::Thumbnail);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn remote_stream_projects_provider_metadata_without_flattening_roles() {
+        let (_root, pool) = test_db().await;
+        for statement in [
+            r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#,
+            r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (10)"#,
+            r#"INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name") VALUES (10, 7, 10, 'Streams')"#,
+            r#"INSERT INTO "LocalLibrary" ("Id") VALUES (10)"#,
+            r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (10, 10, '/streams')"#,
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES (20, 10)"#,
+            r#"INSERT INTO "RemoteStream" ("Id", "IsLive") VALUES (20, 0)"#,
+            r#"INSERT INTO "RemoteStreamMetadata" ("Id", "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "Plot", "Year", "ReleaseDate", "ContentRating", "CollectionName", "OriginalBroadcasters", "Broadcasters") VALUES (30, 20, '2026-01-01', '2026-01-01', 1, 'Episode', 'Plot', 1992, '1992-05-30T21:15:00Z', 'nl:12', 'Public broadcasters', '["AVRO"]', '["AVROTROS"]')"#,
+            r#"INSERT INTO "Genre" ("Name", "RemoteStreamMetadataId") VALUES ('Showbiz', 30)"#,
+            r#"INSERT INTO "Tag" ("Name", "RemoteStreamMetadataId") VALUES ('Television', 30)"#,
+            r#"INSERT INTO "Actor" ("Name", "Role", "Order", "RemoteStreamMetadataId") VALUES ('Presenter', 'presenter', 0, 30), ('Director', 'director', 1, 30), ('Producer', 'producer', 2, 30)"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("seed rich remote stream metadata");
+        }
+
+        let cache = load_content_cache(&pool, &[20])
+            .await
+            .expect("load metadata");
+        let (_, content) = cache.get(&20).expect("remote stream content");
+        assert_eq!(
+            content.release_date.as_deref(),
+            Some("1992-05-30T21:15:00Z")
+        );
+        assert_eq!(content.genres, ["Showbiz"]);
+        assert_eq!(content.tags, ["Television"]);
+        assert_eq!(content.collection.as_deref(), Some("Public broadcasters"));
+        assert_eq!(content.original_broadcasters, ["AVRO"]);
+        assert_eq!(content.broadcasters, ["AVROTROS"]);
+        assert_eq!(content.people.len(), 3);
+        assert_eq!(content.people[0].role, "presenter");
+        assert_eq!(content.people[1].role, "director");
+        assert_eq!(content.people[2].role, "producer");
     }
 }

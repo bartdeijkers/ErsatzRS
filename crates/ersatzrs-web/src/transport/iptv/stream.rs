@@ -1609,6 +1609,8 @@ pub(crate) async fn load_active_media_path(
             plot: None,
             year: None,
             content_rating: None,
+            tags: Vec::new(),
+            ..RemoteStreamDefinition::default()
         };
         Some(
             resolve_remote_stream(&definition, std::path::Path::new(&media_path)).map_err(

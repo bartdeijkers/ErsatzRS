@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -18,7 +18,7 @@ const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const STDERR_EXCERPT_LIMIT: usize = 2 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteStreamDefinition {
     pub url: Option<String>,
@@ -29,7 +29,30 @@ pub struct RemoteStreamDefinition {
     pub title: Option<String>,
     pub plot: Option<String>,
     pub year: Option<i32>,
+    /// Original publication/broadcast instant in RFC 3339 form.
+    pub release_date: Option<String>,
     pub content_rating: Option<String>,
+    #[serde(default)]
+    pub genres: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub collection: Option<String>,
+    #[serde(default)]
+    pub people: Vec<RemoteStreamPerson>,
+    #[serde(default)]
+    pub producers: Vec<String>,
+    #[serde(default)]
+    pub original_broadcasters: Vec<String>,
+    #[serde(default)]
+    pub broadcasters: Vec<String>,
+}
+
+/// One credited person in a Remote Stream definition.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteStreamPerson {
+    pub name: String,
+    pub role: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1125,6 +1148,20 @@ fn validate_definition(definition: &RemoteStreamDefinition) -> Result<(), Remote
     if let Some(duration) = trimmed(definition.duration.as_ref()) {
         validate_duration(duration)?;
     }
+    if let Some(release_date) = trimmed(definition.release_date.as_ref()) {
+        chrono::DateTime::parse_from_rfc3339(release_date).map_err(|_| {
+            RemoteStreamError::Definition(
+                "release_date must be an RFC 3339 date and time".to_owned(),
+            )
+        })?;
+    }
+    for person in &definition.people {
+        if person.name.trim().is_empty() || person.role.trim().is_empty() {
+            return Err(RemoteStreamError::Definition(
+                "people entries require non-empty name and role values".to_owned(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -1431,6 +1468,20 @@ content_rating: PG
         assert!(batch.contains("-c copy -f mpegts pipe:1"));
         assert!(shell.contains("-ss \"$seek_position\""));
         assert!(batch.contains("-ss \"%SEEK_POSITION%\""));
+        assert!(shell.contains("list_series"));
+        assert!(shell.contains("durationNumber"));
+        assert!(shell.contains("publishedAtISO"));
+        assert!(shell.contains("original_broadcasters"));
+        assert!(shell.contains("productionCompanies"));
+        assert!(shell.contains("people"));
+        assert!(shell.contains("if [ \"${1:-}\" = \"play\" ]"));
+        assert!(batch.contains("if /i \"%~1\"==\"list\""));
+        assert!(batch.contains("duration_seconds"));
+        assert!(batch.contains("ConvertTo-Json -Depth 4 -Compress"));
+        assert!(batch.contains("original_broadcasters"));
+        assert!(batch.contains("productionCompanies"));
+        assert!(batch.contains("people"));
+        assert!(batch.contains("if /i \"%~1\"==\"play\""));
     }
 
     #[test]
@@ -1530,6 +1581,8 @@ content_rating: PG
             plot: None,
             year: None,
             content_rating: None,
+            tags: Vec::new(),
+            ..RemoteStreamDefinition::default()
         };
         assert!(
             resolve_remote_stream(&rtsp, Path::new("camera.yml"))

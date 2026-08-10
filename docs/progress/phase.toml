@@ -2,83 +2,28 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9 — Teletext support'
-current_focus = 'Phase 9A — Teletext product contract and runtime capability'
+current_focus = 'Phase 9A — Teletext product and standards contract'
 
 summary = '''
-Phases 0–8 are complete: the workspace, baseline FFmpeg pipeline, scheduling
-engines, media-source scanning, IPTV/HDHomeRun endpoints, main admin UI route
-families, hardening, application-boundary extraction, stopgap closeout,
-large-module splits, and the FFmpeg 9 HDR/Dolby Vision/Vulkan/performance and
-media-input hardening program are in place. Phase 9 now owns teletext support.
-The "The Box" video-jukebox extension follows as Phase 10.
+Phases 0–8 are complete. Remote Stream playlist ingest, synchronization,
+health, localized administration, and ordered managed scheduling closed Phase
+8 on 2026-08-10 through P8D-01 to P8E-03; the separate channel-editor dependency
+milestone P8F-01 is also complete. Phase 9 begins with the blocking P9A-01
+teletext product and standards ADR. The "The Box" video-jukebox extension
+follows as Phase 10.
 '''
 
 next_steps = '''
-Phase 8 closed on 2026-08-07 with all seven required milestones complete:
-P8A-01, P8A-02, P8B-01, P8B-02, P8C-01, P8C-02, and P8C-03. Deferred milestone
-P8C-04, the separate decision about first-class Vulkan encoding, remains
-deferred: no multi-vendor runtime evidence was produced, so the ADR it would
-require does not exist yet.
+Start P9A-01 by deciding the teletext product and standards contract before any
+schema, runtime packaging, selection, or output implementation. Then use
+`cargo xtask progress milestones --runnable` for dependency-ready work and
+`cargo xtask progress milestones --id <id> --full` for acceptance criteria.
 
-Phase 9 is now the live phase and begins with P9A-01, the teletext
-product/standards ADR, which is a blocking decision before any schema, runtime
-packaging, selection, or output work. It then proves six-RID FFmpeg/libzvbi
-capability, scanner persistence, selectable delivery, localized management,
-health reporting, and runtime fixtures.
-
-The 2026-08-07 follow-up review's eleven defects and the 2026-08-08 second
-review's six supervisor/state corrections are all closed, as are the Phase 8
-residue debts that this machine can prove: portable graph-state
-persistence, positive/unproven probe evidence, CUDA-fallback demotion, one-shot
-HLS/IPTV graph fallback, pre-spawn Dolby Vision rejection, exact selected-device
-probing with identity-aware cache validity, stream-indexed frame metadata,
-Dolby Vision stripping from HDR10, the MySQL health query, structural GIF/WebP
-animation parsing, Dolby Vision overlay/subtitle/seek characterization,
-operator-editable HDR10 static metadata, and stream-copy rotation reporting.
-The second review added explicit attempted-but-unproven graph state, strict
-operation-specific live-failure classification, process-wide denial updates,
-fallback-denial persistence after the retry is spent, HLS refusal advancement
-through the error-slate path, and early rendered-graphics cleanup.
-
-The 2026-08-09 residue closeout also made FFmpeg settings publication atomic,
-carried a monotonic runtime generation through command supervision and learned
-denials, keyed caches to FFmpeg/ffprobe digests plus the selected CUDA
-device/driver identity, and stopped unioning NVIDIA capabilities across GPUs.
-Remote Jellyfin/Emby/Plex scans now preserve complete or explicitly incomplete
-Dolby Vision state, strict admission matches only characterized Profile 8.1 and
-Profile 7 tuples, unproven Dolby Vision stream copy is rejected, health counts
-and names every affected stream, and Profile 5 has exact capability-gated SDR
-and HDR10 operations with no guessed-colour fallback.
-
-Phase 8 acceptance debts stay open where they need hardware, fixtures, or a
-client matrix this machine does not have, not because the work was skipped.
-Measured 2026-08-08: `ffmpeg -hwaccels` advertises cuda, vaapi, qsv, drm,
-opencl, vulkan, and amf, but only cuda creates a device — vaapi and qsv fail
-with -542398533, opencl reports no
-platforms, `hevc_qsv` cannot open an MFX session, `hevc_amf` cannot load
-`libamfrt64.so.1`, and there is no `/dev/dri`. The missing manual gates are a
-working Intel/AMD/Apple/Rockchip device for the non-NVIDIA graph probes, HDR10
-characterization, and hardware HDR benchmarks; a full production-path rerun of
-the public Dolby Vision Profile 5 sample on matching NVIDIA/Vulkan hardware; a
-Dolby Vision passthrough source/container/client matrix; and multi-vendor
-Vulkan encoding evidence plus its own ADR. Profile 7 closed on 2026-08-09 with
-a real dual-layer fixture, exact-tuple direct software base-layer decode, and
-decoded SDR/HDR10 MPEG-TS plus HDR10 HLS evidence; `dovi_split=mode=bl` remains
-its characterization oracle rather than a production dependency.
-See the structured debt in `ffmpeg-9-performance-and-support.toml` and
-`hdr-dolby-vision-metadata.toml`.
-
-Phase 9 runtime implementation is therefore unblocked; the P9A-01 standards ADR
-can proceed independently because it does not touch playback.
-
-Phase 10 contains the video-jukebox extension. Its P10A-01 product and
-architecture ADR remains mandatory before schema or add-on API work and is
-gated on Phase 9 closeout through P9B-02. Use
-`cargo xtask progress milestones --runnable` for runnable work,
-`cargo xtask progress milestones --id <id> --full` for acceptance criteria,
-and `cargo xtask progress gaps` for feature/debt state. Historical completion
-evidence remains in parity TOMLs, ADRs, sessions, the changelog, and git history
-instead of accumulating in this current-focus field.
+The original Phase 8 hardware/performance milestones are complete or explicitly
+deferred with structured evidence. Their remaining hardware-, fixture-, and
+client-matrix proof is opportunistic debt and does not block Phase 9. Historical
+completion evidence remains in parity TOMLs, ADRs, sessions, the changelog, and
+git history instead of accumulating in this current-focus record.
 '''
 
 [[blocking_decision]]

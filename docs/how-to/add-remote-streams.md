@@ -89,6 +89,23 @@ Remote Stream scripts are trusted local configuration. They run with the same
 operating-system permissions as ErsatzRS. Keep credentials outside the YAML
 when the producer can load them from a protected file or environment variable.
 
+## Synchronize an upstream playlist
+
+Configure a named extractor, then place one `<name>.playlist.yml` manifest in a
+Remote Streams library. The extractor must implement the `list` and `play`
+subcommands. The exact manifest fields, process bounds, and NDJSON shape are in
+the [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md).
+
+After the next library scan, ErsatzRS writes ordinary generated definitions to
+the configured sibling folder. Open the library's **Remote Stream playlists**
+page to inspect state, synchronize now, troubleshoot one bounded enumeration,
+or manage manifests created by the UI. Hand-authored manifests are shown
+read-only so comments and key ordering cannot be lost.
+
+Set `create_playlist: true` when the upstream order must be schedulable. The
+resulting system playlist follows effective additions, removals, exclusions,
+and reordering and remains read-only in the ordinary playlist editor.
+
 ## Scan and use the item
 
 Scan the library from **Media > Libraries**. A valid definition appears under
@@ -109,7 +126,7 @@ finite content and for scheduling modes that need a known item length.
 
 ## Troubleshoot
 
-The Remote Stream health check validates stored definitions without contacting
+The Remote Stream health checks validate stored definitions and playlist state without contacting
 the source or running scripts. It reports invalid definitions and warns when a
 non-live item has no usable duration.
 

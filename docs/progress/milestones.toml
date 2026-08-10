@@ -517,38 +517,30 @@ overlays, subtitles, scaling, restart, MPEG-TS, and HLS are explicit and
 runtime-proven. Dolby Vision output remains unadvertised.
 '''
 evidence = '''
-Complete 2026-08-07, characterized against a real Dolby Vision file.
+Complete 2026-08-07 and expanded by the verified 2026-08-09 Phase 8 closeout.
+The ffprobe `DOVI configuration record` is parsed, persisted through additive
+SQLite/MySQL migrations, retained across local and remote-provider scans, and
+carried to playback. SDR output strips incompatible HDR/Dolby Vision side data;
+HDR10 preserves or supplies valid static metadata while removing Dolby Vision
+signalling. The health check names and counts every rejected stream.
 
-Implemented: the ffprobe `DOVI configuration record` is parsed (field names read
-from the shipped ffprobe binary), persisted through an additive SQLite/MySQL
-migration, and carried to playback. The profile policy follows the standard
-rather than a guess — profile 8 with base-layer compatibility id 1 (HDR10) or 4
-(HLG) may play from that base layer with Dolby Vision signalling removed;
-profile 7 and profile 5 are rejected, the former because dual-layer separation
-is unproven and the latter because it has no conventional fallback and would
-play with visibly wrong colour. A `Dolby Vision` health check names every
-rejected stream with its reason. Dolby Vision output is not advertised.
+The admitted policies are fixture-shaped rather than profile-number guesses.
+Profile 8 requires the characterized 8.1 tuple: compatibility id 1, BL and RPU
+present, and EL absent. Profile 7 requires the exact progressive HEVC Main 10,
+yuv420p10le, compatibility-id-6 BL+EL+RPU tuple and directly software-decodes
+its conventional HDR10 base layer; `dovi_split=mode=bl` remains the comparison
+oracle. Profile 5 requires the complete tuple plus positive proof of the exact
+selected-device SDR/H.264 or HDR10/HEVC CUDA/Vulkan/libplacebo/NVENC operation.
+There is no generic fallback, Profile 8.4 remains rejected, and Dolby Vision
+output is not advertised.
 
-Characterized against a real 4K profile 8.1 file supplied by the maintainer (a
-commercial recording, so not committed; the gate reads
-`ERSATZRS_DOLBY_VISION_FIXTURE`). ffprobe reports `dv_profile 8`,
-`dv_bl_signal_compatibility_id 1`, `rpu_present 1`, `el_present 0`, and the
-parser reproduces every field. SDR output yields `bt709/bt709/bt709` with no HDR
-side data and no DOVI record; HDR10 output preserves `bt2020nc/smpte2084/bt2020`
-with its metadata and also drops the DOVI record, which is correct because
-neither output is Dolby Vision.
-
-This characterization exposed a defect in the pre-existing HDR-to-SDR path:
-mastering-display and content-light side data survived the tone-map and was
-written onto BT.709 output by libx264, libx265, and hevc_nvenc alike, telling a
-display to expect a 1000-nit BT.2020 grade for pictures that are neither. Fixed
-with the `sidedata` filter on every SDR tone-map path, chosen over
-encoder-specific options so hardware encoders are covered too.
-
-NOT proven, tracked as debt: profiles 5 and 7 remain rejected because no fixture
-of either was available (`dolby-vision-profiles-5-and-7-are-unproven`), and
-overlays/subtitles/seek were not re-exercised with Dolby Vision input
-specifically (`dolby-vision-overlay-subtitle-and-seek-behavior-is-unproven`).
+Real Profile 8.1 and Profile 7 gates cover SDR/HDR10 output, seek, scaling,
+overlay, burned subtitle, MPEG-TS, HLS, stable signalling, and absent DOVI
+records. Profile 5 has equivalent graph characterization plus automated probe,
+command, health, HLS/IPTV refusal, and learned-denial regressions. Its final
+complete production HLS/MPEG-TS run on matching NVIDIA/Vulkan hardware remains
+visible debt in `hdr-dolby-vision-metadata.toml`; the milestone itself remains
+complete because unsupported or unproven operations fail closed.
 '''
 
 [[milestone]]
@@ -781,13 +773,198 @@ otherwise the deferral is retained with measurements.
 evidence = ''
 
 [[milestone]]
+id         = 'p8d-01'
+phase      = 'Phase 8D — Remote Stream playlist ingest'
+title      = 'Decide the Remote Stream playlist ingest contract'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8a-02', 'p8b-02', 'p8c-01', 'p8c-02', 'p8c-03']
+acceptance = '''
+An accepted ADR records this feature as an ErsatzRS extension with no ErsatzTV
+counterpart; fixes the playlist-manifest naming and folder-derived tagging
+contract; defines the extractor allowlist as the scan-time trust boundary;
+pins the list/play protocol and NDJSON entry schema; keeps media-URL resolution
+at playback time; and decides the managed Playlist schema deviation before
+schema, scanner, or UI implementation begins.
+'''
+evidence = 'Accepted ADR 0065 records the ErsatzRS-only manifest, folder/tagging, named extractor list/play protocol, playback-time URL resolution, managed-file safety, playout invalidation, health, and Playlist.ManagedSource contracts.'
+
+[[milestone]]
+id         = 'p8d-02'
+phase      = 'Phase 8D — Remote Stream playlist ingest'
+title      = 'Allowlist and resolve extractors on all six targets'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8d-01']
+acceptance = '''
+Extractors are configured by name with validated per-platform commands and
+resolve identically on all six release targets. Windows and Unix example
+wrappers implement list and play while preserving existing single-video
+playback. ErsatzRS does not bundle, download, or update the extractor, and an
+unknown or unresolvable extractor fails visibly without fallback.
+'''
+evidence = '''
+Completed 2026-08-10. `settings.remote_stream_extractors` parses a named
+Windows/Unix allowlist, validates the selected platform's native absolute
+regular executable, and rejects unknown or unavailable names without fallback.
+The Beeld & Geluid `.sh` and `.bat` wrappers share list/play/legacy behavior;
+scanner tests and both default and MySQL-feature compilation cover the
+platform-neutral contract without bundling the external downloader.
+'''
+
+[[milestone]]
+id         = 'p8d-03'
+phase      = 'Phase 8D — Remote Stream playlist ingest'
+title      = 'Recognize and validate playlist manifests during scan'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8d-02']
+acceptance = '''
+Remote Stream scans recognize playlist manifests, exclude them from the
+ordinary definition sweep, and report validation failures per file without
+failing the library scan. Manifest parsing, defaulting, and every rejection
+path are regression-tested.
+'''
+evidence = '''
+Completed 2026-08-10. Local scanning routes `.playlist.yml` and
+`.playlist.yaml` before the ordinary strict definition parser, skips hidden
+managed folders, and contains invalid manifests as per-file scan issues.
+Focused parser/scanner regressions cover defaults, filtering, invalid paths,
+duplicate identities, bounded output, and independent library continuation.
+'''
+
+[[milestone]]
+id         = 'p8d-04'
+phase      = 'Phase 8D — Remote Stream playlist ingest'
+title      = 'Synchronize playlists into Remote Stream definitions'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8d-03']
+acceptance = '''
+A serialized sync enumerates through the resolved extractor, applies filters,
+exclusions, limits, and ordering, materializes stable per-entry definitions,
+rewrites sidecar state atomically, and removes only files it owns. Manifest and
+playlist etags make unchanged input a no-op; output is redacted, missing
+durations remain unschedulable and visible, upstream removals follow policy,
+and membership changes invalidate affected playouts. SQLite and MySQL pass
+with a network-free fixture extractor.
+'''
+evidence = '''
+Completed 2026-08-10. Serialized enumeration is bounded by time, stdout,
+stderr, line count, and item count. Stable filenames, atomic sidecars and
+definitions, manifest/playlist etags, UI exclusions, keep/trash removal,
+redacted failure state, missing-duration exclusion, and affected-playout
+refresh are implemented. Network-free SQLite regressions and MySQL-feature
+checks pass.
+'''
+
+[[milestone]]
+id         = 'p8e-01'
+phase      = 'Phase 8E — Remote Stream playlist management'
+title      = 'Report playlist sync health and troubleshooting'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8d-04']
+acceptance = '''
+A persisted health check reports unknown or unresolvable extractors, failed or
+stale syncs, missing durations, and truncation. Troubleshooting runs one bounded
+manifest enumeration on demand and shows the parsed entry count plus a bounded,
+redacted diagnostic tail without exposing playlist credentials or local paths.
+'''
+evidence = '''
+Completed 2026-08-10. The persisted Remote Stream playlist health check reports
+unknown/unavailable extractors, invalid intervals, never-synced, failed, stale,
+missing-duration, and truncated manifests without network access. The admin
+troubleshooter performs one bounded enumeration and returns only a parsed count
+plus a bounded sanitized diagnostic tail. Focused health and helper tests pass.
+'''
+
+[[milestone]]
+id         = 'p8e-02'
+phase      = 'Phase 8E — Remote Stream playlist management'
+title      = 'Expose localized playlist management in the admin UI'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8d-04']
+acceptance = '''
+Remote Stream library detail lists manifests with state and Sync now; playlist
+detail shows effective settings and entry state/actions; the add/edit dialog
+manages ErsatzRS-owned manifests without rewriting hand-authored YAML; and the
+browser exposes tag-backed playlist facets. Every string is localized, the
+hydration contract is preserved, and focused browser coverage proves the flows.
+'''
+evidence = '''
+Completed 2026-08-10. The localized management route lists state and entries,
+syncs on demand, selects only configured extractors, manages only header-owned
+manifests, preserves hand-authored YAML as read-only, supports exclusions and
+troubleshooting, and exposes Remote Stream tag facets. Hydration lint and the
+focused Chromium/Firefox management and facet flows pass.
+'''
+
+[[milestone]]
+id         = 'p8e-03'
+phase      = 'Phase 8E — Remote Stream playlist management'
+title      = 'Materialize and schedule upstream playlist order'
+status     = 'Complete'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/remote-stream-playlists.md'
+depends_on = ['p8e-01', 'p8e-02']
+acceptance = '''
+create_playlist maintains an ordered, sync-owned ErsatzRS Playlist through the
+accepted schema deviation. It remains read-only in the UI, follows upstream
+order across additions, removals, and reordering, and schedules in that order
+end to end. Closing this milestone proves the complete Remote Stream playlist
+support branch required for Phase 8 closeout.
+'''
+evidence = '''
+Completed 2026-08-10. The additive SQLite/MySQL `Playlist.ManagedSource`
+contract gives each manifest a stable system playlist identity. Sync replaces
+items only when ordered membership changes, preserves user playlists, excludes
+unknown-duration entries, and queues anchored playout refreshes. The full
+network-free scan regression proves generated upstream order through the real
+scheduling repository, including additions/removals/reordering coverage in the
+managed-playlist regression.
+'''
+
+[[milestone]]
+id         = 'p8f-01'
+phase      = 'Phase 8F — Admin UI closeout'
+title      = 'Gate mirror options on the selected playout source'
+status     = 'Complete'
+feature    = 'channels-admin-ui'
+plan       = 'plans/INDEX.md'
+depends_on = []
+acceptance = '''
+The channel editor enables mirror source channel and playout offset only while
+Playout Source is Mirror. Generated channels cannot accidentally persist those
+subordinate values, existing mirrors remain editable, switching modes is clear
+in the hydrated and server-rendered form paths, every affected label/help state
+is localized, and focused browser plus save-normalization regressions pass.
+'''
+evidence = '''
+Completed 2026-08-10. The SSR form renders Mirror Source Channel and Playout
+Offset disabled for Generated channels and an inline dependency script keeps
+the stable DOM synchronized across both mode transitions. Repository
+normalization discards forged Generated-channel mirror values. The focused
+repository regression, all-language translation test, hydration lint, and the
+delayed-mirror Playwright flow pass; Chromium and Firefox prove initial state,
+both transitions, save, and reload.
+'''
+
+[[milestone]]
 id         = 'p9a-01'
 phase      = 'Phase 9A — Teletext contract and ingest'
 title      = 'Decide the teletext product and standards contract'
 status     = 'Not started'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
-depends_on = ['p8a-02', 'p8b-02', 'p8c-01', 'p8c-02', 'p8c-03']
+depends_on = ['p8e-03', 'p8f-01']
 acceptance = '''
 An accepted ADR distinguishes source DVB teletext subtitles, full-page
 browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the

@@ -81,6 +81,7 @@ Contributor reference:
 - [Parity matrix](reference/parity-matrix.md)
 - [Persistence gap matrix](reference/persistence-gap-matrix.md)
 - [Web crate structure](reference/web-crate-structure.md)
+- [Remote Stream playlist manifest contract](reference/remote-stream-playlist-manifests.md)
 
 Engineering explanation:
 

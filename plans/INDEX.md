@@ -114,9 +114,14 @@ changelog, and git history for evidence. The authoritative live state is always
 - `phase-8-hardware-residue.md` — hand-off plan for the five Phase 8 parity
   debts that an NVIDIA-only machine cannot close: HDR10 characterization and
   functional graph probes on QSV/VAAPI/AMF/VideoToolbox/RKMPP, the three
-  unmeasured `p8b-02` benchmark candidates, Dolby Vision profiles 5 and 7, and
-  the evidence-gated `p8c-04` Vulkan-encoding decision. Independent of Phases 9
-  and 10; includes the measured proof that each item is hardware-blocked.
+  unmeasured `p8b-02` benchmark candidates, the remaining Profile 5 production
+  acceptance, and the evidence-gated `p8c-04` Vulkan-encoding decision.
+  Explicitly deferred after Phase 8 and independent of Phases 9 and 10; includes
+  the measured proof that each item is hardware-blocked.
+- `windows-beta-release-hardening.md` — pre-publication Windows candidate
+  archive, beta workflow hardening, release-policy decisions, extractor
+  hardening, and redacted live acceptance gates required before the next
+  immutable beta after `v1.0.21-beta.1`.
 - `teletext-support.md` — Phase 9 plan to decide the teletext product and
   standards contract, prove optional FFmpeg/libzvbi support on all six release
   targets, persist stream/page metadata, deliver selectable pages, and add

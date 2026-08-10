@@ -1588,6 +1588,14 @@ pub async fn list_remote_streams(
 }
 
 #[server]
+pub async fn list_remote_stream_tags() -> Result<Vec<String>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.application.list_remote_stream_tags().await?)
+}
+
+#[server]
 pub async fn list_songs(
     search: String,
     page: u32,

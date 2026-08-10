@@ -60,6 +60,8 @@ impl HealthCheck for RemoteStreamHealthCheck {
                 plot: None,
                 year: None,
                 content_rating: None,
+                tags: Vec::new(),
+                ..RemoteStreamDefinition::default()
             };
             let definition_path = row
                 .try_get::<Option<String>, _>("Path")
