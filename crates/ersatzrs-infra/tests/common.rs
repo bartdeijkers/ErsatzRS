@@ -1,6 +1,6 @@
 #![cfg(not(feature = "mysql"))]
 #![allow(dead_code)]
-#![allow(clippy::missing_panics_doc, clippy::must_use_candidate)]
+#![allow(clippy::missing_panics_doc)]
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
@@ -47,10 +47,12 @@ pub async fn test_db() -> SqlitePool {
     pool
 }
 
+#[must_use]
 pub fn fixed_time() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap()
 }
 
+#[must_use]
 pub fn profile(id: i64, name: &str) -> FFmpegProfile {
     FFmpegProfile {
         id,
@@ -60,6 +62,7 @@ pub fn profile(id: i64, name: &str) -> FFmpegProfile {
     }
 }
 
+#[must_use]
 pub fn channel(id: i64, number: &str, is_enabled: bool) -> Channel {
     Channel {
         id,
@@ -137,6 +140,7 @@ pub async fn seed_media_graph(pool: &SqlitePool) {
     seed_media_item(pool, 1, 1).await;
 }
 
+#[must_use]
 pub fn library(id: i64, source_id: i64, path_id: i64) -> Library {
     Library {
         id,
@@ -149,6 +153,7 @@ pub fn library(id: i64, source_id: i64, path_id: i64) -> Library {
     }
 }
 
+#[must_use]
 pub fn media_item(id: i64, library_path_id: i64) -> MediaItem {
     MediaItem {
         id,
@@ -157,6 +162,7 @@ pub fn media_item(id: i64, library_path_id: i64) -> MediaItem {
     }
 }
 
+#[must_use]
 pub fn schedule(id: i64, item_ids: Vec<i64>) -> ProgramSchedule {
     ProgramSchedule {
         id,
@@ -166,6 +172,7 @@ pub fn schedule(id: i64, item_ids: Vec<i64>) -> ProgramSchedule {
     }
 }
 
+#[must_use]
 pub fn playout_item(id: i64, playout_id: i64, media_item_id: i64) -> PlayoutItem {
     let start = fixed_time();
     PlayoutItem {
@@ -178,6 +185,7 @@ pub fn playout_item(id: i64, playout_id: i64, media_item_id: i64) -> PlayoutItem
     }
 }
 
+#[must_use]
 pub fn build_status(playout_id: i64) -> PlayoutBuildStatus {
     PlayoutBuildStatus {
         playout_id,
@@ -187,6 +195,7 @@ pub fn build_status(playout_id: i64) -> PlayoutBuildStatus {
     }
 }
 
+#[must_use]
 pub fn playout(id: i64, channel_id: i64, schedule_id: i64) -> Playout {
     Playout {
         id,
@@ -197,6 +206,7 @@ pub fn playout(id: i64, channel_id: i64, schedule_id: i64) -> Playout {
     }
 }
 
+#[must_use]
 pub fn playout_anchor() -> PlayoutAnchor {
     PlayoutAnchor {
         schedule_items_enumerator_state: CollectionEnumeratorState { seed: 77, index: 5 },
@@ -211,6 +221,7 @@ pub fn playout_anchor() -> PlayoutAnchor {
     }
 }
 
+#[must_use]
 pub fn playout_gap(id: i64, playout_id: i64) -> PlayoutGap {
     PlayoutGap {
         id,
@@ -220,6 +231,7 @@ pub fn playout_gap(id: i64, playout_id: i64) -> PlayoutGap {
     }
 }
 
+#[must_use]
 pub fn playout_history(id: i64, playout_id: i64) -> PlayoutHistory {
     PlayoutHistory {
         id,
@@ -236,6 +248,7 @@ pub fn playout_history(id: i64, playout_id: i64) -> PlayoutHistory {
     }
 }
 
+#[must_use]
 pub fn program_schedule_anchor(id: i64, playout_id: i64) -> PlayoutProgramScheduleAnchor {
     PlayoutProgramScheduleAnchor {
         id,
@@ -254,6 +267,7 @@ pub fn program_schedule_anchor(id: i64, playout_id: i64) -> PlayoutProgramSchedu
     }
 }
 
+#[must_use]
 pub fn fill_group_index(
     id: i64,
     playout_id: i64,
@@ -270,6 +284,7 @@ pub fn fill_group_index(
     }
 }
 
+#[must_use]
 pub fn playout_template(
     playout_id: i64,
     template_id: i64,
@@ -308,6 +323,7 @@ pub async fn seed_collection_target(pool: &SqlitePool) {
     .unwrap();
 }
 
+#[must_use]
 pub fn collection_type() -> CollectionType {
     CollectionType::Collection
 }
