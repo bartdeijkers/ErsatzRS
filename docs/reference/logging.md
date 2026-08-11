@@ -30,7 +30,7 @@ admin UI.
 
 ## Remote Stream producer failures
 
-A failed script-backed Remote Stream records one structured warning with these
+A failed add-on-backed Remote Stream records one structured warning with these
 safe correlation fields:
 
 | Field | Meaning |
@@ -47,5 +47,5 @@ safe correlation fields:
 Before the excerpt reaches the logger, ErsatzRS removes URL paths and query
 parameters, authentication and cookie values, common token assignments, control
 characters, and local filesystem paths. The excerpt is intended to retain the
-extractor's error class, not its complete command or response. Cancellation and
+add-on's error class, not its complete command or response. Cancellation and
 a consumer closing a healthy producer pipe remain debug-level lifecycle events.

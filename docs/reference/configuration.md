@@ -94,10 +94,9 @@ dialogs unresponsive.
 
 ## FFmpeg and ffprobe
 
-ErsatzRS validates both tools at web startup. They must be version 8.1 or newer
-and FFmpeg must expose the capabilities required by
-[ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md), including
-`drawvg` and `zscale`.
+ErsatzRS validates both tools at web startup. They must be on the supported
+FFmpeg 9.x runtime line and expose the capabilities listed in the
+[system requirements](system-requirements.md), including `drawvg` and `zscale`.
 
 Runtime resolution order:
 
@@ -145,11 +144,8 @@ satisfies startup validation.
 The admin **Settings** -> **Logging** page persists the default minimum level
 and per-subsystem overrides for scanning, scheduling, searching, streaming, and
 HTTP. Persisted directives are applied after the base `RUST_LOG` filter and can
-be reloaded without replacing application files.
-
-The default log file is `ErsatzRS.log` under the platform's local application
-data `ErsatzRS/logs` directory. The Windows launcher's **Show Logs** action opens
-that directory.
+be reloaded without replacing application files. Exact keys, accepted levels,
+and file locations are in the [logging reference](logging.md).
 
 ## IPTV JWT protection
 
@@ -191,6 +187,21 @@ Release bundles contain `ersatzrs-healthcheck` (or
 
 The Docker image uses this binary for its container health check.
 
+## Trusted add-on repositories
+
+New databases seed an official ErsatzRS add-on source row. In the current
+development tree its public key is intentionally empty, so it cannot refresh
+until a release pins the production key. To replace the complete list for an
+immutable deployment, set:
+
+| Variable | Purpose |
+|---|---|
+| `ERSATZRS_ADDONS__TRUSTED_REPOSITORIES_FILE` | Filesystem path to the authoritative repository allowlist TOML file |
+
+While this variable is set, database-only sources are not trusted and the
+repository editor is read-only. The exact file schema, path behavior, and
+replacement semantics are in the [add-on repository reference](addon-repositories.md).
+
 ## Database-backed settings pages
 
 Use the admin UI for settings that can be loaded after database startup:
@@ -204,22 +215,14 @@ Use the admin UI for settings that can be loaded after database startup:
 | **Settings** -> **Playout** | playout build horizon and scheduling behavior |
 | **Settings** -> **UI** | language, theme, and per-user Windows login startup |
 | **Settings** -> **XMLTV** | guide days, time zone, and block behavior |
+| **Settings** -> **Add-ons** | trusted repositories, install/update state, readiness, and manifest-declared settings |
 
 These values live in the database and move with a database backup.
-
-### Remote Stream playlist extractors
-
-The internal database-backed key `settings.remote_stream_extractors` contains
-the named Windows/Unix command allowlist used by Remote Stream playlist
-manifests. Configure this deployment-level allowlist before using the Remote
-Stream playlist admin surface; that page deliberately offers only configured
-extractor names and never accepts an arbitrary command. The complete JSON and
-executable contract is in the [manifest reference](remote-stream-playlist-manifests.md).
 
 The Windows startup checkbox is the exception: it reflects
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on the current machine and
 is not persisted in the database. Linux automatic startup is configured by an
-administrator through systemd; see [Install on Linux with systemd](../how-to/install-on-linux.md).
+administrator through a service manager such as systemd.
 
 ## Secret handling
 
@@ -228,6 +231,7 @@ Treat these values as secrets:
 - database passwords;
 - Plex, Jellyfin, Emby, and Trakt tokens;
 - JWT signing keys and access tokens; and
+- add-on values resolved through environment or secret-file references;
 - reverse-proxy or session credentials.
 
 Do not commit them, paste them into issue reports, or include them in

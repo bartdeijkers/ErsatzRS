@@ -5,7 +5,7 @@
 Accepted (2026-07-27)
 
 Extends [ADR 0048](0048-collection-item-playback-overrides.md) and
-[ADR 0018](0018-content-variants-and-stream-roles.md).
+[ADR 0018](0018-extras-alternate-versions-and-stream-roles.md).
 
 ## Implementation
 
@@ -70,7 +70,7 @@ indexes legitimately change.
 
 ## References
 
-- [ADR 0018](0018-content-variants-and-stream-roles.md)
+- [ADR 0018](0018-extras-alternate-versions-and-stream-roles.md)
 - [ADR 0048](0048-collection-item-playback-overrides.md)
 - `$ERSATZTV_SRC/ErsatzTV/Pages/Movie.razor`
 - Jellyfin Web item-details media-source selection

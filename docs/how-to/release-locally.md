@@ -9,10 +9,10 @@ Use a beta tag (`v*.*.*-beta.*`) when the active Windows runner should publish
 the archive: that tag runs the Windows-only prerelease workflow and does not
 produce Linux archives or a Docker image.
 
-For a normal release that produces the Linux and Windows GitHub assets, use
-[Publish a full release](publish-release.md). Do not use `./run.ps1 build` for
-release packaging; it builds local dev assets and starts the server, but it does
-not create release archives or a `build/` directory.
+This fallback does not replace the normal multi-platform release workflow. Do
+not use `./run.ps1 build` for release packaging; it builds local development
+assets and starts the server, but it does not create release archives or a
+`build/` directory.
 
 ## Prerequisites
 

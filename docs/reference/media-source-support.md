@@ -10,10 +10,6 @@ current beta.
 | Plex | Plex account PIN sign-in discovers owned servers | Initial library discovery is not yet completed by the admin sign-in flow | Available after library rows exist |
 | Emby | Address and API key can be stored | Initial library discovery is not yet completed by the admin connection flow | Available after library rows exist |
 
-For a complete remote-provider path in this beta, use
-[Jellyfin](../how-to/connect-a-jellyfin-server.md). For filesystem media, use a
-[local library](../how-to/add-and-scan-a-local-library.md).
-
 ## Supported media kinds
 
 Local libraries can be created for Movies, TV Shows, Music Videos, Other

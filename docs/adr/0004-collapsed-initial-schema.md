@@ -31,4 +31,4 @@ starts from the intended ErsatzRS baseline.
 ## References
 
 - `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs`
-- [Migration guide](../how-to/add-migration.md)
+- `migrations/`

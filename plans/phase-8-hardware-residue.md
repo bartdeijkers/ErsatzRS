@@ -107,7 +107,7 @@ range in the schedule:
 ### Steps for a new backend
 
 1. Reproduce the NVIDIA characterization on the new hardware. Follow
-   `docs/how-to/hdr-output-characterization.md` — every command there is
+   `docs/explanation/hdr-output-characterization.md` — every command there is
    self-contained and generates its fixtures from `lavfi`.
 2. Build the backend's HDR10 graph. Two constraints the NVENC work discovered
    the hard way, and which will bite on other backends too:
@@ -143,7 +143,7 @@ range in the schedule:
 ### Acceptance for Workstream A
 
 Decoded-frame evidence for at least one non-NVIDIA backend, recorded as a new
-finding in `docs/how-to/hdr-output-characterization.md`, with the parity debt
+finding in `docs/explanation/hdr-output-characterization.md`, with the parity debt
 either resolved (all backends settled) or narrowed with the remaining vendors
 named.
 
@@ -353,7 +353,7 @@ For each debt closed or narrowed:
    `remediation` field with the evidence and set `resolved = true`, or extend
    `evidence` with what was measured and what still blocks it. See the
    `update-parity` skill (`skills/update-parity.md`).
-2. Add a finding to `docs/how-to/hdr-output-characterization.md` for anything
+2. Add a finding to `docs/explanation/hdr-output-characterization.md` for anything
    HDR-related, with reproducible commands.
 3. Update `CHANGELOG.md` under `[Unreleased]` for anything user-visible — a
    backend gaining hardware HDR10 certainly is.
@@ -372,7 +372,7 @@ For each debt closed or narrowed:
   exist and the positive-proof rule.
 - `docs/adr/0003-ffmpeg-cli-spawn.md` — FFmpeg stays a `tokio::process::Command`
   CLI spawn. **Do not add libav bindings.**
-- `docs/how-to/hdr-output-characterization.md` — eleven findings with
+- `docs/explanation/hdr-output-characterization.md` — eleven findings with
   reproducible commands; the model for new evidence.
 - `docs/how-to/troubleshoot-startup-and-playback.md` — includes the measured
   rotation/display-matrix table from the closed rotation debt.

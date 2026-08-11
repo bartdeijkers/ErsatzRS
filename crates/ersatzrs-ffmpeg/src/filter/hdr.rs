@@ -7,7 +7,7 @@
 //!
 //! The filter shapes here were characterized against the shipped `FFmpeg` 9
 //! runtime rather than derived from documentation; see
-//! `docs/how-to/hdr-output-characterization.md` for the probes and their
+//! `docs/explanation/hdr-output-characterization.md` for the probes and their
 //! decoded results.
 
 use ersatzrs_domain::HardwareAccelerationKind;

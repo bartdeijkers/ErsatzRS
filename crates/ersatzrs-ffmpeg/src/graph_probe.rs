@@ -12,7 +12,7 @@
 //! the only Vulkan device present is `llvmpipe` (a software rasterizer), so
 //! `hwmap=derive_device=cuda` fails with `Could not derive CUDA device` and
 //! every HDR NVENC transcode dies. The proven CUDA-only graph succeeds on the
-//! same machine. See `docs/how-to/hdr-output-characterization.md` and the
+//! same machine. See `docs/explanation/hdr-output-characterization.md` and the
 //! parity record for the captured transcripts.
 //!
 //! This module owns the pure half: which operations exist, what probe command

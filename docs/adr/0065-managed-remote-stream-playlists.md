@@ -4,20 +4,27 @@
 
 Accepted (2026-08-10).
 
+The extractor trust and execution portions are superseded by
+[ADR 0066](0066-signed-repository-backed-add-ons.md). Playlist manifests,
+stable enumeration identity/order, atomic sidecars, managed ownership,
+health, and ordered playlist materialization remain active.
+
 ## Implementation
 
-Implemented in Phase 8D/8E. The scanner, SQLite/MySQL ownership migration,
-cross-platform extractor contract, health/troubleshooting checks, localized
-admin management, tag facets, managed playlist ordering, and playout refresh
-path are tracked by milestones P8D-02 through P8E-03 and the
-`remote-stream-playlists` parity record.
+Implemented in Phase 8D/8E and revised under ADR 0066. The scanner,
+SQLite/MySQL ownership migration, signed add-on list/play integration,
+health/troubleshooting checks, localized admin management, tag facets, managed
+playlist ordering, and playout refresh path are tracked by milestones P8D-02
+through P8E-03 and the `remote-stream-playlists` parity record. Named extractor
+configuration and raw single-stream scripts are no longer implemented.
 
 ## Context
 
-ErsatzTV and ErsatzRS model one Remote Stream as one YAML definition containing
-either a URL or a playback script. This remains practical for small libraries,
-but it does not keep a folder of definitions synchronized with an upstream
-series or playlist. ErsatzTV has no playlist-ingestion counterpart to
+At the time of this decision, ErsatzTV and ErsatzRS modeled one Remote Stream as
+one YAML definition containing either a URL or a playback script. That was
+practical for small libraries, but it did not keep a folder of definitions
+synchronized with an upstream series or playlist. ErsatzTV has no
+playlist-ingestion counterpart to
 `YamlRemoteStreamDefinition`; the feature is therefore an ErsatzRS extension.
 
 Remote Stream folders already become tags, Remote Streams already participate
@@ -41,20 +48,19 @@ definitions in that folder remain ordinary Remote Stream YAML files, so the
 existing folder-derived tag, scan, probe, playback, and scheduling behavior is
 reused without a second media kind.
 
-The manifest identifies an extractor by a stable, case-insensitive name. Named
-extractors are configured in the server-owned `settings.remote_stream_extractors`
-setting as JSON and provide platform-specific commands for Windows and Unix.
-The selected command must resolve to a regular executable file at validation
-and execution time. Unknown, duplicate, invalid, or unavailable extractors fail
-visibly; there is no command fallback and a manifest never embeds an enumeration
-command. Hand-authored single-stream definitions retain their existing raw
-`script` contract.
+The manifest identifies an installed add-on by its stable reverse-DNS identity.
+The package must be enabled and implement `addon.check.v1`,
+`remote-stream.list.v1`, and `remote-stream.play.v1`. Unknown, disabled,
+incompatible, or modified packages fail visibly; there is no command fallback,
+and a manifest never embeds an executable path. Hand-authored single-stream
+definitions use the same installed add-on boundary.
 
-An extractor implements two subcommands:
+The add-on runtime invokes two capability operations:
 
 ```text
-<extractor> list <playlist-url>
-<extractor> play <item-url> <seek>
+list  with ERSATZRS_REMOTE_STREAM_PLAYLIST_URL=<playlist-url>
+play  with ERSATZRS_REMOTE_STREAM_URL=<item-url>
+      and ERSATZRS_REMOTE_STREAM_SEEK=<seek>
 ```
 
 `list` writes UTF-8 NDJSON to standard output, one object per item in upstream
@@ -68,21 +74,23 @@ flattening them would make faithful XMLTV/custom-template projection
 impossible. Unknown fields are ignored. Duplicate IDs, malformed lines, a non-zero exit, timeout,
 oversized output, or more than the configured maximum number of entries rejects
 the entire enumeration. Standard error is retained only as a bounded, redacted
-tail. `play` writes MPEG-TS to standard output and receives the current seek in
-the established Remote Stream format. Media URLs are resolved only during
-playback; synchronization never stores an expiring resolved stream URL.
+tail. `play` writes streamable media bytes to standard output and receives the
+current seek in the established Remote Stream format. Media URLs are resolved
+only during playback; synchronization never stores an expiring resolved stream
+URL.
 
 Playlist synchronization is serialized by the existing scan worker. It applies
 manifest defaults, explicit exclusions, title and duration filters, maximum
-item count, and selected ordering before writing files. Extractor `id` is the
-stable identity and determines a filesystem-safe generated file name; ordinal
-position never determines identity. A versioned `.ersatzrs-playlist.json`
+item count, and selected ordering before writing files. The enumeration entry
+`id` is the stable identity and determines a filesystem-safe generated file
+name; ordinal position never determines identity. A versioned
+`.ersatzrs-playlist.json`
 sidecar records manifest and ordered-playlist hashes, timestamps, last outcome,
 entry order, managed file names, exclusions, and ownership. State and generated
 definitions are written with a sibling temporary file and atomic rename.
-The manifest hash includes the selected extractor command and executable
-identity, so deploying an updated wrapper forces one metadata refresh even when
-the normal synchronization interval has not elapsed.
+The manifest hash includes the selected add-on identity, installed version, and
+verified package content hash, so activating updated package content forces one
+metadata refresh even when the normal synchronization interval has not elapsed.
 
 Only files listed as owned by a valid sidecar for that manifest may be rewritten
 or removed. An upstream removal follows the manifest's `trash` or `keep` policy;
@@ -109,10 +117,19 @@ delete it. A failed synchronization preserves the last complete generated files,
 sidecar, and ordered playlist.
 
 Playlist state drives a persisted health check for unknown or unavailable
-extractors, failed or stale synchronization, missing durations, and truncation.
+add-ons, failed or stale synchronization, missing durations, and truncation.
 Troubleshooting may perform one bounded enumeration on demand and exposes only
 the parsed count and bounded redacted diagnostics. Playlist URLs and local
-extractor paths are not written to logs or health details.
+package paths are not written to logs or health details.
+
+## Historical decision — superseded by ADR 0066
+
+The 2026-08-10 decision originally selected case-insensitive extractor names
+from the JSON `settings.remote_stream_extractors` command allowlist and retained
+raw `script:` for single-stream YAML. Its `list` and `play` subprocess shape was
+the predecessor of the versioned add-on capabilities. ADR 0066 removed the
+setting, raw commands, and compatibility fallback; those rules are no longer
+current behavior.
 
 ## Consequences
 
@@ -126,10 +143,11 @@ classification, credit, collection, and broadcaster metadata. The scanner
 projects compatible facets into search and XMLTV; the YAML remains the lossless
 source when a downstream format has no equivalent field.
 
-Enumeration depends on operator-installed extractors and network availability.
-The application does not bundle, install, update, or silently substitute those
-tools. A provider that omits durations may produce diagnostic-only entries until
-the extractor can supply reliable values.
+Enumeration depends on an installed, enabled package and network availability.
+ErsatzRS installs and updates packages only through a configured signed
+repository and never silently substitutes another provider. A provider that
+omits durations may produce diagnostic-only entries until the add-on can supply
+reliable values.
 
 The schema intentionally diverges from ErsatzTV through the nullable
 `Playlist.ManagedSource` ownership marker and three nullable Remote Stream
@@ -159,5 +177,5 @@ represent losslessly.
 
 - [ADR 0057: Direct Remote Stream pipelines and playlist actions](0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 - [ADR 0011: Generated playlist read-only UI](0011-generated-playlist-read-only-ui.md)
-- [`plans/remote-stream-playlists.md`](../../plans/remote-stream-playlists.md)
+- [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md)
 - `$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs`

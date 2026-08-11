@@ -87,4 +87,4 @@ owning integration rather than the playlist item editor.
 - `$ERSATZTV_SRC/ErsatzTV/Pages/PlaylistEditor.razor`
 - `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/TraktCommandBase.cs`
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlaylistEnumerator.cs`
-- [Trakt lists parity slice](../../plans/trakt-lists-parity-slice.md)
+- [Trakt lists parity record](../progress/parity/trakt-lists.toml)

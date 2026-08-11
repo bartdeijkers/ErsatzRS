@@ -43,7 +43,8 @@ ErsatzRS needs writable persistent storage for:
 
 - the SQLite database, unless MySQL or MariaDB is configured;
 - the managed FFmpeg runtime;
-- extracted resources and user-editable runtime scripts; and
+- extracted resources and, in builds containing the add-on host, verified
+  add-on packages and add-on data; and
 - temporary stream, subtitle, font, and transcode caches.
 
 Media itself can be mounted read-only. The ErsatzRS process must be able to
@@ -55,9 +56,10 @@ and runtime updates.
 
 ## FFmpeg requirement
 
-Both FFmpeg and ffprobe must be version 8.1 or newer and expose the capabilities
-checked at startup. Required filters include `drawvg` for graphics and `zscale`
-for color and HDR processing.
+Both FFmpeg and ffprobe must be on the supported FFmpeg 9.x runtime line and
+expose the capabilities checked at startup. Older and unverified future major
+versions are rejected. Required filters include `drawvg` for graphics and
+`zscale` for color and HDR processing.
 
 Official archives and Docker images do not bundle FFmpeg. On first startup,
 ErsatzRS normally downloads the matching first-party runtime and stores it in

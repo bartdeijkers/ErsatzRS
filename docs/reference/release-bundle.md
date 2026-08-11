@@ -1,16 +1,13 @@
 # Release bundle reference
 
 This page describes the contents and runtime environment of published release
-archives. Use [Install on Windows](../how-to/install-on-windows.md),
-[Install on Linux with systemd](../how-to/install-on-linux.md), or
-[Install with Docker](../how-to/install-with-docker.md) for end-user setup.
+archives.
 
 ## Published artifacts
 
-Normal releases publish Linux x86-64, Linux AArch64, Linux ARMv7, and Windows
-x86-64 archives plus a multi-architecture Docker image. Windows beta releases
-may publish only the Windows archive. The active release workflow does not
-currently publish macOS archives.
+The current package and platform matrix is owned by the
+[system requirements](system-requirements.md). This page describes the layout
+of each artifact when that artifact is published.
 
 ## Windows archive layout
 
@@ -58,9 +55,13 @@ from the same archive as the server binary.
 Official archives and images do not include FFmpeg or ffprobe. On first startup,
 ErsatzRS downloads and validates the matching first-party runtime under the
 application state directory, then reuses or updates that managed copy.
+Third-party tools such as `yt-dlp` are not bundled. Their signed add-on packages
+can be installed independently through **Settings > Add-ons** in builds that
+contain the add-on host, while operators install any manifest-declared external
+executable separately. The currently published beta predates that host, and the
+official add-on repository and production public key are not published yet.
 
-See [Why ErsatzRS manages FFmpeg](../explanation/managed-ffmpeg-runtime.md) and
-the [configuration reference](configuration.md) for offline overrides.
+See the [configuration reference](configuration.md) for offline overrides.
 
 ## Windows launcher environment
 

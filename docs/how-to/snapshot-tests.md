@@ -1,36 +1,36 @@
 # Run snapshot tests
 
-Snapshot tests are mandatory when generated command or timeline output is the
-behavior under test.
+Use this workflow after changing behavior covered by an `insta` snapshot.
 
-## Required uses
+## Run the focused test
 
-- Every FFmpeg argv generator.
-- Every filter-complex builder.
-- Every YAML instruction handler.
-- Every drawvg VGS/ASS template renderer.
-
-## Workflow
+Choose the narrowest crate and test filter that regenerate the affected
+snapshots:
 
 ```bash
-cargo test
+./run.sh test -p <crate> <snapshot-test-filter>
+```
+
+The test leaves proposed changes as `.snap.new` files.
+
+## Review the changes
+
+Open the interactive review:
+
+```bash
 cargo insta review
 ```
 
-Review each snapshot as behavior, not as a formatting artifact. Never commit
-`.snap.new` files.
+Inspect the scenario name, old value, and new value before accepting or
+rejecting each change. Then rerun the focused test.
 
-## Naming
+## Confirm the result
 
-Use names that identify the scenario:
+Check that no pending snapshot files remain:
 
-```text
-software_pipeline_single_video_hls
-yaml_duration_instruction_exact_fit
-drawvg_lower_third_with_title
+```bash
+git status --short
 ```
 
-## Updates
-
-Snapshot updates must be paired with an explanation in the pull request. If the
-change is a deliberate ErsatzTV behavior divergence, link the ADR.
+Do not commit `.snap.new` files. If the change is not intended, reject the
+snapshot and fix the implementation instead of accepting the drift.

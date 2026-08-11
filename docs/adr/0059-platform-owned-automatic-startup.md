@@ -78,7 +78,5 @@ unchanged.
 
 ## References
 
-- [Install on Windows](../how-to/install-on-windows.md)
-- [Install on Linux with systemd](../how-to/install-on-linux.md)
 - `crates/ersatzrs-web/src/host/settings.rs`
 - `crates/ersatzrs-launcher/src/main.rs`

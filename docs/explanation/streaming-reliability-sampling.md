@@ -1,10 +1,7 @@
 # Avoiding the inspection paradox in streaming-reliability testing
 
-Background and tradeoffs for how we sample streams when we test playback
-reliability with TSDuck. This is an *explanation* page: it argues for a
-sampling discipline, it does not replace the operational guide in
-[`scripts/e2e/README.md`](../../scripts/e2e/README.md) or the layered view in
-[test-strategy.md](test-strategy.md).
+Background and tradeoffs for how ErsatzRS samples streams when testing playback
+reliability with TSDuck.
 
 ## The trap
 

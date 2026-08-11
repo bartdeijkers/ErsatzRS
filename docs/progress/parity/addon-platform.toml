@@ -1,0 +1,56 @@
+feature    = 'Signed repository-backed add-on platform'
+etv_source = 'ErsatzRS product extension; ErsatzTV has no signed repository-backed extension equivalent'
+rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
+status     = 'In progress'
+adr        = ['0051', '0066']
+
+summary = '''
+The host implementation is substantial: strict package and catalog schemas,
+detached Ed25519 catalog verification, replaceable trust roots, rollback and
+expiry protection, bounded safe ZIP installation, immutable package/content
+integrity, manual update/enable lifecycle, manifest-rendered settings and
+declarative panels, secret references, required-dependency lifecycle guards,
+bounded out-of-process invocation, health, automatic refresh, and localized
+Settings > Add-ons administration.
+
+The separate official multi-add-on repository source tree builds deterministic
+packages for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on
+all six release RIDs. It is intentionally not published from this worktree and
+the main repository seed intentionally has no production public key until the
+maintainer provisions the private signing key directly in the publisher's
+secret store. HTTP refreshes do not yet use cache validators, and Remote Stream
+playback currently exposes managed tool paths without enforcing the matching
+manifest permission.
+'''
+
+[[debt]]
+id          = 'official-addon-repository-is-not-published'
+description = 'Publish the separate official repository, provision its Ed25519 private key directly in the release secret store, and pin only the corresponding raw public key in the main repository seed.'
+discovered  = '2026-08-11'
+evidence    = 'The local repository source, deterministic package builder, source-contract tests, exact-byte signing workflow, and GitHub Pages workflow exist. Publication and production key provisioning require explicit external authorization and secret handling outside agent context.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'addon-catalog-refresh-is-not-http-conditional'
+description = 'Honor the ADR 0066 conditional-refresh contract with HTTP validators and a verified not-modified path instead of downloading the full index and signature every time.'
+discovered  = '2026-08-11'
+evidence    = '`refresh_repository` always performs ordinary bounded GET requests; repeated-sequence validation accepts identical bytes but no ETag, Last-Modified, or HTTP 304 path exists.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'remote-stream-play-must-honor-managed-ffmpeg-permission'
+description = 'Expose managed FFmpeg and ffprobe paths to Remote Stream play only when the installed manifest declares managed FFmpeg access.'
+discovered  = '2026-08-11'
+evidence    = 'Generic add-on environment projection checks `manifest.permissions.managed_ffmpeg`, but `spawn_remote_stream_producer` currently injects `FFMPEG_BIN` and an available `FFPROBE_BIN` unconditionally.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'addon-settings-browser-proof'
+description = 'Prove the new settings route hydrates and that repository and manifest-rendered setting actions reach the application boundary.'
+discovered  = '2026-08-11'
+evidence    = 'Focused host, server-function, hydration, and browser checks cover the route and its repository/configuration actions.'
+resolved    = true
+resolution  = 'The add-on settings route is included in whole-app hydration and focused browser coverage.'

@@ -51,15 +51,15 @@ Update the Docker port publication and IPTV client URLs to match.
 
 ### FFmpeg download or validation fails
 
-ErsatzRS requires FFmpeg and ffprobe 8.1 or newer with required filters such as
-`drawvg` and `zscale`. Normally it downloads a matching managed runtime.
+ErsatzRS requires the supported FFmpeg 9.x runtime with required filters such
+as `drawvg` and `zscale`. Normally it downloads a matching managed runtime.
 
 Check internet access, release-asset availability, filesystem permissions, and
 free disk space. If you supply your own runtime, set both FFmpeg and ffprobe
 path overrides and verify the binaries belong to the same build.
 
-See [Why ErsatzRS manages FFmpeg](../explanation/managed-ffmpeg-runtime.md) and
-the [configuration reference](../reference/configuration.md).
+See the [configuration reference](../reference/configuration.md) for the exact
+runtime-selection settings.
 
 ### Database or migration health fails
 
@@ -102,42 +102,16 @@ hardware probe.
 
 ## Resolve portrait video that plays sideways
 
-A rotated recording — most phone video — carries its orientation as a *display
-matrix* in the container, not in the encoded pixels. MPEG-TS has no field for
-one. Measured with the FFmpeg 9 runtime ErsatzRS ships, copying a 90°-tagged
-stream:
+A copied MPEG-TS stream cannot carry the source container's display rotation.
+The **Source Orientation** health check names affected items and channels.
 
-| Output | Rotation after `-c copy` |
-|---|---|
-| MP4 | preserved |
-| Matroska | preserved |
-| HLS with fMP4 segments | preserved |
-| MPEG-TS | **lost** |
-| HLS with MPEG-TS segments | **lost** |
-
-Reproduce it with any file FFmpeg reports a rotation for:
-
-```bash
-ffmpeg -y -i rotated.mp4 -c copy -f mpegts out.ts
-ffprobe -select_streams v:0 -show_entries stream_side_data=rotation \
-  -of csv=p=0 out.ts      # prints nothing
-```
-
-Transcoding is unaffected: FFmpeg autorotates, so the rotation ends up in the
-pixels and the frame dimensions swap. Only a channel whose FFmpeg profile
-**copies** video is affected, and the **Source Orientation** health check names
-the specific items and channels.
-
-Two fixes, in order of preference:
+Apply one of these fixes:
 
 1. Give the channel a transcoding FFmpeg profile. The rotation is then baked in
    and every client is correct.
 2. Have the client request the fMP4 HLS variant
    (`/iptv/channel/<number>.m3u8?mode=segmenter-fmp4`), which keeps the display
    matrix. This only helps clients you control.
-
-ErsatzRS does not silently force a transcode to fix the geometry: copy is an
-explicit operator choice with a large CPU cost attached, so it reports instead.
 
 ## Resolve a rendered but unresponsive admin UI
 
@@ -149,5 +123,5 @@ may not match the server binary.
 - Hard-refresh the browser after updating.
 - Check browser requests under `/pkg/` for missing JavaScript or WASM files.
 
-See [Leptos runtime configuration](../explanation/leptos-runtime-config.md) for
-the underlying reason.
+The [release-bundle reference](../reference/release-bundle.md) lists the assets
+that must stay together.

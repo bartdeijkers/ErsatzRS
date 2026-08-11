@@ -2,55 +2,59 @@ feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
 status     = 'Ported'
-adr        = ['0057', '0063']
+adr        = ['0057', '0063', '0066']
 
 summary    = '''
-Remote Stream playout resolves the persisted URL/script definition instead of
-opening its YAML `MediaFile`. URL input uses bounded network reads and HTTP
-reconnect options. Script commands are tokenized without shell expansion,
-receive the managed FFmpeg/ffprobe paths, run from the definition directory,
-and pipe media stdout directly into the managed consumer process. FFmpeg and
-ffprobe detect the producer container from its bytes, matching ErsatzTV's
-format-agnostic loopback endpoint while retaining MPEG-TS producer support.
-Windows batch producers use an exact raw `cmd.exe` command line so quoted
-executable paths and URL arguments survive the platform process boundary. The
-standalone Beeld & Geluid wrappers follow the pinned yt-dlp extractor's fresh
-Server Action and CloudFront-cookie flow, then select one HLS video/audio
-rendition pair so their MPEG-TS output has the stable video-then-audio stream
-order. The Windows YouTube wrapper keeps yt-dlp an optional manual tool while
-requiring the ErsatzRS-managed FFmpeg runtime and preserving yt-dlp's
-extractor-specific request headers.
+Remote Stream playout resolves a persisted direct URL or an enabled installed
+add-on instead of opening its YAML `MediaFile`. URL input uses bounded network
+reads and HTTP reconnect options. Add-on commands come only from an
+integrity-checked signed package, receive declared settings and managed
+FFmpeg/ffprobe paths through a host-owned environment, and pipe media stdout
+directly into the managed consumer process. FFmpeg and ffprobe detect the
+producer container from its bytes, matching ErsatzTV's format-agnostic loopback
+endpoint while retaining MPEG-TS producer support. Windows batch entrypoints use
+an exact raw `cmd.exe` command line so quoted package paths survive the platform
+process boundary. The standalone Beeld & Geluid package implementations follow
+fresh Server Action and CloudFront-cookie discovery, then select one HLS
+video/audio rendition pair so MPEG-TS output has stable video-then-audio order.
+The yt-dlp add-on keeps yt-dlp an operator-supplied tool while requiring the
+ErsatzRS-managed FFmpeg runtime and preserving provider-specific request
+headers.
 IPTV and HLS share this resolver and cancellation ownership. Producer failures
 log safe surface/channel/seek context and a sanitized 2 KiB stderr tail; URLs,
 credentials, cookies, control characters, and local paths are removed. Consumer
 exit and ffprobe timeouts reap stalled producers; cancellation and consumer pipe
-closure remain debug events. Diagnostics never run or retry the producer.
+closure remain debug events. Diagnostics and health never run or retry the
+producer.
 
 Live and finite sources have distinct timing behavior. RTSP is forced live,
 live inputs start at zero without read-rate pacing, and current live Remote
 Streams force HLS realtime admission instead of work-ahead. Liveness is
 evaluated at the actual HLS transcode cursor so a future live item is not
-captured before its scheduled start. Script-backed VOD uses post-input seeking
-for its non-seekable pipe by default. A standalone `{seek}` command argument
-opts a finite producer into source-side seeking without changing existing
-unmarked definitions. Configured or probed duration feeds scheduling.
+captured before its scheduled start. Finite add-on playback receives the source
+offset through `ERSATZRS_REMOTE_STREAM_SEEK`; the consumer removes its duplicate
+post-input seek while the producer owns source-side seeking. Configured or
+probed duration feeds scheduling.
 Classic Flood expands a zero-duration Remote Stream to the next fixed boundary
 or hard stop and persists the expanded duration on the PlayoutItem.
 
 The Remote Stream health check is side-effect-free: it validates persisted
-definitions without contacting URLs or executing scripts, fails malformed
-sources, and warns when a finite source has no usable duration.
+definitions without contacting URLs or executing add-ons, fails malformed or
+legacy script state, reports missing/disabled/incompatible packages, and warns
+when a finite source has no usable duration.
 
 Evidence:
 - Resolver/parser/reconnect/redaction/direct-pipe, transcode-cursor liveness,
-  producer-container auto-detection, Windows batch quoting, single-pair Beeld &
-  Geluid mapping, managed-FFmpeg YouTube extraction, producer-side seeking,
-  stalled-producer cancellation, structured context, secret/path sanitation,
-  and bounded UTF-8 stderr-tail tests:
+  producer-container auto-detection, installed-content verification, Windows
+  batch quoting, single-pair Beeld & Geluid mapping, managed-FFmpeg yt-dlp
+  extraction, producer-side seeking, stalled-producer cancellation, structured
+  context, secret/path sanitation, and bounded UTF-8 stderr-tail tests:
   `./run.sh test -p ersatzrs-infra remote_stream`.
-- Windows runtime proof: the canonical YouTube wrapper tuned a finite video at
-  its midpoint in under four seconds, and the actual HLS channel returned a
-  12-second H.264/AC-3 sample with valid video and six-channel audio.
+- Existing Windows runtime proof for the same yt-dlp/FFmpeg producer path tuned
+  a finite video at its midpoint in under four seconds, and the actual HLS
+  channel returned a 12-second H.264/AC-3 sample with valid video and six-channel
+  audio. Package-level Windows rich-metadata proof remains tracked in the
+  playlist parity record.
 - ADR 0063 FFmpeg 9 compatibility: Beeld & Geluid remains a stream-copy
   producer and the shared consumer pipeline emits `-fps_mode` rather than the
   removed `-vsync` option.

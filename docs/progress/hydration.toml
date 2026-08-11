@@ -75,6 +75,12 @@ routes = ['/media/remote/streams/playlists/:library_id']
 notes  = 'Focused Chromium and Firefox proof on 2026-08-10 covers hand-authored read-only state and hydrated managed-manifest creation; tag facets remain covered in the RemoteStreamsPage route family.'
 
 [[page]]
+name   = 'AddonsSettingsPage'
+status = '✅'
+routes = ['/settings/addons']
+notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup.'
+
+[[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'
 status = '✅'
 routes = ['/media/movies/:id']

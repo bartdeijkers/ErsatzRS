@@ -120,7 +120,8 @@ ADR: [0048](../adr/0048-collection-item-playback-overrides.md)
 ErsatzTV exposes script producers through an internal loopback HTTP endpoint.
 ErsatzRS connects producer stdout directly to the managed FFmpeg or ffprobe
 stdin so producer ownership, cancellation, and error handling remain in one
-process lifecycle.
+process lifecycle. Provider processes are selected by an installed add-on
+identity; raw command strings in Remote Stream YAML are no longer accepted.
 
 The Remote Streams card menu also exposes Add To Playlist directly. ErsatzTV's
 pinned list offers only the per-card Add To Collection action even though its
@@ -132,13 +133,23 @@ ADR: [0057](../adr/0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 
 ErsatzTV supports one YAML definition per Remote Stream but has no contract for
 enumerating an upstream series or playlist. ErsatzRS recognizes distinct
-playlist manifests, executes only named server-allowlisted extractors, owns
-generated definitions through a versioned sidecar, and can maintain an ordered
-read-only playlist through an explicit source marker. Playback still uses the
-ordinary Remote Stream producer contract and resolves media URLs only when an
-item plays.
+playlist manifests, executes only installed and enabled signed add-ons with the
+versioned list/play capabilities, owns generated definitions through a
+versioned sidecar, and can maintain an ordered read-only playlist through an
+explicit source marker. Playback resolves media URLs only when an item plays.
 
 ADR: [0065](../adr/0065-managed-remote-stream-playlists.md)
+
+## Signed repository-backed add-ons
+
+ErsatzTV has no repository-backed extension lifecycle. ErsatzRS uses detached
+Ed25519-signed catalogs, immutable verified packages, an administrator or
+deployment-owned trust allowlist, manifest-rendered settings and panels, and
+out-of-process capability calls. This replaces the earlier raw Remote Stream
+script and named extractor configuration without introducing a native plugin
+ABI.
+
+ADR: [0066](../adr/0066-signed-repository-backed-add-ons.md)
 
 ## Leptos instead of Blazor
 
@@ -208,7 +219,7 @@ ADR: [0058](../adr/0058-minijinja-xmltv-channel-guide-templates.md)
 ErsatzRS uses plain async use-case handlers and constructor-injected traits instead
 of recreating MediatR.
 
-ADR: [0001](../adr/0001-record-architecture-decisions.md)
+ADR: [0051](../adr/0051-application-boundary-and-composition-root.md)
 
 ## Cue-aware burned-subtitle seek rebase
 

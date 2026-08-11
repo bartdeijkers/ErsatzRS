@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-21)
+Accepted (2026-07-21; revised 2026-08-11)
 
 ## Implementation
 
@@ -62,15 +62,18 @@ needs a ratchet that blocks new debt while complete vertical slices migrate.
 
 Use these ownership and dependency rules:
 
+- `ersatzrs-addon-contract` owns dependency-light, versioned add-on package,
+  catalog, settings, panel, and capability DTOs. It has no application,
+  persistence, web, scanner, or FFmpeg dependencies.
 - `ersatzrs-domain` owns entities and value objects and has no ErsatzRS crate
   dependencies.
 - `ersatzrs-core` owns business policies and storage/provider ports. Ports use
   storage-neutral errors and types.
 - `ersatzrs-app` owns commands, queries, use-case validation, transaction and
   side-effect ordering, and cross-adapter operation coordination. It may
-  depend on `ersatzrs-core`, `ersatzrs-domain`, and general-purpose libraries,
-  but not concrete infrastructure, transports, schedulers, binaries, FFmpeg,
-  or platform probes.
+  depend on `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, and
+  general-purpose libraries, but not concrete infrastructure, transports,
+  schedulers, binaries, FFmpeg, or platform probes.
 - `ersatzrs-infra` implements core ports and owns SQL, persisted row decoding,
   and concrete provider clients.
 - `ersatzrs-web` owns Leptos/Axum/IPTV/HDHomeRun transport mapping and is the
@@ -131,6 +134,9 @@ crate architecture.
 
 ## Alternatives Considered
 
+- Recreate MediatR with a framework-level command/query bus. Rejected because
+  plain async handlers and injected ports provide the required application
+  boundary without a second dispatch framework.
 - Preserve ErsatzTV's direct application-to-infrastructure dependency.
   Rejected because it would make application handlers concrete-storage
   services and defeat the existing core-port boundary.
@@ -146,6 +152,7 @@ crate architecture.
 ## References
 
 - [../../ARCHITECTURE.md](../../ARCHITECTURE.md)
+- [ADR 0066: Signed repository-backed add-ons](0066-signed-repository-backed-add-ons.md)
 - [../../plans/application-layer-and-video-jukebox.md](../../plans/application-layer-and-video-jukebox.md)
 - `$ERSATZTV_SRC/ErsatzTV.Application/ErsatzTV.Application.csproj`
 - `$ERSATZTV_SRC/ErsatzTV/ErsatzTV.csproj`

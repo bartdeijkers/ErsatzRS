@@ -1,78 +1,64 @@
-# Run tests
+# Run repository tests
 
-Use the narrowest test that proves the behavior.
+Use the repository wrappers for local Rust tests. Agent hooks reject direct
+`cargo test` commands so focused runs and closeout cannot silently use different
+test sets.
 
-## Running tests
+## Run a focused Rust test
 
-Use the repository wrapper for every focused/local Rust test run:
+Select the narrowest crate and filter that prove the change:
 
 ```bash
 ./run.sh test -p <crate>
 ./run.sh test -p <crate> <test-filter>
 ```
 
-The repository profile in `.config/nextest.toml` runs through all failures,
-does not retry failures, and reports tests that exceed 60 seconds. This keeps
-flaky or hanging Phase 7 tests visible rather than hiding them behind retries.
+The checked-in nextest profile runs through all failures, performs no retries,
+and reports tests that exceed 60 seconds.
 
-For closeout, run the canonical repository gate:
+For ignored integration tests that depend on local tooling or large fixtures:
 
 ```bash
-./run.sh test-closeout
+./run.sh test -p <crate> --run-ignored ignored-only
 ```
 
-The wrapper runs nextest for workspace unit/integration/binary tests, then
-Cargo only for doctests, which nextest cannot execute. Checked-in Codex and
-Claude hooks reject direct agent `cargo test` commands. CI keeps using Cargo's
-built-in runner.
+Supply any documented environment-gated fixture or database setting before the
+command. Never place private paths, credentials, or copyrighted media in the
+repository.
 
-## Unit tests
+## Run browser workflows
 
-Place unit tests next to the module under `#[cfg(test)]`. Use them for pure
-domain logic, small parsers, builder invariants, and error mapping.
-
-## Integration tests
-
-Use crate-level `tests/` directories for behavior that crosses module
-boundaries. Keep fixtures small and deterministic.
-
-Ignored integration tests remain part of the contract when they depend on
-local tooling or large fixtures. Run them explicitly with `./run.sh test -p
-<crate> --run-ignored ignored-only`.
-
-## Snapshot tests
-
-Use `insta` for generated output that must not drift silently:
-
-- FFmpeg argv builders.
-- FFmpeg filter-complex builders.
-- YAML scheduling timelines.
-- VGS/ASS graphics template rendering and `drawvg` filter fragments.
-
-See [snapshot-tests.md](snapshot-tests.md).
-
-## End-to-end tests
-
-Put browser workflows under `tests/e2e/` and run them through:
+Use the Playwright wrapper for the real web host and hydrated bundle:
 
 ```bash
 scripts/e2e/playwright-e2e.sh
 ```
 
-The wrapper boots the real web host and runs serially by default because the
-specs share a seeded database. Use the TSDuck playback gate under `scripts/e2e/`
-for transport-stream correctness that browser tests cannot prove.
+Pass a focused spec through the wrapper while iterating. The suite runs
+serially by default because its specs share a seeded database.
 
-## Database tests
+## Run playback gates
 
-- Use an in-memory `sqlx::SqlitePool` per test where possible.
-- Use MySQL through testcontainers only at integration tier.
-- Gate MySQL integration tests behind a feature such as
-  `mysql-integration`.
+Use the runtime smoke test for basic IPTV and HLS startup:
 
-## Fixtures
+```bash
+cargo xtask smoke
+```
 
-- Keep fixtures minimal.
-- Do not include copyrighted media.
-- Do not include private media paths or personal library metadata.
-- Prefer generated sample data.
+Use the manual TSDuck gate when transport continuity, PCR/PTS behavior, PSI, or
+audio/video PIDs are part of the change:
+
+```bash
+scripts/e2e/tsduck-playback-gate.sh gate
+```
+
+## Close out the Rust test suite
+
+Run the canonical local closeout once after focused tests pass:
+
+```bash
+./run.sh test-closeout
+```
+
+The wrapper runs workspace unit, integration, and binary tests through nextest,
+then uses Cargo only for doctests.

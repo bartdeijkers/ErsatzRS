@@ -8,7 +8,8 @@ active matrix currently produces the GitHub release archives and Docker image:
 - `ersatzrs-<tag>-linux-arm.tar.gz`
 - `ersatzrs-<tag>-win-x64.zip`
 - `ghcr.io/bartdeijkers/ersatzrs:<tag>`
-- `ghcr.io/bartdeijkers/ersatzrs:beta` for beta tags
+- `ghcr.io/bartdeijkers/ersatzrs:latest` for normal tags, or
+  `ghcr.io/bartdeijkers/ersatzrs:alpha` for alpha tags
 - GitHub-generated source archives
 
 macOS archives are intentionally omitted for now. Keep this release line focused
@@ -83,7 +84,8 @@ Confirm the GHCR image exists and carries the expected Linux platforms:
 
 ```bash
 docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
-docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:beta"
+channel=latest # use alpha for an alpha tag
+docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$channel"
 ```
 
 ## When GitHub-hosted minutes are exhausted
@@ -95,6 +97,5 @@ GitHub-hosted minutes.
 
 ## When GitHub Actions cannot build everything
 
-Use [Build and publish a local Windows release](release-locally.md) only as a
-fallback for the Windows archive. A local Windows fallback does not produce the
-Linux archives.
+A local Windows fallback can restore only the Windows archive; it does not
+produce the Linux archives.

@@ -2,7 +2,7 @@
 
 Use this guide for a release tag that publishes the GHCR image. The current
 Windows beta tags publish only `win-x64` archives; they do not publish a Docker
-image. Use [Install on Windows](install-on-windows.md) for that beta line.
+image.
 
 When a normal release image is available, this procedure runs it with
 persistent state and a read-only media mount.
@@ -105,8 +105,7 @@ docker compose pull
 docker compose up --detach
 ```
 
-Back up the data volume before an update. See
-[Back up and restore ErsatzRS](back-up-and-restore.md).
+Back up the data volume before an update.
 
 ## Optional environment settings
 
@@ -138,7 +137,6 @@ After changing device access, restart ErsatzRS and check **Support** ->
 
 ## Next steps
 
-- [Add and scan a local library](add-and-scan-a-local-library.md)
-- [Build your first channel](../tutorials/getting-started.md), starting at
-  step 2 and using the container path for the mounted media
-- [Connect an IPTV client](connect-an-iptv-client.md)
+Return to the [documentation home](../README.md) to choose the next task. Use
+container paths, rather than host paths, anywhere the admin UI asks for a media
+location.

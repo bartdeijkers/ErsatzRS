@@ -61,7 +61,7 @@ while preserving *checkpoint* program-schedule anchors so shuffle/enumerator
 continuity is kept. In ErsatzRS:
 
 - `clear_items` is set only for `PlayoutBuildMode::Reset`
-  (`scheduling/yaml.rs`, `scheduling/scripted.rs`).
+  (`scheduling/yaml/mod.rs`, `scheduling/scripted/mod.rs`).
 - The **classic** engine ignores `request.mode` entirely: it branches on whether
   `request.playout.anchor` is present (`scheduling/classic/mod.rs`), trims only
   items older than `now - 4h`, and appends from the anchor's far-future

@@ -24,7 +24,5 @@ server routes. Mixing a server binary from one commit with `site/pkg` from
 another commit can produce missing asset requests or server-function 404s even
 when both artifacts were valid separately.
 
-For local release builds, follow
-[Build and publish a local Windows release](../how-to/release-locally.md) and
-stage the archive exactly as described in
-[Release Bundle Reference](../reference/release-bundle.md).
+The [release-bundle reference](../reference/release-bundle.md) lists the files
+that must be staged together.

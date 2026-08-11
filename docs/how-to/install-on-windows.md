@@ -40,8 +40,8 @@ The first startup can take longer while ErsatzRS downloads and validates the
 managed FFmpeg 9 runtime. On Windows, the server also copies the selected
 runtime files next to the executable so future launcher starts resolve the same
 pair. Use **Show Logs** to follow that work. Open <http://localhost:8409> after
-the log reports that the server is ready, or after the readiness request in the
-[first-channel tutorial](../tutorials/getting-started.md) returns `200`.
+the log reports that the server is ready or
+`http://localhost:8409/healthz` returns `200`.
 
 If Windows Defender Firewall prompts for access, allow the network profiles on
 which IPTV clients should reach the server. Do not expose port `8409` directly
@@ -69,8 +69,7 @@ Those files are replaceable and do not need to be included in a user-data
 backup.
 
 Use **Show Logs** from the tray menu to open the log directory. Back up the
-state directory before replacing an installation; see
-[Back up and restore ErsatzRS](back-up-and-restore.md).
+state directory before replacing an installation.
 
 ## Update ErsatzRS
 
@@ -94,4 +93,5 @@ icon. For other failures:
 3. Check whether another process already uses port `8409`.
 4. Confirm the extracted `site/pkg` and `assets` directories are
    present.
-5. Follow [Troubleshoot startup and playback](troubleshoot-startup-and-playback.md).
+5. Request `http://localhost:8409/healthz` and resolve any reported readiness
+   failure.

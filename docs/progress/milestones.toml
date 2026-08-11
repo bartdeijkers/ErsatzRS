@@ -469,7 +469,7 @@ snapshots, `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before` (the
 ErsatzTV SDR path is byte-identical), and
 `hdr10_output_signalling_is_identical_for_sdr_and_hdr_items`. Decoded proof
 against the shipped FFmpeg 9 runtime is recorded in
-`docs/how-to/hdr-output-characterization.md`: the SDR reference white lands
+`docs/explanation/hdr-output-characterization.md`: the SDR reference white lands
 exactly on the BT.2408 203 cd/m² PQ code value (10-bit Y = 573), PQ sources
 retain their own mastering-display/MaxCLL through both libx265 and hevc_nvenc,
 and a concatenated SDR + HDR10 + HLG MPEG-TS stream reports one signalling
@@ -778,40 +778,40 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Decide the Remote Stream playlist ingest contract'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8a-02', 'p8b-02', 'p8c-01', 'p8c-02', 'p8c-03']
 acceptance = '''
 An accepted ADR records this feature as an ErsatzRS extension with no ErsatzTV
 counterpart; fixes the playlist-manifest naming and folder-derived tagging
-contract; defines the extractor allowlist as the scan-time trust boundary;
-pins the list/play protocol and NDJSON entry schema; keeps media-URL resolution
-at playback time; and decides the managed Playlist schema deviation before
-schema, scanner, or UI implementation begins.
+contract; requires a trusted installed add-on for enumeration; pins the
+versioned list/play capability and NDJSON entry schema; keeps media-URL
+resolution at playback time; and decides the managed Playlist schema deviation
+before schema, scanner, or UI implementation begins.
 '''
-evidence = 'Accepted ADR 0065 records the ErsatzRS-only manifest, folder/tagging, named extractor list/play protocol, playback-time URL resolution, managed-file safety, playout invalidation, health, and Playlist.ManagedSource contracts.'
+evidence = 'Accepted ADR 0065 records the ErsatzRS-only manifest, folder/tagging, playback-time URL resolution, managed-file safety, playout invalidation, health, and Playlist.ManagedSource contracts. ADR 0066 supersedes its former extractor execution boundary with signed add-ons.'
 
 [[milestone]]
 id         = 'p8d-02'
 phase      = 'Phase 8D — Remote Stream playlist ingest'
-title      = 'Allowlist and resolve extractors on all six targets'
+title      = 'Install and resolve provider add-ons on all six targets'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8d-01']
 acceptance = '''
-Extractors are configured by name with validated per-platform commands and
-resolve identically on all six release targets. Windows and Unix example
-wrappers implement list and play while preserving existing single-video
-playback. ErsatzRS does not bundle, download, or update the extractor, and an
-unknown or unresolvable extractor fails visibly without fallback.
+Provider add-ons install only from explicitly trusted signed repositories with
+validated package-local entrypoints for all six release targets. Windows and
+POSIX entrypoints implement versioned list and play capabilities while
+preserving single-video playback. An unknown, disabled, incompatible, or
+modified package fails visibly without a raw-command fallback.
 '''
 evidence = '''
-Completed 2026-08-10. `settings.remote_stream_extractors` parses a named
-Windows/Unix allowlist, validates the selected platform's native absolute
-regular executable, and rejects unknown or unavailable names without fallback.
-The Beeld & Geluid `.sh` and `.bat` wrappers share list/play/legacy behavior;
-scanner tests and both default and MySQL-feature compilation cover the
-platform-neutral contract without bundling the external downloader.
+Superseded and reclosed 2026-08-11 under ADR 0066. The shared add-on contract
+recognizes all six RIDs, the host verifies signed catalogs and immutable package
+content, and Remote Stream resolution requires an enabled installation with the
+requested capability. The official repository source tree packages standalone
+Beeld & Geluid and operator-supplied yt-dlp entrypoints without raw commands in
+media YAML.
 '''
 
 [[milestone]]
@@ -820,7 +820,7 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Recognize and validate playlist manifests during scan'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8d-02']
 acceptance = '''
 Remote Stream scans recognize playlist manifests, exclude them from the
@@ -842,10 +842,10 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Synchronize playlists into Remote Stream definitions'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8d-03']
 acceptance = '''
-A serialized sync enumerates through the resolved extractor, applies filters,
+A serialized sync enumerates through the resolved add-on capability, applies filters,
 exclusions, limits, and ordering, materializes stable per-entry definitions,
 rewrites sidecar state atomically, and removes only files it owns. Manifest and
 playlist etags make unchanged input a no-op; output is redacted, missing
@@ -858,8 +858,8 @@ Completed 2026-08-10. Serialized enumeration is bounded by time, stdout,
 stderr, line count, and item count. Stable filenames, atomic sidecars and
 definitions, manifest/playlist etags, UI exclusions, keep/trash removal,
 redacted failure state, missing-duration exclusion, and affected-playout
-refresh are implemented. Network-free SQLite regressions and MySQL-feature
-checks pass.
+refresh are implemented. Network-free SQLite regressions use an installed
+fixture add-on; MySQL-feature checks cover the portable persistence path.
 '''
 
 [[milestone]]
@@ -868,17 +868,17 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Report playlist sync health and troubleshooting'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8d-04']
 acceptance = '''
-A persisted health check reports unknown or unresolvable extractors, failed or
+A persisted health check reports missing, disabled, incompatible, or modified add-ons, failed or
 stale syncs, missing durations, and truncation. Troubleshooting runs one bounded
 manifest enumeration on demand and shows the parsed entry count plus a bounded,
 redacted diagnostic tail without exposing playlist credentials or local paths.
 '''
 evidence = '''
 Completed 2026-08-10. The persisted Remote Stream playlist health check reports
-unknown/unavailable extractors, invalid intervals, never-synced, failed, stale,
+missing/unavailable add-ons, invalid intervals, never-synced, failed, stale,
 missing-duration, and truncated manifests without network access. The admin
 troubleshooter performs one bounded enumeration and returns only a parsed count
 plus a bounded sanitized diagnostic tail. Focused health and helper tests pass.
@@ -890,7 +890,7 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Expose localized playlist management in the admin UI'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8d-04']
 acceptance = '''
 Remote Stream library detail lists manifests with state and Sync now; playlist
@@ -901,7 +901,7 @@ hydration contract is preserved, and focused browser coverage proves the flows.
 '''
 evidence = '''
 Completed 2026-08-10. The localized management route lists state and entries,
-syncs on demand, selects only configured extractors, manages only header-owned
+syncs on demand, selects only installed add-ons, manages only header-owned
 manifests, preserves hand-authored YAML as read-only, supports exclusions and
 troubleshooting, and exposes Remote Stream tag facets. Hydration lint and the
 focused Chromium/Firefox management and facet flows pass.
@@ -913,7 +913,7 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Materialize and schedule upstream playlist order'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/remote-stream-playlists.md'
+plan       = 'plans/INDEX.md'
 depends_on = ['p8e-01', 'p8e-02']
 acceptance = '''
 create_playlist maintains an ordered, sync-owned ErsatzRS Playlist through the

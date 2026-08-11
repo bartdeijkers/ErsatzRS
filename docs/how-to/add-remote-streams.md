@@ -1,7 +1,7 @@
 # Add Remote Streams
 
-Use a Remote Streams library to schedule an HTTP, HTTPS, or RTSP source, or a
-local producer script that writes a media stream to standard output.
+Use a Remote Streams library to schedule a direct HTTP, HTTPS, or RTSP source,
+or let an installed add-on resolve a provider URL when playback starts.
 
 ## Create the library
 
@@ -9,7 +9,7 @@ In the admin UI, add a Local media source and create a library with media kind
 **Remote Streams**. Add one or more library paths, then place a `.yml` or
 `.yaml` definition in those paths.
 
-Each definition requires `is_live` and either `url` or `script`:
+A direct source requires `url` and `is_live`:
 
 ```yaml
 url: https://stream.example/live/channel.m3u8
@@ -29,72 +29,66 @@ title: Example programme
 year: 2026
 ```
 
-The duration format is `HH:MM:SS` with an optional fractional second. RTSP URLs
-are always treated as live. If both `url` and `script` are present, `url` wins
-and both values remain stored so the definition can be changed later.
+The duration format is `HH:MM:SS` with an optional fractional second. RTSP
+URLs are always treated as live.
 
-## Use a producer script
+## Use a provider add-on
 
-A script definition names an executable and its arguments:
+This part requires a development build plus a configured trusted repository.
+The official repository and its production public key are not published yet.
 
-```yaml
-script: '"tools/example-stream.sh" "programme-id"'
-is_live: false
-duration: 00:45:00
-title: Script-backed programme
-```
-
-ErsatzRS starts the command in the definition file's directory and connects its
-standard output directly to FFmpeg. FFmpeg detects the media container from the
-stream bytes, matching ErsatzTV; streamable MP4, WebM, and MPEG-TS output are
-supported. It sets `FFMPEG_BIN` and `FFPROBE_BIN` to the managed runtime paths.
-Quote paths or arguments that contain spaces.
-
-Write only media bytes to standard output and send progress or diagnostic text
-to standard error. The container must be readable from a non-seekable pipe;
-MPEG-TS remains the safest choice for live producers.
-
-Commands are not evaluated by a shell. Put pipelines, redirection, variable
-expansion, or other shell features inside a `.sh`, `.bat`, or `.cmd` file and
-invoke that file from `script`.
-
-### Seek finite producer streams
-
-For a finite producer that can seek its own remote input, pass `{seek}` as one
-complete, quoted argument:
+Install, configure, check, and enable the provider under **Settings >
+Add-ons**. Then add its stable reverse-DNS identity alongside the original
+provider URL:
 
 ```yaml
-script: '"C:\path\to\assets\extractors\youtube\youtube.bat" "https://www.youtube.com/watch?v=<video-id>" "{seek}"'
+url: https://www.youtube.com/watch?v=<video-id>
+addon: org.ersatzrs.addon.yt-dlp
 is_live: false
 duration: "00:20:00"
-title: "Example YouTube video"
+title: Example remote video
 ```
 
-ErsatzRS replaces that exact argument with the current playout offset and
-removes the corresponding seek from the consumer. This lets the producer open
-the source at the requested position instead of making FFmpeg discard the
-beginning of a non-seekable pipe. Scripts without the marker keep the original
-consumer-side behavior. The producer must accept `0` and timestamps in
-`HH:MM:SS[.fraction]` form.
+ErsatzRS asks the enabled add-on to play the URL and connects its standard
+output directly to managed FFmpeg. FFmpeg probes the media container from the
+bytes; streamable MP4, WebM, and MPEG-TS are supported. For finite playback,
+the host supplies the current playout offset so the add-on can seek the source
+instead of forcing the consumer to discard the start of a non-seekable pipe.
 
-The bundled
-[`youtube-windows.yml.example`](../../assets/extractors/youtube/youtube-windows.yml.example)
-is the canonical Windows template. Its wrapper requires the managed
-`FFMPEG_BIN` supplied by ErsatzRS and discovers a manually installed,
-unbundled `yt-dlp.exe`; see the adjacent
-[`readme.md`](../../assets/extractors/youtube/readme.md) for the supported
-locations and a manual test procedure.
+The Beeld & Geluid package follows the same contract for one Schatkamer episode:
 
-Remote Stream scripts are trusted local configuration. They run with the same
-operating-system permissions as ErsatzRS. Keep credentials outside the YAML
-when the producer can load them from a protected file or environment variable.
+```yaml
+url: https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>
+addon: org.ersatzrs.addon.beeldengeluid
+is_live: false
+title: Episode title
+```
+
+Do not place executable commands or secrets in Remote Stream YAML. The legacy
+`script:` field and the old extractor setting are rejected. Add-on secret
+settings store only an environment-variable name or secret-file path; the
+accepted forms are defined by the [package reference](../reference/addon-packages.md).
 
 ## Synchronize an upstream playlist
 
-Configure a named extractor, then place one `<name>.playlist.yml` manifest in a
-Remote Streams library. The extractor must implement the `list` and `play`
-subcommands. The exact manifest fields, process bounds, and NDJSON shape are in
-the [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md).
+Install an add-on that exposes both `remote-stream.list.v1` and
+`remote-stream.play.v1`, then place one `<name>.playlist.yml` manifest in a
+Remote Streams library:
+
+```yaml
+name: Example series
+url: https://media.example/series/example
+addon: org.example.ersatzrs.series
+folder: episodes
+sync:
+  interval: 24h
+  order: upstream
+  on_removed: trash
+create_playlist: true
+```
+
+The exact manifest fields and NDJSON result shape are in the [Remote Stream
+playlist manifest reference](../reference/remote-stream-playlist-manifests.md).
 
 After the next library scan, ErsatzRS writes ordinary generated definitions to
 the configured sibling folder. Open the library's **Remote Stream playlists**
@@ -111,44 +105,36 @@ and reordering and remains read-only in the ordinary playlist editor.
 Scan the library from **Media > Libraries**. A valid definition appears under
 **Media > Remote Streams**. An invalid definition does not stop sibling files
 from scanning; an existing item with a newly invalid definition is marked
-unavailable until the definition is fixed and rescanned.
+unavailable until it is fixed and rescanned.
 
-From a Remote Stream card you can:
-
-- add the item to a collection;
-- add the item directly to a playlist; or
-- select several items and use the bulk actions.
-
-Remote Stream playlist items use the same editors and scheduling paths as other
-playlist media. A live item with no duration is intended for Classic Flood
-scheduling, where it fills the available window. Configure a duration for
-finite content and for scheduling modes that need a known item length.
+From a Remote Stream card you can add the item to a collection or playlist, or
+use the bulk actions for several items. A live item with no duration is intended
+for Classic Flood scheduling. Configure a duration for finite content and for
+scheduling modes that need a known item length.
 
 ## Troubleshoot
 
-The Remote Stream health checks validate stored definitions and playlist state without contacting
-the source or running scripts. It reports invalid definitions and warns when a
-non-live item has no usable duration.
+The Remote Stream health checks validate definitions, installed add-on state,
+and playlist synchronization without contacting providers or running an
+add-on. They report missing, disabled, incompatible, or modified packages and
+warn when a non-live item has no usable duration.
 
 When playback fails:
 
-1. rescan the Remote Streams library;
-2. check **System > Health Checks** for structural errors;
-3. verify that a URL is reachable from the ErsatzRS host, or run the producer
-   script as the ErsatzRS service account;
-4. confirm that script stdout is a media container FFmpeg can probe from a
-   non-seekable pipe and that diagnostic text goes to stderr, not stdout.
+1. open **Settings > Add-ons**, run **Check**, and confirm the add-on is enabled;
+2. rescan the Remote Streams library;
+3. check **Support > Health Checks** for structural or package errors;
+4. verify that the declared provider hosts and external commands are available
+   to the ErsatzRS service account; and
+5. inspect the first sanitized producer failure before retrying playback.
 
-Playback logs redact full Remote Stream URLs. A scheme and host, or the producer
-executable name, remains visible so failures can still be correlated safely. A
-producer failure also records the playback surface, channel number, effective
-source-side seek, failure class, exit status, stderr byte count, and a sanitized
-stderr tail of at most 2 KiB. Authentication values, cookies, signed URL
-details, control characters, and local paths are removed before the excerpt is
-logged.
+Playback logs redact full Remote Stream URLs, authentication values, cookies,
+signed URL details, control characters, local paths, and resolved add-on
+secrets. A scheme and host plus the package-local producer name remain visible
+for correlation. Failures include the playback surface, channel number,
+effective source-side seek, failure class, exit status, stderr byte count, and
+a sanitized stderr tail of at most 2 KiB.
 
-The health check and diagnostic logging do not run the producer or contact its
-source. They also do not add a retry. For rate-limited extractors such as
-YouTube, inspect the first captured failure and validate the wrapper manually
-once before trying channel playback again; repeated playback attempts can turn
-a configuration error into a provider cooldown or ban.
+For rate-limited providers such as YouTube, validate configuration once before
+trying channel playback again. Repeated playback attempts can turn one setup
+error into a provider cooldown or ban.

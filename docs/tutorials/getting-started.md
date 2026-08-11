@@ -10,8 +10,7 @@ You will finish with a working example of the main ErsatzRS path:
 media source -> library scan -> collection -> schedule -> playout -> channel
 ```
 
-This is a learning path. For a shorter installation recipe, use
-[Install on Windows](../how-to/install-on-windows.md).
+This is a learning path rather than an exhaustive operator reference.
 
 ## Before you begin
 
@@ -144,10 +143,6 @@ on the channel. Use **Support** -> **Logging** for runtime messages and
 **Support** -> **Troubleshooting** for media, schedule, playout, and channel
 diagnostics.
 
-You now have the complete minimum channel pipeline. Continue with:
-
-- [Install with Docker](../how-to/install-with-docker.md)
-- [Connect an IPTV client](../how-to/connect-an-iptv-client.md)
-- [Add and scan a local library](../how-to/add-and-scan-a-local-library.md)
-- [Troubleshoot startup and playback](../how-to/troubleshoot-startup-and-playback.md)
-- [How ErsatzRS builds a channel](../explanation/how-ersatzrs-builds-a-channel.md)
+You now have the complete minimum channel pipeline. Return to the
+[documentation home](../README.md) to choose the next task, or use the
+[reference index](../reference/README.md) when you need exact contracts.

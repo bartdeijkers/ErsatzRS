@@ -4,6 +4,9 @@ The admin UI is available at the server base URL, which is
 `http://<ersatzrs-host>:8409` by default. Labels can be localized from
 **Settings** -> **UI**; the routes remain the same.
 
+The **Add-ons** settings row describes the current development tree. Existing
+published beta archives do not gain that route retroactively.
+
 ## Primary pages
 
 | Page | Route | Purpose |
@@ -69,6 +72,7 @@ The admin UI is available at the server base URL, which is
 | Playout | `/settings/playout` | Playout horizon and scheduling behavior |
 | UI | `/settings/ui` | Language, theme, and Windows login startup |
 | XMLTV | `/settings/xmltv` | Guide window, time zone, and block behavior |
+| Add-ons | `/settings/addons` | Trusted repositories, packages, permissions, readiness, and settings |
 
 ## Support
 

@@ -1,15 +1,15 @@
-feature    = 'Settings (FFmpeg / Logging / HDHomeRun / Scanner / Playout / UI / XMLTV)'
+feature    = 'Settings (FFmpeg / Logging / HDHomeRun / Scanner / Playout / UI / XMLTV / Add-ons)'
 etv_source = '`ErsatzTV/Pages/Settings*.razor`, `$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs`'
 rs_target  = '`crates/ersatzrs-app/src/{commands,ports}.rs`, `crates/ersatzrs-web/src/admin/pages/settings.rs`, `crates/ersatzrs-web/src/admin/server_fns/settings.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-web/src/host/settings.rs`, `crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-domain/src/config.rs`, `crates/ersatzrs-infra/src/{db,ffmpeg_config,hls_worker,logging,playback,xmltv}.rs`, `crates/ersatzrs-core/src/playout_builder.rs`'
 status     = 'Ported'
-adr        = ['0012', '0052', '0059']
+adr        = ['0012', '0052', '0059', '0066']
 
 summary    = '''
-Ported: `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` provides ErsatzTV-shaped forms and raw HTML POST fallbacks. Database-backed fields cover FFmpeg, logging, HDHR, scanner, playout, UI, and XMLTV behavior. On Windows, `/settings/ui` also mirrors ErsatzTV's opt-in per-user login startup: a raw POST delegates through the application runtime port to the live HKCU Run registration for packaged `ErsatzRS.exe`, distinguishes enabled/disabled/repair/unavailable states, and never stores a machine-local boolean in `ConfigElement`. Non-Windows SSR omits the control; ADR 0059 keeps Linux startup under systemd ownership.
+Ported: `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` provides ErsatzTV-shaped forms and raw HTML POST fallbacks. The ErsatzRS-only `/settings/addons` route provides hydrated signed-repository, package lifecycle, permission, readiness, declarative-panel, and manifest-rendered configuration management under ADR 0066. Database-backed fields cover FFmpeg, logging, HDHR, scanner, playout, UI, XMLTV, and add-on behavior. On Windows, `/settings/ui` also mirrors ErsatzTV's opt-in per-user login startup: a raw POST delegates through the application runtime port to the live HKCU Run registration for packaged `ErsatzRS.exe`, distinguishes enabled/disabled/repair/unavailable states, and never stores a machine-local boolean in `ConfigElement`. Non-Windows SSR omits the control; ADR 0059 keeps Linux startup under systemd ownership.
 
-The persisted `pages.language` value drives SSR translations for every settings route in `en-us`, `pl`, `pt-br`, `nl`, and `fr-fr`, with one generated-registry language module per culture. Mediaserver bootstrap seeds upstream defaults. Saves preserve runtime side effects: logging reload, FFmpeg capability refresh, report-directory creation, embedded-subtitle extraction, playout rebuilds, and XMLTV refreshes.
+The persisted `pages.language` value drives SSR translations for every settings route in `en-us`, `pl`, `pt-br`, `nl`, and `fr-fr`, with one generated-registry language module per culture. Mediaserver bootstrap seeds upstream defaults and the replaceable official add-on source. Saves preserve runtime side effects: logging reload, FFmpeg capability refresh, report-directory creation, embedded-subtitle extraction, playout rebuilds, XMLTV refreshes, and add-on trust/configuration changes.
 
-Configured FFmpeg/ffprobe paths flow through the shared locator used by web and scanner execution and refresh without restart. Empty path fields mean auto-detect and show the resolved tool. The settings loader uses the correct `ChannelWatermark` table. HLS segmenter limits and MPEG-TS-script settings are consumed by their runtime paths. IPTV response disposal reaps wrapper and FFmpeg processes after disconnect; transport proof remains in the HLS and MPEG-TS parity entries. `tests/e2e/settings-i18n.spec.ts` proves the seven settings pages in every supported culture.
+Configured FFmpeg/ffprobe paths flow through the shared locator used by web and scanner execution and refresh without restart. Empty path fields mean auto-detect and show the resolved tool. The settings loader uses the correct `ChannelWatermark` table. HLS segmenter limits and MPEG-TS settings are consumed by their runtime paths. IPTV response disposal reaps add-on and FFmpeg processes after disconnect; transport proof remains in the HLS and MPEG-TS parity entries. `tests/e2e/settings-i18n.spec.ts` proves all eight settings pages in every supported culture.
 ADR 0052 adds Kodi-style selectors. Contextual `und` matches null metadata and
 suffixless sidecars (ErsatzTV `32e5482`).
 '''
@@ -18,7 +18,7 @@ suffixless sidecars (ErsatzTV `32e5482`).
 id          = 'settings-i18n-browser-proof'
 description = 'Full admin-route text coverage and four-language browser proof remain incomplete.'
 discovered  = '2026-06-10'
-evidence    = 'Resolved 2026-06-15: tests/e2e/settings-i18n.spec.ts switches pages.language through every supported culture and proves all seven settings routes render translated labels/actions without English fallback leakage outside intentional technical values.'
+evidence    = 'Resolved 2026-08-11: tests/e2e/settings-i18n.spec.ts switches pages.language through every supported culture and proves all eight settings routes render translated labels/actions without English fallback leakage outside intentional technical values.'
 resolved    = true
 
 [[debt]]

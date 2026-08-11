@@ -30,7 +30,7 @@ implemented in the software pipeline for PQ, HLG, SDR, and untagged sources.
 The SDR reference-white policy is ITU-R BT.2408 diffuse white (203 cd/m²) and
 is proven exact from decoded frames. Evidence, including the mixed
 SDR/HDR/HLG programme-transition proof, is recorded in
-`docs/how-to/hdr-output-characterization.md`.
+`docs/explanation/hdr-output-characterization.md`.
 
 Milestone p8a-01 is complete. NVENC HDR10 output is implemented and
 characterized on real hardware: a PQ
@@ -79,7 +79,7 @@ id          = 'hdr10-output-omits-static-metadata'
 adr         = '0064'
 description = 'After the output dynamic-range contract exists, HDR10 output must carry semantically valid mastering-display and content-light metadata. The scanner must persist source metadata, transforms must preserve it only when it remains meaningful, explicit validated profile metadata must cover transforms or missing sources, and SDR output must strip stale HDR/Dolby Vision signaling.'
 discovered  = '2026-08-07'
-evidence    = 'Resolved 2026-08-07 for the software path by milestone p8a-01. A PQ source is preserved and carries its own side data through both libx265 and hevc_nvenc unmodified; HLG and SDR sources are transformed and therefore receive documented, reviewable profile metadata through the FFmpeg 9 per-stream input options `-mastering_display`/`-content_light` (`hdr10_static_metadata_input_options`). SDR output still strips HDR signalling via the unchanged ErsatzTV tonemap path, asserted by `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before`. Decoded-frame evidence: `docs/how-to/hdr-output-characterization.md` findings 1, 3, and 5. The scanner does not yet persist typed source mastering-display/MaxCLL values, so profile defaults are used for every transform; that gap is tracked by `hdr10-source-metadata-is-not-persisted`.'
+evidence    = 'Resolved 2026-08-07 for the software path by milestone p8a-01. A PQ source is preserved and carries its own side data through both libx265 and hevc_nvenc unmodified; HLG and SDR sources are transformed and therefore receive documented, reviewable profile metadata through the FFmpeg 9 per-stream input options `-mastering_display`/`-content_light` (`hdr10_static_metadata_input_options`). SDR output still strips HDR signalling via the unchanged ErsatzTV tonemap path, asserted by `sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before`. Decoded-frame evidence: `docs/explanation/hdr-output-characterization.md` findings 1, 3, and 5. The scanner does not yet persist typed source mastering-display/MaxCLL values, so profile defaults are used for every transform; that gap is tracked by `hdr10-source-metadata-is-not-persisted`.'
 resolved    = true
 
 [[debt]]
@@ -317,7 +317,7 @@ id          = 'dolby-vision-overlay-subtitle-and-seek-behavior-is-unproven'
 adr         = '0064'
 description = 'Profile 8.1 SDR and HDR10 outputs are characterized, but overlays, burned subtitles, seeking, and restart/fallback were not exercised on a Dolby Vision source specifically. They are proven on plain HDR10 sources, and a profile 8.1 base layer is an HDR10 signal, so the risk is low — but it is not measured.'
 discovered  = '2026-08-07'
-evidence    = 'The p8a-02 characterization covered stream copy, SDR transcode, and HDR10 transcode of a real profile 8.1 file. Overlay, subtitle, seek, and restart proofs exist for plain HDR10 sources (see `docs/how-to/hdr-output-characterization.md` finding 7) but were not repeated with Dolby Vision input.'
+evidence    = 'The p8a-02 characterization covered stream copy, SDR transcode, and HDR10 transcode of a real profile 8.1 file. Overlay, subtitle, seek, and restart proofs exist for plain HDR10 sources (see `docs/explanation/hdr-output-characterization.md` finding 7) but were not repeated with Dolby Vision input.'
 remediation = '''
 Closed 2026-08-08 against the real profile 8.1 file, seeking 3 s in so the
 decode does not begin at a keyframe boundary.
@@ -329,7 +329,7 @@ record. SDR MPEG-TS with the same overlay and subtitles: `bt709/bt709/bt709`
 with no HDR or Dolby Vision side data at all — both strips apply, which is what
 ADR 0064 requires of an SDR output from a Dolby Vision source.
 
-Recorded as finding 11 in `docs/how-to/hdr-output-characterization.md`.
+Recorded as finding 11 in `docs/explanation/hdr-output-characterization.md`.
 Restart/fallback was not re-exercised with Dolby Vision input specifically; it is
 source-agnostic and covered by the hardware-graph retry tests.
 '''

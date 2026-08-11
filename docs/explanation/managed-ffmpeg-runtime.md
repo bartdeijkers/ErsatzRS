@@ -5,15 +5,17 @@ capabilities define whether graphics, subtitles, color conversion, codecs, and
 hardware acceleration behave correctly. A system-provided `ffmpeg` command can
 be new enough while still missing a required filter or library.
 
-## The runtime contract
+## Why version checks are not enough
 
-ErsatzRS requires FFmpeg and ffprobe 8.1 or newer. Startup probes the selected
-binaries and checks required capabilities, including `drawvg` for in-process
-graphics and `zscale` for color and HDR processing.
+Startup probes the selected FFmpeg and ffprobe pair and checks the capabilities
+that ErsatzRS depends on. A version number alone cannot prove that a particular
+build contains the required filters, codecs, or hardware integrations.
 
 The server does not become ready when a required capability is missing. This
 turns a later, channel-specific playback failure into an immediate health
-result with the selected runtime path and missing capability.
+result with the selected runtime path and missing capability. The
+[system-requirements reference](../reference/system-requirements.md) owns the
+supported version and capability contract.
 
 ## Why releases do not bundle FFmpeg
 
@@ -31,30 +33,20 @@ This has several benefits:
 - operators can still supply a compliant custom build for offline or
   specialized deployments.
 
-## Resolution order
+## Why resolution has fallbacks
 
-At startup, ErsatzRS resolves the runtime in this order:
+Operators need reproducible defaults without losing the ability to run offline
+or use a specialized build. ErsatzRS therefore prefers explicit operator
+choices and reusable managed state, can acquire a first-party runtime, and can
+fall back to a compatible pair on `PATH`. Whichever source wins, FFmpeg and
+ffprobe are validated together. The
+[configuration reference](../reference/configuration.md) owns the exact
+precedence and environment variables.
 
-1. explicit FFmpeg and ffprobe path overrides or persisted paths;
-2. an existing managed runtime in application state;
-3. a managed download from the selected first-party release;
-4. compatible binaries on `PATH` when download is unavailable or disabled.
+## The offline trade-off
 
-The chosen pair is validated together. On subsequent starts, a managed runtime
-can be checked for updates, and the admin health page reports update state.
-
-## Offline deployments
-
-An offline deployment must prepare the runtime before startup. It can:
-
-- pre-place a managed runtime in the state directory;
-- set explicit FFmpeg and ffprobe paths; or
-- make a compliant pair available on `PATH` and disable managed download.
-
-Disabling downloads without another valid pair makes startup fail. Pinning
-`ERSATZRS_FFMPEG_RELEASE_TAG` is useful for controlled environments that allow
-downloads but require an immutable runtime version.
-
-See the [configuration reference](../reference/configuration.md) for exact
-variables and [Troubleshoot startup and playback](../how-to/troubleshoot-startup-and-playback.md)
-for failure diagnosis.
+Managed acquisition makes the common path predictable, but it cannot help an
+isolated host. An offline deployment must make a compliant runtime available
+before startup. Disabling downloads without another valid pair makes readiness
+fail; this is intentional because starting without a usable media runtime
+would only defer the failure until playback.

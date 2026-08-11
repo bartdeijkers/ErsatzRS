@@ -34,6 +34,16 @@ and [release bundle reference](reference/release-bundle.md).
 - [Connect a Jellyfin server](how-to/connect-a-jellyfin-server.md)
 - [Media source support](reference/media-source-support.md)
 
+## Extend ErsatzRS with add-ons
+
+The add-on host exists in the current development tree, but the official
+repository and production public key have not yet been published. Check the
+[add-on reference](reference/addons.md) before relying on this workflow in a
+release build.
+
+- [Manage add-ons](how-to/manage-addons.md)
+- [Understand the add-on trust boundary](explanation/addon-trust-boundary.md)
+
 ## Build and watch channels
 
 - [Connect an IPTV client](how-to/connect-an-iptv-client.md)
@@ -50,7 +60,12 @@ together, read [How ErsatzRS builds a channel](explanation/how-ersatzrs-builds-a
 - [Configuration](reference/configuration.md)
 - [Logging](reference/logging.md)
 - [Glossary](reference/glossary.md)
+- [All reference documentation](reference/README.md)
 - [Why ErsatzRS manages FFmpeg](explanation/managed-ffmpeg-runtime.md)
+- [Why copied portrait video loses orientation](explanation/portrait-video-and-mpeg-ts.md)
+
+For a developer and operator view of the running system, see the
+[current runtime architecture](explanation/runtime-architecture.md).
 
 ## Contributors and maintainers
 
@@ -67,4 +82,4 @@ This documentation follows [Diátaxis](https://diataxis.fr/):
 - reference pages provide facts and interfaces for lookup; and
 - explanation pages build understanding of concepts and tradeoffs.
 
-Architecture decisions live separately in [ADRs](adr/).
+Architecture decisions live separately in the [ADR gateway](adr/README.md).

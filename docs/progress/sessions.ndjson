@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-11","summary":"Reorganized docs by Diataxis, added evidence-backed runtime C4 views, and documented the in-progress signed add-on platform without overstating release availability."}
 {"agent":"Codex","date":"2026-08-10","summary":"Added rich Beeld & Geluid episode metadata from generated YAML through searchable persistence and XMLTV/Kodi projection; regenerated and verified the local Glamourland library. Windows PowerShell extractor runtime validation remains pending on a Windows/pwsh host."}
 {"agent":"Codex","date":"2026-08-10","summary":"Completed P8D/P8E Remote Stream playlist ingest, management, health, and ordered scheduling with a local Glamourland proof."}
 {"agent":"Codex","date":"2026-08-10","summary":"Deferred the remaining FFmpeg multi-vendor hardware and HDR/Dolby Vision fixture/client evidence gaps beyond Phase 8; retained their structured debt and made explicit that they do not block Phase 9."}

@@ -7,6 +7,7 @@ boundaries explicit.
 
 ```text
 crates/
+  ersatzrs-addon-contract/ versioned package, catalog, settings, and panel DTOs
   ersatzrs-domain/    entities, enums, value objects
   ersatzrs-core/      business logic, scheduling traits, repository traits
   ersatzrs-hwprobe/   native OS/GPU capability probes behind a safe API
@@ -16,28 +17,37 @@ crates/
   ersatzrs-scheduler/ playout scheduling engines and background scheduling work
   ersatzrs-web/       axum + Leptos host, IPTV, HLS, HDHR, API routes
   ersatzrs-scanner/   scanner binary
+  ersatzrs-healthcheck/ readiness-probe binary
   ersatzrs-launcher/  Windows-only system-tray launcher (no-op on other targets)
+  xtask/               repository validation and progress tooling
 migrations/       sqlx migrations
 assets/           drawvg source templates, VGS scripts, and related assets
 ```
 
 ## Dependency Rules
 
-```text
-ersatzrs-domain
-  <- ersatzrs-core
-  <- ersatzrs-app
-  <- ersatzrs-web
-  <- ersatzrs-scanner
+Direct workspace dependencies are:
 
-ersatzrs-core <- ersatzrs-infra
-ersatzrs-ffmpeg <- ersatzrs-core
-ersatzrs-ffmpeg <- ersatzrs-web
-```
+| Crate | Direct ErsatzRS dependencies |
+|---|---|
+| `ersatzrs-addon-contract` | none |
+| `ersatzrs-domain` | none |
+| `ersatzrs-core` | `ersatzrs-domain` |
+| `ersatzrs-hwprobe` | none |
+| `ersatzrs-ffmpeg` | `ersatzrs-domain`, `ersatzrs-hwprobe` |
+| `ersatzrs-infra` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg` |
+| `ersatzrs-app` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain` |
+| `ersatzrs-scanner` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
+| `ersatzrs-scheduler` | `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
+| `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-scanner`, `ersatzrs-scheduler` |
+| `ersatzrs-healthcheck`, `ersatzrs-launcher`, `xtask` | none |
 
 Rules:
 
 - `ersatzrs-domain` depends on no other ErsatzRS crate.
+- `ersatzrs-addon-contract` is dependency-light and owns only versioned public
+  add-on data contracts. It does not load packages or depend on application,
+  storage, web, scanner, or FFmpeg crates.
 - `ersatzrs-core` owns traits and business rules, not sqlx or HTTP clients.
 - `ersatzrs-hwprobe` is the only non-launcher crate allowed to use small,
   platform-guarded native FFI for hardware capability enumeration. It exposes
@@ -56,7 +66,8 @@ Rules:
   plain axum admin APIs, and `admin` for the Leptos UI.
 - `ersatzrs-scanner` owns scanner CLI concerns.
 - `ersatzrs-scheduler` owns the playout scheduling engines and background
-  scheduling work; it depends on `ersatzrs-core` traits, not concrete storage.
+  scheduling work. Its current runtime integration depends on application,
+  FFmpeg, infrastructure, and SQLx types as shown in the table above.
 - `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction, and consumes
   safe hardware capability rows from `ersatzrs-hwprobe`.
 - `ersatzrs-launcher` is the Windows-only system-tray launcher. Its real logic
@@ -77,8 +88,23 @@ preserve behavior by default, and document deliberate deviations through ADRs.
 - No libav bindings are allowed without a new ADR.
 - FFmpeg 9.x is the supported runtime line; older and unverified future major
   versions are rejected at startup.
-- SQLite is the first database backend.
-- MySQL support is feature-gated and added later.
+- SQLite is the default database backend.
+- MySQL and MariaDB support are available behind the `mysql` feature.
+- Add-ons are detached-signature-verified packages started as child processes;
+  no native or Rust dynamic-library ABI is loaded into ErsatzRS.
+- `ersatzrs-infra` owns repository trust, immutable package storage, settings
+  projection, content verification, and bounded invocation. `ersatzrs-web` is
+  the composition root and owns automatic catalog refresh and administration.
+- The separate official add-ons repository is an external software system. Its
+  private Ed25519 signing key never belongs to this workspace or the runtime
+  database.
+
+## Runtime views
+
+The current [System Context and Container views](docs/explanation/runtime-architecture.md)
+model runnable applications and data stores rather than crates. They include
+the implemented add-on child-process boundary and exclude future teletext and
+video-jukebox components.
 
 ## UI Boundary
 

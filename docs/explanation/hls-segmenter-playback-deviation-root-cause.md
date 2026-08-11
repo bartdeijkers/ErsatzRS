@@ -53,13 +53,6 @@ frames at 60 fps; its 180.021-second container duration comes from AAC
 packetization. The server log also shows no runtime failure that would account
 for the shift.
 
-## Reproducing the evidence
-
-The repeatable capture and analysis procedure now lives in
-[Reproduce an HLS content-timing deviation](../how-to/reproduce-hls-content-timing-deviation.md).
-Keeping the task procedure separate lets this page focus on the cause and
-consequences.
-
 ## Fix direction
 
 A complete fix must make HLS segmenter content time explicit:

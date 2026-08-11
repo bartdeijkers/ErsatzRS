@@ -93,5 +93,5 @@ VGS draw scripts.
 
 ## References
 
-- [Deliberate deviations](../explanation/deviations.md)
+- [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
 - [FFmpeg drawvg reference](https://ffmpeg.org/drawvg-reference.html)

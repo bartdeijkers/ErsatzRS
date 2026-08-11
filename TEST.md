@@ -22,10 +22,10 @@ References:
 
 - [docs/explanation/test-strategy.md](docs/explanation/test-strategy.md) — why
   the layers exist.
-- [docs/how-to/testing.md](docs/how-to/testing.md) — fixture rules, in-memory
-  SQLite vs testcontainers MySQL, ignored tests.
-- [docs/how-to/snapshot-tests.md](docs/how-to/snapshot-tests.md) — `cargo
-  insta review` workflow and snapshot naming.
+- [docs/how-to/testing.md](docs/how-to/testing.md) — focused, browser,
+  playback, ignored, and closeout commands.
+- [docs/how-to/snapshot-tests.md](docs/how-to/snapshot-tests.md) — wrapper plus
+  `cargo insta review` workflow.
 
 ## What runs where
 
@@ -343,6 +343,19 @@ route-set mismatches in either direction.
 
 - **External services (Plex/Jellyfin/Emby/Trakt)** — `httpmock` helper used in
   `ersatzrs-infra` and `ersatzrs-scanner` integration tests.
+
+## Snapshot-test policy
+
+Snapshot tests are required when generated output is the behavior under test,
+including FFmpeg argument generators, filter-complex builders, YAML instruction
+handlers, and drawvg VGS/ASS template renderers.
+
+Name each snapshot for the scenario, for example
+`software_pipeline_single_video_hls`, `yaml_duration_instruction_exact_fit`, or
+`drawvg_lower_third_with_title`. Review the output as behavior rather than a
+formatting artifact, never commit `.snap.new` files, and explain an intentional
+snapshot update in the pull request. A deliberate ErsatzTV behavior divergence
+also needs the owning ADR.
 
 ## Adding a new test
 

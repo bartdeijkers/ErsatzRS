@@ -196,6 +196,11 @@ backing = 'settings page with days-to-build validation, timezone/block behavior 
 routed  = true
 
 [[route]]
+nav     = '/settings/addons'
+backing = 'localized signed repository, package lifecycle, permission, readiness, declarative panel, and manifest-rendered configuration management'
+routed  = true
+
+[[route]]
 nav     = '/system/logs'
 backing = 'newest OS-local app-data log file in ErsatzTV-style Support log table/search/pager surface'
 routed  = true

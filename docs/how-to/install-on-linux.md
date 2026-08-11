@@ -115,7 +115,4 @@ Disable boot startup without deleting the installation:
 sudo systemctl disable --now ersatzrs.service
 ```
 
-The systemd setting is machine-wide and requires administrator privileges, so
-it is deliberately managed by the operating system rather than by a checkbox
-in the web UI. See [ADR 0059](../adr/0059-platform-owned-automatic-startup.md)
-for the platform boundary.
+The systemd setting is machine-wide and requires administrator privileges.

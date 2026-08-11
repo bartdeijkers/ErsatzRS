@@ -8,7 +8,8 @@ consistent with ErsatzTV where parity matters.
 
 | Term | Definition |
 | --- | --- |
-| ADR | Architecture Decision Record. A dated document in [../adr/](../adr/) that records a significant technical decision and its consequences. |
+| Add-on | Signed, separately packaged program that ErsatzRS invokes as a bounded child process through a versioned capability contract. |
+| ADR | Architecture Decision Record. A dated document that records a significant technical decision and its consequences. |
 | Artwork | Image metadata associated with media items, shows, artists, channels, or libraries. Artwork can feed UI views, guide data, and generated overlays. |
 | Axum | The Rust web framework used for HTTP routing, middleware integration, and protocol endpoints. |
 
@@ -36,7 +37,7 @@ consistent with ErsatzTV where parity matters.
 | --- | --- |
 | Diátaxis | Documentation framework that separates tutorials, how-to guides, reference material, and explanation. This glossary is reference material. |
 | Direct stream | Serving media without transcoding when the original container, codecs, and stream properties are already suitable for the target client. |
-| Drawvg | FFmpeg 8.1 filter that renders vector graphics inside the FFmpeg filter graph. ErsatzRS uses it for channel graphics instead of an external renderer process. |
+| Drawvg | FFmpeg filter that renders vector graphics inside the filter graph. ErsatzRS requires it on the supported FFmpeg 9 runtime and uses it instead of an external graphics process. |
 
 ## E
 

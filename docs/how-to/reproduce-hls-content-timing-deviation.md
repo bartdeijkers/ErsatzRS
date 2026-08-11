@@ -1,7 +1,7 @@
 # Reproduce an HLS content-timing deviation
 
-Use this guide to reproduce the calibration evidence described in
-[HLS segmenter playback deviation root cause](../explanation/hls-segmenter-playback-deviation-root-cause.md).
+Use this guide to reproduce the HLS segmenter's content-timing calibration
+evidence.
 
 ## Prerequisites
 

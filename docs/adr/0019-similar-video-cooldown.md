@@ -283,7 +283,7 @@ to deterministic best-effort diversity with a warning, not an offline channel.
 - [Code style and SQL compatibility rules](../../STYLE.md)
 - [`crates/ersatzrs-core/src/scheduling/mod.rs`](../../crates/ersatzrs-core/src/scheduling/mod.rs)
 - [`crates/ersatzrs-core/src/scheduling/classic/mod.rs`](../../crates/ersatzrs-core/src/scheduling/classic/mod.rs)
-- [`crates/ersatzrs-core/src/scheduling/yaml.rs`](../../crates/ersatzrs-core/src/scheduling/yaml.rs)
+- [`crates/ersatzrs-core/src/scheduling/yaml/mod.rs`](../../crates/ersatzrs-core/src/scheduling/yaml/mod.rs)
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/ShuffledMediaCollectionEnumerator.cs`
 - `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/BlockPlayoutShuffledMediaCollectionEnumerator.cs`
 

@@ -20,6 +20,7 @@ source of truth, and is unrelated to the application's runtime database.
 | `routes.toml` | Admin UI route coverage (`routed=false` = advertised-but-404 placeholder). |
 | `hydration.toml` | Per-page Leptos islands hydration parity. |
 | `sessions.ndjson` | Append-only session/handoff log, one JSON object per line. |
+| `persistence-gap-matrix.md` | Human-maintained repository and real-world decode coverage tracker. |
 
 The ADR matrix is **derived** by scanning `docs/adr/*.md` and reverse-linking
 features through each parity file's `adr` field; there is no separate ADR file

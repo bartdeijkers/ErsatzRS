@@ -15,11 +15,19 @@ release section when tagging a release.
 
 ### Added
 
+- A signed, repository-backed add-on platform now provides trusted-source
+  replacement, immutable package install/update, manifest-rendered permissions,
+  settings and panels, readiness checks, content-integrity health, automatic
+  catalog refresh, dependency guards, and localized management under
+  **Settings > Add-ons**. The separate official-repository source builds
+  independent Beeld & Geluid and yt-dlp Remote Stream packages for all six
+  release RIDs; publishing it and pinning its production public key remain
+  release work.
 - Remote Stream playlist manifests can now enumerate an upstream series through
-  a named Windows/Unix extractor, synchronize stable generated definitions,
-  report health and bounded troubleshooting, expose localized management and
-  tag facets, and optionally maintain a read-only playlist in upstream order
-  with affected playout refresh.
+  an installed add-on, synchronize stable generated definitions, report health
+  and bounded troubleshooting, expose localized management and tag facets, and
+  optionally maintain a read-only playlist in upstream order with affected
+  playout refresh.
 - The FFmpeg profile editor now offers the full encoder preset ladders FFmpeg 9
   accepts instead of the single `veryfast` value inherited from ErsatzTV:
   `ultrafast` through `veryslow` for software `libx264`/`libx265`, and the
@@ -52,6 +60,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Documentation now has explicit Diátaxis navigation, a complete reference
+  index, evidence-backed current System Context and Container views, and
+  separate add-on package, repository, runtime, trust, and operator guidance.
+  Add-on pages distinguish the implemented development host from the still
+  unpublished official repository and production key.
+- Remote Stream YAML now uses `addon:` identities for provider playback and
+  playlist enumeration. The legacy raw `script:`, `extractor:`, and
+  `settings.remote_stream_extractors` contracts are intentionally rejected so
+  media files cannot bypass repository trust with arbitrary commands.
 - The remaining FFmpeg multi-vendor hardware and Dolby Vision fixture/client
   evidence gaps are explicitly deferred beyond Phase 8 and no longer block
   Phase 9; their unresolved acceptance evidence remains tracked for later

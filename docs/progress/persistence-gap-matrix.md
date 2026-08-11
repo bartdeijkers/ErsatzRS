@@ -1,7 +1,7 @@
-# Persistence gap matrix
+# Persistence coverage tracker
 
-This matrix tracks repository and real-world decode coverage for the 138
-ErsatzTV tables represented by `migrations/0001_initial.sql`.
+This progress artifact tracks repository and real-world decode coverage for the
+138 ErsatzTV tables represented by `migrations/0001_initial.sql`.
 
 Scope:
 
