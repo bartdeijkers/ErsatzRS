@@ -2,11 +2,14 @@
 
 ## Status
 
-Proposed
+Accepted 2026-08-11
 
 ## Implementation
 
-Not implemented
+Partial — the complete `it-it` module, metadata, product text, dynamic helpers,
+stable errors, and representative tests were added and registered on
+2026-08-11. Structural, placeholder, and backend-error-pattern audits pass;
+the settings browser proof remains before implementation closeout.
 
 ## Context
 

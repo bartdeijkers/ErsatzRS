@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod assets;
 pub mod bootstrap;
 pub mod channels;

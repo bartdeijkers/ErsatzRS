@@ -6,12 +6,13 @@ Accepted (2026-08-11).
 
 ## Implementation
 
-Partial — repository trust, package installation and update, settings,
-readiness, declarative panels, health, Remote Stream list/play dispatch, and the
-localized administration page are implemented in the current source tree. The
-[add-on-platform progress record](../progress/parity/addon-platform.toml) tracks
-the remaining repository publication/key, HTTP-conditional-refresh, and
-managed-tool permission gaps.
+Partial — the host platform is implemented in the current source tree,
+including conditional signed-catalog refresh, package installation and update,
+settings, readiness, declarative panels, health, Remote Stream list/play
+dispatch, lifecycle concurrency guards, and managed Unix process-group/Windows
+Job Object ownership. The [add-on-platform progress
+record](../progress/parity/addon-platform.toml) tracks the remaining external
+publication of the official repository and production public-key pin.
 
 ## Context
 
@@ -66,19 +67,25 @@ retains responsibility for cancelling its already running producer. Updates
 stage and validate a newer version before switching new invocations and require
 a fresh enable check.
 Removing a repository does not remove installed package files or data. Its
-foreign-key association is cleared, so the
-installation no longer has that repository as a recorded update source.
+foreign-key association is cleared, so the installation no longer has that
+repository as a recorded update source. A stable repository-scoped data
+namespace remains with the installation, preventing a later package with the
+same add-on ID but a different configured repository ID from inheriting private
+state. Replacing the URL or key of that same repository identity deliberately
+retains its namespace.
 
 Add-on settings support non-secret scalar/path/executable values and secret
 references. A secret reference contains only an environment-variable name or
-file path; raw secret values are never persisted, displayed, included in
-process arguments, or emitted in diagnostics. The runner exposes only declared
-references and retains existing Remote Stream output limits, cancellation, and
-redaction.
+file path; raw secret values are never persisted, displayed, or included in
+process arguments. Environment values and operation URLs are exactly redacted
+from add-on-controlled output. File-backed references suppress such output
+because the host deliberately does not read the secret value needed for exact
+redaction. The runner exposes only declared references and retains existing
+Remote Stream output limits and cancellation.
 
 The admin UI renders add-on metadata, settings, and declarative panels itself.
-Panels may contain only the versioned host-owned component set; add-ons cannot
-ship HTML, CSS, JavaScript, or WASM.
+Panels may contain only the versioned host-owned component set and cannot render
+or execute package-supplied HTML, CSS, JavaScript, or WASM.
 
 Remote Stream playlist manifests and single-stream definitions select an
 installed add-on through `addon:`. The old `extractor:` field,
@@ -96,7 +103,10 @@ standards, six-RID runtime, fallback, selection, and output decision.
 Signing proves catalog/package provenance and integrity, not confinement.
 Add-on processes run as the ErsatzRS operating-system user. Requested
 permissions are shown before installation and enablement, and the UI warns
-when trusting a non-official repository.
+when trusting a non-official repository. The host owns each invocation's Unix
+process group or Windows Job Object and terminates every member that remains in
+that managed group or job on timeout, cancellation, output-drain failure, or
+teardown; this lifecycle boundary is not an operating-system sandbox.
 
 ## Consequences
 
@@ -108,8 +118,8 @@ when trusting a non-official repository.
   remains an operator-supplied external executable.
 - Existing extractor settings, raw script definitions, and generated
   definitions require manual YAML migration and rescan.
-- The host gains catalog, cryptographic, package, process-lifecycle, persistence,
-  localization, health, and UI maintenance obligations.
+- The host gains catalog, cryptographic, package, managed process-group/job
+  lifecycle, persistence, localization, health, and UI maintenance obligations.
 - A malicious but correctly signed trusted add-on has the host user’s access;
   portable OS sandboxing remains future work and must not be implied.
 - The official signing private key is operational secret material held only by

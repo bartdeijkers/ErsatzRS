@@ -351,6 +351,38 @@ impl LanguageStrings for FrenchStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::Addon => "Extension",
+        TextKey::Addons => "Extensions",
+        TextKey::AddonRepositories => "Dépôts d’extensions",
+        TextKey::AvailableAddons => "Extensions disponibles",
+        TextKey::InstalledAddons => "Extensions installées",
+        TextKey::AddRepository => "Ajouter un dépôt",
+        TextKey::RepositoryUrl => "URL du dépôt",
+        TextKey::PublicSigningKey => "Clé publique de signature",
+        TextKey::DeploymentManagedRepositories => {
+            "Les dépôts sont gérés par la configuration du déploiement."
+        }
+        TextKey::Refresh => "Actualiser",
+        TextKey::Install => "Installer",
+        TextKey::UpdateAddon => "Mettre à jour",
+        TextKey::Uninstall => "Désinstaller",
+        TextKey::Configuration => "Configuration",
+        TextKey::SecretReference => "Référence du secret",
+        TextKey::EnvironmentVariable => "Variable d’environnement",
+        TextKey::SecretFile => "Fichier secret",
+        TextKey::Incompatible => "Incompatible",
+        TextKey::PackageUnavailable => "Paquet indisponible",
+        TextKey::Official => "Officiel",
+        TextKey::ThirdParty => "Dépôt tiers",
+        TextKey::Permissions => "Autorisations",
+        TextKey::Capabilities => "Capacités",
+        TextKey::Dependencies => "Dépendances",
+        TextKey::Optional => "Facultatif",
+        TextKey::MediaReadAccess => "Accès en lecture aux médias",
+        TextKey::ExternalCommands => "Commandes externes",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "N’ajoutez que des dépôts de confiance ; les extensions signées s’exécutent avec le compte de service ErsatzRS."
+        }
         TextKey::AddCustomResolution => "Ajouter une résolution personnalisée",
         TextKey::AddBlock => "Ajouter un bloc",
         TextKey::AddBlockGroup => "Ajouter un groupe de blocs",

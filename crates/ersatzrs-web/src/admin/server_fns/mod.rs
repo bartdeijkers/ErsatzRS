@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod blocks;
 pub mod channels;
 pub mod decos;

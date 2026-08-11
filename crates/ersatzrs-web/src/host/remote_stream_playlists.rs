@@ -1,9 +1,11 @@
 use async_trait::async_trait;
+use ersatzrs_addon_contract::{CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1};
 use ersatzrs_app::{
     RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead,
     RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
     RemoteStreamPlaylistTroubleshootingRead,
 };
+use ersatzrs_infra::addons::{list_installed_addons, AddonRuntimeContext};
 use ersatzrs_infra::db::DbPool;
 
 const MANAGED_HEADER: &str = "# Managed by ErsatzRS Remote Stream playlist editor.\n";
@@ -31,21 +33,21 @@ impl RemoteStreamPlaylistRuntime for NativeRemoteStreamPlaylistRuntime {
             .map_err(runtime_error)
     }
 
-    async fn extractor_names(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
-        use ersatzrs_scanner::remote_stream_playlist::{
-            parse_extractor_settings, CONFIG_KEY_REMOTE_STREAM_EXTRACTORS,
-        };
-
-        let raw: Option<String> =
-            sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-                .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|error| runtime_error(error.to_string()))?;
-        let mut names = parse_extractor_settings(raw.as_deref().unwrap_or("[]"))
+    async fn addon_ids(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
+        let mut names = list_installed_addons(&self.pool)
+            .await
             .map_err(|error| runtime_error(error.to_string()))?
             .into_iter()
-            .map(|extractor| extractor.name)
+            .filter(|addon| {
+                addon.enabled
+                    && addon
+                        .manifest
+                        .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                    && addon
+                        .manifest
+                        .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+            })
+            .map(|addon| addon.addon_id)
             .collect::<Vec<_>>();
         names.sort_by_key(|name| name.to_lowercase());
         Ok(names)
@@ -229,7 +231,7 @@ async fn list_with_pool(
                         .replace('\\', "/"),
                     name: manifest.name,
                     url: manifest.manifest.url,
-                    extractor: manifest.manifest.extractor,
+                    addon: manifest.manifest.addon,
                     folder: manifest.folder,
                     interval: manifest.manifest.sync.interval,
                     max_items: manifest.manifest.sync.max_items,
@@ -319,7 +321,7 @@ async fn save_with_pool(pool: &DbPool, editor: RemoteStreamPlaylistEdit) -> Resu
     struct Manifest<'a> {
         name: &'a str,
         url: &'a str,
-        extractor: &'a str,
+        addon: &'a str,
         folder: &'a str,
         sync: Sync<'a>,
         create_playlist: bool,
@@ -347,7 +349,7 @@ async fn save_with_pool(pool: &DbPool, editor: RemoteStreamPlaylistEdit) -> Resu
     let manifest = Manifest {
         name: editor.name.trim(),
         url: editor.url.trim(),
-        extractor: editor.extractor.trim(),
+        addon: editor.addon.trim(),
         folder: editor.folder.trim(),
         sync: Sync {
             interval: editor.interval.trim(),
@@ -462,27 +464,22 @@ async fn troubleshoot_with_pool(
     root_index: usize,
     relative_path: &str,
 ) -> Result<RemoteStreamPlaylistTroubleshootingRead, String> {
-    use ersatzrs_scanner::remote_stream_playlist::{
-        enumerate_playlist, parse_extractor_settings, parse_playlist_manifest, resolve_extractor,
-        CONFIG_KEY_REMOTE_STREAM_EXTRACTORS,
-    };
+    use ersatzrs_scanner::remote_stream_playlist::{enumerate_playlist, parse_playlist_manifest};
 
     let path = resolve_manifest_path(pool, library_id, root_index, relative_path).await?;
     let yaml = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let manifest = parse_playlist_manifest(&yaml, &path).map_err(|error| error.to_string())?;
-    let raw_settings: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-            .fetch_optional(pool)
-            .await
-            .map_err(|error| error.to_string())?;
-    let settings = parse_extractor_settings(raw_settings.as_deref().unwrap_or("[]"))
-        .map_err(|error| error.to_string())?;
-    let extractor = resolve_extractor(&settings, &manifest.manifest.extractor)
-        .map_err(|error| error.to_string())?;
-    let enumeration = enumerate_playlist(&extractor, &manifest.manifest.url)
-        .await
-        .map_err(|error| error.to_string())?;
+    let enumeration = enumerate_playlist(
+        pool,
+        &manifest.manifest.addon,
+        &manifest.manifest.url,
+        &AddonRuntimeContext {
+            ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+            ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
+        },
+    )
+    .await
+    .map_err(|error| error.to_string())?;
     Ok(RemoteStreamPlaylistTroubleshootingRead {
         entry_count: enumeration.entries.len(),
         diagnostic_tail: enumeration.diagnostic_tail,
@@ -534,7 +531,7 @@ mod tests {
             relative_path,
             name: "Fixture list".to_owned(),
             url: "https://example.test/playlist".to_owned(),
-            extractor: "fixture".to_owned(),
+            addon: "org.ersatzrs.addon.fixture".to_owned(),
             folder: "Fixture list".to_owned(),
             interval: "6h".to_owned(),
             max_items: 25,
@@ -560,7 +557,7 @@ mod tests {
         let hand_authored = temp.path().join("Hand.playlist.yml");
         std::fs::write(
             &hand_authored,
-            "url: https://example.test/hand\nextractor: fixture\n",
+            "url: https://example.test/hand\naddon: org.ersatzrs.addon.fixture\n",
         )
         .expect("hand-authored manifest");
         let error = save_with_pool(
@@ -581,7 +578,9 @@ mod tests {
             let target = temp.path().join("SymlinkTarget.playlist.yml");
             std::fs::write(
                 &target,
-                format!("{MANAGED_HEADER}url: https://example.test/link\nextractor: fixture\n"),
+                format!(
+                    "{MANAGED_HEADER}url: https://example.test/link\naddon: org.ersatzrs.addon.fixture\n"
+                ),
             )
             .expect("symlink target manifest");
             symlink(&target, temp.path().join("Symlink.playlist.yml")).expect("manifest symlink");

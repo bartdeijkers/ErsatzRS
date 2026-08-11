@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/ersatzrs-addon-contract",
     "crates/ersatzrs-domain",
     "crates/ersatzrs-core",
     "crates/ersatzrs-hwprobe",

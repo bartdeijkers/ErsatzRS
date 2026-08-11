@@ -707,13 +707,17 @@ mod tests {
     use crate::admin::server_fns::settings::FfmpegSettingsForm;
 
     #[test]
-    fn ui_language_options_match_ersatztv_supported_languages() {
+    fn ui_language_options_follow_the_generated_registry() {
         let values: Vec<String> = supported_ui_language_options()
             .into_iter()
             .map(|option| option.value)
             .collect();
+        let expected: Vec<String> = crate::admin::languages::LANGUAGES
+            .iter()
+            .map(|language| language.code.to_owned())
+            .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
+        assert_eq!(values, expected);
     }
 
     #[test]

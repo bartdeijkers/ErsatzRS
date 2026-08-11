@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;
 pub mod cache_cleanup;

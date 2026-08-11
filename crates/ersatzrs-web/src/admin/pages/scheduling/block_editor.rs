@@ -1489,7 +1489,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::admin::i18n::{text, UiLanguage};
 
     #[test]
     fn no_script_rows_repeat_the_block_inheritance_marker() {
@@ -1509,22 +1508,14 @@ mod tests {
         assert_eq!(BlockPreviewState::Ready(Vec::new()).data_state(), "ready");
         assert_eq!(BlockPreviewState::Error.data_state(), "error");
 
-        let messages = [
-            UiLanguage::English,
-            UiLanguage::Polish,
-            UiLanguage::PortugueseBrazil,
-            UiLanguage::Dutch,
-            UiLanguage::French,
-        ]
-        .map(|language| text(language, TextKey::BlockPreviewFailed));
-        assert!(messages.iter().all(|message| !message.trim().is_empty()));
-        assert_eq!(
-            messages
-                .iter()
-                .copied()
-                .collect::<std::collections::BTreeSet<_>>()
-                .len(),
-            messages.len()
-        );
+        let languages = crate::admin::languages::LANGUAGES;
+        let english = languages[0].strings.text(TextKey::BlockPreviewFailed);
+        for language in languages {
+            let message = language.strings.text(TextKey::BlockPreviewFailed);
+            assert!(!message.trim().is_empty());
+            if language.code != "en-us" {
+                assert_ne!(message, english);
+            }
+        }
     }
 }

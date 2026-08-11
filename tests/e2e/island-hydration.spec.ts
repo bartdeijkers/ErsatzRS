@@ -68,6 +68,7 @@ const ISLAND_ROUTES: IslandRoute[] = [
   { route: '/settings/playout', islands: 'PlayoutSettingsIsland' },
   { route: '/settings/ui', islands: 'UiSettingsIsland' },
   { route: '/settings/xmltv', islands: 'XmltvSettingsIsland' },
+  { route: '/settings/addons', islands: 'AddonsSettingsIsland' },
 
   // System
   { route: '/system/health', islands: 'HealthIsland' },

@@ -1,0 +1,2559 @@
+use crate::admin::i18n::{LanguageStrings, TextKey};
+
+pub const SORT_ORDER: u16 = 90;
+pub const CODE: &str = "it-it";
+pub const LABEL: &str = "Italiano (Italia)";
+pub const ALIASES: &[&str] = &["it", "it-it", "it_it"];
+
+pub struct ItalianStrings;
+
+pub static STRINGS: ItalianStrings = ItalianStrings;
+
+fn episode_display_subtitle(
+    show_title: Option<&str>,
+    season_number: Option<i64>,
+    episode_number: Option<i64>,
+) -> Option<String> {
+    let show = show_title.unwrap_or("").trim();
+    match (season_number, episode_number) {
+        (Some(season), Some(episode)) if !show.is_empty() => {
+            Some(format!("{show} - S{season} E{episode}"))
+        }
+        (Some(season), Some(episode)) => Some(format!("S{season} E{episode}")),
+        _ => (!show.is_empty()).then(|| show.to_owned()),
+    }
+}
+
+impl LanguageStrings for ItalianStrings {
+    fn text(&self, key: TextKey) -> &'static str {
+        text(key)
+    }
+
+    fn selected_count(&self, count: usize) -> String {
+        format!("{count} selezionato")
+    }
+
+    fn item_count(&self, count: u64) -> String {
+        if count == 1 {
+            "1 elemento".to_owned()
+        } else {
+            format!("{count} elementi")
+        }
+    }
+
+    fn range_of(&self, start: u32, end: u32, total: u64) -> String {
+        format!("{start}-{end} di {total}")
+    }
+
+    fn match_status(&self, matched: u64, total: u64) -> String {
+        format!("{matched} di {total}")
+    }
+
+    fn rows_per_page(&self, page_size: u32) -> String {
+        format!("Righe per pagina: {page_size}")
+    }
+
+    fn page_of(&self, page: u32, total: u32) -> String {
+        format!("Pagina {page} di {total}")
+    }
+
+    fn save_failed(&self, error: &dyn std::fmt::Display) -> String {
+        format!("Salvataggio fallito: {error}")
+    }
+
+    fn delete_failed(&self, error: &dyn std::fmt::Display) -> String {
+        format!("Eliminazione fallita: {error}")
+    }
+
+    fn empty_trash_failed(&self, error: &dyn std::fmt::Display) -> String {
+        format!("Svuatura cestino fallita: {error}")
+    }
+
+    fn search_count(&self, total: u32, label: &'static str) -> String {
+        format!("{total} {label}")
+    }
+
+    fn selected_items_count(&self, count: usize) -> String {
+        if count == 1 {
+            "1 elemento selezionato".to_owned()
+        } else {
+            format!("{count} elementi selezionati")
+        }
+    }
+
+    fn delete_selected_count(&self, count: usize) -> String {
+        format!("Elimina selezionati ({count})")
+    }
+
+    fn deleted_items_from_database(&self, count: u64) -> String {
+        if count == 1 {
+            "Eliminato 1 elemento dal database.".to_owned()
+        } else {
+            format!("Eliminati {count} elementi dal database.")
+        }
+    }
+
+    fn season_display_name(&self, number: i64) -> String {
+        if number == 0 {
+            "Speciali".to_owned()
+        } else {
+            format!("Stagione {number}")
+        }
+    }
+
+    fn episode_display_subtitle(
+        &self,
+        show_title: Option<&str>,
+        season_number: Option<i64>,
+        episode_number: Option<i64>,
+    ) -> Option<String> {
+        episode_display_subtitle(show_title, season_number, episode_number)
+    }
+
+    fn media_item_fallback_label(&self, id: i64) -> String {
+        format!("Elemento media #{id}")
+    }
+
+    fn schedule_item_fallback_label(&self, id: i64) -> String {
+        format!("Elemento programma #{id}")
+    }
+
+    fn schedule_error_message(&self, error: &str) -> String {
+        schedule_error_message(error)
+    }
+
+    fn scheduling_content_error_message(&self, error: &str) -> String {
+        scheduling_content_error_message(error)
+    }
+
+    fn watermark_error_message(&self, error: &str) -> String {
+        watermark_error_message(error)
+    }
+
+    fn channel_streaming_mode_label(&self, mode: i32) -> String {
+        match mode {
+            1 => "MPEG-TS (Legacy)".to_owned(),
+            2 => "HLS Direct".to_owned(),
+            4 => "HLS Segmenter".to_owned(),
+            5 => "MPEG-TS".to_owned(),
+            _ => format!("Sconosciuto ({mode})"),
+        }
+    }
+
+    fn channel_language_label(&self, code: &str) -> String {
+        match code.trim().to_ascii_lowercase().as_str() {
+            "" => String::new(),
+            "eng" | "en" => "English".to_owned(),
+            "nld" | "dut" | "nl" => "Olandese".to_owned(),
+            "deu" | "ger" | "de" => "Tedesco".to_owned(),
+            "fra" | "fre" | "fr" => "Francese".to_owned(),
+            "spa" | "es" => "Spagnolo".to_owned(),
+            "ita" | "it" => "Italiano".to_owned(),
+            "jpn" | "ja" => "Giapponese".to_owned(),
+            "kor" | "ko" => "Coreano".to_owned(),
+            "zho" | "chi" | "zh" => "Cinese".to_owned(),
+            value => value.to_owned(),
+        }
+    }
+
+    fn media_kind_label(&self, kind: i64) -> String {
+        match kind {
+            1 => text(TextKey::Movies),
+            2 => text(TextKey::Shows),
+            3 => text(TextKey::MusicVideos),
+            4 => text(TextKey::OtherVideos),
+            5 => text(TextKey::Songs),
+            6 => text(TextKey::Images),
+            7 => text(TextKey::RemoteStreams),
+            _ => "Sconosciuto",
+        }
+        .to_owned()
+    }
+
+    fn playout_schedule_kind_label(&self, kind: i32) -> String {
+        match kind {
+            1 => text(TextKey::ScheduleKindClassic),
+            2 => text(TextKey::ScheduleKindBlock),
+            3 => text(TextKey::ScheduleKindSequential),
+            4 => text(TextKey::ScheduleKindScripted),
+            20 => text(TextKey::ScheduleKindExternalJson),
+            _ => "",
+        }
+        .to_owned()
+    }
+
+    fn library_kind_label(&self, kind: &str) -> String {
+        match kind {
+            "Local" => text(TextKey::Local).to_owned(),
+            "Plex" | "Jellyfin" | "Emby" => kind.to_owned(),
+            _ => kind.to_owned(),
+        }
+    }
+
+    fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String {
+        if supported {
+            label.to_owned()
+        } else {
+            format!("{label} (non disponibile su questo sistema)")
+        }
+    }
+
+    fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String {
+        match algorithm {
+            0 => "Lineare",
+            1 => "Clip",
+            2 => "Gamma",
+            3 => "Reinhard",
+            4 => "Mobius",
+            5 => "Hable",
+            _ => return format!("Sconosciuto ({algorithm})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_output_dynamic_range_label(&self, range: i32) -> String {
+        match range {
+            0 => "SDR (BT.709)",
+            1 => "HDR10 (BT.2020 PQ)",
+            _ => return format!("Sconosciuto ({range})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
+        match mode {
+            0 => text(TextKey::Off),
+            1 => "loudnorm",
+            _ => return format!("Sconosciuto ({mode})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String {
+        let label = ffmpeg_profile_video_format_label(format);
+        if hardware_acceleration == 0 {
+            label
+        } else {
+            format!(
+                "{} / {}",
+                label,
+                ffmpeg_profile_hardware_acceleration_label(hardware_acceleration)
+            )
+        }
+    }
+
+    fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String {
+        ffmpeg_profile_audio_format_label(format)
+    }
+
+    fn ffmpeg_profile_error_message(&self, error: &str) -> String {
+        ffmpeg_profile_error_message(error)
+    }
+
+    fn settings_error_message(&self, error: &str) -> String {
+        settings_error_message(error)
+    }
+
+    fn media_action_error_message(&self, error: &str) -> String {
+        media_action_error_message(error)
+    }
+
+    fn filler_error_message(&self, error: &str) -> String {
+        filler_error_message(error)
+    }
+
+    fn media_browser_error_message(&self, error: &str) -> String {
+        media_browser_error_message(error)
+    }
+
+    fn media_source_error_message(&self, error: &str) -> String {
+        media_source_error_message(error)
+    }
+
+    fn trakt_error_message(&self, error: &str) -> String {
+        trakt_error_message(error)
+    }
+
+    fn upload_error_message(&self, error: &str) -> String {
+        upload_error_message(error)
+    }
+
+    fn emptied_trash_count(&self, count: u64) -> String {
+        format!("Cestino svuato: eliminati {count} elementi.")
+    }
+
+    fn select_collection_to_add_selected_items(&self, count: usize) -> String {
+        format!("Seleziona la collezione per aggiungere gli {count} elementi selezionati")
+    }
+
+    fn select_playlist_to_add_selected_items(&self, count: usize) -> String {
+        format!("Seleziona la playlist per aggiungere gli {count} elementi selezionati")
+    }
+
+    fn added_items_to_collection(&self, count: usize) -> String {
+        format!("Aggiunti {count} elementi alla collezione")
+    }
+
+    fn added_items_to_playlist(&self, count: usize) -> String {
+        format!("Aggiunti {count} elementi alla playlist")
+    }
+
+    fn add_to_collection_failed(&self, error: &dyn std::fmt::Display) -> String {
+        format!("Aggiunta alla collezione fallita: {error}")
+    }
+
+    fn add_to_playlist_failed(&self, error: &dyn std::fmt::Display) -> String {
+        format!("Aggiunta alla playlist fallita: {error}")
+    }
+
+    fn no_media_source_configured(&self, provider: &'static str) -> String {
+        format!(
+            "Nessuna sorgente {provider} configurata. Clicca su Configura connessione per aggiungerne una."
+        )
+    }
+
+    fn provider_connection_title(&self, provider: &'static str) -> String {
+        format!("Connessione {provider}")
+    }
+
+    fn provider_libraries_title(&self, provider: &'static str) -> String {
+        format!("Biblioteche {provider}")
+    }
+
+    fn provider_path_replacements_title(&self, provider: &'static str) -> String {
+        format!("Sostituzioni percorso {provider}")
+    }
+
+    fn provider_path_label(&self, provider: &'static str) -> String {
+        format!("Percorso {provider}")
+    }
+
+    fn health_summary(&self, errors: u32, warnings: u32) -> String {
+        format!(
+            "{} {}, {} {}",
+            errors,
+            if errors == 1 { "errore" } else { "errori" },
+            warnings,
+            if warnings == 1 { "avviso" } else { "avvisi" },
+        )
+    }
+
+    fn classic_playout_state_message(&self, playouts: &str) -> String {
+        format!(
+            "Lo stato dell'enumeratore di riproduzione classico è incompleto per: {playouts}. Lo scheduler deve aggiornare queste riproduzioni prima che possano continuare in sicurezza."
+        )
+    }
+
+    fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
+        format!(
+            "Impossibile caricare il contesto di risoluzione dei problemi della riproduzione: {error}"
+        )
+    }
+
+    fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String {
+        format!(
+            "Inserisci l'orario in cui la riproduzione sul canale {channel} con programma {schedule} dovrebbe resettarsi ogni giorno"
+        )
+    }
+}
+
+pub fn text(key: TextKey) -> &'static str {
+    match key {
+        TextKey::Addon => "Componente aggiuntivo",
+        TextKey::Addons => "Componenti aggiuntivi",
+        TextKey::AddonRepositories => "Repository dei componenti aggiuntivi",
+        TextKey::AvailableAddons => "Add-on disponibili",
+        TextKey::InstalledAddons => "Add-on installati",
+        TextKey::AddRepository => "Aggiungi repository",
+        TextKey::RepositoryUrl => "URL del repository",
+        TextKey::PublicSigningKey => "Chiave di firma pubblica",
+        TextKey::DeploymentManagedRepositories => {
+            "I repository sono gestiti dalla configurazione di distribuzione."
+        }
+        TextKey::Refresh => "Aggiorna",
+        TextKey::Install => "Installa",
+        TextKey::UpdateAddon => "Aggiorna",
+        TextKey::Uninstall => "Disinstalla",
+        TextKey::Configuration => "Configurazione",
+        TextKey::SecretReference => "Riferimento segreto",
+        TextKey::EnvironmentVariable => "Variabile d'ambiente",
+        TextKey::SecretFile => "File segreto",
+        TextKey::Incompatible => "Incompatibile",
+        TextKey::PackageUnavailable => "Pacchetto non disponibile",
+        TextKey::Official => "Ufficiale",
+        TextKey::ThirdParty => "Repository di terze parti",
+        TextKey::Permissions => "Permessi",
+        TextKey::Capabilities => "Capacità",
+        TextKey::Dependencies => "Dipendenze",
+        TextKey::Optional => "Opzionale",
+        TextKey::MediaReadAccess => "Accesso alla lettura dei media",
+        TextKey::ExternalCommands => "Comandi esterni",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "Aggiungi solo i repository di cui ti fidi; gli add-on firmati vengono eseguiti come utente di servizio ErsatzRS."
+        }
+        TextKey::AddCustomResolution => "Aggiungi Risoluzione Personalizzata",
+        TextKey::AddBlock => "Aggiungi Blocco",
+        TextKey::AddBlockGroup => "Aggiungi Gruppo di Blocchi",
+        TextKey::AddBlockItem => "Aggiungi Elemento di Blocco",
+        TextKey::AddBlockToTemplate => "Aggiungi Blocco al Modello",
+        TextKey::AddCollection => "Aggiungi Collezione",
+        TextKey::AddContent => "Aggiungi Contenuto",
+        TextKey::AddFailed => "Aggiunta fallita",
+        TextKey::AddFillerPreset => "Aggiungi Preset Riempitivo",
+        TextKey::AddMultiCollection => "Aggiungi Multi-Colezione",
+        TextKey::AddPlaylist => "Aggiungi Playlist",
+        TextKey::AddPlaylistGroup => "Aggiungi Gruppo di Playlist",
+        TextKey::AddPlaylistItem => "Aggiungi Elemento di Playlist",
+        TextKey::AddRerunCollection => "Aggiungi Collezione di Ripetizioni",
+        TextKey::AddTemplate => "Aggiungi Modello",
+        TextKey::AddTemplateGroup => "Aggiungi Gruppo di Modelli",
+        TextKey::AddTraktList => "Aggiungi Lista Trakt",
+        TextKey::AddToCollection => "Aggiungi alla Collezione",
+        TextKey::AddToEllipsis => "Aggiungi a...",
+        TextKey::AddToPlaylist => "Aggiungi alla Playlist",
+        TextKey::AddToSchedule => "Aggiungi alla Programmazione",
+        TextKey::Actions => "Azioni",
+        TextKey::All => "Tutti",
+        TextKey::AreYouSureDelete => "Sei sicuro di voler eliminare",
+        TextKey::Actors => "Attori",
+        TextKey::Artist => "Artista",
+        TextKey::ArtistNotFound => "Artista non trovato",
+        TextKey::AfterDurationEnd => "Dopo la fine della durata",
+        TextKey::AutomaticRefresh => "Aggiornamento Automatico",
+        TextKey::Back => "Indietro",
+        TextKey::BackToSettings => "Torna alle impostazioni",
+        TextKey::BackToArtists => "Torna agli artisti",
+        TextKey::BackToCollections => "Torna alle collezioni",
+        TextKey::BackToMovies => "Torna ai film",
+        TextKey::BackToOtherVideos => "Torna ad altri video",
+        TextKey::BackToTvShows => "Torna alle serie TV",
+        TextKey::BeforeDurationEnd => "Prima della fine della durata",
+        TextKey::BackToTemplates => "Torna ai modelli",
+        TextKey::Block => "Blocco",
+        TextKey::BlockGroup => "Gruppo di Blocchi",
+        TextKey::BlockCannotBeMoved => {
+            "Il blocco non può essere spostato lì perché sovrapporrebbe o attraverserebbe la mezzanotte."
+        }
+        TextKey::BlockCopied => "Blocco copiato.",
+        TextKey::BlockCreated => "Blocco creato.",
+        TextKey::BlockDeleted => "Blocco eliminato.",
+        TextKey::BlockGroupCreated => "Gruppo di blocchi creato.",
+        TextKey::BlockGroupDeleted => "Gruppo di blocchi eliminato.",
+        TextKey::BlockGroupName => "Nome del Blocco",
+        TextKey::BlockGroups => "Gruppi di Blocchi",
+        TextKey::BlockItem => "Elemento di Blocco",
+        TextKey::BlockItems => "Elementi di Blocco",
+        TextKey::BlockName => "Nome del Blocco",
+        TextKey::BlockNotFound => "Blocco non trovato.",
+        TextKey::BlockPreviewFailed => {
+            "Impossibile generare l'anteprima del blocco. Controlla gli elementi del blocco e riprova."
+        }
+        TextKey::Blocks => "Blocchi",
+        TextKey::BlockToRemove => "Blocco da rimuovere",
+        TextKey::BlockWillNotFit => {
+            "Il blocco non si adatterà al o dopo l'orario di inizio selezionato."
+        }
+        TextKey::Cancel => "Annulla",
+        TextKey::Clear => "Pulisci",
+        TextKey::Channels => "Canali",
+        TextKey::Close => "Chiudi",
+        TextKey::Collections => "Collezioni",
+        TextKey::CollectionDeleted => "Collezione eliminata.",
+        TextKey::CollectionSaved => "Collezione salvata.",
+        TextKey::SaveCollection => "Salva Collezione",
+        TextKey::ComputingPreview => "Elaborazione anteprima...",
+        TextKey::Confirm => "Conferma",
+        TextKey::ConfirmDelete => "Conferma Eliminazione",
+        TextKey::CommentaryTracks => "Tracce di Commento",
+        TextKey::Content => "Contenuto",
+        TextKey::ContentVariantAcoustic => "Acustico",
+        TextKey::ContentVariantAlternateVersion => "Versione",
+        TextKey::ContentVariantBehindTheScenes => "Dietro le quinte",
+        TextKey::ContentVariantDeletedScene => "Scena eliminata",
+        TextKey::ContentVariantDirectorsCut => "Taglio del regista",
+        TextKey::ContentVariantExtended => "Esteso",
+        TextKey::ContentVariantExtra => "Extra",
+        TextKey::ContentVariantFeaturette => "Featurette",
+        TextKey::ContentVariantInterview => "Intervista",
+        TextKey::ContentVariantLive => "In diretta",
+        TextKey::ContentVariantOfficialVideo => "Video Ufficiale",
+        TextKey::ContentVariantOther => "Altro",
+        TextKey::ContentVariantRemaster => "Remaster",
+        TextKey::ContentVariantRemix => "Remix",
+        TextKey::ContentVariantScene => "Scena",
+        TextKey::ContentVariantSearchHelp => {
+            "Token di variante: content_kind:extra, content_kind:alternate_version, sub_kind:featurette, sub_kind:unplugged, parent_title:\"Titolo film\", audio_title:commentary, subtitle_title:commentary, has_commentary:true"
+        }
+        TextKey::ContentVariantShort => "Breve",
+        TextKey::ContentVariantSpecialFeatures => "Extra / Caratteristiche speciali",
+        TextKey::ContentVariantTrailer => "Trailer",
+        TextKey::ContentVariantUnplugged => "Non collegato",
+        TextKey::ContentVariantVersions => "Versioni",
+        TextKey::ContentRatings => "Classificazioni dei contenuti",
+        TextKey::CustomResolutionHeight => "Altezza risoluzione personalizzata",
+        TextKey::CustomResolutionWidth => "Larghezza risoluzione personalizzata",
+        TextKey::CustomResolutions => "Risoluzioni personalizzate",
+        TextKey::Dark => "Scuro",
+        TextKey::DaysToBuild => "Giorni per costruire",
+        TextKey::AddBreakContent => "Aggiungi contenuto di pausa",
+        TextKey::AddDeco => "Aggiungi decorazione",
+        TextKey::AddDecoGroup => "Aggiungi gruppo decorazioni",
+        TextKey::AddDecoTemplate => "Aggiungi modello decorazione",
+        TextKey::AddDecoTemplateGroup => "Aggiungi gruppo modelli decorazione",
+        TextKey::AtChapterMarkers => "Ai marcatori di capitolo",
+        TextKey::BackToDecos => "Torna alle decorazioni",
+        TextKey::BackToDecoTemplates => "Torna ai modelli decorazione",
+        TextKey::BetweenBlockItems => "Tra gli elementi di blocco",
+        TextKey::BlockFinish => "Fine blocco",
+        TextKey::BlockStart => "Inizio blocco",
+        TextKey::BreakContent => "Contenuto di pausa",
+        TextKey::BreakContentBody => {
+            "Il contenuto di pausa può essere utilizzato per riprodurre elementi specifici (utilizzando playlist) e per riempire i blocchi fino alla loro durata configurata completa."
+        }
+        TextKey::BreakContentItem => "Elemento contenuto di pausa",
+        TextKey::BreakContentMode => "Modalità contenuto di pausa",
+        TextKey::DeadAirFallback => "Fallback per interruzione",
+        TextKey::DeadAirFallbackBody => {
+            "Quando non viene trovato un elemento di riproduzione per l'orario corrente, verrà selezionato casualmente un elemento da questa raccolta e ripetuto e ritagliato per adattarsi esattamente fino all'inizio del prossimo elemento di riproduzione. Questo sostituisce l'immagine Canale offline che verrebbe altrimenti visualizzata."
+        }
+        TextKey::DeadAirFallbackCollectionType => "Tipo di raccolta fallback per interruzione",
+        TextKey::DeadAirFallbackMode => "Modalità fallback per interruzione",
+        TextKey::Deco => "Decorazione",
+        TextKey::DecoCannotBeAdded => {
+            "La decorazione non può essere aggiunta perché sovrapporrebbe o attraverserebbe la mezzanotte."
+        }
+        TextKey::DecoCannotBeMoved => {
+            "La decorazione non può essere spostata lì perché sovrapporrebbe o attraverserebbe la mezzanotte."
+        }
+        TextKey::DecoCreated => "Decorazione creata.",
+        TextKey::DecoDeleted => "Decorazione eliminata.",
+        TextKey::DecoGroup => "Gruppo decorazioni",
+        TextKey::DecoGroupCreated => "Gruppo decorazioni creato.",
+        TextKey::DecoGroupDeleted => "Gruppo decorazioni eliminato.",
+        TextKey::DecoGroupName => "Nome gruppo decorazioni",
+        TextKey::DecoGroups => "Gruppi decorazioni",
+        TextKey::DecoName => "Nome decorazione",
+        TextKey::DecoNotFound => "Decorazione non trovata.",
+        TextKey::DecoSaved => "Decorazione salvata.",
+        TextKey::Decos => "Decorazioni",
+        TextKey::DecoTemplate => "Modello decorazione",
+        TextKey::DecoTemplateCreated => "Modello decorazione creato.",
+        TextKey::DecoTemplateDeleted => "Modello decorazione eliminato.",
+        TextKey::DecoTemplateGroup => "Gruppo modelli decorazione",
+        TextKey::DecoTemplateGroupCreated => "Gruppo modelli decorazione creato.",
+        TextKey::DecoTemplateGroupDeleted => "Gruppo modelli decorazione eliminato.",
+        TextKey::DecoTemplateGroupName => "Nome gruppo modelli decorazione",
+        TextKey::DecoTemplateGroups => "Gruppi modelli decorazione",
+        TextKey::DecoTemplateName => "Nome modello decorazione",
+        TextKey::DecoTemplateNotFound => "Modello decorazione non trovato.",
+        TextKey::DecoTemplateSaved => "Modello decorazione salvato.",
+        TextKey::AddDecoToTemplate => "Aggiungi decorazione al modello",
+        TextKey::DecoToRemove => "Decorazione da rimuovere",
+        TextKey::DefaultFiller => "Riempimento predefinito",
+        TextKey::DefaultFillerBody => {
+            "Dopo aver programmato tutti i blocchi, verrà effettuata una seconda passata per riempire il tempo non programmato utilizzando elementi casuali da questa raccolta."
+        }
+        TextKey::DefaultFillerCollectionType => "Tipo di raccolta riempimento predefinito",
+        TextKey::DefaultFillerMode => "Modalità riempimento predefinito",
+        TextKey::DeleteDeco => "Elimina decorazione",
+        TextKey::DeleteDecoGroup => "Elimina gruppo decorazioni",
+        TextKey::DeleteDecoTemplate => "Elimina modello decorazione",
+        TextKey::DeleteDecoTemplateGroup => "Elimina gruppo modelli decorazione",
+        TextKey::Disable => "Disabilita",
+        TextKey::EditDeco => "Modifica decorazione",
+        TextKey::EditDecoTemplate => "Modifica modello decorazione",
+        TextKey::GraphicsElementsMode => "Modalità elementi grafici",
+        TextKey::Inherit => "Eredità",
+        TextKey::Merge => "Unisci",
+        TextKey::NoDecosFound => "Nessuna decorazione trovata.",
+        TextKey::NoDecoTemplatesFound => "Nessun modello decorazione trovato.",
+        TextKey::Override => "Sovrascrivi",
+        TextKey::RemoveBreakContent => "Rimuovi contenuto di pausa",
+        TextKey::RemoveDecoFromTemplate => "Rimuovi Deco dal Modello",
+        TextKey::Replace => "Sostituisci",
+        TextKey::SavedDecos => "Deco Salvati",
+        TextKey::SavedDecoTemplates => "Modelli Deco Salvati",
+        TextKey::SearchForDecos => "Cerca decos",
+        TextKey::SearchForDecoTemplates => "Cerca modelli deco",
+        TextKey::TrimToFit => "Ridimensiona per Adattare",
+        TextKey::UseGraphicsElementsDuringFiller => "Utilizza Elementi Grafici durante il Filler",
+        TextKey::UseWatermarkDuringFiller => "Utilizza Filigrana durante il Filler",
+        TextKey::WatermarkMode => "Modalità Filigrana",
+        TextKey::DecoTemplates => "Modelli Deco",
+        TextKey::DefaultFfmpegProfile => "Profilo FFmpeg Predefinito",
+        TextKey::DefaultFfmpegProfileHelp => {
+            "Il profilo FFmpeg da utilizzare quando si creano nuovi canali"
+        }
+        TextKey::DefaultMinimumLogLevel => "Livello di Log Minimo Predefinito",
+        TextKey::DefaultMpegTsScript => "Script MPEG-TS Predefinito",
+        TextKey::DefaultMpegTsScriptHelp => "Lo script MPEG-TS da utilizzare durante lo streaming",
+        TextKey::Decorations => "Decorazioni",
+        TextKey::Debug => "Debug",
+        TextKey::Delete => "Elimina",
+        TextKey::DeleteAll => "Elimina Tutto",
+        TextKey::DeleteBlock => "Elimina Blocco",
+        TextKey::DeleteBlockGroup => "Elimina Gruppo di Blocchi",
+        TextKey::DeleteCustomResolution => "Elimina Risoluzione Personalizzata",
+        TextKey::DeleteCollection => "Elimina Collezione",
+        TextKey::DeleteFillerPreset => "Elimina Preset Filler",
+        TextKey::DeleteMultiCollection => "Elimina Multi-Collezione",
+        TextKey::DeletePlaylist => "Elimina Playlist",
+        TextKey::DeletePlaylistGroup => "Elimina Gruppo Playlist",
+        TextKey::DeleteRerunCollection => "Elimina Collezione di Ripetizioni",
+        TextKey::DeleteTemplate => "Elimina Modello",
+        TextKey::DeleteTemplateGroup => "Elimina Gruppo Modelli",
+        TextKey::DeleteTraktList => "Elimina Lista Trakt",
+        TextKey::DisabledCollectionsAlreadyPresent => {
+            "Le collezioni disabilitate sono già presenti in questa multi-collezione"
+        }
+        TextKey::EmptyTrash => "Svuota Cestino",
+        TextKey::ExtractEmbeddedSubtitles => "Estrai Sottotitoli Incorporati (Testo)",
+        TextKey::ErasedPlayoutItemsAndHistory => "Elementi di emissione e cronologia cancellati.",
+        TextKey::EraseFailed => "Eliminazione fallita",
+        TextKey::EraseItemsAndHistory => "Elimina Elementi e Cronologia",
+        TextKey::ErasePlayoutItemsAndHistoryConfirm => {
+            "Questa operazione eliminerà tutti gli elementi di emissione e la cronologia per questa emissione sequenziale. Continuare?"
+        }
+        TextKey::Episode => "Episodio",
+        TextKey::FanArt => "Fan Art",
+        TextKey::Ffmpeg => "FFmpeg",
+        TextKey::FileNotFound => "File non trovato",
+        TextKey::Finish => "Fine",
+        TextKey::Fatal => "Fatale",
+        TextKey::FfmpegPath => "Percorso FFmpeg",
+        TextKey::FfmpegPathHelp => "Il percorso completo del file eseguibile ffmpeg",
+        TextKey::FfmpegProfiles => "Profili FFmpeg",
+        TextKey::FfprobePath => "Percorso FFprobe",
+        TextKey::FfprobePathHelp => "Il percorso completo del file eseguibile ffprobe",
+        TextKey::FillerPreset => "Preset Filler",
+        TextKey::FillerPresetActionFailed => "Azione preset filler non riuscita.",
+        TextKey::FillerPresetCouldNotBeSaved => {
+            "Il preset filler non può essere salvato. Controlla i valori del modulo e riprova."
+        }
+        TextKey::FillerPresetDeleted => "Preset filler eliminato.",
+        TextKey::FillerPresetExpressionHelp => {
+            "Per il filler mid-roll, aggiungi il filler solo quando questa espressione restituisce true per un dato punto mid-roll."
+        }
+        TextKey::FillerPresetSaved => "Preset filler salvato.",
+        TextKey::FillerPresets => "Preset Filler",
+        TextKey::Flags => "Bandiere",
+        TextKey::GlobalFallbackFiller => "Filler di Fallback Globale",
+        TextKey::GlobalWatermark => "Filigrana Globale",
+        TextKey::GoHome => "Torna alla Home",
+        TextKey::HdHomeRun => "HDHomeRun",
+        TextKey::HealthChecks => "Controlli di Salute",
+        TextKey::Height => "Altezza",
+        TextKey::HlsDirectOutputFormat => "Formato di Output Diretto HLS",
+        TextKey::HlsSegmenterIdleTimeout => "Timeout di Inattività Segmentatore HLS",
+        TextKey::HlsSegmenterIdleTimeoutHelp => {
+            "Il numero di secondi per continuare la transcoding di un canale mentre non vengono ricevute richieste da alcun client"
+        }
+        TextKey::HlsSegmenterInitialSegmentCount => {
+            "Numero Iniziale di Segmenti del Segmentatore HLS"
+        }
+        TextKey::HlsSegmenterInitialSegmentCountHelp => {
+            "Rinvia l'inizio dello streaming fino al numero specificato di segmenti (di 4 secondi) trascodificati; un numero maggiore comporterà una riproduzione iniziale più lenta, ma potenzialmente meno buffering"
+        }
+        TextKey::HomeRunning => "Il server IPTV è in esecuzione.",
+        TextKey::HttpMinimumLogLevel => {
+            "Livello Minimo di Log per la Registrazione delle Richieste"
+        }
+        TextKey::Id => "ID",
+        TextKey::Images => "Immagini",
+        TextKey::Item => "Elemento",
+        TextKey::ItemActions => "Azioni elemento",
+        TextKey::ItemType => "Tipo elemento",
+        TextKey::Items => "Elementi",
+        TextKey::Language => "Lingua",
+        TextKey::Languages => "Lingue",
+        TextKey::MusicLabels => "Etichette musicali",
+        TextKey::LeaveEmptyToAutoDetect => "Lascia vuoto per rilevamento automatico",
+        TextKey::Libraries => "Biblioteche",
+        TextKey::LibraryRefreshInterval => "Intervallo di aggiornamento della biblioteca",
+        TextKey::Light => "Luce",
+        TextKey::Lists => "Liste",
+        TextKey::Loading => "Caricamento...",
+        TextKey::LoadingMembers => "Caricamento membri...",
+        TextKey::Local => "Locale",
+        TextKey::Logging => "Registrazione",
+        TextKey::M3u => "M3U",
+        TextKey::Media => "Media",
+        TextKey::MediaInfo => "Info media",
+        TextKey::MediaSources => "Sorgenti media",
+        TextKey::Movie => "Film",
+        TextKey::MovieNotFound => "Film non trovato",
+        TextKey::Movies => "Film",
+        TextKey::MusicVideo => "Video musicale",
+        TextKey::MultiCollections => "Raccolte multiple",
+        TextKey::ManualCollections => "Raccolte manuali",
+        TextKey::MatchFailed => "Abbinamento fallito",
+        TextKey::MatchStatus => "Stato abbinamento",
+        TextKey::MatchTraktListItems => "Elenco elementi Trakt",
+        TextKey::Members => "Membri",
+        TextKey::MultiCollection => "Raccolta multipla",
+        TextKey::MultiCollectionDeleted => "Raccolta multipla eliminata.",
+        TextKey::MultiCollectionItems => "Elementi della raccolta multipla",
+        TextKey::MultiCollectionNameRequired => "Il nome della raccolta multipla è obbligatorio!",
+        TextKey::MultiCollectionNameTooLong => {
+            "Il nome della raccolta multipla non può superare i 50 caratteri."
+        }
+        TextKey::MultiCollectionSaved => "Raccolta multipla salvata.",
+        TextKey::Music => "Musica",
+        TextKey::Name => "Nome",
+        TextKey::NameRequired => "Il nome è obbligatorio",
+        TextKey::Networks => "Reti",
+        TextKey::NewCollection => "(Nuova raccolta)",
+        TextKey::NewCollectionTitle => "Nuova raccolta",
+        TextKey::NewFillerPreset => "Nuovo preset riempitivo",
+        TextKey::NewMultiCollection => "Nuova raccolta multipla",
+        TextKey::NewTemplateGroup => "Nuovo gruppo modelli",
+        TextKey::NewTemplateName => "Nuovo nome modello",
+        TextKey::Next24Hours => "Prossime 24h",
+        TextKey::NextPage => "Pagina successiva",
+        TextKey::NoFillerPresets => "Nessun preset riempitivo presente.",
+        TextKey::NoBlockItems => "Nessun elemento blocco.",
+        TextKey::NoItems => "Nessun elemento.",
+        TextKey::NoItemsToDisplay => "Nessun elemento da visualizzare.",
+        TextKey::NoTraktListsYet => "Nessun elenco Trakt presente.",
+        TextKey::No => "Nessuno",
+        TextKey::NoCollections => "Nessuna raccolta presente.",
+        TextKey::NoMembers => "Nessun membro presente.",
+        TextKey::NoMultiCollections => "Nessuna raccolta multipla presente.",
+        TextKey::NoTemplatesFound => "Nessun modello trovato.",
+        TextKey::NotFound => "Pagina non trovata.",
+        TextKey::OtherVideo => "Altro video",
+        TextKey::OtherVideoNotFound => "Altro video non trovato",
+        TextKey::OtherVideos => "Altri video",
+        TextKey::OpenBrowser => "Apri browser",
+        TextKey::Playout => "Riproduzione",
+        TextKey::PlayoutItemsAndHistory => "Elementi di riproduzione e cronologia",
+        TextKey::PlayoutNotFound => "Riproduzione non trovata.",
+        TextKey::Playouts => "Riproduzioni",
+        TextKey::AddPlayout => "Aggiungi riproduzione",
+        TextKey::ClassicScheduleMenu => "Programma classico",
+        TextKey::BlockScheduleMenu => "Programma a blocchi",
+        TextKey::SequentialScheduleMenu => "Programma sequenziale",
+        TextKey::ScriptedScheduleMenu => "Programma scriptato",
+        TextKey::JsonDizqueTvScheduleMenu => "Programma JSON (dizqueTV)",
+        TextKey::ResetAllPlayouts => "Ripristina tutte le riproduzioni",
+        TextKey::PlayoutBuildQueued => "Ripristino riproduzione in coda",
+        TextKey::PlayoutBuildsQueued => "Ripristini riproduzione in coda",
+        TextKey::SearchForPlayouts => "Cerca riproduzioni",
+        TextKey::PlayoutDetail => "Dettagli riproduzione",
+        TextKey::ShowFiller => "Mostra riempitivo",
+        TextKey::EditPlayout => "Modifica riproduzione",
+        TextKey::RefreshPlayout => "Aggiorna riproduzione",
+        TextKey::ResetPlayout => "Ripristina riproduzione",
+        TextKey::ScheduleReset => "Ripristino programma",
+        TextKey::SchedulePlayoutReset => "Ripristino programma di riproduzione",
+        TextKey::EditExternalJsonFile => "Modifica file JSON esterno",
+        TextKey::DeletePlayout => "Elimina riproduzione",
+        TextKey::Troubleshoot => "Risoluzione problemi",
+        TextKey::DailyResetTime => "Ora di ripristino giornaliero",
+        TextKey::DoNotAutomaticallyReset => "Non ripristinare automaticamente",
+        TextKey::SaveChanges => "Salva modifiche",
+        TextKey::ExternalJsonFileLabel => "File JSON esterno",
+        TextKey::EditExternalJsonFilePrompt => "Modifica il file JSON esterno della riproduzione",
+        TextKey::UnscheduledPlayoutItem => "NON PROGRAMMATO",
+        TextKey::DisabledChannelsAlreadyHavePlayout => {
+            "I canali già disabilitati hanno già una riproduzione"
+        }
+        TextKey::ProgramSchedule => "Programma",
+        TextKey::SequentialScheduleFileHelp => {
+            "Il percorso completo del file di programma sequenziale (YAML)"
+        }
+        TextKey::BlockTemplatesAddedLater => "I modelli di blocco verranno aggiunti in seguito",
+        TextKey::UnsupportedPlayoutKind => "Tipo di emissione non supportato.",
+        TextKey::ClassicPlayout => "Emissione classica",
+        TextKey::ClassicPlayoutState => "Stato dell'emissione classica",
+        TextKey::BlockPlayout => "Emissione a blocchi",
+        TextKey::ScriptedPlayout => "Programma scriptato",
+        TextKey::AlternateSchedules => "Programmi alternativi",
+        TextKey::EditAlternateSchedules => "Modifica programmi alternativi",
+        TextKey::PlayoutTemplates => "Modelli di emissione",
+        TextKey::EditTemplates => "Modifica modelli",
+        TextKey::DefaultDeco => "Deco predefinito",
+        TextKey::EnableDefaultDeco => "Abilita deco predefinito",
+        TextKey::SaveDefaultDeco => "Salva deco predefinito",
+        TextKey::SaveScriptedSchedule => "Salva programma scriptato",
+        TextKey::EraseItems => "Cancella elementi",
+        TextKey::ErasedPlayoutItems => "Elementi di emissione cancellati.",
+        TextKey::SavedDefaultDeco => "Deco predefinito salvato.",
+        TextKey::SavedScriptedSchedule => "Programma scriptato salvato.",
+        TextKey::Maintenance => "Manutenzione",
+        TextKey::SaveAlternateSchedules => "Salva programmi alternativi",
+        TextKey::AddAlternateSchedule => "Aggiungi programma alternativo",
+        TextKey::SaveTemplates => "Salva modelli",
+        TextKey::PreviewCalendar => "Anteprima calendario",
+        TextKey::EditContent => "Modifica contenuti",
+        TextKey::PlayoutNestedCatchAllHelp => {
+            "In ordine di priorità da alto a basso. L'ultima voce corrisponderà sempre a tutti i giorni e a tutti i mesi come valore predefinito."
+        }
+        TextKey::PlayoutNestedPriorityHelp => "In ordine di priorità da alto a basso.",
+        TextKey::DaysOfWeek => "Giorni della settimana",
+        TextKey::DaysOfMonth => "Giorni del mese",
+        TextKey::Months => "Mesi",
+        TextKey::LimitToDateRange => "Limita all'intervallo di date",
+        TextKey::StartDay => "Giorno di inizio",
+        TextKey::EndDay => "Giorno di fine",
+        TextKey::Enable => "Abilita",
+        TextKey::Up => "Su",
+        TextKey::Down => "Giù",
+        TextKey::Weekdays => "Giorni feriali",
+        TextKey::Weekends => "Weekend",
+        TextKey::Sunday => "Domenica",
+        TextKey::Monday => "Lunedì",
+        TextKey::Tuesday => "Martedì",
+        TextKey::Wednesday => "Mercoledì",
+        TextKey::Thursday => "Giovedì",
+        TextKey::Friday => "Venerdì",
+        TextKey::Saturday => "Sabato",
+        TextKey::January => "Gennaio",
+        TextKey::February => "Febbraio",
+        TextKey::March => "Marzo",
+        TextKey::April => "Aprile",
+        TextKey::May => "Maggio",
+        TextKey::June => "Giugno",
+        TextKey::July => "Luglio",
+        TextKey::August => "Agosto",
+        TextKey::September => "Settembre",
+        TextKey::October => "Ottobre",
+        TextKey::November => "Novembre",
+        TextKey::December => "Dicembre",
+        TextKey::JanuaryShort => "Gen",
+        TextKey::FebruaryShort => "Feb",
+        TextKey::MarchShort => "Mar",
+        TextKey::AprilShort => "Apr",
+        TextKey::MayShort => "Maggio",
+        TextKey::JuneShort => "Giu",
+        TextKey::JulyShort => "Lug",
+        TextKey::AugustShort => "Ago",
+        TextKey::SeptemberShort => "Set",
+        TextKey::OctoberShort => "Ott",
+        TextKey::NovemberShort => "Nov",
+        TextKey::DecemberShort => "Dic",
+        TextKey::PlayAll => "Riproduci tutto",
+        TextKey::Playlist => "Lista di riproduzione",
+        TextKey::PlaylistAdded => "Lista di riproduzione aggiunta.",
+        TextKey::PlaylistDeleted => "Lista di riproduzione eliminata.",
+        TextKey::PlaylistGroup => "Gruppo di lista di riproduzione",
+        TextKey::PlaylistGroupAdded => "Gruppo di lista di riproduzione aggiunto.",
+        TextKey::PlaylistGroupDeleted => "Gruppo di lista di riproduzione eliminato.",
+        TextKey::PlaylistGroupName => "Nome gruppo di lista di riproduzione",
+        TextKey::PlaylistGroups => "Gruppi di lista di riproduzione",
+        TextKey::PlaylistItem => "Elemento di lista di riproduzione",
+        TextKey::PlaylistItems => "Elementi di lista di riproduzione",
+        TextKey::PlaylistName => "Nome lista di riproduzione",
+        TextKey::PlaylistNotFound => "Lista di riproduzione non trovata.",
+        TextKey::PlaylistPlayoutPreview => "Anteprima emissione lista di riproduzione",
+        TextKey::PlaylistPreviewEmpty => {
+            "L'anteprima di emissione della lista di riproduzione non contiene elementi"
+        }
+        TextKey::Playlists => "Liste di riproduzione",
+        TextKey::ProbeForInterlacedFrames => "Rileva fotogrammi interlacciati",
+        TextKey::PreferredAudioLanguage => "Lingua audio preferita",
+        TextKey::DefaultSubtitleLanguage => "Lingua sottotitoli predefinita",
+        TextKey::FallbackSubtitleLanguage => "Lingua sottotitoli di riserva",
+        TextKey::OriginalLanguageOption => "Originale (und)",
+        TextKey::UndefinedLanguageOption => "Non definito (und)",
+        TextKey::Previous24Hours => "Ultimi 24h",
+        TextKey::PreviousPage => "Pagina precedente",
+        TextKey::RerunCollections => "Raccolte di ripetizioni",
+        TextKey::RerunCollection => "Raccolta di ripetizioni",
+        TextKey::RerunCollectionActionFailed => "Azione sulla raccolta di ripetizioni fallita.",
+        TextKey::RerunCollectionDeleted => "La collezione di riproduzione è stata eliminata.",
+        TextKey::RerunCollectionNameRequired => {
+            "Il nome della collezione di riproduzione è obbligatorio!"
+        }
+        TextKey::RerunCollectionSaved => "La collezione di riproduzione è stata salvata.",
+        TextKey::RerunPlaybackOrder => "Ordine di riproduzione",
+        TextKey::RemoteStreams => "Flussi remoti",
+        TextKey::RemoteStream => "Flusso remoto",
+        TextKey::RemoteStreamPlaylists => "Playlist dei flussi remoti",
+        TextKey::PlaylistUrl => "URL della playlist",
+        TextKey::Extractor => "Estrattore",
+        TextKey::DestinationFolder => "Cartella di destinazione",
+        TextKey::SyncInterval => "Intervallo di sincronizzazione",
+        TextKey::MaxItems => "Numero massimo di elementi",
+        TextKey::RemovedEntries => "Entrate rimosse",
+        TextKey::CreateOrderedPlaylist => "Crea una playlist ordinata",
+        TextKey::SyncNow => "Sincronizza ora",
+        TextKey::LastSync => "Ultima sincronizzazione",
+        TextKey::NeverSynced => "Mai sincronizzato",
+        TextKey::ManagedManifestReadOnly => {
+            "Questo manifesto creato manualmente è solo di lettura qui."
+        }
+        TextKey::Truncated => "Troncato",
+        TextKey::MissingDuration => "Durata mancante",
+        TextKey::Orphaned => "Orfano",
+        TextKey::Materialized => "Materializzato",
+        TextKey::State => "Stato",
+        TextKey::Upstream => "A monte",
+        TextKey::NewestFirst => "Più recenti per primi",
+        TextKey::Keep => "Mantieni",
+        TextKey::ResetChannels => "Resetta i canali",
+        TextKey::RowsPerPage => "Righe per pagina",
+        TextKey::Save => "Salva",
+        TextKey::SaveMultiCollection => "Salva Multi-Collection",
+        TextKey::SavePlaylist => "Salva Playlist",
+        TextKey::SaveTroubleshootingReportsToDisk => {
+            "Salva i rapporti di risoluzione problemi su disco"
+        }
+        TextKey::SaveAsSmartCollection => "Salva come raccolta intelligente",
+        TextKey::SearchQueryRequired => "La query di ricerca è obbligatoria",
+        TextKey::SaveSettings => "Salva impostazioni",
+        TextKey::Scanner => "Scanner",
+        TextKey::ScanningMinimumLogLevel => "Livello minimo di registro per lo scanner",
+        TextKey::Scheduling => "Programmazione",
+        TextKey::SchedulingMinimumLogLevel => "Livello minimo di registro per la programmazione",
+        TextKey::StartWithWindows => "Avvia ErsatzRS quando mi connetto a Windows",
+        TextKey::StartWithWindowsHelp => {
+            "Avvia automaticamente il launcher della tray per l'utente Windows corrente."
+        }
+        TextKey::Schedules => "Programmi",
+        TextKey::AddSchedule => "Aggiungi programma",
+        TextKey::AddScheduleItem => "Aggiungi elemento programma",
+        TextKey::AddSmartCollection => "Aggiungi raccolta intelligente",
+        TextKey::Album => "Album",
+        TextKey::Chronological => "Cronologico",
+        TextKey::CollectionSize => "Dimensione della collezione",
+        TextKey::CollectionType => "Tipo di collezione",
+        TextKey::Count => "Conteggio",
+        TextKey::CopySchedule => "Copia programma",
+        TextKey::CopyScheduleItem => "Copia elemento programma",
+        TextKey::CustomTitle => "Titolo personalizzato",
+        TextKey::DeleteSchedule => "Elimina programma",
+        TextKey::DeleteScheduleItem => "Elimina elemento programma",
+        TextKey::DeleteSmartCollection => "Elimina raccolta intelligente",
+        TextKey::DetailRowsPerPage => "Righe dettagli per pagina",
+        TextKey::Director => "Regista",
+        TextKey::Directors => "Registi",
+        TextKey::DiscardToFillAttempts => "Abbandona per tentare di riempire",
+        TextKey::Duration => "Durata",
+        TextKey::Dynamic => "Dinamico",
+        TextKey::EditFillerPreset => "Modifica preset riempitivo",
+        TextKey::EditProperties => "Modifica proprietà",
+        TextKey::EditScheduleItems => "Modifica elementi programma",
+        TextKey::EditSmartCollection => "Modifica raccolta intelligente",
+        TextKey::EnterNameForNewSchedule => "Inserisci un nome per il nuovo programma",
+        TextKey::Fixed => "Fisso",
+        TextKey::FixedStartTimeBehavior => "Comportamento dell'orario di inizio fisso",
+        TextKey::Flood => "Alluvione",
+        TextKey::Flexible => "Flessibile",
+        TextKey::FlexibleStartSoonAsPossible => "Flessibile - Inizia il prima possibile",
+        TextKey::FlexibleStartSoonAsPossibleAfterStartTime => {
+            "Flessibile - Inizia il prima possibile dopo l'orario di inizio"
+        }
+        TextKey::FillWithGroupMode => "Riempimento con modalità gruppo (Serie o artista)",
+        TextKey::GraphicsElements => "Elementi grafici",
+        TextKey::GraphicsIds => "ID grafici",
+        TextKey::Genres => "Generi",
+        TextKey::GroupName => "Nome gruppo",
+        TextKey::GroupMultiPartEpisodesHelp => {
+            "Raggruppa gli episodi multi-parte durante lo shuffling"
+        }
+        TextKey::GuideMode => "Modalità guida",
+        TextKey::KeepMultiPartEpisodesTogether => "Mantieni gli episodi multi-parte insieme",
+        TextKey::Marathon => "Maratona",
+        TextKey::MarathonBatchSize => "Dimensione lotto maratona",
+        TextKey::MarathonBatchSizeHelp => {
+            "Numero di elementi da riprodurre da ciascun gruppo prima di avanzare; vuoto o zero riprodurrà tutti gli elementi"
+        }
+        TextKey::MarathonGroupBy => "Raggruppa per maratona",
+        TextKey::MarathonShuffleGroups => "Mescola gruppi maratona",
+        TextKey::MarathonShuffleItems => "Elementi casuali della maratona",
+        TextKey::MidRollFiller => "Riempitivo Mid-Roll",
+        TextKey::MidRoll => "Mid-Roll",
+        TextKey::MoveDown => "Sposta in basso",
+        TextKey::MoveUp => "Sposta in alto",
+        TextKey::MultiEpisodeGroupSize => "Dimensione gruppo multi-episodio",
+        TextKey::MultiEpisodeShuffle => "Scambio multi-episodio",
+        TextKey::Multiple => "Multipli",
+        TextKey::MultipleCount => "Conteggio multipli",
+        TextKey::MultipleCountHelp => {
+            "Può essere un'espressione con 'count' (dimensione collezione) e 'random' (da 0 a count-1)"
+        }
+        TextKey::MultipleMode => "Modalità multipli",
+        TextKey::NewScheduleName => "Nuovo nome programma",
+        TextKey::NewSmartCollection => "Nuova collezione intelligente",
+        TextKey::NoScheduleItems => "Nessun elemento del programma.",
+        TextKey::NoSchedules => "Nessun programma.",
+        TextKey::Normal => "Normale",
+        TextKey::Offline => "Offline",
+        TextKey::One => "Uno",
+        TextKey::OrderedGroups => "Gruppi ordinati",
+        TextKey::Playback => "Riproduzione",
+        TextKey::PlaybackOrder => "Ordine di riproduzione",
+        TextKey::PlaybackOrderUpdateFailed => "Aggiornamento ordine di riproduzione fallito",
+        TextKey::PlaybackOrderUpdated => "Ordine di riproduzione aggiornato.",
+        TextKey::PlaylistItemSize => "Dimensione elemento playlist",
+        TextKey::PlayoutDurationHours => "Ore durata playout",
+        TextKey::PlayoutDurationMinutes => "Minuti durata playout",
+        TextKey::PostRollFiller => "Riempitivo Post-Roll",
+        TextKey::PostRoll => "Post-Roll",
+        TextKey::PreRollFiller => "Riempitivo Pre-Roll",
+        TextKey::PreRoll => "Pre-Roll",
+        TextKey::Random => "Casuale",
+        TextKey::RandomCount => "Conteggio casuale",
+        TextKey::RandomRotation => "Rotazione casuale",
+        TextKey::RemainingDurationHelp => {
+            "durata del contenuto dopo questo punto mid-roll, in secondi"
+        }
+        TextKey::RandomStartPoint => "Punto iniziale casuale",
+        TextKey::RemoveFailed => "Rimozione fallita",
+        TextKey::RemovedFromCollection => "Rimosso dalla collezione.",
+        TextKey::RemoveFromCollection => "Rimuovi dalla collezione",
+        TextKey::Rename => "Rinomina",
+        TextKey::RenameFailed => "Rinomazione fallita",
+        TextKey::ReorderFailed => "Riordino fallito",
+        TextKey::RerunFirstRun => "Ripeti prima esecuzione",
+        TextKey::RerunRerun => "Ripeti ripetizione",
+        TextKey::ReadOnlyTwentyFourHourPlayoutView => {
+            "Vista di sola lettura di 24 ore degli elementi di playout programmati."
+        }
+        TextKey::SaveSchedule => "Salva programma",
+        TextKey::SaveScheduleItems => "Salva elementi programma",
+        TextKey::SaveSmartCollection => "Salva collezione intelligente",
+        TextKey::Schedule => "Programma",
+        TextKey::ScheduleActionFailed => "Azione programma fallita.",
+        TextKey::ScheduleAsGroup => "Programma come gruppo",
+        TextKey::ScheduleKind => "Tipo programma",
+        TextKey::ScheduleKindBlock => "Blocco",
+        TextKey::ScheduleKindClassic => "Classico",
+        TextKey::ScheduleKindExternalJson => "JSON (dizqueTV)",
+        TextKey::ScheduleKindScripted => "Scriptato",
+        TextKey::ScheduleKindSequential => "Sequenziale",
+        TextKey::SchedulingContext => "Contesto programmazione",
+        TextKey::ScheduleItem => "Elemento programma",
+        TextKey::ScheduleItemActionFailed => "Azione elemento programma fallita.",
+        TextKey::ScheduleItemFiller => "Elemento programma riempitivo",
+        TextKey::ScheduleItemFillerHelp => {
+            "Il riempitivo pre-, mid- e post-roll si applica a ogni elemento multimedia selezionato da questo elemento programma. Per riprodurre il contenuto una volta dopo un blocco Multipli, aggiungerlo come prossimo elemento programma."
+        }
+        TextKey::ScheduleItemOverrides => "Sovrascritture elemento programma",
+        TextKey::ScheduleItems => "Elementi programma",
+        TextKey::ScheduleNotFound => "Programma non trovato.",
+        TextKey::ScheduleSaveFailed => "Salvataggio programma fallito.",
+        TextKey::SmartShuffle => "Scambio intelligente",
+        TextKey::SmartShufflePreset => "Preset spaziatura",
+        TextKey::Balanced => "Bilanciato",
+        TextKey::SmartShuffleScope => "Condividi spaziatura tra",
+        TextKey::SmartShuffleScopePlayout => "Riproduzione",
+        TextKey::SmartShuffleScopeScheduleItem => "Elemento programma",
+        TextKey::SmartShuffleValidation => {
+            "Scegli una soglia di spaziatura e almeno una regola di similarità."
+        }
+        TextKey::SmartShuffleScopeContentSource => "Sorgente contenuto",
+        TextKey::SmartShuffleAfterItems => "Video tra elementi simili",
+        TextKey::SmartShuffleAfterDurationMinutes => "Minuti tra elementi simili",
+        TextKey::SmartShuffleIncludeFiller => "Includi riempitivo",
+        TextKey::SmartShuffleInheritedBlock => {
+            "Questo elemento non ha sovrascrittura Scambio intelligente e mantiene qualsiasi politica di playout legacy."
+        }
+        TextKey::SmartShuffleInactive => {
+            "Scambio intelligente è inattivo perché questo ordine di riproduzione non è randomizzato."
+        }
+        TextKey::SmartShuffleOverrideBlock => "Sovrascrittura per questo elemento blocco",
+        TextKey::SimilarityRules => "Regole di similarità",
+        TextKey::AlbumArtist => "Artista album",
+        TextKey::Apply => "Applica",
+        TextKey::ContentParent => "Genitore o variante",
+        TextKey::SmartShuffleFilterRules => "Regole di filtraggio",
+        TextKey::SearchForSchedules => "Cerca gli orari",
+        TextKey::SearchForManualCollections => "Cerca raccolte manuali",
+        TextKey::SearchForRerunCollections => "Cerca raccolte di ripetizioni",
+        TextKey::SearchForSmartCollections => "Cerca raccolte intelligenti",
+        TextKey::SearchForTemplates => "Cerca modelli",
+        TextKey::SearchForBlocks => "Cerca blocchi",
+        TextKey::SearchForMultiCollections => "Cerca raccolte multiple",
+        TextKey::SearchQuery => "Ricerca query",
+        TextKey::BlockSearchQueryPlaceholder => "ad es. genere:azione",
+        TextKey::SearchTitle => "Cerca titolo",
+        TextKey::SearchTitleDisplay => "Cerca titolo (visualizzazione)",
+        TextKey::SearchSmartCollection => "Cerca raccolta intelligente",
+        TextKey::Season => "Stagione",
+        TextKey::SeasonEpisode => "Stagione, Episodio",
+        TextKey::SeasonNotFound => "Stagione non trovata",
+        TextKey::Select => "Seleziona",
+        TextKey::SelectCollection => "Seleziona una raccolta",
+        TextKey::SelectGroupForNewTemplate => "Seleziona un gruppo per il nuovo modello",
+        TextKey::SelectScheduleItemPrompt => {
+            "Seleziona un elemento dell'orario da modificare o aggiungi un nuovo elemento."
+        }
+        TextKey::SelectSchedule => "Seleziona un orario",
+        TextKey::SelectSmartCollection => "Seleziona raccolta intelligente",
+        TextKey::Shuffle => "Mescola",
+        TextKey::ShuffleInOrder => "Mescola in ordine",
+        TextKey::ShuffleScheduleItems => "Mescola elementi dell'orario",
+        TextKey::ShuffleScheduleItemsHelp => {
+            "Nota: questa opzione disabilita gli orari di inizio fissi e la modalità alluvione"
+        }
+        TextKey::ShuffledGroups => "Gruppi mescolati",
+        TextKey::Show => "Serie",
+        TextKey::ShowNotFound => "Serie non trovata",
+        TextKey::Shows => "Serie",
+        TextKey::Start => "Inizio",
+        TextKey::StartTime => "Ora di inizio",
+        TextKey::StartTimeOnOrAfter => "Inizio da o dopo",
+        TextKey::StartType => "Tipo di inizio",
+        TextKey::Strict => "Rigido",
+        TextKey::StrictAlwaysWaitExactStartTime => {
+            "Rigido - Aspetta sempre l'orario di inizio esatto"
+        }
+        TextKey::StrictWaitExactStartTime => "Rigido - Aspetta l'orario di inizio esatto",
+        TextKey::TailFiller => "Riempitivo finale",
+        TextKey::TailMode => "Modalità finale",
+        TextKey::Tail => "Finale",
+        TextKey::TelevisionSeason => "Stagione televisiva",
+        TextKey::TelevisionShow => "Serie televisiva",
+        TextKey::TreatCollectionsAsShows => "Tratta le raccolte come serie",
+        TextKey::TreatCollectionsAsShowsHelp => "Utile per episodi di crossover in più parti",
+        TextKey::Type => "Tipo",
+        TextKey::TypeToSearch => "Tipo da cercare...",
+        TextKey::Search => "Cerca",
+        TextKey::SearchMedia => "Cerca media",
+        TextKey::SearchMoviesOrShows => "Cerca film o serie...",
+        TextKey::SearchTraktList => "Cerca lista Trakt",
+        TextKey::SearchingMinimumLogLevel => "Livello minimo di registro durante la ricerca",
+        TextKey::Settings => "Impostazioni",
+        TextKey::SettingsSaveFailed => "Salvataggio impostazioni fallito",
+        TextKey::ShowMediaInfo => "Mostra informazioni sul media",
+        TextKey::ScriptedScheduleTimeout => "Timeout per gli orari programmati",
+        TextKey::SkipMissingItems => "Salta gli elementi mancanti",
+        TextKey::SkipMissingItemsHelp => {
+            "Controlla se gli elementi non trovati o non disponibili devono essere inclusi nelle trasmissioni"
+        }
+        TextKey::SmartCollections => "Raccolte intelligenti",
+        TextKey::SmartCollection => "Raccolta intelligente",
+        TextKey::SmartCollectionDeleted => "Raccolta intelligente eliminata.",
+        TextKey::SmartCollectionQueryPlaceholder => "ad es. genere:azione OPPURE genere:commedia",
+        TextKey::SmartCollectionSaved => "Raccolta intelligente salvata.",
+        TextKey::SaveTraktList => "Salva lista Trakt",
+        TextKey::Songs => "Canzoni",
+        TextKey::SplitTimeEvenly => "Dividi il tempo in modo uniforme",
+        TextKey::StreamingMinimumLogLevel => "Livello minimo di registro per lo streaming",
+        TextKey::Studios => "Studi",
+        TextKey::Support => "Supporto",
+        TextKey::Template => "Modello",
+        TextKey::TemplateCopied => "Modello copiato.",
+        TextKey::TemplateCreated => "Modello creato.",
+        TextKey::TemplateDeleted => "Modello eliminato.",
+        TextKey::TemplateGroup => "Gruppo di modelli",
+        TextKey::TemplateGroupCreated => "Gruppo di modelli creato.",
+        TextKey::TemplateGroupDeleted => "Gruppo di modelli eliminato.",
+        TextKey::TemplateGroupName => "Nome del gruppo di modelli",
+        TextKey::TemplateGroups => "Gruppi di modelli",
+        TextKey::TemplateName => "Nome del modello",
+        TextKey::TemplateNotFound => "Modello non trovato.",
+        TextKey::Templates => "Modelli",
+        TextKey::Theme => "Tema",
+        TextKey::ThisActionCannotBeUndone => "Questa azione non può essere annullata.",
+        TextKey::ThisCollectionHasNoItemsYet => "Questa raccolta non ha ancora elementi.",
+        TextKey::Thumbnail => "miniatura",
+        TextKey::Title => "Titolo",
+        TextKey::ToggleNavigation => "Attiva/disattiva navigazione",
+        TextKey::TotalDurationHelp => "durata totale del contenuto, in secondi",
+        TextKey::TotalPointsHelp => "numero totale di punti potenziali mid-roll",
+        TextKey::TotalProgressHelp => "posizione normalizzata da 0 a 1",
+        TextKey::TraktList => "Lista Trakt",
+        TextKey::TraktListActionFailed => "Trakt l'azione della lista non è riuscita.",
+        TextKey::TraktListAdded => "Lista Trakt aggiunta.",
+        TextKey::TraktListDeleted => "Lista Trakt eliminata.",
+        TextKey::TraktListMatched => "Lista Trakt trovata.",
+        TextKey::TraktListNotFound => "Lista Trakt non trovata.",
+        TextKey::TraktListSaveFailed => "Trakt il salvataggio della lista non è riuscito.",
+        TextKey::TraktListSaved => "Lista Trakt salvata.",
+        TextKey::TraktLists => "Trakt Liste",
+        TextKey::TraktListUrl => "URL della lista Trakt",
+        TextKey::Trash => "Cestino",
+        TextKey::TrashAlreadyEmpty => "Il cestino è già vuoto.",
+        TextKey::TrashEmpty => "Il cestino è vuoto.",
+        TextKey::TrashEmptyConfirm => "Eliminare ogni elemento non trovato nel database?",
+        TextKey::TrashEmptyConfirmHelp => {
+            "Questo rimuove permanentemente gli elementi multimediali attualmente mancanti e le loro righe di metadati dipendenti."
+        }
+        TextKey::TrashSubtitle => {
+            "Elementi il cui file sorgente è attualmente mancante dal disco o dal provider."
+        }
+        TextKey::Troubleshooting => "Risoluzione problemi",
+        TextKey::TunerCount => "Numero di sintonizzatori",
+        TextKey::TvShows => "Programmi TV",
+        TextKey::Ui => "Interfaccia utente",
+        TextKey::Unavailable => "Non disponibile",
+        TextKey::UseActualTimes => "Usa orari reali",
+        TextKey::UseCustomPlaybackOrder => "Usa ordine di riproduzione personalizzato",
+        TextKey::UseChaptersAsMediaItems => "Usa capitoli come elementi multimediali",
+        TextKey::UseChaptersAsMediaItemsHelp => {
+            "Programma capitoli individuali invece di file interi"
+        }
+        TextKey::UseEmbeddedSubtitles => "Usa sottotitoli incorporati",
+        TextKey::Uuid => "UUID",
+        TextKey::UntitledItem => "Elemento senza titolo",
+        TextKey::WindowsStartup => "Avvio di Windows",
+        TextKey::WindowsStartupNeedsRepair => {
+            "Il comando di avvio salvato punta a un'altra posizione. Applica questa impostazione per ripararlo."
+        }
+        TextKey::WindowsStartupUnavailable => {
+            "L'avvio di Windows non è disponibile perché non è stato trovato il launcher imballato o non è stato possibile leggere la registrazione."
+        }
+        TextKey::ActiveTranscodeLimit => "Trascode di streaming simultanei massimi",
+        TextKey::ActiveTranscodeLimitHelp => {
+            "Limite massimo per le trascode FFmpeg di streaming. Quando tutte le slot sono occupate, un nuovo utente riceve una risposta all-streams-in-use fino a quando una slot non si libera; gli stream attivi non vengono bypassati oltre il limite."
+        }
+        TextKey::ActiveTranscodeSuggestionHardware => {
+            "Encoder hardware rilevato; questo è un valore suggerito, non una modifica automatica."
+        }
+        TextKey::ActiveTranscodeSuggestionSoftware => {
+            "Solo codifica software; questo è un valore suggerito, non una modifica automatica."
+        }
+        TextKey::Peak => "picco",
+        TextKey::StreamsInUse => "Stream in uso",
+        TextKey::SuggestedTranscodeLimit => "Valore suggerito",
+        TextKey::Watermarks => "Watermark",
+        TextKey::Width => "Larghezza",
+        TextKey::WorkAheadSegmenterLimit => "Trascode HLS Work-Ahead",
+        TextKey::WorkAheadSegmenterLimitHelp => {
+            "Quante slot di trascode HLS possono funzionare in anticipo alla massima velocità per costruire la buffer. Work-ahead cede sempre agli stream guardati."
+        }
+        TextKey::AccelerationKind => "Tipo di accelerazione",
+        TextKey::AddFfmpegProfile => "Aggiungi profilo FFmpeg",
+        TextKey::AddProfile => "Aggiungi profilo",
+        TextKey::AllowBFrames => "Consenti B-Frames",
+        TextKey::AllowWatermarks => "Consenti Watermark",
+        TextKey::Audio => "Audio",
+        TextKey::AudioBitrate => "Bitrate audio (kBit/s)",
+        TextKey::AudioBufferSize => "Dimensione buffer audio (kBit)",
+        TextKey::AudioChannels => "Canali",
+        TextKey::AudioFormat => "Formato audio",
+        TextKey::BitDepth => "Profondità bit",
+        TextKey::Copy => "Copia",
+        TextKey::CopyBlock => "Blocco copia",
+        TextKey::CopyFailed => "Copia non riuscita",
+        TextKey::CopyNameSuffix => "Copia",
+        TextKey::CopyProfile => "Profilo copia",
+        TextKey::CopyTemplate => "Modello copia",
+        TextKey::Crop => "Ritaglio",
+        TextKey::DeinterlaceVideo => "Deinterlaccia video",
+        TextKey::Edit => "Modifica",
+        TextKey::EditBlock => "Blocco modifica",
+        TextKey::EditCollection => "Collezione modifica",
+        TextKey::EditFfmpegProfile => "Profilo modifica FFmpeg",
+        TextKey::EditMultiCollection => "Collezione modifica multipla",
+        TextKey::EditRerunCollection => "Collezione modifica di nuovo avvio",
+        TextKey::EditTemplate => "Modifica modello",
+        TextKey::Expression => "Espressione",
+        TextKey::Fallback => "Alternativa",
+        TextKey::FillerKind => "Tipo di riempitivo",
+        TextKey::General => "Generale",
+        TextKey::HardwareAcceleration => "Accelerazione hardware",
+        TextKey::HardwareIfPossible => "Se possibile",
+        TextKey::NewProfileName => "Nuovo nome profilo",
+        TextKey::NoneOption => "(Nessuno)",
+        TextKey::NumHelp => "il numero del punto di inserzione, a partire da 1",
+        TextKey::OptionalDisplayTitle => "Titolo opzionale da visualizzare...",
+        TextKey::TranscodeAudio => "Transcodifica audio",
+        TextKey::NormalizeColors => "Normalizza colori",
+        TextKey::NormalizeFramerate => "Normalizza fotogrammi al secondo",
+        TextKey::NormalizeLoudness => "Normalizza volume",
+        TextKey::TranscodeVideo => "Transcodifica video",
+        TextKey::Off => "Disattivato",
+        TextKey::Pad => "Padding",
+        TextKey::PadNearestFifteenMinutes => "15 (:00, :15, :30, :45)",
+        TextKey::PadNearestFiveMinutes => "5 (:00, :05, :10, :15, :20, ecc)",
+        TextKey::PadNearestTenMinutes => "10 (:00, :10, :20, :30, :40, :50)",
+        TextKey::PadNearestThirtyMinutes => "30 (:00, :30)",
+        TextKey::PadMode => "Modalità padding",
+        TextKey::PadToNearestMinute => "Padding fino al minuto più vicino",
+        TextKey::PointHelp => "la posizione del punto di inserzione, in secondi",
+        TextKey::ProfileCopied => "Profilo copiato.",
+        TextKey::ProfileNotFound => "Profilo non trovato.",
+        TextKey::QsvExtraHardwareFrames => "QSV Frame hardware extra",
+        TextKey::Resolution => "Risoluzione",
+        TextKey::SampleRateKhz => "Frequenza di campionamento (kHz)",
+        TextKey::SaveDecoTemplate => "Salva modello Deco",
+        TextKey::SaveProfile => "Salva profilo",
+        TextKey::SaveFillerPreset => "Salva preset riempitivo",
+        TextKey::SaveRerunCollection => "Salva raccolta di ripetizioni",
+        TextKey::SaveSequentialSchedule => "Salva programma sequenziale",
+        TextKey::SaveTemplate => "Salva modello",
+        TextKey::SaveBlock => "Salva blocco",
+        TextKey::ScaleAndPad => "Ridimensiona e padding",
+        TextKey::ScalingBehavior => "Comportamento ridimensionamento",
+        TextKey::Software => "Software",
+        TextKey::Stretch => "Stiramento",
+        TextKey::TargetLoudnessLufs => "Volume target (LUFS)",
+        TextKey::ThreadCountAuto => "Numero thread (0 = automatico)",
+        TextKey::OutputDynamicRange => "Gamma dinamica di output",
+        TextKey::OutputDynamicRangeCopyHint => {
+            "Il video è copiato, quindi l'output mantiene la gamma dinamica della sorgente."
+        }
+        TextKey::HdrStaticMetadataHint => {
+            "Lascia vuoto per utilizzare i valori predefiniti HDR10 documentati. Questi si applicano solo quando la sorgente non porta metadati HDR propri; i livelli del display di mastering e di luminosità della sorgente vincono sempre."
+        }
+        TextKey::HdrMasteringDisplay => "Display di mastering",
+        TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
+        TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
+        TextKey::TonemapAlgorithm => "Algoritmo di tonemapping",
+        TextKey::VaapiDevicePath => "VAAPI Percorso dispositivo",
+        TextKey::VaapiDisplay => "Display VAAPI",
+        TextKey::VaapiDriver => "Driver VAAPI",
+        TextKey::Video => "Video",
+        TextKey::VideoBitrate => "Bitrate video (kBit/s)",
+        TextKey::VideoBufferSize => "Dimensione buffer video (kBit)",
+        TextKey::VideoFormat => "Formato video",
+        TextKey::VideoPreset => "Preset video",
+        TextKey::VideoTune => "Impostazioni video",
+        TextKey::VideoProfile => "Profilo video",
+        TextKey::ViewCollection => "Visualizza raccolta",
+        TextKey::ViewPlaylist => "Visualizza playlist",
+        TextKey::AddAll => "Aggiungi tutto",
+        TextKey::AddedItemToPlaylist => "Elemento aggiunto alla playlist.",
+        TextKey::AddedArtistToSchedule => "Artista aggiunto al programma",
+        TextKey::AddedMovieToSchedule => "Film aggiunto al programma",
+        TextKey::AddedSeasonToSchedule => "Stagione aggiunta al programma",
+        TextKey::AddedShowToSchedule => "Serie aggiunta al programma",
+        TextKey::AddingItem => "Aggiornamento elemento...",
+        TextKey::AddingItemToPlaylist => "Aggiornamento elemento alla playlist...",
+        TextKey::Artists => "Artisti",
+        TextKey::ClearSelection => "Cancella selezione",
+        TextKey::Collection => "Raccolta",
+        TextKey::CollectionNameRequired => "Il nome della raccolta è obbligatorio",
+        TextKey::CollectionNotFound => "Raccolta non trovata",
+        TextKey::CollectionRenamed => "Raccolta rinominata.",
+        TextKey::EditTraktListProperties => "Modifica proprietà elenco Trakt",
+        TextKey::EnterTraktListUrl => "Inserisci elenco Trakt URL",
+        TextKey::EnterSearchQuery => "Inserisci una query di ricerca.",
+        TextKey::Episodes => "Episodi",
+        TextKey::LoadingCollections => "Caricamento raccolte...",
+        TextKey::LoadingPlaylistGroups => "Caricamento gruppi playlist...",
+        TextKey::LoadingPlaylists => "Caricamento playlist...",
+        TextKey::GeneratePlaylist => "Genera playlist",
+        TextKey::GeneratePlaylistFromSortedTraktItems => {
+            "Genera una playlist dagli elementi della lista trakt ordinata"
+        }
+        TextKey::MusicVideos => "Video musicali",
+        TextKey::NewCollectionName => "Nuovo nome della collezione",
+        TextKey::NoMediaMatched => "Nessun media trovato.",
+        TextKey::NoItemsToAdd => "Nessun elemento da aggiungere.",
+        TextKey::NoItemsToPreview => "Nessun elemento da anteprima.",
+        TextKey::NoPlaylistsInGroup => "Nessuna playlist in questo gruppo.",
+        TextKey::PleaseChoosePlaylist => "Scegliere una playlist.",
+        TextKey::RequestFailed => "Richiesta fallita",
+        TextKey::Released => "Pubblicato",
+        TextKey::SaveAs => "Salva come",
+        TextKey::Seasons => "Stagioni",
+        TextKey::SeeAll => "Vedi tutto >>",
+        TextKey::SelectAll => "Seleziona tutto",
+        TextKey::SelectGroup => "(Seleziona un gruppo)",
+        TextKey::SelectPlaylist => "(Seleziona una playlist)",
+        TextKey::SelectSearchCollectionHelp => {
+            "Seleziona la collezione a cui aggiungere i risultati della ricerca."
+        }
+        TextKey::SelectSearchPlaylistHelp => {
+            "Seleziona la playlist a cui aggiungere i risultati della ricerca."
+        }
+        TextKey::Selected => "Selezionato",
+        TextKey::SelectCollectionToAddThisMovie => {
+            "Seleziona una collezione a cui aggiungere questo film."
+        }
+        TextKey::SelectPlaylistToAddThisMovie => {
+            "Seleziona una playlist a cui aggiungere questo film."
+        }
+        TextKey::Add => "Aggiungi",
+        TextKey::AddLibrary => "Aggiungi alla libreria",
+        TextKey::Address => "Indirizzo",
+        TextKey::AddressRequired => "L'indirizzo è obbligatorio.",
+        TextKey::ApiKey => "Chiave API",
+        TextKey::ApiKeyRequired => "La chiave API è obbligatoria.",
+        TextKey::AuthorizedRedirecting => "Autorizzato - reindirizzamento...",
+        TextKey::CheckingEveryTwoSeconds => "Controllo ogni 2 secondi...",
+        TextKey::ClickAuthorizePlex => "Clicca qui per autorizzarti su Plex.tv",
+        TextKey::ClickPlayoutItemHelp => {
+            "Clicca su un elemento di playout per ispezionarne il titolo, i tempi e il contesto di programmazione."
+        }
+        TextKey::ConfigureConnection => "Configura connessione",
+        TextKey::Connection => "Connessione",
+        TextKey::DeepScanCollections => "Scansione approfondita delle collezioni",
+        TextKey::DeepScanLibrary => "Scansione approfondita della libreria",
+        TextKey::DeepScan => "Scansione approfondita",
+        TextKey::EditLibrary => "Modifica libreria",
+        TextKey::EditPlaylist => "Modifica playlist",
+        TextKey::EnterOnePathPerLine => "Inserisci un percorso per riga.",
+        TextKey::Error => "Errore",
+        TextKey::ExternalCollections => "Collezioni esterne",
+        TextKey::Information => "Informazioni",
+        TextKey::Kind => "Tipo",
+        TextKey::Library => "Libreria",
+        TextKey::LibraryKind => "Tipo di libreria",
+        TextKey::LibraryPaths => "Percorsi della libreria",
+        TextKey::LocalLibraries => "Librerie locali",
+        TextKey::LocalPath => "Percorso locale",
+        TextKey::MediaKind => "Tipo di media",
+        TextKey::NoLibrariesConfigured => {
+            "Nessuna libreria configurata. Aggiungi prima una fonte media."
+        }
+        TextKey::NoSchedulingContext => "Nessun contesto di programmazione",
+        TextKey::NoPlayoutItemsInWindow => {
+            "Nessun elemento di playout in questa finestra di 24 ore"
+        }
+        TextKey::NoPlayoutsFound => "Nessun playout trovato.",
+        TextKey::NoPathReplacements => "Nessun sostituzione di percorso.",
+        TextKey::Paths => "Percorsi",
+        TextKey::PathReplacements => "Sostituzioni di percorsi",
+        TextKey::PlexSignInHelp => "Accedi a Plex per aggiungere una fonte media.",
+        TextKey::Remote => "Remoto",
+        TextKey::RemotePath => "Percorso remoto",
+        TextKey::Remove => "Rimuovi",
+        TextKey::RemoveBlockFromTemplate => "Rimuovi blocco dal modello",
+        TextKey::RemoveContent => "Rimuovi contenuto",
+        TextKey::Retry => "Riprova",
+        TextKey::Saved => "Salvato.",
+        TextKey::Saving => "Salvataggio...",
+        TextKey::QuickScan => "Scansione rapida",
+        TextKey::ScanCollections => "Scansione collezioni",
+        TextKey::ScanFailed => "Scansione fallita",
+        TextKey::ScanLibrary => "Scansione libreria",
+        TextKey::ScanQueued => "Scansione in coda",
+        TextKey::Scanning => "Scansione in corso...",
+        TextKey::Server => "Server",
+        TextKey::ServerAddress => "Indirizzo server",
+        TextKey::SignInToPlex => "Accedi a Plex",
+        TextKey::SignOutOfPlex => "Esci da Plex",
+        TextKey::Sync => "Sincronizza",
+        TextKey::WaitingForPlexAuthorization => "In attesa dell'autorizzazione di Plex.",
+        TextKey::AddChannel => "Aggiungi canale",
+        TextKey::Any => "Qualsiasi",
+        TextKey::BlockPlayoutTroubleshooting => "Risoluzione problemi di playout bloccato",
+        TextKey::BlockPlayoutHistory => "Cronologia playout bloccato",
+        TextKey::Categories => "Categorie",
+        TextKey::CategoriesHelp => "Elenco separato da virgola di categorie",
+        TextKey::Channel => "Canale",
+        TextKey::ChannelCouldNotBeSaved => {
+            "Il canale non può essere salvato. Controlla i valori del modulo e riprova."
+        }
+        TextKey::ChannelDisabled => "Canale disabilitato",
+        TextKey::ChannelHiddenFromEpg => "Canale nascosto dall'EPG",
+        TextKey::ChannelLogo => "Logo del canale",
+        TextKey::ChannelLogoPreview => "Anteprima logo del canale",
+        TextKey::ChannelLogoUploadFailed => {
+            "Caricamento logo del canale fallito. Controlla il file e riprova."
+        }
+        TextKey::Check => "Controlla",
+        TextKey::Continuous => "Continuo",
+        TextKey::DateAndTime => "Data e ora",
+        TextKey::DefaultOption => "Predefinito",
+        TextKey::DefaultSchedule => "Programma predefinito",
+        TextKey::DeleteChannel => "Elimina canale",
+        TextKey::DownloadMediaSample => "Scarica campione multimedia",
+        TextKey::DownloadResults => "Risultati scaricamento",
+        TextKey::DisableWatermarks => "Disabilita filigrane",
+        TextKey::EditChannel => "Modifica canale",
+        TextKey::EditChannelNumbers => "Modifica numeri canale",
+        TextKey::EditNumbers => "Modifica numeri",
+        TextKey::ExternalLogoUrl => "Logo esterno URL",
+        TextKey::Fail => "Errore",
+        TextKey::FallbackFiller => "Fallback riempitivo",
+        TextKey::FfmpegProfile => "Profilo FFmpeg",
+        TextKey::FirstPage => "Prima pagina",
+        TextKey::FirstRunPlaybackOrder => "Ordine riproduzione prima esecuzione",
+        TextKey::Forced => "Forzato",
+        TextKey::GenerateSubtitles => "Genera sottotitoli",
+        TextKey::Generated => "Generato",
+        TextKey::Details => "Dettagli",
+        TextKey::Full => "Completo",
+        TextKey::Group => "Gruppo",
+        TextKey::FfmpegRuntime => "Tempo di esecuzione FFmpeg",
+        TextKey::FfmpegRuntimeDownloaded => "Tempo di esecuzione FFmpeg scaricato",
+        TextKey::FfmpegRuntimeLatestRelease => "Ultima versione",
+        TextKey::FfmpegRuntimeRelease => "Versione installata",
+        TextKey::FfmpegRuntimeSource => "Sorgente",
+        TextKey::FfmpegRuntimeSourceDownloaded => "Scaricato",
+        TextKey::FfmpegRuntimeSourceManaged => "Gestito",
+        TextKey::FfmpegRuntimeSourceOverride => "Sovrascrivi",
+        TextKey::FfmpegRuntimeSourcePath => "PERCORSO",
+        TextKey::FfmpegRuntimeSourceUnknown => "Sconosciuto",
+        TextKey::FfmpegRuntimeUpdateAvailable => "Aggiornamento disponibile",
+        TextKey::FfmpegRuntimeUpdateCheckFailed => "Controllo aggiornamenti fallito",
+        TextKey::FfmpegRuntimeUpdateFailed => "Aggiornamento tempo di esecuzione FFmpeg fallito",
+        TextKey::FfmpegRuntimeUpToDate => "Aggiornato",
+        TextKey::FfmpegRuntimeUpdated => "Tempo di esecuzione FFmpeg aggiornato",
+        TextKey::FfmpegRuntimeVersion => "Versione",
+        TextKey::HealthNoPersistedRun => "Al momento non sono applicabili controlli di stato.",
+        TextKey::HealthPersistedRunHelp => {
+            "Risultati controllo stato parità corrente. Questa pagina si aggiorna dopo l'aggiornamento dello stato degli elementi tramite scansione dei media."
+        }
+        TextKey::HistoryDetails => "Dettagli cronologia",
+        TextKey::HlsDirect => "HLS Direct",
+        TextKey::HlsSegmenter => "HLS Segmenter",
+        TextKey::Hours => "ore",
+        TextKey::IdleBehavior => "Comportamento inattivo",
+        TextKey::IdleBehaviorHelp => {
+            "Controlla il comportamento del processo di transcoding dopo che tutti i client si sono disconnessi"
+        }
+        TextKey::Info => "Info",
+        TextKey::Import => "Importa",
+        TextKey::IsEnabled => "Abilitato",
+        TextKey::Json => "JSON",
+        TextKey::KeepRunning => "Continua a funzionare",
+        TextKey::Key => "Chiave",
+        TextKey::LastMidFillerHelp => "secondi dall'ultimo riempitivo mid-roll",
+        TextKey::LastPage => "Ultima pagina",
+        TextKey::Level => "Livello",
+        TextKey::LoadingMediaInfo => "Caricamento informazioni media...",
+        TextKey::Logs => "Log",
+        TextKey::Logo => "Logo",
+        TextKey::MediaItem => "Elemento multimedia",
+        TextKey::Message => "Messaggio",
+        TextKey::MissingMediaItemQueryParameter => "Parametro di query mediaItem mancante",
+        TextKey::Mirror => "Specchio",
+        TextKey::MirrorOptionsHelp => {
+            "Disponibile solo quando la Sorgente di riproduzione è impostata su Specchio."
+        }
+        TextKey::MirrorSourceChannel => "Canale sorgente specchio",
+        TextKey::MusicVideoCreditsMode => "Modalità crediti video musicale",
+        TextKey::MusicVideoCreditsTemplate => "Modello crediti video musicale",
+        TextKey::NoMatchingRecordsFound => "Nessun record corrispondente trovato",
+        TextKey::NoFfmpegProfiles => "Nessun profilo FFmpeg trovato. Creane uno prima.",
+        TextKey::NoBlockPlayoutSelected => {
+            "Seleziona una riproduzione a blocchi per ispezionarne i blocchi."
+        }
+        TextKey::NoBlocks => "Nessun blocco trovato.",
+        TextKey::NoHistory => "Nessun cronologia trovata.",
+        TextKey::NoMessages => "Nessun messaggio.",
+        TextKey::NvidiaCapabilitiesNotCollected => {
+            "Le capacità NVIDIA non sono ancora state raccolte."
+        }
+        TextKey::Number => "Numero",
+        TextKey::OnDemand => "Su richiesta",
+        TextKey::MatchedPointsHelp => {
+            "numero di punti mid-roll che hanno già corrisposto all'espressione"
+        }
+        TextKey::Pass => "Passa",
+        TextKey::ParityDebt => "ParityDebt",
+        TextKey::PlaybackTroubleshooting => "Risoluzione problemi riproduzione",
+        TextKey::Play => "Riproduci",
+        TextKey::PlayoutTimeline => "Timeline di riproduzione",
+        TextKey::PlayoutMode => "Modalità di riproduzione",
+        TextKey::PlayoutModeHelp => "Controlla la progressione della riproduzione del canale",
+        TextKey::PlayoutOffset => "Offset di messa in onda",
+        TextKey::PlayoutSource => "Sorgente di messa in onda",
+        TextKey::PlayoutSourceHelp => {
+            "Controlla la sorgente del contenuto del canale. Non può essere modificato quando il canale ha già una messa in onda."
+        }
+        TextKey::Preview => "Anteprima",
+        TextKey::PreviewBlockPlayout => "Messa in onda del blocco di anteprima",
+        TextKey::PreviewChannel => "Canale di anteprima",
+        TextKey::ChannelPreview => "Anteprima del canale",
+        TextKey::ReloadStream => "Ricarica flusso",
+        TextKey::StopPreview => "Ferma anteprima",
+        TextKey::OpenFullPlayer => "Apri lettore completo",
+        TextKey::BackToChannels => "Torna ai canali",
+        TextKey::NowPlaying => "In riproduzione",
+        TextKey::UpNext => "Prossimo",
+        TextKey::ProgrammeGuide => "Guida dei programmi",
+        TextKey::EpgPreview => "Anteprima EPG",
+        TextKey::EpgPreviewDescription => {
+            "Naviga nella guida pubblicata con due ore di storia e 24 ore in anticipo."
+        }
+        TextKey::EpgZoom => "Zoom",
+        TextKey::EpgNow => "Ora",
+        TextKey::NoEpgChannels => "Non sono visibili canali abilitati nell'EPG.",
+        TextKey::ScheduleGap => "Intervallo di programmazione",
+        TextKey::Filler => "Riempitivo",
+        TextKey::NoProgramming => "Non è programmata alcuna programmazione in questa finestra.",
+        TextKey::ChannelDisabledPreview => "Questo canale è disabilitato.",
+        TextKey::ChannelNotAiring => "Questo canale non sta attualmente trasmettendo.",
+        TextKey::ChannelNoPlayout => "Questo canale non ha una messa in onda.",
+        TextKey::PreviewIdle => "L'anteprima inizia in mutato automaticamente.",
+        TextKey::PreviewConnecting => "Connessione al flusso live in corso…",
+        TextKey::PreviewLive => "La riproduzione live è in esecuzione.",
+        TextKey::PreviewPaused => "Anteprima in pausa.",
+        TextKey::PreviewRecovering => "Ripristino della riproduzione in corso…",
+        TextKey::PreviewStopped => "Anteprima arrestata.",
+        TextKey::PreviewUnsupported => "Questo browser non può riprodurre video HLS.",
+        TextKey::PreviewAuthorizationFailed => "L'autorizzazione dell'anteprima è fallita.",
+        TextKey::PreviewUnavailable => "Il flusso live non è disponibile.",
+        TextKey::PreviewCapacityReached => "Tutte le slot di transcoding sono attualmente in uso.",
+        TextKey::PreviewNetworkError => "L'anteprima ha perso la connessione di rete.",
+        TextKey::PreviewMediaError => {
+            "Il browser non è riuscito a decodificare l'output configurato di questo canale."
+        }
+        TextKey::PreviewDerivativeNote => {
+            "L'anteprima di amministrazione utilizza una derivazione H.264/AAC compatibile con i browser; l'output del canale configurato non è modificato."
+        }
+        TextKey::JavascriptRequiredPlayback => {
+            "È richiesto JavaScript per la riproduzione interattiva."
+        }
+        TextKey::ConfirmStopTranscodeSession => {
+            "Arrestare la sessione di transcoding condivisa per questo canale?"
+        }
+        TextKey::PreviewPlaylistPlayout => "Messa in onda della playlist di anteprima",
+        TextKey::PreferredAudioTitle => "Titolo audio preferito",
+        TextKey::PreferredSubtitleLanguage => "Lingua dei sottotitoli preferita",
+        TextKey::QsvCapabilitiesNotCollected => "Le capacità QSV non sono ancora state raccolte.",
+        TextKey::RemoveStoredLogo => "Rimuovi logo memorizzato",
+        TextKey::SaveChannel => "Salva canale",
+        TextKey::SaveChannels => "Salva canali",
+        TextKey::Second => "secondo",
+        TextKey::Seconds => "secondi",
+        TextKey::SelectProfile => "- Seleziona profilo -",
+        TextKey::SequentialSchedule => "Programma sequenziale",
+        TextKey::SequentialScheduleValidation => "Validazione sequenziale della programmazione",
+        TextKey::SeekSeconds => "Cerca secondi",
+        TextKey::Schema => "Schema",
+        TextKey::ShowDisabled => "Mostra disabilitata",
+        TextKey::ShowInEpg => "Mostra in EPG",
+        TextKey::SlugSeconds => "Slug secondi",
+        TextKey::SlugSecondsHelp => {
+            "Secondi di video nero e audio silenzioso da inserire tra ogni elemento di messa in onda"
+        }
+        TextKey::Song => "Canzone",
+        TextKey::SongVideoMode => "Modalità video canzone",
+        TextKey::SortByLevel => "Ordina per livello",
+        TextKey::SortByTimestamp => "Ordina per timestamp",
+        TextKey::StopOnDisconnect => "Ferma allo scollegamento",
+        TextKey::StopScheduling => "Ferma la programmazione",
+        TextKey::StopSchedulingBlockItems => "Ferma la programmazione degli elementi di blocco",
+        TextKey::StopTranscodeSession => "Ferma sessione di transcoding",
+        TextKey::StartFromBeginning => "Inizia dall'inizio",
+        TextKey::StreamSelector => "Selettore flusso",
+        TextKey::StreamSelectorMode => "Modalità selettore flusso",
+        TextKey::StreamingMode => "Modalità streaming",
+        TextKey::Styles => "Stili",
+        TextKey::Subtitle => "Sottotitolo",
+        TextKey::SubtitleMode => "Modalità sottotitolo",
+        TextKey::SubtitleModeHelp => {
+            "Mostra solo le tracce narrative forzate. Per mostrare sempre i sottotitoli nella lingua preferita, scegli Qualsiasi."
+        }
+        TextKey::Timestamp => "Marca temporale",
+        TextKey::Timeline => "Linea temporale",
+        TextKey::Target => "Destinazione",
+        TextKey::Tags => "Tag",
+        TextKey::Tools => "Strumenti",
+        TextKey::TranscodeMode => "Modalità di transcoding",
+        TextKey::TranscodeModeHelp => "Controlla quando il processo di transcoding è attivo",
+        TextKey::TroubleshootPlayback => "Risoluzione problemi di riproduzione",
+        TextKey::TroubleshootChannel => "Risoluzione problemi del canale",
+        TextKey::TroubleshootingReports => "Report di risoluzione problemi",
+        TextKey::MpegTsTroubleshooting => "MPEG-TS Risoluzione problemi",
+        TextKey::InternalMpegTs => "Interno MPEG-TS",
+        TextKey::PublicMpegTs => "Pubblico MPEG-TS",
+        TextKey::RetainRawSample => "Conserva il campione grezzo",
+        TextKey::TsdDuckVersion => "Versione TSDuck",
+        TextKey::Report => "Rapporto",
+        TextKey::RunId => "ID Esecuzione",
+        TextKey::Status => "Stato",
+        TextKey::Summary => "Riepilogo",
+        TextKey::SampleBytes => "Byte del campione",
+        TextKey::RawSampleArchived => "Campione grezzo archiviato",
+        TextKey::ArchivePath => "Percorso di archiviazione",
+        TextKey::SampleUrl => "Campione URL",
+        TextKey::StabilityMeter => "Misuratore di stabilità",
+        TextKey::Stable => "Stabile",
+        TextKey::Packets => "pacchetti",
+        TextKey::Services => "Servizi",
+        TextKey::Pids => "PIDs",
+        TextKey::ContinuityFindings => "Trovamenti di continuità",
+        TextKey::PcrFindings => "Trovamenti PCR",
+        TextKey::Bitrate => "Bitrate",
+        TextKey::AnalysisJson => "Analisi JSON",
+        TextKey::StandardOutput => "Output standard",
+        TextKey::StandardError => "Errore standard",
+        TextKey::NotAvailable => "Non disponibile",
+        TextKey::NotApplicable => "Non applicabile",
+        TextKey::Completed => "Completato",
+        TextKey::Failed => "Fallito",
+        TextKey::TroubleshootingPlaybackStartDebt => {
+            "Anteprima di riproduzione di elementi multimediali e canali ora scrive report FFmpeg, log, media_info.json, troubleshooting_info.json, selezionatore di flusso YAML, file di capacità, esegue regole del selezionatore di flusso e reindirizza a /iptv/session/.troubleshooting/live.m3u8."
+        }
+        TextKey::UnableToLoadMediaInfo => "Impossibile caricare le informazioni multimediali",
+        TextKey::UnableToLoadPlaybackTroubleshooting => {
+            "Impossibile caricare il contesto di risoluzione problemi della riproduzione"
+        }
+        TextKey::UpdateListFromTraktDaily => "Aggiorna l'elenco da trakt.tv una volta al giorno",
+        TextKey::UploadLogo => "Carica Logo",
+        TextKey::UploadLogoHelp => {
+            "Scegli un'immagine locale per sostituire il logo del canale memorizzato al salvataggio"
+        }
+        TextKey::Warning => "Avvertenza",
+        TextKey::Watermark => "Filigrana",
+        TextKey::WatermarkIds => "ID Filigrana",
+        TextKey::Window => "Finestra",
+        TextKey::WithProgress => "Con Progresso",
+        TextKey::Writers => "Sceneggiatori",
+        TextKey::Validate => "Validare",
+        TextKey::Yaml => "YAML",
+        TextKey::YamlFile => "File YAML",
+        TextKey::Messages => "Messaggi",
+        TextKey::CollectionName => "Nome della Collezione",
+        TextKey::MediaItemType => "Tipo di Elemento Multimediale",
+        TextKey::MediaItemTitle => "Titolo dell'Elemento Multimediale",
+        TextKey::ActualSize => "Dimensione Reale",
+        TextKey::AddWatermark => "Aggiungi Filigrana",
+        TextKey::AspectRatioGuides => "Guide del rapporto di aspetto",
+        TextKey::BottomLeft => "Basso Sinistra",
+        TextKey::BottomMiddle => "Basso Centro",
+        TextKey::BottomRight => "Basso Destra",
+        TextKey::CopyWatermark => "Copia Filigrana",
+        TextKey::CopyOf => "Copia di",
+        TextKey::CurrentImage => "Immagine corrente",
+        TextKey::Custom => "Personalizzato",
+        TextKey::ChannelLogoPreviewUnavailable => {
+            "Le anteprime del logo del canale richiedono un contesto del canale. Scegli un'immagine personalizzata per l'anteprima qui."
+        }
+        TextKey::DeleteWatermark => "Elimina filigrana",
+        TextKey::DurationSeconds => "Durata (secondi)",
+        TextKey::EditWatermark => "Modifica Filigrana",
+        TextKey::EnableWatermarkToPreview => "Abilita la filigrana per visualizzarne la posizione.",
+        TextKey::Frequency => "Frequenza",
+        TextKey::GeneratingPreview => "Generazione anteprima...",
+        TextKey::HorizontalMarginPercent => "Margine Orizzontale (%)",
+        TextKey::GuideFourThree => "Quadro sicuro 4:3",
+        TextKey::Identity => "Identità",
+        TextKey::Image => "Immagine",
+        TextKey::ImageSource => "Sorgente Immagine",
+        TextKey::Intermittent => "Intermittente",
+        TextKey::IntermittentTiming => "Temporizzazione intermittente",
+        TextKey::LeftMiddle => "Centro Sinistra",
+        TextKey::Location => "Posizione",
+        TextKey::MiddleCenter => "Centro Centrale",
+        TextKey::Mode => "Modalità",
+        TextKey::Minutes => "minuti",
+        TextKey::Moods => "Umore",
+        TextKey::NewName => "Nuovo nome",
+        TextKey::NativeAssetDimensions => "Asset nativo e dimensione resa",
+        TextKey::NextWatermark => "Filigrana successiva",
+        TextKey::Opacity => "Opacità",
+        TextKey::OpacityExpression => "Espressione opacità",
+        TextKey::OpacityOneToHundred => "Opacità (1-100)",
+        TextKey::Permanent => "Permanente",
+        TextKey::PerPass => "per passaggio",
+        TextKey::PlaceWithinSourceContent => "Posizionamento all'interno del contenuto sorgente",
+        TextKey::Placement => "Posizionamento",
+        TextKey::PlacementPreview => "Anteprima posizionamento",
+        TextKey::PreviewFailed => "Anteprima fallita",
+        TextKey::PreviewReferenceFullHd => "Quadro di riferimento Full HD · 1920×1080",
+        TextKey::PreviousWatermark => "Filigrana precedente",
+        TextKey::RightMiddle => "Centro Destra",
+        TextKey::SaveWatermark => "Salva Filigrana",
+        TextKey::Scaled => "Ridimensionato",
+        TextKey::SelectCustomImageToPreview => {
+            "Seleziona o carica un'immagine personalizzata per l'anteprima."
+        }
+        TextKey::Size => "Dimensione",
+        TextKey::TopLeft => "In alto a sinistra",
+        TextKey::TopMiddle => "In alto al centro",
+        TextKey::TopRight => "In alto a destra",
+        TextKey::UploadFailed => "Caricamento fallito.",
+        TextKey::UploadImage => "Carica immagine",
+        TextKey::UnsavedChanges => "Modifiche non salvate",
+        TextKey::UnsavedWatermarkChangesMessage => {
+            "Scartare le modifiche alla filigrana e aprire la filigrana selezionata?"
+        }
+        TextKey::VerticalMarginPercent => "Margine verticale (%)",
+        TextKey::WatermarkCopied => "Filigrana copiata.",
+        TextKey::WatermarkNotFound => "Filigrana non trovata.",
+        TextKey::WatermarkPlacementPreview => "anteprima posizionamento filigrana",
+        TextKey::WatermarkPreview => "anteprima filigrana",
+        TextKey::WatermarkNavigation => "Navigazione filigrana",
+        TextKey::WidthPercent => "Larghezza (%)",
+        TextKey::ZIndex => "Z-Index",
+        TextKey::DiscardChanges => "Scartare modifiche",
+        TextKey::XmltvBlockBehavior => "XMLTV Comportamento blocco",
+        TextKey::XmltvTimeZone => "XMLTV Fuso orario",
+        TextKey::Xmltv => "XMLTV",
+        TextKey::Badge => "Etichetta",
+        TextKey::Buttons => "Pulsanti",
+        TextKey::CheckValue => "Controlla",
+        TextKey::ChannelName => "Nome canale",
+        TextKey::ChannelNumber => "Numero canale",
+        TextKey::ComponentGallery => "ErsatzRS Galleria componenti",
+        TextKey::DangerButton => "Pericolo",
+        TextKey::DeleteDialog => "Dialogo eliminazione",
+        TextKey::Decrement => "Decrementa",
+        TextKey::Dialogs => "Dialoghi",
+        TextKey::DisabledButton => "Disabilitato",
+        TextKey::EnterName => "Inserisci nome",
+        TextKey::ErrorOccurred => "Si è verificato un errore.",
+        TextKey::ErrorToast => "Toast errore",
+        TextKey::ExampleModal => "Modal di esempio",
+        TextKey::ExampleModalBody => "Questo è il corpo del dialogo modale di esempio.",
+        TextKey::FormInputs => "Input modulo",
+        TextKey::Icons => "Icone",
+        TextKey::IncrementBadge => "Incrementa badge",
+        TextKey::InfoToast => "Toast info",
+        TextKey::JustFyi => "Solo a titolo informativo.",
+        TextKey::LinkButton => "Pulsante link",
+        TextKey::ModalCancelled => "Annullato.",
+        TextKey::ModalConfirmed => "Confermato!",
+        TextKey::NumValue => "N.",
+        TextKey::OpenModal => "Apri modulo",
+        TextKey::OperationSucceeded => "Operazione riuscita.",
+        TextKey::PagedTableDemo => "PagedTable (5 righe per pagina, 7 totali)",
+        TextKey::PrimaryButton => "Primario",
+        TextKey::SecondaryButton => "Secondario",
+        TextKey::SelectValue => "Seleziona",
+        TextKey::SomethingMightBeWrong => "Qualcosa potrebbe essere sbagliato.",
+        TextKey::SuccessToast => "Toast successo",
+        TextKey::TextButton => "Testo",
+        TextKey::TextValue => "Testo",
+        TextKey::Toasts => "Toast",
+        TextKey::WarningToast => "Toast avviso",
+        TextKey::YamlScript => "Script YAML",
+        TextKey::Yes => "Sì",
+    }
+}
+
+fn schedule_error_message(error: &str) -> String {
+    match error.trim() {
+        "Schedule name is required!" => "Il nome del programma è obbligatorio!".to_owned(),
+        "New Schedule Name is required." => "Il nuovo nome del programma è obbligatorio.".to_owned(),
+        "Schedule name must be 50 characters or less." => {
+            "Il nome del programma deve contenere 50 caratteri o meno.".to_owned()
+        }
+        "Schedule name must be unique" => "Il nome del programma deve essere unico".to_owned(),
+        "Schedule does not exist" => "Il programma non esiste".to_owned(),
+        "[ProgramScheduleId] does not exist." => "[ProgramScheduleId] non esiste.".to_owned(),
+        "A collection must use the same playback order in every schedule item." => {
+            "Una raccolta deve utilizzare lo stesso ordine di riproduzione in ogni elemento del programma.".to_owned()
+        }
+        "Shuffle In Order cannot be used with Fill With Group Mode." => {
+            "Shuffle In Order non può essere utilizzato con Fill With Group Mode.".to_owned()
+        }
+        "Fixed schedule items require a start time." => {
+            "Gli elementi del programma fissi richiedono un orario di inizio.".to_owned()
+        }
+        "Multi Collection items can only use Shuffle or Shuffle In Order." => {
+            "Gli elementi Multi Collection possono utilizzare solo Shuffle o Shuffle In Order.".to_owned()
+        }
+        "Playlist Item Size can only be used with Playlist schedule items." => {
+            "La dimensione dell'elemento della playlist può essere utilizzata solo con gli elementi di programmazione della playlist.".to_owned()
+        }
+        "Multiple playout mode with Count requires a count expression." => {
+            "La modalità di riproduzione multipla con Conteggio richiede un'espressione di conteggio.".to_owned()
+        }
+        "Duration playout mode requires a duration between 1 minute and 24 hours." => {
+            "La modalità di riproduzione Durata richiede una durata compresa tra 1 minuto e 24 ore.".to_owned()
+        }
+        "Duration playout mode requires discard-to-fill attempts." => {
+            "La modalità di riproduzione Durata richiede tentativi di eliminazione per riempimento.".to_owned()
+        }
+        "Tail Mode Filler requires a tail filler preset." => {
+            "Il riempitore di coda richiede un preset di riempitore di coda.".to_owned()
+        }
+        "Tail filler can only be set when Tail Mode is Filler." => {
+            "Il riempitore di coda può essere impostato solo quando la modalità di coda è Riempitore.".to_owned()
+        }
+        "Collection is required." => "È richiesta una Raccolta.".to_owned(),
+        "Media item is required." => "È richiesto un elemento multimediale.".to_owned(),
+        "Multi Collection is required." => "È richiesta una Multi-Raccolta.".to_owned(),
+        "Smart Collection is required." => "È richiesta una Raccolta Intelligente.".to_owned(),
+        "Playlist is required." => "È richiesta una Playlist.".to_owned(),
+        "Rerun Collection is required." => "È richiesta una Raccolta di Ripetizione.".to_owned(),
+        "Search Query is required." => "È richiesta una Query di ricerca.".to_owned(),
+        "Only one pre-, mid-, or post-roll filler can pad to the nearest minute." => {
+            "Solo un riempitore pre-, mid- o post-roll può essere utilizzato per arrotondare al minuto più vicino.".to_owned()
+        }
+        "Padding filler requires a fallback filler." => {
+            "Il riempitore di riempimento richiede un riempitore di riserva.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn scheduling_content_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("A template named \"")
+        && trimmed.ends_with("\" already exists in that template group")
+    {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Block from ") && trimmed.contains("interseca il blocco da") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Il gruppo deco non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Deco ") && trimmed.ends_with(" does not exist.") {
+        return "Deco non esiste.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Il gruppo di modelli deco non esiste.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplate ") && trimmed.ends_with(" does not exist.") {
+        return "Il modello deco non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Deco name \"") && trimmed.ends_with("\" is invalid") {
+        return "Il nome del deco deve essere di 50 caratteri o meno.".to_owned();
+    }
+    if trimmed.starts_with("A deco named \"")
+        && trimmed.ends_with("\" already exists in that deco group")
+    {
+        return "Un deco con quel nome esiste già in quel gruppo deco.".to_owned();
+    }
+    if trimmed.starts_with("Deco template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Il nome del modello deco deve essere di 50 caratteri o meno.".to_owned();
+    }
+    if trimmed.starts_with("A deco template named \"")
+        && trimmed.ends_with("\" already exists in that deco template group")
+    {
+        return "Un modello deco con quel nome esiste già in quel gruppo di modelli deco."
+            .to_owned();
+    }
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Watermark non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
+        return "L'elemento grafico non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Deco from ") && trimmed.contains("interseca deco da") {
+        return "Il deco sovrappone un altro deco.".to_owned();
+    }
+
+    match trimmed {
+        "Block does not exist." => "Il blocco non esiste.".to_owned(),
+        "Block group name is required" => "È richiesto il nome del gruppo di blocchi".to_owned(),
+        "Block group name must be unique" => {
+            "Il nome del gruppo di blocchi deve essere unico".to_owned()
+        }
+        "Block name is required" => "È richiesto il nome del blocco".to_owned(),
+        "A block named with that value already exists in that block group" => {
+            "Un blocco denominato con quel valore esiste già in quel gruppo di blocchi".to_owned()
+        }
+        "Block duration must be between 5 minutes and 24 hours" => {
+            "La durata del blocco deve essere compresa tra 5 minuti e 24 ore".to_owned()
+        }
+        "[Collection] is required for collection type 'Collection'" => {
+            "[Collection] è richiesto per il tipo di raccolta 'Collection'".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionShow'" => {
+            "[MediaItem] è richiesto per il tipo di raccolta 'TelevisionShow'".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionSeason'" => {
+            "[MediaItem] è richiesto per il tipo di raccolta 'TelevisionSeason'".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "[MultiCollection] è richiesto per il tipo di raccolta 'MultiCollection'".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "[SmartCollection] è richiesto per il tipo di raccolta 'SmartCollection'".to_owned()
+        }
+        "[SearchQuery] is required for collection type 'SearchQuery'" => {
+            "[SearchQuery] è richiesto per il tipo di collezione 'SearchQuery'".to_owned()
+        }
+        "[CollectionType] is invalid" => "[CollectionType] non è valido".to_owned(),
+        "[BlockId] does not exist." => "[BlockId] non esiste.".to_owned(),
+        "Template does not exist." => "Il modello non esiste.".to_owned(),
+        "Template group name is required" => "È richiesto il nome del gruppo modello".to_owned(),
+        "Template group name must be 50 characters or fewer" => {
+            "Il nome del gruppo modello deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Template group name must be unique" => {
+            "Il nome del gruppo modello deve essere unico".to_owned()
+        }
+        "Template group does not exist." => "Il gruppo modello non esiste.".to_owned(),
+        "[TemplateId] does not exist." => "[TemplateId] non esiste.".to_owned(),
+        "Template name is required" => "È richiesto il nome del modello".to_owned(),
+        "Template items cannot cross midnight." => {
+            "Gli elementi del modello non possono attraversare la mezzanotte.".to_owned()
+        }
+        "Deco group name is required" => "È richiesto il nome del gruppo deco".to_owned(),
+        "Deco group name must be 50 characters or fewer" => {
+            "Il nome del gruppo deco deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Deco group name must be unique" => "Il nome del gruppo deco deve essere unico".to_owned(),
+        "Deco group does not exist." => "Il gruppo deco non esiste.".to_owned(),
+        "Deco name is required" => "È richiesto il nome deco".to_owned(),
+        "Deco does not exist" => "Deco non esiste.".to_owned(),
+        "Default filler has unsupported collection type." => {
+            "Il riempimento predefinito ha un tipo di collezione non supportato.".to_owned()
+        }
+        "Dead air fallback has unsupported collection type." => {
+            "Il fallback per il silenzio ha un tipo di collezione non supportato.".to_owned()
+        }
+        "Break content has unsupported collection type." => {
+            "Il contenuto di pausa ha un tipo di collezione non supportato.".to_owned()
+        }
+        "Default filler must have valid item" => {
+            "Il riempimento predefinito deve avere un elemento valido".to_owned()
+        }
+        "Dead air fallback must have valid item" => {
+            "Il fallback per il silenzio deve avere un elemento valido".to_owned()
+        }
+        "Break content collection must have valid item" => {
+            "La collezione di contenuto di pausa deve avere un elemento valido".to_owned()
+        }
+        "Break content multi collection must have valid item" => {
+            "La collezione multi-collezione di contenuto di pausa deve avere un elemento valido"
+                .to_owned()
+        }
+        "Break content smart collection must have valid item" => {
+            "La collezione intelligente di contenuto di pausa deve avere un elemento valido"
+                .to_owned()
+        }
+        "Break content media item must have valid item" => {
+            "L'elemento multimediale di contenuto di pausa deve avere un elemento valido".to_owned()
+        }
+        "Break content playlist must have valid item" => {
+            "La playlist di contenuto di pausa deve avere un elemento valido".to_owned()
+        }
+        "Default filler item does not exist." => {
+            "L'elemento di riempimento predefinito non esiste.".to_owned()
+        }
+        "Dead air fallback item does not exist." => {
+            "L'elemento di fallback per il silenzio non esiste.".to_owned()
+        }
+        "Break content collection item does not exist." => {
+            "L'elemento di collezione di contenuto di pausa non esiste.".to_owned()
+        }
+        "Break content multi collection item does not exist." => {
+            "L'elemento di collezione multi-collezione di contenuto di pausa non esiste.".to_owned()
+        }
+        "Break content smart collection item does not exist." => {
+            "L'elemento di collezione intelligente di contenuto di pausa non esiste.".to_owned()
+        }
+        "Break content media item item does not exist." => {
+            "L'elemento multimediale di contenuto di pausa non esiste.".to_owned()
+        }
+        "Break content playlist item does not exist." => {
+            "La playlist di contenuto di pausa non esiste.".to_owned()
+        }
+        "Deco may only contain one [Block Start] break content" => {
+            "Deco può contenere solo un contenuto di pausa Block Start.".to_owned()
+        }
+        "Deco may only contain one [Between Block Items] break content" => {
+            "Deco può contenere solo un contenuto di pausa Between Block Items.".to_owned()
+        }
+        "Deco may only contain one [At Chapter Markers] break content" => {
+            "Deco può contenere solo un contenuto di pausa At Chapter Markers.".to_owned()
+        }
+        "Deco may only contain one [Block Finish] break content" => {
+            "Deco può contenere solo un contenuto di pausa Block Finish.".to_owned()
+        }
+        "Deco template group name is required" => {
+            "È richiesto il nome del gruppo modello deco".to_owned()
+        }
+        "Deco template group name must be 50 characters or fewer" => {
+            "Il nome del gruppo modello Deco deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Deco template group name must be unique" => {
+            "Il nome del gruppo modello Deco deve essere unico".to_owned()
+        }
+        "Deco template group does not exist." => "Il gruppo di modelli deco non esiste.".to_owned(),
+        "[DecoTemplateId] does not exist." => "Il modello deco non esiste.".to_owned(),
+        "Deco template name is required" => "Il nome del modello Deco è obbligatorio".to_owned(),
+        "[DecoId] does not exist." => "Deco non esiste.".to_owned(),
+        "Deco template items cannot be empty." => {
+            "Gli elementi del modello Deco non possono essere vuoti.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn watermark_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Filigrana non trovata.".to_owned();
+    }
+
+    match trimmed {
+        "Name is required" => "Il nome è obbligatorio".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "Il nome deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Watermark image is required" | "Watermark image is required!" => {
+            "L'immagine filigrana è obbligatoria".to_owned()
+        }
+        "Width must be between 0 and 100%" => {
+            "La larghezza deve essere compresa tra 0 e 100%".to_owned()
+        }
+        "Horizontal margin must be between 0 and 50%" => {
+            "Il margine orizzontale deve essere compreso tra 0 e 50%".to_owned()
+        }
+        "Vertical margin must be between 0 and 50%" => {
+            "Il margine verticale deve essere compreso tra 0 e 50%".to_owned()
+        }
+        "Duration must be positive and less than frequency window" => {
+            "La durata deve essere positiva e inferiore alla finestra di frequenza".to_owned()
+        }
+        "Opacity must be between 1 and 100" => {
+            "L'opacità deve essere compresa tra 1 e 100".to_owned()
+        }
+        "Watermark name must be unique" | "ChannelWatermark name must be unique" => {
+            "Il nome filigrana deve essere unico".to_owned()
+        }
+        "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
+            "Filigrana non trovata.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn ffmpeg_profile_hardware_acceleration_label(value: i32) -> String {
+    match value {
+        1 => "QSV",
+        2 => "NVENC",
+        3 => "VAAPI",
+        4 => "VideoToolbox",
+        5 => "AMF",
+        6 => "V4L2M2M",
+        7 => "RKMPP",
+        _ => return format!("Sconosciuto ({value})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_video_format_label(format: i32) -> String {
+    match format {
+        0 => "Nessuno",
+        1 => "H264",
+        2 => "H265 (HEVC)",
+        3 => "MPEG-2",
+        4 => "AV1",
+        99 => text(TextKey::Copy),
+        _ => return format!("Sconosciuto ({format})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_audio_format_label(format: i32) -> String {
+    match format {
+        0 => "Nessuno",
+        1 => "AAC",
+        2 => "AC3",
+        3 => "AAC (LATM)",
+        99 => text(TextKey::Copy),
+        _ => return format!("Sconosciuto ({format})"),
+    }
+    .to_owned()
+}
+
+fn settings_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    let trimmed = trimmed
+        .strip_prefix("update Windows startup registration is unavailable: ")
+        .unwrap_or(trimmed);
+
+    if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
+        return format!(
+            "XMLTV giorni per costruire ({current}) non può essere maggiore dei giorni per costruire Playout ({limit})"
+        );
+    }
+    if let Some(name) = trimmed.strip_suffix(" path does not exist") {
+        return format!("il percorso {name} non esiste");
+    }
+    if let Some(name) = trimmed
+        .strip_prefix("Unable to verify ")
+        .and_then(|value| value.strip_suffix(" version"))
+    {
+        return format!("Impossibile verificare la versione {name}");
+    }
+    if let Some(value) = trimmed.strip_prefix("Invalid option: ") {
+        return format!("Opzione non valida: {value}");
+    }
+    if trimmed.starts_with("Resolution ") && trimmed.ends_with(" does not exist.") {
+        return "La risoluzione non esiste.".to_owned();
+    }
+
+    match trimmed {
+        "Windows startup registration is not supported on this platform" => {
+            "La registrazione all'avvio di Windows non è supportata su questa piattaforma".to_owned()
+        }
+        "ErsatzRS.exe was not found next to ersatzrs-web.exe" => {
+            "ErsatzRS.exe non è stato trovato accanto a ersatzrs-web.exe".to_owned()
+        }
+        "Unable to update Windows startup registration" => {
+            "Impossibile aggiornare la registrazione all'avvio di Windows".to_owned()
+        }
+        "Tuner count must be greater than zero" => {
+            "Il numero di sintonizzatori deve essere maggiore di zero".to_owned()
+        }
+        "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
+            "L'intervallo di aggiornamento della libreria deve essere 0 (non aggiornare) o maggiore di zero".to_owned()
+        }
+        "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh" => {
+            "L'intervallo di aggiornamento della libreria deve essere inferiore a 1.000.000. Usa 0 per disabilitare l'aggiornamento automatico".to_owned()
+        }
+        "Playout days to build must be greater than zero" => {
+            "I giorni per costruire Playout devono essere maggiori di zero".to_owned()
+        }
+        "Scripted schedule timeout seconds must be at least 10" => {
+            "I secondi di timeout dell'orario programmato devono essere almeno 10".to_owned()
+        }
+        "XMLTV days to build must be greater than zero" => {
+            "XMLTV giorni per costruire devono essere maggiori di zero".to_owned()
+        }
+        "Resolution width or height is invalid" => {
+            "La larghezza o l'altezza della risoluzione non sono valide".to_owned()
+        }
+        "Resolution width and height must be unique" => {
+            "La larghezza e l'altezza della risoluzione devono essere uniche".to_owned()
+        }
+        "HLS Segmenter idle timeout must be greater than or equal to 30" => {
+            "HLS Timeout di inattività del segmentatore deve essere maggiore o uguale a 30".to_owned()
+        }
+        "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
+            "HLS Limite del segmentatore Work-Ahead deve essere maggiore o uguale a 0".to_owned()
+        }
+        "Active HLS transcode limit must be greater than or equal to 1" => {
+            "HLS Limite di transcoding attivo deve essere maggiore o uguale a 1".to_owned()
+        }
+        "HLS Segmenter initial segment count must be greater than or equal to 1" => {
+            "HLS Numero iniziale di segmenti del segmentatore deve essere maggiore o uguale a 1".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_action_error_message(error: &str) -> String {
+    match error.trim() {
+        "Collection name is required" => "Il nome della raccolta è obbligatorio".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Il nome della raccolta deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Collection name must be unique" => "Il nome della raccolta deve essere unico".to_owned(),
+        "Media item does not exist" => "L'elemento multimediale non esiste".to_owned(),
+        "Collection does not exist" | "Collection does not exist." => {
+            "La raccolta non esiste.".to_owned()
+        }
+        "Playlist does not exist" | "Playlist does not exist." => {
+            "La playlist non esiste.".to_owned()
+        }
+        "Unable to locate media item" => {
+            "Impossibile localizzare l'elemento multimediale".to_owned()
+        }
+        "Media action failed" => "Azione multimediale fallita".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn filler_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("FillerPreset ") && trimmed.ends_with(" does not exist.") {
+        return "Il preset filler non esiste.".to_owned();
+    }
+
+    match trimmed {
+        "Filler preset does not exist" => "Il preset filler non esiste.".to_owned(),
+        "Filler preset name must be unique" => {
+            "Il nome del preset filler deve essere unico".to_owned()
+        }
+        "Name must not be empty" => "Il nome non può essere vuoto".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "Il nome deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Filler kind must not be None" => "Il tipo di filler non può essere None".to_owned(),
+        "Filler mode must not be None" => "La modalità filler non può essere None".to_owned(),
+        "Count must be greater than or equal to 0" => {
+            "Il conteggio deve essere maggiore o uguale a 0".to_owned()
+        }
+        "Duration must not be empty" => "La durata non può essere vuota".to_owned(),
+        "Pad To Nearest Minute must not be empty" => {
+            "\"Pad To Nearest Minute\" non può essere vuoto".to_owned()
+        }
+        "Use Chapters As Media Items must not be enabled for fallback filler" => {
+            "\"Use Chapters As Media Items\" non può essere abilitato per il filler di riserva"
+                .to_owned()
+        }
+        "Collection must not be empty" => "La raccolta non può essere vuota".to_owned(),
+        "Multi Collection must not be empty" => "La raccolta multi non può essere vuota".to_owned(),
+        "Smart Collection must not be empty" => {
+            "La raccolta intelligente non può essere vuota".to_owned()
+        }
+        "Media item must not be empty" => "L'elemento multimediale non può essere vuoto".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_browser_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed == "La selezione dello stream bloccato è non valida o non è più disponibile." {
+        return trimmed.to_owned();
+    }
+    if trimmed == "Il film non è stato trovato." {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
+        return "La raccolta è già presente.".to_owned();
+    }
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" does not exist.") {
+        return "La raccolta non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" is already present.") {
+        return "La raccolta intelligente è già presente.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" does not exist.") {
+        return "La raccolta intelligente non esiste.".to_owned();
+    }
+    if trimmed.starts_with("MultiCollection ") && trimmed.ends_with(" does not exist.") {
+        return "La raccolta multi non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Rerun collection ") && trimmed.ends_with(" does not exist.") {
+        return "La raccolta di ripetizione non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Referenced item ") && trimmed.ends_with(" does not exist.") {
+        return "L'elemento di riferimento non esiste.".to_owned();
+    }
+    if trimmed.starts_with("PlaylistGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Il gruppo della playlist non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Playlist ") && trimmed.ends_with(" does not exist.") {
+        return "La playlist non esiste.".to_owned();
+    }
+    if trimmed.starts_with("Playlist name \"") && trimmed.ends_with("\" is invalid") {
+        return "Il nome della playlist non è valido.".to_owned();
+    }
+    if let Some(error) = trimmed.strip_prefix("Playlist preview failed: ") {
+        return format!("La anteprima della playlist è fallita: {error}");
+    }
+    if trimmed.starts_with("Media item ") && trimmed.ends_with(" does not exist.") {
+        return "L'elemento multimediale non esiste.".to_owned();
+    }
+
+    match trimmed {
+        "Collection name is required" => "Il nome della raccolta è obbligatorio".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Il nome della raccolta deve essere di 50 caratteri o meno".to_owned()
+        }
+        "Collection name must be unique" => "Il nome della raccolta deve essere unico".to_owned(),
+        "Collection does not exist." => "La raccolta non esiste.".to_owned(),
+        "Smart collection name is required" => {
+            "Il nome della raccolta intelligente è richiesto".to_owned()
+        }
+        "Smart collection query is required" => {
+            "La query della raccolta intelligente è richiesta".to_owned()
+        }
+        "SmartCollection name must be unique" => {
+            "Il nome della raccolta intelligente deve essere unico".to_owned()
+        }
+        "MultiCollection does not exist." => "La raccolta multi non esiste.".to_owned(),
+        "Multi-collection name is required!" => {
+            "Il nome della raccolta multi è richiesto.".to_owned()
+        }
+        "Multi-collection name cannot be longer than 50 characters." => {
+            "Il nome della raccolta multipla non può superare i 50 caratteri.".to_owned()
+        }
+        "MultiCollection name must be unique" => {
+            "Il nome della raccolta multi deve essere unico".to_owned()
+        }
+        "Each multi-collection item must reference exactly one collection." => {
+            "Ogni elemento della raccolta multi deve fare riferimento a esattamente una raccolta."
+                .to_owned()
+        }
+        "Rerun collection does not exist." => "La raccolta di ripetizione non esiste.".to_owned(),
+        "[Name] is an empty string" | "[Name] must not be empty." => {
+            "Il nome non può essere vuoto.".to_owned()
+        }
+        "[Name] must not be longer than 50" | "[Name] must not be longer than 50." => {
+            "Il nome non può essere più lungo di 50 caratteri.".to_owned()
+        }
+        "Rerun collection name must be unique" => {
+            "Il nome della raccolta di ripetizione deve essere unico".to_owned()
+        }
+        "Unsupported collection type." => "Tipo di raccolta non supportato.".to_owned(),
+        "[ProgramScheduleId] does not exist." => "L'orario non esiste.".to_owned(),
+        "[MediaItem] does not exist." => "L'elemento multimediale non esiste.".to_owned(),
+        "[PlaylistGroupId] does not exist." => "Il gruppo della playlist non esiste.".to_owned(),
+        "Cannot delete system playlist group" => {
+            "Non è possibile eliminare il gruppo della playlist di sistema".to_owned()
+        }
+        "Cannot delete system (generated) playlist" => {
+            "Non è possibile eliminare la playlist di sistema (generata)".to_owned()
+        }
+        "[PlaylistId] does not exist." => "La playlist non esiste.".to_owned(),
+        "Cannot save system (generated) playlist" => {
+            "Non è possibile salvare la playlist di sistema (generata)".to_owned()
+        }
+        "Playlist playout preview has no items" => {
+            "L'anteprima di emissione della lista di riproduzione non contiene elementi".to_owned()
+        }
+        "Playlist name is required" => "Il nome della playlist è richiesto".to_owned(),
+        "[Collection] is required for collection type 'Collection'" => {
+            "È richiesta una Raccolta.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "La raccolta multi è richiesta.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "La raccolta intelligente è richiesta.".to_owned()
+        }
+        "[CollectionType] is invalid" => "Il tipo di raccolta non è valido.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_source_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Could not reach Jellyfin: ") {
+        return format!("Impossibile raggiungere Jellyfin: {error}");
+    }
+
+    match trimmed {
+        "Address is required." => "L'indirizzo è obbligatorio.".to_owned(),
+        "API key is required." => "La chiave API è obbligatoria.".to_owned(),
+        "'Address' must be a valid URL" => "'Address' deve essere un URL valido".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn trakt_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
+    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
+        return format!("Impossibile raggiungere Trakt: {error}");
+    }
+    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
+        return "L'elenco Trakt non esiste.".to_owned();
+    }
+
+    match normalized {
+        "Invalid Trakt list url" => "Elenco Trakt URL non valido.".to_owned(),
+        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
+            "Il ClientId Trakt non è configurato; impostare TRAKT__CLIENTID.".to_owned()
+        }
+        "Trakt API client is not configured for this operation" => {
+            "Il client Trakt API non è configurato per questa operazione.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn upload_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Cannot create upload directory: ") {
+        return format!("Impossibile creare la directory di caricamento: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Write failed: ") {
+        return format!("Scrittura fallita: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Read field: ") {
+        return format!("Lettura campo: {error}");
+    }
+
+    match trimmed {
+        "Upload exceeds maximum allowed size" => {
+            "Il caricamento supera la dimensione massima consentita.".to_owned()
+        }
+        "No file field" => "Nessun campo file trovato.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
+    let rest = error.strip_prefix("XMLTV days to build (")?;
+    let (current, rest) = rest.split_once(") cannot be greater than Playout days to build (")?;
+    let limit = rest.strip_suffix(')')?;
+    Some((current, limit))
+}
+
+fn ffmpeg_profile_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("An FFmpeg profile named \"") && trimmed.ends_with("\" already exists.")
+    {
+        return trimmed.to_owned();
+    }
+
+    match trimmed {
+        "Profile name is required." => "Il nome del profilo è richiesto.".to_owned(),
+        "Profile name must be 50 characters or fewer." => {
+            "Il nome del profilo deve essere di 50 caratteri o meno.".to_owned()
+        }
+        "Thread count must be 0 or greater." => "Il conteggio dei thread deve essere 0 o maggiore.".to_owned(),
+        "QSV supports formats (h264, hevc, mpeg2video)" => {
+            "QSV supporta i formati (h264, hevc, mpeg2video).".to_owned()
+        }
+        "NVENC supports formats (h264, hevc, av1)" => {
+            "NVENC supporta i formati (h264, hevc, av1).".to_owned()
+        }
+        "VAAPI supports formats (h264, hevc, av1, mpeg2video)" => {
+            "VAAPI supporta i formati (h264, hevc, av1, mpeg2video).".to_owned()
+        }
+        "VideoToolbox supports formats (h264, hevc)" => {
+            "VideoToolbox supporta i formati (h264, hevc).".to_owned()
+        }
+        "Amf supports formats (h264, hevc)" => "Amf supporta i formati (h264, hevc).".to_owned(),
+        "V4L2 M2M supports formats (h264, hevc)" => {
+            "V4L2 M2M supporta i formati (h264, hevc).".to_owned()
+        }
+        "Rkmpp supports formats (h264, hevc)" => "Rkmpp supporta i formati (h264, hevc).".to_owned(),
+        "HDR10 output requires hevc or av1; h264 and mpeg2video cannot carry HDR10 static metadata" => {
+            "HDR10 output richiede hevc o av1; h264 e mpeg2video non possono trasportare HDR10 static metadata.".to_owned()
+        }
+        "HDR10 output requires 10-bit; 8-bit cannot represent a PQ signal without banding" => {
+            "HDR10 output richiede 10-bit; 8-bit non può rappresentare un segnale PQ senza banding.".to_owned()
+        }
+        "Mastering display must look like G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), with chromaticities up to 50000 and max luminance above min" => {
+            "Mastering display deve assomigliare a G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1), con cromaticità fino a 50000 e luminosità massima superiore al minimo.".to_owned()
+        }
+        "MaxCLL and MaxFALL must both be set (or both left empty), at most 65535, with MaxFALL no greater than MaxCLL" => {
+            "MaxCLL e MaxFALL devono essere entrambi impostati (o entrambi lasciati vuoti), al massimo 65535, con MaxFALL non superiore a MaxCLL.".to_owned()
+        }
+        "Mpeg2Video does not support 10-bit content" => {
+            "Mpeg2Video non supporta contenuti 10-bit.".to_owned()
+        }
+        "VideoProfile must be high10 with 10-bit h264" => {
+            "Video Profile deve essere high10 con h264 10-bit.".to_owned()
+        }
+        "VideoProfile must be high444p with NVIDIA 10-bit h264" => {
+            "Video Profile deve essere high444p con NVIDIA 10-bit h264.".to_owned()
+        }
+        "VideoProfile cannot be high10 with 8-bit h264" => {
+            "Video Profile non può essere high10 con h264 8-bit.".to_owned()
+        }
+        "Source profile not found." => "Profilo sorgente non trovato.".to_owned(),
+        "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
+            "Non sono disponibili risoluzioni FFmpeg; il bootstrap del database è incompleto".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_matches_italian_locale_contract() {
+        assert_eq!(SORT_ORDER, 90);
+        assert_eq!(CODE, "it-it");
+        assert_eq!(LABEL, "Italiano (Italia)");
+        assert_eq!(ALIASES, &["it", "it-it", "it_it"]);
+    }
+
+    #[test]
+    fn representative_admin_text_is_italian() {
+        assert_eq!(text(TextKey::Save), "Salva");
+        assert_eq!(text(TextKey::Settings), "Impostazioni");
+        assert_eq!(text(TextKey::Movies), "Film");
+        assert_eq!(text(TextKey::Addons), "Add-ons");
+    }
+
+    #[test]
+    fn dynamic_helpers_and_unknown_errors_are_stable() {
+        assert_eq!(STRINGS.health_summary(1, 2), "1 errore, 2 avvisi");
+        assert_eq!(STRINGS.health_summary(2, 1), "2 errori, 1 avviso");
+        assert_eq!(
+            schedule_error_message("custom database failure"),
+            "custom database failure"
+        );
+        assert_eq!(
+            settings_error_message("custom database failure"),
+            "custom database failure"
+        );
+    }
+}

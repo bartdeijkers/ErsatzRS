@@ -69,8 +69,36 @@ fn normalize_language_input(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum TextKey {
+    Addon,
+    Addons,
+    AddonRepositories,
+    AvailableAddons,
+    InstalledAddons,
+    AddRepository,
+    RepositoryUrl,
+    PublicSigningKey,
+    DeploymentManagedRepositories,
+    Refresh,
+    Install,
+    UpdateAddon,
+    Uninstall,
+    Configuration,
+    SecretReference,
+    EnvironmentVariable,
+    SecretFile,
+    Incompatible,
+    PackageUnavailable,
+    Official,
+    ThirdParty,
+    Permissions,
+    Capabilities,
+    Dependencies,
+    Optional,
+    MediaReadAccess,
+    ExternalCommands,
+    ThirdPartyRepositoryWarning,
     AddCustomResolution,
     AddBlock,
     AddBlockGroup,
@@ -1321,6 +1349,34 @@ pub enum TextKey {
 }
 
 pub const ALL_TEXT_KEYS: &[TextKey] = &[
+    TextKey::Addon,
+    TextKey::Addons,
+    TextKey::AddonRepositories,
+    TextKey::AvailableAddons,
+    TextKey::InstalledAddons,
+    TextKey::AddRepository,
+    TextKey::RepositoryUrl,
+    TextKey::PublicSigningKey,
+    TextKey::DeploymentManagedRepositories,
+    TextKey::Refresh,
+    TextKey::Install,
+    TextKey::UpdateAddon,
+    TextKey::Uninstall,
+    TextKey::Configuration,
+    TextKey::SecretReference,
+    TextKey::EnvironmentVariable,
+    TextKey::SecretFile,
+    TextKey::Incompatible,
+    TextKey::PackageUnavailable,
+    TextKey::Official,
+    TextKey::ThirdParty,
+    TextKey::Permissions,
+    TextKey::Capabilities,
+    TextKey::Dependencies,
+    TextKey::Optional,
+    TextKey::MediaReadAccess,
+    TextKey::ExternalCommands,
+    TextKey::ThirdPartyRepositoryWarning,
     TextKey::AddCustomResolution,
     TextKey::AddBlock,
     TextKey::AddBlockGroup,
@@ -1714,7 +1770,6 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::DiscardToFillAttempts,
     TextKey::Duration,
     TextKey::Dynamic,
-    TextKey::EditFillerPreset,
     TextKey::EditProperties,
     TextKey::EditScheduleItems,
     TextKey::EditSmartCollection,
@@ -2553,7 +2608,6 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::MpegTsTroubleshooting,
     TextKey::NotApplicable,
     TextKey::NotAvailable,
-    TextKey::Packets,
     TextKey::PcrFindings,
     TextKey::Pids,
     TextKey::PublicMpegTs,
@@ -2564,11 +2618,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SampleBytes,
     TextKey::SampleUrl,
     TextKey::Services,
-    TextKey::Stable,
     TextKey::StandardError,
     TextKey::StandardOutput,
     TextKey::Status,
-    TextKey::StabilityMeter,
     TextKey::Summary,
     TextKey::TsdDuckVersion,
 ];
@@ -2900,6 +2952,7 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
 }
 
 const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
+const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
     "Classic playout enumerator state is incomplete for: ";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str =
@@ -2912,6 +2965,7 @@ pub fn health_check_title(title: &str) -> String {
 pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
+        ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
         _ => title.to_owned(),
     }
 }
@@ -3138,44 +3192,59 @@ pub fn load_language_initial_for_state(app_state: &crate::host::state::AppState)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
-    fn supported_languages_match_requested_i18n_scope() {
-        let values: Vec<String> = supported_ui_language_options()
-            .into_iter()
-            .map(|option| option.value)
-            .collect();
+    fn supported_languages_follow_the_generated_registry() {
+        let languages = crate::admin::languages::LANGUAGES;
+        let options = supported_ui_language_options();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl", "fr-fr"]);
+        assert_eq!(
+            languages.first().map(|language| language.code),
+            Some("en-us")
+        );
+        assert_eq!(options.len(), languages.len());
+
+        let mut codes = HashSet::new();
+        for (option, language) in options.iter().zip(languages) {
+            assert!(
+                codes.insert(language.code),
+                "duplicate language code {}",
+                language.code
+            );
+            assert!(!language.label.trim().is_empty());
+            assert_eq!(option.value, language.code);
+            assert_eq!(option.label, language.label);
+            assert_eq!(normalize_ui_language(language.code), language.code);
+            for alias in language.aliases {
+                assert_eq!(normalize_ui_language(alias), language.code);
+            }
+        }
     }
 
     #[test]
     fn all_languages_translate_each_key() {
-        let languages = [
-            UiLanguage::English,
-            UiLanguage::Polish,
-            UiLanguage::PortugueseBrazil,
-            UiLanguage::Dutch,
-            UiLanguage::French,
-        ];
-        for language in languages {
+        let mut keys = HashSet::new();
+        for key in ALL_TEXT_KEYS {
+            assert!(keys.insert(*key), "duplicate text key: {key:?}");
+        }
+
+        for definition in crate::admin::languages::LANGUAGES {
             for key in ALL_TEXT_KEYS {
-                assert!(!text(language, *key).trim().is_empty());
+                assert!(
+                    !definition.strings.text(*key).trim().is_empty(),
+                    "{} has an empty translation for {key:?}",
+                    definition.code
+                );
             }
         }
     }
 
     #[test]
     fn classic_playout_health_text_is_localized_for_every_language() {
-        let languages = [
-            UiLanguage::English,
-            UiLanguage::Polish,
-            UiLanguage::PortugueseBrazil,
-            UiLanguage::Dutch,
-            UiLanguage::French,
-        ];
         let message = "Classic playout enumerator state is incomplete for: 50 - Health. The scheduler must Refresh these playouts before they can continue safely.";
-        for language in languages {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
             let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
             let localized = health_check_message_text(
                 language,
@@ -3185,7 +3254,7 @@ mod tests {
             );
             assert!(!title.trim().is_empty());
             assert!(localized.contains("50 - Health"));
-            if language != UiLanguage::English {
+            if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
                 assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
             }

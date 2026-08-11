@@ -14,6 +14,7 @@ type RouteExpectation = {
   marker: string;
   englishMarker?: string;
   unit?: string;
+  settingsSave?: boolean;
 };
 
 type LanguageExpectation = {
@@ -43,6 +44,12 @@ const languages: LanguageExpectation[] = [
       { path: '/settings/playout', heading: 'Playout', marker: 'Skip Missing Items' },
       { path: '/settings/ui', heading: 'UI', marker: 'Theme' },
       { path: '/settings/xmltv', heading: 'XMLTV', marker: 'XMLTV Time Zone' },
+      {
+        path: '/settings/addons',
+        heading: 'Add-ons',
+        marker: 'Add-on repositories',
+        settingsSave: false,
+      },
     ],
   },
   {
@@ -88,6 +95,13 @@ const languages: LanguageExpectation[] = [
         heading: 'XMLTV',
         marker: 'Strefa czasowa XMLTV',
         englishMarker: 'XMLTV Time Zone',
+      },
+      {
+        path: '/settings/addons',
+        heading: 'Dodatki',
+        marker: 'Repozytoria dodatków',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
       },
     ],
   },
@@ -135,6 +149,13 @@ const languages: LanguageExpectation[] = [
         marker: 'Fuso horário XMLTV',
         englishMarker: 'XMLTV Time Zone',
       },
+      {
+        path: '/settings/addons',
+        heading: 'Complementos',
+        marker: 'Repositórios de complementos',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
+      },
     ],
   },
   {
@@ -180,6 +201,13 @@ const languages: LanguageExpectation[] = [
         heading: 'XMLTV',
         marker: 'XMLTV-tijdzone',
         englishMarker: 'XMLTV Time Zone',
+      },
+      {
+        path: '/settings/addons',
+        heading: 'Add-ons',
+        marker: 'Add-onrepositories',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
       },
     ],
   },
@@ -227,6 +255,135 @@ const languages: LanguageExpectation[] = [
         marker: 'Fuseau horaire XMLTV',
         englishMarker: 'XMLTV Time Zone',
       },
+      {
+        path: '/settings/addons',
+        heading: 'Extensions',
+        marker: 'Dépôts d’extensions',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
+      },
+    ],
+  },
+  {
+    code: 'it-it',
+    save: 'Salva impostazioni',
+    defaultSubtitleLanguage: 'Lingua sottotitoli predefinita',
+    fallbackSubtitleLanguage: 'Lingua sottotitoli di riserva',
+    routes: [
+      { path: '/settings/ffmpeg', heading: 'FFmpeg', marker: 'Percorso FFmpeg', englishMarker: 'FFmpeg Path' },
+      { path: '/settings/logging', heading: 'Registrazione', marker: 'Livello di Log Minimo Predefinito', englishMarker: 'Default Minimum Log Level' },
+      { path: '/settings/hdhr', heading: 'HDHomeRun', marker: 'Numero di sintonizzatori', englishMarker: 'Tuner Count' },
+      { path: '/settings/scanner', heading: 'Scanner', marker: 'Intervallo di aggiornamento della biblioteca', englishMarker: 'Library Refresh Interval', unit: 'ore' },
+      { path: '/settings/playout', heading: 'Riproduzione', marker: 'Salta gli elementi mancanti', englishMarker: 'Skip Missing Items' },
+      { path: '/settings/ui', heading: 'Interfaccia utente', marker: 'Tema', englishMarker: 'Theme' },
+      { path: '/settings/xmltv', heading: 'XMLTV', marker: 'XMLTV Fuso orario', englishMarker: 'XMLTV Time Zone' },
+      { path: '/settings/addons', heading: 'Componenti aggiuntivi', marker: 'Repository dei componenti aggiuntivi', englishMarker: 'Add-on repositories', settingsSave: false },
+    ],
+  },
+  {
+    code: 'es-419',
+    save: 'Guardar configuración',
+    defaultSubtitleLanguage: 'Idioma de subtítulos por defecto',
+    fallbackSubtitleLanguage: 'Idioma de subtítulos de respaldo',
+    routes: [
+      {
+        path: '/settings/ffmpeg',
+        heading: 'FFmpeg',
+        marker: 'Ruta de FFmpeg',
+        englishMarker: 'FFmpeg Path',
+      },
+      {
+        path: '/settings/logging',
+        heading: 'Registro',
+        marker: 'Nivel mínimo de registro predeterminado',
+        englishMarker: 'Default Minimum Log Level',
+      },
+      {
+        path: '/settings/hdhr',
+        heading: 'HDHomeRun',
+        marker: 'Número de sintonizadores',
+        englishMarker: 'Tuner Count',
+      },
+      {
+        path: '/settings/scanner',
+        heading: 'Escáner',
+        marker: 'Intervalo de actualización de la biblioteca',
+        englishMarker: 'Library Refresh Interval',
+        unit: 'horas',
+      },
+      {
+        path: '/settings/playout',
+        heading: 'Reproducción',
+        marker: 'Omitir elementos ausentes',
+        englishMarker: 'Skip Missing Items',
+      },
+      { path: '/settings/ui', heading: 'UI', marker: 'Tema', englishMarker: 'Theme' },
+      {
+        path: '/settings/xmltv',
+        heading: 'XMLTV',
+        marker: 'Zona horaria de XMLTV',
+        englishMarker: 'XMLTV Time Zone',
+      },
+      {
+        path: '/settings/addons',
+        heading: 'Complementos',
+        marker: 'Repositorios de complementos',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
+      },
+    ],
+  },
+  {
+    code: 'es-es',
+    save: 'Guardar configuración',
+    defaultSubtitleLanguage: 'Idioma de subtítulos por defecto',
+    fallbackSubtitleLanguage: 'Idioma de subtítulos de respaldo',
+    routes: [
+      {
+        path: '/settings/ffmpeg',
+        heading: 'FFmpeg',
+        marker: 'Ruta de FFmpeg',
+        englishMarker: 'FFmpeg Path',
+      },
+      {
+        path: '/settings/logging',
+        heading: 'Registro',
+        marker: 'Nivel mínimo de registro predeterminado',
+        englishMarker: 'Default Minimum Log Level',
+      },
+      {
+        path: '/settings/hdhr',
+        heading: 'HDHomeRun',
+        marker: 'Número de sintonizadores',
+        englishMarker: 'Tuner Count',
+      },
+      {
+        path: '/settings/scanner',
+        heading: 'Escáner',
+        marker: 'Intervalo de actualización de la biblioteca',
+        englishMarker: 'Library Refresh Interval',
+        unit: 'horas',
+      },
+      {
+        path: '/settings/playout',
+        heading: 'Reproducción',
+        marker: 'Omitir elementos ausentes',
+        englishMarker: 'Skip Missing Items',
+      },
+      { path: '/settings/ui', heading: 'UI', marker: 'Tema', englishMarker: 'Theme' },
+      {
+        path: '/settings/xmltv',
+        heading: 'XMLTV',
+        marker: 'Zona horaria de XMLTV',
+        englishMarker: 'XMLTV Time Zone',
+      },
+      {
+        path: '/settings/addons',
+        heading: 'Complementos',
+        marker: 'Repositorios de complementos',
+        englishMarker: 'Add-on repositories',
+        settingsSave: false,
+      },
     ],
   },
 ];
@@ -243,24 +400,26 @@ async function switchLanguage(page: Page, code: string): Promise<void> {
 }
 
 test.describe('settings i18n parity', () => {
-  test('settings route family renders translated labels in every supported culture', async ({
-    browserName,
-    page,
-  }) => {
-    test.skip(
-      browserName !== 'chromium',
-      'settings i18n proof mutates global pages.language; Chromium coverage avoids project races',
-    );
+  test.describe.configure({ mode: 'serial' });
 
-    const runtimeErrors: string[] = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error') {
-        runtimeErrors.push(message.text());
-      }
-    });
-    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+  for (const language of languages) {
+    test(`${language.code} renders translated labels across the settings route family`, async ({
+      browserName,
+      page,
+    }) => {
+      test.skip(
+        browserName !== 'chromium',
+        'settings i18n proof mutates global pages.language; Chromium coverage avoids project races',
+      );
 
-    for (const language of languages) {
+      const runtimeErrors: string[] = [];
+      page.on('console', (message) => {
+        if (message.type() === 'error') {
+          runtimeErrors.push(message.text());
+        }
+      });
+      page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
       await switchLanguage(page, language.code);
 
       for (const route of language.routes) {
@@ -271,7 +430,9 @@ test.describe('settings i18n parity', () => {
         if (route.unit) {
           await expect(page.getByText(route.unit, { exact: true }).first()).toBeVisible();
         }
-        await expect(page.getByRole('button', { name: language.save }).first()).toBeVisible();
+        if (route.settingsSave !== false) {
+          await expect(page.getByRole('button', { name: language.save }).first()).toBeVisible();
+        }
         await expect(page.locator(ERROR_SURFACE_SELECTOR)).toHaveCount(0);
 
         if (route.path === '/settings/ffmpeg') {
@@ -294,14 +455,14 @@ test.describe('settings i18n parity', () => {
         if (route.englishMarker) {
           await expect(page.getByText(route.englishMarker, { exact: true })).toHaveCount(0);
         }
-        if (language.code !== 'en-us') {
+        if (language.code !== 'en-us' && route.settingsSave !== false) {
           await expect(page.getByRole('button', { name: 'Save Settings' })).toHaveCount(0);
         }
       }
-    }
 
-    expect(runtimeErrors).toEqual([]);
-  });
+      expect(runtimeErrors).toEqual([]);
+    });
+  }
 
   test('ffmpeg playback language preferences use the Kodi list and persist und', async ({
     browserName,

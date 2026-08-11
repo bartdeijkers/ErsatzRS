@@ -1,0 +1,254 @@
+use ersatzrs_addon_contract::{AddonManifest, CatalogAddon};
+use leptos::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonRepositoryRow {
+    pub id: String,
+    pub name: String,
+    pub index_url: String,
+    pub public_key: String,
+    pub is_official: bool,
+    pub is_enabled: bool,
+    pub last_sequence: Option<u64>,
+    pub last_refresh: Option<String>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AvailableAddonRow {
+    pub repository_id: String,
+    pub addon: CatalogAddon,
+    pub host_compatible: bool,
+    pub package_available: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonSettingRow {
+    pub key: String,
+    pub value: Option<String>,
+    pub reference_kind: Option<String>,
+    pub reference: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstalledAddonRow {
+    pub addon_id: String,
+    pub repository_id: Option<String>,
+    pub version: String,
+    pub enabled: bool,
+    pub manifest: AddonManifest,
+    pub settings: Vec<AddonSettingRow>,
+    pub last_check_code: Option<String>,
+    pub last_check_message: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonOverview {
+    pub repositories_are_deployment_managed: bool,
+    pub repositories: Vec<AddonRepositoryRow>,
+    pub available: Vec<AvailableAddonRow>,
+    pub installed: Vec<InstalledAddonRow>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonRepositoryEditor {
+    pub id: String,
+    pub name: String,
+    pub index_url: String,
+    pub public_key: String,
+    pub is_enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonSettingEditor {
+    pub addon_id: String,
+    pub key: String,
+    pub value: Option<String>,
+    pub reference_kind: Option<String>,
+    pub reference: Option<String>,
+}
+
+#[server]
+pub async fn load_addon_overview() -> Result<AddonOverview, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_overview()
+        .await
+        .map(AddonOverview::from)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn save_addon_repository(repository: AddonRepositoryEditor) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .save_addon_repository(ersatzrs_app::AddonRepositoryEdit {
+            id: repository.id,
+            name: repository.name,
+            index_url: repository.index_url,
+            public_key: repository.public_key,
+            is_enabled: repository.is_enabled,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn remove_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .remove_addon_repository(repository_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn refresh_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .refresh_addon_repository(repository_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn install_addon_package(
+    repository_id: String,
+    addon_id: String,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .install_addon(repository_id, addon_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn save_addon_configuration(setting: AddonSettingEditor) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .save_addon_setting(ersatzrs_app::AddonSettingEdit {
+            addon_id: setting.addon_id,
+            key: setting.key,
+            value: setting.value,
+            reference_kind: setting.reference_kind,
+            reference: setting.reference,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn check_addon_package(addon_id: String) -> Result<String, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .check_addon(addon_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn enable_addon_package(addon_id: String) -> Result<String, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .enable_addon(addon_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn disable_addon_package(addon_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .disable_addon(addon_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn uninstall_addon_package(addon_id: String, force: bool) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .uninstall_addon(addon_id, force)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
+    fn from(value: ersatzrs_app::AddonOverviewRead) -> Self {
+        Self {
+            repositories_are_deployment_managed: value.repositories_are_deployment_managed,
+            repositories: value
+                .repositories
+                .into_iter()
+                .map(|item| AddonRepositoryRow {
+                    id: item.id,
+                    name: item.name,
+                    index_url: item.index_url,
+                    public_key: item.public_key,
+                    is_official: item.is_official,
+                    is_enabled: item.is_enabled,
+                    last_sequence: item.last_sequence,
+                    last_refresh: item.last_refresh,
+                    last_error: item.last_error,
+                })
+                .collect(),
+            available: value
+                .available
+                .into_iter()
+                .map(|item| AvailableAddonRow {
+                    repository_id: item.repository_id,
+                    addon: item.addon,
+                    host_compatible: item.host_compatible,
+                    package_available: item.package_available,
+                })
+                .collect(),
+            installed: value
+                .installed
+                .into_iter()
+                .map(|item| InstalledAddonRow {
+                    addon_id: item.addon_id,
+                    repository_id: item.repository_id,
+                    version: item.version,
+                    enabled: item.enabled,
+                    manifest: item.manifest,
+                    settings: item
+                        .settings
+                        .into_iter()
+                        .map(|setting| AddonSettingRow {
+                            key: setting.key,
+                            value: setting.value,
+                            reference_kind: setting.reference_kind,
+                            reference: setting.reference,
+                        })
+                        .collect(),
+                    last_check_code: item.last_check_code,
+                    last_check_message: item.last_check_message,
+                })
+                .collect(),
+        }
+    }
+}

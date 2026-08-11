@@ -9,6 +9,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use crate::addons::AddonRuntimeContext;
 use crate::channel_playout::load_channel_playout_context;
 use crate::db::DbPool;
 use crate::repositories::common::{
@@ -25,11 +26,11 @@ use ersatzrs_domain::{
     VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
-    build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FfmpegRuntimeReport, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput,
-    InputFile, InputKind, OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode,
-    SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
-    WatermarkOpacityClock,
+    build_pipeline_for_acceleration, ffmpeg_path, ffprobe_path, DesiredVideoState,
+    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate, FrameSize,
+    GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat, OutputMetadata,
+    PipelineRequest, RealtimeMode, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
+    SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
 };
 
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
@@ -46,7 +47,7 @@ use crate::playback::{
 };
 use crate::remote_stream::{
     redact_remote_stream_output, redacted_source_label, remote_stream_input_file,
-    remote_stream_producer, resolve_remote_stream, spawn_ffmpeg_with_remote_input,
+    remote_stream_producer, resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input,
     RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext,
     ResolvedRemoteStream,
 };
@@ -3728,7 +3729,8 @@ async fn load_active_hls_item(
                   c."MusicVideoCreditsMode" AS "ChannelMusicVideoCreditsMode",
                   c."MusicVideoCreditsTemplate" AS "ChannelMusicVideoCreditsTemplate",
                   rs."Url" AS "RemoteUrl",
-                  rs."Script" AS "RemoteScript",
+                  rs."AddonId" AS "RemoteAddonId",
+                  rs."Script" AS "RemoteLegacyScript",
                   rs."Duration" AS "RemoteDuration",
                   rs."FallbackQuery" AS "RemoteFallbackQuery",
                   rs."IsLive" AS "RemoteIsLive"
@@ -3766,11 +3768,18 @@ async fn load_active_hls_item(
 
     let media_path = decode_hls_column::<String>(&row, "MediaPath")?;
     let remote_url = decode_hls_column::<Option<String>>(&row, "RemoteUrl")?;
-    let remote_script = decode_hls_column::<Option<String>>(&row, "RemoteScript")?;
-    let remote_stream = if remote_url.is_some() || remote_script.is_some() {
+    let remote_addon = decode_hls_column::<Option<String>>(&row, "RemoteAddonId")?;
+    let remote_legacy_script = decode_hls_column::<Option<String>>(&row, "RemoteLegacyScript")?;
+    if remote_legacy_script.is_some() {
+        return Err(RepositoryError::Decode {
+            kind: "active HLS remote stream",
+            value: "legacy script source requires migration to an add-on".to_owned(),
+        });
+    }
+    let remote_stream = if remote_url.is_some() || remote_addon.is_some() {
         let definition = RemoteStreamDefinition {
             url: remote_url,
-            script: remote_script,
+            addon: remote_addon,
             duration: decode_hls_column(&row, "RemoteDuration")?,
             fallback_query: decode_hls_column(&row, "RemoteFallbackQuery")?,
             is_live: decode_hls_column::<Option<i64>>(&row, "RemoteIsLive")?
@@ -3783,11 +3792,18 @@ async fn load_active_hls_item(
             ..RemoteStreamDefinition::default()
         };
         Some(
-            resolve_remote_stream(&definition, Path::new(&media_path)).map_err(|error| {
-                RepositoryError::Decode {
-                    kind: "active HLS remote stream",
-                    value: error.to_string(),
-                }
+            resolve_remote_stream_with_addons(
+                pool,
+                &definition,
+                &AddonRuntimeContext {
+                    ffmpeg_path: Some(ffmpeg_path()),
+                    ffprobe_path: Some(ffprobe_path()),
+                },
+            )
+            .await
+            .map_err(|error| RepositoryError::Decode {
+                kind: "active HLS remote stream",
+                value: error.to_string(),
             })?,
         )
     } else {
@@ -5654,15 +5670,9 @@ mod tests {
         assert!(current_remote_stream_is_live(&pool, 7, now)
             .await
             .expect("load current live state"));
-        let active = load_active_hls_item(&pool, 7, &[], now)
-            .await
-            .expect("load active remote HLS item")
-            .expect("active remote HLS item");
-        let remote = active.remote_stream.expect("resolved remote stream");
-        assert!(remote.is_live);
         assert!(matches!(
-            remote.source,
-            crate::remote_stream::RemoteStreamSource::Script(_)
+            load_active_hls_item(&pool, 7, &[], now).await,
+            Err(RepositoryError::Decode { .. })
         ));
 
         pool.close().await;
@@ -5718,6 +5728,7 @@ mod tests {
     }
 
     #[cfg(not(feature = "mysql"))]
+    #[allow(clippy::too_many_lines)] // The inline schema mirrors the production query shape.
     async fn active_hls_item_test_pool() -> sqlx::SqlitePool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -5780,10 +5791,16 @@ mod tests {
             r#"CREATE TABLE "RemoteStream" (
                 "Id" INTEGER PRIMARY KEY,
                 "Url" TEXT NULL,
+                "AddonId" TEXT NULL,
                 "Script" TEXT NULL,
                 "Duration" TEXT NULL,
                 "FallbackQuery" TEXT NULL,
                 "IsLive" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "AddonInstallation" (
+                "AddonId" TEXT PRIMARY KEY,
+                "Enabled" INTEGER NOT NULL,
+                "ManifestJson" TEXT NOT NULL
             )"#,
         ] {
             sqlx::query(statement)

@@ -1058,6 +1058,38 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::Addon => "Dodatek",
+        TextKey::Addons => "Dodatki",
+        TextKey::AddonRepositories => "Repozytoria dodatków",
+        TextKey::AvailableAddons => "Dostępne dodatki",
+        TextKey::InstalledAddons => "Zainstalowane dodatki",
+        TextKey::AddRepository => "Dodaj repozytorium",
+        TextKey::RepositoryUrl => "Adres URL repozytorium",
+        TextKey::PublicSigningKey => "Publiczny klucz podpisu",
+        TextKey::DeploymentManagedRepositories => {
+            "Repozytoria są zarządzane przez konfigurację wdrożenia."
+        }
+        TextKey::Refresh => "Odśwież",
+        TextKey::Install => "Zainstaluj",
+        TextKey::UpdateAddon => "Zaktualizuj",
+        TextKey::Uninstall => "Odinstaluj",
+        TextKey::Configuration => "Konfiguracja",
+        TextKey::SecretReference => "Odwołanie do sekretu",
+        TextKey::EnvironmentVariable => "Zmienna środowiskowa",
+        TextKey::SecretFile => "Plik sekretu",
+        TextKey::Incompatible => "Niezgodny",
+        TextKey::PackageUnavailable => "Pakiet niedostępny",
+        TextKey::Official => "Oficjalne",
+        TextKey::ThirdParty => "Repozytorium zewnętrzne",
+        TextKey::Permissions => "Uprawnienia",
+        TextKey::Capabilities => "Możliwości",
+        TextKey::Dependencies => "Zależności",
+        TextKey::Optional => "Opcjonalne",
+        TextKey::MediaReadAccess => "Dostęp do odczytu multimediów",
+        TextKey::ExternalCommands => "Polecenia zewnętrzne",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "Dodawaj tylko zaufane repozytoria; podpisane dodatki działają jako konto usługi ErsatzRS."
+        }
         TextKey::AddCustomResolution => "Dodaj niestandardową rozdzielczość",
         TextKey::AddBlock => "Dodaj blok",
         TextKey::AddBlockGroup => "Dodaj grupę bloków",

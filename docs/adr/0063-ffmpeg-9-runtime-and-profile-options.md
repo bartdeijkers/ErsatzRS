@@ -26,8 +26,8 @@ performance presets and encoding tunes as separate options. The first-party
 
 Keeping the old arguments caused every HLS transcode to fail before output was
 opened. This also affected Remote Streams produced by the Beeld & Geluid
-extractor: the extractor itself is a stream-copy producer, but its stdout is
-consumed by the same shared transcode pipeline.
+add-on: its producer process uses stream copy, but its stdout is consumed by
+the same shared transcode pipeline.
 
 Accepting any version newer than the historical minimum would hide future
 incompatible command-line changes. Persisting downloaded paths as ordinary
@@ -46,8 +46,8 @@ advertise presets `p1` through `p7` and tunes `hq`, `ll`, `ull`, and
 
 Generated transcode commands use `-fps_mode:v cfr` instead of `-vsync cfr`.
 Diagnostic stream-copy commands use `-fps_mode:v passthrough` where an explicit
-sync mode is needed. The Beeld & Geluid scripts remain stream-copy producers
-and do not perform their own frame-rate normalization.
+sync mode is needed. The Beeld & Geluid add-on entrypoints remain stream-copy
+producers and do not perform their own frame-rate normalization.
 
 Add nullable `VideoTune` to `FFmpegProfile` in SQLite and MySQL. The admin
 editor presents NVENC preset and tune as separate localized fields. The

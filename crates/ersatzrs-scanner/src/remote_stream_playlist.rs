@@ -1,34 +1,32 @@
-//! Remote Stream playlist manifests and allowlisted extractor enumeration.
+//! Remote Stream playlist manifests backed by installed add-ons.
 //!
-//! ADR 0065 keeps scan-time process execution separate from hand-authored
-//! Remote Stream `script` definitions. A manifest selects one server-configured
-//! extractor by name; this module validates the file and runs its bounded
-//! `list` command without invoking a shell.
+//! ADR 0066 replaces operator-authored extractor commands with signed,
+//! repository-pinned packages. Both list and play operations use the same
+//! out-of-process host runner and manifest capability contract.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::process::Stdio;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Utc};
-use ersatzrs_infra::remote_stream::{
-    parse_script_command, sanitize_remote_stream_diagnostic, RemoteStreamPerson,
+use ersatzrs_addon_contract::{
+    validate_addon_id, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
+use ersatzrs_infra::addons::{
+    invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
+    InstalledAddon,
+};
+use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::remote_stream::RemoteStreamPerson;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 
 const ENUMERATION_TIMEOUT: Duration = Duration::from_mins(2);
 const MAX_ENUMERATION_BYTES: usize = 8 * 1024 * 1024;
-const MAX_DIAGNOSTIC_BYTES: usize = 16 * 1024;
 const MAX_ENUMERATION_ENTRIES: usize = 10_000;
-
-/// Persisted `ConfigElement` key containing the named extractor array as JSON.
-pub const CONFIG_KEY_REMOTE_STREAM_EXTRACTORS: &str = "settings.remote_stream_extractors";
 
 /// Suffixes that distinguish playlist manifests from ordinary definitions.
 pub const MANIFEST_SUFFIXES: &[&str] = &[".playlist.yml", ".playlist.yaml"];
@@ -37,42 +35,20 @@ pub const MANIFEST_SUFFIXES: &[&str] = &[".playlist.yml", ".playlist.yaml"];
 pub enum PlaylistError {
     #[error("playlist manifest is invalid: {0}")]
     Manifest(String),
-    #[error("remote stream extractor settings are invalid: {0}")]
-    ExtractorSettings(String),
-    #[error("remote stream extractor '{0}' is not configured")]
-    UnknownExtractor(String),
-    #[error("remote stream extractor '{name}' is unavailable: {reason}")]
-    UnavailableExtractor { name: String, reason: String },
+    #[error("remote stream playlist add-on is unavailable: {0}")]
+    Addon(String),
     #[error("remote stream playlist enumeration failed: {0}")]
     Enumeration(String),
 }
 
 pub type Result<T> = std::result::Result<T, PlaylistError>;
 
-/// Named operator-owned extractor with commands for both native platform families.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RemoteStreamExtractorConfig {
-    pub name: String,
-    pub windows: String,
-    pub unix: String,
-}
-
-/// Validated extractor command selected for the current platform.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedPlaylistExtractor {
-    pub name: String,
-    pub program: String,
-    pub args: Vec<String>,
-    pub working_directory: PathBuf,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteStreamPlaylistManifest {
     pub name: Option<String>,
     pub url: String,
-    pub extractor: String,
+    pub addon: String,
     pub folder: Option<String>,
     #[serde(default)]
     pub sync: PlaylistSyncOptions,
@@ -155,7 +131,7 @@ pub struct ValidatedPlaylistManifest {
     pub max_duration_seconds: Option<u64>,
 }
 
-/// One provider entry emitted by `<extractor> list`.
+/// One provider entry emitted by `remote-stream.list.v1`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PlaylistEntry {
     pub id: String,
@@ -254,7 +230,8 @@ pub struct PlaylistFileSync {
 
 #[derive(Serialize)]
 struct GeneratedRemoteStreamDefinition<'a> {
-    script: String,
+    url: &'a str,
+    addon: &'a str,
     is_live: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration: Option<String>,
@@ -315,8 +292,10 @@ pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlayl
     if non_empty(Some(&manifest.url)).is_none() {
         return Err(PlaylistError::Manifest("url is required".to_owned()));
     }
-    if non_empty(Some(&manifest.extractor)).is_none() {
-        return Err(PlaylistError::Manifest("extractor is required".to_owned()));
+    if validate_addon_id(manifest.addon.trim()).is_err() {
+        return Err(PlaylistError::Manifest(
+            "addon must be a reverse-DNS identifier".to_owned(),
+        ));
     }
     if manifest.sync.max_items > MAX_ENUMERATION_ENTRIES {
         return Err(PlaylistError::Manifest(format!(
@@ -375,97 +354,25 @@ pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlayl
     })
 }
 
-/// Decode and validate the server-owned named extractor setting.
-///
-/// # Errors
-///
-/// Returns an error for invalid JSON, duplicate names, or incomplete commands.
-pub fn parse_extractor_settings(json: &str) -> Result<Vec<RemoteStreamExtractorConfig>> {
-    let settings: Vec<RemoteStreamExtractorConfig> = serde_json::from_str(json)
-        .map_err(|error| PlaylistError::ExtractorSettings(error.to_string()))?;
-    let mut names = BTreeSet::new();
-    for setting in &settings {
-        let name = setting.name.trim();
-        if name.is_empty() {
-            return Err(PlaylistError::ExtractorSettings(
-                "extractor names must not be empty".to_owned(),
-            ));
-        }
-        if !names.insert(name.to_ascii_lowercase()) {
-            return Err(PlaylistError::ExtractorSettings(format!(
-                "duplicate extractor name '{name}'"
-            )));
-        }
-        if setting.windows.trim().is_empty() || setting.unix.trim().is_empty() {
-            return Err(PlaylistError::ExtractorSettings(format!(
-                "extractor '{name}' requires both windows and unix commands"
+async fn resolve_playlist_addon(pool: &DbPool, addon_id: &str) -> Result<InstalledAddon> {
+    let addon = load_installed_addon(pool, addon_id)
+        .await
+        .map_err(|error| PlaylistError::Addon(error.to_string()))?
+        .ok_or_else(|| PlaylistError::Addon(format!("{addon_id} is not installed")))?;
+    if !addon.enabled {
+        return Err(PlaylistError::Addon(format!("{addon_id} is disabled")));
+    }
+    for capability in [
+        CAPABILITY_REMOTE_STREAM_LIST_V1,
+        CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    ] {
+        if !addon.manifest.has_capability(capability) {
+            return Err(PlaylistError::Addon(format!(
+                "{addon_id} does not implement {capability}"
             )));
         }
     }
-    Ok(settings)
-}
-
-/// Resolve a named command for a requested platform family.
-///
-/// # Errors
-///
-/// Returns an error when the name is unknown or the command is not an absolute regular file.
-pub fn resolve_extractor_for_platform(
-    settings: &[RemoteStreamExtractorConfig],
-    name: &str,
-    windows: bool,
-) -> Result<ResolvedPlaylistExtractor> {
-    let setting = settings
-        .iter()
-        .find(|setting| setting.name.trim().eq_ignore_ascii_case(name.trim()))
-        .ok_or_else(|| PlaylistError::UnknownExtractor(name.trim().to_owned()))?;
-    let raw = if windows {
-        setting.windows.trim()
-    } else {
-        setting.unix.trim()
-    };
-    let parsed = parse_script_command(raw, Path::new("."))
-        .map_err(|error| PlaylistError::ExtractorSettings(error.to_string()))?;
-    let program_path = Path::new(&parsed.program);
-    if !program_path.is_absolute() {
-        return Err(PlaylistError::UnavailableExtractor {
-            name: setting.name.clone(),
-            reason: "the executable path must be absolute".to_owned(),
-        });
-    }
-    let metadata =
-        std::fs::metadata(program_path).map_err(|error| PlaylistError::UnavailableExtractor {
-            name: setting.name.clone(),
-            reason: error.to_string(),
-        })?;
-    if !metadata.is_file() {
-        return Err(PlaylistError::UnavailableExtractor {
-            name: setting.name.clone(),
-            reason: "the executable path is not a regular file".to_owned(),
-        });
-    }
-    let working_directory = program_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
-    Ok(ResolvedPlaylistExtractor {
-        name: setting.name.trim().to_owned(),
-        program: parsed.program,
-        args: parsed.args,
-        working_directory,
-    })
-}
-
-/// Resolve a named extractor for the native build platform.
-///
-/// # Errors
-///
-/// Returns an error when the configured native command cannot be resolved.
-pub fn resolve_extractor(
-    settings: &[RemoteStreamExtractorConfig],
-    name: &str,
-) -> Result<ResolvedPlaylistExtractor> {
-    resolve_extractor_for_platform(settings, name, cfg!(windows))
+    Ok(addon)
 }
 
 /// Run one bounded playlist enumeration and decode its NDJSON atomically.
@@ -474,72 +381,35 @@ pub fn resolve_extractor(
 ///
 /// Returns an error for process, timeout, output-bound, exit-status, or NDJSON failures.
 pub async fn enumerate_playlist(
-    extractor: &ResolvedPlaylistExtractor,
+    pool: &DbPool,
+    addon_id: &str,
     playlist_url: &str,
+    runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistEnumeration> {
-    let mut command = Command::new(&extractor.program);
-    command
-        .args(&extractor.args)
-        .arg("list")
-        .arg(playlist_url)
-        .current_dir(&extractor.working_directory)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = command.spawn().map_err(|error| {
-        PlaylistError::Enumeration(format!("extractor failed to start: {error}"))
-    })?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| PlaylistError::Enumeration("extractor stdout was unavailable".to_owned()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| PlaylistError::Enumeration("extractor stderr was unavailable".to_owned()))?;
-    let stdout_task = tokio::spawn(read_bounded_output(stdout, MAX_ENUMERATION_BYTES));
-    let stderr_task = tokio::spawn(read_tail(stderr, MAX_DIAGNOSTIC_BYTES));
-    let status = if let Ok(result) = tokio::time::timeout(ENUMERATION_TIMEOUT, child.wait()).await {
-        result.map_err(|error| {
-            PlaylistError::Enumeration(format!("extractor wait failed: {error}"))
-        })?
-    } else {
-        let _ = child.kill().await;
-        return Err(PlaylistError::Enumeration(
-            "extractor exceeded the 120 second timeout".to_owned(),
-        ));
-    };
-    let (stdout, overflowed) = stdout_task
-        .await
-        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?
-        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
-    let stderr = stderr_task
-        .await
-        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?
-        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
-    let diagnostic_tail = sanitize_remote_stream_diagnostic(&String::from_utf8_lossy(&stderr));
-    if overflowed {
-        return Err(PlaylistError::Enumeration(format!(
-            "extractor output exceeded {MAX_ENUMERATION_BYTES} bytes"
-        )));
-    }
-    if !status.success() {
-        let suffix = if diagnostic_tail.is_empty() {
-            String::new()
-        } else {
-            format!(": {diagnostic_tail}")
-        };
-        return Err(PlaylistError::Enumeration(format!(
-            "extractor exited with {status}{suffix}"
-        )));
-    }
+    let environment = BTreeMap::from([(
+        "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
+        playlist_url.to_owned(),
+    )]);
+    let stdout = invoke_enabled_addon(
+        pool,
+        addon_id,
+        AddonInvocation {
+            capability: CAPABILITY_REMOTE_STREAM_LIST_V1,
+            operation: "list",
+            runtime,
+            extra_environment: &environment,
+            timeout: ENUMERATION_TIMEOUT,
+            max_output_bytes: MAX_ENUMERATION_BYTES,
+        },
+    )
+    .await
+    .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
     let text = String::from_utf8(stdout)
-        .map_err(|_| PlaylistError::Enumeration("extractor output is not UTF-8".to_owned()))?;
+        .map_err(|_| PlaylistError::Enumeration("add-on output is not UTF-8".to_owned()))?;
     let entries = parse_ndjson_entries(&text)?;
     Ok(PlaylistEnumeration {
         entries,
-        diagnostic_tail,
+        diagnostic_tail: String::new(),
     })
 }
 
@@ -552,16 +422,18 @@ pub async fn enumerate_playlist(
 /// Returns an error when enumeration, generated-file management, or sidecar publication fails.
 #[allow(clippy::too_many_lines)]
 pub async fn sync_playlist_files(
+    pool: &DbPool,
     manifest_path: &Path,
     manifest_bytes: &[u8],
     manifest: &ValidatedPlaylistManifest,
-    extractor: &ResolvedPlaylistExtractor,
+    runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistFileSync> {
+    let addon = resolve_playlist_addon(pool, &manifest.manifest.addon).await?;
     let parent = manifest_path.parent().unwrap_or_else(|| Path::new("."));
     let folder = parent.join(&manifest.folder);
     let sidecar_path = folder.join(".ersatzrs-playlist.json");
     let existing = load_sidecar(&sidecar_path)?;
-    let manifest_etag = manifest_etag(manifest_bytes, extractor);
+    let manifest_etag = manifest_etag(manifest_bytes, &addon);
     let now = Utc::now();
     if let Some(state) = existing.as_ref().filter(|state| {
         state.version == 1
@@ -581,7 +453,14 @@ pub async fn sync_playlist_files(
         });
     }
 
-    let enumeration = match enumerate_playlist(extractor, &manifest.manifest.url).await {
+    let enumeration = match enumerate_playlist(
+        pool,
+        &manifest.manifest.addon,
+        &manifest.manifest.url,
+        runtime,
+    )
+    .await
+    {
         Ok(enumeration) => enumeration,
         Err(error) => {
             persist_failed_sync(&folder, existing.as_ref(), manifest_etag, now)?;
@@ -642,7 +521,7 @@ pub async fn sync_playlist_files(
     for entry in &selected {
         let file = managed_file_name(&entry.id);
         let path = folder.join(&file);
-        write_generated_definition(&path, manifest, extractor, entry)?;
+        write_generated_definition(&path, manifest, entry)?;
         managed_files.insert(entry.id.clone(), file.clone());
         entries.push(PlaylistSidecarEntry {
             id: entry.id.clone(),
@@ -858,7 +737,7 @@ fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
         entries.push(entry);
         if entries.len() > MAX_ENUMERATION_ENTRIES {
             return Err(PlaylistError::Enumeration(format!(
-                "extractor returned more than {MAX_ENUMERATION_ENTRIES} entries"
+                "add-on returned more than {MAX_ENUMERATION_ENTRIES} entries"
             )));
         }
     }
@@ -907,11 +786,11 @@ fn definitions_from_state(
 fn write_generated_definition(
     path: &Path,
     manifest: &ValidatedPlaylistManifest,
-    extractor: &ResolvedPlaylistExtractor,
     entry: &PlaylistEntry,
 ) -> Result<()> {
     let definition = GeneratedRemoteStreamDefinition {
-        script: playback_command(extractor, &entry.url),
+        url: &entry.url,
+        addon: &manifest.manifest.addon,
         is_live: entry.is_live || manifest.manifest.defaults.is_live,
         duration: entry.duration_seconds.map(format_clock_duration),
         title: &entry.title,
@@ -949,30 +828,6 @@ fn union_values(left: &[String], right: &[String]) -> Vec<String> {
             (!value.is_empty() && seen.insert(value.to_ascii_lowercase())).then(|| value.to_owned())
         })
         .collect()
-}
-
-fn playback_command(extractor: &ResolvedPlaylistExtractor, item_url: &str) -> String {
-    extractor
-        .args
-        .iter()
-        .map(String::as_str)
-        .chain(["play", item_url, "{seek}"])
-        .fold(
-            quote_command_argument(&extractor.program),
-            |mut output, argument| {
-                output.push(' ');
-                output.push_str(&quote_command_argument(argument));
-                output
-            },
-        )
-}
-
-fn quote_command_argument(value: &str) -> String {
-    if cfg!(windows) {
-        format!("\"{}\"", value.replace('"', "\\\""))
-    } else {
-        format!("'{}'", value.replace('\'', "'\\''"))
-    }
 }
 
 fn managed_file_name(id: &str) -> String {
@@ -1031,30 +886,15 @@ fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn manifest_etag(bytes: &[u8], extractor: &ResolvedPlaylistExtractor) -> String {
+fn manifest_etag(bytes: &[u8], addon: &InstalledAddon) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.update([0]);
-    hasher.update(extractor.name.as_bytes());
+    hasher.update(addon.addon_id.as_bytes());
     hasher.update([0]);
-    hasher.update(extractor.program.as_bytes());
-    for argument in &extractor.args {
-        hasher.update([0]);
-        hasher.update(argument.as_bytes());
-    }
-    // A wrapper update can change enumeration metadata without changing the
-    // configured command path. Include a cheap executable identity stamp so a
-    // fresh sidecar does not suppress the first synchronization after an
-    // operator deploys a corrected extractor.
+    hasher.update(addon.version.to_string().as_bytes());
     hasher.update([0]);
-    if let Ok(metadata) = std::fs::metadata(&extractor.program) {
-        hasher.update(metadata.len().to_le_bytes());
-        if let Ok(modified) = metadata.modified() {
-            if let Ok(since_epoch) = modified.duration_since(std::time::UNIX_EPOCH) {
-                hasher.update(since_epoch.as_nanos().to_le_bytes());
-            }
-        }
-    }
+    hasher.update(addon.package_sha256.as_bytes());
     bytes_to_hex(&hasher.finalize())
 }
 
@@ -1086,44 +926,6 @@ fn format_clock_duration(seconds: u64) -> String {
         (seconds % 3600) / 60,
         seconds % 60
     )
-}
-
-async fn read_bounded_output<R: tokio::io::AsyncRead + Unpin>(
-    mut reader: R,
-    limit: usize,
-) -> std::io::Result<(Vec<u8>, bool)> {
-    let mut output = Vec::new();
-    let mut overflowed = false;
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let read = reader.read(&mut buffer).await?;
-        if read == 0 {
-            break;
-        }
-        let remaining = limit.saturating_sub(output.len());
-        output.extend_from_slice(&buffer[..read.min(remaining)]);
-        overflowed |= read > remaining;
-    }
-    Ok((output, overflowed))
-}
-
-async fn read_tail<R: tokio::io::AsyncRead + Unpin>(
-    mut reader: R,
-    limit: usize,
-) -> std::io::Result<Vec<u8>> {
-    let mut output = VecDeque::with_capacity(limit);
-    let mut buffer = [0_u8; 4096];
-    loop {
-        let read = reader.read(&mut buffer).await?;
-        if read == 0 {
-            break;
-        }
-        output.extend(&buffer[..read]);
-        while output.len() > limit {
-            output.pop_front();
-        }
-    }
-    Ok(output.into_iter().collect())
 }
 
 fn manifest_stem(path: &Path) -> Result<String> {
@@ -1236,7 +1038,7 @@ mod tests {
     fn valid_yaml() -> &'static str {
         r#"
 url: "https://example.test/playlist"
-extractor: fixture
+addon: org.ersatzrs.addon.fixture
 sync:
   interval: 6h
   max_items: 2
@@ -1247,6 +1049,73 @@ filter:
 exclude: [skip]
 create_playlist: true
 "#
+    }
+
+    #[cfg(unix)]
+    async fn fixture_addon_pool(root: &Path) -> DbPool {
+        let database_path = root
+            .parent()
+            .expect("fixture package has a parent")
+            .join("addons.db");
+        let database_url = format!("sqlite:{}", database_path.display());
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("fixture database");
+        let manifest = serde_json::json!({
+            "manifest_version": 1,
+            "id": "org.ersatzrs.addon.fixture",
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture playlist add-on"},
+            "license": "GPL-3.0-or-later",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": [
+                {"id": "addon.check.v1"},
+                {"id": "remote-stream.list.v1"},
+                {"id": "remote-stream.play.v1"}
+            ],
+            "entrypoints": {
+                "any": {"path": "fixture.sh", "kind": "posix_shell"}
+            },
+            "permissions": {},
+            "settings": [],
+            "panels": []
+        });
+        let now = Utc::now().to_rfc3339();
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(root)
+            .await
+            .expect("hash fixture package");
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, NULL, '1.0.0', 1, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .bind("a".repeat(64))
+        .bind(content_sha256)
+        .bind(manifest.to_string())
+        .bind(root.to_string_lossy().into_owned())
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("fixture add-on installation");
+        pool
+    }
+
+    #[cfg(unix)]
+    async fn update_fixture_content_hash(pool: &DbPool, root: &Path) {
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(root)
+            .await
+            .expect("hash updated fixture package");
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ContentSha256" = ? WHERE "AddonId" = ?"#)
+            .bind(content_sha256)
+            .bind("org.ersatzrs.addon.fixture")
+            .execute(pool)
+            .await
+            .expect("record updated fixture content");
     }
 
     #[test]
@@ -1309,8 +1178,8 @@ create_playlist: true
     #[test]
     fn manifest_rejects_traversal_and_unknown_fields() {
         let traversal = valid_yaml().replace(
-            "extractor: fixture",
-            "extractor: fixture\nfolder: ../escape",
+            "addon: org.ersatzrs.addon.fixture",
+            "addon: org.ersatzrs.addon.fixture\nfolder: ../escape",
         );
         assert!(
             parse_playlist_manifest(&traversal, Path::new("x.playlist.yml"))
@@ -1328,18 +1197,14 @@ create_playlist: true
     }
 
     #[test]
-    fn extractor_settings_require_both_platforms_and_unique_names() {
-        let valid =
-            r#"[{"name":"fixture","windows":"C:\\\\tools\\\\fixture.bat","unix":"/opt/fixture"}]"#;
-        assert_eq!(parse_extractor_settings(valid).expect("settings").len(), 1);
-        let duplicate = r#"[
-            {"name":"fixture","windows":"C:\\\\one.bat","unix":"/one"},
-            {"name":"FIXTURE","windows":"C:\\\\two.bat","unix":"/two"}
-        ]"#;
-        assert!(parse_extractor_settings(duplicate)
-            .expect_err("duplicate")
-            .to_string()
-            .contains("duplicate"));
+    fn manifest_requires_a_stable_addon_identifier() {
+        let invalid = valid_yaml().replace("org.ersatzrs.addon.fixture", "fixture command");
+        assert!(
+            parse_playlist_manifest(&invalid, Path::new("x.playlist.yml"))
+                .expect_err("invalid add-on")
+                .to_string()
+                .contains("reverse-DNS")
+        );
     }
 
     #[test]
@@ -1361,7 +1226,9 @@ create_playlist: true
         use std::os::unix::fs::PermissionsExt as _;
 
         let temp = tempfile::TempDir::new().expect("temp dir");
-        let script = temp.path().join("fixture.sh");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
         std::fs::write(
             &script,
             concat!(
@@ -1377,17 +1244,13 @@ create_playlist: true
             .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&script, permissions).expect("fixture permissions");
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
         let manifest_path = temp.path().join("Fixture.playlist.yml");
         let manifest_bytes = valid_yaml().as_bytes();
         let manifest = parse_playlist_manifest(valid_yaml(), &manifest_path).expect("manifest");
-        let extractor = ResolvedPlaylistExtractor {
-            name: "fixture".to_owned(),
-            program: script.display().to_string(),
-            args: Vec::new(),
-            working_directory: temp.path().to_path_buf(),
-        };
 
-        let first = sync_playlist_files(&manifest_path, manifest_bytes, &manifest, &extractor)
+        let first = sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
             .await
             .expect("first sync");
         assert!(first.enumerated);
@@ -1416,29 +1279,47 @@ create_playlist: true
         assert_eq!(parsed.producers, ["John de Mol Produkties"]);
         assert_eq!(parsed.original_broadcasters, ["AVRO"]);
         assert_eq!(parsed.broadcasters, ["AVROTROS"]);
-        let resolved = ersatzrs_infra::remote_stream::resolve_remote_stream(
-            &parsed,
-            &first.definitions[0].path,
+        let resolved = ersatzrs_infra::remote_stream::resolve_remote_stream_with_addons(
+            &pool, &parsed, &runtime,
         )
+        .await
         .expect("generated command");
         let producer = ersatzrs_infra::remote_stream::remote_stream_producer(&resolved)
-            .expect("generated producer");
+            .expect("generated add-on producer");
         assert_eq!(
-            &producer.args[producer.args.len() - 3..],
-            ["play", "https://example.test/1", "{seek}"]
+            producer
+                .environment
+                .get("ERSATZRS_REMOTE_STREAM_URL")
+                .map(String::as_str),
+            Some("https://example.test/1")
         );
+        assert_eq!(parsed.addon.as_deref(), Some("org.ersatzrs.addon.fixture"));
 
-        let skipped = sync_playlist_files(&manifest_path, manifest_bytes, &manifest, &extractor)
-            .await
-            .expect("interval skip");
+        let skipped =
+            sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+                .await
+                .expect("interval skip");
         assert!(!skipped.enumerated);
         assert_eq!(skipped.definitions.len(), 2);
 
-        std::fs::write(&script, "#!/bin/sh\necho extractor-updated >&2\nexit 1\n")
+        std::fs::write(&script, "#!/bin/sh\necho addon-updated >&2\nexit 1\n")
             .expect("replace fixture");
-        let error = sync_playlist_files(&manifest_path, manifest_bytes, &manifest, &extractor)
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(&package_root)
             .await
-            .expect_err("updated extractor must bypass the fresh interval");
+            .expect("hash updated package");
+        sqlx::query(
+            r#"UPDATE "AddonInstallation" SET "PackageSha256" = ?, "ContentSha256" = ?
+               WHERE "AddonId" = ?"#,
+        )
+        .bind("b".repeat(64))
+        .bind(content_sha256)
+        .bind("org.ersatzrs.addon.fixture")
+        .execute(&pool)
+        .await
+        .expect("record fixture package update");
+        let error = sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+            .await
+            .expect_err("updated add-on must bypass the fresh interval");
         assert!(error.to_string().contains("enumeration failed"));
     }
 
@@ -1448,27 +1329,26 @@ create_playlist: true
         use std::os::unix::fs::PermissionsExt as _;
 
         let temp = tempfile::TempDir::new().expect("temp dir");
-        let script = temp.path().join("fixture.sh");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
         let manifest_path = temp.path().join("Fixture.playlist.yml");
         let manifest = parse_playlist_manifest(valid_yaml(), &manifest_path).expect("manifest");
-        let extractor = ResolvedPlaylistExtractor {
-            name: "fixture".to_owned(),
-            program: script.display().to_string(),
-            args: Vec::new(),
-            working_directory: temp.path().to_path_buf(),
-        };
         std::fs::write(&script, "#!/bin/sh\necho failed >&2\nexit 1\n").expect("failed fixture");
         let mut permissions = std::fs::metadata(&script)
             .expect("fixture metadata")
             .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&script, permissions).expect("fixture permissions");
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
 
         sync_playlist_files(
+            &pool,
             &manifest_path,
             valid_yaml().as_bytes(),
             &manifest,
-            &extractor,
+            &runtime,
         )
         .await
         .expect_err("enumeration should fail");
@@ -1492,11 +1372,13 @@ create_playlist: true
             ),
         )
         .expect("successful fixture");
+        update_fixture_content_hash(&pool, &package_root).await;
         let first = sync_playlist_files(
+            &pool,
             &manifest_path,
             valid_yaml().as_bytes(),
             &manifest,
-            &extractor,
+            &runtime,
         )
         .await
         .expect("successful sync");
@@ -1515,11 +1397,13 @@ create_playlist: true
             ),
         )
         .expect("changed URL fixture");
+        update_fixture_content_hash(&pool, &package_root).await;
         let second = sync_playlist_files(
+            &pool,
             &manifest_path,
             valid_yaml().as_bytes(),
             &manifest,
-            &extractor,
+            &runtime,
         )
         .await
         .expect("override sync");

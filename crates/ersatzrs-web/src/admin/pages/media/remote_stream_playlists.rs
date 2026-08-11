@@ -7,9 +7,9 @@ use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::libraries::scan_library;
 use crate::admin::server_fns::remote_stream_playlists::{
     delete_remote_stream_playlist, exclude_remote_stream_playlist_entry,
-    list_remote_stream_playlist_extractors, list_remote_stream_playlists,
-    save_remote_stream_playlist, troubleshoot_remote_stream_playlist,
-    PlaylistTroubleshootingResult, RemoteStreamPlaylistEditor, RemoteStreamPlaylistRow,
+    list_remote_stream_playlist_addons, list_remote_stream_playlists, save_remote_stream_playlist,
+    troubleshoot_remote_stream_playlist, PlaylistTroubleshootingResult, RemoteStreamPlaylistEditor,
+    RemoteStreamPlaylistRow,
 };
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity};
 
@@ -35,9 +35,9 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
             load_or_notify(list_remote_stream_playlists(library_id).await, toast)
         });
     let current_rows = RwSignal::new(Vec::<RemoteStreamPlaylistRow>::new());
-    let extractor_names = RwSignal::new(Vec::<String>::new());
-    let extractors: LocalResource<Vec<String>> = LocalResource::new(move || async move {
-        load_or_notify(list_remote_stream_playlist_extractors().await, toast)
+    let addon_ids = RwSignal::new(Vec::<String>::new());
+    let addons: LocalResource<Vec<String>> = LocalResource::new(move || async move {
+        load_or_notify(list_remote_stream_playlist_addons().await, toast)
     });
     Effect::new(move |_| {
         if let Some(next) = rows.get() {
@@ -45,8 +45,8 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
         }
     });
     Effect::new(move |_| {
-        if let Some(next) = extractors.get() {
-            extractor_names.set(next);
+        if let Some(next) = addons.get() {
+            addon_ids.set(next);
         }
     });
 
@@ -55,7 +55,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
     let editor_relative_path = RwSignal::new(None::<String>);
     let editor_name = RwSignal::new(String::new());
     let editor_url = RwSignal::new(String::new());
-    let editor_extractor = RwSignal::new(String::new());
+    let editor_addon = RwSignal::new(String::new());
     let editor_folder = RwSignal::new(String::new());
     let editor_interval = RwSignal::new("24h".to_owned());
     let editor_max_items = RwSignal::new(500usize);
@@ -69,7 +69,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
         editor_relative_path.set(None);
         editor_name.set(String::new());
         editor_url.set(String::new());
-        editor_extractor.set(String::new());
+        editor_addon.set(String::new());
         editor_folder.set(String::new());
         editor_interval.set("24h".to_owned());
         editor_max_items.set(500);
@@ -164,10 +164,10 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
                 <input id="remote-playlist-name" class=style::form_input prop:value=move || editor_name.get() on:input=move |event| editor_name.set(event_target_value(&event))/>
                 <label class=style::form_label for="remote-playlist-url">{tr(TextKey::PlaylistUrl)}</label>
                 <input id="remote-playlist-url" class=style::form_input prop:value=move || editor_url.get() on:input=move |event| editor_url.set(event_target_value(&event))/>
-                <label class=style::form_label for="remote-playlist-extractor">{tr(TextKey::Extractor)}</label>
-                <select id="remote-playlist-extractor" class=style::form_select prop:value=move || editor_extractor.get() on:change=move |event| editor_extractor.set(event_target_value(&event))>
+                <label class=style::form_label for="remote-playlist-addon">{tr(TextKey::Addon)}</label>
+                <select id="remote-playlist-addon" class=style::form_select prop:value=move || editor_addon.get() on:change=move |event| editor_addon.set(event_target_value(&event))>
                     <option value="" disabled=true>{tr(TextKey::SelectValue)}</option>
-                    {move || extractor_names.get().into_iter().map(|name| view! { <option value=name.clone()>{name.clone()}</option> }).collect_view()}
+                    {move || addon_ids.get().into_iter().map(|id| view! { <option value=id.clone()>{id.clone()}</option> }).collect_view()}
                 </select>
                 <label class=style::form_label for="remote-playlist-folder">{tr(TextKey::DestinationFolder)}</label>
                 <input id="remote-playlist-folder" class=style::form_input prop:value=move || editor_folder.get() on:input=move |event| editor_folder.set(event_target_value(&event))/>
@@ -208,7 +208,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
                                 relative_path: editor_relative_path.get_untracked(),
                                 name: editor_name.get_untracked(),
                                 url: editor_url.get_untracked(),
-                                extractor: editor_extractor.get_untracked(),
+                                addon: editor_addon.get_untracked(),
                                 folder: editor_folder.get_untracked(),
                                 interval: editor_interval.get_untracked(),
                                 max_items: editor_max_items.get_untracked(),
@@ -238,7 +238,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
                             <div class=style::toolbar>
                                 <div>
                                     <h2 class=style::page_title>{row.name.clone()}</h2>
-                                    <p class=style::cell_muted>{format!("{} · {} · {}", row.extractor, state_label(&row.state), last_sync)}</p>
+                                    <p class=style::cell_muted>{format!("{} · {} · {}", row.addon, state_label(&row.state), last_sync)}</p>
                                 </div>
                                 <div class=style::toolbar_actions>
                                     <button type="button" class=style::btn_secondary on:click=move |_| { troubleshoot_action.dispatch(troubleshoot_target.clone()); }>{tr(TextKey::Troubleshoot)}</button>
@@ -252,7 +252,7 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
                                             editor_relative_path.set(Some(edit_row.relative_path.clone()));
                                             editor_name.set(edit_row.name.clone());
                                             editor_url.set(edit_row.url.clone());
-                                            editor_extractor.set(edit_row.extractor.clone());
+                                            editor_addon.set(edit_row.addon.clone());
                                             editor_folder.set(edit_row.folder.clone());
                                             editor_interval.set(edit_row.interval.clone());
                                             editor_max_items.set(edit_row.max_items);

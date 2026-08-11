@@ -17,6 +17,7 @@ use ersatzrs_domain::{
     ExtraVideoClassification, LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind,
     ScanProgressSink,
 };
+use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
@@ -24,7 +25,7 @@ use ersatzrs_infra::metadata::{
     replace_strings, update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use ersatzrs_infra::remote_stream::{
-    parse_remote_stream_definition, resolve_remote_stream, RemoteStreamError,
+    parse_remote_stream_definition, resolve_remote_stream_with_addons, RemoteStreamError,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
@@ -399,16 +400,18 @@ async fn scan_local_library_with_progress_once(
                             .await?;
                         }
                         LocalScanWork::RemoteStream { path } => {
-                            let result = match load_remote_stream_definition(&path) {
+                            let result = match load_remote_stream_definition(
+                                pool,
+                                &path,
+                                &config.ffprobe_path,
+                            )
+                            .await
+                            {
                                 Ok((definition, resolved)) => {
-                                    let ffmpeg_path = paired_ffmpeg_path(&config.ffprobe_path);
                                     let probed = if is_managed_remote_stream_definition(&path) {
                                         None
                                     } else {
-                                        match extractor
-                                            .extract_remote(&resolved, &ffmpeg_path)
-                                            .await
-                                        {
+                                        match extractor.extract_remote(&resolved).await {
                                             Ok(probed) => Some(probed),
                                             Err(error) => {
                                                 warn!(
@@ -472,6 +475,7 @@ async fn scan_local_library_with_progress_once(
                                 config.library_id,
                                 &library_path,
                                 &path,
+                                &config.ffprobe_path,
                             )
                             .await
                             {
@@ -1859,12 +1863,13 @@ async fn upsert_local_remote_stream(
 
     sqlx::query(
         r#"UPDATE "RemoteStream"
-           SET "Duration" = ?, "FallbackQuery" = ?, "Script" = ?, "Url" = ?, "IsLive" = ?
+           SET "Duration" = ?, "FallbackQuery" = ?, "AddonId" = ?,
+               "Script" = NULL, "Url" = ?, "IsLive" = ?
            WHERE "Id" = ?"#,
     )
     .bind(definition.duration.as_deref())
     .bind(definition.fallback_query.as_deref())
-    .bind(definition.script.as_deref())
+    .bind(definition.addon.as_deref())
     .bind(definition.url.as_deref())
     .bind(i32::from(resolved.is_live))
     .bind(item_id)
@@ -2016,8 +2021,10 @@ async fn flag_invalid_remote_stream(pool: &DbPool, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_remote_stream_definition(
+async fn load_remote_stream_definition(
+    pool: &DbPool,
     path: &Path,
+    ffprobe_path: &str,
 ) -> Result<(
     ersatzrs_infra::remote_stream::RemoteStreamDefinition,
     ersatzrs_infra::remote_stream::ResolvedRemoteStream,
@@ -2027,7 +2034,15 @@ fn load_remote_stream_definition(
         source,
     })?;
     let definition = parse_remote_stream_definition(&yaml)?;
-    let resolved = resolve_remote_stream(&definition, path)?;
+    let resolved = resolve_remote_stream_with_addons(
+        pool,
+        &definition,
+        &AddonRuntimeContext {
+            ffmpeg_path: Some(paired_ffmpeg_path(ffprobe_path)),
+            ffprobe_path: Some(ffprobe_path.to_owned()),
+        },
+    )
+    .await?;
     Ok((definition, resolved))
 }
 
@@ -2036,6 +2051,7 @@ async fn synchronize_remote_stream_playlist(
     library_id: i64,
     library_path: &LocalLibraryPath,
     path: &Path,
+    ffprobe_path: &str,
 ) -> Result<Vec<i64>> {
     let yaml = std::fs::read(path).map_err(|source| ScannerError::RemoteStreamPlaylistRead {
         path: path.display().to_string(),
@@ -2045,20 +2061,16 @@ async fn synchronize_remote_stream_playlist(
         remote_stream_playlist::PlaylistError::Manifest(format!("manifest is not UTF-8: {error}"))
     })?;
     let manifest = remote_stream_playlist::parse_playlist_manifest(manifest_text, path)?;
-    let raw_settings: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(remote_stream_playlist::CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-            .fetch_optional(pool)
-            .await?;
-    let settings =
-        remote_stream_playlist::parse_extractor_settings(raw_settings.as_deref().unwrap_or("[]"))?;
-    let resolved =
-        remote_stream_playlist::resolve_extractor(&settings, &manifest.manifest.extractor)?;
+    let runtime = AddonRuntimeContext {
+        ffmpeg_path: Some(paired_ffmpeg_path(ffprobe_path)),
+        ffprobe_path: Some(ffprobe_path.to_owned()),
+    };
     let sync =
-        remote_stream_playlist::sync_playlist_files(path, &yaml, &manifest, &resolved).await?;
+        remote_stream_playlist::sync_playlist_files(pool, path, &yaml, &manifest, &runtime).await?;
     let mut ordered_items = Vec::new();
     for definition in &sync.definitions {
-        let (parsed, source) = load_remote_stream_definition(&definition.path)?;
+        let (parsed, source) =
+            load_remote_stream_definition(pool, &definition.path, ffprobe_path).await?;
         let item_id = upsert_local_remote_stream(
             pool,
             library_path,
@@ -4714,9 +4726,8 @@ mod tests {
         let definition_path = news.join("Example.yaml");
         std::fs::write(
             &definition_path,
-            r#"
+            r"
 url: https://example.test/live.m3u8
-script: '"tools/fallback producer.sh" "ignored"'
 is_live: true
 duration: 01:02:03
 fallback_query: tag:backup
@@ -4736,7 +4747,7 @@ people:
 producers: [Example Productions]
 original_broadcasters: [AVRO]
 broadcasters: [AVROTROS]
-"#,
+",
         )
         .expect("definition");
         std::fs::write(news.join("Example.jpg"), b"artwork").expect("artwork");
@@ -4769,7 +4780,7 @@ broadcasters: [AVROTROS]
         assert!(report.issues[0].starts_with("Broken.yml:"));
 
         let row = sqlx::query(
-            r#"SELECT rs."Url", rs."Script", rs."Duration", rs."FallbackQuery", rs."IsLive",
+            r#"SELECT rs."Url", rs."AddonId", rs."Script", rs."Duration", rs."FallbackQuery", rs."IsLive",
                       rsm."Title", rsm."Plot", rsm."Year", rsm."ReleaseDate",
                       rsm."ContentRating", rsm."CollectionName",
                       rsm."OriginalBroadcasters", rsm."Broadcasters",
@@ -4786,9 +4797,8 @@ broadcasters: [AVROTROS]
             row.get::<Option<String>, _>("Url").as_deref(),
             Some("https://example.test/live.m3u8")
         );
-        assert!(row
-            .get::<Option<String>, _>("Script")
-            .is_some_and(|script| script.contains("fallback producer.sh")));
+        assert_eq!(row.get::<Option<String>, _>("AddonId"), None);
+        assert_eq!(row.get::<Option<String>, _>("Script"), None);
         assert_eq!(
             row.get::<Option<String>, _>("Duration").as_deref(),
             Some("01:02:03")
@@ -5517,9 +5527,6 @@ broadcasters: [AVROTROS]
     #[allow(clippy::too_many_lines)]
     async fn remote_stream_playlist_scan_materializes_definitions_tags_and_order() {
         use super::{scan_local_library, LocalScanConfig};
-        use crate::remote_stream_playlist::{
-            RemoteStreamExtractorConfig, CONFIG_KEY_REMOTE_STREAM_EXTRACTORS,
-        };
         use ersatzrs_core::scheduling::SchedulingContentSource;
         use sqlx::sqlite::SqlitePoolOptions;
         use sqlx::Row as _;
@@ -5528,7 +5535,9 @@ broadcasters: [AVROTROS]
         let temp = tempfile::TempDir::new().expect("temp dir");
         let library_root = temp.path().join("remote-streams");
         std::fs::create_dir_all(&library_root).expect("library root");
-        let script = temp.path().join("fixture.sh");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
         std::fs::write(
             &script,
             concat!(
@@ -5538,17 +5547,17 @@ broadcasters: [AVROTROS]
                 "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
             ),
         )
-        .expect("fixture extractor");
+        .expect("fixture add-on");
         let mut permissions = std::fs::metadata(&script)
-            .expect("extractor metadata")
+            .expect("add-on metadata")
             .permissions();
         permissions.set_mode(0o755);
-        std::fs::set_permissions(&script, permissions).expect("extractor permissions");
+        std::fs::set_permissions(&script, permissions).expect("add-on permissions");
         std::fs::write(
             library_root.join("Fixture.playlist.yml"),
             r"name: Fixture order
 url: https://example.test/playlist
-extractor: fixture
+addon: org.ersatzrs.addon.fixture
 sync:
   interval: 24h
   max_items: 10
@@ -5593,18 +5602,47 @@ tags: [Fixture Tag]
             .execute(&pool)
             .await
             .expect("library path");
-        let settings = serde_json::to_string(&[RemoteStreamExtractorConfig {
-            name: "fixture".to_owned(),
-            windows: r"C:\fixture.bat".to_owned(),
-            unix: script.display().to_string(),
-        }])
-        .expect("settings JSON");
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-            .bind(settings)
-            .execute(&pool)
+        let addon_manifest = serde_json::json!({
+            "manifest_version": 1,
+            "id": "org.ersatzrs.addon.fixture",
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture playlist add-on"},
+            "license": "GPL-3.0-or-later",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": [
+                {"id": "addon.check.v1"},
+                {"id": "remote-stream.list.v1"},
+                {"id": "remote-stream.play.v1"}
+            ],
+            "entrypoints": {
+                "any": {"path": "fixture.sh", "kind": "posix_shell"}
+            },
+            "permissions": {},
+            "settings": [],
+            "panels": []
+        });
+        let now = chrono::Utc::now().to_rfc3339();
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(&package_root)
             .await
-            .expect("extractor settings");
+            .expect("hash fixture package");
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, NULL, '1.0.0', 1, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .bind("a".repeat(64))
+        .bind(content_sha256)
+        .bind(addon_manifest.to_string())
+        .bind(package_root.to_string_lossy().into_owned())
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("add-on installation");
 
         let report = scan_local_library(
             &pool,

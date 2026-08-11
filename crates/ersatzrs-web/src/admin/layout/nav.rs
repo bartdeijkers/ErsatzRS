@@ -56,6 +56,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                 </SchedulingNavGroup>
 
                 <NavGroup storage_key="settings" label=tr(TextKey::Settings)>
+                    <NavLink href="/settings/addons" label=tr(TextKey::Addons) icon=IconName::Settings/>
                     <NavLink href="/settings/ffmpeg" label=tr(TextKey::Ffmpeg) icon=IconName::Settings/>
                     <NavLink href="/settings/logging" label=tr(TextKey::Logging) icon=IconName::Settings/>
                     <NavLink href="/settings/hdhr" label=tr(TextKey::HdHomeRun) icon=IconName::Settings/>

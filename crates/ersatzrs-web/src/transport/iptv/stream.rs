@@ -32,6 +32,7 @@ use ersatzrs_ffmpeg::{
     OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
     SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
+use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
@@ -54,7 +55,7 @@ use ersatzrs_infra::playback::{
 };
 use ersatzrs_infra::remote_stream::{
     redact_remote_stream_output, remote_stream_input_file, remote_stream_producer,
-    resolve_remote_stream, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
+    resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
     RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
@@ -1529,7 +1530,8 @@ pub(crate) async fn load_active_media_path(
                   pi."AudioStreamIndex" AS "AudioStreamIndex",
                   pi."SubtitleStreamIndex" AS "SubtitleStreamIndex",
                   rs."Url" AS "RemoteUrl",
-                  rs."Script" AS "RemoteScript",
+                  rs."AddonId" AS "RemoteAddonId",
+                  rs."Script" AS "RemoteLegacyScript",
                   rs."Duration" AS "RemoteDuration",
                   rs."FallbackQuery" AS "RemoteFallbackQuery",
                   rs."IsLive" AS "RemoteIsLive"
@@ -1595,13 +1597,21 @@ pub(crate) async fn load_active_media_path(
         .transpose()?;
     let media_path = decode_active_item_column::<String>(&row, "MediaPath")?;
     let remote_url = decode_active_item_column::<Option<String>>(&row, "RemoteUrl")?;
-    let remote_script = decode_active_item_column::<Option<String>>(&row, "RemoteScript")?;
-    let remote_stream = if remote_url.is_some() || remote_script.is_some() {
+    let remote_addon = decode_active_item_column::<Option<String>>(&row, "RemoteAddonId")?;
+    let remote_legacy_script =
+        decode_active_item_column::<Option<String>>(&row, "RemoteLegacyScript")?;
+    if remote_legacy_script.is_some() {
+        return Err(RepositoryError::Decode {
+            kind: "active remote stream",
+            value: "legacy script source requires migration to an add-on".to_owned(),
+        });
+    }
+    let remote_stream = if remote_url.is_some() || remote_addon.is_some() {
         let is_live = decode_active_item_column::<Option<i64>>(&row, "RemoteIsLive")?
             .is_some_and(|value| value != 0);
         let definition = RemoteStreamDefinition {
             url: remote_url,
-            script: remote_script,
+            addon: remote_addon,
             duration: decode_active_item_column(&row, "RemoteDuration")?,
             fallback_query: decode_active_item_column(&row, "RemoteFallbackQuery")?,
             is_live,
@@ -1613,12 +1623,19 @@ pub(crate) async fn load_active_media_path(
             ..RemoteStreamDefinition::default()
         };
         Some(
-            resolve_remote_stream(&definition, std::path::Path::new(&media_path)).map_err(
-                |error| RepositoryError::Decode {
-                    kind: "active remote stream",
-                    value: error.to_string(),
+            resolve_remote_stream_with_addons(
+                pool,
+                &definition,
+                &AddonRuntimeContext {
+                    ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+                    ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
                 },
-            )?,
+            )
+            .await
+            .map_err(|error| RepositoryError::Decode {
+                kind: "active remote stream",
+                value: error.to_string(),
+            })?,
         )
     } else {
         None
@@ -3180,6 +3197,7 @@ mod tests {
             r#"CREATE TABLE "RemoteStream" (
                 "Id" INTEGER PRIMARY KEY,
                 "Url" TEXT NULL,
+                "AddonId" TEXT NULL,
                 "Script" TEXT NULL,
                 "Duration" TEXT NULL,
                 "FallbackQuery" TEXT NULL,

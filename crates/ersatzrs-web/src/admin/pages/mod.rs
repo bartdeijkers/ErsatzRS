@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod channels;
 pub mod dev;
 pub mod ffmpeg_profiles;

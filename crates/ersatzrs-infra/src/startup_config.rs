@@ -41,18 +41,24 @@ fn startup_database_url() -> Option<OsString> {
     startup_database_url_from_vars([
         (
             ERSATZRS_DATABASE_URL_ENV_VAR,
-            environment_var(ERSATZRS_DATABASE_URL_ENV_VAR),
+            environment_variable(ERSATZRS_DATABASE_URL_ENV_VAR),
         ),
         (
             ERSATZRS_DATABASE_URL_ENV_VAR_UPPER,
-            environment_var(ERSATZRS_DATABASE_URL_ENV_VAR_UPPER),
+            environment_variable(ERSATZRS_DATABASE_URL_ENV_VAR_UPPER),
         ),
-        (DATABASE_URL_ENV_VAR, environment_var(DATABASE_URL_ENV_VAR)),
+        (
+            DATABASE_URL_ENV_VAR,
+            environment_variable(DATABASE_URL_ENV_VAR),
+        ),
     ])
 }
 
+/// Read one process environment value through the startup/configuration
+/// boundary. Callers remain responsible for parsing and redacting it.
+#[must_use]
 #[allow(clippy::disallowed_methods)]
-fn environment_var(key: &str) -> Option<OsString> {
+pub(crate) fn environment_variable(key: &str) -> Option<OsString> {
     std::env::var_os(key)
 }
 

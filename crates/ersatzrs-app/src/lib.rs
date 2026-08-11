@@ -15,9 +15,11 @@ pub mod queries;
 pub use error::{ApplicationError, Result};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    AdminFfmpegRuntimeRead, AdminHealthRead, AdminHealthRuntime, AdminHealthRuntimeError,
-    AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
-    BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError, MediaSourceRuntime,
+    AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
+    AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
+    AdminHealthRuntime, AdminHealthRuntimeError, AdminTroubleshootingRuntime,
+    AdminTroubleshootingRuntimeError, ApplicationPorts, AvailableAddonRead, BlockPreviewBuilder,
+    ChannelRuntime, ChannelRuntimeError, InstalledAddonRead, MediaSourceRuntime,
     MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
     PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
     RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
@@ -64,16 +66,87 @@ impl ApplicationServices {
         self.ports.remote_stream_playlists().list(library_id).await
     }
 
-    pub async fn list_remote_stream_playlist_extractors(
+    pub async fn list_remote_stream_playlist_addons(
         &self,
     ) -> std::result::Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
-        self.ports.remote_stream_playlists().extractor_names().await
+        self.ports.remote_stream_playlists().addon_ids().await
     }
 
     pub async fn list_remote_stream_tags(
         &self,
     ) -> std::result::Result<Vec<String>, RemoteStreamPlaylistRuntimeError> {
         self.ports.remote_stream_playlists().tags().await
+    }
+
+    pub async fn addon_overview(
+        &self,
+    ) -> std::result::Result<AddonOverviewRead, AddonRuntimeError> {
+        self.ports.addons().overview().await
+    }
+
+    pub async fn save_addon_repository(
+        &self,
+        repository: AddonRepositoryEdit,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().save_repository(repository).await
+    }
+
+    pub async fn remove_addon_repository(
+        &self,
+        repository_id: String,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().remove_repository(repository_id).await
+    }
+
+    pub async fn refresh_addon_repository(
+        &self,
+        repository_id: String,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().refresh_repository(repository_id).await
+    }
+
+    pub async fn install_addon(
+        &self,
+        repository_id: String,
+        addon_id: String,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().install(repository_id, addon_id).await
+    }
+
+    pub async fn save_addon_setting(
+        &self,
+        setting: AddonSettingEdit,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().save_setting(setting).await
+    }
+
+    pub async fn check_addon(
+        &self,
+        addon_id: String,
+    ) -> std::result::Result<String, AddonRuntimeError> {
+        self.ports.addons().check(addon_id).await
+    }
+
+    pub async fn enable_addon(
+        &self,
+        addon_id: String,
+    ) -> std::result::Result<String, AddonRuntimeError> {
+        self.ports.addons().enable(addon_id).await
+    }
+
+    pub async fn disable_addon(
+        &self,
+        addon_id: String,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().disable(addon_id).await
+    }
+
+    pub async fn uninstall_addon(
+        &self,
+        addon_id: String,
+        force: bool,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().uninstall(addon_id, force).await
     }
 
     pub async fn save_remote_stream_playlist(

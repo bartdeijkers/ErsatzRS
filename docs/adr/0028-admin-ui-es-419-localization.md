@@ -2,11 +2,14 @@
 
 ## Status
 
-Proposed
+Accepted 2026-08-11
 
 ## Implementation
 
-Not implemented
+Partial — the complete `es-419` translation module, regional metadata, dynamic
+helpers, stable error mappings, and representative tests were added on
+2026-08-11. Focused compiler and Chromium settings-route proof remain before
+this ADR can claim implementation.
 
 ## Context
 

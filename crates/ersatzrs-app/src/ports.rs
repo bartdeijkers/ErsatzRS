@@ -328,7 +328,7 @@ pub struct RemoteStreamPlaylistRead {
     pub relative_path: String,
     pub name: String,
     pub url: String,
-    pub extractor: String,
+    pub addon: String,
     pub folder: String,
     pub interval: String,
     pub max_items: usize,
@@ -352,7 +352,7 @@ pub struct RemoteStreamPlaylistEdit {
     pub relative_path: Option<String>,
     pub name: String,
     pub url: String,
-    pub extractor: String,
+    pub addon: String,
     pub folder: String,
     pub interval: String,
     pub max_items: usize,
@@ -385,7 +385,7 @@ impl RemoteStreamPlaylistRuntimeError {
     }
 }
 
-/// Native filesystem, storage, and extractor operations for playlist administration.
+/// Native filesystem, storage, and add-on operations for playlist administration.
 #[async_trait]
 pub trait RemoteStreamPlaylistRuntime: Send + Sync {
     async fn list(
@@ -393,7 +393,7 @@ pub trait RemoteStreamPlaylistRuntime: Send + Sync {
         library_id: i64,
     ) -> Result<Vec<RemoteStreamPlaylistRead>, RemoteStreamPlaylistRuntimeError>;
 
-    async fn extractor_names(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError>;
+    async fn addon_ids(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError>;
 
     async fn tags(&self) -> Result<Vec<String>, RemoteStreamPlaylistRuntimeError>;
 
@@ -423,6 +423,118 @@ pub trait RemoteStreamPlaylistRuntime: Send + Sync {
         root_index: usize,
         relative_path: String,
     ) -> Result<RemoteStreamPlaylistTroubleshootingRead, RemoteStreamPlaylistRuntimeError>;
+}
+
+/// One trusted repository shown on the add-on settings page.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonRepositoryRead {
+    pub id: String,
+    pub name: String,
+    pub index_url: String,
+    pub public_key: String,
+    pub is_official: bool,
+    pub is_enabled: bool,
+    pub last_sequence: Option<u64>,
+    pub last_refresh: Option<String>,
+    pub last_error: Option<String>,
+}
+
+/// One signed catalog entry paired with its source repository.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AvailableAddonRead {
+    pub repository_id: String,
+    pub addon: ersatzrs_addon_contract::CatalogAddon,
+    pub host_compatible: bool,
+    pub package_available: bool,
+}
+
+/// Persisted, unresolved setting value or secret reference.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonSettingRead {
+    pub key: String,
+    pub value: Option<String>,
+    pub reference_kind: Option<String>,
+    pub reference: Option<String>,
+}
+
+/// One installed package and its host-rendered configuration state.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstalledAddonRead {
+    pub addon_id: String,
+    pub repository_id: Option<String>,
+    pub version: String,
+    pub enabled: bool,
+    pub manifest: ersatzrs_addon_contract::AddonManifest,
+    pub settings: Vec<AddonSettingRead>,
+    pub last_check_code: Option<String>,
+    pub last_check_message: Option<String>,
+}
+
+/// Complete read model for the add-on settings page.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonOverviewRead {
+    pub repositories_are_deployment_managed: bool,
+    pub repositories: Vec<AddonRepositoryRead>,
+    pub available: Vec<AvailableAddonRead>,
+    pub installed: Vec<InstalledAddonRead>,
+}
+
+/// Editable trusted repository identity. Public signing keys are not secrets.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonRepositoryEdit {
+    pub id: String,
+    pub name: String,
+    pub index_url: String,
+    pub public_key: String,
+    pub is_enabled: bool,
+}
+
+/// Editable setting value. Secret kinds carry a reference, never secret bytes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonSettingEdit {
+    pub addon_id: String,
+    pub key: String,
+    pub value: Option<String>,
+    pub reference_kind: Option<String>,
+    pub reference: Option<String>,
+}
+
+/// Failure from the native add-on lifecycle adapter.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct AddonRuntimeError {
+    message: String,
+}
+
+impl AddonRuntimeError {
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// Signed catalog, package, configuration, and process lifecycle operations.
+#[async_trait]
+pub trait AddonRuntime: Send + Sync {
+    async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError>;
+    async fn save_repository(
+        &self,
+        repository: AddonRepositoryEdit,
+    ) -> Result<(), AddonRuntimeError>;
+    async fn remove_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError>;
+    async fn refresh_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError>;
+    async fn install(
+        &self,
+        repository_id: String,
+        addon_id: String,
+    ) -> Result<(), AddonRuntimeError>;
+    async fn save_setting(&self, setting: AddonSettingEdit) -> Result<(), AddonRuntimeError>;
+    async fn check(&self, addon_id: String) -> Result<String, AddonRuntimeError>;
+    async fn enable(&self, addon_id: String) -> Result<String, AddonRuntimeError>;
+    async fn disable(&self, addon_id: String) -> Result<(), AddonRuntimeError>;
+    async fn uninstall(&self, addon_id: String, force: bool) -> Result<(), AddonRuntimeError>;
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -544,6 +656,7 @@ pub struct ApplicationPorts {
     troubleshooting: Arc<dyn TroubleshootingRepository>,
     troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
     remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
+    addons: Arc<dyn AddonRuntime>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -581,6 +694,7 @@ impl ApplicationPorts {
         troubleshooting: Arc<dyn TroubleshootingRepository>,
         troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
         remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
+        addons: Arc<dyn AddonRuntime>,
         media_source_runtime: Arc<dyn MediaSourceRuntime>,
         admin_search: Arc<dyn AdminSearchRepository>,
         block_previews: Arc<dyn BlockPreviewRepository>,
@@ -613,6 +727,7 @@ impl ApplicationPorts {
             troubleshooting,
             troubleshooting_runtime,
             remote_stream_playlists,
+            addons,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -756,6 +871,12 @@ impl ApplicationPorts {
     #[must_use]
     pub fn remote_stream_playlists(&self) -> &(dyn RemoteStreamPlaylistRuntime + 'static) {
         self.remote_stream_playlists.as_ref()
+    }
+
+    /// Signed add-on repository and package lifecycle adapter.
+    #[must_use]
+    pub fn addons(&self) -> &(dyn AddonRuntime + 'static) {
+        self.addons.as_ref()
     }
 
     /// Remote media-source validation and synchronization effects.

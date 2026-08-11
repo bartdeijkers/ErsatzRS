@@ -10,17 +10,18 @@ detached Ed25519 catalog verification, replaceable trust roots, rollback and
 expiry protection, bounded safe ZIP installation, immutable package/content
 integrity, manual update/enable lifecycle, manifest-rendered settings and
 declarative panels, secret references, required-dependency lifecycle guards,
-bounded out-of-process invocation, health, automatic refresh, and localized
-Settings > Add-ons administration.
+repository/install compare-and-swap protection, conditional signed-catalog
+refresh, repository-ID-scoped persistent data, managed Unix process-group and
+Windows Job Object ownership, health, and localized Settings > Add-ons
+administration.
 
 The separate official multi-add-on repository source tree builds deterministic
 packages for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on
 all six release RIDs. It is intentionally not published from this worktree and
 the main repository seed intentionally has no production public key until the
 maintainer provisions the private signing key directly in the publisher's
-secret store. HTTP refreshes do not yet use cache validators, and Remote Stream
-playback currently exposes managed tool paths without enforcing the matching
-manifest permission.
+secret store. Publishing that repository and pinning its production public key
+are the only remaining platform work in this record.
 '''
 
 [[debt]]
@@ -35,17 +36,19 @@ resolved    = false
 id          = 'addon-catalog-refresh-is-not-http-conditional'
 description = 'Honor the ADR 0066 conditional-refresh contract with HTTP validators and a verified not-modified path instead of downloading the full index and signature every time.'
 discovered  = '2026-08-11'
-evidence    = '`refresh_repository` always performs ordinary bounded GET requests; repeated-sequence validation accepts identical bytes but no ETag, Last-Modified, or HTTP 304 path exists.'
+evidence    = '`refresh_repository` persists ETag and Last-Modified, conditionally requests the index, reuses only previously signature-verified exact bytes on a valid 304, and always verifies a detached signature for new 200 response bytes.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'Repository refresh persists ETag and Last-Modified, conditionally requests the signed index, revalidates only previously signature-verified bytes on 304, and always fetches and verifies the detached signature for a new 200 response. Focused regressions cover both paths and stale-revision rejection.'
 
 [[debt]]
 id          = 'remote-stream-play-must-honor-managed-ffmpeg-permission'
 description = 'Expose managed FFmpeg and ffprobe paths to Remote Stream play only when the installed manifest declares managed FFmpeg access.'
 discovered  = '2026-08-11'
-evidence    = 'Generic add-on environment projection checks `manifest.permissions.managed_ffmpeg`, but `spawn_remote_stream_producer` currently injects `FFMPEG_BIN` and an available `FFPROBE_BIN` unconditionally.'
+evidence    = '`resolve_setting_environment` is the single manifest-gated projection for generic and Remote Stream operations; its sentinel-path regression proves the managed tool variables are absent without permission and exact when enabled.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'All add-on operations share the same manifest-gated environment projection; Remote Stream play receives FFMPEG_BIN and FFPROBE_BIN only when managed_ffmpeg is declared, with a direct sentinel-path regression.'
 
 [[debt]]
 id          = 'addon-settings-browser-proof'

@@ -1,9 +1,10 @@
 # Add-on runtime reference
 
-The host launches an installed package only when it is enabled, its manifest
-supports the requested capability, its host version and RID match, required
-dependencies are ready, and its extracted content still matches the recorded
-hash.
+Normal capability, list, and play invocations require an enabled package whose
+manifest supports the requested capability, whose host version and RID match,
+whose required dependencies are ready, and whose extracted content still
+matches the recorded hash. `addon.check.v1` is also allowed while disabled so
+readiness can be established before enablement.
 
 ## Process environment
 
@@ -19,15 +20,10 @@ setting values use these names:
 | `ERSATZRS_ADDON_SETTING_<KEY>` | Resolved non-secret setting. |
 | `ERSATZRS_ADDON_SECRET_<KEY>` | Secret resolved from a named environment reference. |
 | `ERSATZRS_ADDON_SECRET_FILE_<KEY>` | Configured secret-file path. |
-| `FFMPEG_BIN`, `FFPROBE_BIN` | Managed tool paths for generic operations when `managed_ffmpeg` is declared. |
+| `FFMPEG_BIN`, `FFPROBE_BIN` | Managed tool paths when `managed_ffmpeg` is declared. |
 | `ERSATZRS_REMOTE_STREAM_URL` | URL for `remote-stream.play.v1`. |
 | `ERSATZRS_REMOTE_STREAM_SEEK` | Current source offset for play. |
 | `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL` | URL for `remote-stream.list.v1`. |
-
-The Remote Stream producer integration currently supplies `FFMPEG_BIN` and an
-available `FFPROBE_BIN` as playback environment values even when the package
-does not declare `managed_ffmpeg`. This is an implementation gap, not an
-operating-system permission boundary.
 
 ## Operations
 
@@ -40,26 +36,46 @@ The list and play payloads, environment, output bounds, and NDJSON fields are
 defined by the [Remote Stream playlist reference](remote-stream-playlist-manifests.md).
 Unknown capability versions are rejected.
 
-Processes run as the ErsatzRS operating-system user. Signing proves provenance
-and integrity, not confinement, and v1 does not install a portable OS sandbox.
+Every invocation runs in an owned Unix process group or Windows Job Object.
+Timeout, cancellation, output-drain failure, and invocation-owner teardown
+terminate every member that remains in that managed group or job. Control,
+list, and check output plus diagnostic stderr are byte- and time-bounded.
+`remote-stream.play.v1` stdout is instead a session-owned media stream; session
+cancellation owns its lifetime.
+
+Processes still run as the ErsatzRS operating-system user. Signing proves
+provenance and integrity, not confinement. The small startup allowlist still
+includes `PATH`, and v1 does not install a portable OS sandbox.
 
 ## Persistence and lifecycle
 
 `AddonRepository`, `AddonInstallation`, and `AddonSetting` own repository,
 active package, and configuration state. `RemoteStream.AddonId` is a restricting
 foreign key to the active installation. Packages are installed in immutable
-version/hash/RID paths; data and cache use separate per-add-on roots.
+version/hash/RID paths and their content hash is revalidated before each
+invocation. On Unix, extraction normalizes directories to `0755` and files to
+`0444` or `0555`, stripping group/world write access. Data and cache use
+separate repository-scoped per-add-on roots, so an add-on with the same ID from
+a different configured repository ID cannot inherit retained private state.
 
 New installs and updates are disabled by default. Enable validates settings,
 required dependency versions, RID and host compatibility, package integrity,
 and readiness. An `unavailable` result blocks enablement. A package cannot be
 disabled while an enabled package requires it, and uninstall is blocked by
-installed required dependents or active Remote Stream references.
+installed required dependents or active Remote Stream references through the
+normal administration flow.
 
-Uninstall removes package executables but retains persistent add-on data.
+Uninstall removes package executables and disposable cache but retains the
+installation's repository-scoped persistent add-on data.
 Removing a repository retains installed packages while clearing their stored
-repository association. Changing a repository URL or public key clears its
-catalog, refresh sequence, and refresh state.
+repository association; their stable data namespace remains retained. Changing
+a repository URL or public key clears its catalog, refresh sequence,
+validators, and refresh state.
+
+Environment-backed secret values and operation URLs are exactly redacted from
+add-on-controlled output. When a file-backed secret is configured, ErsatzRS
+does not read that file and therefore suppresses add-on-controlled diagnostic
+text instead of risking disclosure of a value the add-on read itself.
 
 There is no stable public add-on HTTP or event API in v1. Leptos server
 functions under the admin route are internal UI adapters, not an add-on ingress

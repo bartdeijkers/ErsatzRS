@@ -2,7 +2,8 @@
 
 An add-on repository is trusted only after ErsatzRS has an allowlist record
 containing its stable ID, credential-free HTTPS index URL, and raw Ed25519
-public key encoded as standard Base64.
+public key in canonical standard Base64. The key must be exactly 44 ASCII
+characters, contain no whitespace, decode to 32 bytes, and re-encode exactly.
 
 ## Deployment allowlist
 
@@ -48,9 +49,9 @@ The strict index object contains:
 
 Each catalog entry supplies identity, version, localized metadata, license,
 source URL, host requirement, capabilities, permissions, and packages. Its
-`packages` map selects an exact RID before `any`; each package supplies a
-credential-free HTTPS URL, SHA-256, and byte size. Redirect targets must remain
-HTTPS.
+`packages` map selects an exact RID before `any`; each package supplies an HTTPS
+URL without userinfo, query, or fragment, plus SHA-256 and byte size. Redirect
+targets must remain HTTPS and may use provider-owned query parameters.
 
 Reusing a sequence with different signed bytes is rejected. Reusing it with
 identical bytes is accepted. Expired catalogs remain stored for diagnosis but
@@ -59,10 +60,18 @@ cannot install or update packages.
 ## Refresh and removal
 
 The web host checks repositories when its maintenance task starts and every six
-hours. A repository is refreshed when its previous successful refresh is more
-than twelve hours old. Each refresh downloads the complete index and signature;
-v1 does not send HTTP cache validators or use a `304 Not Modified` response.
-A failed refresh preserves the last verified catalog.
+hours. A repository is refreshed when its previous successful refresh is at
+least twelve hours old. ErsatzRS persists the signed index response's `ETag` and
+`Last-Modified` values and sends them on the next index request. A valid `304
+Not Modified` response reuses, reparses, and revalidates the exact previously
+signature-verified catalog bytes without requesting the detached signature.
+It is rejected when no matching validator or verified catalog is available.
+
+A `200 OK` response always fetches the detached signature and verifies the new
+exact bytes before replacing the cache. Compare-and-swap repository revisions
+prevent a stale refresh from overwriting a changed trust root or rolling the
+catalog sequence backward. A failed or concurrent refresh preserves the last
+verified catalog.
 
 Removing a database-backed repository does not uninstall its packages. The
 installation's repository association becomes unset, so it no longer has that

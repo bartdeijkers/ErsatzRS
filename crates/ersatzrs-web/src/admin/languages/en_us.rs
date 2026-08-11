@@ -355,6 +355,38 @@ impl LanguageStrings for EnglishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::Addon => "Add-on",
+        TextKey::Addons => "Add-ons",
+        TextKey::AddonRepositories => "Add-on repositories",
+        TextKey::AvailableAddons => "Available add-ons",
+        TextKey::InstalledAddons => "Installed add-ons",
+        TextKey::AddRepository => "Add repository",
+        TextKey::RepositoryUrl => "Repository URL",
+        TextKey::PublicSigningKey => "Public signing key",
+        TextKey::DeploymentManagedRepositories => {
+            "Repositories are managed by deployment configuration."
+        }
+        TextKey::Refresh => "Refresh",
+        TextKey::Install => "Install",
+        TextKey::UpdateAddon => "Update",
+        TextKey::Uninstall => "Uninstall",
+        TextKey::Configuration => "Configuration",
+        TextKey::SecretReference => "Secret reference",
+        TextKey::EnvironmentVariable => "Environment variable",
+        TextKey::SecretFile => "Secret file",
+        TextKey::Incompatible => "Incompatible",
+        TextKey::PackageUnavailable => "Package unavailable",
+        TextKey::Official => "Official",
+        TextKey::ThirdParty => "Third-party repository",
+        TextKey::Permissions => "Permissions",
+        TextKey::Capabilities => "Capabilities",
+        TextKey::Dependencies => "Dependencies",
+        TextKey::Optional => "Optional",
+        TextKey::MediaReadAccess => "Media read access",
+        TextKey::ExternalCommands => "External commands",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "Only add repositories you trust; signed add-ons run as the ErsatzRS service user."
+        }
         TextKey::AddCustomResolution => "Add Custom Resolution",
         TextKey::AddBlock => "Add Block",
         TextKey::AddBlockGroup => "Add Block Group",

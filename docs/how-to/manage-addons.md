@@ -49,14 +49,19 @@ only one of these references:
 An environment secret is resolved only while the invocation environment is
 built. A secret-file reference remains a path that the add-on reads itself.
 Raw secret values are not displayed, persisted, placed in process arguments,
-or included in diagnostics. Configure the environment variable or mounted file
-outside the admin UI.
+or included in diagnostics. When a file-backed secret is configured,
+add-on-controlled diagnostic text is suppressed because ErsatzRS deliberately
+does not read the value needed to redact it. Configure the environment variable
+or mounted file outside the admin UI. Clear an optional secret setting by
+saving it with no reference; this also disables the add-on until it passes a
+fresh check and is enabled again.
 
 ## Add a custom repository
 
 Select **Add repository** and enter a stable reverse-DNS ID, display name,
 credential-free HTTPS index URL, and the repository's raw 32-byte Ed25519
-public key encoded as standard Base64. A repository signature establishes
+public key encoded as canonical standard Base64, with no whitespace. A
+repository signature establishes
 provenance; it does not make third-party code safe. Review its source and
 permissions before installation.
 
@@ -84,11 +89,14 @@ ErsatzRS needs the public key only.
 **Disable** blocks new invocations. A stream already owned by a playback
 session is stopped by that session's normal cancellation lifecycle.
 
-**Disable** and **Uninstall** are also blocked while another enabled or installed
-package has a required dependency on the add-on. Remove that dependent package
-or migrate it first. **Uninstall** remains blocked while a Remote Stream refers
-to the add-on. Persistent add-on data is retained so reinstalling can recover
-operator state; package executables are removed.
+**Disable** is blocked while another enabled package requires the add-on;
+**Uninstall** is blocked while any installed package requires it. Remove that
+dependent package or migrate it first. **Uninstall** remains blocked while a
+Remote Stream refers to the add-on. Persistent add-on data is retained so
+reinstalling can recover operator state from the same repository-scoped
+namespace; package executables and disposable cache are removed. A same-ID
+package from a different configured repository ID cannot inherit that retained
+state.
 
 Use **Support > Health Checks** to find expired catalogs, failed refreshes,
 modified package content, incompatible manifests, and enabled packages without

@@ -35,6 +35,18 @@ pub fn ffmpeg_runtime_folder() -> PathBuf {
     app_state_folder().join("ffmpeg")
 }
 
+/// Root for repository-managed add-on packages.
+#[must_use]
+pub fn addon_packages_folder() -> PathBuf {
+    app_state_folder().join("addons").join("packages")
+}
+
+/// Persistent private data root for one installed add-on.
+#[must_use]
+pub fn addon_data_folder(data_namespace: &str, addon_id: &str) -> PathBuf {
+    data_path(Path::new("addons").join(data_namespace).join(addon_id))
+}
+
 /// Resolve a path below the persistent data root.
 #[must_use]
 pub fn data_path(path: impl AsRef<Path>) -> PathBuf {
@@ -155,6 +167,16 @@ pub fn transcode_folder() -> PathBuf {
 #[must_use]
 pub fn filter_graph_folder() -> PathBuf {
     app_data_folder().join("cache").join("filter-graphs")
+}
+
+/// Disposable cache root for one installed add-on.
+#[must_use]
+pub fn addon_cache_folder(data_namespace: &str, addon_id: &str) -> PathBuf {
+    app_data_folder()
+        .join("cache")
+        .join("addons")
+        .join(data_namespace)
+        .join(addon_id)
 }
 
 /// `<AppDataFolder>/scripts` — root for user-editable scripts.

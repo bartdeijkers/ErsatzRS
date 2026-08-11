@@ -1,0 +1,19 @@
+feature    = 'German (Germany) admin UI localization'
+etv_source = 'ErsatzRS ADR 0022 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
+rs_target  = '`crates/ersatzrs-web/src/admin/languages/de_de.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
+status     = 'In progress'
+adr        = ['0012', '0022']
+summary    = '''
+The dedicated `de-de` module has the accepted metadata, aliases, full
+`LanguageStrings` shape, localized dynamic helpers, and representative tests.
+It remains excluded from the generated language registry through
+`TRANSLATION_COMPLETE = false` because the one-hour translation pass did not
+replace every English product string.
+'''
+
+[[debt]]
+id          = 'admin-ui-de-de-translation-and-browser-proof'
+description = 'Finish the remaining German product translations, remove the incomplete guard, and prove language selection plus all settings routes without English fallback leakage.'
+discovered  = '2026-08-11'
+evidence    = 'The timeboxed 2026-08-11 pass produced a structurally complete draft but its exact-English audit still found genuine untranslated product labels. The build registry deliberately skips files marked `TRANSLATION_COMPLETE = false`.'
+resolved    = false

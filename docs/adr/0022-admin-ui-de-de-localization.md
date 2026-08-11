@@ -2,11 +2,14 @@
 
 ## Status
 
-Proposed
+Accepted 2026-08-11
 
 ## Implementation
 
-Not implemented
+Partial — the complete `de-de` module shape, metadata, localized helpers,
+add-on copy, stable FFmpeg errors, and representative tests were added on
+2026-08-11. Most static product labels still require translation, so
+`TRANSLATION_COMPLETE = false` keeps the draft out of the generated registry.
 
 ## Context
 

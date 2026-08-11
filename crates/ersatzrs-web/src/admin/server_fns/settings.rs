@@ -882,14 +882,12 @@ mod tests {
 
     #[test]
     fn normalize_ui_language_falls_back_to_ersatztv_default() {
-        assert_eq!(normalize_ui_language("en"), "en-us");
-        assert_eq!(normalize_ui_language("en-us"), "en-us");
-        assert_eq!(normalize_ui_language("pl"), "pl");
-        assert_eq!(normalize_ui_language("pt-br"), "pt-br");
-        assert_eq!(normalize_ui_language("nl-NL"), "nl");
-        assert_eq!(normalize_ui_language("fr"), "fr-fr");
-        assert_eq!(normalize_ui_language("fr-FR"), "fr-fr");
-        assert_eq!(normalize_ui_language("fr_FR"), "fr-fr");
+        for language in crate::admin::languages::LANGUAGES {
+            assert_eq!(normalize_ui_language(language.code), language.code);
+            for alias in language.aliases {
+                assert_eq!(normalize_ui_language(alias), language.code);
+            }
+        }
         assert_eq!(normalize_ui_language("unknown"), "en-us");
     }
 }

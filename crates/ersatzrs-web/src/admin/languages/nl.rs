@@ -1049,6 +1049,38 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::Addon => "Add-on",
+        TextKey::Addons => "Add-ons",
+        TextKey::AddonRepositories => "Add-onrepositories",
+        TextKey::AvailableAddons => "Beschikbare add-ons",
+        TextKey::InstalledAddons => "Geïnstalleerde add-ons",
+        TextKey::AddRepository => "Repository toevoegen",
+        TextKey::RepositoryUrl => "Repository-URL",
+        TextKey::PublicSigningKey => "Publieke ondertekeningssleutel",
+        TextKey::DeploymentManagedRepositories => {
+            "Repositories worden door de installatieconfiguratie beheerd."
+        }
+        TextKey::Refresh => "Vernieuwen",
+        TextKey::Install => "Installeren",
+        TextKey::UpdateAddon => "Bijwerken",
+        TextKey::Uninstall => "Deïnstalleren",
+        TextKey::Configuration => "Configuratie",
+        TextKey::SecretReference => "Geheimverwijzing",
+        TextKey::EnvironmentVariable => "Omgevingsvariabele",
+        TextKey::SecretFile => "Geheimbestand",
+        TextKey::Incompatible => "Niet compatibel",
+        TextKey::PackageUnavailable => "Pakket niet beschikbaar",
+        TextKey::Official => "Officieel",
+        TextKey::ThirdParty => "Externe repository",
+        TextKey::Permissions => "Rechten",
+        TextKey::Capabilities => "Mogelijkheden",
+        TextKey::Dependencies => "Afhankelijkheden",
+        TextKey::Optional => "Optioneel",
+        TextKey::MediaReadAccess => "Leestoegang tot media",
+        TextKey::ExternalCommands => "Externe programma's",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "Voeg alleen repositories toe die je vertrouwt; ondertekende add-ons draaien als de ErsatzRS-servicegebruiker."
+        }
         TextKey::AddCustomResolution => "Aangepaste resolutie toevoegen",
         TextKey::AddBlock => "Blok toevoegen",
         TextKey::AddBlockGroup => "Blokgroep toevoegen",

@@ -1,0 +1,19 @@
+feature    = 'Spanish (Spain) admin UI localization'
+etv_source = 'ErsatzRS ADR 0029 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
+rs_target  = '`crates/ersatzrs-web/src/admin/languages/es_es.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
+status     = 'In progress'
+adr        = ['0012', '0029']
+summary    = '''
+The dedicated `es-es` module carries the accepted regional metadata and
+aliases and implements every current static key, dynamic helper, stable error
+mapping, and representative locale test in Spanish for Spain. Focused compiler
+and settings-browser proof remain before the ADR can claim an implemented
+localization.
+'''
+
+[[debt]]
+id          = 'admin-ui-es-es-browser-proof'
+description = 'Prove es-es language selection, normalization, translated rendering across all settings routes, and absence of unintended English fallback text.'
+discovered  = '2026-08-11'
+evidence    = 'The timeboxed 2026-08-11 translation and structural audit completed the locale file; the shared Cargo build lock prevented the required compiled and Chromium closeout before the cutoff.'
+resolved    = false

@@ -1072,6 +1072,38 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::Addon => "Complemento",
+        TextKey::Addons => "Complementos",
+        TextKey::AddonRepositories => "Repositórios de complementos",
+        TextKey::AvailableAddons => "Complementos disponíveis",
+        TextKey::InstalledAddons => "Complementos instalados",
+        TextKey::AddRepository => "Adicionar repositório",
+        TextKey::RepositoryUrl => "URL do repositório",
+        TextKey::PublicSigningKey => "Chave pública de assinatura",
+        TextKey::DeploymentManagedRepositories => {
+            "Os repositórios são gerenciados pela configuração da implantação."
+        }
+        TextKey::Refresh => "Atualizar",
+        TextKey::Install => "Instalar",
+        TextKey::UpdateAddon => "Atualizar",
+        TextKey::Uninstall => "Desinstalar",
+        TextKey::Configuration => "Configuração",
+        TextKey::SecretReference => "Referência do segredo",
+        TextKey::EnvironmentVariable => "Variável de ambiente",
+        TextKey::SecretFile => "Arquivo de segredo",
+        TextKey::Incompatible => "Incompatível",
+        TextKey::PackageUnavailable => "Pacote indisponível",
+        TextKey::Official => "Oficial",
+        TextKey::ThirdParty => "Repositório de terceiros",
+        TextKey::Permissions => "Permissões",
+        TextKey::Capabilities => "Recursos",
+        TextKey::Dependencies => "Dependências",
+        TextKey::Optional => "Opcional",
+        TextKey::MediaReadAccess => "Acesso de leitura à mídia",
+        TextKey::ExternalCommands => "Comandos externos",
+        TextKey::ThirdPartyRepositoryWarning => {
+            "Adicione apenas repositórios confiáveis; complementos assinados são executados como o usuário do serviço ErsatzRS."
+        }
         TextKey::AddCustomResolution => "Adicionar resolução personalizada",
         TextKey::AddBlock => "Adicionar bloco",
         TextKey::AddBlockGroup => "Adicionar grupo de blocos",

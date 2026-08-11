@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Spanish for Latin America (`es-419`), Spain (`es-es`), and Italian for Italy
+  (`it-it`) now have complete admin UI translation modules with regional
+  aliases, dynamic labels, stable workflow errors, and settings-route browser
+  cases (ADRs 0025, 0028, and 0029); focused runtime proof remains tracked
+  before parity closeout. The same workflow preserves the improving but
+  incomplete German draft without registering it as a selectable culture.
 - A signed, repository-backed add-on platform now provides trusted-source
   replacement, immutable package install/update, manifest-rendered permissions,
   settings and panels, readiness checks, content-integrity health, automatic
@@ -113,6 +119,16 @@ release section when tagging a release.
 
 ### Fixed
 
+- Signed add-on catalog refresh now uses verified `ETag`/`Last-Modified`
+  revalidation and compare-and-swap trust/catalog revisions, preventing stale
+  refreshes, installs, configuration changes, or readiness checks from
+  overwriting a newer repository or installation state.
+- Add-on execution now gates managed FFmpeg paths on the declared permission,
+  owns and terminates managed Unix process groups or Windows Job Objects,
+  bounds probe output and drain time, strips unsafe Unix package write modes,
+  redacts or suppresses secret-bearing diagnostics, and isolates retained data
+  by repository ID.
+
 - Beeld & Geluid playlist-generated episode definitions now retain plot,
   original broadcast timestamp, Kijkwijzer advice, genre and subject labels,
   collection, role-aware people, producer, original broadcasters, and current
@@ -131,7 +147,7 @@ release section when tagging a release.
 - Remote Stream producer failures now include the playback surface, channel,
   producer name, effective seek, failure class, exit status, stderr byte count,
   and a bounded diagnostic tail. URLs, credentials, cookies, authorization
-  values, and local paths are sanitized before logging, so extractor failures
+  values, and local paths are sanitized before logging, so add-on failures
   are actionable without exposing signed media URLs or private configuration.
 
 ## [1.0.21-beta.1] - 2026-08-09

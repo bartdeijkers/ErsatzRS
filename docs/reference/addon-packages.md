@@ -48,8 +48,8 @@ and `secret_reference`. Secret definitions cannot have defaults. A secret
 setting stores an environment-variable name or file path, never the resolved
 secret value.
 
-Declarative panels accept text, status, key/value, and credential-free HTTPS
-link blocks. Packages cannot inject HTML, CSS, JavaScript, or WASM into the
+Declarative panels accept text, status, key/value, and HTTPS link blocks without
+URL userinfo. Packages cannot inject HTML, CSS, JavaScript, or WASM into the
 admin UI.
 
 ## Permission declarations

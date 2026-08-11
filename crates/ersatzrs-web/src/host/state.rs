@@ -18,6 +18,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
+use super::addons::NativeAddonRuntime;
 use super::channels::NativeChannelRuntime;
 use super::health::NativeAdminHealthRuntime;
 use super::media_sources::NativeMediaSourceRuntime;
@@ -176,6 +177,7 @@ impl AppState {
                     Arc::clone(&ffmpeg_runtime),
                 )),
                 Arc::new(NativeRemoteStreamPlaylistRuntime::new(pool.clone())),
+                Arc::new(NativeAddonRuntime::new(pool.clone())),
                 Arc::new(NativeMediaSourceRuntime::new(pool.clone())),
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(repositories.scheduling.clone()),

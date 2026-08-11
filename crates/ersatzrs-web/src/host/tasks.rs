@@ -24,7 +24,14 @@ pub fn spawn_background_tasks(
             hdhr.listen_port,
             shutdown.clone(),
         )),
-        tokio::spawn(run_trakt_maintenance(maintenance.pool, shutdown.clone())),
+        tokio::spawn(run_trakt_maintenance(
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
+        tokio::spawn(run_addon_repository_maintenance(
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
         tokio::spawn(run_maintenance_scheduler(
             maintenance.playout_build_rx,
             maintenance.application.clone(),
@@ -95,5 +102,64 @@ async fn run_trakt_maintenance(pool: DbPool, shutdown: CancellationToken) {
         if let Err(error) = sync.match_due_lists().await {
             tracing::warn!(error = %error, "failed to match due Trakt lists");
         }
+    }
+}
+
+async fn run_addon_repository_maintenance(pool: DbPool, shutdown: CancellationToken) {
+    let client = super::addons::addon_repository_client();
+    let mut interval = tokio::time::interval(std::time::Duration::from_hours(6));
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            _ = interval.tick() => {}
+        }
+
+        let repositories = match ersatzrs_infra::addons::list_trusted_repositories(&pool).await {
+            Ok(repositories) => repositories,
+            Err(error) => {
+                tracing::warn!(%error, "failed to load trusted add-on repositories");
+                continue;
+            }
+        };
+        for repository in repositories.into_iter().filter(|repository| {
+            repository.is_enabled
+                && !repository.public_key.trim().is_empty()
+                && repository_refresh_is_due(repository.last_refresh.as_deref())
+        }) {
+            if let Err(error) =
+                ersatzrs_infra::addons::refresh_repository(&pool, &client, &repository.id).await
+            {
+                tracing::warn!(
+                    repository_id = %repository.id,
+                    %error,
+                    "automatic add-on repository refresh failed"
+                );
+            }
+        }
+    }
+}
+
+fn repository_refresh_is_due(last_refresh: Option<&str>) -> bool {
+    let Some(last_refresh) =
+        last_refresh.and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+    else {
+        return true;
+    };
+    last_refresh.with_timezone(&chrono::Utc) <= chrono::Utc::now() - chrono::Duration::hours(12)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::repository_refresh_is_due;
+
+    #[test]
+    fn repository_refresh_is_due_for_missing_or_old_state() {
+        let old = (chrono::Utc::now() - chrono::Duration::hours(13)).to_rfc3339();
+        let recent = chrono::Utc::now().to_rfc3339();
+
+        assert!(repository_refresh_is_due(None));
+        assert!(repository_refresh_is_due(Some("invalid")));
+        assert!(repository_refresh_is_due(Some(&old)));
+        assert!(!repository_refresh_is_due(Some(&recent)));
     }
 }

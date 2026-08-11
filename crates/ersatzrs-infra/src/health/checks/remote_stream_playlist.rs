@@ -2,14 +2,15 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
     Row,
 };
-use crate::remote_stream::parse_script_command;
 use chrono::{DateTime, Utc};
+use ersatzrs_addon_contract::{
+    AddonManifest, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+};
+use semver::Version;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-const CONFIG_KEY_REMOTE_STREAM_EXTRACTORS: &str = "settings.remote_stream_extractors";
 
 pub(crate) struct RemoteStreamPlaylistHealthCheck {
     pool: Pool<Db>,
@@ -24,7 +25,7 @@ impl RemoteStreamPlaylistHealthCheck {
 #[derive(Deserialize)]
 struct HealthManifest {
     name: Option<String>,
-    extractor: String,
+    addon: String,
     folder: Option<String>,
     #[serde(default)]
     sync: HealthSync,
@@ -42,13 +43,6 @@ impl Default for HealthSync {
             interval: "24h".to_owned(),
         }
     }
-}
-
-#[derive(Deserialize)]
-struct HealthExtractor {
-    name: String,
-    windows: String,
-    unix: String,
 }
 
 #[derive(Deserialize)]
@@ -89,7 +83,7 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
         if manifests.is_empty() {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
-        let extractors = load_extractors(&self.pool).await?;
+        let addons = load_addons(&self.pool).await?;
         let mut failures = Vec::new();
         let mut warnings = Vec::new();
         let mut truncated = Vec::new();
@@ -110,12 +104,12 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
                 .filter(|value| !value.is_empty())
                 .unwrap_or(&fallback_name)
                 .to_owned();
-            let Some(extractor) = extractors.get(&manifest.extractor.to_ascii_lowercase()) else {
-                failures.push(format!("{name} has an unknown extractor"));
+            let Some(addon_available) = addons.get(&manifest.addon) else {
+                failures.push(format!("{name} has an unknown add-on"));
                 continue;
             };
-            if !extractor_available(extractor) {
-                failures.push(format!("{name} has an unavailable extractor"));
+            if !addon_available {
+                failures.push(format!("{name} has an unavailable add-on"));
                 continue;
             }
             let interval =
@@ -231,35 +225,40 @@ async fn remote_stream_library_roots(pool: &Pool<Db>) -> Result<Vec<PathBuf>> {
         .collect())
 }
 
-async fn load_extractors(pool: &Pool<Db>) -> Result<BTreeMap<String, HealthExtractor>> {
-    let raw: Option<String> =
-        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-            .fetch_optional(pool)
-            .await
-            .map_err(sqlx_error)?;
-    let values: Vec<HealthExtractor> = raw
-        .as_deref()
-        .and_then(|value| serde_json::from_str(value).ok())
-        .unwrap_or_default();
-    Ok(values
+async fn load_addons(pool: &Pool<Db>) -> Result<BTreeMap<String, bool>> {
+    let rows = sqlx::query(
+        r#"SELECT "AddonId", "Enabled", "ManifestJson", "InstallPath"
+           FROM "AddonInstallation" ORDER BY "AddonId""#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)?;
+    let host_version = Version::parse(env!("CARGO_PKG_VERSION")).ok();
+    Ok(rows
         .into_iter()
-        .map(|value| (value.name.trim().to_ascii_lowercase(), value))
-        .collect())
-}
-
-fn extractor_available(extractor: &HealthExtractor) -> bool {
-    let value = if cfg!(windows) {
-        &extractor.windows
-    } else {
-        &extractor.unix
-    };
-    parse_script_command(value, Path::new("."))
-        .ok()
-        .is_some_and(|command| {
-            let path = Path::new(&command.program);
-            path.is_absolute() && path.is_file()
+        .filter_map(|row| {
+            let addon_id = row.try_get::<String, _>("AddonId").ok()?;
+            let enabled = row
+                .try_get::<i64, _>("Enabled")
+                .is_ok_and(|value| value != 0);
+            let manifest = row
+                .try_get::<String, _>("ManifestJson")
+                .ok()
+                .and_then(|json| serde_json::from_str::<AddonManifest>(&json).ok());
+            let install_path = row.try_get::<String, _>("InstallPath").ok();
+            let available = enabled
+                && install_path.is_some_and(|path| Path::new(&path).is_dir())
+                && manifest.is_some_and(|manifest| {
+                    manifest.validate().is_ok()
+                        && manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                        && manifest.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+                        && host_version
+                            .as_ref()
+                            .is_some_and(|version| manifest.host_version.matches(version))
+                });
+            Some((addon_id, available))
         })
+        .collect())
 }
 
 fn collect_manifests(root: &Path) -> Vec<PathBuf> {
@@ -327,14 +326,14 @@ mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
 
     #[tokio::test]
-    async fn health_reports_missing_duration_and_unknown_extractor() {
+    async fn health_reports_missing_duration_and_unknown_addon() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let root = temp.path().join("remote-streams");
         let folder = root.join("Fixture");
         std::fs::create_dir_all(&folder).expect("managed folder");
         std::fs::write(
             root.join("Fixture.playlist.yml"),
-            "url: https://example.test/list\nextractor: fixture\n",
+            "url: https://example.test/list\naddon: org.ersatzrs.addon.fixture\n",
         )
         .expect("manifest");
         let state = serde_json::json!({
@@ -358,7 +357,9 @@ mod tests {
             r#"CREATE TABLE "Library" ("Id" INTEGER, "MediaKind" INTEGER)"#,
             r#"CREATE TABLE "LocalLibrary" ("Id" INTEGER)"#,
             r#"CREATE TABLE "LibraryPath" ("Id" INTEGER, "LibraryId" INTEGER, "Path" TEXT)"#,
-            r#"CREATE TABLE "ConfigElement" ("Key" TEXT, "Value" TEXT)"#,
+            r#"CREATE TABLE "AddonInstallation" (
+                "AddonId" TEXT, "Enabled" INTEGER, "ManifestJson" TEXT, "InstallPath" TEXT
+            )"#,
             r#"INSERT INTO "Library" ("Id", "MediaKind") VALUES (1, 7)"#,
             r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#,
         ] {
@@ -372,31 +373,49 @@ mod tests {
             .execute(&pool)
             .await
             .expect("library path");
-        let settings = serde_json::json!([{
-            "name": "fixture",
-            "windows": r"C:\fixture.bat",
-            "unix": "/bin/sh"
-        }]);
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
-            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
-            .bind(settings.to_string())
-            .execute(&pool)
-            .await
-            .expect("settings");
+        let addon_manifest = serde_json::json!({
+            "manifest_version": 1,
+            "id": "org.ersatzrs.addon.fixture",
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture playlist add-on"},
+            "license": "GPL-3.0-or-later",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": [
+                {"id": "addon.check.v1"},
+                {"id": "remote-stream.list.v1"},
+                {"id": "remote-stream.play.v1"}
+            ],
+            "entrypoints": {"any": {"path": "addon.sh", "kind": "posix_shell"}},
+            "permissions": {},
+            "settings": [],
+            "panels": []
+        });
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "Enabled", "ManifestJson", "InstallPath"
+               ) VALUES (?, 1, ?, ?)"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .bind(addon_manifest.to_string())
+        .bind(temp.path().to_string_lossy().into_owned())
+        .execute(&pool)
+        .await
+        .expect("add-on installation");
 
         let check = RemoteStreamPlaylistHealthCheck::new(pool.clone());
         let result = check.check().await.expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("1 entries without duration"));
 
-        sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = '[]' WHERE "Key" = ?"#)
-            .bind(CONFIG_KEY_REMOTE_STREAM_EXTRACTORS)
+        sqlx::query(r#"DELETE FROM "AddonInstallation""#)
             .execute(&pool)
             .await
-            .expect("unknown extractor");
+            .expect("unknown add-on");
         let result = check.check().await.expect("failed health result");
         assert_eq!(result.status, HealthCheckStatus::Fail);
-        assert!(result.message.contains("unknown extractor"));
+        assert!(result.message.contains("unknown add-on"));
         assert!(!result.message.contains(&root.display().to_string()));
     }
 }

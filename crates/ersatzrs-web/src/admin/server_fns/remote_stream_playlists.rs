@@ -16,7 +16,7 @@ pub struct RemoteStreamPlaylistRow {
     pub relative_path: String,
     pub name: String,
     pub url: String,
-    pub extractor: String,
+    pub addon: String,
     pub folder: String,
     pub interval: String,
     pub max_items: usize,
@@ -39,7 +39,7 @@ pub struct RemoteStreamPlaylistEditor {
     pub relative_path: Option<String>,
     pub name: String,
     pub url: String,
-    pub extractor: String,
+    pub addon: String,
     pub folder: String,
     pub interval: String,
     pub max_items: usize,
@@ -74,13 +74,13 @@ pub async fn list_remote_stream_playlists(
 }
 
 #[server]
-pub async fn list_remote_stream_playlist_extractors() -> Result<Vec<String>, ServerFnError> {
+pub async fn list_remote_stream_playlist_addons() -> Result<Vec<String>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
     state
         .application
-        .list_remote_stream_playlist_extractors()
+        .list_remote_stream_playlist_addons()
         .await
         .map_err(ServerFnError::new)
 }
@@ -98,7 +98,7 @@ pub async fn save_remote_stream_playlist(
         relative_path: editor.relative_path,
         name: editor.name,
         url: editor.url,
-        extractor: editor.extractor,
+        addon: editor.addon,
         folder: editor.folder,
         interval: editor.interval,
         max_items: editor.max_items,
@@ -188,7 +188,7 @@ impl From<ersatzrs_app::RemoteStreamPlaylistRead> for RemoteStreamPlaylistRow {
             relative_path: value.relative_path,
             name: value.name,
             url: value.url,
-            extractor: value.extractor,
+            addon: value.addon,
             folder: value.folder,
             interval: value.interval,
             max_items: value.max_items,

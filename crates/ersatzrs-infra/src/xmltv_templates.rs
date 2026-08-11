@@ -31,7 +31,7 @@
 //! - The bundled Remote Stream template emits persisted genres that ErsatzTV
 //!   exposes to custom templates but omits from its own bundled template.
 //! - The Remote Stream template also emits provider publication date,
-//!   categories, Kijkwijzer rating, and credits when a rich playlist extractor
+//!   categories, Kijkwijzer rating, and credits when a rich playlist add-on
 //!   supplied them. ErsatzTV's YAML contract has no corresponding fields.
 
 use std::path::PathBuf;

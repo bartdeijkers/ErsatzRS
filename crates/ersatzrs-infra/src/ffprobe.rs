@@ -11,13 +11,18 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::DolbyVisionConfiguration;
 use serde::Deserialize;
 use thiserror::Error;
+use tokio::io::AsyncReadExt as _;
 use tokio::process::Command;
 
 use crate::remote_stream::{
-    pipe_remote_stream_producer, redacted_source_label, remote_stream_input_file,
-    spawn_remote_stream_producer, RemoteStreamProducerPipe, RemoteStreamSource,
-    RemoteStreamSpawnContext, ResolvedRemoteStream,
+    command_has_file_backed_secret, pipe_remote_stream_producer, read_stderr_tail,
+    redact_remote_stream_output, redacted_source_label, remote_stream_environment_secrets,
+    remote_stream_input_file, spawn_remote_stream_producer, RemoteStreamProducerPipe,
+    RemoteStreamSource, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
+
+const MAX_REMOTE_FFPROBE_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+const REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT: StdDuration = StdDuration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FfprobeMediaVersion {
@@ -111,9 +116,9 @@ impl FfprobeExtractor {
         })
     }
 
-    /// Probe a persisted Remote Stream URL or media-producing script.
+    /// Probe a persisted Remote Stream URL or media-producing add-on.
     ///
-    /// Script stdout is connected directly to ffprobe stdin and both
+    /// Add-on stdout is connected directly to ffprobe stdin and both
     /// processes are bounded by one timeout/lifecycle.
     ///
     /// # Errors
@@ -123,20 +128,18 @@ impl FfprobeExtractor {
     pub async fn extract_remote(
         &self,
         stream: &ResolvedRemoteStream,
-        ffmpeg_path: &str,
     ) -> Result<FfprobeMediaVersion> {
-        self.extract_remote_with_timeout(stream, ffmpeg_path, StdDuration::from_secs(30))
+        self.extract_remote_with_timeout(stream, StdDuration::from_secs(30))
             .await
     }
 
     async fn extract_remote_with_timeout(
         &self,
         stream: &ResolvedRemoteStream,
-        ffmpeg_path: &str,
         timeout: StdDuration,
     ) -> Result<FfprobeMediaVersion> {
         let label = redacted_source_label(&stream.source);
-        let (args, mut producer) = self.remote_probe_command(stream, ffmpeg_path, &label)?;
+        let (args, mut producer) = self.remote_probe_command(stream, &label)?;
         let mut process = Command::new(&self.ffprobe_path);
         process
             .args(&args)
@@ -168,6 +171,18 @@ impl FfprobeExtractor {
                     label.clone(),
                     RemoteStreamSpawnContext::probe(),
                     Some("0".to_owned()),
+                    match &stream.source {
+                        RemoteStreamSource::Addon(command) => {
+                            remote_stream_environment_secrets(command)
+                        }
+                        RemoteStreamSource::Url(_) => Vec::new(),
+                    },
+                    match &stream.source {
+                        RemoteStreamSource::Addon(command) => {
+                            command_has_file_backed_secret(command)
+                        }
+                        RemoteStreamSource::Url(_) => false,
+                    },
                 )
                 .map_err(|error| FfprobeError::Spawn {
                     path: label.clone(),
@@ -178,34 +193,77 @@ impl FfprobeExtractor {
             None
         };
 
-        let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
-            Ok(Ok(output)) => output,
+        let stdout = child.stdout.take().ok_or_else(|| FfprobeError::Spawn {
+            path: label.clone(),
+            source: std::io::Error::other("ffprobe did not expose stdout"),
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| FfprobeError::Spawn {
+            path: label.clone(),
+            source: std::io::Error::other("ffprobe did not expose stderr"),
+        })?;
+        let mut stdout_task = tokio::spawn(read_remote_ffprobe_stdout(stdout));
+        let mut stderr_task = tokio::spawn(read_stderr_tail(stderr));
+        let status = match tokio::time::timeout(timeout, child.wait()).await {
+            Ok(Ok(status)) => status,
             Ok(Err(source)) => {
                 shutdown_remote_producer(&mut producer_pipe).await;
+                stdout_task.abort();
+                stderr_task.abort();
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
                 return Err(FfprobeError::Spawn {
                     path: label,
                     source,
                 });
             }
             Err(_) => {
+                let _ = child.kill().await;
                 shutdown_remote_producer(&mut producer_pipe).await;
+                stdout_task.abort();
+                stderr_task.abort();
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
                 return Err(FfprobeError::Timeout { path: label });
             }
         };
         shutdown_remote_producer(&mut producer_pipe).await;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stderr = match &stream.source {
-                RemoteStreamSource::Url(url) => stderr.replace(url, &label),
-                RemoteStreamSource::Script(_) => stderr.into_owned(),
-            };
+        let readers = tokio::time::timeout(REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT, async {
+            let stdout = (&mut stdout_task)
+                .await
+                .map_err(|_| std::io::Error::other("ffprobe stdout reader failed"))??;
+            let stderr = (&mut stderr_task)
+                .await
+                .map_err(|_| std::io::Error::other("ffprobe stderr reader failed"))?;
+            Ok::<_, std::io::Error>((stdout, stderr))
+        })
+        .await;
+        let (stdout, stderr) = match readers {
+            Ok(Ok(output)) => output,
+            Ok(Err(source)) => {
+                return Err(FfprobeError::Spawn {
+                    path: label,
+                    source,
+                });
+            }
+            Err(_) => {
+                stdout_task.abort();
+                stderr_task.abort();
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                return Err(FfprobeError::Spawn {
+                    path: label,
+                    source: std::io::Error::other("ffprobe output pipes did not close"),
+                });
+            }
+        };
+        if !status.success() {
             return Err(FfprobeError::Process {
                 path: label,
-                status: output.status,
-                stderr,
+                status,
+                stderr: redact_remote_stream_output(&stderr, stream),
             });
         }
-        parse_ffprobe_json(Path::new("remote-stream"), &output.stdout).map_err(|source| {
+        parse_ffprobe_json(Path::new("remote-stream"), &stdout).map_err(|source| {
             FfprobeError::Json {
                 path: label,
                 source,
@@ -216,9 +274,8 @@ impl FfprobeExtractor {
     fn remote_probe_command(
         &self,
         stream: &ResolvedRemoteStream,
-        ffmpeg_path: &str,
         label: &str,
-    ) -> Result<(Vec<String>, Option<tokio::process::Child>)> {
+    ) -> Result<(Vec<String>, Option<crate::addons::ManagedAddonChild>)> {
         let mut args = [
             "-hide_banner",
             "-print_format",
@@ -240,16 +297,33 @@ impl FfprobeExtractor {
         args.extend(["-i".to_owned(), input.path]);
         let producer = match &stream.source {
             RemoteStreamSource::Url(_) => None,
-            RemoteStreamSource::Script(command) => Some(
-                spawn_remote_stream_producer(command, ffmpeg_path, Some(&self.ffprobe_path))
-                    .map_err(|error| FfprobeError::Spawn {
+            RemoteStreamSource::Addon(command) => {
+                Some(spawn_remote_stream_producer(command).map_err(|error| {
+                    FfprobeError::Spawn {
                         path: label.to_owned(),
                         source: std::io::Error::other(error),
-                    })?,
-            ),
+                    }
+                })?)
+            }
         };
         Ok((args, producer))
     }
+}
+
+async fn read_remote_ffprobe_stdout(
+    stdout: tokio::process::ChildStdout,
+) -> std::io::Result<Vec<u8>> {
+    let mut output = Vec::new();
+    stdout
+        .take(MAX_REMOTE_FFPROBE_OUTPUT_BYTES as u64 + 1)
+        .read_to_end(&mut output)
+        .await?;
+    if output.len() > MAX_REMOTE_FFPROBE_OUTPUT_BYTES {
+        return Err(std::io::Error::other(
+            "ffprobe stdout exceeded its size limit",
+        ));
+    }
+    Ok(output)
 }
 
 async fn shutdown_remote_producer(producer: &mut Option<RemoteStreamProducerPipe>) {
@@ -768,24 +842,21 @@ mod tests {
         std::fs::set_permissions(&blocker, permissions).expect("blocker permissions");
 
         let stream = ResolvedRemoteStream {
-            source: RemoteStreamSource::Script(crate::remote_stream::RemoteStreamCommand {
+            source: RemoteStreamSource::Addon(crate::remote_stream::RemoteStreamCommand {
                 program: blocker.display().to_string(),
                 args: Vec::new(),
                 working_directory: temp.path().to_path_buf(),
+                environment: std::collections::BTreeMap::new(),
             }),
             is_live: false,
             configured_duration: None,
             fallback_query: None,
-            url_overrides_script: false,
+            uses_addon: true,
         };
         let extractor = FfprobeExtractor::new(blocker.display().to_string());
         let result = tokio::time::timeout(
             StdDuration::from_secs(2),
-            extractor.extract_remote_with_timeout(
-                &stream,
-                "ffmpeg-unused",
-                StdDuration::from_millis(50),
-            ),
+            extractor.extract_remote_with_timeout(&stream, StdDuration::from_millis(50)),
         )
         .await
         .expect("producer cancellation timed out");

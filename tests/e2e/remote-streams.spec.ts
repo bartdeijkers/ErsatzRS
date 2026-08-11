@@ -63,11 +63,42 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
 
 function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
   const seed = seedForProject(testInfo);
+  const addonId = 'org.ersatzrs.addon.fixture';
+  const addonManifest = JSON.stringify({
+    manifest_version: 1,
+    id: addonId,
+    version: '1.0.0',
+    name: { 'en-US': 'Remote Stream fixture' },
+    summary: { 'en-US': 'Network-free browser fixture.' },
+    license: 'MIT',
+    source_url: 'https://example.test/remote-stream-fixture',
+    host_version: '*',
+    capabilities: [
+      { id: 'addon.check.v1' },
+      { id: 'remote-stream.list.v1' },
+      { id: 'remote-stream.play.v1' },
+    ],
+    entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' } },
+    permissions: {
+      network_hosts: ['example.test'],
+      media_read: false,
+      managed_ffmpeg: false,
+      external_commands: [],
+    },
+    settings: [],
+    panels: [],
+  });
   sqlite(`
-INSERT INTO "ConfigElement" ("Key", "Value") VALUES (
-  'settings.remote_stream_extractors',
-  '[{"name":"fixture","windows":"C:\\\\fixture.bat","unix":"/tmp/fixture"}]'
-) ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value";
+DELETE FROM "AddonInstallation" WHERE "AddonId" = '${addonId}';
+INSERT INTO "AddonInstallation" (
+  "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
+  "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+) VALUES (
+  '${addonId}', NULL, '1.0.0', 1,
+  '${'0'.repeat(64)}', '${'1'.repeat(64)}',
+  '${sqlEscape(addonManifest)}', '/tmp/ersatzrs-remote-stream-addon-fixture',
+  '2026-08-11T00:00:00Z', '2026-08-11T00:00:00Z'
+);
 DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId};
 DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
@@ -223,7 +254,7 @@ test.describe('remote streams browser parity', () => {
       writeFileSync(join(root, 'Hand.playlist.yml'), [
         'name: Hand-authored E2E',
         'url: https://example.test/hand',
-        'extractor: fixture',
+        'addon: org.ersatzrs.addon.fixture',
         'folder: Hand',
         'create_playlist: true',
         '',
@@ -251,7 +282,7 @@ test.describe('remote streams browser parity', () => {
       await expect(page.getByTestId('remote-playlist-editor')).toBeVisible();
       await page.locator('#remote-playlist-name').fill('Managed E2E');
       await page.locator('#remote-playlist-url').fill('https://example.test/managed');
-      await page.locator('#remote-playlist-extractor').selectOption('fixture');
+      await page.locator('#remote-playlist-addon').selectOption('org.ersatzrs.addon.fixture');
       await page.locator('#remote-playlist-folder').fill('Managed E2E');
       await page.getByTestId('remote-playlist-save').click();
       await expect(page.getByTestId('remote-playlist-row').filter({ hasText: 'Managed E2E' })).toBeVisible();

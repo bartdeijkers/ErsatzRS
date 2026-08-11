@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -11,18 +11,27 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+use ersatzrs_addon_contract::validate_addon_id;
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
+
+use crate::addons::{
+    spawn_managed_addon_process, AddonRuntimeContext, ManagedAddonChild, ResolvedAddonCommand,
+};
+use crate::db::DbPool;
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const STDERR_EXCERPT_LIMIT: usize = 2 * 1024;
+const STDERR_READER_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+const FILE_SECRET_DIAGNOSTIC: &str =
+    "add-on diagnostics unavailable while a protected file reference is configured";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteStreamDefinition {
     pub url: Option<String>,
-    pub script: Option<String>,
+    pub addon: Option<String>,
     pub duration: Option<String>,
     pub fallback_query: Option<String>,
     pub is_live: bool,
@@ -60,6 +69,7 @@ pub struct RemoteStreamCommand {
     pub program: String,
     pub args: Vec<String>,
     pub working_directory: PathBuf,
+    pub environment: BTreeMap<String, String>,
 }
 
 impl RemoteStreamCommand {
@@ -67,6 +77,10 @@ impl RemoteStreamCommand {
         self.args
             .iter()
             .any(|argument| argument == REMOTE_STREAM_SEEK_PLACEHOLDER)
+            || self
+                .environment
+                .values()
+                .any(|value| value == REMOTE_STREAM_SEEK_PLACEHOLDER)
     }
 
     fn with_seek(&self, seek_position: &str) -> Self {
@@ -76,6 +90,11 @@ impl RemoteStreamCommand {
                 seek_position.clone_into(argument);
             }
         }
+        for value in command.environment.values_mut() {
+            if value == REMOTE_STREAM_SEEK_PLACEHOLDER {
+                seek_position.clone_into(value);
+            }
+        }
         command
     }
 }
@@ -83,7 +102,7 @@ impl RemoteStreamCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoteStreamSource {
     Url(String),
-    Script(RemoteStreamCommand),
+    Addon(RemoteStreamCommand),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +111,7 @@ pub struct ResolvedRemoteStream {
     pub is_live: bool,
     pub configured_duration: Option<String>,
     pub fallback_query: Option<String>,
-    pub url_overrides_script: bool,
+    pub uses_addon: bool,
 }
 
 /// Playback surface that owns a Remote Stream producer.
@@ -158,7 +177,7 @@ impl RemoteStreamSpawnContext {
 pub enum RemoteStreamError {
     #[error("remote stream definition is invalid: {0}")]
     Definition(String),
-    #[error("remote stream script command is invalid: {0}")]
+    #[error("remote stream add-on command is invalid: {0}")]
     Command(String),
     #[error("remote stream producer failed to start: {0}")]
     Spawn(String),
@@ -295,30 +314,66 @@ pub fn parse_remote_stream_definition(
     Ok(definition)
 }
 
-/// Resolve the selected source and its definition-relative working directory.
+/// Resolve a direct URL source.
 ///
 /// # Errors
 ///
-/// Returns an error when the definition or script command is invalid.
+/// Returns an error when the definition is invalid or requires an add-on.
 pub fn resolve_remote_stream(
     definition: &RemoteStreamDefinition,
-    definition_path: &Path,
+    _definition_path: &Path,
 ) -> Result<ResolvedRemoteStream, RemoteStreamError> {
     validate_definition(definition)?;
-    let url = trimmed(definition.url.as_ref());
-    let script = trimmed(definition.script.as_ref());
-    let url_overrides_script = url.is_some() && script.is_some();
-    let source = if let Some(url) = url {
-        RemoteStreamSource::Url(url.to_owned())
+    if trimmed(definition.addon.as_ref()).is_some() {
+        return Err(RemoteStreamError::Definition(
+            "add-on source requires the installed add-on resolver".to_owned(),
+        ));
+    }
+    resolve_remote_stream_source(definition, None)
+}
+
+/// Resolve a URL through an installed, enabled add-on when `addon:` is set.
+///
+/// # Errors
+///
+/// Returns an error when the definition or installed add-on is unavailable.
+pub async fn resolve_remote_stream_with_addons(
+    pool: &DbPool,
+    definition: &RemoteStreamDefinition,
+    runtime: &AddonRuntimeContext,
+) -> Result<ResolvedRemoteStream, RemoteStreamError> {
+    validate_definition(definition)?;
+    let command = if let Some(addon_id) = trimmed(definition.addon.as_ref()) {
+        let resolved = crate::addons::resolve_enabled_addon_command(
+            pool,
+            addon_id,
+            ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1,
+            "play",
+            runtime,
+        )
+        .await
+        .map_err(|error| RemoteStreamError::Command(error.to_string()))?;
+        Some(remote_stream_command_from_addon(
+            resolved,
+            trimmed(definition.url.as_ref()).unwrap_or_default(),
+        ))
     } else {
-        let script = script.ok_or_else(|| {
-            RemoteStreamError::Definition("either url or script is required".to_owned())
-        })?;
-        RemoteStreamSource::Script(parse_script_command(
-            script,
-            definition_path.parent().unwrap_or_else(|| Path::new(".")),
-        )?)
+        None
     };
+    resolve_remote_stream_source(definition, command)
+}
+
+fn resolve_remote_stream_source(
+    definition: &RemoteStreamDefinition,
+    addon_command: Option<RemoteStreamCommand>,
+) -> Result<ResolvedRemoteStream, RemoteStreamError> {
+    let url = trimmed(definition.url.as_ref())
+        .ok_or_else(|| RemoteStreamError::Definition("url is required".to_owned()))?;
+    let uses_addon = addon_command.is_some();
+    let source = addon_command.map_or_else(
+        || RemoteStreamSource::Url(url.to_owned()),
+        RemoteStreamSource::Addon,
+    );
     let is_live = definition.is_live
         || matches!(&source, RemoteStreamSource::Url(url)
             if url_scheme(url).is_some_and(|scheme| scheme.eq_ignore_ascii_case("rtsp")));
@@ -327,132 +382,26 @@ pub fn resolve_remote_stream(
         is_live,
         configured_duration: definition.duration.clone(),
         fallback_query: definition.fallback_query.clone(),
-        url_overrides_script,
+        uses_addon,
     })
 }
 
-/// Split a platform-native script command without invoking a shell.
-///
-/// # Errors
-///
-/// Returns an error for an empty command or malformed quoting.
-pub fn parse_script_command(
-    value: &str,
-    working_directory: &Path,
-) -> Result<RemoteStreamCommand, RemoteStreamError> {
-    let parts = split_command_line(value)?;
-    let (program, args) = parts.split_first().ok_or_else(|| {
-        RemoteStreamError::Command("the command must include an executable".to_owned())
-    })?;
-    if program.trim().is_empty() {
-        return Err(RemoteStreamError::Command(
-            "the executable must not be empty".to_owned(),
-        ));
+fn remote_stream_command_from_addon(
+    resolved: ResolvedAddonCommand,
+    url: &str,
+) -> RemoteStreamCommand {
+    let mut environment = resolved.environment;
+    environment.insert("ERSATZRS_REMOTE_STREAM_URL".to_owned(), url.to_owned());
+    environment.insert(
+        "ERSATZRS_REMOTE_STREAM_SEEK".to_owned(),
+        REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
+    );
+    RemoteStreamCommand {
+        program: resolved.program,
+        args: resolved.args,
+        working_directory: resolved.working_directory,
+        environment,
     }
-    Ok(RemoteStreamCommand {
-        program: program.clone(),
-        args: args.to_vec(),
-        working_directory: working_directory.to_path_buf(),
-    })
-}
-
-#[cfg(not(windows))]
-fn split_command_line(value: &str) -> Result<Vec<String>, RemoteStreamError> {
-    let mut result = Vec::new();
-    let mut current = String::new();
-    let mut quote = None;
-    let mut escaped = false;
-    let mut token_started = false;
-    for character in value.chars() {
-        if escaped {
-            current.push(character);
-            escaped = false;
-            token_started = true;
-            continue;
-        }
-        match (quote, character) {
-            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
-            (Some('"') | None, '\\') => escaped = true,
-            (Some('\'' | '"'), _) => current.push(character),
-            (None, '\'' | '"') => {
-                quote = Some(character);
-                token_started = true;
-            }
-            (None, character) if character.is_whitespace() => {
-                if token_started {
-                    result.push(std::mem::take(&mut current));
-                    token_started = false;
-                }
-            }
-            (None, character) => {
-                current.push(character);
-                token_started = true;
-            }
-            _ => unreachable!(),
-        }
-    }
-    if quote.is_some() || escaped {
-        return Err(RemoteStreamError::Command(
-            "the command contains unmatched quotes or an incomplete escape".to_owned(),
-        ));
-    }
-    if token_started {
-        result.push(current);
-    }
-    Ok(result)
-}
-
-#[cfg(windows)]
-fn split_command_line(value: &str) -> Result<Vec<String>, RemoteStreamError> {
-    split_windows_command_line(value)
-}
-
-#[cfg(windows)]
-fn split_windows_command_line(value: &str) -> Result<Vec<String>, RemoteStreamError> {
-    let mut result = Vec::new();
-    let mut current = String::new();
-    let mut quoted = false;
-    let mut backslashes = 0usize;
-    let mut token_started = false;
-    for character in value.chars() {
-        if character == '\\' {
-            backslashes += 1;
-            token_started = true;
-            continue;
-        }
-        if character == '"' {
-            current.extend(std::iter::repeat_n('\\', backslashes / 2));
-            if backslashes % 2 == 0 {
-                quoted = !quoted;
-            } else {
-                current.push('"');
-            }
-            backslashes = 0;
-            token_started = true;
-            continue;
-        }
-        current.extend(std::iter::repeat_n('\\', backslashes));
-        backslashes = 0;
-        if character.is_whitespace() && !quoted {
-            if token_started {
-                result.push(std::mem::take(&mut current));
-                token_started = false;
-            }
-        } else {
-            current.push(character);
-            token_started = true;
-        }
-    }
-    current.extend(std::iter::repeat_n('\\', backslashes));
-    if quoted {
-        return Err(RemoteStreamError::Command(
-            "the command contains unmatched quotes".to_owned(),
-        ));
-    }
-    if token_started {
-        result.push(current);
-    }
-    Ok(result)
 }
 
 #[must_use]
@@ -495,7 +444,7 @@ pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
                 input
             }
         }
-        RemoteStreamSource::Script(_) => {
+        RemoteStreamSource::Addon(_) => {
             // ErsatzTV forwards producer stdout through its internal endpoint
             // without adding an FFmpeg input format. Keep the direct pipe
             // equally opaque so FFmpeg can probe streamable MP4, WebM, MPEG-TS,
@@ -513,7 +462,7 @@ pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
 #[must_use]
 pub fn remote_stream_producer(stream: &ResolvedRemoteStream) -> Option<&RemoteStreamCommand> {
     match &stream.source {
-        RemoteStreamSource::Script(command) => Some(command),
+        RemoteStreamSource::Addon(command) => Some(command),
         RemoteStreamSource::Url(_) => None,
     }
 }
@@ -531,10 +480,10 @@ pub fn redacted_source_label(source: &RemoteStreamSource) -> String {
                 .unwrap_or("remote");
             format!("{scheme}://{authority}")
         }
-        RemoteStreamSource::Script(command) => Path::new(&command.program)
+        RemoteStreamSource::Addon(command) => Path::new(&command.program)
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("script")
+            .unwrap_or("add-on")
             .to_owned(),
     }
 }
@@ -543,9 +492,43 @@ pub fn redacted_source_label(source: &RemoteStreamSource) -> String {
 pub fn redact_remote_stream_output(value: &str, stream: &ResolvedRemoteStream) -> String {
     let source_redacted = match &stream.source {
         RemoteStreamSource::Url(url) => value.replace(url, &redacted_source_label(&stream.source)),
-        RemoteStreamSource::Script(_) => value.to_owned(),
+        RemoteStreamSource::Addon(command) if command_has_file_backed_secret(command) => {
+            FILE_SECRET_DIAGNOSTIC.to_owned()
+        }
+        RemoteStreamSource::Addon(command) => {
+            redact_exact_secrets(value, &remote_stream_environment_secrets(command))
+        }
     };
     sanitize_remote_stream_diagnostic(&source_redacted)
+}
+
+pub(crate) fn command_has_file_backed_secret(command: &RemoteStreamCommand) -> bool {
+    command
+        .environment
+        .keys()
+        .any(|name| name.starts_with("ERSATZRS_ADDON_SECRET_FILE_"))
+}
+
+pub(crate) fn remote_stream_environment_secrets(command: &RemoteStreamCommand) -> Vec<String> {
+    let mut secrets = command
+        .environment
+        .iter()
+        .filter(|(name, value)| {
+            (name.starts_with("ERSATZRS_ADDON_SECRET_")
+                || (name.starts_with("ERSATZRS_") && name.ends_with("_URL")))
+                && !value.is_empty()
+        })
+        .map(|(_, value)| value.clone())
+        .collect::<Vec<_>>();
+    secrets.sort_unstable_by_key(|secret| std::cmp::Reverse(secret.len()));
+    secrets.dedup();
+    secrets
+}
+
+fn redact_exact_secrets(value: &str, secrets: &[String]) -> String {
+    secrets.iter().fold(value.to_owned(), |redacted, secret| {
+        redacted.replace(secret, "[redacted]")
+    })
 }
 
 /// Sanitize and bound an operator-facing Remote Stream diagnostic excerpt.
@@ -680,7 +663,10 @@ fn looks_like_private_path(word: &str) -> bool {
 }
 
 fn redact_diagnostic_urls(value: &str) -> String {
-    const SCHEMES: [&str; 5] = ["https://", "http://", "rtsps://", "rtsp://", "file://"];
+    const SCHEMES: [&str; 11] = [
+        "https://", "http://", "rtsps://", "rtsp://", "rtmps://", "rtmp://", "srt://", "rist://",
+        "udp://", "tcp://", "file://",
+    ];
     let mut result = String::with_capacity(value.len());
     let mut remaining = value;
 
@@ -745,29 +731,24 @@ fn bounded_tail(value: &str, limit: usize) -> String {
     value[start..].to_owned()
 }
 
-/// Start a configured Remote Stream script producer.
+/// Start a configured Remote Stream add-on producer.
 ///
 /// # Errors
 ///
 /// Returns an error when the producer process cannot be started.
-pub fn spawn_remote_stream_producer(
+pub(crate) fn spawn_remote_stream_producer(
     command: &RemoteStreamCommand,
-    ffmpeg_path: &str,
-    ffprobe_path: Option<&str>,
-) -> Result<Child, RemoteStreamError> {
+) -> Result<ManagedAddonChild, RemoteStreamError> {
     let command = command.with_seek("0");
     let mut process = platform_script_process(&command);
     process
         .current_dir(&command.working_directory)
-        .env("FFMPEG_BIN", ffmpeg_path)
+        .env_clear()
+        .envs(crate::addons::addon_process_environment())
+        .envs(&command.environment)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    if let Some(ffprobe_path) = ffprobe_path {
-        process.env("FFPROBE_BIN", ffprobe_path);
-    }
-    process
-        .spawn()
+        .stderr(Stdio::piped());
+    spawn_managed_addon_process(process)
         .map_err(|error| RemoteStreamError::Spawn(error.to_string()))
 }
 
@@ -786,7 +767,7 @@ pub fn spawn_ffmpeg_with_remote_input(
     let (arguments, producer, producer_seek) = prepare_remote_stream_spawn(command, producer);
     let mut producer_child = producer
         .as_ref()
-        .map(|producer| spawn_remote_stream_producer(producer, &command.executable, None))
+        .map(spawn_remote_stream_producer)
         .transpose()?;
     // ADR 0003: move an oversized graph out of argv before spawning, so a
     // complex channel cannot become unspawnable on a platform with a tight
@@ -826,21 +807,30 @@ pub fn spawn_ffmpeg_with_remote_input(
             ));
         };
         let label = producer.as_ref().map_or_else(
-            || "script".to_owned(),
+            || "add-on".to_owned(),
             |producer| {
                 Path::new(&producer.program)
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .unwrap_or("script")
+                    .unwrap_or("add-on")
                     .to_owned()
             },
         );
+        let secrets = producer
+            .as_ref()
+            .map(remote_stream_environment_secrets)
+            .unwrap_or_default();
+        let suppress_diagnostics = producer
+            .as_ref()
+            .is_some_and(command_has_file_backed_secret);
         Some(pipe_remote_stream_producer(
             producer_child,
             consumer_stdin,
             label,
             context,
             producer_seek,
+            secrets,
+            suppress_diagnostics,
         )?)
     } else {
         None
@@ -892,18 +882,20 @@ fn take_remote_stream_output_seek(arguments: &mut Vec<String>) -> Option<String>
 }
 
 pub(crate) fn pipe_remote_stream_producer(
-    mut producer: Child,
+    mut producer: ManagedAddonChild,
     consumer_stdin: ChildStdin,
     label: String,
     context: RemoteStreamSpawnContext,
     effective_seek: Option<String>,
+    secrets: Vec<String>,
+    suppress_diagnostics: bool,
 ) -> Result<RemoteStreamProducerPipe, RemoteStreamError> {
     let stdout = producer
-        .stdout
+        .stdout()
         .take()
         .ok_or(RemoteStreamError::MissingStdout)?;
     let stderr_task = producer
-        .stderr
+        .stderr()
         .take()
         .map(|stderr| tokio::spawn(read_stderr_tail(stderr)));
     let (cancel, cancellation) = oneshot::channel();
@@ -911,6 +903,8 @@ pub(crate) fn pipe_remote_stream_producer(
         label,
         context,
         effective_seek,
+        secrets,
+        suppress_diagnostics,
     };
     let task = tokio::spawn(run_remote_stream_producer(
         producer,
@@ -930,10 +924,12 @@ struct RemoteStreamProducerDiagnostics {
     label: String,
     context: RemoteStreamSpawnContext,
     effective_seek: Option<String>,
+    secrets: Vec<String>,
+    suppress_diagnostics: bool,
 }
 
 async fn run_remote_stream_producer(
-    mut producer: Child,
+    mut producer: ManagedAddonChild,
     stdout: ChildStdout,
     consumer_stdin: ChildStdin,
     stderr_task: Option<JoinHandle<String>>,
@@ -944,6 +940,8 @@ async fn run_remote_stream_producer(
         label,
         context,
         effective_seek,
+        secrets,
+        suppress_diagnostics,
     } = diagnostics;
     let copy_result = tokio::select! {
         result = copy_remote_producer_to_stdin(stdout, consumer_stdin) => Some(result),
@@ -969,8 +967,9 @@ async fn run_remote_stream_producer(
             producer.wait().await
         }
     };
+    let _ = producer.start_kill();
     let stderr = match stderr_task {
-        Some(task) => task.await.unwrap_or_default(),
+        Some(task) => finish_stderr_task(task).await,
         None => String::new(),
     };
     match status {
@@ -991,7 +990,7 @@ async fn run_remote_stream_producer(
             "remote stream producer stopped after the consumer closed its input"
         ),
         Ok(status) => {
-            let stderr_excerpt = sanitize_remote_stream_diagnostic(&stderr);
+            let stderr_excerpt = producer_stderr_excerpt(&stderr, &secrets, suppress_diagnostics);
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1006,7 +1005,7 @@ async fn run_remote_stream_producer(
             );
         }
         Err(error) => {
-            let stderr_excerpt = sanitize_remote_stream_diagnostic(&stderr);
+            let stderr_excerpt = producer_stderr_excerpt(&stderr, &secrets, suppress_diagnostics);
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1020,6 +1019,24 @@ async fn run_remote_stream_producer(
             );
         }
     }
+}
+
+async fn finish_stderr_task(mut task: JoinHandle<String>) -> String {
+    match tokio::time::timeout(STDERR_READER_SHUTDOWN_TIMEOUT, &mut task).await {
+        Ok(result) => result.unwrap_or_default(),
+        Err(_) => {
+            task.abort();
+            let _ = task.await;
+            String::new()
+        }
+    }
+}
+
+fn producer_stderr_excerpt(stderr: &str, secrets: &[String], suppress_diagnostics: bool) -> String {
+    if suppress_diagnostics {
+        return FILE_SECRET_DIAGNOSTIC.to_owned();
+    }
+    sanitize_remote_stream_diagnostic(&redact_exact_secrets(stderr, secrets))
 }
 
 fn consumer_closed_remote_stream_pipe(copy_result: Option<&io::Result<()>>) -> bool {
@@ -1140,9 +1157,16 @@ impl RollingStderrTail {
 }
 
 fn validate_definition(definition: &RemoteStreamDefinition) -> Result<(), RemoteStreamError> {
-    if trimmed(definition.url.as_ref()).is_none() && trimmed(definition.script.as_ref()).is_none() {
+    if trimmed(definition.url.as_ref()).is_none() {
+        return Err(RemoteStreamError::Definition("url is required".to_owned()));
+    }
+    if definition
+        .addon
+        .as_deref()
+        .is_some_and(|addon| validate_addon_id(addon).is_err())
+    {
         return Err(RemoteStreamError::Definition(
-            "either url or script is required".to_owned(),
+            "addon must be a reverse-DNS identifier".to_owned(),
         ));
     }
     if let Some(duration) = trimmed(definition.duration.as_ref()) {
@@ -1226,6 +1250,7 @@ mod tests {
                 program: "sh".to_owned(),
                 args: vec!["-c".to_owned(), "printf remote-bytes".to_owned()],
                 working_directory: PathBuf::from("."),
+                environment: BTreeMap::new(),
             },
             FfmpegCommand {
                 executable: "sh".to_owned(),
@@ -1242,6 +1267,7 @@ mod tests {
                 program: "sh".to_owned(),
                 args: vec!["-c".to_owned(), "while :; do :; done".to_owned()],
                 working_directory: PathBuf::from("."),
+                environment: BTreeMap::new(),
             },
             FfmpegCommand {
                 executable: "sh".to_owned(),
@@ -1263,6 +1289,7 @@ mod tests {
                     "for /L %i in (1,0,2) do @rem".to_owned(),
                 ],
                 working_directory: PathBuf::from("."),
+                environment: BTreeMap::new(),
             },
             FfmpegCommand {
                 executable: "cmd.exe".to_owned(),
@@ -1289,6 +1316,7 @@ mod tests {
                     "<nul set /p=remote-bytes".to_owned(),
                 ],
                 working_directory: PathBuf::from("."),
+                environment: BTreeMap::new(),
             },
             FfmpegCommand {
                 executable: "cmd.exe".to_owned(),
@@ -1304,43 +1332,27 @@ mod tests {
     }
 
     #[test]
-    fn parses_complete_definition_and_prefers_url() {
+    fn parses_complete_direct_definition() {
         let definition = parse_remote_stream_definition(
-            r#"
+            r"
 url: https://user:secret@example.test/live.m3u8?token=hidden
-script: '"tools/stream producer.sh" "https://example.test/watch/1"'
 is_live: true
 duration: 03:41:00
 title: Example
 plot: Plot
 year: 1994
 content_rating: PG
-"#,
+",
         )
         .expect("definition");
         let resolved =
             resolve_remote_stream(&definition, Path::new("streams/example.yml")).expect("source");
-        assert!(resolved.url_overrides_script);
+        assert!(!resolved.uses_addon);
         assert!(resolved.is_live);
         assert_eq!(
             redacted_source_label(&resolved.source),
             "https://example.test"
         );
-    }
-
-    #[test]
-    fn parses_quoted_script_without_shell_expansion() {
-        let command = parse_script_command(
-            r#""tools/Remote Producer.sh" "https://example.test/watch?id=1&x=2""#,
-            Path::new("streams"),
-        )
-        .expect("command");
-        assert_eq!(command.program, "tools/Remote Producer.sh");
-        assert_eq!(command.args, ["https://example.test/watch?id=1&x=2"]);
-
-        let empty_argument =
-            parse_script_command(r#""producer" """#, Path::new("streams")).expect("empty argument");
-        assert_eq!(empty_argument.args, [""]);
     }
 
     #[test]
@@ -1352,6 +1364,7 @@ content_rating: PG
                 String::new(),
             ],
             working_directory: PathBuf::from("."),
+            environment: BTreeMap::new(),
         };
 
         assert_eq!(
@@ -1370,6 +1383,7 @@ content_rating: PG
                 REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
             ],
             working_directory: PathBuf::from("."),
+            environment: BTreeMap::new(),
         };
         let consumer = FfmpegCommand {
             executable: "ffmpeg".to_owned(),
@@ -1423,6 +1437,7 @@ content_rating: PG
             program: "producer".to_owned(),
             args: vec!["https://example.test/watch".to_owned()],
             working_directory: PathBuf::from("."),
+            environment: BTreeMap::new(),
         };
         let marked = RemoteStreamCommand {
             args: vec![
@@ -1452,75 +1467,26 @@ content_rating: PG
     }
 
     #[test]
-    fn beeldengeluid_extractors_emit_one_video_audio_pair() {
-        let shell = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.sh");
-        let batch = include_str!("../../../assets/extractors/beeldengeluid/beeldengeluid.bat");
+    fn add_on_seek_placeholder_is_projected_through_environment() {
+        let command = RemoteStreamCommand {
+            program: "producer".to_owned(),
+            args: vec!["play".to_owned()],
+            working_directory: PathBuf::from("."),
+            environment: BTreeMap::from([(
+                "ERSATZRS_REMOTE_STREAM_SEEK".to_owned(),
+                REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
+            )]),
+        };
 
-        assert!(shell.contains("-map 0:v:0?"));
-        assert!(shell.contains("-map 0:a:0?"));
-        assert!(!shell.contains("-map 0:v?"));
-        assert!(!shell.contains("-map 0:a?"));
-        assert!(batch.contains("-map 0:v:0? -map 0:a:0?"));
-        assert!(!batch.contains("-map 0:v? -map 0:a?"));
-        assert!(!shell.contains("-vsync"));
-        assert!(!batch.contains("-vsync"));
-        assert!(shell.contains("-c copy"));
-        assert!(batch.contains("-c copy -f mpegts pipe:1"));
-        assert!(shell.contains("-ss \"$seek_position\""));
-        assert!(batch.contains("-ss \"%SEEK_POSITION%\""));
-        assert!(shell.contains("list_series"));
-        assert!(shell.contains("durationNumber"));
-        assert!(shell.contains("publishedAtISO"));
-        assert!(shell.contains("original_broadcasters"));
-        assert!(shell.contains("productionCompanies"));
-        assert!(shell.contains("people"));
-        assert!(shell.contains("if [ \"${1:-}\" = \"play\" ]"));
-        assert!(batch.contains("if /i \"%~1\"==\"list\""));
-        assert!(batch.contains("duration_seconds"));
-        assert!(batch.contains("ConvertTo-Json -Depth 4 -Compress"));
-        assert!(batch.contains("original_broadcasters"));
-        assert!(batch.contains("productionCompanies"));
-        assert!(batch.contains("people"));
-        assert!(batch.contains("if /i \"%~1\"==\"play\""));
-    }
-
-    #[test]
-    fn youtube_extractor_uses_managed_ffmpeg_and_producer_seek() {
-        let batch = include_str!("../../../assets/extractors/youtube/youtube.bat");
-        let example =
-            include_str!("../../../assets/extractors/youtube/youtube-windows.yml.example");
-
-        assert!(batch.contains("if not defined FFMPEG_BIN"));
-        assert!(batch.contains("YT_DLP_BIN"));
-        assert!(batch.contains("best[ext=mp4][vcodec*=avc1][acodec*=mp4a]"));
-        assert!(batch.contains("--ffmpeg-location \"%FFMPEG_BIN%\""));
-        assert!(batch.contains("--downloader ffmpeg"));
-        assert!(batch.contains("--downloader-args \"ffmpeg_i:-ss %SEEK_POSITION%\""));
-        assert!(batch.contains("--hls-use-mpegts"));
-        assert!(batch.contains("--output -"));
-        assert!(batch.contains("--quiet"));
-        assert!(!batch.contains("--no-warnings"));
-        assert!(!batch.contains("--no-progress"));
-        assert!(example.contains("\"{seek}\""));
-
-        let definition = parse_remote_stream_definition(example).expect("example definition");
-        assert!(definition.url.is_none());
-        assert!(!definition.is_live);
-        assert_eq!(definition.duration.as_deref(), Some("00:20:00"));
-        let resolved = resolve_remote_stream(
-            &definition,
-            Path::new("assets/extractors/youtube/youtube-windows.yml"),
-        )
-        .expect("example source");
-        let producer = remote_stream_producer(&resolved).expect("script producer");
+        assert!(command.accepts_seek());
         assert_eq!(
-            producer.args,
-            [
-                "https://www.youtube.com/watch?v=<video-id>",
-                REMOTE_STREAM_SEEK_PLACEHOLDER,
-            ]
+            command
+                .with_seek("00:20:00")
+                .environment
+                .get("ERSATZRS_REMOTE_STREAM_SEEK")
+                .map(String::as_str),
+            Some("00:20:00")
         );
-        assert!(producer.accepts_seek());
     }
 
     #[cfg(windows)]
@@ -1540,10 +1506,10 @@ content_rating: PG
                 String::new(),
             ],
             working_directory: root.path().to_path_buf(),
+            environment: BTreeMap::new(),
         };
 
-        let mut child = spawn_remote_stream_producer(&command, "unused-ffmpeg.exe", None)
-            .expect("spawn batch producer");
+        let mut child = spawn_remote_stream_producer(&command).expect("spawn batch producer");
         let mut stdout = child.stdout.take().expect("producer stdout");
         let mut output = String::new();
         stdout
@@ -1573,7 +1539,7 @@ content_rating: PG
     fn rtsp_is_always_live_and_http_live_reconnects_at_eof() {
         let rtsp = RemoteStreamDefinition {
             url: Some("rtsp://camera.test/live".to_owned()),
-            script: None,
+            addon: None,
             duration: None,
             fallback_query: None,
             is_live: false,
@@ -1598,17 +1564,18 @@ content_rating: PG
     }
 
     #[test]
-    fn script_input_uses_container_autodetection() {
+    fn add_on_input_uses_container_autodetection() {
         let stream = ResolvedRemoteStream {
-            source: RemoteStreamSource::Script(RemoteStreamCommand {
+            source: RemoteStreamSource::Addon(RemoteStreamCommand {
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("streams"),
+                environment: BTreeMap::new(),
             }),
             is_live: false,
             configured_duration: None,
             fallback_query: None,
-            url_overrides_script: false,
+            uses_addon: true,
         };
 
         let input = remote_stream_input_file(&stream);
@@ -1628,7 +1595,7 @@ content_rating: PG
             is_live: true,
             configured_duration: None,
             fallback_query: None,
-            url_overrides_script: false,
+            uses_addon: false,
         };
         let stderr = redact_remote_stream_output(
             "Error opening https://user:secret@example.test/live.m3u8?token=hidden",
@@ -1638,6 +1605,86 @@ content_rating: PG
         assert_eq!(stderr, "Error opening https://example.test");
         assert!(!stderr.contains("secret"));
         assert!(!stderr.contains("token"));
+    }
+
+    #[test]
+    fn redacts_bare_add_on_environment_secrets_from_output() {
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                program: "producer".to_owned(),
+                args: Vec::new(),
+                working_directory: PathBuf::from("streams"),
+                environment: BTreeMap::from([
+                    (
+                        "ERSATZRS_ADDON_SECRET_API_TOKEN".to_owned(),
+                        "long-secret-value".to_owned(),
+                    ),
+                    (
+                        "ERSATZRS_ADDON_SETTING_LABEL".to_owned(),
+                        "visible-setting".to_owned(),
+                    ),
+                ]),
+            }),
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: true,
+        };
+
+        let stderr = redact_remote_stream_output(
+            "producer failed with long-secret-value for visible-setting",
+            &stream,
+        );
+
+        assert_eq!(
+            stderr,
+            "producer failed with [redacted] for visible-setting"
+        );
+        assert!(!stderr.contains("long-secret-value"));
+    }
+
+    #[test]
+    fn redacts_operation_urls_and_suppresses_file_secret_diagnostics() {
+        let operation_url = "srt://user:secret@example.test:9000?token=hidden";
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                program: "producer".to_owned(),
+                args: Vec::new(),
+                working_directory: PathBuf::from("streams"),
+                environment: BTreeMap::from([(
+                    "ERSATZRS_REMOTE_STREAM_URL".to_owned(),
+                    operation_url.to_owned(),
+                )]),
+            }),
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: true,
+        };
+        assert_eq!(
+            redact_remote_stream_output(operation_url, &stream),
+            "[redacted]"
+        );
+
+        let file_secret_stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                program: "producer".to_owned(),
+                args: Vec::new(),
+                working_directory: PathBuf::from("streams"),
+                environment: BTreeMap::from([(
+                    "ERSATZRS_ADDON_SECRET_FILE_TOKEN".to_owned(),
+                    "/run/secrets/token".to_owned(),
+                )]),
+            }),
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: true,
+        };
+        assert_eq!(
+            redact_remote_stream_output("raw secret contents", &file_secret_stream),
+            FILE_SECRET_DIAGNOSTIC
+        );
     }
 
     #[test]
