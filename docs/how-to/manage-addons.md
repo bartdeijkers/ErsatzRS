@@ -1,4 +1,4 @@
-# Manage add-ons
+# Install and manage an add-on
 
 Add-ons extend ErsatzRS through signed packages and bounded child processes.
 This guide applies to a development build that exposes **Settings > Add-ons**;
@@ -6,17 +6,26 @@ the [platform reference](../reference/addons.md) records current availability.
 Use the workflow for Remote Stream providers and future capabilities, and do
 not put executable commands in media YAML.
 
+The normal official installation path is not available yet because the
+official repository and production public key have not been published. A
+custom signed repository is an advanced, self-managed deployment path.
+
 ## Install from a trusted repository
 
 1. Open **Settings > Add-ons**.
-2. Refresh a trusted repository.
+2. Refresh a trusted repository and confirm that its available packages appear.
 3. Review the source, version, capabilities, dependencies, media access,
    network hosts, managed FFmpeg access, and external commands shown for the
    package.
-4. Select **Install**. A new package starts disabled.
+4. Select **Install** and confirm that the selected version appears as
+   installed. A new package starts disabled.
 5. Configure every required setting.
 6. Select **Check** and resolve any unavailable dependency.
 7. Select **Enable**.
+
+The task is complete when the installed package shows a successful readiness
+result and **Enabled** state. **Check** validates readiness but never enables a
+package by itself.
 
 The official repository entry is seeded in a new database. A source build or
 unpublished deployment may intentionally contain no official public key yet;
@@ -26,7 +35,7 @@ raw Ed25519 public key. Never bypass that check with an unsigned catalog.
 Updates are manual. The available list shows **Update** when the signed catalog
 offers a different version. ErsatzRS rejects SemVer downgrades, stages and
 verifies the new immutable package, switches the active record, and leaves it
-disabled until **Check** succeeds again.
+disabled. Run **Check**, resolve any failure, and then select **Enable** again.
 
 ## Configure secrets by reference
 
@@ -50,6 +59,11 @@ credential-free HTTPS index URL, and the repository's raw 32-byte Ed25519
 public key encoded as standard Base64. A repository signature establishes
 provenance; it does not make third-party code safe. Review its source and
 permissions before installation.
+
+After adding it, select **Refresh**. Proceed only when the refresh succeeds and
+the expected package IDs and versions appear in the available list. A signature
+failure, expired catalog, or sequence rollback is a repository problem; do not
+work around it by replacing the trusted key ad hoc.
 
 Removing a repository does not remove packages already installed from it.
 

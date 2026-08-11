@@ -41,11 +41,14 @@ repository and production public key have not yet been published. Check the
 [add-on reference](reference/addons.md) before relying on this workflow in a
 release build.
 
-- [Manage add-ons](how-to/manage-addons.md)
+- [Install and manage an add-on](how-to/manage-addons.md)
 - [Understand the add-on trust boundary](explanation/addon-trust-boundary.md)
 
 ## Build and watch channels
 
+- [Build a manual collection from media results](how-to/build-a-manual-collection.md)
+- [Keep channel content updated with a smart collection](how-to/keep-channel-content-updated-with-a-smart-collection.md)
+- [Build a channel from a collection](how-to/build-a-channel-from-a-collection.md)
 - [Connect an IPTV client](how-to/connect-an-iptv-client.md)
 - [Schedule extras and alternate versions](how-to/schedule-content-variants.md)
 - [Admin navigation](reference/admin-navigation.md)

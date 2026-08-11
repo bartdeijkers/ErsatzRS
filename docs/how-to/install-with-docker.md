@@ -105,7 +105,8 @@ docker compose pull
 docker compose up --detach
 ```
 
-Back up the data volume before an update.
+[Back up the data volume](back-up-and-restore.md#back-up-a-docker-volume)
+before an update.
 
 ## Optional environment settings
 

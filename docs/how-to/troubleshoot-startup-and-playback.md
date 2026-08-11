@@ -71,7 +71,9 @@ binary and database migration history do not match.
 ## Resolve library scan failures
 
 1. Confirm the path is visible from the ErsatzRS process.
-2. For Docker, run `docker exec ersatzrs find /media -maxdepth 3 -type f`.
+2. For Docker, inspect the configured container media root. For the `/media`
+   example from the installation guide, run
+   `docker exec ersatzrs find /media -maxdepth 3 -type f`.
 3. Confirm the container or service account can read the files and directories.
 4. Open the library row's **Search Media** action after the scan.
 5. Troubleshoot an imported item to inspect its resolved path and ffprobe data.
@@ -95,6 +97,17 @@ Then test both outputs directly:
 http://127.0.0.1:8409/iptv/channel/1.m3u8
 http://127.0.0.1:8409/iptv/channel/1.ts
 ```
+
+When IPTV JWT protection is enabled, an unauthenticated probe correctly returns
+`401 Unauthorized`. Send `Authorization: Bearer <jwt>` or add
+`?access_token=<jwt>`. Never paste the token into logs, screenshots, or support
+reports; the [HTTP endpoint reference](../reference/http-endpoints.md#iptv-authentication)
+owns the accepted request forms.
+
+After reproducing the failure through **Support** -> **Troubleshooting**, select
+**Download Results** and attach the redacted archive to a support report. Review
+the archive before sharing it and keep raw credentials or media paths out of
+the report.
 
 If software playback works but hardware playback fails, switch the channel to a
 software FFmpeg profile, restart the stream, and inspect health results for the

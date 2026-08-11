@@ -3,11 +3,18 @@
 Use a Remote Streams library to schedule a direct HTTP, HTTPS, or RTSP source,
 or let an installed add-on resolve a provider URL when playback starts.
 
+## Before you begin
+
+Create a directory that the ErsatzRS service account can read and place Remote
+Stream definitions there. For a direct source, also confirm that FFmpeg on the
+ErsatzRS host can reach the source URL. Provider URLs require an installed,
+enabled add-on; the official add-on repository is not published yet.
+
 ## Create the library
 
-In the admin UI, add a Local media source and create a library with media kind
-**Remote Streams**. Add one or more library paths, then place a `.yml` or
-`.yaml` definition in those paths.
+Follow [Add and scan a local library](add-and-scan-a-local-library.md#add-the-library),
+choose **Remote Streams** as the media kind, and add one or more library paths.
+Place a `.yml` or `.yaml` definition in those paths.
 
 A direct source requires `url` and `is_live`:
 
@@ -29,8 +36,13 @@ title: Example programme
 year: 2026
 ```
 
-The duration format is `HH:MM:SS` with an optional fractional second. RTSP
-URLs are always treated as live.
+The duration format is `HH:MM:SS` with an optional fractional second. Set
+`is_live` to match the real source: marking a live source as finite makes
+ErsatzRS incorrectly try to work ahead. RTSP URLs are always treated as live.
+
+Use subdirectories when their names are useful schedule metadata. ErsatzRS
+adds one tag for the library-root directory and for every containing
+subdirectory.
 
 ## Use a provider add-on
 
@@ -71,24 +83,19 @@ accepted forms are defined by the [package reference](../reference/addon-package
 
 ## Synchronize an upstream playlist
 
-Install an add-on that exposes both `remote-stream.list.v1` and
-`remote-stream.play.v1`, then place one `<name>.playlist.yml` manifest in a
-Remote Streams library:
+This development-only workflow needs an installed add-on that exposes both
+`remote-stream.list.v1` and `remote-stream.play.v1`.
 
-```yaml
-name: Example series
-url: https://media.example/series/example
-addon: org.example.ersatzrs.series
-folder: episodes
-sync:
-  interval: 24h
-  order: upstream
-  on_removed: trash
-create_playlist: true
-```
+1. Edit the Remote Streams library.
+2. Open **Remote Stream playlists**.
+3. Select **Add**.
+4. Enter the upstream URL, add-on, destination folder, synchronization
+   interval, ordering, removal policy, and any tags or item limit.
+5. Enable ordered-playlist creation when upstream order must be schedulable.
+6. Save the definition and select **Sync Now**.
 
-The exact manifest fields and NDJSON result shape are in the [Remote Stream
-playlist manifest reference](../reference/remote-stream-playlist-manifests.md).
+The [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md)
+owns the exact stored fields and NDJSON result shape.
 
 After the next library scan, ErsatzRS writes ordinary generated definitions to
 the configured sibling folder. Open the library's **Remote Stream playlists**
@@ -96,9 +103,9 @@ page to inspect state, synchronize now, troubleshoot one bounded enumeration,
 or manage manifests created by the UI. Hand-authored manifests are shown
 read-only so comments and key ordering cannot be lost.
 
-Set `create_playlist: true` when the upstream order must be schedulable. The
-resulting system playlist follows effective additions, removals, exclusions,
-and reordering and remains read-only in the ordinary playlist editor.
+The resulting system playlist follows effective additions, removals,
+exclusions, and reordering and remains read-only in the ordinary playlist
+editor.
 
 ## Scan and use the item
 
@@ -111,6 +118,14 @@ From a Remote Stream card you can add the item to a collection or playlist, or
 use the bulk actions for several items. A live item with no duration is intended
 for Classic Flood scheduling. Configure a duration for finite content and for
 scheduling modes that need a known item length.
+
+## Verify the result
+
+The task is complete when the definition appears under **Media** -> **Remote
+Streams**, its card is available, and **Support** -> **Health Checks** reports
+no definition or add-on error. Add the item to a collection, refresh the
+affected playout, and check **Playout Detail** before testing it repeatedly
+against a rate-limited provider.
 
 ## Troubleshoot
 

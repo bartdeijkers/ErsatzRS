@@ -14,6 +14,10 @@ evidence.
 The examples use channel `5` and write under `diagnostics/calibration-channel5`.
 Change both values for another calibration channel.
 
+The capture and analysis commands below use PowerShell on Windows. Translate
+line continuation and path separators when running the same tools from another
+shell.
+
 ## Generate the calibration clips
 
 From the repository root:
@@ -96,17 +100,18 @@ ffmpeg -hide_banner -y `
 
 At 60 fps, frame 18,000 is exactly 300 seconds after frame 0. Read the visible
 absolute time from both images and compare the observed delta with five
-minutes. In the 2026-06-15 evidence, the later frame was 516.7 ms ahead.
+minutes. Record the observed signed delta; do not substitute a result from an
+earlier capture.
 
 ## Probe an item rollover
 
-Choose frame numbers around an observed audio phase change and extract one frame
-per second around the boundary. For the original capture:
+Choose frame numbers immediately before, at, and after an observed audio phase
+change. Replace the placeholders below with frames from the current capture:
 
 ```powershell
 ffmpeg -hide_banner -y `
   -i "diagnostics\calibration-channel5\channel5_calibration_5min.ts" `
-  -vf "select='eq(n,2580)+eq(n,2640)+eq(n,2700)+eq(n,6960)+eq(n,7020)+eq(n,7080)+eq(n,17760)+eq(n,17820)'" `
+  -vf "select='eq(n,<frame-before>)+eq(n,<frame-at>)+eq(n,<frame-after>)'" `
   -fps_mode:v passthrough "diagnostics\calibration-channel5\frame_probe_%02d.png"
 ```
 

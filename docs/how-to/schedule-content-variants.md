@@ -2,6 +2,15 @@
 
 Use this guide to include content that ordinary searches intentionally hide,
 such as featurettes, alternate renditions, or movies with commentary tracks.
+For the general save-and-schedule workflow, first read [Keep channel content
+updated with a smart collection](keep-channel-content-updated-with-a-smart-collection.md).
+
+## Before you begin
+
+Scan the library and open the relevant media detail page. Confirm that ErsatzRS
+classified the item as an extra or alternate version, or detected the intended
+commentary audio stream. A smart collection cannot select metadata that the
+scan did not persist.
 
 ## Schedule unplugged renditions
 
@@ -63,3 +72,15 @@ Query: type:movie
 Ordinary searches implicitly keep `content_kind:primary`, so the main
 collection remains primary-only and the featurette enters through the explicit
 pre-roll filler.
+
+## Verify the schedule
+
+Open each smart collection and confirm that it contains the intended variants
+without their primary items. Save the affected schedule, wait for its Classic
+playout refresh, and inspect **Playout Detail**. For commentary, also start one
+scheduled item and confirm that the selected audio stream has the expected
+title.
+
+If a collection is empty, return to the media detail page and compare the
+persisted content kind, sub-kind, and stream title with the query. Rescan after
+correcting filenames, sidecars, or stream metadata.

@@ -100,8 +100,9 @@ expose the unauthenticated admin UI directly to the public internet.
 
 ## Update or disable automatic startup
 
-Stop the service, replace the complete `/opt/ersatzrs` release tree, and start
-it again. Do not mix `site/` assets from different releases.
+[Back up the native state](back-up-and-restore.md#back-up-a-native-installation),
+then stop the service, replace the complete `/opt/ersatzrs` release tree, and
+start it again. Do not mix `site/` assets from different releases.
 
 ```bash
 sudo systemctl stop ersatzrs.service

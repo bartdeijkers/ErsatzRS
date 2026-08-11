@@ -16,6 +16,33 @@ The server must be able to read every configured path.
 
 One local library has one media kind, but it can contain multiple paths.
 
+## Prepare a scan-friendly layout
+
+ErsatzRS scans supported files recursively, so a directory per movie is
+recommended for predictable metadata but is not required. Useful layouts are:
+
+```text
+Movies/
+└── Example Movie (1999)/
+    ├── Example Movie (1999).mkv
+    └── movie.nfo
+
+TV/
+└── Example Show/
+    ├── tvshow.nfo
+    └── Season 01/
+        ├── Example Show - S01E01.mkv
+        └── Example Show - S01E01.nfo
+
+Music Videos/
+└── Example Artist/
+    └── Example Artist - Example Song.mkv
+```
+
+Use `movie.nfo` and `tvshow.nfo` for item-level metadata, and give an episode
+NFO the same base name as its video. Clear show, season, episode, year, and
+artist names make grouping easier to diagnose after a scan.
+
 ## Add the library
 
 1. Open the admin UI.
@@ -56,6 +83,11 @@ the mount directly:
 docker exec ersatzrs find /media -maxdepth 3 -type f
 ```
 
+If no items appear, also check the file extension, service-account permission,
+and selected media kind. For incorrect show or season grouping, correct the
+folder and `SxxEyy` episode names. For an incorrect title or year, correct the
+filename or NFO and run another scan.
+
 ## Verify tracks and variants
 
 Open a movie, episode, or other media detail page to inspect metadata, audio
@@ -65,3 +97,8 @@ information for channel-level and schedule-item playback preferences.
 If a file imports without the expected streams, open **Support** ->
 **Troubleshooting** for that media item and inspect the ffprobe result and
 resolved path.
+
+The import is ready for scheduling when the expected items are available on
+the matching **Media** page and their detail pages show the intended audio and
+subtitle tracks. Continue with [Build a channel from a
+collection](build-a-channel-from-a-collection.md).

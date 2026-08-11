@@ -2,11 +2,15 @@
 
 Use this guide to import selected Jellyfin libraries into ErsatzRS.
 
+Synchronization is one-way: Jellyfin remains the media and metadata source,
+and ErsatzRS does not modify the Jellyfin server or its libraries.
+
 ## Prepare Jellyfin
 
-1. Create an API key in Jellyfin for ErsatzRS.
-2. Confirm that ErsatzRS can reach the Jellyfin server address.
-3. If ErsatzRS runs in Docker, use an address reachable from the container,
+1. Open the Jellyfin administration dashboard and its **API Keys** page.
+2. Add a key named `ErsatzRS` and copy its value for the connection form.
+3. Confirm that ErsatzRS can reach the Jellyfin server address.
+4. If ErsatzRS runs in Docker, use an address reachable from the container,
    such as `http://jellyfin:8096`; do not use `localhost` unless both services
    share the same network namespace.
 
@@ -32,14 +36,18 @@ save, the Jellyfin page shows the detected server name and address.
 3. Select **Save**.
 
 Saving starts synchronization for the selected libraries. Open **Media** ->
-**Libraries** to follow progress, then open the matching Movies, TV Shows,
-Music, or Other Videos page to inspect imported items.
+**Libraries** to follow progress, then open **Movies** or **TV Shows** to
+inspect imported items. Jellyfin discovery currently accepts those two library
+kinds.
 
 ## Map provider paths when needed
 
 Add a path replacement when Jellyfin reports a file path that is different
 from the path visible to ErsatzRS. This is common when the two applications use
 different container mounts or operating systems.
+
+No replacement is needed when both applications already see the same path. A
+replacement only rewrites a path prefix; it does not copy or move media.
 
 1. On the Jellyfin source row, select **Paths**.
 2. Enter the path prefix reported by Jellyfin under **Jellyfin Path**.

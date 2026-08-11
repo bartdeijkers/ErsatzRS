@@ -2,6 +2,12 @@
 
 Use this guide to add ErsatzRS channels and guide data to an IPTV application.
 
+## Before you begin
+
+At least one enabled channel must have a populated playout. The client device
+must be able to reach TCP port `8409` on the ErsatzRS host. Test from the client
+network rather than only from the server itself.
+
 ## Confirm the server address
 
 From the client device, open:
@@ -24,6 +30,32 @@ Configure the client with:
 
 Refresh both sources after adding or renumbering channels. The playlist embeds
 the matching stream URLs and generated or uploaded channel logos.
+
+## Configure a common client
+
+Use the playlist and guide URLs above in the matching client concepts:
+
+- **Jellyfin**: add an **M3U Tuner** under Live TV, then add an **XMLTV** guide
+  data provider.
+- **Kodi**: install and enable **PVR IPTV Simple Client**, set its M3U playlist
+  URL, and set its EPG XMLTV URL.
+- **TiviMate**: add an **M3U Playlist**, keep it as a TV playlist, then assign
+  the XMLTV URL as its EPG if the guide is not detected automatically.
+- **Channels DVR**: add a **Custom Channels** source with the M3U and XMLTV
+  URLs. Choose a stream format that matches the generated playlist entries;
+  do not force MPEG-TS when the included channels use `.m3u8` HLS streams.
+
+Client labels can move between releases. Preserve the distinction between the
+M3U channel source and XMLTV guide source even when a client groups both fields
+in one setup screen.
+
+## Confirm the import
+
+The client should show the same channel numbers and names as **Channels**, load
+programme rows from the XMLTV source, and start one direct channel test. If the
+playlist imports but playback fails, test the channel URL below before changing
+client settings. If guide rows are missing, fetch the XMLTV URL from the client
+device and confirm that it contains the expected channel ID.
 
 ## Test a channel directly
 

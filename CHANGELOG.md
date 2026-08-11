@@ -64,7 +64,17 @@ release section when tagging a release.
   index, evidence-backed current System Context and Container views, and
   separate add-on package, repository, runtime, trust, and operator guidance.
   Add-on pages distinguish the implemented development host from the still
-  unpublished official repository and production key.
+  unpublished official repository and production key. Goal-oriented how-to
+  guides now also cover building and refreshing a Classic playout, verifying
+  local and Remote Stream ingestion, scheduling content variants, managing an
+  add-on lifecycle, building manual collections from media results, keeping
+  channel content updated with smart collections, and confirming IPTV
+  client imports. Release how-to guides now separate normal multi-platform
+  tags from Windows-only beta tags and use unmistakable version placeholders.
+  Backup and troubleshooting procedures now also cover external databases and
+  state, the documented systemd service home, IPTV JWT probes, and redacted
+  diagnostic downloads; Jellyfin guidance reflects its Movies/TV-only,
+  one-way synchronization contract.
 - Remote Stream YAML now uses `addon:` identities for provider playback and
   playlist enumeration. The legacy raw `script:`, `extractor:`, and
   `settings.remote_stream_extractors` contracts are intentionally rejected so

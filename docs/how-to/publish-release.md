@@ -46,7 +46,7 @@ requires them.
 Create and push an annotated tag:
 
 ```bash
-tag=v1.0.15
+tag=vX.Y.Z
 git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 ```

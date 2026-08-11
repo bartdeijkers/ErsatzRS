@@ -1,8 +1,12 @@
 # Publish a release without GitHub-hosted minutes
 
-Use this guide for the current Linux/Windows/Docker release path. macOS archives
-are intentionally omitted so the active release line stays focused on Linux,
-Windows, and GHCR artifacts.
+Use this guide for a normal Linux/Windows/Docker release when GitHub-hosted
+minutes are unavailable. Do not use a beta tag: the current beta workflow is
+Windows-only. Follow [Build and publish a local Windows
+release](release-locally.md) for that path.
+
+macOS archives are intentionally omitted so this release path stays focused on
+Linux, Windows, and GHCR artifacts.
 
 This produces:
 
@@ -11,7 +15,6 @@ This produces:
 - `ersatzrs-<tag>-linux-arm.tar.gz`
 - `ersatzrs-<tag>-win-x64.zip`
 - `ghcr.io/bartdeijkers/ersatzrs:<tag>`
-- `ghcr.io/bartdeijkers/ersatzrs:beta` for beta tags
 - GitHub-generated source archives
 
 It intentionally does not produce:
@@ -80,80 +83,26 @@ stylance --version
 7z
 ```
 
-## Release workflow shape
+## Confirm workflow routing
 
-The committed `.github/workflows/release.yml` already uses the self-hosted
-Linux/Windows release runner shape, publishes Docker images from the Linux
-runner, and omits macOS archives. Keep that shape for this release line.
+The committed [release workflow](../../.github/workflows/release.yml) is the
+canonical job and matrix definition. Before tagging, confirm that:
 
-In `.github/workflows/release.yml`:
+- release creation, web assets, and Docker publishing target the Linux release
+  runner;
+- Linux binary entries target the Linux release runner;
+- the Windows entry targets the Windows release runner; and
+- no active matrix entry expects a macOS runner.
 
-1. The `release` job should use:
-
-```yaml
-runs-on: [self-hosted, ersatzrs-linux-release]
-```
-
-2. The `web-assets` job should use:
-
-```yaml
-runs-on: [self-hosted, ersatzrs-linux-release]
-```
-
-3. The `docker` job should use:
-
-```yaml
-runs-on: [self-hosted, ersatzrs-linux-release]
-```
-
-4. In the `binaries` matrix:
-
-- Set the Linux entries to use the Linux release runner.
-- Set the Windows entry to use the Windows release runner.
-- Do not add the two macOS entries unless this is a future macOS-targeted
-  release.
-
-Use this matrix shape:
-
-```yaml
-matrix:
-  include:
-    - rid: linux-x64
-      runner: '["self-hosted","ersatzrs-linux-release"]'
-      target: x86_64-unknown-linux-gnu
-      cross: false
-      archive: tar.gz
-    - rid: linux-arm64
-      runner: '["self-hosted","ersatzrs-linux-release"]'
-      target: aarch64-unknown-linux-gnu
-      cross: true
-      archive: tar.gz
-    - rid: linux-arm
-      runner: '["self-hosted","ersatzrs-linux-release"]'
-      target: armv7-unknown-linux-gnueabihf
-      cross: true
-      archive: tar.gz
-    - rid: win-x64
-      runner: '["self-hosted","ersatzrs-windows-release"]'
-      target: x86_64-pc-windows-msvc
-      cross: false
-      archive: zip
-```
-
-Then change the `binaries` job `runs-on` to:
-
-```yaml
-runs-on: ${{ fromJSON(matrix.runner) }}
-```
-
-Commit any workflow change before tagging the release.
+Commit and validate any required workflow correction before tagging. Do not
+make an uncommitted runner change on the release host.
 
 ## Push the release tag
 
 Create and push the annotated tag:
 
 ```bash
-tag=v1.0.15-beta.1
+tag=vX.Y.Z
 git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 ```
@@ -177,11 +126,4 @@ Confirm the GHCR image exists and carries the expected Linux platforms:
 
 ```bash
 docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
-docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:beta"
 ```
-
-## Restoring macOS archives later
-
-For a future macOS-targeted release, restore the two `osx-*` matrix entries and
-use GitHub-hosted macOS runners or add a macOS self-hosted runner. Do this in a
-separate release-prep commit before tagging that release.

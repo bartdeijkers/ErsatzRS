@@ -34,8 +34,15 @@ Use the Playwright wrapper for the real web host and hydrated bundle:
 scripts/e2e/playwright-e2e.sh
 ```
 
-Pass a focused spec through the wrapper while iterating. The suite runs
-serially by default because its specs share a seeded database.
+Pass a focused spec through the wrapper while iterating:
+
+```bash
+scripts/e2e/playwright-e2e.sh tests/e2e/<feature>.spec.ts
+```
+
+The command is successful only when the requested spec reports no failed test
+and the wrapper exits zero. The suite runs serially by default because its
+specs share a seeded database.
 
 ## Run playback gates
 

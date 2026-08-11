@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-08-11","summary":"Extended Diataxis how-to coverage with manual and smart collection tasks, Classic rotation, client recipes, and corrected Jellyfin, backup, and JWT troubleshooting guidance."}
+{"agent":"Codex","date":"2026-08-11","summary":"Improved Diataxis how-to guides from legacy user journeys: channel builds, media layouts, Remote Streams, add-ons, IPTV verification, releases, migrations, FFmpeg, and tests."}
 {"agent":"Codex","date":"2026-08-11","summary":"Reorganized docs by Diataxis, added evidence-backed runtime C4 views, and documented the in-progress signed add-on platform without overstating release availability."}
 {"agent":"Codex","date":"2026-08-10","summary":"Added rich Beeld & Geluid episode metadata from generated YAML through searchable persistence and XMLTV/Kodi projection; regenerated and verified the local Glamourland library. Windows PowerShell extractor runtime validation remains pending on a Windows/pwsh host."}
 {"agent":"Codex","date":"2026-08-10","summary":"Completed P8D/P8E Remote Stream playlist ingest, management, health, and ordered scheduling with a local Glamourland proof."}

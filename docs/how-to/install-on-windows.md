@@ -73,7 +73,7 @@ state directory before replacing an installation.
 
 ## Update ErsatzRS
 
-1. Back up the current data.
+1. [Back up the current data](back-up-and-restore.md).
 2. Select **Exit** from the tray menu.
 3. Download and extract the new archive into a new folder.
 4. Run the new folder's `ErsatzRS.exe`.
