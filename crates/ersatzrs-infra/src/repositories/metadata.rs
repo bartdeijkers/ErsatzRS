@@ -5,6 +5,7 @@ use ersatzrs_core::repositories::{MetadataRepository, Result};
 use ersatzrs_domain::{EntityId, EpisodeMetadata, MovieMetadata, MusicVideoMetadata};
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{
     decode_datetime, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
     encode_optional_datetime,
@@ -49,12 +50,13 @@ impl MetadataRepository for SqliteMetadataRepository {
     }
 
     async fn upsert_movie_metadata(&self, metadata: &MovieMetadata) -> Result<()> {
-        sqlx::query(
-            r#"REPLACE INTO "MovieMetadata" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "MovieMetadata" (
                 "Id", "MovieId", "MetadataKind", "Title", "OriginalTitle", "SortTitle", "Year",
                 "ReleaseDate", "DateAdded", "DateUpdated", "Outline", "Plot", "Tagline"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(metadata.metadata.id)
         .bind(metadata.metadata.id)
         .bind(encode_enum(metadata.metadata.metadata_kind))
@@ -79,13 +81,14 @@ impl MetadataRepository for SqliteMetadataRepository {
         // We store it here using ErsatzRS TEXT convention, but the column won't exist in the
         // schema unless we added it. Since ErsatzTV schema has no season_number on EpisodeMetadata,
         // we omit it from the INSERT and store only what the schema supports.
-        sqlx::query(
-            r#"REPLACE INTO "EpisodeMetadata" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "EpisodeMetadata" (
                 "Id", "EpisodeId", "MetadataKind", "Title", "OriginalTitle", "SortTitle", "Year",
                 "ReleaseDate", "DateAdded", "DateUpdated", "EpisodeNumber",
                 "Outline", "Plot"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(metadata.metadata.id)
         .bind(metadata.metadata.id)
         .bind(encode_enum(metadata.metadata.metadata_kind))

@@ -2,7 +2,8 @@
 mod common;
 
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
+    ChannelRepository, FfmpegProfileRepository, MediaItemRepository, PlayoutRepository,
+    ProgramScheduleRepository,
 };
 use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_infra::repositories::make_repositories;
@@ -76,6 +77,35 @@ async fn saving_a_channel_does_not_cascade_delete_its_playout() {
     assert!(
         repos.playout.get_with_anchor(1).await.is_ok(),
         "saving a channel must not delete its playout"
+    );
+}
+
+/// `MediaItem` is the widest cascade parent in the schema — 21 tables cascade
+/// off it, including `Episode`, `Movie` and `PlayoutItem` — and it is rewritten
+/// for every scanned item, so a `REPLACE` here erased library state on any
+/// rescan.
+#[tokio::test]
+async fn re_upserting_a_media_item_does_not_cascade_delete_its_children() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_media_graph(&pool).await;
+
+    let item = common::media_item(900, 1);
+    repos.media_item.upsert(&item).await.unwrap();
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (900)"#)
+        .await
+        .unwrap();
+
+    // Re-scanning the same item runs the same upsert again.
+    repos.media_item.upsert(&item).await.unwrap();
+
+    let movies: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Movie" WHERE "Id" = 900"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        movies, 1,
+        "re-upserting a media item must not delete its child rows"
     );
 }
 

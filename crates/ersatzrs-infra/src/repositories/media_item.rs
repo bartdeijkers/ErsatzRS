@@ -5,6 +5,7 @@ use ersatzrs_core::repositories::{MediaItemRepository, Result};
 use ersatzrs_domain::{EntityId, MediaItem};
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
@@ -55,11 +56,12 @@ impl MediaItemRepository for SqliteMediaItemRepository {
     }
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
-        sqlx::query(
-            r#"REPLACE INTO "MediaItem" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "MediaItem" (
                 "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
             ) VALUES (?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(item.id)
         .bind(item.library_path_id)
         .bind(encode_enum(item.state))

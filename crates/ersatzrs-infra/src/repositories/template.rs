@@ -8,6 +8,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{EntityId, Template};
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{decode_string_column, load_ids, not_found};
 
 #[derive(Clone)]
@@ -50,11 +51,12 @@ impl TemplateRepository for SqliteTemplateRepository {
 
     async fn upsert(&self, template: &Template) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "Template" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "Template" (
                 "Id", "TemplateGroupId", "Name", "DateUpdated"
              ) VALUES (?, ?, ?, ?)"#,
-        )
+            &[&["Id"], &["TemplateGroupId", "Name"]],
+        ))
         .bind(template.id)
         .bind(template.template_group_id)
         .bind(&template.name)

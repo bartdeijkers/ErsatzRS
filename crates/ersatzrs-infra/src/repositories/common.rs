@@ -17,6 +17,7 @@ use ersatzrs_domain::{
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
+use std::fmt::Write as _;
 
 pub(crate) fn map_data_access_error(kind: &'static str, error: &sqlx::Error) -> RepositoryError {
     if matches!(
@@ -707,44 +708,80 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
 /// `insert_sql` must be an `INSERT INTO "Table" ("A", "B", ...) VALUES (...)`
 /// statement; `conflict_columns` are the key columns that identify an existing
 /// row and are excluded from the update list.
-pub(crate) fn cascade_safe_upsert(
-    insert_sql: &str,
-    conflict_columns: &[&str],
-    is_mysql: bool,
-) -> String {
+/// `keys[0]` must be the primary key. Any further entries are the table's other
+/// UNIQUE indexes: `REPLACE` resolved a conflict on *any* unique index, so each
+/// one needs its own upsert clause or the statement would start raising
+/// `UNIQUE constraint failed` where it previously succeeded. The primary key is
+/// never assigned, so a conflict on a secondary key updates the existing row in
+/// place instead of moving its identity out from under its children.
+///
+/// `MySQL` needs only one clause: `ON DUPLICATE KEY UPDATE` already fires for
+/// every unique key.
+pub(crate) fn cascade_safe_upsert(insert_sql: &str, keys: &[&[&str]], is_mysql: bool) -> String {
     let columns = insert_columns(insert_sql);
-    let updates = columns
-        .iter()
-        .filter(|column| !conflict_columns.contains(&column.as_str()))
-        .map(|column| {
-            if is_mysql {
-                format!("\"{column}\" = VALUES(\"{column}\")")
-            } else {
-                format!("\"{column}\" = excluded.\"{column}\"")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let primary_key = keys.first().copied().unwrap_or(&[]);
 
-    // A statement whose every column is part of the key has nothing to update;
-    // ignoring the duplicate keeps the row and its children intact.
-    if updates.is_empty() {
-        return if is_mysql {
-            let first = conflict_columns.first().copied().unwrap_or_default();
-            format!("{insert_sql}\nON DUPLICATE KEY UPDATE \"{first}\" = \"{first}\"")
-        } else {
-            let targets = quoted_list(conflict_columns);
-            format!("{insert_sql}\nON CONFLICT({targets}) DO NOTHING")
-        };
-    }
+    let assignments = |target: &[&str]| {
+        columns
+            .iter()
+            .filter(|column| {
+                !target.contains(&column.as_str()) && !primary_key.contains(&column.as_str())
+            })
+            .map(|column| {
+                if is_mysql {
+                    format!("\"{column}\" = VALUES(\"{column}\")")
+                } else {
+                    format!("\"{column}\" = excluded.\"{column}\"")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
 
     if is_mysql {
-        format!("{insert_sql}\nON DUPLICATE KEY UPDATE {updates}")
-    } else {
-        let targets = quoted_list(conflict_columns);
-        format!("{insert_sql}\nON CONFLICT({targets}) DO UPDATE SET {updates}")
+        let updates = assignments(primary_key);
+        // Every column belongs to the key, so there is nothing to assign.
+        // Re-assigning the key is the idiomatic no-op that keeps the row.
+        if updates.is_empty() {
+            let first = primary_key.first().copied().unwrap_or_default();
+            return format!("{insert_sql}\nON DUPLICATE KEY UPDATE \"{first}\" = \"{first}\"");
+        }
+        return format!("{insert_sql}\nON DUPLICATE KEY UPDATE {updates}");
     }
+
+    let mut sql = insert_sql.to_owned();
+    for target in keys {
+        let updates = assignments(target);
+        let targets = quoted_list(target);
+        if updates.is_empty() {
+            let _ = write!(sql, "\nON CONFLICT({targets}) DO NOTHING");
+        } else {
+            let _ = write!(sql, "\nON CONFLICT({targets}) DO UPDATE SET {updates}");
+        }
+    }
+    sql
 }
+
+/// Builds a cascade-safe upsert once and reuses it.
+///
+/// Wraps [`cascade_safe_upsert`] in a call-site `static` so the statement is
+/// assembled a single time rather than on every write, which matters on scan
+/// hot paths. Takes the plain `INSERT INTO ...` statement and the key columns
+/// that identify an existing row.
+macro_rules! upsert_sql {
+    ($insert:expr, $keys:expr $(,)?) => {{
+        static UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            $crate::repositories::common::cascade_safe_upsert(
+                $insert,
+                $keys,
+                $crate::db::connected_backend_is_mysql(),
+            )
+        });
+        UPSERT_SQL.as_str()
+    }};
+}
+
+pub(crate) use upsert_sql;
 
 fn quoted_list(columns: &[&str]) -> String {
     columns
@@ -836,7 +873,7 @@ mod tests {
 
     #[test]
     fn sqlite_upsert_updates_every_non_key_column() {
-        let sql = cascade_safe_upsert(CHANNEL_INSERT, &["Id"], false);
+        let sql = cascade_safe_upsert(CHANNEL_INSERT, &[&["Id"]], false);
         assert!(sql.starts_with("INSERT INTO \"Channel\""), "{sql}");
         assert!(
             sql.ends_with(
@@ -853,7 +890,7 @@ mod tests {
 
     #[test]
     fn mysql_upsert_uses_duplicate_key_syntax() {
-        let sql = cascade_safe_upsert(CHANNEL_INSERT, &["Id"], true);
+        let sql = cascade_safe_upsert(CHANNEL_INSERT, &[&["Id"]], true);
         assert!(
             sql.ends_with(
                 "ON DUPLICATE KEY UPDATE \
@@ -870,11 +907,11 @@ mod tests {
         let join =
             r#"INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#;
         assert!(
-            cascade_safe_upsert(join, &["PlayoutItemId", "WatermarkId"], false)
+            cascade_safe_upsert(join, &[&["PlayoutItemId", "WatermarkId"]], false)
                 .ends_with("ON CONFLICT(\"PlayoutItemId\", \"WatermarkId\") DO NOTHING")
         );
         assert!(
-            cascade_safe_upsert(join, &["PlayoutItemId", "WatermarkId"], true)
+            cascade_safe_upsert(join, &[&["PlayoutItemId", "WatermarkId"]], true)
                 .contains("ON DUPLICATE KEY UPDATE")
         );
     }

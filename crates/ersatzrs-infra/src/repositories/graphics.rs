@@ -10,6 +10,7 @@ use sqlx::{Pool, Row};
 
 use super::common::{decode_bool_column, decode_enum_column, encode_enum, not_found};
 
+use super::common::upsert_sql;
 #[derive(Clone)]
 pub struct SqliteGraphicsRepository(pub Pool<crate::db::Db>);
 
@@ -50,15 +51,16 @@ impl GraphicsRepository for SqliteGraphicsRepository {
     }
 
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {
-        sqlx::query(
-            r#"REPLACE INTO "GraphicsElement" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "GraphicsElement" (
                 "Id", "Name", "Kind", "Path", "ZIndex",
                 "OpacityPercent", "OpacityExpression", "Location",
                 "HorizontalMarginPercent", "VerticalMarginPercent",
                 "LocationX", "LocationY", "Scale", "ScaleWidthPercent",
                 "PlaceWithinSourceContent", "EpgEntries", "Config"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(element.id)
         .bind(&element.name)
         .bind(encode_enum(element.kind))

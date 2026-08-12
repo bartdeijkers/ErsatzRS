@@ -10,6 +10,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{CollectionType, Deco, DecoMode, EntityId};
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{
     decode_bool_column, decode_enum_column, decode_optional_enum_column,
     decode_optional_string_column, decode_string_column, encode_enum, load_ids, not_found,
@@ -59,8 +60,8 @@ impl DecoRepository for SqliteDecoRepository {
 
     async fn upsert(&self, deco: &Deco) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "Deco" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "Deco" (
                 "Id", "DecoGroupId", "Name", "BreakContentMode", "DefaultFillerMode",
                 "DefaultFillerCollectionType", "DefaultFillerCollectionId",
                 "DefaultFillerMediaItemId", "DefaultFillerMultiCollectionId",
@@ -69,7 +70,8 @@ impl DecoRepository for SqliteDecoRepository {
                 "GraphicsElementsMode", "UseGraphicsElementsDuringFiller",
                 "UseWatermarkDuringFiller", "WatermarkMode"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0)"#,
-        )
+            &[&["Id"], &["DecoGroupId", "Name"]],
+        ))
         .bind(deco.id)
         .bind(deco.deco_group_id)
         .bind(&deco.name)

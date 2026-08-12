@@ -8,6 +8,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
@@ -63,11 +64,12 @@ impl LibraryRepository for SqliteLibraryRepository {
 
     async fn upsert(&self, library: &Library) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "Library" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "Library" (
                 "Id", "Name", "MediaKind", "MediaSourceId"
              ) VALUES (?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(library.id)
         .bind(&library.name)
         .bind(encode_enum(library.media_kind))

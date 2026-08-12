@@ -13,6 +13,7 @@ use ersatzrs_domain::{
 use sqlx::{Row, Transaction};
 
 use crate::db::DbPool;
+use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -333,10 +334,11 @@ pub(crate) async fn ensure_media_file(
     version_id: i64,
     path: &str,
 ) -> Result<()> {
-    sqlx::query(
-        r#"REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+    sqlx::query(upsert_sql!(
+        r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
            VALUES (?, ?, ?)"#,
-    )
+        &[&["PathHash"]],
+    ))
     .bind(version_id)
     .bind(path)
     .bind(path_hash(path))

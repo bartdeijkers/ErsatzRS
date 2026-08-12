@@ -1,5 +1,6 @@
 use crate::db::DbPool;
 use crate::repositories::common::decode_enum_column;
+use crate::repositories::common::upsert_sql;
 use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
@@ -2777,17 +2778,25 @@ async fn ensure_media_file(
     version_id: i64,
     item: &PlexMediaItem,
 ) -> Result<()> {
-    let result = sqlx::query(
-        r#"REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+    sqlx::query(upsert_sql!(
+        r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
            VALUES (?, ?, ?)"#,
-    )
+        &[&["PathHash"]],
+    ))
     .bind(version_id)
     .bind(&item.path)
     .bind(path_hash(&item.path))
     .execute(&mut **tx)
     .await
     .repository()?;
-    let file_id = crate::db::last_insert_id(result);
+    // The upsert updates an existing row in place rather than deleting and
+    // re-inserting it, so there is no fresh rowid to read. Resolve the real id
+    // by the natural key instead.
+    let file_id: i64 = sqlx::query_scalar(r#"SELECT "Id" FROM "MediaFile" WHERE "PathHash" = ?"#)
+        .bind(path_hash(&item.path))
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
     sqlx::query(r#"REPLACE INTO "PlexMediaFile" ("Id", "PlexId", "Key") VALUES (?, ?, ?)"#)
         .bind(file_id)
         .bind(item.plex_part_id)

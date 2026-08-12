@@ -15,6 +15,7 @@ use sqlx::{Pool, Row};
 
 use super::common::{decode_bool_column, load_ids, not_found};
 
+use super::common::upsert_sql;
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
 const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
 const COLLECTION_TYPE_SHOW: i32 = 1;
@@ -123,13 +124,15 @@ impl CollectionRepository for SqliteCollectionRepository {
     async fn upsert(&self, collection: &Collection) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
         // ErsatzTV Collection has no collection_type column; UseCustomPlaybackOrder is always false
-        sqlx::query(
-            r#"REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
-        )
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
+            &[&["Id"], &["Name"]],
+        ))
         .bind(collection.id)
         .bind(&collection.name)
         .execute(&mut *tx)
-        .await.repository()?;
+        .await
+        .repository()?;
 
         sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
             .bind(collection.id)

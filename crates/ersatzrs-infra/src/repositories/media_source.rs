@@ -12,6 +12,7 @@ use ersatzrs_domain::{
 };
 use sqlx::{Pool, Row};
 
+use super::common::upsert_sql;
 use super::common::{decode_optional_datetime, encode_optional_datetime, not_found};
 
 #[derive(Clone)]
@@ -887,10 +888,11 @@ impl ProviderUpsert for PlexMediaSource {
         tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            sqlx::query(
-                r#"REPLACE INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
+            sqlx::query(upsert_sql!(
+                r#"INSERT INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
                  VALUES (?, ?, ?)"#,
-            )
+                &[&["Id"]],
+            ))
             .bind(self.media_source.id)
             .bind(&self.server_name)
             .bind(&self.machine_identifier)
@@ -948,11 +950,12 @@ impl ProviderUpsert for JellyfinMediaSource {
         tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            sqlx::query(
-                r#"REPLACE INTO "JellyfinMediaSource" (
+            sqlx::query(upsert_sql!(
+                r#"INSERT INTO "JellyfinMediaSource" (
                     "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
                  ) VALUES (?, ?, ?, ?)"#,
-            )
+                &[&["Id"]],
+            ))
             .bind(self.media_source.id)
             .bind(&self.server_name)
             .bind(&self.operating_system)
@@ -1012,11 +1015,12 @@ impl ProviderUpsert for EmbyMediaSource {
         tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            sqlx::query(
-                r#"REPLACE INTO "EmbyMediaSource" (
+            sqlx::query(upsert_sql!(
+                r#"INSERT INTO "EmbyMediaSource" (
                     "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
                  ) VALUES (?, ?, ?, ?)"#,
-            )
+                &[&["Id"]],
+            ))
             .bind(self.media_source.id)
             .bind(&self.server_name)
             .bind(&self.operating_system)

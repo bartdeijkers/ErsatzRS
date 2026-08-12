@@ -17,6 +17,7 @@ use ersatzrs_domain::{
 };
 use sqlx::{Pool, Row, Transaction};
 
+use super::common::upsert_sql;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
@@ -170,8 +171,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "PlayoutItem" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "PlayoutItem" (
                 "Id", "PlayoutId", "MediaItemId", "Start", "Finish", "GuideStart", "GuideFinish",
                 "CustomTitle", "GuideGroup", "FillerKind", "InPoint", "OutPoint",
                 "ChapterTitle", "DisableWatermarks", "PreferredAudioLanguageCode",
@@ -179,7 +180,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                 "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex",
                 "BlockKey", "CollectionKey", "CollectionEtag", "SchedulingContext"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["Id"]],
+        ))
         .bind(item.id)
         .bind(item.playout_id)
         .bind(item.media_item_id)
@@ -2248,13 +2250,14 @@ async fn replace_anchor_state(
     anchor: Option<&PlayoutAnchor>,
 ) -> Result<()> {
     if let Some(anchor) = anchor {
-        sqlx::query(
-            r#"REPLACE INTO "PlayoutAnchor" (
+        sqlx::query(upsert_sql!(
+            r#"INSERT INTO "PlayoutAnchor" (
                 "PlayoutId", "DurationFinish", "InDurationFiller", "InFlood",
                 "MultipleRemaining", "NextGuideGroup", "NextStart",
                 "NextInstructionIndex", "Context"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
+            &[&["PlayoutId"]],
+        ))
         .bind(playout_id)
         .bind(encode_optional_datetime(anchor.duration_finish))
         .bind(anchor.in_duration_filler)
