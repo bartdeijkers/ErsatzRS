@@ -606,11 +606,27 @@ WHERE "Id" = ${source.id + 3};
 
     await page.goto(`/channels/${mirror.id}`);
     await waitForHydration(page);
+    const mirrorSource = page.locator('select[name="mirror_source_channel_id"]');
+    const playoutOffset = page.locator('input[name="playout_offset_hours"]');
+    await expect(page.locator('select[name="playout_source"]')).toHaveValue('0');
+    await expect(mirrorSource).toBeDisabled();
+    await expect(playoutOffset).toBeDisabled();
+    await expect(
+      page.getByText('Available only when Playout Source is set to Mirror.'),
+    ).toBeVisible();
     await page.locator('select[name="playout_source"]').selectOption('1');
-    await page
-      .locator('select[name="mirror_source_channel_id"]')
-      .selectOption(String(source.id));
-    await page.locator('input[name="playout_offset_hours"]').fill('1');
+    await expect(mirrorSource).toBeEnabled();
+    await expect(playoutOffset).toBeEnabled();
+    await mirrorSource.selectOption(String(source.id));
+    await playoutOffset.fill('1');
+    await page.locator('select[name="playout_source"]').selectOption('0');
+    await expect(mirrorSource).toBeDisabled();
+    await expect(playoutOffset).toBeDisabled();
+    await page.locator('select[name="playout_source"]').selectOption('1');
+    await expect(mirrorSource).toBeEnabled();
+    await expect(playoutOffset).toBeEnabled();
+    await expect(mirrorSource).toHaveValue(String(source.id));
+    await expect(playoutOffset).toHaveValue('1');
     await Promise.all([
       page.waitForURL(/\/channels$/),
       page.getByRole('button', { name: 'Save Channel', exact: true }).click(),
