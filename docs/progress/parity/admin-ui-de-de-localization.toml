@@ -1,19 +1,36 @@
 feature    = 'German (Germany) admin UI localization'
 etv_source = 'ErsatzRS ADR 0022 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
 rs_target  = '`crates/ersatzrs-web/src/admin/languages/de_de.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0012', '0022']
 summary    = '''
-The dedicated `de-de` module has the accepted metadata, aliases, full
-`LanguageStrings` shape, localized dynamic helpers, and representative tests.
-It remains excluded from the generated language registry through
-`TRANSLATION_COMPLETE = false` because the one-hour translation pass did not
-replace every English product string.
-'''
+Implemented 2026-08-12: German (Germany) is a first-class admin UI language.
+`crates/ersatzrs-web/src/admin/languages/de_de.rs` follows the file-driven
+per-culture contract (SORT_ORDER 60, code `de-de`, label
+`Deutsch (Deutschland)`, aliases `de`/`de-de`/`de_de` with case/underscore
+normalization) and implements the full `LanguageStrings` trait: every admin
+`TextKey`, the dynamic helper methods (counts, pagination, fallback labels,
+provider titles, health summary, playout reset prompt), and the localized
+server-error mappings for schedules, scheduling content, watermarks, settings,
+media actions, filler presets, media browsers, media sources, Trakt, uploads,
+and FFmpeg profiles. `TRANSLATION_COMPLETE = true` registers the culture in the
+generated registry.
 
-[[debt]]
-id          = 'admin-ui-de-de-translation-and-browser-proof'
-description = 'Finish the remaining German product translations, remove the incomplete guard, and prove language selection plus all settings routes without English fallback leakage.'
-discovered  = '2026-08-11'
-evidence    = 'The timeboxed 2026-08-11 pass produced a structurally complete draft but its exact-English audit still found genuine untranslated product labels. The build registry deliberately skips files marked `TRANSLATION_COMPLETE = false`.'
-resolved    = false
+Terminology is unified on one German term per ErsatzTV concept — Sendeplan /
+Sendeplanelement, Playout, Block, Deko / Deko-Vorlage, Filler / Filler-Vorlage,
+Sammlung / Mehrsammlung / Wiederholungssammlung, Element, Wasserzeichen — and
+technical identifiers (product and provider names, codecs, protocol tokens,
+routes, configuration keys, search tokens, month abbreviations) stay verbatim
+per ADR 0012's translation boundary. Unknown dynamic server errors pass through
+untranslated. Coverage is enforced by `all_languages_translate_each_key`, the
+supported-registry test, and module tests for the glossary, stable workflow
+errors, identifier preservation, and pass-through behavior.
+
+Browser proof: `tests/e2e/settings-i18n.spec.ts` gained a `de-de` culture leg
+and passes in Chromium against a live host booted by
+`scripts/e2e/playwright-e2e.sh` — the language switch persists, `html lang`
+becomes `de-de`, and all eight settings routes (`/settings/ffmpeg`,
+`logging`, `hdhr`, `scanner`, `playout`, `ui`, `xmltv`, `addons`) render German
+headings, markers, units, and save actions with zero English fallback markers,
+no error/warning alert surfaces, and a clean browser console.
+'''

@@ -6,10 +6,13 @@ Accepted 2026-08-11
 
 ## Implementation
 
-Partial — the complete `it-it` module, metadata, product text, dynamic helpers,
-stable errors, and representative tests were added and registered on
-2026-08-11. Structural, placeholder, and backend-error-pattern audits pass;
-the settings browser proof remains before implementation closeout.
+Implemented 2026-08-12. The `it-it` module was added and registered on
+2026-08-11; the 2026-08-12 completion pass unified the glossary, repaired four
+backend-error guards whose English needles had been translated (so those
+branches could never fire), translated the ten remaining English passthrough
+returns, and localized `channel_language_label`, `channel_streaming_mode_label`,
+and `episode_display_subtitle`. The `it-it` leg of
+`tests/e2e/settings-i18n.spec.ts` passes in Chromium against a live host.
 
 ## Context
 

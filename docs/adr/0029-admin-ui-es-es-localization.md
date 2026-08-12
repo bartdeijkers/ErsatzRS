@@ -6,10 +6,12 @@ Accepted 2026-08-11
 
 ## Implementation
 
-Partial — the complete `es-es` translation module, regional metadata, dynamic
-helpers, stable error mappings, and representative tests were added on
-2026-08-11. Focused compiler and Chromium settings-route proof remain before
-this ADR can claim implementation.
+Implemented 2026-08-12. The `es-es` translation module, regional metadata,
+dynamic helpers, stable error mappings, and tests were added on 2026-08-11; the
+2026-08-12 completion pass unified the Playout glossary (which had collided
+with Playback), translated the remaining English passthrough returns, and
+localized the episode subtitle and streaming-mode labels. The `es-es` leg of
+`tests/e2e/settings-i18n.spec.ts` passes in Chromium against a live host.
 
 ## Context
 

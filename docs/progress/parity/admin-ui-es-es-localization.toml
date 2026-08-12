@@ -1,19 +1,37 @@
 feature    = 'Spanish (Spain) admin UI localization'
 etv_source = 'ErsatzRS ADR 0029 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
 rs_target  = '`crates/ersatzrs-web/src/admin/languages/es_es.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0012', '0029']
 summary    = '''
-The dedicated `es-es` module carries the accepted regional metadata and
-aliases and implements every current static key, dynamic helper, stable error
-mapping, and representative locale test in Spanish for Spain. Focused compiler
-and settings-browser proof remain before the ADR can claim an implemented
-localization.
-'''
+Implemented 2026-08-12: Spanish (Spain) is a first-class admin UI language. The
+dedicated `es-es` module carries the accepted regional metadata and aliases and
+implements every admin `TextKey`, dynamic helper, and stable error mapping in
+Spanish for Spain, preserving the regional axes ("vídeo", "ajustes") against es-419.
 
-[[debt]]
-id          = 'admin-ui-es-es-browser-proof'
-description = 'Prove es-es language selection, normalization, translated rendering across all settings routes, and absence of unintended English fallback text.'
-discovered  = '2026-08-11'
-evidence    = 'The timeboxed 2026-08-11 translation and structural audit completed the locale file; the shared Cargo build lock prevented the required compiled and Chromium closeout before the cutoff.'
-resolved    = false
+The 2026-08-12 completion pass closed the remaining gaps. Glossary: Playout
+was rendered "Reproducción" — colliding exactly with Playback — and
+"Reproductora"; it is now the product noun `playout`, so "reproducción"
+belongs to Playback alone. Stream keeps "emisión", which was already
+consistent. Leakage: seven `return trimmed.to_owned()` passthroughs and the
+duplicate-deco-template message echoed raw English and are now Spanish.
+Localization: `episode_display_subtitle` still used the English compact
+`S{season} E{episode}` form and now reads `temporada X, episodio Y`;
+`channel_streaming_mode_label` and `TextKey::HlsDirect` return `HLS directo`;
+`SubtitleModeHelp` and `PagedTableDemo` were still English.
+`ContentVariantSearchHelp` was also still fully English in es-es only.
+
+Technical identifiers (product and provider names, codecs, protocol tokens,
+routes, configuration keys) stay verbatim per ADR 0012's translation boundary,
+and unknown dynamic server errors pass through untranslated. Coverage is
+enforced by `all_languages_translate_each_key`, the supported-registry test,
+and module tests for the glossary, the localized episode subtitle, the
+backend-error guards, and pass-through behavior.
+
+Browser proof: the `es-es` leg of `tests/e2e/settings-i18n.spec.ts` passes in
+Chromium against a live host booted by `scripts/e2e/playwright-e2e.sh` — the
+language switch persists, `html lang` becomes `es-es`, and all eight settings
+routes render Spanish headings, markers, units, and save actions with zero
+English fallback markers, no error/warning alert surfaces, and a clean browser
+console.
+'''

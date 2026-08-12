@@ -1,18 +1,47 @@
 feature    = 'Italian (Italy) admin UI localization'
 etv_source = 'ErsatzRS ADR 0025 localization extension; ErsatzTV supplies only the persisted `pages.language` mechanism'
 rs_target  = '`crates/ersatzrs-web/src/admin/languages/it_it.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `tests/e2e/settings-i18n.spec.ts`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0012', '0025']
 summary    = '''
-The dedicated `it-it` module has the accepted metadata, aliases, complete
-`LanguageStrings` structure, and complete Italian product translation. It is
-registered after TextKey, placeholder, English-residual, and immutable
-backend-error-pattern audits passed.
-'''
+Implemented 2026-08-12: Italian (Italy) is a first-class admin UI language.
+`crates/ersatzrs-web/src/admin/languages/it_it.rs` follows the file-driven
+per-culture contract (SORT_ORDER 90, code `it-it`, label `Italiano (Italia)`,
+aliases `it`/`it-it`/`it_it`) and implements the full `LanguageStrings` trait:
+every admin `TextKey`, the dynamic helper methods, and the localized
+server-error mappings.
 
-[[debt]]
-id          = 'admin-ui-it-it-translation-and-browser-proof'
-description = 'Prove Italian language selection plus all settings routes without English fallback leakage in a real browser run.'
-discovered  = '2026-08-11'
-evidence    = 'The 2026-08-11 completion audit found 1,273 unique TextKeys, no placeholder mismatches, no changed backend-error inputs or guards, and no genuine English product-text residuals. The settings browser case is collected but has not run against a live host.'
-resolved    = false
+The 2026-08-12 completion pass closed four classes of gap the initial
+registration missed. Correctness: four backend-error guards had had their
+English needles translated into Italian (`" intersects block from "`,
+`" intersects deco from "`, `"Pinned stream selection is invalid or no longer
+available."`, `"Movie was not found."`), so those branches could never match
+the message the backend actually emits; the guards are restored to the English
+inputs and now return Italian. Leakage: ten `return trimmed.to_owned()`
+passthroughs and the duplicate-FFmpeg-profile-name case echoed raw English and
+are now translated, and `channel_language_label` returned `English` for `eng`.
+Localization: `episode_display_subtitle` still used the English compact
+`S{season} E{episode}` form and now reads `stagione X, episodio Y`, and
+`channel_streaming_mode_label` returns `HLS diretto`. Glossary: Playout was
+split across `riproduzione` / `emissione` / `messa in onda` and collided
+exactly with Playback; it is now the product noun `playout`, freeing
+`riproduzione` for Playback. Collection unified on `raccolta` (was split with
+`collezione`), Playlist on `playlist` (was `lista di riproduzione`), Watermark
+on `filigrana`, plus fixes for garbled word order (`Collezione modifica`),
+`Rerun` rendered as `di riproduzione`, and `RerunPlaybackOrder` having lost its
+qualifier.
+
+Technical identifiers (product and provider names, codecs, protocol tokens,
+routes, configuration keys, month abbreviations) stay verbatim per ADR 0012's
+translation boundary, and unknown dynamic server errors pass through
+untranslated. Coverage is enforced by `all_languages_translate_each_key`, the
+supported-registry test, and module tests for the glossary, the localized
+helpers, the restored backend-error guards, and pass-through behavior.
+
+Browser proof: the `it-it` leg of `tests/e2e/settings-i18n.spec.ts` passes in
+Chromium against a live host booted by `scripts/e2e/playwright-e2e.sh` — the
+language switch persists, `html lang` becomes `it-it`, and all eight settings
+routes render Italian headings, markers, units, and save actions with zero
+English fallback markers, no error/warning alert surfaces, and a clean browser
+console.
+'''

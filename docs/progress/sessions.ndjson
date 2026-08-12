@@ -1,3 +1,7 @@
+{"agent":"Claude Opus 5","date":"2026-08-12","summary":"Complete the es-es and es-419 admin UI translations and prove both in Chromium"}
+{"agent":"Claude Opus 5","date":"2026-08-12","summary":"Complete the it-it admin UI translation, repair its backend-error guards, and prove it in Chromium"}
+{"agent":"Claude Opus 5","date":"2026-08-12","summary":"Prove de-de settings i18n in Chromium and close the localization parity debt"}
+{"agent":"Claude Opus 5","date":"2026-08-12","summary":"Complete the de-de admin UI translation and register the culture"}
 {"agent":"Codex","date":"2026-08-11","summary":"Completed and registered the Italian admin localization with structural, placeholder, backend-pattern, and mixed-English audits; advanced the guarded German draft to 507 translated TextKeys within the extended timebox."}
 {"agent":"Codex","date":"2026-08-11","summary":"Extended Diataxis how-to coverage with manual and smart collection tasks, Classic rotation, client recipes, and corrected Jellyfin, backup, and JWT troubleshooting guidance."}
 {"agent":"Codex","date":"2026-08-11","summary":"Improved Diataxis how-to guides from legacy user journeys: channel builds, media layouts, Remote Streams, add-ons, IPTV verification, releases, migrations, FFmpeg, and tests."}

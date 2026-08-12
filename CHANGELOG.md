@@ -13,14 +13,37 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Four Italian admin UI error branches never fired, because the English text
+  they match against had itself been translated. Overlapping block and deco
+  reports, the pinned-stream-selection error, and the movie-not-found error
+  now match the message the backend actually emits and render in Italian.
+
 ### Added
 
-- Spanish for Latin America (`es-419`), Spain (`es-es`), and Italian for Italy
-  (`it-it`) now have complete admin UI translation modules with regional
-  aliases, dynamic labels, stable workflow errors, and settings-route browser
-  cases (ADRs 0025, 0028, and 0029); focused runtime proof remains tracked
-  before parity closeout. The same workflow preserves the improving but
-  incomplete German draft without registering it as a selectable culture.
+- German for Germany (`de-de`) is now a complete, selectable admin UI language
+  (ADR 0022). Every admin text key and every stable workflow error message is
+  translated, terminology is unified on one German term per ErsatzTV concept
+  (Sendeplan, Sendeplanelement, Playout, Block, Deko, Filler, Sammlung,
+  Element), and product nouns, provider/codec/protocol identifiers, routes, and
+  configuration keys stay verbatim. The settings-route browser case passes in
+  Chromium against a live host with no English fallback leakage.
+- Italian for Italy (`it-it`) is now a complete, selectable admin UI language
+  (ADR 0025). Terminology is unified on one Italian term per ErsatzTV concept —
+  Playout keeps the product noun so it no longer collides with Playback
+  ("riproduzione"), Collection settles on "raccolta", Playlist on "playlist",
+  and Watermark on "filigrana" — the remaining English passthrough messages are
+  translated, and the settings-route browser case passes in Chromium against a
+  live host with no English fallback leakage.
+- Spanish for Latin America (`es-419`) and Spain (`es-es`) are now complete,
+  selectable admin UI languages (ADRs 0028 and 0029). Playout keeps the product
+  noun so it no longer collides with Playback ("reproducción"), the remaining
+  English passthrough messages are translated, episode subtitles read
+  "temporada X, episodio Y", and both settings-route browser cases pass in
+  Chromium against a live host with no English fallback leakage. The regional
+  split between the two ("vídeo"/"video", "ajustes"/"configuración") is
+  preserved.
 - A signed, repository-backed add-on platform now provides trusted-source
   replacement, immutable package install/update, manifest-rendered permissions,
   settings and panels, readiness checks, content-integrity health, automatic

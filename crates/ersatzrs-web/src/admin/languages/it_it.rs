@@ -17,9 +17,9 @@ fn episode_display_subtitle(
     let show = show_title.unwrap_or("").trim();
     match (season_number, episode_number) {
         (Some(season), Some(episode)) if !show.is_empty() => {
-            Some(format!("{show} - S{season} E{episode}"))
+            Some(format!("{show} - stagione {season}, episodio {episode}"))
         }
-        (Some(season), Some(episode)) => Some(format!("S{season} E{episode}")),
+        (Some(season), Some(episode)) => Some(format!("stagione {season}, episodio {episode}")),
         _ => (!show.is_empty()).then(|| show.to_owned()),
     }
 }
@@ -133,7 +133,7 @@ impl LanguageStrings for ItalianStrings {
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (Legacy)".to_owned(),
-            2 => "HLS Direct".to_owned(),
+            2 => "HLS diretto".to_owned(),
             4 => "HLS Segmenter".to_owned(),
             5 => "MPEG-TS".to_owned(),
             _ => format!("Sconosciuto ({mode})"),
@@ -143,7 +143,7 @@ impl LanguageStrings for ItalianStrings {
     fn channel_language_label(&self, code: &str) -> String {
         match code.trim().to_ascii_lowercase().as_str() {
             "" => String::new(),
-            "eng" | "en" => "English".to_owned(),
+            "eng" | "en" => "Inglese".to_owned(),
             "nld" | "dut" | "nl" => "Olandese".to_owned(),
             "deu" | "ger" | "de" => "Tedesco".to_owned(),
             "fra" | "fre" | "fr" => "Francese".to_owned(),
@@ -396,21 +396,21 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddBlockGroup => "Aggiungi Gruppo di Blocchi",
         TextKey::AddBlockItem => "Aggiungi Elemento di Blocco",
         TextKey::AddBlockToTemplate => "Aggiungi Blocco al Modello",
-        TextKey::AddCollection => "Aggiungi Collezione",
+        TextKey::AddCollection => "Aggiungi raccolta",
         TextKey::AddContent => "Aggiungi Contenuto",
         TextKey::AddFailed => "Aggiunta fallita",
         TextKey::AddFillerPreset => "Aggiungi Preset Riempitivo",
         TextKey::AddMultiCollection => "Aggiungi Multi-Colezione",
-        TextKey::AddPlaylist => "Aggiungi Playlist",
-        TextKey::AddPlaylistGroup => "Aggiungi Gruppo di Playlist",
-        TextKey::AddPlaylistItem => "Aggiungi Elemento di Playlist",
-        TextKey::AddRerunCollection => "Aggiungi Collezione di Ripetizioni",
+        TextKey::AddPlaylist => "Aggiungi playlist",
+        TextKey::AddPlaylistGroup => "Aggiungi gruppo di playlist",
+        TextKey::AddPlaylistItem => "Aggiungi elemento alla playlist",
+        TextKey::AddRerunCollection => "Aggiungi raccolta di ripetizioni",
         TextKey::AddTemplate => "Aggiungi Modello",
         TextKey::AddTemplateGroup => "Aggiungi Gruppo di Modelli",
         TextKey::AddTraktList => "Aggiungi Lista Trakt",
-        TextKey::AddToCollection => "Aggiungi alla Collezione",
+        TextKey::AddToCollection => "Aggiungi alla raccolta",
         TextKey::AddToEllipsis => "Aggiungi a...",
-        TextKey::AddToPlaylist => "Aggiungi alla Playlist",
+        TextKey::AddToPlaylist => "Aggiungi alla playlist",
         TextKey::AddToSchedule => "Aggiungi alla Programmazione",
         TextKey::Actions => "Azioni",
         TextKey::All => "Tutti",
@@ -423,7 +423,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Back => "Indietro",
         TextKey::BackToSettings => "Torna alle impostazioni",
         TextKey::BackToArtists => "Torna agli artisti",
-        TextKey::BackToCollections => "Torna alle collezioni",
+        TextKey::BackToCollections => "Torna alle raccolte",
         TextKey::BackToMovies => "Torna ai film",
         TextKey::BackToOtherVideos => "Torna ad altri video",
         TextKey::BackToTvShows => "Torna alle serie TV",
@@ -457,10 +457,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Clear => "Pulisci",
         TextKey::Channels => "Canali",
         TextKey::Close => "Chiudi",
-        TextKey::Collections => "Collezioni",
-        TextKey::CollectionDeleted => "Collezione eliminata.",
-        TextKey::CollectionSaved => "Collezione salvata.",
-        TextKey::SaveCollection => "Salva Collezione",
+        TextKey::Collections => "Raccolte",
+        TextKey::CollectionDeleted => "Raccolta eliminata.",
+        TextKey::CollectionSaved => "Raccolta salvata.",
+        TextKey::SaveCollection => "Salva raccolta",
         TextKey::ComputingPreview => "Elaborazione anteprima...",
         TextKey::Confirm => "Conferma",
         TextKey::ConfirmDelete => "Conferma Eliminazione",
@@ -513,9 +513,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BreakContentItem => "Elemento contenuto di pausa",
         TextKey::BreakContentMode => "Modalità contenuto di pausa",
         TextKey::DeadAirFallback => "Fallback per interruzione",
-        TextKey::DeadAirFallbackBody => {
-            "Quando non viene trovato un elemento di riproduzione per l'orario corrente, verrà selezionato casualmente un elemento da questa raccolta e ripetuto e ritagliato per adattarsi esattamente fino all'inizio del prossimo elemento di riproduzione. Questo sostituisce l'immagine Canale offline che verrebbe altrimenti visualizzata."
-        }
+        TextKey::DeadAirFallbackBody => "Quando non viene trovato un elemento del playout per l'orario corrente, verrà selezionato casualmente un elemento da questa raccolta e ripetuto e ritagliato per adattarsi esattamente fino all'inizio del prossimo elemento del playout. Questo sostituisce l'immagine Canale offline che verrebbe altrimenti visualizzata.",
         TextKey::DeadAirFallbackCollectionType => "Tipo di raccolta fallback per interruzione",
         TextKey::DeadAirFallbackMode => "Modalità fallback per interruzione",
         TextKey::Deco => "Decorazione",
@@ -594,26 +592,22 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteBlock => "Elimina Blocco",
         TextKey::DeleteBlockGroup => "Elimina Gruppo di Blocchi",
         TextKey::DeleteCustomResolution => "Elimina Risoluzione Personalizzata",
-        TextKey::DeleteCollection => "Elimina Collezione",
+        TextKey::DeleteCollection => "Elimina raccolta",
         TextKey::DeleteFillerPreset => "Elimina Preset Filler",
-        TextKey::DeleteMultiCollection => "Elimina Multi-Collezione",
-        TextKey::DeletePlaylist => "Elimina Playlist",
-        TextKey::DeletePlaylistGroup => "Elimina Gruppo Playlist",
-        TextKey::DeleteRerunCollection => "Elimina Collezione di Ripetizioni",
+        TextKey::DeleteMultiCollection => "Elimina raccolta multipla",
+        TextKey::DeletePlaylist => "Elimina playlist",
+        TextKey::DeletePlaylistGroup => "Elimina gruppo di playlist",
+        TextKey::DeleteRerunCollection => "Elimina raccolta di ripetizioni",
         TextKey::DeleteTemplate => "Elimina Modello",
         TextKey::DeleteTemplateGroup => "Elimina Gruppo Modelli",
         TextKey::DeleteTraktList => "Elimina Lista Trakt",
-        TextKey::DisabledCollectionsAlreadyPresent => {
-            "Le collezioni disabilitate sono già presenti in questa multi-collezione"
-        }
+        TextKey::DisabledCollectionsAlreadyPresent => "Le raccolte disabilitate sono già presenti in questa raccolta multipla",
         TextKey::EmptyTrash => "Svuota Cestino",
         TextKey::ExtractEmbeddedSubtitles => "Estrai Sottotitoli Incorporati (Testo)",
-        TextKey::ErasedPlayoutItemsAndHistory => "Elementi di emissione e cronologia cancellati.",
+        TextKey::ErasedPlayoutItemsAndHistory => "Elementi del playout e cronologia cancellati.",
         TextKey::EraseFailed => "Eliminazione fallita",
         TextKey::EraseItemsAndHistory => "Elimina Elementi e Cronologia",
-        TextKey::ErasePlayoutItemsAndHistoryConfirm => {
-            "Questa operazione eliminerà tutti gli elementi di emissione e la cronologia per questa emissione sequenziale. Continuare?"
-        }
+        TextKey::ErasePlayoutItemsAndHistoryConfirm => "Questa operazione eliminerà tutti gli elementi del playout e la cronologia per questo playout sequenziale. Continuare?",
         TextKey::Episode => "Episodio",
         TextKey::FanArt => "Fan Art",
         TextKey::Ffmpeg => "FFmpeg",
@@ -725,59 +719,57 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::OtherVideoNotFound => "Altro video non trovato",
         TextKey::OtherVideos => "Altri video",
         TextKey::OpenBrowser => "Apri browser",
-        TextKey::Playout => "Riproduzione",
-        TextKey::PlayoutItemsAndHistory => "Elementi di riproduzione e cronologia",
-        TextKey::PlayoutNotFound => "Riproduzione non trovata.",
-        TextKey::Playouts => "Riproduzioni",
-        TextKey::AddPlayout => "Aggiungi riproduzione",
+        TextKey::Playout => "Playout",
+        TextKey::PlayoutItemsAndHistory => "Elementi del playout e cronologia",
+        TextKey::PlayoutNotFound => "Playout non trovato.",
+        TextKey::Playouts => "Playout",
+        TextKey::AddPlayout => "Aggiungi playout",
         TextKey::ClassicScheduleMenu => "Programma classico",
         TextKey::BlockScheduleMenu => "Programma a blocchi",
         TextKey::SequentialScheduleMenu => "Programma sequenziale",
         TextKey::ScriptedScheduleMenu => "Programma scriptato",
         TextKey::JsonDizqueTvScheduleMenu => "Programma JSON (dizqueTV)",
-        TextKey::ResetAllPlayouts => "Ripristina tutte le riproduzioni",
-        TextKey::PlayoutBuildQueued => "Ripristino riproduzione in coda",
-        TextKey::PlayoutBuildsQueued => "Ripristini riproduzione in coda",
-        TextKey::SearchForPlayouts => "Cerca riproduzioni",
-        TextKey::PlayoutDetail => "Dettagli riproduzione",
+        TextKey::ResetAllPlayouts => "Ripristina tutti i playout",
+        TextKey::PlayoutBuildQueued => "Ricostruzione del playout in coda",
+        TextKey::PlayoutBuildsQueued => "ricostruzioni del playout in coda",
+        TextKey::SearchForPlayouts => "Cerca playout",
+        TextKey::PlayoutDetail => "Dettagli del playout",
         TextKey::ShowFiller => "Mostra riempitivo",
-        TextKey::EditPlayout => "Modifica riproduzione",
-        TextKey::RefreshPlayout => "Aggiorna riproduzione",
-        TextKey::ResetPlayout => "Ripristina riproduzione",
+        TextKey::EditPlayout => "Modifica playout",
+        TextKey::RefreshPlayout => "Aggiorna playout",
+        TextKey::ResetPlayout => "Ripristina playout",
         TextKey::ScheduleReset => "Ripristino programma",
-        TextKey::SchedulePlayoutReset => "Ripristino programma di riproduzione",
+        TextKey::SchedulePlayoutReset => "Pianifica il ripristino del playout",
         TextKey::EditExternalJsonFile => "Modifica file JSON esterno",
-        TextKey::DeletePlayout => "Elimina riproduzione",
+        TextKey::DeletePlayout => "Elimina playout",
         TextKey::Troubleshoot => "Risoluzione problemi",
         TextKey::DailyResetTime => "Ora di ripristino giornaliero",
         TextKey::DoNotAutomaticallyReset => "Non ripristinare automaticamente",
         TextKey::SaveChanges => "Salva modifiche",
         TextKey::ExternalJsonFileLabel => "File JSON esterno",
-        TextKey::EditExternalJsonFilePrompt => "Modifica il file JSON esterno della riproduzione",
+        TextKey::EditExternalJsonFilePrompt => "Modifica il file JSON esterno del playout",
         TextKey::UnscheduledPlayoutItem => "NON PROGRAMMATO",
-        TextKey::DisabledChannelsAlreadyHavePlayout => {
-            "I canali già disabilitati hanno già una riproduzione"
-        }
+        TextKey::DisabledChannelsAlreadyHavePlayout => "I canali disabilitati hanno già un playout",
         TextKey::ProgramSchedule => "Programma",
         TextKey::SequentialScheduleFileHelp => {
             "Il percorso completo del file di programma sequenziale (YAML)"
         }
         TextKey::BlockTemplatesAddedLater => "I modelli di blocco verranno aggiunti in seguito",
-        TextKey::UnsupportedPlayoutKind => "Tipo di emissione non supportato.",
-        TextKey::ClassicPlayout => "Emissione classica",
-        TextKey::ClassicPlayoutState => "Stato dell'emissione classica",
-        TextKey::BlockPlayout => "Emissione a blocchi",
+        TextKey::UnsupportedPlayoutKind => "Tipo di playout non supportato.",
+        TextKey::ClassicPlayout => "Playout classico",
+        TextKey::ClassicPlayoutState => "Stato del playout classico",
+        TextKey::BlockPlayout => "Playout a blocchi",
         TextKey::ScriptedPlayout => "Programma scriptato",
         TextKey::AlternateSchedules => "Programmi alternativi",
         TextKey::EditAlternateSchedules => "Modifica programmi alternativi",
-        TextKey::PlayoutTemplates => "Modelli di emissione",
+        TextKey::PlayoutTemplates => "Modelli di playout",
         TextKey::EditTemplates => "Modifica modelli",
         TextKey::DefaultDeco => "Deco predefinito",
         TextKey::EnableDefaultDeco => "Abilita deco predefinito",
         TextKey::SaveDefaultDeco => "Salva deco predefinito",
         TextKey::SaveScriptedSchedule => "Salva programma scriptato",
         TextKey::EraseItems => "Cancella elementi",
-        TextKey::ErasedPlayoutItems => "Elementi di emissione cancellati.",
+        TextKey::ErasedPlayoutItems => "Elementi del playout cancellati.",
         TextKey::SavedDefaultDeco => "Deco predefinito salvato.",
         TextKey::SavedScriptedSchedule => "Programma scriptato salvato.",
         TextKey::Maintenance => "Manutenzione",
@@ -833,23 +825,21 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NovemberShort => "Nov",
         TextKey::DecemberShort => "Dic",
         TextKey::PlayAll => "Riproduci tutto",
-        TextKey::Playlist => "Lista di riproduzione",
-        TextKey::PlaylistAdded => "Lista di riproduzione aggiunta.",
-        TextKey::PlaylistDeleted => "Lista di riproduzione eliminata.",
-        TextKey::PlaylistGroup => "Gruppo di lista di riproduzione",
-        TextKey::PlaylistGroupAdded => "Gruppo di lista di riproduzione aggiunto.",
-        TextKey::PlaylistGroupDeleted => "Gruppo di lista di riproduzione eliminato.",
-        TextKey::PlaylistGroupName => "Nome gruppo di lista di riproduzione",
-        TextKey::PlaylistGroups => "Gruppi di lista di riproduzione",
-        TextKey::PlaylistItem => "Elemento di lista di riproduzione",
-        TextKey::PlaylistItems => "Elementi di lista di riproduzione",
-        TextKey::PlaylistName => "Nome lista di riproduzione",
-        TextKey::PlaylistNotFound => "Lista di riproduzione non trovata.",
-        TextKey::PlaylistPlayoutPreview => "Anteprima emissione lista di riproduzione",
-        TextKey::PlaylistPreviewEmpty => {
-            "L'anteprima di emissione della lista di riproduzione non contiene elementi"
-        }
-        TextKey::Playlists => "Liste di riproduzione",
+        TextKey::Playlist => "Playlist",
+        TextKey::PlaylistAdded => "Playlist aggiunta.",
+        TextKey::PlaylistDeleted => "Playlist eliminata.",
+        TextKey::PlaylistGroup => "Gruppo di playlist",
+        TextKey::PlaylistGroupAdded => "Gruppo di playlist aggiunto.",
+        TextKey::PlaylistGroupDeleted => "Gruppo di playlist eliminato.",
+        TextKey::PlaylistGroupName => "Nome del gruppo di playlist",
+        TextKey::PlaylistGroups => "Gruppi di playlist",
+        TextKey::PlaylistItem => "Elemento della playlist",
+        TextKey::PlaylistItems => "Elementi della playlist",
+        TextKey::PlaylistName => "Nome della playlist",
+        TextKey::PlaylistNotFound => "Playlist non trovata.",
+        TextKey::PlaylistPlayoutPreview => "Anteprima del playout della playlist",
+        TextKey::PlaylistPreviewEmpty => "L'anteprima del playout della playlist non contiene elementi",
+        TextKey::Playlists => "Playlist",
         TextKey::ProbeForInterlacedFrames => "Rileva fotogrammi interlacciati",
         TextKey::PreferredAudioLanguage => "Lingua audio preferita",
         TextKey::DefaultSubtitleLanguage => "Lingua sottotitoli predefinita",
@@ -861,12 +851,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RerunCollections => "Raccolte di ripetizioni",
         TextKey::RerunCollection => "Raccolta di ripetizioni",
         TextKey::RerunCollectionActionFailed => "Azione sulla raccolta di ripetizioni fallita.",
-        TextKey::RerunCollectionDeleted => "La collezione di riproduzione è stata eliminata.",
-        TextKey::RerunCollectionNameRequired => {
-            "Il nome della collezione di riproduzione è obbligatorio!"
-        }
-        TextKey::RerunCollectionSaved => "La collezione di riproduzione è stata salvata.",
-        TextKey::RerunPlaybackOrder => "Ordine di riproduzione",
+        TextKey::RerunCollectionDeleted => "Raccolta di ripetizioni eliminata.",
+        TextKey::RerunCollectionNameRequired => "Il nome della raccolta di ripetizioni è obbligatorio!",
+        TextKey::RerunCollectionSaved => "Raccolta di ripetizioni salvata.",
+        TextKey::RerunPlaybackOrder => "Ordine di riproduzione delle ripetizioni",
         TextKey::RemoteStreams => "Flussi remoti",
         TextKey::RemoteStream => "Flusso remoto",
         TextKey::RemoteStreamPlaylists => "Playlist dei flussi remoti",
@@ -894,8 +882,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ResetChannels => "Resetta i canali",
         TextKey::RowsPerPage => "Righe per pagina",
         TextKey::Save => "Salva",
-        TextKey::SaveMultiCollection => "Salva Multi-Collection",
-        TextKey::SavePlaylist => "Salva Playlist",
+        TextKey::SaveMultiCollection => "Salva raccolta multipla",
+        TextKey::SavePlaylist => "Salva playlist",
         TextKey::SaveTroubleshootingReportsToDisk => {
             "Salva i rapporti di risoluzione problemi su disco"
         }
@@ -916,8 +904,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddSmartCollection => "Aggiungi raccolta intelligente",
         TextKey::Album => "Album",
         TextKey::Chronological => "Cronologico",
-        TextKey::CollectionSize => "Dimensione della collezione",
-        TextKey::CollectionType => "Tipo di collezione",
+        TextKey::CollectionSize => "Dimensione della raccolta",
+        TextKey::CollectionType => "Tipo di raccolta",
         TextKey::Count => "Conteggio",
         TextKey::CopySchedule => "Copia programma",
         TextKey::CopyScheduleItem => "Copia elemento programma",
@@ -970,12 +958,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MultiEpisodeShuffle => "Scambio multi-episodio",
         TextKey::Multiple => "Multipli",
         TextKey::MultipleCount => "Conteggio multipli",
-        TextKey::MultipleCountHelp => {
-            "Può essere un'espressione con 'count' (dimensione collezione) e 'random' (da 0 a count-1)"
-        }
+        TextKey::MultipleCountHelp => "Può essere un'espressione con 'count' (dimensione della raccolta) e 'random' (da 0 a count-1)",
         TextKey::MultipleMode => "Modalità multipli",
         TextKey::NewScheduleName => "Nuovo nome programma",
-        TextKey::NewSmartCollection => "Nuova collezione intelligente",
+        TextKey::NewSmartCollection => "Nuova raccolta intelligente",
         TextKey::NoScheduleItems => "Nessun elemento del programma.",
         TextKey::NoSchedules => "Nessun programma.",
         TextKey::Normal => "Normale",
@@ -986,9 +972,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlaybackOrder => "Ordine di riproduzione",
         TextKey::PlaybackOrderUpdateFailed => "Aggiornamento ordine di riproduzione fallito",
         TextKey::PlaybackOrderUpdated => "Ordine di riproduzione aggiornato.",
-        TextKey::PlaylistItemSize => "Dimensione elemento playlist",
-        TextKey::PlayoutDurationHours => "Ore durata playout",
-        TextKey::PlayoutDurationMinutes => "Minuti durata playout",
+        TextKey::PlaylistItemSize => "Dimensione dell'elemento della playlist",
+        TextKey::PlayoutDurationHours => "Ore di durata del playout",
+        TextKey::PlayoutDurationMinutes => "Minuti di durata del playout",
         TextKey::PostRollFiller => "Riempitivo Post-Roll",
         TextKey::PostRoll => "Post-Roll",
         TextKey::PreRollFiller => "Riempitivo Pre-Roll",
@@ -1001,19 +987,17 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RandomStartPoint => "Punto iniziale casuale",
         TextKey::RemoveFailed => "Rimozione fallita",
-        TextKey::RemovedFromCollection => "Rimosso dalla collezione.",
-        TextKey::RemoveFromCollection => "Rimuovi dalla collezione",
+        TextKey::RemovedFromCollection => "Rimosso dalla raccolta.",
+        TextKey::RemoveFromCollection => "Rimuovi dalla raccolta",
         TextKey::Rename => "Rinomina",
         TextKey::RenameFailed => "Rinomazione fallita",
         TextKey::ReorderFailed => "Riordino fallito",
         TextKey::RerunFirstRun => "Ripeti prima esecuzione",
         TextKey::RerunRerun => "Ripeti ripetizione",
-        TextKey::ReadOnlyTwentyFourHourPlayoutView => {
-            "Vista di sola lettura di 24 ore degli elementi di playout programmati."
-        }
+        TextKey::ReadOnlyTwentyFourHourPlayoutView => "Vista di sola lettura di 24 ore degli elementi del playout programmati.",
         TextKey::SaveSchedule => "Salva programma",
         TextKey::SaveScheduleItems => "Salva elementi programma",
-        TextKey::SaveSmartCollection => "Salva collezione intelligente",
+        TextKey::SaveSmartCollection => "Salva raccolta intelligente",
         TextKey::Schedule => "Programma",
         TextKey::ScheduleActionFailed => "Azione programma fallita.",
         TextKey::ScheduleAsGroup => "Programma come gruppo",
@@ -1038,7 +1022,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShufflePreset => "Preset spaziatura",
         TextKey::Balanced => "Bilanciato",
         TextKey::SmartShuffleScope => "Condividi spaziatura tra",
-        TextKey::SmartShuffleScopePlayout => "Riproduzione",
+        TextKey::SmartShuffleScopePlayout => "Playout",
         TextKey::SmartShuffleScopeScheduleItem => "Elemento programma",
         TextKey::SmartShuffleValidation => {
             "Scegli una soglia di spaziatura e almeno una regola di similarità."
@@ -1209,7 +1193,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Peak => "picco",
         TextKey::StreamsInUse => "Stream in uso",
         TextKey::SuggestedTranscodeLimit => "Valore suggerito",
-        TextKey::Watermarks => "Watermark",
+        TextKey::Watermarks => "Filigrane",
         TextKey::Width => "Larghezza",
         TextKey::WorkAheadSegmenterLimit => "Trascode HLS Work-Ahead",
         TextKey::WorkAheadSegmenterLimitHelp => {
@@ -1219,7 +1203,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddFfmpegProfile => "Aggiungi profilo FFmpeg",
         TextKey::AddProfile => "Aggiungi profilo",
         TextKey::AllowBFrames => "Consenti B-Frames",
-        TextKey::AllowWatermarks => "Consenti Watermark",
+        TextKey::AllowWatermarks => "Consenti filigrane",
         TextKey::Audio => "Audio",
         TextKey::AudioBitrate => "Bitrate audio (kBit/s)",
         TextKey::AudioBufferSize => "Dimensione buffer audio (kBit)",
@@ -1236,10 +1220,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeinterlaceVideo => "Deinterlaccia video",
         TextKey::Edit => "Modifica",
         TextKey::EditBlock => "Blocco modifica",
-        TextKey::EditCollection => "Collezione modifica",
+        TextKey::EditCollection => "Modifica raccolta",
         TextKey::EditFfmpegProfile => "Profilo modifica FFmpeg",
-        TextKey::EditMultiCollection => "Collezione modifica multipla",
-        TextKey::EditRerunCollection => "Collezione modifica di nuovo avvio",
+        TextKey::EditMultiCollection => "Modifica raccolta multipla",
+        TextKey::EditRerunCollection => "Modifica raccolta di ripetizioni",
         TextKey::EditTemplate => "Modifica modello",
         TextKey::Expression => "Espressione",
         TextKey::Fallback => "Alternativa",
@@ -1313,7 +1297,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddedSeasonToSchedule => "Stagione aggiunta al programma",
         TextKey::AddedShowToSchedule => "Serie aggiunta al programma",
         TextKey::AddingItem => "Aggiornamento elemento...",
-        TextKey::AddingItemToPlaylist => "Aggiornamento elemento alla playlist...",
+        TextKey::AddingItemToPlaylist => "Aggiunta elemento alla playlist...",
         TextKey::Artists => "Artisti",
         TextKey::ClearSelection => "Cancella selezione",
         TextKey::Collection => "Raccolta",
@@ -1332,7 +1316,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Genera una playlist dagli elementi della lista trakt ordinata"
         }
         TextKey::MusicVideos => "Video musicali",
-        TextKey::NewCollectionName => "Nuovo nome della collezione",
+        TextKey::NewCollectionName => "Nuovo nome della raccolta",
         TextKey::NoMediaMatched => "Nessun media trovato.",
         TextKey::NoItemsToAdd => "Nessun elemento da aggiungere.",
         TextKey::NoItemsToPreview => "Nessun elemento da anteprima.",
@@ -1346,16 +1330,12 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SelectAll => "Seleziona tutto",
         TextKey::SelectGroup => "(Seleziona un gruppo)",
         TextKey::SelectPlaylist => "(Seleziona una playlist)",
-        TextKey::SelectSearchCollectionHelp => {
-            "Seleziona la collezione a cui aggiungere i risultati della ricerca."
-        }
+        TextKey::SelectSearchCollectionHelp => "Seleziona la raccolta a cui aggiungere i risultati della ricerca.",
         TextKey::SelectSearchPlaylistHelp => {
             "Seleziona la playlist a cui aggiungere i risultati della ricerca."
         }
         TextKey::Selected => "Selezionato",
-        TextKey::SelectCollectionToAddThisMovie => {
-            "Seleziona una collezione a cui aggiungere questo film."
-        }
+        TextKey::SelectCollectionToAddThisMovie => "Seleziona una raccolta a cui aggiungere questo film.",
         TextKey::SelectPlaylistToAddThisMovie => {
             "Seleziona una playlist a cui aggiungere questo film."
         }
@@ -1368,19 +1348,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AuthorizedRedirecting => "Autorizzato - reindirizzamento...",
         TextKey::CheckingEveryTwoSeconds => "Controllo ogni 2 secondi...",
         TextKey::ClickAuthorizePlex => "Clicca qui per autorizzarti su Plex.tv",
-        TextKey::ClickPlayoutItemHelp => {
-            "Clicca su un elemento di playout per ispezionarne il titolo, i tempi e il contesto di programmazione."
-        }
+        TextKey::ClickPlayoutItemHelp => "Clicca su un elemento del playout per ispezionarne il titolo, i tempi e il contesto di programmazione.",
         TextKey::ConfigureConnection => "Configura connessione",
         TextKey::Connection => "Connessione",
-        TextKey::DeepScanCollections => "Scansione approfondita delle collezioni",
+        TextKey::DeepScanCollections => "Scansione approfondita delle raccolte",
         TextKey::DeepScanLibrary => "Scansione approfondita della libreria",
         TextKey::DeepScan => "Scansione approfondita",
         TextKey::EditLibrary => "Modifica libreria",
         TextKey::EditPlaylist => "Modifica playlist",
         TextKey::EnterOnePathPerLine => "Inserisci un percorso per riga.",
         TextKey::Error => "Errore",
-        TextKey::ExternalCollections => "Collezioni esterne",
+        TextKey::ExternalCollections => "Raccolte esterne",
         TextKey::Information => "Informazioni",
         TextKey::Kind => "Tipo",
         TextKey::Library => "Libreria",
@@ -1393,9 +1371,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Nessuna libreria configurata. Aggiungi prima una fonte media."
         }
         TextKey::NoSchedulingContext => "Nessun contesto di programmazione",
-        TextKey::NoPlayoutItemsInWindow => {
-            "Nessun elemento di playout in questa finestra di 24 ore"
-        }
+        TextKey::NoPlayoutItemsInWindow => "Nessun elemento del playout in questa finestra di 24 ore",
         TextKey::NoPlayoutsFound => "Nessun playout trovato.",
         TextKey::NoPathReplacements => "Nessun sostituzione di percorso.",
         TextKey::Paths => "Percorsi",
@@ -1410,7 +1386,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Saved => "Salvato.",
         TextKey::Saving => "Salvataggio...",
         TextKey::QuickScan => "Scansione rapida",
-        TextKey::ScanCollections => "Scansione collezioni",
+        TextKey::ScanCollections => "Scansione delle raccolte",
         TextKey::ScanFailed => "Scansione fallita",
         TextKey::ScanLibrary => "Scansione libreria",
         TextKey::ScanQueued => "Scansione in coda",
@@ -1423,8 +1399,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::WaitingForPlexAuthorization => "In attesa dell'autorizzazione di Plex.",
         TextKey::AddChannel => "Aggiungi canale",
         TextKey::Any => "Qualsiasi",
-        TextKey::BlockPlayoutTroubleshooting => "Risoluzione problemi di playout bloccato",
-        TextKey::BlockPlayoutHistory => "Cronologia playout bloccato",
+        TextKey::BlockPlayoutTroubleshooting => "Risoluzione problemi del playout a blocchi",
+        TextKey::BlockPlayoutHistory => "Cronologia del playout a blocchi",
         TextKey::Categories => "Categorie",
         TextKey::CategoriesHelp => "Elenco separato da virgola di categorie",
         TextKey::Channel => "Canale",
@@ -1483,7 +1459,7 @@ pub fn text(key: TextKey) -> &'static str {
             "Risultati controllo stato parità corrente. Questa pagina si aggiorna dopo l'aggiornamento dello stato degli elementi tramite scansione dei media."
         }
         TextKey::HistoryDetails => "Dettagli cronologia",
-        TextKey::HlsDirect => "HLS Direct",
+        TextKey::HlsDirect => "HLS diretto",
         TextKey::HlsSegmenter => "HLS Segmenter",
         TextKey::Hours => "ore",
         TextKey::IdleBehavior => "Comportamento inattivo",
@@ -1506,17 +1482,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Message => "Messaggio",
         TextKey::MissingMediaItemQueryParameter => "Parametro di query mediaItem mancante",
         TextKey::Mirror => "Specchio",
-        TextKey::MirrorOptionsHelp => {
-            "Disponibile solo quando la Sorgente di riproduzione è impostata su Specchio."
-        }
+        TextKey::MirrorOptionsHelp => "Disponibile solo quando la Sorgente del playout è impostata su Specchio.",
         TextKey::MirrorSourceChannel => "Canale sorgente specchio",
         TextKey::MusicVideoCreditsMode => "Modalità crediti video musicale",
         TextKey::MusicVideoCreditsTemplate => "Modello crediti video musicale",
         TextKey::NoMatchingRecordsFound => "Nessun record corrispondente trovato",
         TextKey::NoFfmpegProfiles => "Nessun profilo FFmpeg trovato. Creane uno prima.",
-        TextKey::NoBlockPlayoutSelected => {
-            "Seleziona una riproduzione a blocchi per ispezionarne i blocchi."
-        }
+        TextKey::NoBlockPlayoutSelected => "Seleziona un playout a blocchi per ispezionarne i blocchi.",
         TextKey::NoBlocks => "Nessun blocco trovato.",
         TextKey::NoHistory => "Nessun cronologia trovata.",
         TextKey::NoMessages => "Nessun messaggio.",
@@ -1532,16 +1504,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ParityDebt => "ParityDebt",
         TextKey::PlaybackTroubleshooting => "Risoluzione problemi riproduzione",
         TextKey::Play => "Riproduci",
-        TextKey::PlayoutTimeline => "Timeline di riproduzione",
-        TextKey::PlayoutMode => "Modalità di riproduzione",
-        TextKey::PlayoutModeHelp => "Controlla la progressione della riproduzione del canale",
-        TextKey::PlayoutOffset => "Offset di messa in onda",
-        TextKey::PlayoutSource => "Sorgente di messa in onda",
-        TextKey::PlayoutSourceHelp => {
-            "Controlla la sorgente del contenuto del canale. Non può essere modificato quando il canale ha già una messa in onda."
-        }
+        TextKey::PlayoutTimeline => "Timeline del playout",
+        TextKey::PlayoutMode => "Modalità del playout",
+        TextKey::PlayoutModeHelp => "Controlla la progressione del playout del canale",
+        TextKey::PlayoutOffset => "Offset del playout",
+        TextKey::PlayoutSource => "Sorgente del playout",
+        TextKey::PlayoutSourceHelp => "Controlla la sorgente del contenuto del canale. Non può essere modificato quando il canale ha già un playout.",
         TextKey::Preview => "Anteprima",
-        TextKey::PreviewBlockPlayout => "Messa in onda del blocco di anteprima",
+        TextKey::PreviewBlockPlayout => "Anteprima del playout a blocchi",
         TextKey::PreviewChannel => "Canale di anteprima",
         TextKey::ChannelPreview => "Anteprima del canale",
         TextKey::ReloadStream => "Ricarica flusso",
@@ -1563,7 +1533,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoProgramming => "Non è programmata alcuna programmazione in questa finestra.",
         TextKey::ChannelDisabledPreview => "Questo canale è disabilitato.",
         TextKey::ChannelNotAiring => "Questo canale non sta attualmente trasmettendo.",
-        TextKey::ChannelNoPlayout => "Questo canale non ha una messa in onda.",
+        TextKey::ChannelNoPlayout => "Questo canale non ha un playout.",
         TextKey::PreviewIdle => "L'anteprima inizia in mutato automaticamente.",
         TextKey::PreviewConnecting => "Connessione al flusso live in corso…",
         TextKey::PreviewLive => "La riproduzione live è in esecuzione.",
@@ -1587,7 +1557,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ConfirmStopTranscodeSession => {
             "Arrestare la sessione di transcoding condivisa per questo canale?"
         }
-        TextKey::PreviewPlaylistPlayout => "Messa in onda della playlist di anteprima",
+        TextKey::PreviewPlaylistPlayout => "Anteprima del playout della playlist",
         TextKey::PreferredAudioTitle => "Titolo audio preferito",
         TextKey::PreferredSubtitleLanguage => "Lingua dei sottotitoli preferita",
         TextKey::QsvCapabilitiesNotCollected => "Le capacità QSV non sono ancora state raccolte.",
@@ -1604,9 +1574,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ShowDisabled => "Mostra disabilitata",
         TextKey::ShowInEpg => "Mostra in EPG",
         TextKey::SlugSeconds => "Slug secondi",
-        TextKey::SlugSecondsHelp => {
-            "Secondi di video nero e audio silenzioso da inserire tra ogni elemento di messa in onda"
-        }
+        TextKey::SlugSecondsHelp => "Secondi di video nero e audio silenzioso da inserire tra ogni elemento del playout",
         TextKey::Song => "Canzone",
         TextKey::SongVideoMode => "Modalità video canzone",
         TextKey::SortByLevel => "Ordina per livello",
@@ -1685,7 +1653,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Yaml => "YAML",
         TextKey::YamlFile => "File YAML",
         TextKey::Messages => "Messaggi",
-        TextKey::CollectionName => "Nome della Collezione",
+        TextKey::CollectionName => "Nome della raccolta",
         TextKey::MediaItemType => "Tipo di Elemento Multimediale",
         TextKey::MediaItemTitle => "Titolo dell'Elemento Multimediale",
         TextKey::ActualSize => "Dimensione Reale",
@@ -1864,27 +1832,27 @@ fn schedule_error_message(error: &str) -> String {
 fn scheduling_content_error_message(error: &str) -> String {
     let trimmed = error.trim();
     if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
-        return trimmed.to_owned();
+        return "Il nome del gruppo di blocchi deve essere di 50 caratteri o meno.".to_owned();
     }
     if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
-        return trimmed.to_owned();
+        return "Il nome del blocco deve essere di 50 caratteri o meno.".to_owned();
     }
     if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
-        return trimmed.to_owned();
+        return "Il nome del modello deve essere di 50 caratteri o meno.".to_owned();
     }
     if trimmed.starts_with("A template named \"")
         && trimmed.ends_with("\" already exists in that template group")
     {
-        return trimmed.to_owned();
+        return "Un modello con quel nome esiste già in quel gruppo di modelli.".to_owned();
     }
-    if trimmed.starts_with("Block from ") && trimmed.contains("interseca il blocco da") {
-        return trimmed.to_owned();
+    if trimmed.starts_with("Block from ") && trimmed.contains(" intersects block from ") {
+        return "Il blocco si sovrappone a un altro blocco.".to_owned();
     }
     if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
-        return trimmed.to_owned();
+        return "Il gruppo di modelli non esiste.".to_owned();
     }
     if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
-        return trimmed.to_owned();
+        return "Il modello non esiste.".to_owned();
     }
     if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
         return "Il gruppo deco non esiste.".to_owned();
@@ -1921,7 +1889,7 @@ fn scheduling_content_error_message(error: &str) -> String {
     if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
         return "L'elemento grafico non esiste.".to_owned();
     }
-    if trimmed.starts_with("Deco from ") && trimmed.contains("interseca deco da") {
+    if trimmed.starts_with("Deco from ") && trimmed.contains(" intersects deco from ") {
         return "Il deco sovrappone un altro deco.".to_owned();
     }
 
@@ -2282,11 +2250,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
-    if trimmed == "La selezione dello stream bloccato è non valida o non è più disponibile." {
-        return trimmed.to_owned();
+    if trimmed == "Pinned stream selection is invalid or no longer available." {
+        return "La selezione dello stream bloccato non è valida o non è più disponibile."
+            .to_owned();
     }
-    if trimmed == "Il film non è stato trovato." {
-        return trimmed.to_owned();
+    if trimmed == "Movie was not found." {
+        return "Il film non è stato trovato.".to_owned();
     }
     if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
         return "La raccolta è già presente.".to_owned();
@@ -2319,7 +2288,7 @@ fn media_browser_error_message(error: &str) -> String {
         return "Il nome della playlist non è valido.".to_owned();
     }
     if let Some(error) = trimmed.strip_prefix("Playlist preview failed: ") {
-        return format!("La anteprima della playlist è fallita: {error}");
+        return format!("Anteprima della playlist non riuscita: {error}");
     }
     if trimmed.starts_with("Media item ") && trimmed.ends_with(" does not exist.") {
         return "L'elemento multimediale non esiste.".to_owned();
@@ -2442,7 +2411,7 @@ fn upload_error_message(error: &str) -> String {
         return format!("Scrittura fallita: {error}");
     }
     if let Some(error) = trimmed.strip_prefix("Read field: ") {
-        return format!("Lettura campo: {error}");
+        return format!("Impossibile leggere il campo: {error}");
     }
 
     match trimmed {
@@ -2463,9 +2432,11 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 fn ffmpeg_profile_error_message(error: &str) -> String {
     let trimmed = error.trim();
-    if trimmed.starts_with("An FFmpeg profile named \"") && trimmed.ends_with("\" already exists.")
+    if let Some(name) = trimmed
+        .strip_prefix("An FFmpeg profile named \"")
+        .and_then(|value| value.strip_suffix("\" already exists."))
     {
-        return trimmed.to_owned();
+        return format!("Esiste già un profilo FFmpeg denominato \"{name}\".");
     }
 
     match trimmed {
@@ -2540,7 +2511,70 @@ mod tests {
         assert_eq!(text(TextKey::Save), "Salva");
         assert_eq!(text(TextKey::Settings), "Impostazioni");
         assert_eq!(text(TextKey::Movies), "Film");
-        assert_eq!(text(TextKey::Addons), "Add-ons");
+        assert_eq!(text(TextKey::Addons), "Componenti aggiuntivi");
+    }
+
+    #[test]
+    fn glossary_terms_are_used_consistently() {
+        // Playout keeps the product noun so it cannot collide with Playback,
+        // which is the term that owns "riproduzione".
+        assert_eq!(text(TextKey::Playout), "Playout");
+        assert_eq!(text(TextKey::BlockPlayout), "Playout a blocchi");
+        assert_eq!(text(TextKey::Playback), "Riproduzione");
+        assert_eq!(text(TextKey::PlaybackOrder), "Ordine di riproduzione");
+        assert_eq!(
+            text(TextKey::RerunPlaybackOrder),
+            "Ordine di riproduzione delle ripetizioni"
+        );
+        assert_eq!(text(TextKey::Collection), "Raccolta");
+        assert_eq!(text(TextKey::Collections), "Raccolte");
+        assert_eq!(text(TextKey::MultiCollection), "Raccolta multipla");
+        assert_eq!(text(TextKey::Watermark), "Filigrana");
+        assert_eq!(text(TextKey::Watermarks), "Filigrane");
+        assert_eq!(text(TextKey::Playlist), "Playlist");
+        assert_eq!(text(TextKey::PlaylistItem), "Elemento della playlist");
+    }
+
+    #[test]
+    fn localized_helpers_use_italian_wording() {
+        assert_eq!(STRINGS.channel_language_label("eng"), "Inglese");
+        assert_eq!(STRINGS.channel_streaming_mode_label(2), "HLS diretto");
+        assert_eq!(
+            STRINGS.episode_display_subtitle(Some("Serie"), Some(2), Some(5)),
+            Some("Serie - stagione 2, episodio 5".to_owned())
+        );
+    }
+
+    #[test]
+    fn backend_error_guards_match_the_english_inputs() {
+        // These branches key off the untranslated message the backend emits;
+        // translating the needle silently disables them.
+        assert_eq!(
+            scheduling_content_error_message("Block from 1 intersects block from 2"),
+            "Il blocco si sovrappone a un altro blocco."
+        );
+        assert_eq!(
+            scheduling_content_error_message("Deco from 1 intersects deco from 2"),
+            "Il deco sovrappone un altro deco."
+        );
+        assert_eq!(
+            scheduling_content_error_message("Template name \"x\" is invalid"),
+            "Il nome del modello deve essere di 50 caratteri o meno."
+        );
+        assert_eq!(
+            media_browser_error_message(
+                "Pinned stream selection is invalid or no longer available."
+            ),
+            "La selezione dello stream bloccato non è valida o non è più disponibile."
+        );
+        assert_eq!(
+            media_browser_error_message("Movie was not found."),
+            "Il film non è stato trovato."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_message("An FFmpeg profile named \"HD\" already exists."),
+            "Esiste già un profilo FFmpeg denominato \"HD\"."
+        );
     }
 
     #[test]
@@ -2555,5 +2589,7 @@ mod tests {
             settings_error_message("custom database failure"),
             "custom database failure"
         );
+        assert_eq!(STRINGS.channel_streaming_mode_label(99), "Sconosciuto (99)");
+        assert_eq!(STRINGS.channel_language_label("tlh"), "tlh");
     }
 }

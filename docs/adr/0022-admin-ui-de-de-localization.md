@@ -6,10 +6,16 @@ Accepted 2026-08-11
 
 ## Implementation
 
-Partial — the complete `de-de` module shape, metadata, localized helpers,
-add-on copy, stable FFmpeg errors, and representative tests were added on
-2026-08-11. Most static product labels still require translation, so
-`TRANSLATION_COMPLETE = false` keeps the draft out of the generated registry.
+Implemented 2026-08-12. The complete `de-de` module, metadata, product text,
+dynamic helpers, stable errors, and module tests are registered
+(`TRANSLATION_COMPLETE = true`). Every admin `TextKey` and every stable
+workflow message returned by the `*_error_message` helpers is German, apart
+from the product nouns, provider/codec/protocol identifiers, routes, and
+configuration keys the translation boundary keeps verbatim. The `de-de` leg of
+`tests/e2e/settings-i18n.spec.ts` passes in Chromium against a live host:
+language selection persists, `html lang` becomes `de-de`, and all eight
+settings routes render German without English fallback markers or console
+errors.
 
 ## Context
 
