@@ -1,5 +1,5 @@
-feature    = 'Signed repository-backed add-on platform'
-etv_source = 'ErsatzRS product extension; ErsatzTV has no signed repository-backed extension equivalent'
+feature    = 'Repository-backed add-on platform with tiered trust'
+etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
 adr        = ['0051', '0066']
@@ -20,8 +20,16 @@ packages for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on
 all six release RIDs. It is intentionally not published from this worktree and
 the main repository seed intentionally has no production public key until the
 maintainer provisions the private signing key directly in the publisher's
-secret store. Publishing that repository and pinning its production public key
-are the only remaining platform work in this record.
+secret store.
+
+ADR 0066 was reworked on 2026-08-12 to a Kodi-shaped distribution model after
+the mandatory-signing contract proved to admit no private, local, or offline
+installation and to tax every third-party author with Ed25519 key custody. The
+reworked contract adds three trust tiers (verified, unverified, sideloaded), a
+single off-by-default gate for unverified sources, and repository packages
+distributed as zips. None of that is implemented; the host still requires a
+pinned key on every repository and has no local-file install path. The scope
+and sequencing live in `plans/addon-sideload-install.md`.
 '''
 
 [[debt]]
@@ -29,6 +37,46 @@ id          = 'official-addon-repository-is-not-published'
 description = 'Publish the separate official repository, provision its Ed25519 private key directly in the release secret store, and pin only the corresponding raw public key in the main repository seed.'
 discovered  = '2026-08-11'
 evidence    = 'The local repository source, deterministic package builder, source-contract tests, exact-byte signing workflow, and GitHub Pages workflow exist. Publication and production key provisioning require explicit external authorization and secret handling outside agent context.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'tiered-trust-model-is-not-implemented'
+description = 'Implement the ADR 0066 tiered trust model: allow a repository with no pinned key to refresh over HTTPS with per-package SHA-256 only, record verified/unverified/sideloaded per installation, and gate unverified sources behind an off-by-default admin setting.'
+discovered  = '2026-08-12'
+evidence    = '`validate_repository_entry` rejects an empty public key and `refresh_repository_inner` fails closed on one, so every repository must pin a key. `AddonInstallation` has no trust-tier column and the admin UI has no unverified-sources setting.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'official-repository-must-not-gain-the-unverified-tier'
+description = 'Refuse refresh for an official repository with an empty public key even after unverified sources are enabled, so the seeded default source cannot silently become an unverified origin.'
+discovered  = '2026-08-12'
+evidence    = 'The seed inserts `org.ersatzrs.addons.official` with `PublicKey` empty. Once an empty key becomes a legal unverified tier, the default row would qualify for it without an explicit guard.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'repository-packages-are-not-installable'
+description = 'Add the ADR 0066 repository package: a bounded zip carrying a strict `repository.toml` (id, name, index URL, optional public key) whose installation creates the trust record, gated by the unverified-sources setting and refused while deployment-managed or targeting an official repository.'
+discovered  = '2026-08-12'
+evidence    = 'Repositories can only be added through the admin form or the deployment allowlist file; `ersatzrs-addon-contract` has no repository manifest type.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'addon-packages-cannot-be-sideloaded'
+description = 'Add a local-file install path for add-on packages, reusing bounded extraction, manifest validation, RID/host compatibility, and content hashing while skipping catalog cross-checks, with a reserved `sideload` data namespace.'
+discovered  = '2026-08-12'
+evidence    = 'No sideload, `from_zip`, `install_from`, or `file://` path exists in `crates/ersatzrs-infra/src/addons.rs`; `install_addon` resolves packages only from a refreshed catalog, and `validate_https_url` blocks any local origin.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'keyless-repository-offers-a-refresh-that-always-fails'
+description = 'Disable Refresh with a localized "no signing key pinned" state for a repository that cannot refresh, instead of offering an enabled button that surfaces a raw trust error, and allow an existing repository row to have its key re-pinned from the admin UI.'
+discovered  = '2026-08-12'
+evidence    = 'The maintenance task already skips keyless repositories, but the admin page renders an enabled Refresh button for them and reports the infra trust error as a toast. The repository editor only creates new rows; it has no edit action for an existing one.'
 adr         = '0066'
 resolved    = false
 
