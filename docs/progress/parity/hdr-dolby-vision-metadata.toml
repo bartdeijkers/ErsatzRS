@@ -1,69 +1,40 @@
 feature    = 'HDR static metadata and Dolby Vision source handling'
 etv_source = 'ErsatzRS extension enabled by the FFmpeg 9 runtime; no ErsatzTV equivalent (`$ERSATZTV_SRC` contains no Dolby Vision policy and no HDR10 static-metadata emission)'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-scanner`, `crates/ersatzrs-infra`, `crates/ersatzrs-app`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`'
-status     = 'In progress'
+status     = 'Deferred'
 adr        = ['0014', '0017', '0064']
 summary    = '''
-In progress. ADR 0064 accepts a beyond-parity input/output contract for HDR10,
-HLG, SDR, and Dolby Vision sources. FFmpeg profiles will persist a localized
-output dynamic-range choice: stable BT.709 SDR or stable BT.2020/PQ HDR10.
-Bit depth remains separate, ordinary copy profiles preserve source signaling,
-known or incomplete Dolby Vision copy is rejected until its client matrix is
-proven, and invalid codec/output combinations must fail validation rather than
-downgrade silently.
+Deferred after Phase 8 and explicitly non-blocking for Phase 9. ADR 0064
+defines the beyond-parity SDR, HDR10, HLG, and Dolby
+Vision input/output contract. Profiles persist a localized output dynamic
+range independently of codec bit depth. Software and NVENC graphs produce
+stable BT.709 SDR or BT.2020/PQ HDR10, preserve or replace static metadata only
+when its meaning remains valid, and strip incompatible HDR or Dolby Vision
+signalling. Backends without a characterized HDR10 graph demote to software
+instead of silently emitting SDR, and health reports the performance impact.
 
-This record corrects the 2026-08-07 differential-review assumption that the two
-seeded HDR-named profiles already produce BT.2020/PQ without static metadata.
-Current command generation tone-maps every transcoded HDR source to BT.709
-because `FFmpegProfile` has no desired output dynamic range. The work is
-therefore a color-semantics and persistence slice before it is a metadata-option
-slice.
+Dolby Vision output is not supported. Profile 8.1 and the exact characterized
+Profile 7 dual-layer tuple transcode from conventional base layers; Profile 7
+uses direct software decode while `dovi_split=mode=bl` remains a fixture oracle.
+Profile 5 is admitted only through two positively proven operations on the
+selected CUDA/Vulkan/NVENC device: SDR/H.264 and HDR10/HEVC. There is no generic
+or guessed-colour fallback. Jellyfin, Emby, Plex, and local scans preserve
+complete or explicitly incomplete Dolby Vision identity, and old incomplete
+rows fail closed until a rescan supplies the required fields.
 
-Dolby Vision is an input policy first. Profiles 5, 7, and 8.1 require real
-fixture characterization; `dovi_split` is a profile-7 multilayer tool rather
-than general Dolby Vision support. Dolby Vision output remains out of scope.
-Milestone `p8a-01` has landed the software half of the output contract:
-`OutputDynamicRange` is persisted (additive SQLite/MySQL migration defaulting
-existing rows to `SdrBt709`), validated, localized in all five cultures, seeded
-as HDR10 for exactly the two ADR 0017 profiles named `hdr`, health-checked, and
-implemented in the software pipeline for PQ, HLG, SDR, and untagged sources.
-The SDR reference-white policy is ITU-R BT.2408 diffuse white (203 cd/m²) and
-is proven exact from decoded frames. Evidence, including the mixed
-SDR/HDR/HLG programme-transition proof, is recorded in
-`docs/explanation/hdr-output-characterization.md`.
+The implemented command boundary rejects unsupported and incomplete Dolby
+Vision before spawn. Runtime capability proof, learned denial, cache identity,
+health, HLS, and direct IPTV all share the selected device and FFmpeg runtime
+identity. Dolby Vision stream copy remains rejected until a source, codec,
+container, output, and client matrix is proven.
 
-Milestone p8a-01 is complete. NVENC HDR10 output is implemented and
-characterized on real hardware: a PQ
-source stays entirely on the GPU, while HLG and SDR sources convert in software
-and re-upload so NVENC still encodes. Backends with no characterized HDR10 graph
-(QSV, VAAPI, AMF, VideoToolbox, RKMPP, V4L2M2M) are demoted to software encoding
-rather than allowed to emit SDR, and the health check warns. Dolby Vision
-(`p8a-02`) added profile parsing, persistence, policy, health visibility, and a
-profile 8.1 characterization gate. A 2026-08-07 follow-up review found three
-remaining correctness gaps: production stream spawns do not enforce the
-unplayable-source policy, frame HDR side data is not scoped to its video stream,
-and HDR10 transcodes do not explicitly remove Dolby Vision side data. The active
-sequence and runtime acceptance matrix live in
-`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
-`p8a-01`/`p8a-02`.
-
-A 2026-08-09 follow-up characterized a real dual-layer profile 7 fixture.
-`dovi_split=mode=bl` proved the base-layer interpretation as an oracle, while
-the production path now directly software-decodes only the exact HEVC Main
-10/yuv420p10le, compatibility-id-6 BL+EL+RPU tuple. SDR and HDR10 MPEG-TS plus
-HDR10 HLS outputs were decoded and probed with a nonzero seek, scaling, drawvg,
-and a burned PGS subtitle; their output signalling remained stable and no DOVI
-record survived. The scanner persists `bl_present_flag`, so an old row remains
-rejected until a rescan supplies the complete record.
-
-The same follow-up implements Profile 5 as two exact, selected-device
-CUDA/Vulkan/libplacebo/NVENC operations: SDR/H.264 and HDR10/HEVC. Admission
-requires the complete profile-5 tuple, progressive HEVC Main 10/yuv420p10le,
-the matching native decoder and encoder, and a positive functional proof for
-the current runtime identity. There is no generic fallback. Automated command,
-probe, health, HLS, and direct-IPTV regressions are in place; the public sample
-still needs a full production HLS/MPEG-TS run on matching NVIDIA hardware before
-the fixture-acceptance debt closes.
+Remaining debt is evidence-gated and retained for later opportunistic closure:
+HDR10 and functional graph proof on
+non-NVIDIA hardware, the complete Profile 5 production HLS/MPEG-TS run on
+matching NVIDIA/Vulkan hardware, and a Dolby Vision passthrough matrix. Exact
+evidence and closure state live in the debt entries below; future work is
+sequenced by `plans/phase-8-hardware-residue.md`. None of these deferred gates
+is required for Phase 8 closeout or Phase 9 entry.
 '''
 
 [[debt]]

@@ -10,7 +10,7 @@ Phase 8 itself is complete: all seven required milestones (`p8a-01`, `p8a-02`,
 `p8b-01`, `p8b-02`, `p8c-01`, `p8c-02`, `p8c-03`) shipped. The first follow-up
 review's eleven defects, its fourteen residue debts, and the second review's six
 stream-supervisor and graph-state corrections are closed. What remains is five
-parity debts that could not be closed on an NVIDIA-only machine, plus the
+parity debts that could not be closed on the available hardware, plus the
 deferred milestone `p8c-04`.
 
 Nothing here blocks Phase 9. Every item is additive hardening or an
@@ -20,7 +20,8 @@ evidence-gated decision.
 
 An agent or contributor with access to hardware the primary machine lacks:
 Intel (QSV), AMD (VAAPI / AMF), Apple Silicon (VideoToolbox), or Rockchip
-(RKMPP) — or to genuine Dolby Vision profile 5 / profile 7 media.
+(RKMPP) — or to the NVIDIA/Vulkan environment needed for the remaining Dolby
+Vision Profile 5 production-path acceptance.
 
 Read `AGENTS.md` (`CODEX.md` is a symlink to it) first, then `CONTRIBUTING.md`,
 `STYLE.md`, and `PORTING.md`. The rules that matter most for this work:
@@ -75,7 +76,7 @@ Feature slugs: **HDR** = `hdr-dolby-vision-metadata`, **PERF** =
 | `hdr10-is-uncharacterized-on-non-nvidia-hardware` | HDR | Intel / AMD / Apple / Rockchip device |
 | `hardware-graph-probes-cover-only-the-nvidia-graphs` | PERF | same |
 | `hardware-hdr-candidates-need-real-gpu-measurement` | PERF | Vulkan GPU, VAAPI device, AMD device |
-| `dolby-vision-playback-is-not-fixture-proven` | HDR | Dolby Vision profile 5 and 7 media |
+| `dolby-vision-playback-is-not-fixture-proven` | HDR | Matching NVIDIA/Vulkan hardware for the Profile 5 production-path gate |
 | `first-class-vulkan-encoding-is-undecided` | PERF | multi-vendor evidence, then an ADR |
 
 ---
@@ -235,41 +236,38 @@ measured "no win" closes the debt just as validly as a measured win.
 
 ---
 
-## Workstream D — Dolby Vision profiles 5 and 7
+## Workstream D — Dolby Vision Profile 5 production acceptance
 
 Closes `dolby-vision-playback-is-not-fixture-proven`.
 
-Profile 8.1 is fully characterized against a real file. Profiles 5 and 7 return
-`DolbyVisionHandling::Unproven` and are rejected before spawn, which is the
-correct safe default — ADR 0064 forbids playing them with plausible-but-wrong
-colour.
+Profiles 8.1 and 7 are implemented from characterized conventional base layers.
+Profile 7 direct software decode is limited to the exact dual-layer tuple in
+ADR 0064, and `dovi_split=mode=bl` remains a characterization oracle rather
+than a production dependency.
 
-**Fixtures cannot be generated locally.** `libx265` accepts
-`dolby-vision-profile`, but a genuine RPU needs an external file that only
-Dolby tooling produces, and `dolby-vision-rpu=none` silently yields plain HDR10
-with no DOVI record — a fixture that looks right and proves nothing. Real media
-is required.
+Profile 5 now has exact SDR/H.264 and HDR10/HEVC operations using the selected
+CUDA device, RPU-aware Vulkan/libplacebo processing, software colour-contract
+conversion, and NVENC. Functional probes, health, command selection, HLS/IPTV
+refusal, and learned-denial behavior are covered. A public Profile 5 sample was
+characterized through equivalent graphs, but the complete production HLS and
+MPEG-TS paths still need a run on matching NVIDIA/Vulkan hardware.
 
-### Steps for a fixture
+### Remaining gate
 
-1. Profile 5: no conventional-signal fallback exists, so characterize what a
-   conversion actually produces for both SDR and HDR10 targets. If the colour
-   cannot be made correct without an RPU-aware decoder, the right outcome is to
-   **keep the rejection** and record the measurement — that closes the debt too.
-2. Profile 7: dual-layer. Characterize base/enhancement separation via
-   `dovi_split`, again for both targets.
-3. On success, add the arm to `DolbyVisionConfiguration::handling`
-   (`crates/ersatzrs-ffmpeg/src/dolby_vision.rs:61`) and confirm the Dolby
-   Vision health check and the pre-spawn rejection agree with the new
-   classification.
-4. Do not commit the media, and do not commit the path to it.
-   `CONTRIBUTING.md` forbids private library paths and maintainer-machine
-   absolute paths in source, fixtures, logs, snapshots, and docs — an `ffprobe`
-   dump pasted into a parity file will carry one. Record the stream
-   characteristics (profile, compatibility id, RPU/EL presence, resolution,
-   codec) and redact the path, the way
-   `crates/ersatzrs-ffmpeg/tests/fixtures/graphics/README.md` records
-   provenance for the generated fixtures.
+1. Run the public Profile 5 sample through the real web host's HLS and direct
+   MPEG-TS paths with both SDR and HDR10 profiles on matching hardware.
+2. Confirm positive operation-scoped capability proof selects the intended
+   graph and a forced failure denies it without a guessed-colour fallback.
+3. Decode and compare representative output frames, verify SDR/HDR10
+   signalling, confirm Dolby Vision metadata is absent, and run the transport
+   checks required by the playback gate.
+4. Re-run the six supported target/runtime build and packaging gates before
+   describing Profile 5 support as portable; unsupported targets must retain
+   their explicit refusal rather than selecting an unproven graph.
+5. Record only redacted stream characteristics and results. Do not commit the
+   media, provider URLs, or maintainer-machine paths.
+6. Close the parity debt only when the production-path evidence is attached to
+   `docs/progress/parity/hdr-dolby-vision-metadata.toml`.
 
 ---
 
@@ -278,9 +276,12 @@ is required.
 Closes `first-class-vulkan-encoding-is-undecided`. This is a **decision**
 milestone, deliberately deferred, and it is gated on Workstreams B and C.
 
-Current state: ErsatzRS's Vulkan use is an internal libplacebo *processing*
-bridge for NVENC, not an encoder backend. FFmpeg does expose `h264_vulkan` and
-`hevc_vulkan`.
+Current state: ErsatzRS's production Vulkan use is an internal libplacebo
+*processing* bridge for NVENC, not an encoder backend. Native Windows/NVIDIA
+measurements proved that FFmpeg's `h264_vulkan` and `hevc_vulkan` encoders can
+produce structurally valid HLS and MPEG-TS, but the result is one-vendor,
+synthetic-content evidence with codec-specific trade-offs. It is not enough to
+justify a persisted acceleration kind.
 
 **Do not add a persisted Vulkan hardware-acceleration kind before the ADR
 exists.** No domain enum variant, no migration, no profile UI, no encoder
@@ -304,7 +305,7 @@ outcome for this milestone.
 
 Workstreams A and B pair per vendor: characterize the graph, then teach the
 probe to verify it. C follows on the same hardware while it is available. D is
-independent and gated only on media. E is gated on B and C.
+independent and gated on matching hardware. E is gated on B and C.
 
 Doing one vendor end-to-end (A + B + C) is far more valuable than doing
 Workstream A across several vendors, because the probe is what keeps the

@@ -1,10 +1,11 @@
 feature    = 'FFmpeg 9 pipeline performance and support hardening'
 etv_source = 'ErsatzRS extensions and operational hardening beyond the pinned ErsatzTV pipeline; compare `$ERSATZTV_SRC/ErsatzTV.FFmpeg/` before each behavior change'
 rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, `scripts/e2e`'
-status     = 'In progress'
+status     = 'Deferred'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
-In progress. The FFmpeg 9 differential review found no additional mandatory
+Deferred after Phase 8 and explicitly non-blocking for Phase 9. The FFmpeg 9
+differential review found no additional mandatory
 command migration after ADR 0063. Phase 8 added operation-scoped NVIDIA graph
 probes, persisted denials, health visibility, long-filtergraph file transport,
 source-orientation handling, and animated WebP coverage. A 2026-08-07 follow-up
@@ -23,7 +24,9 @@ children cannot mutate a replacement generation. NVIDIA capabilities are
 probed only for the explicitly selected device zero. Operation probing now also
 covers the exact Dolby Vision Profile 5 SDR/H.264 and HDR10/HEVC graphs.
 
-Vulkan already exists as an internal NVENC HDR processing bridge; it is not a
+The unresolved hardware and multi-vendor evidence gates remain visible below
+for later opportunistic closure; they are not required for Phase 8 closeout or
+Phase 9 entry. Vulkan already exists as an internal NVENC HDR processing bridge; it is not a
 persisted hardware-acceleration kind. First-class Vulkan H.264/HEVC encoding is
 deferred until the existing graph is proven, multi-vendor benchmarks exist, and
 a later ADR accepts the schema/UI/release-matrix consequences. Work sequencing
