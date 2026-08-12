@@ -14,6 +14,79 @@ use super::common::{
 #[derive(Clone)]
 pub struct SqliteFfmpegProfileRepository(pub Pool<crate::db::Db>);
 
+const INSERT_PROFILE_SQL: &str = r#"INSERT INTO "FFmpegProfile" (
+    "Id", "Name", "ThreadCount", "TranscodeAudio", "TranscodeVideo",
+    "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
+    "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
+    "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
+    "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
+    "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
+    "AudioFormat",
+    "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
+    "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
+    "DeinterlaceVideo"
+ ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#;
+
+type ProfileQuery<'q> =
+    sqlx::query::Query<'q, crate::db::Db, <crate::db::Db as sqlx::Database>::Arguments>;
+
+/// Binds the 35 non-`Id` profile columns in the shared order used by both the
+/// `UPDATE` and `INSERT` halves of [`upsert`]. The `INSERT` binds `Id` first;
+/// the `UPDATE` binds it last, in its `WHERE` clause.
+fn bind_profile_columns<'q>(
+    query: ProfileQuery<'q>,
+    profile: &'q FFmpegProfile,
+) -> ProfileQuery<'q> {
+    query
+        .bind(&profile.name)
+        .bind(profile.thread_count)
+        .bind(profile.transcode_audio)
+        .bind(profile.transcode_video)
+        .bind(encode_enum(profile.hardware_acceleration))
+        .bind(&profile.vaapi_display)
+        .bind(encode_enum(profile.vaapi_driver))
+        .bind(&profile.vaapi_device)
+        .bind(profile.qsv_extra_hardware_frames)
+        .bind(profile.resolution_id)
+        .bind(encode_enum(profile.scaling_behavior))
+        .bind(encode_enum(profile.pad_mode))
+        .bind(encode_enum(profile.video_format))
+        .bind(&profile.video_profile)
+        .bind(&profile.video_preset)
+        .bind(&profile.video_tune)
+        .bind(profile.allow_b_frames)
+        .bind(encode_enum(profile.bit_depth))
+        .bind(profile.video_bitrate)
+        .bind(profile.video_buffer_size)
+        .bind(encode_enum(profile.tonemap_algorithm))
+        .bind(encode_enum(profile.output_dynamic_range))
+        .bind(
+            profile
+                .hdr_mastering_display
+                .map(MasteringDisplayMetadata::to_ffmpeg_value),
+        )
+        .bind(
+            profile
+                .hdr_content_light
+                .map(|light| content_light_column(light.max_cll)),
+        )
+        .bind(
+            profile
+                .hdr_content_light
+                .map(|light| content_light_column(light.max_fall)),
+        )
+        .bind(encode_enum(profile.audio_format))
+        .bind(profile.audio_bitrate)
+        .bind(profile.audio_buffer_size)
+        .bind(encode_enum(profile.normalize_loudness_mode))
+        .bind(profile.target_loudness)
+        .bind(profile.audio_channels)
+        .bind(profile.audio_sample_rate)
+        .bind(profile.normalize_framerate)
+        .bind(profile.normalize_colors)
+        .bind(profile.deinterlace_video)
+}
+
 #[async_trait]
 impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     async fn get(&self, id: EntityId) -> Result<FFmpegProfile> {
@@ -44,63 +117,56 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         rows.iter().map(map_profile).collect()
     }
 
+    /// Updates an existing profile in place, inserting only when the row is
+    /// absent.
+    ///
+    /// This deliberately does NOT use `REPLACE INTO`, unlike the
+    /// `ConfigElement` upsert. On both `SQLite` and `MySQL`, `REPLACE` deletes the
+    /// conflicting row before inserting the replacement, and that delete fires
+    /// `ON DELETE CASCADE`. `FK_Channel_FFmpegProfile_FFmpegProfileId` cascades,
+    /// so replacing a profile row silently destroyed every channel using it,
+    /// along with its playouts and playout items, while leaving the profile
+    /// looking untouched. Editing a profile in the admin UI was enough to
+    /// trigger it.
+    ///
+    /// `UPDATE` never deletes the row, so no cascade runs, and it stays
+    /// portable across both backends (`ON CONFLICT ... excluded` is not valid
+    /// on `MySQL`).
     async fn upsert(&self, profile: &FFmpegProfile) -> Result<()> {
-        sqlx::query(
-            r#"REPLACE INTO "FFmpegProfile" (
-                "Id", "Name", "ThreadCount", "TranscodeAudio", "TranscodeVideo",
-                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
-                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
-                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
-                "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
-                "AudioFormat",
-                "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
-                "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
-                "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+        let mut transaction = self.0.begin().await.repository()?;
+
+        let updated = bind_profile_columns(
+            sqlx::query(
+                r#"UPDATE "FFmpegProfile" SET
+                    "Name" = ?, "ThreadCount" = ?, "TranscodeAudio" = ?, "TranscodeVideo" = ?,
+                    "HardwareAcceleration" = ?, "VaapiDisplay" = ?, "VaapiDriver" = ?, "VaapiDevice" = ?,
+                    "QsvExtraHardwareFrames" = ?, "ResolutionId" = ?, "ScalingBehavior" = ?, "PadMode" = ?,
+                    "VideoFormat" = ?, "VideoProfile" = ?, "VideoPreset" = ?, "VideoTune" = ?,
+                    "AllowBFrames" = ?, "BitDepth" = ?,
+                    "VideoBitrate" = ?, "VideoBufferSize" = ?, "TonemapAlgorithm" = ?, "OutputDynamicRange" = ?,
+                    "HdrMasteringDisplay" = ?, "HdrMaxCll" = ?, "HdrMaxFall" = ?,
+                    "AudioFormat" = ?,
+                    "AudioBitrate" = ?, "AudioBufferSize" = ?, "NormalizeLoudnessMode" = ?, "TargetLoudness" = ?,
+                    "AudioChannels" = ?, "AudioSampleRate" = ?, "NormalizeFramerate" = ?, "NormalizeColors" = ?,
+                    "DeinterlaceVideo" = ?
+                   WHERE "Id" = ?"#,
+            ),
+            profile,
         )
         .bind(profile.id)
-        .bind(&profile.name)
-        .bind(profile.thread_count)
-        .bind(profile.transcode_audio)
-        .bind(profile.transcode_video)
-        .bind(encode_enum(profile.hardware_acceleration))
-        .bind(&profile.vaapi_display)
-        .bind(encode_enum(profile.vaapi_driver))
-        .bind(&profile.vaapi_device)
-        .bind(profile.qsv_extra_hardware_frames)
-        .bind(profile.resolution_id)
-        .bind(encode_enum(profile.scaling_behavior))
-        .bind(encode_enum(profile.pad_mode))
-        .bind(encode_enum(profile.video_format))
-        .bind(&profile.video_profile)
-        .bind(&profile.video_preset)
-        .bind(&profile.video_tune)
-        .bind(profile.allow_b_frames)
-        .bind(encode_enum(profile.bit_depth))
-        .bind(profile.video_bitrate)
-        .bind(profile.video_buffer_size)
-        .bind(encode_enum(profile.tonemap_algorithm))
-        .bind(encode_enum(profile.output_dynamic_range))
-        .bind(
-            profile
-                .hdr_mastering_display
-                .map(MasteringDisplayMetadata::to_ffmpeg_value),
-        )
-        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_cll)))
-        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_fall)))
-        .bind(encode_enum(profile.audio_format))
-        .bind(profile.audio_bitrate)
-        .bind(profile.audio_buffer_size)
-        .bind(encode_enum(profile.normalize_loudness_mode))
-        .bind(profile.target_loudness)
-        .bind(profile.audio_channels)
-        .bind(profile.audio_sample_rate)
-        .bind(profile.normalize_framerate)
-        .bind(profile.normalize_colors)
-        .bind(profile.deinterlace_video)
-        .execute(&self.0)
-        .await.repository()?;
+        .execute(&mut *transaction)
+        .await
+        .repository()?;
+
+        if updated.rows_affected() == 0 {
+            let insert = sqlx::query(INSERT_PROFILE_SQL).bind(profile.id);
+            bind_profile_columns(insert, profile)
+                .execute(&mut *transaction)
+                .await
+                .repository()?;
+        }
+
+        transaction.commit().await.repository()?;
         Ok(())
     }
 

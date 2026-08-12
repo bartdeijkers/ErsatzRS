@@ -688,11 +688,90 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
         .repository()
 }
 
+/// Turns a plain `INSERT INTO` statement into a cascade-safe upsert.
+///
+/// `REPLACE INTO` is not an update: on both `SQLite` and `MySQL` it deletes the
+/// conflicting row before inserting the replacement, and that delete fires
+/// `ON DELETE CASCADE`. Any table whose primary key is a cascade parent
+/// therefore loses all of its children every time a row is "replaced", while
+/// the row itself looks untouched. Editing an `FFmpeg` profile destroyed every
+/// channel using it exactly this way on 2026-08-12.
+///
+/// A real upsert never deletes the row, so no cascade runs. It also preserves
+/// columns the statement does not list, where `REPLACE` silently reset them to
+/// their schema defaults.
+///
+/// Identifiers stay double-quoted for both backends because `MySQL` sessions
+/// are opened with `ANSI_QUOTES`.
+///
+/// `insert_sql` must be an `INSERT INTO "Table" ("A", "B", ...) VALUES (...)`
+/// statement; `conflict_columns` are the key columns that identify an existing
+/// row and are excluded from the update list.
+pub(crate) fn cascade_safe_upsert(
+    insert_sql: &str,
+    conflict_columns: &[&str],
+    is_mysql: bool,
+) -> String {
+    let columns = insert_columns(insert_sql);
+    let updates = columns
+        .iter()
+        .filter(|column| !conflict_columns.contains(&column.as_str()))
+        .map(|column| {
+            if is_mysql {
+                format!("\"{column}\" = VALUES(\"{column}\")")
+            } else {
+                format!("\"{column}\" = excluded.\"{column}\"")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // A statement whose every column is part of the key has nothing to update;
+    // ignoring the duplicate keeps the row and its children intact.
+    if updates.is_empty() {
+        return if is_mysql {
+            let first = conflict_columns.first().copied().unwrap_or_default();
+            format!("{insert_sql}\nON DUPLICATE KEY UPDATE \"{first}\" = \"{first}\"")
+        } else {
+            let targets = quoted_list(conflict_columns);
+            format!("{insert_sql}\nON CONFLICT({targets}) DO NOTHING")
+        };
+    }
+
+    if is_mysql {
+        format!("{insert_sql}\nON DUPLICATE KEY UPDATE {updates}")
+    } else {
+        let targets = quoted_list(conflict_columns);
+        format!("{insert_sql}\nON CONFLICT({targets}) DO UPDATE SET {updates}")
+    }
+}
+
+fn quoted_list(columns: &[&str]) -> String {
+    columns
+        .iter()
+        .map(|column| format!("\"{column}\""))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Extracts the column names from the leading column list of an `INSERT`.
+fn insert_columns(insert_sql: &str) -> Vec<String> {
+    let open = insert_sql.find('(').unwrap_or(0);
+    let close = insert_sql[open..]
+        .find(')')
+        .map_or(insert_sql.len(), |offset| open + offset);
+    insert_sql[open + 1..close]
+        .split(',')
+        .map(|column| column.trim().trim_matches('"').trim().to_owned())
+        .filter(|column| !column.is_empty())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_signed_duration, map_data_access_error, not_found, try_decode_duration_text,
-        try_decode_signed_duration_text,
+        cascade_safe_upsert, encode_signed_duration, insert_columns, map_data_access_error,
+        not_found, try_decode_duration_text, try_decode_signed_duration_text,
     };
     use chrono::Duration;
     use ersatzrs_core::repositories::RepositoryError;
@@ -744,5 +823,59 @@ mod tests {
         assert!(try_decode_duration_text("-01:00:00").is_err());
         assert!(try_decode_signed_duration_text("+01:00:00").is_err());
         assert!(try_decode_signed_duration_text("-01:60:00").is_err());
+    }
+
+    const CHANNEL_INSERT: &str = r#"INSERT INTO "Channel" (
+                "Id", "Name", "Group"
+             ) VALUES (?, ?, ?)"#;
+
+    #[test]
+    fn insert_columns_are_parsed_from_the_leading_list_only() {
+        assert_eq!(insert_columns(CHANNEL_INSERT), ["Id", "Name", "Group"]);
+    }
+
+    #[test]
+    fn sqlite_upsert_updates_every_non_key_column() {
+        let sql = cascade_safe_upsert(CHANNEL_INSERT, &["Id"], false);
+        assert!(sql.starts_with("INSERT INTO \"Channel\""), "{sql}");
+        assert!(
+            sql.ends_with(
+                "ON CONFLICT(\"Id\") DO UPDATE SET \
+                 \"Name\" = excluded.\"Name\", \"Group\" = excluded.\"Group\""
+            ),
+            "{sql}"
+        );
+        assert!(
+            !sql.contains("REPLACE INTO"),
+            "the cascade-firing form must be gone: {sql}"
+        );
+    }
+
+    #[test]
+    fn mysql_upsert_uses_duplicate_key_syntax() {
+        let sql = cascade_safe_upsert(CHANNEL_INSERT, &["Id"], true);
+        assert!(
+            sql.ends_with(
+                "ON DUPLICATE KEY UPDATE \
+                 \"Name\" = VALUES(\"Name\"), \"Group\" = VALUES(\"Group\")"
+            ),
+            "{sql}"
+        );
+    }
+
+    #[test]
+    fn key_only_statements_keep_the_existing_row() {
+        // Join tables such as PlayoutItemWatermark are entirely key columns, so
+        // there is nothing to SET. The row and its children must survive.
+        let join =
+            r#"INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#;
+        assert!(
+            cascade_safe_upsert(join, &["PlayoutItemId", "WatermarkId"], false)
+                .ends_with("ON CONFLICT(\"PlayoutItemId\", \"WatermarkId\") DO NOTHING")
+        );
+        assert!(
+            cascade_safe_upsert(join, &["PlayoutItemId", "WatermarkId"], true)
+                .contains("ON DUPLICATE KEY UPDATE")
+        );
     }
 }

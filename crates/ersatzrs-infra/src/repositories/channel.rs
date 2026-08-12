@@ -26,6 +26,26 @@ use super::common::{
 #[derive(Clone)]
 pub struct SqliteChannelRepository(pub Pool<crate::db::Db>);
 
+/// Upsert, never `REPLACE`: replacing deletes the row before re-inserting it,
+/// and `Playout` and `Artwork` cascade off `Channel`, so saving a channel used
+/// to destroy its playout and artwork.
+static CHANNEL_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    super::common::cascade_safe_upsert(
+        r#"INSERT INTO "Channel" (
+                "Id", "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
+                "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
+                "StreamingMode", "StreamSelectorMode", "StreamSelector",
+                "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                "PreferredSubtitleLanguageCode", "SubtitleMode",
+                "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
+                "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
+                "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        &["Id"],
+        crate::db::connected_backend_is_mysql(),
+    )
+});
+
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl ChannelRepository for SqliteChannelRepository {
@@ -79,49 +99,48 @@ impl ChannelRepository for SqliteChannelRepository {
 
     async fn upsert(&self, channel: &Channel) -> Result<()> {
         let mut tx = self.0.begin().await.repository()?;
-        sqlx::query(
-            r#"REPLACE INTO "Channel" (
-                "Id", "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
-                "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
-                "StreamingMode", "StreamSelectorMode", "StreamSelector",
-                "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                "PreferredSubtitleLanguageCode", "SubtitleMode",
-                "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
-                "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
-                "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(channel.id)
-        .bind(channel.unique_id.to_string())
-        .bind(&channel.number)
-        .bind(channel.sort_number)
-        .bind(&channel.name)
-        .bind(&channel.group)
-        .bind(&channel.categories)
-        .bind(channel.ffmpeg_profile_id)
-        .bind(channel.slug_seconds)
-        .bind(channel.watermark_id)
-        .bind(channel.fallback_filler_id)
-        .bind(encode_enum(channel.streaming_mode))
-        .bind(encode_enum(channel.stream_selector_mode))
-        .bind(&channel.stream_selector)
-        .bind(&channel.preferred_audio_language_code)
-        .bind(&channel.preferred_audio_title)
-        .bind(&channel.preferred_subtitle_language_code)
-        .bind(encode_enum(channel.subtitle_mode))
-        .bind(encode_enum(channel.music_video_credits_mode))
-        .bind(&channel.music_video_credits_template)
-        .bind(encode_enum(channel.song_video_mode))
-        .bind(encode_enum(channel.playout_source))
-        .bind(encode_enum(channel.playout_mode))
-        .bind(channel.mirror_source_channel_id)
-        .bind(channel.playout_offset.map(encode_duration))
-        .bind(encode_enum(channel.transcode_mode))
-        .bind(encode_enum(channel.idle_behavior))
-        .bind(channel.is_enabled)
-        .bind(channel.show_in_epg)
-        .execute(&mut *tx)
-        .await.repository()?;
+        sqlx::query(CHANNEL_UPSERT_SQL.as_str())
+            .bind(channel.id)
+            .bind(channel.unique_id.to_string())
+            .bind(&channel.number)
+            .bind(channel.sort_number)
+            .bind(&channel.name)
+            // "Group" is NOT NULL DEFAULT 'ErsatzRS'. `REPLACE INTO` used to
+            // substitute that default whenever this bound NULL, because REPLACE
+            // conflict resolution rewrites a NULL into the column default. A
+            // real upsert does not, so the default is applied explicitly here.
+            .bind(
+                channel
+                    .group
+                    .as_deref()
+                    .unwrap_or(crate::db::DEFAULT_CHANNEL_GROUP),
+            )
+            .bind(&channel.categories)
+            .bind(channel.ffmpeg_profile_id)
+            .bind(channel.slug_seconds)
+            .bind(channel.watermark_id)
+            .bind(channel.fallback_filler_id)
+            .bind(encode_enum(channel.streaming_mode))
+            .bind(encode_enum(channel.stream_selector_mode))
+            .bind(&channel.stream_selector)
+            .bind(&channel.preferred_audio_language_code)
+            .bind(&channel.preferred_audio_title)
+            .bind(&channel.preferred_subtitle_language_code)
+            .bind(encode_enum(channel.subtitle_mode))
+            .bind(encode_enum(channel.music_video_credits_mode))
+            .bind(&channel.music_video_credits_template)
+            .bind(encode_enum(channel.song_video_mode))
+            .bind(encode_enum(channel.playout_source))
+            .bind(encode_enum(channel.playout_mode))
+            .bind(channel.mirror_source_channel_id)
+            .bind(channel.playout_offset.map(encode_duration))
+            .bind(encode_enum(channel.transcode_mode))
+            .bind(encode_enum(channel.idle_behavior))
+            .bind(channel.is_enabled)
+            .bind(channel.show_in_epg)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
 
         // Update artwork rows that belong to this channel: clear old ones, set new ones.
         // In ErsatzTV, Artwork.ChannelId is a direct FK - we don't use a junction table.

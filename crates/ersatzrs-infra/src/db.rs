@@ -79,6 +79,9 @@ const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
 const DEFAULT_CHANNEL_NUMBER: &str = "1";
 const DEFAULT_CHANNEL_NAME: &str = "ErsatzRS";
+/// Mirrors the `Channel."Group"` schema default so repository writes can apply
+/// it explicitly instead of relying on `REPLACE INTO` rewriting a NULL bind.
+pub const DEFAULT_CHANNEL_GROUP: &str = "ErsatzRS";
 const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_RESOLUTION_ID: &str = "ffmpeg.default_resolution_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";
@@ -446,10 +449,33 @@ async fn connect_mysql(database_url: &str) -> Result<DbPool, sqlx::Error> {
         .await
 }
 
+/// The backend the process connected to, recorded once at connect time.
+///
+/// Repository SQL that must differ per dialect reads this instead of calling
+/// `backend_name()` on a freshly acquired connection. Acquiring inside a held
+/// transaction deadlocks a single-connection pool, which is exactly how the
+/// integration tests are configured.
+static CONNECTED_BACKEND: std::sync::OnceLock<DatabaseBackend> = std::sync::OnceLock::new();
+
+/// Whether the connected backend is `MySQL`.
+///
+/// Defaults to `false` (`SQLite`) when no pool has been opened through
+/// [`connect_database`], which is the case for tests that build a pool
+/// directly.
+#[must_use]
+pub fn connected_backend_is_mysql() -> bool {
+    match CONNECTED_BACKEND.get() {
+        #[cfg(feature = "mysql")]
+        Some(DatabaseBackend::MySql) => true,
+        Some(DatabaseBackend::Sqlite) | None => false,
+    }
+}
+
 async fn connect_database(
     database_url: &str,
     database_backend: DatabaseBackend,
 ) -> Result<DbPool, sqlx::Error> {
+    let _ = CONNECTED_BACKEND.set(database_backend);
     match database_backend {
         DatabaseBackend::Sqlite => connect_sqlite(database_url).await,
         #[cfg(feature = "mysql")]

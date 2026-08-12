@@ -1,9 +1,83 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
-use ersatzrs_core::repositories::FfmpegProfileRepository;
+use ersatzrs_core::repositories::{
+    ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
+};
 use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_infra::repositories::make_repositories;
+use sqlx::Executor as _;
+
+/// Regression for the 2026-08-12 data loss: editing an `FFmpeg` profile deleted
+/// every channel that used it.
+///
+/// `upsert` used `REPLACE INTO`, which deletes the conflicting row before
+/// inserting the replacement. With foreign keys enabled,
+/// `FK_Channel_FFmpegProfile_FFmpegProfileId ... ON DELETE CASCADE` then
+/// removed every channel on that profile, cascading on to its playouts and
+/// playout items, while the profile itself looked untouched.
+#[tokio::test]
+async fn editing_a_profile_does_not_cascade_delete_its_channels() {
+    let repos = make_repositories(common::test_db().await);
+    common::seed_profile_and_channel(&repos, 7).await;
+    assert_eq!(
+        repos.channel.list_enabled().await.unwrap().len(),
+        1,
+        "precondition: the seeded channel uses profile 1"
+    );
+
+    // Exactly what the admin UI does when a profile is edited and saved.
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "edited"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        repos.ffmpeg_profile.get(1).await.unwrap().name,
+        "edited",
+        "the edit must still be persisted"
+    );
+    assert_eq!(
+        repos.channel.list_enabled().await.unwrap().len(),
+        1,
+        "editing a profile must not delete channels that reference it"
+    );
+}
+
+/// Companion to the profile regression: `Playout` and `Artwork` cascade off
+/// `Channel`, so the same `REPLACE INTO` hazard meant saving a channel
+/// destroyed its playout.
+#[tokio::test]
+async fn saving_a_channel_does_not_cascade_delete_its_playout() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 7).await;
+    repos
+        .program_schedule
+        .upsert(&common::schedule(1, Vec::new()))
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+         VALUES (1, 7, 1, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+    assert!(
+        repos.playout.get_with_anchor(1).await.is_ok(),
+        "precondition: channel 7 has a playout"
+    );
+
+    let mut channel = common::channel(7, "7", true);
+    channel.name = "renamed".to_owned();
+    repos.channel.upsert(&channel).await.unwrap();
+
+    assert!(
+        repos.playout.get_with_anchor(1).await.is_ok(),
+        "saving a channel must not delete its playout"
+    );
+}
 
 #[tokio::test]
 async fn ffmpeg_profile_repository_round_trips_lists_and_deletes() {
