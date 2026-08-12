@@ -68,16 +68,6 @@ version = "=5.3.0"
 reason = "Follows the split between getrandom 0.3 and getrandom 0.4 in the current upstream graph."
 
 [[bans.skip]]
-name = "serde_spanned"
-version = "=0.6.9"
-reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
-
-[[bans.skip]]
-name = "toml_datetime"
-version = "=0.6.11"
-reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
-
-[[bans.skip]]
 name = "thiserror"
 version = "=1.0.69"
 reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the workspace crates use thiserror 2."
