@@ -15,6 +15,27 @@ release section when tagging a release.
 
 ### Fixed
 
+- Saving almost anything could silently delete related data. Repository writes
+  used SQL `REPLACE INTO`, which is not an update: on both SQLite and MySQL it
+  deletes the conflicting row before re-inserting it, and that delete fires
+  `ON DELETE CASCADE`. Seventeen statements wrote to a table other rows cascade
+  off, so editing an FFmpeg profile destroyed every channel using it (and their
+  playouts), saving a channel destroyed its playout and artwork, and — worst —
+  every library rescan erased the child rows of each media item it touched,
+  because 21 tables cascade off `MediaItem`. All seventeen now use a real
+  upsert, which never deletes the row. Statements still using `REPLACE INTO`
+  write only to tables nothing cascades off.
+- A Plex rescan deleted and recreated a media file row whenever its path hash
+  already existed, taking the linked Plex file record with it. The write now
+  updates the existing row in place.
+- A new database migration did not run until the crate was rebuilt for some
+  other reason. `sqlx::migrate!` embeds migrations at compile time but cannot
+  register the directory as a build input, so adding a `.sql` file left the
+  cached build — and its stale migration set — in place, and restarting the
+  server changed nothing. A build script now tracks both migration directories.
+- The official add-on repository could never refresh, reporting "the repository
+  has no Ed25519 public key". Its production signing key is now pinned, so a
+  fresh database verifies the signed catalog instead of failing every refresh.
 - Four Italian admin UI error branches never fired, because the English text
   they match against had itself been translated. Overlapping block and deco
   reports, the pinned-stream-selection error, and the movie-not-found error
@@ -89,6 +110,17 @@ release section when tagging a release.
 
 ### Changed
 
+- Add-on trust is now tiered rather than all-or-nothing (ADR 0066, still draft
+  and not yet implemented). Requiring a pinned Ed25519 key on every repository
+  admitted no private, local, or offline installation and obliged every
+  third-party author to run key infrastructure — a bar neither Kodi nor Stash
+  sets. The reworked contract keeps signature verification for repositories
+  that pin a key, adds an unverified tier that relies on HTTPS plus per-package
+  SHA-256, and allows installing an add-on or a whole repository from a local
+  package. Unverified sources sit behind a single administrator setting that is
+  off by default, and the trust tier is recorded per installation and shown
+  wherever the add-on appears. Updates and version selection stay manual,
+  diverging from Kodi deliberately.
 - Documentation now has explicit Diátaxis navigation, a complete reference
   index, evidence-backed current System Context and Container views, and
   separate add-on package, repository, runtime, trust, and operator guidance.

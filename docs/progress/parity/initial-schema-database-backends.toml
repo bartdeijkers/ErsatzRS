@@ -8,6 +8,22 @@ Ported: the initial SQLite schema matches the ErsatzTV table/column/foreign-key 
 '''
 
 [[debt]]
+id          = 'replace-into-cascade-deleted-child-rows'
+description = 'Repository writes used `REPLACE INTO`, which deletes the conflicting row before re-inserting it and therefore fires `ON DELETE CASCADE`. Seventeen production statements targeted a cascade parent, so ordinary saves destroyed unrelated data.'
+discovered  = '2026-08-12'
+evidence    = 'Reproduced on a live database: editing an FFmpeg profile deleted all four channels, their playouts, and 1741 playout items. All seventeen statements now use `cascade_safe_upsert`, which emits `ON CONFLICT ... DO UPDATE` on SQLite and `ON DUPLICATE KEY UPDATE` on MySQL with one clause per unique key and no assignment to the primary key. Regressions for profile edit, channel save, and media-item rescan were each verified by reintroducing `REPLACE` and observing the children disappear. Statements still using `REPLACE INTO` write only to tables nothing cascades off.'
+resolved    = true
+resolution  = 'All cascade-parent writes are real upserts. The three behaviours `REPLACE` provided implicitly are reproduced deliberately: conflict resolution on any unique index, the NOT NULL default substitution that only `Channel."Group"` relied on, and the fresh rowid that Plex media-file writes used for `last_insert_id`.'
+
+[[debt]]
+id          = 'new-migrations-need-a-build-input'
+description = 'A new migration did not run until the crate was rebuilt for an unrelated reason, because `sqlx::migrate!` embeds migrations at compile time and cannot register the directory as a Cargo input.'
+discovered  = '2026-08-12'
+evidence    = 'A pinned-key migration silently never applied across repeated restarts; the compiled `Migrator` kept the previous migration set. `crates/ersatzrs-infra/build.rs` now emits `rerun-if-changed` for both migration directories.'
+resolved    = true
+resolution  = 'A build script tracks `migrations/` and `migrations/mysql/`, so adding or editing a `.sql` file invalidates the crate and the new migration runs on the next start.'
+
+[[debt]]
 id          = 'fresh-db-default-channel-branding'
 description = 'Fresh database bootstrap still created the first channel with `Name` / `Group` set to `ErsatzTV` instead of the ErsatzRS brand.'
 discovered  = '2026-06-22'

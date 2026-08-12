@@ -1,3 +1,4 @@
+{"agent":"Claude Opus 5","date":"2026-08-12","summary":"Recovered channels lost to REPLACE INTO cascade, converted all 17 cascade-parent writes to upserts, pinned the official add-on repository key, and reworked ADR 0066 to tiered trust"}
 {"agent":"Claude Opus 5","date":"2026-08-12","summary":"Complete the es-es and es-419 admin UI translations and prove both in Chromium"}
 {"agent":"Claude Opus 5","date":"2026-08-12","summary":"Complete the it-it admin UI translation, repair its backend-error guards, and prove it in Chromium"}
 {"agent":"Claude Opus 5","date":"2026-08-12","summary":"Prove de-de settings i18n in Chromium and close the localization parity debt"}
