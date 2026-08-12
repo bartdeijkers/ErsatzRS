@@ -28,6 +28,12 @@ release section when tagging a release.
 - A Plex rescan deleted and recreated a media file row whenever its path hash
   already existed, taking the linked Plex file record with it. The write now
   updates the existing row in place.
+- Saving a library discarded every item scanned into it and blanked its stored
+  paths. The save deleted all of the library's path rows before re-inserting
+  them with an empty path, and media items cascade off those rows. Library save
+  now reconciles paths instead: a path that stays keeps its row, its stored
+  path, and its scanned items, while a path genuinely removed from the library
+  is still deleted along with its items.
 - A new database migration did not run until the crate was rebuilt for some
   other reason. `sqlx::migrate!` embeds migrations at compile time but cannot
   register the directory as a build input, so adding a `.sql` file left the

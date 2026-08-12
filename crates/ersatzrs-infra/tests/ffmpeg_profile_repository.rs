@@ -2,8 +2,8 @@
 mod common;
 
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, MediaItemRepository, PlayoutRepository,
-    ProgramScheduleRepository,
+    ChannelRepository, FfmpegProfileRepository, LibraryRepository, MediaItemRepository,
+    PlayoutRepository, ProgramScheduleRepository,
 };
 use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_infra::repositories::make_repositories;
@@ -107,6 +107,66 @@ async fn re_upserting_a_media_item_does_not_cascade_delete_its_children() {
         movies, 1,
         "re-upserting a media item must not delete its child rows"
     );
+}
+
+/// Saving a library used to `DELETE FROM "LibraryPath" WHERE "LibraryId" = ?`
+/// and re-insert every path. `MediaItem` and `LibraryFolder` cascade off
+/// `LibraryPath`, so that discarded every scanned item in the library, and the
+/// re-insert wrote `Path = ''` over each surviving path.
+#[tokio::test]
+async fn saving_a_library_keeps_its_paths_and_scanned_items() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_media_graph(&pool).await;
+    pool.execute(r#"UPDATE "LibraryPath" SET "Path" = '/media/movies' WHERE "Id" = 1"#)
+        .await
+        .unwrap();
+    let item = common::media_item(901, 1);
+    repos.media_item.upsert(&item).await.unwrap();
+
+    let mut library = common::library(1, 1, 1);
+    library.name = "renamed".to_owned();
+    repos.library.upsert(&library).await.unwrap();
+
+    let path: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Path" FROM "LibraryPath" WHERE "Id" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        path.as_deref(),
+        Some("/media/movies"),
+        "saving a library must not blank its stored paths"
+    );
+
+    let items: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = 901"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        items, 1,
+        "saving a library must not cascade its scanned items away"
+    );
+}
+
+/// A path genuinely removed from the library must still go, along with the
+/// items scanned under it — that is the delete this reconcile keeps.
+#[tokio::test]
+async fn removing_a_library_path_still_deletes_it() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_media_graph(&pool).await;
+
+    let mut library = common::library(1, 1, 1);
+    library.path_ids = Vec::new();
+    repos.library.upsert(&library).await.unwrap();
+
+    let paths: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "LibraryPath" WHERE "LibraryId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(paths, 0, "a path dropped from the library must be removed");
 }
 
 #[tokio::test]

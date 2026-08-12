@@ -9,10 +9,28 @@ use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
 use sqlx::{Pool, Row};
 
 use super::common::upsert_sql;
-use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
+use super::common::{decode_enum_column, encode_enum, load_ids, not_found};
 
 #[derive(Clone)]
 pub struct SqliteLibraryRepository(pub Pool<crate::db::Db>);
+
+/// Attaches a path to its library without touching any other column.
+///
+/// Deliberately assigns only `LibraryId`: a path that already exists keeps its
+/// `Path` and `LastScan`, and — because no row is deleted — keeps the
+/// `MediaItem` rows that cascade off it. The empty `Path` in `VALUES` therefore
+/// applies to genuinely new rows only, matching what the previous re-insert
+/// wrote for them.
+static LIBRARY_PATH_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    let insert = r#"INSERT INTO "LibraryPath" ("LibraryId", "Id", "Path") VALUES (?, ?, '')"#;
+    if crate::db::connected_backend_is_mysql() {
+        format!("{insert}\nON DUPLICATE KEY UPDATE \"LibraryId\" = VALUES(\"LibraryId\")")
+    } else {
+        format!(
+            "{insert}\nON CONFLICT(\"Id\") DO UPDATE SET \"LibraryId\" = excluded.\"LibraryId\""
+        )
+    }
+});
 
 #[async_trait]
 impl LibraryRepository for SqliteLibraryRepository {
@@ -91,14 +109,39 @@ impl LibraryRepository for SqliteLibraryRepository {
                 .repository()?;
         }
 
-        replace_ids(
-            &mut tx,
-            r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#,
-            r#"REPLACE INTO "LibraryPath" ("LibraryId", "Id", "Path") VALUES (?, ?, '')"#,
-            library.id,
-            &library.path_ids,
-        )
-        .await?;
+        // Reconcile the library's paths instead of replacing them wholesale.
+        // `LibraryPath` is a cascade parent — `MediaItem` and `LibraryFolder`
+        // cascade off it — so deleting every path and re-inserting it discarded
+        // every scanned item in the library, and the re-insert also blanked
+        // each surviving `Path`. Only paths that are genuinely gone are
+        // deleted; the rest keep their rows, their `Path`, and their items.
+        if library.path_ids.is_empty() {
+            sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#)
+                .bind(library.id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        } else {
+            let placeholders = vec!["?"; library.path_ids.len()].join(", ");
+            let delete_removed = format!(
+                r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ? AND "Id" NOT IN ({placeholders})"#
+            );
+            let mut delete =
+                sqlx::query(crate::db::assert_sql_safe(delete_removed)).bind(library.id);
+            for id in &library.path_ids {
+                delete = delete.bind(id);
+            }
+            delete.execute(&mut *tx).await.repository()?;
+        }
+
+        for id in &library.path_ids {
+            sqlx::query(LIBRARY_PATH_UPSERT_SQL.as_str())
+                .bind(library.id)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
 
         // LibraryFolder requires a LibraryPathId; we cannot insert folders without a valid path.
         // For upsert purposes we skip folder insertion if we don't have path context.
