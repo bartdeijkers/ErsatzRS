@@ -29,12 +29,13 @@ References:
 
 ## What runs where
 
-- **CI (every push and PR)**: layers 1–4 plus `cargo xtask architecture-lint`
+- **CI (every push and PR)**: the SQLite/default test layers plus a dedicated
+  MySQL 8 Output Dynamic Range health-contract job, `cargo xtask architecture-lint`,
   and `cargo xtask hydration-lint -p ersatzrs-web`. The browser island
   hydration smoke also runs in CI when the
   diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
-  files. The `mysql-integration` feature is enabled there, so the
-  testcontainers MariaDB run is part of CI.
+  files. Other environment-gated MySQL integration tests still require
+  `ERSATZRS_MYSQL_TEST_URL` when run locally.
 - **Focused/local dev**: use `./run.sh test -p <crate>` as the required runner
   and append a test filter when one regression is sufficient. Agent command
   hooks reject direct `cargo test` invocations. The

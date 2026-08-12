@@ -189,6 +189,39 @@ jobs:
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask architecture-lint
 
+  mysql_health:
+    name: MySQL health contract
+    runs-on: ubuntu-24.04
+    needs: fmt
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ersatzrs_health_test
+          MYSQL_ROOT_PASSWORD: ersatzrs-test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      ERSATZRS_MYSQL_TEST_URL: mysql://root:ersatzrs-test@127.0.0.1:3306/ersatzrs_health_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mysql-health
+          cache-bin: "false"
+      - name: Prove Output Dynamic Range health classifications on MySQL 8
+        run: >-
+          cargo test -p ersatzrs-infra --features mysql-integration
+          --test mysql_backend
+          mysql_output_dynamic_range_health_check_classifies_every_row_shape
+          -- --exact
+
   hydration:
     name: Playwright E2E
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}

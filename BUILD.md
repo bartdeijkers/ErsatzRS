@@ -87,6 +87,11 @@ untouched. The full test selection remains intact, and self-hosted CI retains
 the single canonical workspace Test job. This path remains an explicit
 fallback rather than the default.
 
+The focused `MySQL health contract` job always runs on GitHub-hosted Ubuntu
+with an isolated MySQL 8 service. It injects `ERSATZRS_MYSQL_TEST_URL` and
+executes the Output Dynamic Range classification regression without the
+environment-based skip used by local MySQL integration tests.
+
 Because the self-hosted runner is a single physical machine, every job in
 `ci.yml` queues and runs serially on it — there is no wall-clock parallelism
 to lose by sharing build output across jobs. `ci.yml` sets a workflow-level
