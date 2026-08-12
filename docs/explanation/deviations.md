@@ -149,7 +149,7 @@ out-of-process capability calls. This replaces the earlier raw Remote Stream
 script and named extractor configuration without introducing a native plugin
 ABI.
 
-ADR: [0066](../adr/0066-signed-repository-backed-add-ons.md)
+ADR: [0066](../adr/0066-repository-backed-add-ons.md)
 
 ## Leptos instead of Blazor
 

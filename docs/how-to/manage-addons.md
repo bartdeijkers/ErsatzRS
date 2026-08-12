@@ -1,41 +1,70 @@
-# Install and manage an add-on
+# Install and manage add-ons
 
-Add-ons extend ErsatzRS through signed packages and bounded child processes.
-This guide applies to a development build that exposes **Settings > Add-ons**;
-the [platform reference](../reference/addons.md) records current availability.
-Use the workflow for Remote Stream providers and future capabilities, and do
-not put executable commands in media YAML.
+Use **Settings > Add-ons** to install, inspect, configure, update, disable, and
+remove out-of-process add-ons. The manager separates **Installed**, **Browse**,
+**Updates**, and **Sources** so package lifecycle and repository trust remain
+visible. Each card opens a dedicated detail route at
+`/settings/addons/<add-on-id>`.
 
-The normal official installation path is not available yet because the
-official repository and production public key have not been published. A
-custom signed repository is an advanced, self-managed deployment path.
+The [platform reference](../reference/addons.md) lists the supported
+capabilities. Do not put executable commands in media YAML.
 
-## Install from a trusted repository
+## Install from a repository
 
-1. Open **Settings > Add-ons**.
-2. Refresh a trusted repository and confirm that its available packages appear.
-3. Review the source, version, capabilities, dependencies, media access,
-   network hosts, managed FFmpeg access, and external commands shown for the
-   package.
-4. Select **Install** and confirm that the selected version appears as
-   installed. A new package starts disabled.
-5. Configure every required setting.
+1. Open **Settings > Add-ons > Sources** and refresh the intended repository.
+2. Open **Browse**, search for the add-on, and select its card.
+3. On the detail page, review its source, trust tier, version, capabilities,
+   dependencies, network hosts, media access, managed FFmpeg access, and
+   external commands.
+4. Select **Install** and confirm. A new package starts disabled.
+5. Configure every required setting on the same detail page.
 6. Select **Check** and resolve any unavailable dependency.
 7. Select **Enable**.
 
-The task is complete when the installed package shows a successful readiness
-result and **Enabled** state. **Check** validates readiness but never enables a
-package by itself.
+The task is complete when the detail page shows a successful readiness result
+and **Enabled** state. **Check** validates readiness but never enables a package.
 
-The official repository entry is seeded in a new database. A source build or
-unpublished deployment may intentionally contain no official public key yet;
-such an entry cannot refresh until the release maintainer pins the repository's
-raw Ed25519 public key. Never bypass that check with an unsigned catalog.
+Updates stay manual. Open **Updates**, select an add-on, review the offered
+source and permissions, and select **Update**. ErsatzRS refuses downgrades,
+stages and validates the package, and leaves the updated add-on disabled. Run
+**Check** and **Enable** again.
 
-Updates are manual. The available list shows **Update** when the signed catalog
-offers a different version. ErsatzRS rejects SemVer downgrades, stages and
-verifies the new immutable package, switches the active record, and leaves it
-disabled. Run **Check**, resolve any failure, and then select **Enable** again.
+## Install a local package
+
+Local packages and unsigned repository sources require an explicit risk opt-in:
+
+1. Open **Settings > Add-ons > Sources**.
+2. Under **Unknown sources**, select **Enable** and confirm the warning.
+3. Choose an add-on ZIP under **Install from file**, then select **Install**.
+4. Open the installed add-on's detail page. Confirm that its trust badge says
+   **Sideloaded**, review its permissions, configure it, run **Check**, and
+   enable it only when ready.
+
+A sideloaded package has no repository update source. Install a newer local ZIP
+to update it. A sideload cannot replace a repository-backed package with the
+same ID; uninstall the existing package first. Disabling unknown sources later
+blocks new unverified installs and refreshes but does not remove existing
+packages.
+
+The package layout and limits are defined by the [package
+reference](../reference/addon-packages.md).
+
+## Add an unverified repository
+
+After enabling unknown sources, use either workflow:
+
+- Select **Add repository** and enter its reverse-DNS ID, display name,
+  credential-free HTTPS index URL, and optional raw Ed25519 public key.
+- Choose a repository ZIP and select **Install**. Its root must contain the
+  strict `repository.toml` described by the [repository
+  reference](../reference/addon-repositories.md).
+
+A source with a public key is **Verified** after the initial trust record is
+accepted; subsequent catalogs must carry a valid detached signature. A source
+without a key is **Unverified** and relies on HTTPS plus catalog package
+digests. Review the source before refreshing or installing from it.
+
+Removing a repository does not remove packages already installed from it.
 
 ## Configure secrets by reference
 
@@ -46,58 +75,32 @@ only one of these references:
   available to the ErsatzRS service.
 - **Secret file**: an absolute path readable by the ErsatzRS service account.
 
-An environment secret is resolved only while the invocation environment is
-built. A secret-file reference remains a path that the add-on reads itself.
 Raw secret values are not displayed, persisted, placed in process arguments,
-or included in diagnostics. When a file-backed secret is configured,
-add-on-controlled diagnostic text is suppressed because ErsatzRS deliberately
-does not read the value needed to redact it. Configure the environment variable
-or mounted file outside the admin UI. Clear an optional secret setting by
-saving it with no reference; this also disables the add-on until it passes a
-fresh check and is enabled again.
+or included in diagnostics. Configure the environment variable or mounted file
+outside the admin UI. Clear an optional secret setting by saving it with no
+reference; this also disables the add-on until it passes a fresh check and is
+enabled again.
 
-## Add a custom repository
+## Replace repository administration for a deployment
 
-Select **Add repository** and enter a stable reverse-DNS ID, display name,
-credential-free HTTPS index URL, and the repository's raw 32-byte Ed25519
-public key encoded as canonical standard Base64, with no whitespace. A
-repository signature establishes
-provenance; it does not make third-party code safe. Review its source and
-permissions before installation.
+Create the authoritative TOML file defined by the [repository
+reference](../reference/addon-repositories.md), set
+`ERSATZRS_ADDONS__TRUSTED_REPOSITORIES_FILE` to its path, and restart ErsatzRS.
+Confirm that **Sources** is read-only and lists only the file's entries.
 
-After adding it, select **Refresh**. Proceed only when the refresh succeeds and
-the expected package IDs and versions appear in the available list. A signature
-failure, expired catalog, or sequence rollback is a repository problem; do not
-work around it by replacing the trusted key ad hoc.
-
-Removing a repository does not remove packages already installed from it.
-
-## Replace the complete allowlist for a deployment
-
-Create the authoritative TOML file defined by the
-[repository reference](../reference/addon-repositories.md), then set
-`ERSATZRS_ADDONS__TRUSTED_REPOSITORIES_FILE` to its path. Prefer an absolute
-path for a service so its working directory cannot change the result. Restart
-ErsatzRS and confirm that the repository editor is read-only and that only the
-file's entries are listed.
-
-Keep the private signing key only in the repository publisher's secret store;
-ErsatzRS needs the public key only.
+Keep private signing keys only in repository publishers' secret stores;
+ErsatzRS needs public keys only.
 
 ## Disable or uninstall
 
 **Disable** blocks new invocations. A stream already owned by a playback
 session is stopped by that session's normal cancellation lifecycle.
 
-**Disable** is blocked while another enabled package requires the add-on;
-**Uninstall** is blocked while any installed package requires it. Remove that
-dependent package or migrate it first. **Uninstall** remains blocked while a
-Remote Stream refers to the add-on. Persistent add-on data is retained so
-reinstalling can recover operator state from the same repository-scoped
-namespace; package executables and disposable cache are removed. A same-ID
-package from a different configured repository ID cannot inherit that retained
-state.
+Disabling is blocked while another enabled package requires the add-on.
+Uninstalling is blocked while any installed package or Remote Stream still
+requires it. Persistent add-on data is retained in its origin-scoped namespace;
+package executables and disposable cache are removed.
 
 Use **Support > Health Checks** to find expired catalogs, failed refreshes,
-modified package content, incompatible manifests, and enabled packages without
-a readiness result.
+modified package content, incompatible manifests, unverified enabled packages,
+and installed packages without a readiness result.

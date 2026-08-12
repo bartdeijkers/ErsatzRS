@@ -152,7 +152,7 @@ crate architecture.
 ## References
 
 - [../../ARCHITECTURE.md](../../ARCHITECTURE.md)
-- [ADR 0066: Signed repository-backed add-ons](0066-signed-repository-backed-add-ons.md)
+- [ADR 0066: Repository-backed add-ons](0066-repository-backed-add-ons.md)
 - [../../plans/application-layer-and-video-jukebox.md](../../plans/application-layer-and-video-jukebox.md)
 - `$ERSATZTV_SRC/ErsatzTV.Application/ErsatzTV.Application.csproj`
 - `$ERSATZTV_SRC/ErsatzTV/ErsatzTV.csproj`

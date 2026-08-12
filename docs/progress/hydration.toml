@@ -81,6 +81,12 @@ routes = ['/settings/addons']
 notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup.'
 
 [[page]]
+name   = 'AddonDetailPage'
+status = '✅'
+routes = ['/settings/addons/:addon_id']
+notes  = 'The SSR route loads installed or catalog identity by stable add-on ID and hydrates guarded install/update, check, enable/disable, uninstall, configuration, source selection, and confirmation actions. Focused browser coverage proves canonical card navigation and the dedicated detail surface.'
+
+[[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'
 status = '✅'
 routes = ['/media/movies/:id']

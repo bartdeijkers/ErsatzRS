@@ -116,17 +116,16 @@ release section when tagging a release.
 
 ### Changed
 
-- Add-on trust is now tiered rather than all-or-nothing (ADR 0066, still draft
-  and not yet implemented). Requiring a pinned Ed25519 key on every repository
-  admitted no private, local, or offline installation and obliged every
-  third-party author to run key infrastructure — a bar neither Kodi nor Stash
-  sets. The reworked contract keeps signature verification for repositories
-  that pin a key, adds an unverified tier that relies on HTTPS plus per-package
-  SHA-256, and allows installing an add-on or a whole repository from a local
-  package. Unverified sources sit behind a single administrator setting that is
-  off by default, and the trust tier is recorded per installation and shown
-  wherever the add-on appears. Updates and version selection stay manual,
-  diverging from Kodi deliberately.
+- Add-on trust is now tiered rather than all-or-nothing (ADR 0066). Verified
+  repositories keep detached Ed25519 catalog signatures; unverified HTTPS
+  repositories and sideloaded add-on or repository ZIPs require one
+  off-by-default Unknown Sources opt-in. The permanent trust tier is visible in
+  the manager and health report, while the official source still fails closed
+  without its pinned key. The localized Settings > Add-ons manager now provides
+  Installed, Browse, Updates, and Sources views plus a dedicated detail page for
+  every add-on, guarded lifecycle actions, source offers, permissions,
+  configuration, readiness, and optional bounded package artwork. Updates and
+  source ownership remain manual by design.
 - Documentation now has explicit Diátaxis navigation, a complete reference
   index, evidence-backed current System Context and Container views, and
   separate add-on package, repository, runtime, trust, and operator guidance.

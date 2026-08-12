@@ -5,7 +5,7 @@
 Accepted (2026-08-10).
 
 The extractor trust and execution portions are superseded by
-[ADR 0066](0066-signed-repository-backed-add-ons.md). Playlist manifests,
+[ADR 0066](0066-repository-backed-add-ons.md). Playlist manifests,
 stable enumeration identity/order, atomic sidecars, managed ownership,
 health, and ordered playlist materialization remain active.
 

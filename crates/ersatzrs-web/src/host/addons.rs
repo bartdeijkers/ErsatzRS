@@ -1,14 +1,16 @@
 use async_trait::async_trait;
 use ersatzrs_app::{
-    AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
-    AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead,
+    AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
+    AddonRuntimeError, AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead,
 };
 use ersatzrs_infra::addons::{
-    check_addon, disable_addon, enable_addon, install_addon, list_available_addons,
-    list_installed_addons, list_trusted_repositories, load_addon_settings, refresh_repository,
+    check_addon, disable_addon, enable_addon, install_addon, install_addon_from_package,
+    install_repository_from_package, list_available_addons, list_installed_addons,
+    list_trusted_repositories, load_addon_settings, load_installed_addon, refresh_repository,
     remove_trusted_repository, repositories_are_deployment_managed, save_addon_setting,
-    save_trusted_repository, uninstall_addon, AddonRuntimeContext, AddonSecretReferenceKind,
-    AddonSettingValue, TrustedAddonRepository,
+    save_trusted_repository, set_unverified_sources_enabled, uninstall_addon,
+    unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind, AddonSettingValue,
+    TrustedAddonRepository,
 };
 use ersatzrs_infra::db::DbPool;
 
@@ -51,6 +53,12 @@ impl AddonRuntime for NativeAddonRuntime {
             .map_err(runtime_error)?
             .into_iter()
             .map(|value| AvailableAddonRead {
+                icon_url: value.addon.icon.as_ref().map(|_| {
+                    format!(
+                        "/api/addons/catalog-icon/{}/{}",
+                        value.repository_id, value.addon.id
+                    )
+                }),
                 repository_id: value.repository_id,
                 addon: value.addon,
                 host_compatible: value.host_compatible,
@@ -77,22 +85,63 @@ impl AddonRuntime for NativeAddonRuntime {
                 })
                 .collect();
             installed.push(InstalledAddonRead {
+                icon_url: value
+                    .manifest
+                    .icon
+                    .as_ref()
+                    .map(|_| format!("/api/addons/installed-icon/{}", value.addon_id)),
                 addon_id: value.addon_id,
                 repository_id: value.repository_id,
                 version: value.version.to_string(),
                 enabled: value.enabled,
+                trust_tier: value.trust_tier.as_str().to_owned(),
                 manifest: value.manifest,
                 settings,
                 last_check_code: value.last_check_code,
                 last_check_message: value.last_check_message,
+                last_check_at: value.last_check_at,
+                installed_at: value.installed_at,
+                updated_at: value.updated_at,
             });
         }
         Ok(AddonOverviewRead {
+            unverified_sources_enabled: unverified_sources_enabled(&self.pool)
+                .await
+                .map_err(runtime_error)?,
             repositories_are_deployment_managed: repositories_are_deployment_managed(),
             repositories,
             available,
             installed,
         })
+    }
+
+    async fn installed_icon(
+        &self,
+        addon_id: String,
+    ) -> Result<Option<AddonIconRead>, AddonRuntimeError> {
+        let Some(installed) = load_installed_addon(&self.pool, &addon_id)
+            .await
+            .map_err(runtime_error)?
+        else {
+            return Ok(None);
+        };
+        let Some(icon) = installed.manifest.icon else {
+            return Ok(None);
+        };
+        let bytes = match tokio::fs::read(installed.install_path.join(icon.path)).await {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(AddonRuntimeError::new(error.to_string())),
+        };
+        if bytes.len() > 2 * 1024 * 1024 || !valid_icon_bytes(&bytes, icon.media_type) {
+            return Err(AddonRuntimeError::new(
+                "installed add-on icon does not match its manifest",
+            ));
+        }
+        Ok(Some(AddonIconRead {
+            bytes,
+            content_type: icon.media_type.as_mime_type().to_owned(),
+        }))
     }
 
     async fn save_repository(
@@ -136,6 +185,29 @@ impl AddonRuntime for NativeAddonRuntime {
         addon_id: String,
     ) -> Result<(), AddonRuntimeError> {
         install_addon(&self.pool, &self.client, &repository_id, &addon_id)
+            .await
+            .map(|_| ())
+            .map_err(runtime_error)
+    }
+
+    async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError> {
+        set_unverified_sources_enabled(&self.pool, enabled)
+            .await
+            .map_err(runtime_error)
+    }
+
+    async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError> {
+        install_addon_from_package(&self.pool, archive)
+            .await
+            .map(|_| ())
+            .map_err(runtime_error)
+    }
+
+    async fn install_repository_from_package(
+        &self,
+        archive: Vec<u8>,
+    ) -> Result<(), AddonRuntimeError> {
+        install_repository_from_package(&self.pool, archive)
             .await
             .map(|_| ())
             .map_err(runtime_error)
@@ -199,7 +271,17 @@ fn runtime_context() -> AddonRuntimeContext {
     }
 }
 
+fn valid_icon_bytes(bytes: &[u8], media_type: ersatzrs_addon_contract::AddonIconMediaType) -> bool {
+    match media_type {
+        ersatzrs_addon_contract::AddonIconMediaType::Png => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        ersatzrs_addon_contract::AddonIconMediaType::Webp => {
+            bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+        }
+    }
+}
+
 fn map_repository(value: TrustedAddonRepository) -> AddonRepositoryRead {
+    let trust_tier = value.trust_tier().as_str().to_owned();
     AddonRepositoryRead {
         id: value.id,
         name: value.name,
@@ -207,6 +289,7 @@ fn map_repository(value: TrustedAddonRepository) -> AddonRepositoryRead {
         public_key: value.public_key,
         is_official: value.is_official,
         is_enabled: value.is_enabled,
+        trust_tier,
         last_sequence: value.last_sequence,
         last_refresh: value.last_refresh,
         last_error: value.last_error,

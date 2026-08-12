@@ -1,6 +1,6 @@
 # Add-on platform reference
 
-The signed add-on host is implemented in the current source tree. The platform
+The tiered-trust add-on host is implemented in the current source tree. The platform
 remains in development until the official repository is published and its
 production public key is pinned; existing beta archives do not gain add-on
 support retroactively.

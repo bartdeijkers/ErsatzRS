@@ -15,8 +15,8 @@ pub mod queries;
 pub use error::{ApplicationError, Result};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
-    AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
+    AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
+    AddonRuntimeError, AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
     AdminHealthRuntime, AdminHealthRuntimeError, AdminTroubleshootingRuntime,
     AdminTroubleshootingRuntimeError, ApplicationPorts, AvailableAddonRead, BlockPreviewBuilder,
     ChannelRuntime, ChannelRuntimeError, InstalledAddonRead, MediaSourceRuntime,
@@ -84,6 +84,13 @@ impl ApplicationServices {
         self.ports.addons().overview().await
     }
 
+    pub async fn addon_installed_icon(
+        &self,
+        addon_id: String,
+    ) -> std::result::Result<Option<AddonIconRead>, AddonRuntimeError> {
+        self.ports.addons().installed_icon(addon_id).await
+    }
+
     pub async fn save_addon_repository(
         &self,
         repository: AddonRepositoryEdit,
@@ -111,6 +118,30 @@ impl ApplicationServices {
         addon_id: String,
     ) -> std::result::Result<(), AddonRuntimeError> {
         self.ports.addons().install(repository_id, addon_id).await
+    }
+
+    pub async fn set_unverified_addon_sources(
+        &self,
+        enabled: bool,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().set_unverified_sources(enabled).await
+    }
+
+    pub async fn install_addon_from_package(
+        &self,
+        archive: Vec<u8>,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().install_from_package(archive).await
+    }
+
+    pub async fn install_addon_repository_from_package(
+        &self,
+        archive: Vec<u8>,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports
+            .addons()
+            .install_repository_from_package(archive)
+            .await
     }
 
     pub async fn save_addon_setting(

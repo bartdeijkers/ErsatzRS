@@ -24,14 +24,14 @@ impl HealthCheck for AddonPlatformHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let repositories = sqlx::query(
-            r#"SELECT "Id", "PublicKey", "IsEnabled", "LastError", "CatalogJson"
+            r#"SELECT "Id", "PublicKey", "IsOfficial", "IsEnabled", "LastError", "CatalogJson"
                FROM "AddonRepository" ORDER BY "Id""#,
         )
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_error)?;
         let installations = sqlx::query(
-            r#"SELECT "AddonId", "Enabled", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode"
+            r#"SELECT "AddonId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode"
                FROM "AddonInstallation" ORDER BY "AddonId""#,
         )
         .fetch_all(&self.pool)
@@ -113,7 +113,10 @@ fn repository_findings(row: &DbRow) -> (Option<String>, Option<String>) {
         .flatten()
         .is_some();
     let public_key = row.try_get::<String, _>("PublicKey").unwrap_or_default();
-    let failure = if (catalog_json.is_some() || has_refresh_error) && public_key.trim().is_empty() {
+    let is_official = row
+        .try_get::<i64, _>("IsOfficial")
+        .is_ok_and(|value| value != 0);
+    let failure = if is_official && public_key.trim().is_empty() {
         Some(format!("{id} has no public signing key"))
     } else if catalog_json.as_deref().is_some_and(|catalog| {
         crate::addons::validate_stored_catalog_state(&id, &public_key, catalog).is_err()
@@ -122,7 +125,13 @@ fn repository_findings(row: &DbRow) -> (Option<String>, Option<String>) {
     } else {
         None
     };
-    let warning = has_refresh_error.then(|| format!("{id} last refresh failed"));
+    let warning = if has_refresh_error {
+        Some(format!("{id} last refresh failed"))
+    } else if public_key.trim().is_empty() {
+        Some(format!("{id} is an unverified repository"))
+    } else {
+        None
+    };
     (failure, warning)
 }
 
@@ -181,8 +190,15 @@ async fn installation_findings(
         .ok()
         .flatten()
         .is_none();
-    (
-        None,
-        (enabled && no_readiness).then(|| format!("{id} is enabled without a readiness result")),
-    )
+    let trust_tier = row
+        .try_get::<String, _>("TrustTier")
+        .unwrap_or_else(|_| "invalid".to_owned());
+    let warning = if enabled && trust_tier != "verified" {
+        Some(format!("{id} is enabled with {trust_tier} trust"))
+    } else if enabled && no_readiness {
+        Some(format!("{id} is enabled without a readiness result"))
+    } else {
+        None
+    };
+    (None, warning)
 }

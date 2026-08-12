@@ -2,22 +2,22 @@
 
 ## Status
 
-draft (2026-08-11, reworked 2026-08-12 to adopt Kodi-shaped distribution).
+Accepted (2026-08-12; drafted 2026-08-11 and reworked before acceptance to
+adopt Kodi-shaped distribution).
 
 ## Implementation
 
-Partial. The host platform is implemented in the current source tree, including
+Partial. The full host and management contract is implemented in the current
+source tree, including
 signed-catalog refresh, package installation and update, settings, readiness,
 declarative panels, health, Remote Stream list/play dispatch, lifecycle
 concurrency guards, and managed Unix process-group/Windows Job Object
-ownership.
-
-The tiered trust model, repository packages, and package sideloading introduced
-by the 2026-08-12 rework are **not implemented**. Every repository currently
-requires a pinned key, and there is no way to install a package from a local
-file. See [`plans/addon-sideload-install.md`](../../plans/addon-sideload-install.md)
-for the work breakdown and the [add-on-platform progress
-record](../progress/parity/addon-platform.toml) for tracked debt.
+ownership. The tiered trust model, repository packages, package sideloading,
+off-by-default unknown-sources gate, persistent trust tiers, health warnings,
+optional schema-v2 icons, mature manager views, and per-add-on detail routes
+were implemented on 2026-08-12. External publication and production-key
+provisioning for the official repository remain tracked separately in the
+[add-on-platform progress record](../progress/parity/addon-platform.toml).
 
 ## Context
 
@@ -66,7 +66,8 @@ from local packages. It does not load add-on code through a Rust/native dynamic
 library ABI.
 
 Each package contains a strict `addon.toml` manifest with a stable reverse-DNS
-identifier, SemVer version, supported host range and RIDs, versioned
+identifier, SemVer version, supported host range and RIDs, optional bounded
+PNG/WebP artwork, versioned
 capabilities, package-local entrypoints, declared permissions, host-rendered
 settings, localized metadata, and declarative panels. The shared
 `ersatzrs-addon-contract` crate and add-on contract reference own these public

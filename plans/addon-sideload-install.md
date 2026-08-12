@@ -1,9 +1,24 @@
 # Scope: tiered trust, repository packages, and sideload installation
 
-Status: **proposed, not started**
+Status: **implemented 2026-08-12**
 Discovered: 2026-08-12
 Implements: [ADR 0066](../docs/adr/0066-repository-backed-add-ons.md) as reworked 2026-08-12
 Tracked in: `docs/progress/parity/addon-platform.toml`
+
+## Delivery outcome
+
+The planned validation split, persistent trust tiers, unverified repository
+refresh, official-source fail-closed guard, add-on and repository ZIP installs,
+unknown-sources setting, application boundary, multipart API, localized admin
+manager, health reporting, and focused regression coverage are implemented.
+The management surface now includes Installed, Browse, Updates, and Sources
+views plus `/settings/addons/{addon_id}` detail pages. Manifest and catalog
+schema 2 add optional bounded PNG/WebP artwork while schema 1 remains readable.
+
+The work breakdown below is retained as the delivery rationale and audit trail;
+its future-tense wording describes the pre-implementation plan. Publication of
+the separate official repository and provisioning its production signing key
+remain external release work, not implementation debt in this plan.
 
 ## Problem
 

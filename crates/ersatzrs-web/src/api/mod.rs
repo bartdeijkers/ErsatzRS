@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod artwork;
 pub mod blocks;
 pub mod channels;

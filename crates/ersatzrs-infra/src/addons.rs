@@ -14,10 +14,10 @@ use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use ersatzrs_addon_contract::{
-    validate_addon_id, AddonCheckResult, AddonCheckStatus, AddonEntrypointKind, AddonManifest,
-    AddonRepositoryIndex, AddonSettingKind, CatalogAddon, CatalogPackage,
-    ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    validate_addon_id, AddonCheckResult, AddonCheckStatus, AddonEntrypointKind, AddonIconMediaType,
+    AddonManifest, AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon,
+    CatalogPackage, RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -46,8 +46,11 @@ pub const OFFICIAL_REPOSITORY_ID: &str = "org.ersatzrs.addons.official";
 /// Default official catalog location.
 pub const OFFICIAL_REPOSITORY_INDEX_URL: &str =
     "https://bartdeijkers.github.io/ErsatzRS-addons/index-v1.json";
+/// Persisted opt-in required for unsigned repositories and local packages.
+pub const ALLOW_UNVERIFIED_SOURCES_KEY: &str = "addons.allow_unverified_sources";
 
 const MAX_REPOSITORY_FILE_BYTES: usize = 256 * 1024;
+const MAX_REPOSITORY_PACKAGE_BYTES: usize = 256 * 1024;
 const MAX_INDEX_BYTES: usize = 4 * 1024 * 1024;
 const MAX_SIGNATURE_BYTES: usize = 1024;
 const MAX_ETAG_BYTES: usize = 1_024;
@@ -107,6 +110,17 @@ pub struct TrustedAddonRepository {
     pub last_error: Option<String>,
 }
 
+impl TrustedAddonRepository {
+    #[must_use]
+    pub fn trust_tier(&self) -> AddonTrustTier {
+        if self.public_key.trim().is_empty() {
+            AddonTrustTier::Unverified
+        } else {
+            AddonTrustTier::Verified
+        }
+    }
+}
+
 /// Catalog item paired with the repository that signed it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AvailableAddon {
@@ -123,6 +137,7 @@ pub struct InstalledAddon {
     pub repository_id: Option<String>,
     pub version: Version,
     pub enabled: bool,
+    pub trust_tier: AddonTrustTier,
     pub package_sha256: String,
     pub content_sha256: String,
     pub manifest: AddonManifest,
@@ -133,6 +148,7 @@ pub struct InstalledAddon {
     pub state_revision: String,
     pub last_check_code: Option<String>,
     pub last_check_message: Option<String>,
+    pub last_check_at: Option<String>,
 }
 
 /// Stored value or reference for one manifest-declared setting.
@@ -280,6 +296,7 @@ struct TrustedRepositoryEntry {
     id: String,
     name: String,
     index_url: String,
+    #[serde(default)]
     public_key: String,
     #[serde(default)]
     official: bool,
@@ -336,6 +353,53 @@ const fn default_true() -> bool {
 #[must_use]
 pub fn repositories_are_deployment_managed() -> bool {
     crate::startup_config::environment_variable(TRUSTED_REPOSITORIES_FILE_ENV).is_some()
+}
+
+/// Whether the administrator accepted unsigned repositories and local packages.
+///
+/// # Errors
+///
+/// Returns an error when the persisted configuration cannot be read.
+pub async fn unverified_sources_enabled(pool: &DbPool) -> Result<bool, AddonError> {
+    let value =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(ALLOW_UNVERIFIED_SOURCES_KEY)
+            .fetch_optional(pool)
+            .await
+            .map_err(database_error)?;
+    Ok(value.is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    }))
+}
+
+/// Persist the explicit administrator opt-in for unverified sources.
+///
+/// # Errors
+///
+/// Returns an error when the configuration cannot be persisted.
+pub async fn set_unverified_sources_enabled(
+    pool: &DbPool,
+    enabled: bool,
+) -> Result<(), AddonError> {
+    let value = if enabled { "true" } else { "false" };
+    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
+        .bind(value)
+        .bind(ALLOW_UNVERIFIED_SOURCES_KEY)
+        .execute(pool)
+        .await
+        .map_err(database_error)?;
+    if updated.rows_affected() == 0 {
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(ALLOW_UNVERIFIED_SOURCES_KEY)
+            .bind(value)
+            .execute(pool)
+            .await
+            .map_err(database_error)?;
+    }
+    Ok(())
 }
 
 /// Load the effective trusted repository allowlist.
@@ -399,6 +463,11 @@ pub async fn save_trusted_repository(
         enabled: repository.is_enabled,
     };
     validate_repository_entry(&entry)?;
+    if entry.public_key.trim().is_empty() && !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unverified sources before adding an unsigned repository".to_owned(),
+        ));
+    }
     upsert_repository_row(pool, &entry).await
 }
 
@@ -428,6 +497,7 @@ pub async fn remove_trusted_repository(pool: &DbPool, id: &str) -> Result<(), Ad
 ///
 /// Returns an error without replacing the last valid catalog when refresh
 /// fails. Safe failure detail is persisted for the settings page and health.
+#[allow(clippy::too_many_lines)]
 pub async fn refresh_repository(
     pool: &DbPool,
     client: &reqwest::Client,
@@ -436,6 +506,18 @@ pub async fn refresh_repository(
     let repository = effective_repository(pool, repository_id).await?;
     if !repository.is_enabled {
         return Err(AddonError::Validation("repository is disabled".to_owned()));
+    }
+    if repository.public_key.trim().is_empty() {
+        if repository.is_official {
+            return Err(AddonError::Trust(
+                "the official repository has no pinned signing key".to_owned(),
+            ));
+        }
+        if !unverified_sources_enabled(pool).await? {
+            return Err(AddonError::Trust(
+                "enable unverified sources before refreshing an unsigned repository".to_owned(),
+            ));
+        }
     }
 
     let previous_cache = load_catalog_cache(pool, repository_id).await?;
@@ -535,12 +617,14 @@ async fn refresh_repository_inner(
     repository: &TrustedAddonRepository,
     previous_cache: &StoredCatalogCache,
 ) -> Result<RefreshedCatalog, AddonError> {
-    if repository.public_key.is_empty() {
+    if repository.is_official && repository.public_key.trim().is_empty() {
         return Err(AddonError::Trust(
-            "the repository has no Ed25519 public key".to_owned(),
+            "the official repository has no pinned signing key".to_owned(),
         ));
     }
-    decode_public_key(&repository.public_key)?;
+    if !repository.public_key.trim().is_empty() {
+        decode_public_key(&repository.public_key)?;
+    }
     let download = download_catalog_index(
         client,
         &repository.index_url,
@@ -554,10 +638,12 @@ async fn refresh_repository_inner(
             etag,
             last_modified,
         } => {
-            let signature_url = format!("{}.sig", repository.index_url);
-            let signature_bytes =
-                download_bounded(client, &signature_url, MAX_SIGNATURE_BYTES).await?;
-            verify_detached_signature(repository.public_key.trim(), &bytes, &signature_bytes)?;
+            if !repository.public_key.trim().is_empty() {
+                let signature_url = format!("{}.sig", repository.index_url);
+                let signature_bytes =
+                    download_bounded(client, &signature_url, MAX_SIGNATURE_BYTES).await?;
+                verify_detached_signature(repository.public_key.trim(), &bytes, &signature_bytes)?;
+            }
             let raw_json = String::from_utf8(bytes)
                 .map_err(|_| AddonError::Validation("catalog is not UTF-8 JSON".to_owned()))?;
             (raw_json, etag, last_modified, false)
@@ -579,8 +665,9 @@ async fn refresh_repository_inner(
             )
         }
     };
-    let index: AddonRepositoryIndex = serde_json::from_str(&raw_json)
-        .map_err(|_| AddonError::Validation("catalog JSON does not match schema v1".to_owned()))?;
+    let index: AddonRepositoryIndex = serde_json::from_str(&raw_json).map_err(|_| {
+        AddonError::Validation("catalog JSON does not match a supported schema".to_owned())
+    })?;
     if not_modified && repository.last_sequence != Some(index.sequence) {
         return Err(AddonError::Trust(
             "cached catalog sequence does not match trusted repository state".to_owned(),
@@ -715,6 +802,7 @@ pub async fn install_addon(
         pool,
         client,
         repository_id,
+        repository.trust_tier(),
         catalog_cache.catalog_revision,
         installed.as_ref(),
         addon,
@@ -723,10 +811,148 @@ pub async fn install_addon(
     .await
 }
 
+/// Install or update an add-on from locally supplied package bytes.
+///
+/// The package receives the permanent `sideloaded` trust tier and starts
+/// disabled. A sideload can only update another sideload of the same identity.
+///
+/// # Errors
+///
+/// Returns an error when unknown sources are disabled, the archive or manifest
+/// is invalid, the platform is unsupported, persistence races, or the package
+/// would replace a different source or downgrade an installed sideload.
+pub async fn install_addon_from_package(
+    pool: &DbPool,
+    archive: Vec<u8>,
+) -> Result<InstalledAddon, AddonError> {
+    if !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unverified sources before installing a local add-on package".to_owned(),
+        ));
+    }
+    if archive.is_empty() || archive.len() as u64 > MAX_PACKAGE_BYTES {
+        return Err(AddonError::Validation(
+            "package is empty or too large".to_owned(),
+        ));
+    }
+    let package_sha256 = sha256_hex(&archive);
+    let staged = stage_sideload_package(current_rid()?, archive, package_sha256).await?;
+    let previous = load_installed_addon(pool, &staged.manifest.id).await?;
+    if let Some(previous) = &previous {
+        if previous.trust_tier != AddonTrustTier::Sideloaded {
+            return Err(AddonError::Trust(
+                "installed add-on belongs to a repository; uninstall it before sideloading"
+                    .to_owned(),
+            ));
+        }
+        if staged.manifest.version == previous.version {
+            return Err(AddonError::Validation(
+                "this add-on version is already installed".to_owned(),
+            ));
+        }
+        if staged.manifest.version < previous.version {
+            return Err(AddonError::Trust(
+                "local package would downgrade the installed add-on".to_owned(),
+            ));
+        }
+    }
+    persist_sideloaded_addon(pool, previous.as_ref(), &staged).await?;
+    load_installed_addon(pool, &staged.manifest.id)
+        .await?
+        .ok_or_else(|| AddonError::Database("sideloaded package was not persisted".to_owned()))
+}
+
+/// Install a repository trust record from a bounded local ZIP package.
+///
+/// # Errors
+///
+/// Returns an error when repository administration is deployment-managed,
+/// unknown sources are disabled, the archive or manifest is invalid, the
+/// signing key is malformed, or the package targets the official repository.
+pub async fn install_repository_from_package(
+    pool: &DbPool,
+    archive: Vec<u8>,
+) -> Result<TrustedAddonRepository, AddonError> {
+    if repositories_are_deployment_managed() {
+        return Err(AddonError::Configuration(
+            "repository trust is managed by the deployment file".to_owned(),
+        ));
+    }
+    if !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unverified sources before installing a repository package".to_owned(),
+        ));
+    }
+    if archive.is_empty() || archive.len() > MAX_REPOSITORY_PACKAGE_BYTES {
+        return Err(AddonError::Validation(
+            "repository package is empty or too large".to_owned(),
+        ));
+    }
+    let staging_root =
+        addon_packages_folder().join(format!(".repository-staging-{}", Uuid::new_v4()));
+    tokio::fs::create_dir_all(&staging_root)
+        .await
+        .map_err(package_io_error)?;
+    let extraction_path = staging_root.clone();
+    let extraction =
+        tokio::task::spawn_blocking(move || extract_zip_safely(&archive, &extraction_path))
+            .await
+            .map_err(|_| AddonError::Package("repository extraction task failed".to_owned()))?;
+    let result = async {
+        extraction?;
+        let manifest_path = staging_root.join("repository.toml");
+        let metadata = tokio::fs::metadata(&manifest_path).await.map_err(|_| {
+            AddonError::Validation("package has no root repository.toml".to_owned())
+        })?;
+        if !metadata.is_file() || metadata.len() > MAX_REPOSITORY_FILE_BYTES as u64 {
+            return Err(AddonError::Validation(
+                "repository.toml is not a bounded regular file".to_owned(),
+            ));
+        }
+        let text = tokio::fs::read_to_string(&manifest_path)
+            .await
+            .map_err(|_| AddonError::Validation("repository.toml is not UTF-8".to_owned()))?;
+        let manifest: RepositoryManifest = toml::from_str(&text).map_err(|_| {
+            AddonError::Validation("repository.toml does not match its schema".to_owned())
+        })?;
+        manifest
+            .validate()
+            .map_err(|error| AddonError::Validation(error.to_string()))?;
+        if load_repository_row(pool, &manifest.id)
+            .await?
+            .is_some_and(|repository| repository.is_official)
+        {
+            return Err(AddonError::Trust(
+                "a repository package cannot replace the official repository".to_owned(),
+            ));
+        }
+        let repository = TrustedAddonRepository {
+            id: manifest.id,
+            name: manifest.name,
+            index_url: manifest.index_url,
+            public_key: manifest.public_key.unwrap_or_default(),
+            is_official: false,
+            is_enabled: true,
+            last_sequence: None,
+            last_refresh: None,
+            last_error: None,
+        };
+        save_trusted_repository(pool, &repository).await?;
+        load_repository_row(pool, &repository.id)
+            .await?
+            .ok_or_else(|| AddonError::Database("repository package was not persisted".to_owned()))
+    }
+    .await;
+    let _ = tokio::fs::remove_dir_all(&staging_root).await;
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn install_catalog_package(
     pool: &DbPool,
     client: &reqwest::Client,
     repository_id: &str,
+    trust_tier: AddonTrustTier,
     repository_catalog_revision: i64,
     previous_installation: Option<&InstalledAddon>,
     addon: &CatalogAddon,
@@ -738,6 +964,7 @@ async fn install_catalog_package(
     persist_staged_addon(
         pool,
         repository_id,
+        trust_tier,
         repository_catalog_revision,
         previous_installation,
         addon,
@@ -808,6 +1035,59 @@ async fn stage_catalog_package(
     result
 }
 
+async fn stage_sideload_package(
+    rid: &str,
+    archive: Vec<u8>,
+    package_sha256: String,
+) -> Result<StagedAddonPackage, AddonError> {
+    let package_root = addon_packages_folder();
+    tokio::fs::create_dir_all(&package_root)
+        .await
+        .map_err(package_io_error)?;
+    let staging_root = package_root.join(format!(".staging-{}", Uuid::new_v4()));
+    let extracted_root = staging_root.join("content");
+    tokio::fs::create_dir_all(&extracted_root)
+        .await
+        .map_err(package_io_error)?;
+    let extraction_path = extracted_root.clone();
+    let extraction =
+        tokio::task::spawn_blocking(move || extract_zip_safely(&archive, &extraction_path))
+            .await
+            .map_err(|_| AddonError::Package("package extraction task failed".to_owned()))?;
+    let result = async {
+        extraction?;
+        let manifest = validate_extracted_manifest(&extracted_root, rid).await?;
+        let content_sha256 = hash_addon_tree(extracted_root.clone()).await?;
+        let destination = package_root
+            .join(&manifest.id)
+            .join(manifest.version.to_string())
+            .join(&package_sha256[..16])
+            .join(rid);
+        if destination.exists() {
+            verify_addon_content_path(&destination, &content_sha256).await?;
+        } else {
+            let parent = destination.parent().ok_or_else(|| {
+                AddonError::Package("could not resolve package destination".to_owned())
+            })?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(package_io_error)?;
+            tokio::fs::rename(&extracted_root, &destination)
+                .await
+                .map_err(package_io_error)?;
+        }
+        Ok(StagedAddonPackage {
+            manifest,
+            package_sha256,
+            content_sha256,
+            destination,
+        })
+    }
+    .await;
+    let _ = tokio::fs::remove_dir_all(&staging_root).await;
+    result
+}
+
 async fn stage_catalog_package_inner(
     addon: &CatalogAddon,
     rid: &str,
@@ -825,7 +1105,8 @@ async fn stage_catalog_package_inner(
     .map_err(|_| AddonError::Package("package extraction task failed".to_owned()))?;
     extraction?;
 
-    let manifest = validate_extracted_package(extracted_root, addon, rid).await?;
+    let manifest = validate_extracted_manifest(extracted_root, rid).await?;
+    ensure_manifest_matches_catalog(&manifest, addon)?;
     let content_sha256 = hash_addon_tree(extracted_root.to_path_buf()).await?;
 
     let destination = package_root
@@ -862,6 +1143,7 @@ async fn stage_catalog_package_inner(
 async fn persist_staged_addon(
     pool: &DbPool,
     repository_id: &str,
+    trust_tier: AddonTrustTier,
     repository_catalog_revision: i64,
     previous_installation: Option<&InstalledAddon>,
     addon: &CatalogAddon,
@@ -886,10 +1168,10 @@ async fn persist_staged_addon(
     let changed = if let Some(previous) = previous_installation {
         sqlx::query(
             r#"UPDATE "AddonInstallation"
-               SET "RepositoryId" = ?, "Version" = ?, "Enabled" = 0,
+               SET "RepositoryId" = ?, "TrustTier" = ?, "Version" = ?, "Enabled" = 0,
                    "PackageSha256" = ?, "ContentSha256" = ?, "ManifestJson" = ?,
                    "InstallPath" = ?, "DataNamespace" = ?, "UpdatedAt" = ?, "StateRevision" = ?,
-                   "LastCheckCode" = NULL, "LastCheckMessage" = NULL
+                   "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
                WHERE "AddonId" = ? AND "RepositoryId" = ? AND "Version" = ?
                  AND "StateRevision" = ?
                  AND EXISTS (
@@ -898,6 +1180,7 @@ async fn persist_staged_addon(
                  )"#,
         )
         .bind(repository_id)
+        .bind(trust_tier.as_str())
         .bind(addon.version.to_string())
         .bind(&staged.package_sha256)
         .bind(&staged.content_sha256)
@@ -918,11 +1201,11 @@ async fn persist_staged_addon(
     } else {
         sqlx::query(
             r#"INSERT INTO "AddonInstallation" (
-                   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
+                   "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256",
                    "ContentSha256", "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt",
                    "UpdatedAt", "StateRevision"
                )
-               SELECT ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?
+               SELECT ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?
                WHERE EXISTS (
                    SELECT 1 FROM "AddonRepository"
                    WHERE "Id" = ? AND "CatalogRevision" = ? AND "IsEnabled" = 1
@@ -932,6 +1215,7 @@ async fn persist_staged_addon(
         )
         .bind(&addon.id)
         .bind(repository_id)
+        .bind(trust_tier.as_str())
         .bind(addon.version.to_string())
         .bind(&staged.package_sha256)
         .bind(&staged.content_sha256)
@@ -957,9 +1241,88 @@ async fn persist_staged_addon(
     Ok(())
 }
 
-async fn validate_extracted_package(
+async fn persist_sideloaded_addon(
+    pool: &DbPool,
+    previous_installation: Option<&InstalledAddon>,
+    staged: &StagedAddonPackage,
+) -> Result<(), AddonError> {
+    let now = Utc::now().to_rfc3339();
+    let manifest_json = serde_json::to_string(&staged.manifest)
+        .map_err(|_| AddonError::Validation("manifest could not be persisted".to_owned()))?;
+    let install_path = staged.destination.to_string_lossy().into_owned();
+    let state_revision = Uuid::new_v4().to_string();
+    let mut transaction = pool.begin().await.map_err(database_error)?;
+    lock_addon_lifecycle(&mut transaction).await?;
+    let installed = list_installed_addons_in_transaction(&mut transaction).await?;
+    let enabled_dependents =
+        dependent_addon_ids_from_installations(&installed, &staged.manifest.id, true);
+    if !enabled_dependents.is_empty() {
+        return Err(AddonError::Validation(format!(
+            "disable dependent add-on(s) before updating {}: {}",
+            staged.manifest.id,
+            enabled_dependents.join(", ")
+        )));
+    }
+    let changed = if let Some(previous) = previous_installation {
+        sqlx::query(
+            r#"UPDATE "AddonInstallation"
+               SET "RepositoryId" = NULL, "TrustTier" = 'sideloaded', "Version" = ?,
+                   "Enabled" = 0, "PackageSha256" = ?, "ContentSha256" = ?,
+                   "ManifestJson" = ?, "InstallPath" = ?, "DataNamespace" = 'sideload',
+                   "UpdatedAt" = ?, "StateRevision" = ?, "LastCheckCode" = NULL,
+                   "LastCheckMessage" = NULL, "LastCheckAt" = NULL
+               WHERE "AddonId" = ? AND "TrustTier" = 'sideloaded' AND "Version" = ?
+                 AND "StateRevision" = ?"#,
+        )
+        .bind(staged.manifest.version.to_string())
+        .bind(&staged.package_sha256)
+        .bind(&staged.content_sha256)
+        .bind(&manifest_json)
+        .bind(&install_path)
+        .bind(&now)
+        .bind(&state_revision)
+        .bind(&staged.manifest.id)
+        .bind(previous.version.to_string())
+        .bind(&previous.state_revision)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?
+    } else {
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled",
+                   "PackageSha256", "ContentSha256", "ManifestJson", "InstallPath",
+                   "DataNamespace", "InstalledAt", "UpdatedAt", "StateRevision"
+               ) SELECT ?, NULL, 'sideloaded', ?, 0, ?, ?, ?, ?, 'sideload', ?, ?, ?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM "AddonInstallation" WHERE "AddonId" = ?
+               )"#,
+        )
+        .bind(&staged.manifest.id)
+        .bind(staged.manifest.version.to_string())
+        .bind(&staged.package_sha256)
+        .bind(&staged.content_sha256)
+        .bind(&manifest_json)
+        .bind(&install_path)
+        .bind(&now)
+        .bind(&now)
+        .bind(&state_revision)
+        .bind(&staged.manifest.id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?
+    };
+    if changed.rows_affected() != 1 {
+        return Err(AddonError::Trust(
+            "installed add-on changed while sideloading".to_owned(),
+        ));
+    }
+    transaction.commit().await.map_err(database_error)?;
+    Ok(())
+}
+
+async fn validate_extracted_manifest(
     extracted_root: &Path,
-    addon: &CatalogAddon,
     rid: &str,
 ) -> Result<AddonManifest, AddonError> {
     let manifest_path = extracted_root.join("addon.toml");
@@ -974,14 +1337,59 @@ async fn validate_extracted_package(
     let manifest_text = tokio::fs::read_to_string(&manifest_path)
         .await
         .map_err(|_| AddonError::Validation("package has no root addon.toml".to_owned()))?;
-    let manifest: AddonManifest = toml::from_str(&manifest_text)
-        .map_err(|_| AddonError::Validation("addon.toml does not match schema v1".to_owned()))?;
+    let manifest: AddonManifest = toml::from_str(&manifest_text).map_err(|_| {
+        AddonError::Validation("addon.toml does not match a supported schema".to_owned())
+    })?;
     manifest
         .validate()
         .map_err(|error| AddonError::Validation(error.to_string()))?;
+    let entrypoint = manifest.entrypoint_for(rid).ok_or_else(|| {
+        AddonError::Validation("manifest has no entrypoint for this platform".to_owned())
+    })?;
+    let entrypoint_path = extracted_root.join(&entrypoint.path);
+    if !entrypoint_path.is_file() {
+        return Err(AddonError::Validation(
+            "manifest entrypoint is missing from package".to_owned(),
+        ));
+    }
+    if let Some(icon) = &manifest.icon {
+        let icon_path = extracted_root.join(&icon.path);
+        let metadata = tokio::fs::metadata(&icon_path).await.map_err(|_| {
+            AddonError::Validation("manifest icon is missing from package".to_owned())
+        })?;
+        if !metadata.is_file() || metadata.len() > 2 * 1024 * 1024 {
+            return Err(AddonError::Validation(
+                "manifest icon is not a bounded regular file".to_owned(),
+            ));
+        }
+        let bytes = tokio::fs::read(&icon_path)
+            .await
+            .map_err(|_| AddonError::Validation("manifest icon is unreadable".to_owned()))?;
+        if !valid_icon_bytes(&bytes, icon.media_type) {
+            return Err(AddonError::Validation(
+                "manifest icon bytes do not match the declared media type".to_owned(),
+            ));
+        }
+    }
+    Ok(manifest)
+}
+
+fn valid_icon_bytes(bytes: &[u8], media_type: AddonIconMediaType) -> bool {
+    match media_type {
+        AddonIconMediaType::Png => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        AddonIconMediaType::Webp => {
+            bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+        }
+    }
+}
+
+fn ensure_manifest_matches_catalog(
+    manifest: &AddonManifest,
+    addon: &CatalogAddon,
+) -> Result<(), AddonError> {
     if manifest.id != addon.id || manifest.version != addon.version {
         return Err(AddonError::Trust(
-            "package manifest identity differs from signed catalog".to_owned(),
+            "package manifest identity differs from catalog".to_owned(),
         ));
     }
     let manifest_capabilities = manifest
@@ -1007,16 +1415,7 @@ async fn validate_extracted_package(
             "package manifest metadata differs from signed catalog".to_owned(),
         ));
     }
-    let entrypoint = manifest.entrypoint_for(rid).ok_or_else(|| {
-        AddonError::Validation("manifest has no entrypoint for this platform".to_owned())
-    })?;
-    let entrypoint_path = extracted_root.join(&entrypoint.path);
-    if !entrypoint_path.is_file() {
-        return Err(AddonError::Validation(
-            "manifest entrypoint is missing from package".to_owned(),
-        ));
-    }
-    Ok(manifest)
+    Ok(())
 }
 
 /// List active package selections, including disabled packages.
@@ -1026,9 +1425,9 @@ async fn validate_extracted_package(
 /// Returns an error when a row or its stored manifest cannot be decoded.
 pub async fn list_installed_addons(pool: &DbPool) -> Result<Vec<InstalledAddon>, AddonError> {
     let rows = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
     )
     .fetch_all(pool)
@@ -1047,9 +1446,9 @@ pub async fn load_installed_addon(
     addon_id: &str,
 ) -> Result<Option<InstalledAddon>, AddonError> {
     let row = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
     )
     .bind(addon_id)
@@ -1081,9 +1480,9 @@ async fn load_installed_addon_in_transaction(
     addon_id: &str,
 ) -> Result<Option<InstalledAddon>, AddonError> {
     let row = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
     )
     .bind(addon_id)
@@ -1097,9 +1496,9 @@ async fn list_installed_addons_in_transaction(
     transaction: &mut Transaction<'_, crate::db::Db>,
 ) -> Result<Vec<InstalledAddon>, AddonError> {
     let rows = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
     )
     .fetch_all(&mut **transaction)
@@ -1190,7 +1589,7 @@ pub async fn save_addon_setting(
     let changed = sqlx::query(
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "UpdatedAt" = ?, "StateRevision" = ?,
-               "LastCheckCode" = NULL, "LastCheckMessage" = NULL
+               "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(now)
@@ -1264,11 +1663,13 @@ async fn check_addon_with_revision(
     result.code = sanitize_check_code(&result.code);
     result.message = redact_and_bound(&result.message, &command.environment, 1_024);
     sqlx::query(
-        r#"UPDATE "AddonInstallation" SET "LastCheckCode" = ?, "LastCheckMessage" = ?
+        r#"UPDATE "AddonInstallation"
+           SET "LastCheckCode" = ?, "LastCheckMessage" = ?, "LastCheckAt" = ?
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(&result.code)
     .bind(&result.message)
+    .bind(Utc::now().to_rfc3339())
     .bind(addon_id)
     .bind(&command.state_revision)
     .execute(pool)
@@ -1361,7 +1762,7 @@ pub async fn disable_addon(pool: &DbPool, addon_id: &str) -> Result<(), AddonErr
     let changed = sqlx::query(
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "StateRevision" = ?,
-               "LastCheckCode" = NULL, "LastCheckMessage" = NULL
+               "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(next_revision)
@@ -2202,12 +2603,9 @@ fn validate_repository_entry(entry: &TrustedRepositoryEntry) -> Result<(), Addon
             "repository index URL cannot contain a query or fragment".to_owned(),
         ));
     }
-    if entry.public_key.trim().is_empty() {
-        return Err(AddonError::Configuration(
-            "repository public key is empty".to_owned(),
-        ));
+    if !entry.public_key.trim().is_empty() {
+        decode_public_key(&entry.public_key)?;
     }
-    decode_public_key(&entry.public_key)?;
     Ok(())
 }
 
@@ -2466,6 +2864,21 @@ fn installed_from_row(row: &DbRow) -> Result<InstalledAddon, AddonError> {
             .map_err(repository_error)?,
         version,
         enabled: decode_bool_column(row, "Enabled").map_err(repository_error)?,
+        trust_tier: match row
+            .try_get::<String, _>("TrustTier")
+            .repository()
+            .map_err(repository_error)?
+            .as_str()
+        {
+            "verified" => AddonTrustTier::Verified,
+            "unverified" => AddonTrustTier::Unverified,
+            "sideloaded" => AddonTrustTier::Sideloaded,
+            _ => {
+                return Err(AddonError::Validation(
+                    "stored add-on trust tier is invalid".to_owned(),
+                ));
+            }
+        },
         package_sha256: row
             .try_get("PackageSha256")
             .repository()
@@ -2499,6 +2912,8 @@ fn installed_from_row(row: &DbRow) -> Result<InstalledAddon, AddonError> {
         last_check_code: decode_optional_string_column(row, "LastCheckCode")
             .map_err(repository_error)?,
         last_check_message: decode_optional_string_column(row, "LastCheckMessage")
+            .map_err(repository_error)?,
+        last_check_at: decode_optional_string_column(row, "LastCheckAt")
             .map_err(repository_error)?,
     })
 }
@@ -2576,7 +2991,9 @@ pub(crate) fn validate_stored_catalog_state(
     public_key: &str,
     catalog_json: &str,
 ) -> Result<(), AddonError> {
-    decode_public_key(public_key)?;
+    if !public_key.trim().is_empty() {
+        decode_public_key(public_key)?;
+    }
     let index: AddonRepositoryIndex = serde_json::from_str(catalog_json)
         .map_err(|_| AddonError::Validation("stored catalog is invalid".to_owned()))?;
     let repository = TrustedAddonRepository {
@@ -2612,7 +3029,7 @@ fn validate_catalog(
     repository: &TrustedAddonRepository,
     now: DateTime<Utc>,
 ) -> Result<(), AddonError> {
-    if index.schema_version != ADDON_REPOSITORY_SCHEMA_VERSION {
+    if !(1..=ADDON_REPOSITORY_SCHEMA_VERSION).contains(&index.schema_version) {
         return Err(AddonError::Validation(
             "repository uses an unsupported schema version".to_owned(),
         ));
@@ -2651,6 +3068,11 @@ fn validate_catalog(
     }
     let mut addon_ids = BTreeSet::new();
     for addon in &index.addons {
+        if index.schema_version == 1 && addon.icon.is_some() {
+            return Err(AddonError::Validation(
+                "catalog icons require repository schema version 2".to_owned(),
+            ));
+        }
         addon
             .validate()
             .map_err(|error| AddonError::Validation(error.to_string()))?;
@@ -3135,6 +3557,7 @@ mod tests {
             version: Version::new(1, 0, 0),
             name: localized("Fixture"),
             summary: localized("Fixture add-on"),
+            icon: None,
             license: "GPL-3.0-or-later".to_owned(),
             source_url: "https://example.test/source".to_owned(),
             host_version: semver::VersionReq::STAR,
@@ -3507,6 +3930,121 @@ mod tests {
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "play").is_ok());
         assert!(validate_supported_operation("remote-stream.play.v2", "play").is_err());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "list").is_err());
+    }
+
+    #[tokio::test]
+    async fn unverified_repository_requires_explicit_opt_in() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let repository = TrustedAddonRepository {
+            id: "org.example.addons".to_owned(),
+            name: "Example add-ons".to_owned(),
+            index_url: "https://example.test/index-v2.json".to_owned(),
+            public_key: String::new(),
+            is_official: false,
+            is_enabled: true,
+            last_sequence: None,
+            last_refresh: None,
+            last_error: None,
+        };
+
+        assert!(!unverified_sources_enabled(&pool).await.expect("load gate"));
+        assert!(save_trusted_repository(&pool, &repository).await.is_err());
+        set_unverified_sources_enabled(&pool, true)
+            .await
+            .expect("enable gate");
+        save_trusted_repository(&pool, &repository)
+            .await
+            .expect("save unverified repository");
+        assert_eq!(
+            load_repository_row(&pool, &repository.id)
+                .await
+                .expect("load repository")
+                .expect("repository row")
+                .trust_tier(),
+            AddonTrustTier::Unverified
+        );
+    }
+
+    #[tokio::test]
+    async fn local_packages_require_explicit_opt_in_before_archive_processing() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+
+        let addon_error = install_addon_from_package(&pool, b"not a zip".to_vec())
+            .await
+            .expect_err("sideload must be gated");
+        assert!(addon_error.to_string().contains("unverified sources"));
+
+        let repository_error = install_repository_from_package(&pool, b"not a zip".to_vec())
+            .await
+            .expect_err("repository package must be gated");
+        assert!(repository_error.to_string().contains("unverified sources"));
+    }
+
+    #[tokio::test]
+    async fn sideload_persistence_records_provenance_and_starts_disabled() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let manifest = fixture_manifest("org.ersatzrs.addon.sideload-fixture");
+        let install_path = temp.path().join("installed-package");
+        std::fs::create_dir_all(&install_path).expect("create package directory");
+        std::fs::write(
+            install_path.join("addon.toml"),
+            toml::to_string(&manifest).expect("serialize manifest"),
+        )
+        .expect("write manifest");
+        std::fs::write(install_path.join("addon.sh"), b"#!/bin/sh\n").expect("write entrypoint");
+        let staged = StagedAddonPackage {
+            manifest: manifest.clone(),
+            package_sha256: "a".repeat(64),
+            content_sha256: hash_addon_tree_sync(&install_path).expect("hash package"),
+            destination: install_path,
+        };
+
+        persist_sideloaded_addon(&pool, None, &staged)
+            .await
+            .expect("persist sideload");
+        let installed = load_installed_addon(&pool, &manifest.id)
+            .await
+            .expect("load sideload")
+            .expect("installed row");
+
+        assert_eq!(installed.trust_tier, AddonTrustTier::Sideloaded);
+        assert_eq!(installed.repository_id, None);
+        assert_eq!(installed.data_namespace, "sideload");
+        assert!(!installed.enabled);
+    }
+
+    #[tokio::test]
+    async fn official_repository_never_falls_back_to_unverified_refresh() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        set_unverified_sources_enabled(&pool, true)
+            .await
+            .expect("enable gate");
+        sqlx::query(r#"UPDATE "AddonRepository" SET "PublicKey" = '' WHERE "Id" = ?"#)
+            .bind(OFFICIAL_REPOSITORY_ID)
+            .execute(&pool)
+            .await
+            .expect("simulate missing official key");
+
+        let error = refresh_repository(&pool, &reqwest::Client::new(), OFFICIAL_REPOSITORY_ID)
+            .await
+            .expect_err("keyless official repository must fail");
+        assert!(error.to_string().contains("official repository"));
     }
 
     #[tokio::test]

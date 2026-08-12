@@ -22,14 +22,14 @@ the main repository seed intentionally has no production public key until the
 maintainer provisions the private signing key directly in the publisher's
 secret store.
 
-ADR 0066 was reworked on 2026-08-12 to a Kodi-shaped distribution model after
-the mandatory-signing contract proved to admit no private, local, or offline
-installation and to tax every third-party author with Ed25519 key custody. The
-reworked contract adds three trust tiers (verified, unverified, sideloaded), a
-single off-by-default gate for unverified sources, and repository packages
-distributed as zips. None of that is implemented; the host still requires a
-pinned key on every repository and has no local-file install path. The scope
-and sequencing live in `plans/addon-sideload-install.md`.
+ADR 0066's Kodi-shaped distribution model is implemented with verified,
+unverified, and sideloaded trust tiers, a single off-by-default unknown-sources
+gate, bounded repository and add-on ZIP installation, official-source
+fail-closed behavior, persistent tier-aware health reporting, schema-v2
+optional icons, and manual source-owned updates. The localized manager provides
+Installed, Browse, Updates, and Sources views plus canonical
+`/settings/addons/{addon_id}` detail pages for metadata, permissions,
+configuration, readiness, source offers, and lifecycle actions.
 '''
 
 [[debt]]
@@ -44,41 +44,46 @@ resolved    = false
 id          = 'tiered-trust-model-is-not-implemented'
 description = 'Implement the ADR 0066 tiered trust model: allow a repository with no pinned key to refresh over HTTPS with per-package SHA-256 only, record verified/unverified/sideloaded per installation, and gate unverified sources behind an off-by-default admin setting.'
 discovered  = '2026-08-12'
-evidence    = '`validate_repository_entry` rejects an empty public key and `refresh_repository_inner` fails closed on one, so every repository must pin a key. `AddonInstallation` has no trust-tier column and the admin UI has no unverified-sources setting.'
+evidence    = '`migrations/202608121800_addon_management_maturity.sql` persists `TrustTier`; `refresh_repository_inner` branches between signed and HTTPS-only validation; the `addons.allow_unverified_sources` configuration gate is enforced in infra and surfaced under Sources.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'Installations permanently record verified, unverified, or sideloaded provenance. Keyless HTTPS repositories and local packages are refused unless the administrator enables unknown sources, while verified repositories remain available without the opt-in.'
 
 [[debt]]
 id          = 'official-repository-must-not-gain-the-unverified-tier'
 description = 'Refuse refresh for an official repository with an empty public key even after unverified sources are enabled, so the seeded default source cannot silently become an unverified origin.'
 discovered  = '2026-08-12'
-evidence    = 'The seed inserts `org.ersatzrs.addons.official` with `PublicKey` empty. Once an empty key becomes a legal unverified tier, the default row would qualify for it without an explicit guard.'
+evidence    = '`refresh_repository_inner` rejects `IsOfficial = 1` when `PublicKey` is empty before evaluating the unknown-sources gate; a focused regression covers the combination.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'The seeded official repository cannot refresh without its pinned production key and never falls back to the unverified tier.'
 
 [[debt]]
 id          = 'repository-packages-are-not-installable'
 description = 'Add the ADR 0066 repository package: a bounded zip carrying a strict `repository.toml` (id, name, index URL, optional public key) whose installation creates the trust record, gated by the unverified-sources setting and refused while deployment-managed or targeting an official repository.'
 discovered  = '2026-08-12'
-evidence    = 'Repositories can only be added through the admin form or the deployment allowlist file; `ersatzrs-addon-contract` has no repository manifest type.'
+evidence    = '`RepositoryManifest` is a strict shared contract and `install_repository_from_package` performs bounded safe extraction, gate enforcement, deployment-file refusal, and official-row protection. The multipart API and Sources UI expose the install path.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'A repository ZIP containing root `repository.toml` can create or update a database-backed source after the administrator accepts unknown sources; key presence determines subsequent catalog verification.'
 
 [[debt]]
 id          = 'addon-packages-cannot-be-sideloaded'
 description = 'Add a local-file install path for add-on packages, reusing bounded extraction, manifest validation, RID/host compatibility, and content hashing while skipping catalog cross-checks, with a reserved `sideload` data namespace.'
 discovered  = '2026-08-12'
-evidence    = 'No sideload, `from_zip`, `install_from`, or `file://` path exists in `crates/ersatzrs-infra/src/addons.rs`; `install_addon` resolves packages only from a refreshed catalog, and `validate_https_url` blocks any local origin.'
+evidence    = '`install_addon_from_package` reuses bounded path-safe extraction and manifest/RID/host validation, records the supplied archive and content hashes, persists the `sideloaded` tier and reserved data namespace, and enforces source-collision and downgrade guards.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'Administrators can install and update local package ZIPs through the gated multipart API and Sources UI without relaxing the HTTPS repository contract.'
 
 [[debt]]
 id          = 'keyless-repository-offers-a-refresh-that-always-fails'
 description = 'Disable Refresh with a localized "no signing key pinned" state for a repository that cannot refresh, instead of offering an enabled button that surfaces a raw trust error, and allow an existing repository row to have its key re-pinned from the admin UI.'
 discovered  = '2026-08-12'
-evidence    = 'The maintenance task already skips keyless repositories, but the admin page renders an enabled Refresh button for them and reports the infra trust error as a toast. The repository editor only creates new rows; it has no edit action for an existing one.'
+evidence    = 'The Sources view labels each repository trust tier, allows editing an existing database-backed source, and refreshes legal keyless third-party repositories only while unknown sources are enabled. The official keyless state remains disabled by the infra guard.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'Keyless third-party repositories are now an intentional unverified tier rather than a permanently broken row; administrators can edit and re-pin them, while the official source keeps its explicit fail-closed behavior.'
 
 [[debt]]
 id          = 'addon-catalog-refresh-is-not-http-conditional'

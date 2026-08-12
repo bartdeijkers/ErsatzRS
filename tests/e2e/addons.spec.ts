@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 
 const DATABASE_PATH = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
@@ -65,6 +65,12 @@ function openDatabase(): DatabaseSync {
   return database;
 }
 
+async function waitForHydration(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true))
+    .toBe(true);
+}
+
 function resetFixtures(): void {
   const database = openDatabase();
   try {
@@ -72,6 +78,9 @@ function resetFixtures(): void {
       .prepare('DELETE FROM "AddonInstallation" WHERE "AddonId" = ?')
       .run(FIXTURE_ADDON_ID);
     database.prepare('DELETE FROM "AddonRepository" WHERE "Id" = ?').run(FIXTURE_REPOSITORY_ID);
+    database
+      .prepare('DELETE FROM "ConfigElement" WHERE "Key" = ?')
+      .run('addons.allow_unverified_sources');
   } finally {
     database.close();
   }
@@ -83,9 +92,9 @@ function seedInstalledAddon(): void {
     database
       .prepare(`
         INSERT INTO "AddonInstallation" (
-          "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
-          "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
-        ) VALUES (?, NULL, ?, 0, ?, ?, ?, ?, ?, ?)
+          "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256",
+          "ContentSha256", "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt"
+        ) VALUES (?, NULL, 'sideloaded', ?, 0, ?, ?, ?, ?, 'sideload', ?, ?)
       `)
       .run(
         FIXTURE_ADDON_ID,
@@ -114,11 +123,12 @@ test.beforeEach(async ({ request }) => {
 test.afterEach(() => resetFixtures());
 
 test('manages trusted repositories through the hydrated settings page', async ({ page }) => {
-  await page.goto('/settings/addons');
+  await page.goto('/settings/addons?view=sources');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Add-ons', exact: true })).toBeVisible();
   await expect(page.getByTestId('addon-repository-row').filter({ hasText: 'Official ErsatzRS add-ons' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Add Repository' }).click();
+  await page.locator('button').filter({ hasText: 'Add repository' }).click();
   const editor = page.getByTestId('addon-repository-editor');
   await editor.locator('#addon-repository-name').fill('Example add-ons');
   await editor.locator('#addon-repository-url').fill('https://example.test/addons/index-v1.json');
@@ -131,22 +141,28 @@ test('manages trusted repositories through the hydrated settings page', async ({
   const row = page.getByTestId('addon-repository-row').filter({ hasText: 'Example add-ons' });
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
   await expect(row).toHaveCount(0);
 });
 
 test('renders declarative panels and persists normal and secret-reference settings', async ({
   page,
 }) => {
-  await page.goto('/settings/addons');
-  const installation = page.getByTestId('installed-addon-row').filter({ hasText: 'Fixture add-on' });
-  await expect(installation).toBeVisible();
-  await expect(installation.getByText('Rendered by the ErsatzRS host.')).toBeVisible();
+  await page.goto(`/settings/addons/${FIXTURE_ADDON_ID}`);
+  await waitForHydration(page);
+  await expect(page).toHaveURL(new RegExp(`/settings/addons/${FIXTURE_ADDON_ID}$`));
+  await expect(page.getByTestId('addon-detail-page')).toContainText('Fixture add-on');
+  await expect(page.getByText('Rendered by the ErsatzRS host.')).toBeVisible();
 
-  const labelSetting = installation
+  const labelSetting = page
     .getByTestId('addon-setting-row')
-    .filter({ hasText: 'Display label (DISPLAY_LABEL)' });
+    .filter({ hasText: 'Display label' });
   await labelSetting.locator('input').fill('Configured value');
-  await labelSetting.getByRole('button', { name: 'Save' }).click();
+  await Promise.all([
+    page.waitForEvent('load'),
+    labelSetting.getByRole('button', { name: 'Save' }).click(),
+  ]);
+  await waitForHydration(page);
 
   await expect
     .poll(() => {
@@ -161,12 +177,15 @@ test('renders declarative panels and persists normal and secret-reference settin
     })
     .toEqual({ Value: 'Configured value' });
 
-  const secretSetting = installation
+  const secretSetting = page
     .getByTestId('addon-setting-row')
-    .filter({ hasText: 'API token reference (API_TOKEN)' });
+    .filter({ hasText: 'API token reference' });
   await secretSetting.getByRole('combobox').selectOption('environment');
   await secretSetting.locator('input').fill('EXAMPLE_ADDON_TOKEN');
-  await secretSetting.getByRole('button', { name: 'Save' }).click();
+  await Promise.all([
+    page.waitForEvent('load'),
+    secretSetting.getByRole('button', { name: 'Save' }).click(),
+  ]);
 
   await expect
     .poll(() => {
@@ -185,4 +204,32 @@ test('renders declarative panels and persists normal and secret-reference settin
       }
     })
     .toEqual({ Value: null, ReferenceKind: 'environment', Reference: 'EXAMPLE_ADDON_TOKEN' });
+});
+
+test('opens the canonical detail page and confirms unknown sources', async ({ page }) => {
+  await page.goto('/settings/addons');
+  await waitForHydration(page);
+  const card = page.getByTestId('installed-addon-row').filter({ hasText: 'Fixture add-on' });
+  await card.getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveURL(new RegExp(`/settings/addons/${FIXTURE_ADDON_ID}$`));
+  await expect(page.getByRole('heading', { name: 'Fixture add-on' })).toBeVisible();
+  await waitForHydration(page);
+
+  await page.goto('/settings/addons?view=sources');
+  await waitForHydration(page);
+  await page.getByRole('button', { name: 'Enable', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Unknown sources');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect
+    .poll(() => {
+      const database = openDatabase();
+      try {
+        return database
+          .prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?')
+          .get('addons.allow_unverified_sources') as { Value: string } | undefined;
+      } finally {
+        database.close();
+      }
+    })
+    .toEqual({ Value: 'true' });
 });

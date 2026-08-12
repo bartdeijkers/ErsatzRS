@@ -1,24 +1,36 @@
-# Why signed add-ons are not a sandbox
+# Why add-on trust is not a sandbox
 
 ErsatzRS add-ons are separately packaged programs that the host starts as
-bounded child processes. Signing and process separation reduce several risks,
-but they answer different questions from operating-system confinement.
+bounded child processes. Provenance, package integrity, and process separation
+reduce different risks; none provides operating-system confinement.
 
-## What repository trust proves
+## Why trust has three tiers
 
-A trusted repository is pinned by identity, HTTPS location, and an Ed25519
-public key. Its detached signature authenticates the exact catalog bytes. The
-catalog then pins each package URL, size, and SHA-256 digest, while installation
-records a second digest of the extracted files.
+A mandatory signing key for every publisher would exclude private, offline,
+and local-development packages and make operating key infrastructure the entry
+price for a third-party repository. ErsatzRS therefore records how each
+installation was obtained instead of presenting every source as equally
+trusted.
 
-Together, those checks establish provenance and detect a catalog rollback,
-package substitution, or later package modification. They do not establish
-that the signed program is benign. Trusting a repository means trusting its
-publisher to choose and build the code that will run.
+- **Verified** means a repository's identity and Ed25519 public key are pinned.
+  The detached signature authenticates exact catalog bytes, which in turn pin
+  each package URL, size, and digest.
+- **Unverified** means an HTTPS repository has no signing key. Its package
+  sizes and digests still protect against accidental corruption, but origin
+  authenticity rests on TLS and the repository host.
+- **Sideloaded** means the operator supplied a local ZIP with no catalog. The
+  host validates and hashes that package, but there is no publisher provenance
+  or automatic update source.
 
-The exact catalog and package formats are defined by the
-[repository contract](../reference/addon-repositories.md) and
-[package contract](../reference/addon-packages.md).
+Unverified and sideloaded installs are behind one off-by-default **Unknown
+sources** gate. The tier remains attached to the installation so the add-on
+detail page, source manager, and health report can show the actual support and
+risk context later. Disabling the gate prevents new unverified activity; it
+does not pretend existing code disappeared.
+
+The exact catalog and package formats are defined by the [repository
+contract](../reference/addon-repositories.md) and [package
+contract](../reference/addon-packages.md).
 
 ## What the process boundary provides
 
@@ -36,15 +48,15 @@ account as ErsatzRS.
 
 Package permissions tell the operator which network hosts, media access,
 managed tools, and external commands a package expects. The host uses some of
-those declarations when constructing an invocation, but v1 does not install a
-portable operating-system sandbox or firewall policy.
+those declarations when constructing an invocation, but the current contract
+does not install a portable operating-system sandbox or firewall policy.
 
 An enabled malicious add-on can therefore attempt anything allowed to the
-ErsatzRS service account. Run ErsatzRS with the least filesystem and network
-access it needs, review third-party source and requested permissions, and treat
-a repository public key as a trust root rather than a safety certificate.
+ErsatzRS service account, regardless of its trust badge. Run ErsatzRS with the
+least filesystem and network access it needs, review requested permissions, and
+treat a repository key as a publisher identity rather than a safety
+certificate.
 
-[ADR 0066](../adr/0066-signed-repository-backed-add-ons.md) owns the decision to
-use signed repositories and out-of-process execution. The
-[runtime contract](../reference/addon-runtime.md) owns the exact implemented
-invocation behavior.
+[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the tiered-trust and
+out-of-process decision. The [runtime contract](../reference/addon-runtime.md)
+owns the exact implemented invocation behavior.

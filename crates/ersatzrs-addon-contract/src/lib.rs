@@ -9,10 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
-/// Current package-manifest schema.
-pub const ADDON_MANIFEST_VERSION: u32 = 1;
-/// Current repository-index schema.
-pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 1;
+/// Current package-manifest schema. Schema v1 remains readable.
+pub const ADDON_MANIFEST_VERSION: u32 = 2;
+/// Current repository-index schema. Schema v1 remains readable.
+pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 /// Health capability implemented by every executable add-on.
 pub const CAPABILITY_ADDON_CHECK_V1: &str = "addon.check.v1";
 /// Enumerate a Remote Stream playlist as bounded `NDJSON`.
@@ -50,6 +50,9 @@ pub struct AddonManifest {
     pub name: BTreeMap<String, String>,
     /// Localized short summaries, requiring en-US.
     pub summary: BTreeMap<String, String>,
+    /// Optional package-local icon rendered by the host.
+    #[serde(default)]
+    pub icon: Option<AddonPackageIcon>,
     /// SPDX license expression or identifier.
     pub license: String,
     /// Public source-code URL.
@@ -82,13 +85,19 @@ impl AddonManifest {
     ///
     /// Returns a safe validation error when the package cannot be installed.
     pub fn validate(&self) -> Result<(), ContractError> {
-        if self.manifest_version != ADDON_MANIFEST_VERSION {
+        if !(1..=ADDON_MANIFEST_VERSION).contains(&self.manifest_version) {
             return invalid("manifest_version", "unsupported schema version");
         }
         validate_addon_id(&self.id)?;
         validate_package_version(&self.version)?;
         require_english(&self.name, "name")?;
         require_english(&self.summary, "summary")?;
+        if self.manifest_version == 1 && self.icon.is_some() {
+            return invalid("icon", "requires manifest schema version 2");
+        }
+        if let Some(icon) = &self.icon {
+            icon.validate()?;
+        }
         if self.license.trim().is_empty() {
             return invalid("license", "must not be empty");
         }
@@ -157,6 +166,50 @@ impl AddonManifest {
     #[must_use]
     pub fn has_capability(&self, capability: &str) -> bool {
         self.capabilities.iter().any(|item| item.id == capability)
+    }
+}
+
+/// Optional package-local add-on icon.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonPackageIcon {
+    /// Relative path inside the extracted package.
+    pub path: String,
+    /// Exact supported media type.
+    pub media_type: AddonIconMediaType,
+}
+
+impl AddonPackageIcon {
+    fn validate(&self) -> Result<(), ContractError> {
+        if !is_safe_relative_path(&self.path) {
+            return invalid("icon.path", "must stay inside the package");
+        }
+        let expected_extension = match self.media_type {
+            AddonIconMediaType::Png => ".png",
+            AddonIconMediaType::Webp => ".webp",
+        };
+        if !self.path.to_ascii_lowercase().ends_with(expected_extension) {
+            return invalid("icon.path", "extension does not match media type");
+        }
+        Ok(())
+    }
+}
+
+/// Image formats accepted for add-on icons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonIconMediaType {
+    Png,
+    Webp,
+}
+
+impl AddonIconMediaType {
+    #[must_use]
+    pub const fn as_mime_type(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Webp => "image/webp",
+        }
     }
 }
 
@@ -415,6 +468,8 @@ pub struct CatalogAddon {
     pub version: Version,
     pub name: BTreeMap<String, String>,
     pub summary: BTreeMap<String, String>,
+    #[serde(default)]
+    pub icon: Option<CatalogAddonIcon>,
     pub license: String,
     pub source_url: String,
     pub host_version: VersionReq,
@@ -438,6 +493,9 @@ impl CatalogAddon {
         validate_package_version(&self.version)?;
         require_english(&self.name, "name")?;
         require_english(&self.summary, "summary")?;
+        if let Some(icon) = &self.icon {
+            icon.validate()?;
+        }
         if self.license.trim().is_empty() {
             return invalid("license", "must not be empty");
         }
@@ -472,6 +530,86 @@ impl CatalogAddon {
             if !is_sha256_hex(&package.sha256) {
                 return invalid("packages.sha256", "must be a hexadecimal SHA-256 digest");
             }
+        }
+        Ok(())
+    }
+}
+
+/// Signed remote icon metadata for a catalog entry.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogAddonIcon {
+    pub url: String,
+    pub media_type: AddonIconMediaType,
+    pub size: u64,
+    pub sha256: String,
+}
+
+impl CatalogAddonIcon {
+    fn validate(&self) -> Result<(), ContractError> {
+        if !is_https_url(&self.url) {
+            return invalid("icon.url", "must use HTTPS without userinfo");
+        }
+        if self.size == 0 || self.size > 2 * 1024 * 1024 {
+            return invalid("icon.size", "must be between 1 byte and 2 MiB");
+        }
+        if !is_sha256_hex(&self.sha256) {
+            return invalid("icon.sha256", "must be lowercase SHA-256 hex");
+        }
+        Ok(())
+    }
+}
+
+/// Persisted provenance assigned when an add-on is installed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonTrustTier {
+    Verified,
+    Unverified,
+    Sideloaded,
+}
+
+impl AddonTrustTier {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Verified => "verified",
+            Self::Unverified => "unverified",
+            Self::Sideloaded => "sideloaded",
+        }
+    }
+}
+
+/// Strict manifest carried by a repository installation ZIP.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryManifest {
+    pub id: String,
+    pub name: String,
+    pub index_url: String,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub description: BTreeMap<String, String>,
+}
+
+impl RepositoryManifest {
+    /// Validate a repository-package manifest before it becomes a trust record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the identity, display metadata, index URL, or
+    /// localized description violates the repository-package contract.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_addon_id(&self.id)?;
+        if self.name.trim().is_empty() || self.name.len() > 200 {
+            return invalid("name", "must be between 1 and 200 characters");
+        }
+        if !is_https_url(&self.index_url) {
+            return invalid("index_url", "must use HTTPS without userinfo");
+        }
+        if !self.description.is_empty() {
+            require_english(&self.description, "description")?;
         }
         Ok(())
     }
@@ -628,7 +766,10 @@ fn is_lower_identifier(value: &str) -> bool {
 }
 
 fn is_sha256_hex(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn is_https_url(value: &str) -> bool {
@@ -668,6 +809,7 @@ mod tests {
             version: Version::new(1, 0, 0),
             name: localized("Fixture"),
             summary: localized("Fixture add-on"),
+            icon: None,
             license: "GPL-3.0-or-later".to_owned(),
             source_url: "https://example.test/source".to_owned(),
             host_version: VersionReq::STAR,
@@ -693,6 +835,31 @@ mod tests {
         let mut manifest = valid_manifest();
         manifest.entrypoints.get_mut("any").unwrap().path = "../escape".to_owned();
         assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn schema_v1_remains_readable_but_cannot_declare_an_icon() {
+        let mut manifest = valid_manifest();
+        manifest.icon = Some(AddonPackageIcon {
+            path: "icon.png".to_owned(),
+            media_type: AddonIconMediaType::Png,
+        });
+        assert!(manifest.validate().is_err());
+
+        manifest.manifest_version = 2;
+        manifest.validate().expect("schema v2 icon");
+    }
+
+    #[test]
+    fn repository_package_manifest_accepts_an_optional_key() {
+        let manifest = RepositoryManifest {
+            id: "org.example.addons".to_owned(),
+            name: "Example add-ons".to_owned(),
+            index_url: "https://example.test/index-v2.json".to_owned(),
+            public_key: None,
+            description: localized("Example repository"),
+        };
+        manifest.validate().expect("valid repository package");
     }
 
     #[test]

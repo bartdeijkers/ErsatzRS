@@ -197,7 +197,12 @@ routed  = true
 
 [[route]]
 nav     = '/settings/addons'
-backing = 'localized signed repository, package lifecycle, permission, readiness, declarative panel, and manifest-rendered configuration management'
+backing = 'localized Installed/Browse/Updates/Sources manager with tiered trust, package and repository uploads, lifecycle actions, health, optional icons, and links to canonical add-on details'
+routed  = true
+
+[[route]]
+nav     = '/settings/addons/:addon_id'
+backing = 'localized per-add-on detail page with identity, provenance, source offers, permissions, configuration, readiness, declarative panels, and guarded lifecycle actions'
 routed  = true
 
 [[route]]

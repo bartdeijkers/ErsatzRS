@@ -78,6 +78,25 @@ pub fn build_app(app_state: AppState) -> Router {
     let api_router: Router = Router::new()
         .route("/healthz", get(super::bootstrap::healthz))
         .route(
+            "/api/addons/package",
+            post(api::addons::upload_addon_package).layer(DefaultBodyLimit::max(
+                api::addons::MAX_ADDON_UPLOAD_BYTES + 1024 * 1024,
+            )),
+        )
+        .route(
+            "/api/addons/repository-package",
+            post(api::addons::upload_repository_package)
+                .layer(DefaultBodyLimit::max(256 * 1024 + 64 * 1024)),
+        )
+        .route(
+            "/api/addons/installed-icon/{addon_id}",
+            get(api::addons::installed_icon),
+        )
+        .route(
+            "/api/addons/catalog-icon/{repository_id}/{addon_id}",
+            get(api::addons::catalog_icon),
+        )
+        .route(
             "/api/blocks/items/save",
             post(api::blocks::save_block_items_form),
         )

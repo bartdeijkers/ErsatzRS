@@ -434,6 +434,7 @@ pub struct AddonRepositoryRead {
     pub public_key: String,
     pub is_official: bool,
     pub is_enabled: bool,
+    pub trust_tier: String,
     pub last_sequence: Option<u64>,
     pub last_refresh: Option<String>,
     pub last_error: Option<String>,
@@ -446,6 +447,7 @@ pub struct AvailableAddonRead {
     pub addon: ersatzrs_addon_contract::CatalogAddon,
     pub host_compatible: bool,
     pub package_available: bool,
+    pub icon_url: Option<String>,
 }
 
 /// Persisted, unresolved setting value or secret reference.
@@ -464,19 +466,32 @@ pub struct InstalledAddonRead {
     pub repository_id: Option<String>,
     pub version: String,
     pub enabled: bool,
+    pub trust_tier: String,
     pub manifest: ersatzrs_addon_contract::AddonManifest,
     pub settings: Vec<AddonSettingRead>,
     pub last_check_code: Option<String>,
     pub last_check_message: Option<String>,
+    pub last_check_at: Option<String>,
+    pub installed_at: String,
+    pub updated_at: String,
+    pub icon_url: Option<String>,
 }
 
 /// Complete read model for the add-on settings page.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonOverviewRead {
+    pub unverified_sources_enabled: bool,
     pub repositories_are_deployment_managed: bool,
     pub repositories: Vec<AddonRepositoryRead>,
     pub available: Vec<AvailableAddonRead>,
     pub installed: Vec<InstalledAddonRead>,
+}
+
+/// Bounded package artwork served through the host-owned admin API.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddonIconRead {
+    pub bytes: Vec<u8>,
+    pub content_type: String,
 }
 
 /// Editable trusted repository identity. Public signing keys are not secrets.
@@ -519,6 +534,10 @@ impl AddonRuntimeError {
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
     async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError>;
+    async fn installed_icon(
+        &self,
+        addon_id: String,
+    ) -> Result<Option<AddonIconRead>, AddonRuntimeError>;
     async fn save_repository(
         &self,
         repository: AddonRepositoryEdit,
@@ -529,6 +548,12 @@ pub trait AddonRuntime: Send + Sync {
         &self,
         repository_id: String,
         addon_id: String,
+    ) -> Result<(), AddonRuntimeError>;
+    async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError>;
+    async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
+    async fn install_repository_from_package(
+        &self,
+        archive: Vec<u8>,
     ) -> Result<(), AddonRuntimeError>;
     async fn save_setting(&self, setting: AddonSettingEdit) -> Result<(), AddonRuntimeError>;
     async fn check(&self, addon_id: String) -> Result<String, AddonRuntimeError>;

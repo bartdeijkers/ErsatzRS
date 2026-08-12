@@ -77,7 +77,7 @@ The database owns repository, installation, setting, media, schedule, and
 playout state; the managed state directories own verified packages and
 per-add-on data. [ADR 0051](../adr/0051-application-boundary-and-composition-root.md)
 owns the application/composition-root decision, and
-[ADR 0066](../adr/0066-signed-repository-backed-add-ons.md) owns the add-on
+[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the add-on
 boundary.
 
 ## Evidence and excluded future state

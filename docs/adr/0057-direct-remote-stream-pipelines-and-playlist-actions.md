@@ -5,7 +5,7 @@
 Accepted (2026-07-29; revised 2026-08-09)
 
 The raw `script:` source and command-parsing portions are superseded by [ADR
-0066](0066-signed-repository-backed-add-ons.md). Direct producer-to-FFmpeg
+0066](0066-repository-backed-add-ons.md). Direct producer-to-FFmpeg
 piping, cancellation, bounded diagnostics, source-side seeking, and playlist
 actions remain active for add-on-backed producers.
 
