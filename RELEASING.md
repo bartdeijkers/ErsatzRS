@@ -1,8 +1,10 @@
 # Releasing
 
-ErsatzRS publishes beta prereleases while Phase 7 parity work continues. The
-release workflow builds Linux and Windows binary archives and publishes GHCR
-Docker images from annotated version tags.
+ErsatzRS publishes Windows-only beta prereleases while parity work continues.
+For non-beta annotated version tags, the release workflow builds Linux and
+Windows binary archives and publishes GHCR Docker images. Beta tags use the
+separate Windows-only path documented below and do not publish Linux archives
+or Docker images.
 
 ## Versioning
 
@@ -31,8 +33,9 @@ git push origin v0.1.0
 4. Create a new empty `[Unreleased]` section.
 5. Add or update the compare links at the bottom of `CHANGELOG.md`.
 6. Tag the release.
-7. Let the release workflow create the Linux and Windows binary archives and
-   GHCR Docker image.
+7. Let the release workflow create the artifacts for the selected release
+   type: Windows-only for a beta, or Linux and Windows archives plus the GHCR
+   image for a non-beta release.
 8. Verify the GitHub release notes match the changelog, which is the canonical
    release overview.
 
