@@ -139,7 +139,7 @@ impl FfprobeExtractor {
         timeout: StdDuration,
     ) -> Result<FfprobeMediaVersion> {
         let label = redacted_source_label(&stream.source);
-        let (args, mut producer) = self.remote_probe_command(stream, &label)?;
+        let (args, mut producer) = Self::remote_probe_command(stream, &label)?;
         let mut process = Command::new(&self.ffprobe_path);
         process
             .args(&args)
@@ -201,8 +201,8 @@ impl FfprobeExtractor {
             path: label.clone(),
             source: std::io::Error::other("ffprobe did not expose stderr"),
         })?;
-        let mut stdout_task = tokio::spawn(read_remote_ffprobe_stdout(stdout));
-        let mut stderr_task = tokio::spawn(read_stderr_tail(stderr));
+        let stdout_task = tokio::spawn(read_remote_ffprobe_stdout(stdout));
+        let stderr_task = tokio::spawn(read_stderr_tail(stderr));
         let status = match tokio::time::timeout(timeout, child.wait()).await {
             Ok(Ok(status)) => status,
             Ok(Err(source)) => {
@@ -227,6 +227,16 @@ impl FfprobeExtractor {
             }
         };
         shutdown_remote_producer(&mut producer_pipe).await;
+        let (stdout, stderr) =
+            Self::collect_remote_ffprobe_output(stdout_task, stderr_task, &label).await?;
+        finish_remote_ffprobe(status, &label, &stdout, &stderr, stream)
+    }
+
+    async fn collect_remote_ffprobe_output(
+        mut stdout_task: tokio::task::JoinHandle<std::io::Result<Vec<u8>>>,
+        mut stderr_task: tokio::task::JoinHandle<String>,
+        label: &str,
+    ) -> Result<(Vec<u8>, String)> {
         let readers = tokio::time::timeout(REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT, async {
             let stdout = (&mut stdout_task)
                 .await
@@ -237,42 +247,26 @@ impl FfprobeExtractor {
             Ok::<_, std::io::Error>((stdout, stderr))
         })
         .await;
-        let (stdout, stderr) = match readers {
-            Ok(Ok(output)) => output,
-            Ok(Err(source)) => {
-                return Err(FfprobeError::Spawn {
-                    path: label,
-                    source,
-                });
-            }
+        match readers {
+            Ok(Ok(output)) => Ok(output),
+            Ok(Err(source)) => Err(FfprobeError::Spawn {
+                path: label.to_owned(),
+                source,
+            }),
             Err(_) => {
                 stdout_task.abort();
                 stderr_task.abort();
                 let _ = stdout_task.await;
                 let _ = stderr_task.await;
-                return Err(FfprobeError::Spawn {
-                    path: label,
+                Err(FfprobeError::Spawn {
+                    path: label.to_owned(),
                     source: std::io::Error::other("ffprobe output pipes did not close"),
-                });
+                })
             }
-        };
-        if !status.success() {
-            return Err(FfprobeError::Process {
-                path: label,
-                status,
-                stderr: redact_remote_stream_output(&stderr, stream),
-            });
         }
-        parse_ffprobe_json(Path::new("remote-stream"), &stdout).map_err(|source| {
-            FfprobeError::Json {
-                path: label,
-                source,
-            }
-        })
     }
 
     fn remote_probe_command(
-        &self,
         stream: &ResolvedRemoteStream,
         label: &str,
     ) -> Result<(Vec<String>, Option<crate::addons::ManagedAddonChild>)> {
@@ -308,6 +302,26 @@ impl FfprobeExtractor {
         };
         Ok((args, producer))
     }
+}
+
+fn finish_remote_ffprobe(
+    status: std::process::ExitStatus,
+    label: &str,
+    stdout: &[u8],
+    stderr: &str,
+    stream: &ResolvedRemoteStream,
+) -> Result<FfprobeMediaVersion> {
+    if !status.success() {
+        return Err(FfprobeError::Process {
+            path: label.to_owned(),
+            status,
+            stderr: redact_remote_stream_output(stderr, stream),
+        });
+    }
+    parse_ffprobe_json(Path::new("remote-stream"), stdout).map_err(|source| FfprobeError::Json {
+        path: label.to_owned(),
+        source,
+    })
 }
 
 async fn read_remote_ffprobe_stdout(

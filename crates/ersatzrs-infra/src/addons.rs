@@ -671,7 +671,7 @@ pub async fn install_addon(
         .raw_json
         .as_deref()
         .ok_or_else(|| AddonError::NotFound("repository has not been refreshed".to_owned()))?;
-    let index: AddonRepositoryIndex = serde_json::from_str(&raw_catalog)
+    let index: AddonRepositoryIndex = serde_json::from_str(raw_catalog)
         .map_err(|_| AddonError::Validation("stored catalog is invalid".to_owned()))?;
     validate_catalog(&index, &repository, Utc::now())?;
     let addon = index
@@ -719,7 +719,6 @@ pub async fn install_addon(
         installed.as_ref(),
         addon,
         package,
-        rid,
     )
     .await
 }
@@ -732,8 +731,8 @@ async fn install_catalog_package(
     previous_installation: Option<&InstalledAddon>,
     addon: &CatalogAddon,
     package: &CatalogPackage,
-    rid: &str,
 ) -> Result<InstalledAddon, AddonError> {
+    let rid = current_rid()?;
     let (archive, package_sha256) = download_catalog_package(client, package).await?;
     let staged = stage_catalog_package(addon, rid, archive, package_sha256).await?;
     persist_staged_addon(
@@ -1659,16 +1658,13 @@ async fn run_bounded_command(
         let _ = stderr_task.await;
         return Err(AddonError::Process("entrypoint timed out".to_owned()));
     };
-    let status = match wait_result {
-        Ok(status) => status,
-        Err(_) => {
-            let _ = child.start_kill();
-            stdout_task.abort();
-            stderr_task.abort();
-            let _ = stdout_task.await;
-            let _ = stderr_task.await;
-            return Err(AddonError::Process("entrypoint wait failed".to_owned()));
-        }
+    let Ok(status) = wait_result else {
+        let _ = child.start_kill();
+        stdout_task.abort();
+        stderr_task.abort();
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+        return Err(AddonError::Process("entrypoint wait failed".to_owned()));
     };
     let _ = child.start_kill();
     let (stdout, stderr) = collect_bounded_output(stdout_task, stderr_task).await?;
@@ -1709,17 +1705,16 @@ async fn collect_bounded_output(
         Ok::<_, AddonError>((stdout, stderr))
     })
     .await;
-    match readers {
-        Ok(result) => result,
-        Err(_) => {
-            stdout_task.abort();
-            stderr_task.abort();
-            let _ = stdout_task.await;
-            let _ = stderr_task.await;
-            Err(AddonError::Process(
-                "entrypoint output pipes did not close".to_owned(),
-            ))
-        }
+    if let Ok(result) = readers {
+        result
+    } else {
+        stdout_task.abort();
+        stderr_task.abort();
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+        Err(AddonError::Process(
+            "entrypoint output pipes did not close".to_owned(),
+        ))
     }
 }
 
@@ -2223,31 +2218,10 @@ async fn upsert_repository_row(
     validate_repository_entry(entry)?;
     for _ in 0..MAX_REPOSITORY_RECONCILE_ATTEMPTS {
         let Some(existing) = load_persisted_repository_state(pool, &entry.id).await? else {
-            let insert = sqlx::query(
-                r#"INSERT INTO "AddonRepository" (
-                       "Id", "Name", "IndexUrl", "PublicKey", "IsOfficial", "IsEnabled"
-                   ) VALUES (?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(&entry.id)
-            .bind(&entry.name)
-            .bind(&entry.index_url)
-            .bind(&entry.public_key)
-            .bind(i32::from(entry.official))
-            .bind(i32::from(entry.enabled))
-            .execute(pool)
-            .await;
-            match insert {
-                Ok(_) => return Ok(()),
-                Err(error) => {
-                    if load_persisted_repository_state(pool, &entry.id)
-                        .await?
-                        .is_none()
-                    {
-                        return Err(database_error(error));
-                    }
-                    continue;
-                }
+            if insert_repository_row(pool, entry).await? {
+                return Ok(());
             }
+            continue;
         };
         let unchanged = existing.name == entry.name
             && existing.index_url == entry.index_url
@@ -2257,74 +2231,113 @@ async fn upsert_repository_row(
         if unchanged {
             return Ok(());
         }
-        let trust_changed =
-            existing.index_url != entry.index_url || existing.public_key != entry.public_key;
-        let updated = if trust_changed {
-            sqlx::query(
-                r#"UPDATE "AddonRepository"
-                   SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
-                       "IsOfficial" = ?, "IsEnabled" = ?, "LastSequence" = NULL,
-                       "LastRefresh" = NULL, "LastError" = NULL, "CatalogJson" = NULL,
-                       "CatalogEtag" = NULL, "CatalogLastModified" = NULL,
-                       "StateRevision" = "StateRevision" + 1,
-                       "CatalogRevision" = "CatalogRevision" + 1
-                   WHERE "Id" = ? AND "StateRevision" = ?"#,
-            )
-            .bind(&entry.name)
-            .bind(&entry.index_url)
-            .bind(&entry.public_key)
-            .bind(i32::from(entry.official))
-            .bind(i32::from(entry.enabled))
-            .bind(&entry.id)
-            .bind(existing.state_revision)
-            .execute(pool)
-            .await
-            .map_err(database_error)?
-        } else if existing.is_enabled != entry.enabled {
-            sqlx::query(
-                r#"UPDATE "AddonRepository"
-                   SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
-                       "IsOfficial" = ?, "IsEnabled" = ?,
-                       "StateRevision" = "StateRevision" + 1,
-                       "CatalogRevision" = "CatalogRevision" + 1
-                   WHERE "Id" = ? AND "StateRevision" = ?"#,
-            )
-            .bind(&entry.name)
-            .bind(&entry.index_url)
-            .bind(&entry.public_key)
-            .bind(i32::from(entry.official))
-            .bind(i32::from(entry.enabled))
-            .bind(&entry.id)
-            .bind(existing.state_revision)
-            .execute(pool)
-            .await
-            .map_err(database_error)?
-        } else {
-            sqlx::query(
-                r#"UPDATE "AddonRepository"
-                   SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
-                       "IsOfficial" = ?, "IsEnabled" = ?,
-                       "StateRevision" = "StateRevision" + 1
-                   WHERE "Id" = ? AND "StateRevision" = ?"#,
-            )
-            .bind(&entry.name)
-            .bind(&entry.index_url)
-            .bind(&entry.public_key)
-            .bind(i32::from(entry.official))
-            .bind(i32::from(entry.enabled))
-            .bind(&entry.id)
-            .bind(existing.state_revision)
-            .execute(pool)
-            .await
-            .map_err(database_error)?
-        };
-        if updated.rows_affected() == 1 {
+        if update_repository_row(pool, entry, &existing).await? == 1 {
             return Ok(());
         }
     }
     Err(AddonError::Trust(
         "repository configuration kept changing during reconciliation".to_owned(),
     ))
+}
+
+async fn insert_repository_row(
+    pool: &DbPool,
+    entry: &TrustedRepositoryEntry,
+) -> Result<bool, AddonError> {
+    let insert = sqlx::query(
+        r#"INSERT INTO "AddonRepository" (
+               "Id", "Name", "IndexUrl", "PublicKey", "IsOfficial", "IsEnabled"
+           ) VALUES (?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&entry.id)
+    .bind(&entry.name)
+    .bind(&entry.index_url)
+    .bind(&entry.public_key)
+    .bind(i32::from(entry.official))
+    .bind(i32::from(entry.enabled))
+    .execute(pool)
+    .await;
+    match insert {
+        Ok(_) => Ok(true),
+        Err(error) => {
+            if load_persisted_repository_state(pool, &entry.id)
+                .await?
+                .is_none()
+            {
+                return Err(database_error(error));
+            }
+            Ok(false)
+        }
+    }
+}
+
+async fn update_repository_row(
+    pool: &DbPool,
+    entry: &TrustedRepositoryEntry,
+    existing: &PersistedRepositoryState,
+) -> Result<u64, AddonError> {
+    let trust_changed =
+        existing.index_url != entry.index_url || existing.public_key != entry.public_key;
+    let updated = if trust_changed {
+        sqlx::query(
+            r#"UPDATE "AddonRepository"
+               SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
+                   "IsOfficial" = ?, "IsEnabled" = ?, "LastSequence" = NULL,
+                   "LastRefresh" = NULL, "LastError" = NULL, "CatalogJson" = NULL,
+                   "CatalogEtag" = NULL, "CatalogLastModified" = NULL,
+                   "StateRevision" = "StateRevision" + 1,
+                   "CatalogRevision" = "CatalogRevision" + 1
+               WHERE "Id" = ? AND "StateRevision" = ?"#,
+        )
+        .bind(&entry.name)
+        .bind(&entry.index_url)
+        .bind(&entry.public_key)
+        .bind(i32::from(entry.official))
+        .bind(i32::from(entry.enabled))
+        .bind(&entry.id)
+        .bind(existing.state_revision)
+        .execute(pool)
+        .await
+        .map_err(database_error)?
+    } else if existing.is_enabled != entry.enabled {
+        sqlx::query(
+            r#"UPDATE "AddonRepository"
+               SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
+                   "IsOfficial" = ?, "IsEnabled" = ?,
+                   "StateRevision" = "StateRevision" + 1,
+                   "CatalogRevision" = "CatalogRevision" + 1
+               WHERE "Id" = ? AND "StateRevision" = ?"#,
+        )
+        .bind(&entry.name)
+        .bind(&entry.index_url)
+        .bind(&entry.public_key)
+        .bind(i32::from(entry.official))
+        .bind(i32::from(entry.enabled))
+        .bind(&entry.id)
+        .bind(existing.state_revision)
+        .execute(pool)
+        .await
+        .map_err(database_error)?
+    } else {
+        sqlx::query(
+            r#"UPDATE "AddonRepository"
+               SET "Name" = ?, "IndexUrl" = ?, "PublicKey" = ?,
+                   "IsOfficial" = ?, "IsEnabled" = ?,
+                   "StateRevision" = "StateRevision" + 1
+               WHERE "Id" = ? AND "StateRevision" = ?"#,
+        )
+        .bind(&entry.name)
+        .bind(&entry.index_url)
+        .bind(&entry.public_key)
+        .bind(i32::from(entry.official))
+        .bind(i32::from(entry.enabled))
+        .bind(&entry.id)
+        .bind(existing.state_revision)
+        .execute(pool)
+        .await
+        .map_err(database_error)?
+    };
+    Ok(updated.rows_affected())
 }
 
 async fn load_persisted_repository_state(
@@ -3602,8 +3615,8 @@ mod tests {
         assert!(load_installed_addon(&pool, &manifest.id).await.is_err());
     }
 
-    #[tokio::test]
-    async fn migration_seeds_an_operator_replaceable_official_repository() {
+    /// Fresh database plus the official repository row the migration seeds.
+    async fn seeded_official_repository() -> (tempfile::TempDir, DbPool, TrustedAddonRepository) {
         let temp = tempfile::tempdir().expect("temp directory");
         let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
         let pool = crate::db::init(&database_url)
@@ -3613,10 +3626,15 @@ mod tests {
             .await
             .expect("load repository")
             .expect("seeded repository");
-        assert!(seeded.is_official);
-        assert_eq!(seeded.index_url, OFFICIAL_REPOSITORY_INDEX_URL);
-        assert!(seeded.public_key.is_empty());
+        (temp, pool, seeded)
+    }
 
+    /// Give the seeded official repository cached catalog state, then pin a new
+    /// public key over it. Returns the pinned key and the reloaded row.
+    async fn pin_official_public_key(
+        pool: &DbPool,
+        seeded: TrustedAddonRepository,
+    ) -> (String, TrustedAddonRepository) {
         let signing_key = SigningKey::from_bytes(&[9; 32]);
         let public_key = base64::engine::general_purpose::STANDARD
             .encode(signing_key.verifying_key().as_bytes());
@@ -3627,11 +3645,11 @@ mod tests {
                WHERE "Id" = ?"#,
         )
         .bind(OFFICIAL_REPOSITORY_ID)
-        .execute(&pool)
+        .execute(pool)
         .await
         .expect("seed previous trust state");
         save_trusted_repository(
-            &pool,
+            pool,
             &TrustedAddonRepository {
                 public_key: public_key.clone(),
                 is_official: false,
@@ -3640,10 +3658,27 @@ mod tests {
         )
         .await
         .expect("pin public key");
-        let updated = load_repository_row(&pool, OFFICIAL_REPOSITORY_ID)
+        let updated = load_repository_row(pool, OFFICIAL_REPOSITORY_ID)
             .await
             .expect("reload repository")
             .expect("updated repository");
+        (public_key, updated)
+    }
+
+    #[tokio::test]
+    async fn migration_seeds_an_operator_replaceable_official_repository() {
+        let (_temp, _pool, seeded) = seeded_official_repository().await;
+        assert!(seeded.is_official);
+        assert_eq!(seeded.index_url, OFFICIAL_REPOSITORY_INDEX_URL);
+        assert!(seeded.public_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn pinning_a_new_official_public_key_clears_cached_catalog_state() {
+        let (_temp, pool, seeded) = seeded_official_repository().await;
+        let (public_key, updated) = pin_official_public_key(&pool, seeded).await;
+
+        // The official flag is owned by the migration, not by the caller.
         assert!(updated.is_official);
         assert_eq!(updated.public_key, public_key);
         assert_eq!(updated.last_sequence, None);
@@ -3658,6 +3693,12 @@ mod tests {
         assert!(cleared_cache.etag.is_none());
         assert!(cleared_cache.last_modified.is_none());
         assert_eq!(cleared_cache.public_key, public_key);
+    }
+
+    #[tokio::test]
+    async fn saving_unchanged_official_trust_state_preserves_cached_catalog_state() {
+        let (_temp, pool, seeded) = seeded_official_repository().await;
+        let (_public_key, updated) = pin_official_public_key(&pool, seeded).await;
 
         sqlx::query(
             r#"UPDATE "AddonRepository"

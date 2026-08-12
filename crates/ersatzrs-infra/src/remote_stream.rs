@@ -1022,13 +1022,12 @@ async fn run_remote_stream_producer(
 }
 
 async fn finish_stderr_task(mut task: JoinHandle<String>) -> String {
-    match tokio::time::timeout(STDERR_READER_SHUTDOWN_TIMEOUT, &mut task).await {
-        Ok(result) => result.unwrap_or_default(),
-        Err(_) => {
-            task.abort();
-            let _ = task.await;
-            String::new()
-        }
+    if let Ok(result) = tokio::time::timeout(STDERR_READER_SHUTDOWN_TIMEOUT, &mut task).await {
+        result.unwrap_or_default()
+    } else {
+        task.abort();
+        let _ = task.await;
+        String::new()
     }
 }
 
