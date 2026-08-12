@@ -3670,7 +3670,15 @@ mod tests {
         let (_temp, _pool, seeded) = seeded_official_repository().await;
         assert!(seeded.is_official);
         assert_eq!(seeded.index_url, OFFICIAL_REPOSITORY_INDEX_URL);
-        assert!(seeded.public_key.is_empty());
+        // The 202608111200 seed shipped an empty key because the official
+        // repository was not published yet; 202608121200 pins the production
+        // key, so a fresh database must now come up able to verify the signed
+        // catalog rather than failing every refresh.
+        assert!(
+            !seeded.public_key.is_empty(),
+            "the official repository must ship with its production public key"
+        );
+        decode_public_key(&seeded.public_key).expect("seeded key is a canonical Ed25519 key");
     }
 
     #[tokio::test]
