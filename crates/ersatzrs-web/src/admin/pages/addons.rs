@@ -188,7 +188,6 @@ fn AddonsSettingsIsland(
                 <div>
                     <h1>{tr(TextKey::Addons)}</h1>
                     <p>{tr(TextKey::ThirdPartyRepositoryWarning)}</p>
-                    <p class=style::muted>{tr(TextKey::AddonRepositories)}</p>
                 </div>
                 <button
                     type="button"
@@ -454,6 +453,7 @@ fn manager_body(
                 </div>
             </div>
 
+            <h2 class=style::section_heading>{tr(TextKey::AddonRepositories)}</h2>
             <div class=style::repository_list>
                 {data.repositories.into_iter().map(|repository| {
                     let refresh_id = repository.id.clone();
@@ -773,7 +773,15 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                     <dt>{tr(TextKey::License)}</dt><dd>{license}</dd>
                     <dt>{tr(TextKey::Capabilities)}</dt><dd>{permissions.0.join(", ")}</dd>
                 </dl>
-                <a href=source_url target="_blank" rel="noopener noreferrer">{tr(TextKey::Source)}</a>
+                // Distinct from the `Source` fact above, which names the
+                // repository this add-on came from; this points at the
+                // manifest's public source-code URL.
+                <a
+                    class=style::source_link
+                    href=source_url
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >{tr(TextKey::ViewSourceCode)}</a>
                 {permissions_view(&permissions.0, &permissions.1)}
                 {dependencies_view(&dependencies)}
                 <div class=style::offer_list>

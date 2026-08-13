@@ -15,6 +15,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Two rendering defects in the Settings > Add-ons manager. An "Add-on
+  repositories" caption sat in the page header, where it labelled all four
+  views instead of the repository list it describes; it now heads that list in
+  the Sources view. And on an add-on's detail page the link to its public
+  source-code URL had no styling of its own, so it inherited body text colour
+  and read as a label rather than a link — directly below a "Source" fact
+  naming the repository the add-on came from, leaving two different things
+  wearing the same word. The link is now styled as one and reads "View source
+  code", translated in every supported culture.
 - Connecting to MySQL 8 failed outright with "RSA auth backend disabled".
   MySQL 8 defaults to the `caching_sha2_password` plugin, whose first
   password exchange on a connection needs either TLS or an RSA public-key

@@ -1070,6 +1070,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Enabled => "Ingeschakeld",
         TextKey::Disabled => "Uitgeschakeld",
         TextKey::Source => "Bron",
+        TextKey::ViewSourceCode => "Broncode bekijken",
         TextKey::Version => "Versie",
         TextKey::NoAddonsMatch => "Geen add-ons voldoen aan deze filters.",
         TextKey::AddonRepositories => "Add-onrepositories",

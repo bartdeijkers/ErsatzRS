@@ -20,8 +20,36 @@
 .detail h2,
 .card h2,
 .repository h3,
-.security-card h2 {
+.security-card h2,
+.section-heading {
     margin: 0;
+}
+
+/* Labels the repository list inside the Sources view. This text used to sit in
+   the page header, where it captioned all four views instead of the one
+   section it actually describes. */
+.section-heading {
+    font-size: 1rem;
+}
+
+/* The manifest's public source-code URL, and the only link in .detail-section.
+   Without a rule of its own it inherited body text colour and read as a label
+   rather than a link — next to a `Source` fact naming the repository, that was
+   two different things wearing the same word. */
+.source-link {
+    justify-self: start;
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.source-link:hover {
+    text-decoration: underline;
+}
+
+.source-link:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius);
 }
 
 .page-header p,

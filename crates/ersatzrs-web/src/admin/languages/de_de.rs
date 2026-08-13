@@ -378,6 +378,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Enabled => "Aktiviert",
         TextKey::Disabled => "Deaktiviert",
         TextKey::Source => "Quelle",
+        TextKey::ViewSourceCode => "Quellcode ansehen",
         TextKey::Version => "Version",
         TextKey::NoAddonsMatch => "Keine Add-ons entsprechen diesen Filtern.",
         TextKey::AddonRepositories => "Add-on-Repositorys",
