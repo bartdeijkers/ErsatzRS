@@ -1,0 +1,188 @@
+/* Facet rail — a fixed-height row of filter chips with a CSS-only disclosure.
+ *
+ * Collapsed (default) the chips sit on one horizontally scrollable line, so a
+ * library with 500 tags costs the same vertical space as one with three. The
+ * checkbox toggle re-flows the same chips into a wrapped, height-capped cloud;
+ * no chip is ever removed from the DOM, so keyboard tabbing and in-page find
+ * keep reaching every facet in both states. */
+.bar {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-table-line);
+}
+
+/* Out of the grid flow: the checkbox only carries expanded/collapsed state.
+   It stays focusable (never `display:none`) and lends its focus ring to the
+   label that renders the affordance. */
+.toggle {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin: 0;
+    color: var(--color-gray-400);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.count {
+    min-width: 1.25rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: var(--color-table-hover);
+    color: var(--color-text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-align: center;
+}
+
+.rail {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+    min-width: 0;
+    /* Vertical padding leaves room for the chip focus ring. */
+    padding: 0.25rem 0.125rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    /* Fades the trailing chip instead of cutting it, which reads as
+       "keep scrolling" without needing a scrollbar in a 2rem-tall row. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+.rail::-webkit-scrollbar {
+    display: none;
+}
+
+.chip {
+    flex: 0 0 auto;
+    max-width: 14rem;
+    height: 1.75rem;
+    padding: 0 0.7rem;
+    border: 1px solid var(--chip-border);
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--chip-fg);
+    font-size: 0.8125rem;
+    line-height: 1.625rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+
+.chip:hover {
+    border-color: var(--chip-fg-hover);
+    background: var(--chip-bg-hover);
+    color: var(--chip-fg-hover);
+}
+
+.chip:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.chip-active {
+    border-color: var(--chip-bg-active);
+    background: var(--chip-bg-active);
+    color: var(--chip-fg-active);
+    font-weight: 500;
+}
+
+.more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    color: var(--color-gray-400);
+    cursor: pointer;
+}
+
+.more:hover {
+    background: var(--color-table-hover);
+    color: var(--color-text-primary);
+}
+
+.chevron {
+    transition: transform 150ms;
+}
+
+/* Expanded: same chips, wrapped and capped at roughly four rows. */
+.toggle:checked ~ .rail {
+    flex-wrap: wrap;
+    max-height: 9.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+    mask-image: none;
+    -webkit-mask-image: none;
+}
+
+.toggle:checked ~ .rail::-webkit-scrollbar {
+    display: block;
+    width: 0.5rem;
+}
+
+.toggle:checked ~ .more .chevron {
+    transform: rotate(180deg);
+}
+
+.toggle:focus-visible ~ .more {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rail {
+        scroll-behavior: auto;
+    }
+
+    .chip,
+    .chevron {
+        transition: none;
+    }
+}
+
+@media (max-width: 48rem) {
+    .bar {
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+    }
+
+    /* Keep the count and the disclosure; the word is redundant next to chips. */
+    .label-text {
+        display: none;
+    }
+
+    .chip {
+        max-width: 10rem;
+    }
+
+    .toggle:checked ~ .rail {
+        max-height: 7.5rem;
+    }
+}

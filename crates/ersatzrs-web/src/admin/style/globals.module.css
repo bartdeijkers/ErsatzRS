@@ -61,6 +61,16 @@
     --color-gray-300:    #d1d5db;
     --color-gray-400:    #9ca3af;
     --radius:            4px;
+
+    /* Filter chips (facet rails, metadata facts). Derived from the palette
+       above so the light theme inherits them without a second definition. */
+    --chip-bg:           var(--color-surface);
+    --chip-fg:           var(--color-text-secondary);
+    --chip-border:       var(--color-table-line);
+    --chip-bg-hover:     var(--color-primary-20);
+    --chip-fg-hover:     var(--color-primary);
+    --chip-bg-active:    var(--color-primary);
+    --chip-fg-active:    var(--color-on-primary);
 }
 
 [data-theme="light"] {

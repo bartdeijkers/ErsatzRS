@@ -124,6 +124,19 @@ release section when tagging a release.
 
 ### Changed
 
+- The tag facets on the remote-streams browser no longer push the card grid off
+  the screen. On a tag-heavy library the wrapped chip cloud grew without limit
+  and filled most of the viewport before a single stream was visible. Tags now
+  render through a shared facet rail: one fixed-height row of chips that
+  scrolls sideways, with a CSS-only disclosure that expands the same chips into
+  a height-capped cloud. The rail also shows how many tags exist, marks the tag
+  currently filtered on, and offers an "All" chip to clear the filter — which
+  previously required editing the URL. No hydration is involved, so it behaves
+  identically in the `<noscript>` fallback. Facet links on the media detail
+  pages (tags, genres, studios, languages, people) now share the same chip
+  palette and focus ring, and pick up the light theme instead of a hard-coded
+  dark-theme green.
+
 - Add-on trust is now tiered rather than all-or-nothing (ADR 0066). Verified
   repositories keep detached Ed25519 catalog signatures; unverified HTTPS
   repositories and sideloaded add-on or repository ZIPs require one

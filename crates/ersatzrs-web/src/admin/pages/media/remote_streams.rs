@@ -22,6 +22,7 @@ use crate::admin::server_fns::media_browser::{
     MediaCardRow,
 };
 use crate::admin::ui::primitives::card::first_letter_placeholder;
+use crate::admin::ui::primitives::facet_bar::{FacetBar, FacetLink};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
@@ -67,7 +68,7 @@ pub fn RemoteStreamsPage() -> impl IntoView {
     );
 
     view! {
-        <RemoteStreamTagFacets/>
+        <RemoteStreamTagFacets query=query.clone()/>
         <RemoteStreamsNoScriptFallback query=query.clone() page=page/>
         <Suspense fallback=admin_loading_resource_view>
             {move || {
@@ -90,20 +91,51 @@ pub fn RemoteStreamsPage() -> impl IntoView {
 }
 
 #[component]
-fn RemoteStreamTagFacets() -> impl IntoView {
+fn RemoteStreamTagFacets(query: String) -> impl IntoView {
     let tags = Resource::new(|| (), |()| list_remote_stream_tags());
+    let active = active_tag(&query);
     view! {
         <Suspense fallback=|| ()>
-            {move || tags.get().map(|result| admin_result_view(result, |tags| view! {
-                <nav class=style::facet_chips aria-label=tr(TextKey::Tags)>
-                    {tags.into_iter().map(|tag| {
-                        let href = format!("{BASE_PATH}?query={}", urlencoding::encode(&format!("tag:\"{tag}\"")));
-                        view! { <a class=style::facet_chip href=href>{tag}</a> }
-                    }).collect_view()}
-                </nav>
-            }.into_any()))}
+            {move || {
+                let active = active.clone();
+                tags.get().map(|result| admin_result_view(result, move |tags| {
+                    let items: Vec<FacetLink> = tags
+                        .into_iter()
+                        .map(|tag| FacetLink {
+                            href: tag_query_href(&tag),
+                            label: tag,
+                        })
+                        .collect();
+                    view! {
+                        <FacetBar
+                            id="tag"
+                            label=tr(TextKey::Tags)
+                            items=items
+                            active=active
+                            reset_href=BASE_PATH
+                            reset_label=tr(TextKey::All)
+                        />
+                    }
+                    .into_any()
+                }))
+            }}
         </Suspense>
     }
+}
+
+/// Browser link that filters the list down to one tag.
+fn tag_query_href(tag: &str) -> String {
+    format!(
+        "{BASE_PATH}?query={}",
+        urlencoding::encode(&format!("tag:\"{tag}\""))
+    )
+}
+
+/// Reads back the tag a `tag:"…"` browser query filters on, so the rail can
+/// mark that chip active and offer a way back to the unfiltered list.
+fn active_tag(query: &str) -> Option<String> {
+    let value = query.trim().strip_prefix("tag:\"")?.strip_suffix('"')?;
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 #[component]
@@ -769,7 +801,24 @@ fn RemoteStreamCard(
 
 #[cfg(test)]
 mod tests {
-    use super::page_href;
+    use super::{active_tag, page_href, tag_query_href};
+
+    #[test]
+    fn active_tag_round_trips_the_facet_link_query() {
+        let href = tag_query_href("Dutch TV");
+        let query = href.split_once("?query=").expect("query string").1;
+        let decoded = urlencoding::decode(query).expect("valid encoding");
+
+        assert_eq!(active_tag(&decoded).as_deref(), Some("Dutch TV"));
+    }
+
+    #[test]
+    fn active_tag_ignores_queries_that_are_not_a_single_tag_filter() {
+        assert_eq!(active_tag(""), None);
+        assert_eq!(active_tag("library_id:7"), None);
+        assert_eq!(active_tag(r#"tag:"""#), None);
+        assert_eq!(active_tag(r#"tag:"news" AND library_id:7"#), None);
+    }
 
     #[test]
     fn remote_stream_page_links_match_ersatztv_route_shape() {

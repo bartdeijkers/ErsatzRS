@@ -354,12 +354,24 @@
     word-break: break-word;
 }
 
+/* Facet links (tags, genres, studios, …) share the chip palette used by the
+   `facet_bar` rail, so a tag reads the same on a detail page as in a browser.
+   These stay inline comma-separated text for ErsatzTV parity; only the accent
+   is unified — and tokenised, so the light theme no longer gets dark-theme
+   green. */
 .fact-row a {
-    color: #00a000;
+    color: var(--chip-fg-hover);
+    border-radius: 999px;
+    transition: color 150ms;
 }
 
 .fact-row a:hover {
-    color: #15c715;
+    color: var(--color-primary-h);
+}
+
+.fact-row a:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 .fact-row code {
