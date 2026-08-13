@@ -76,6 +76,25 @@ is_live: false
 title: Episode title
 ```
 
+It can also synchronize an anonymously accessible, user-made Schatkamer list.
+Use the public share URL as the manifest URL and retain upstream ordering:
+
+```yaml
+name: Example shared list
+url: https://schatkamer.beeldengeluid.nl/lijst/<list-uuid>
+addon: org.ersatzrs.addon.beeldengeluid
+folder: shared-list
+sync:
+  interval: 24h
+  order: upstream
+  on_removed: trash
+create_playlist: true
+```
+
+Duplicate programmes keep their first position. Programmes that Schatkamer
+marks unavailable are skipped with a bounded diagnostic. Private lists that
+require a signed-in browser session are not supported.
+
 Do not place executable commands or secrets in Remote Stream YAML. The legacy
 `script:` field and the old extractor setting are rejected. Add-on secret
 settings store only an environment-variable name or secret-file path; the

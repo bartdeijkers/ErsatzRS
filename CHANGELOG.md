@@ -71,6 +71,11 @@ release section when tagging a release.
 
 ### Added
 
+- The Beeld & Geluid streaming add-on can now synchronize public, user-made
+  Schatkamer `/lijst/<uuid>` links as ordered Remote Stream playlists alongside
+  series links. Duplicate programmes keep their first position, unavailable
+  programmes are skipped with a bounded diagnostic, and the standalone POSIX
+  and Windows implementations preserve the existing rich metadata projection.
 - German for Germany (`de-de`) is now a complete, selectable admin UI language
   (ADR 0022). Every admin text key and every stable workflow error message is
   translated, terminology is unified on one German term per ErsatzTV concept

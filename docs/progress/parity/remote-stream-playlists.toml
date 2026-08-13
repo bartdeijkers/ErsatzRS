@@ -1,7 +1,7 @@
 feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0065', '0066']
 
 summary = '''
@@ -23,7 +23,9 @@ Beeld & Geluid enumeration preserves plot, full original broadcast timestamp,
 Kijkwijzer advice, distinct genre/subject labels, collection, role-aware people,
 producer, and original/current broadcasters. Scanner and XMLTV regressions
 prove persistence, search facets, and compatible Kodi/EPG projection without
-flattening the lossless YAML source.
+flattening the lossless YAML source. Version 0.1.2 of the official Beeld &
+Geluid add-on also accepts public user-made Schatkamer lists, preserving their
+playable-item order while skipping duplicate and unavailable entries safely.
 '''
 
 [[debt]]
@@ -54,5 +56,6 @@ resolution  = 'Unknown-duration finite entries are retained for diagnosis but ca
 id          = 'beeldengeluid-windows-rich-metadata-runtime-validation'
 description = 'Run the packaged Windows Beeld & Geluid add-on against a representative episode on a Windows host and confirm that its nested people and provider-label arrays match the POSIX add-on output.'
 discovered  = '2026-08-10'
-evidence    = 'The POSIX implementation was exercised against the public Glamourland series and both package entrypoints are covered by source-contract tests, but this Linux host cannot provide an end-to-end Windows batch runtime proof.'
-resolved    = false
+evidence    = 'The generated 0.1.2 package was exercised through native CMD and Windows PowerShell against the public Teleac shared list. Its seven playable IDs and rich metadata fields matched the POSIX output; both implementations skipped the same one unavailable item.'
+resolved    = true
+resolution  = 'Live Windows package enumeration now proves ordered shared-list discovery and the rich metadata projection; deterministic packaging also normalizes batch entrypoints to CRLF.'
