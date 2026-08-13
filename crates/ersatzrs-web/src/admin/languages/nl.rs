@@ -1073,6 +1073,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ViewSourceCode => "Broncode bekijken",
         TextKey::Version => "Versie",
         TextKey::NoAddonsMatch => "Geen add-ons voldoen aan deze filters.",
+        TextKey::AddonsUpToDate => "Alles is up-to-date.",
         TextKey::AddonRepositories => "Add-onrepositories",
         TextKey::AvailableAddons => "Beschikbare add-ons",
         TextKey::InstalledAddons => "Geïnstalleerde add-ons",

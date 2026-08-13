@@ -95,6 +95,7 @@ pub enum TextKey {
     ViewSourceCode,
     Version,
     NoAddonsMatch,
+    AddonsUpToDate,
     AddonRepositories,
     AvailableAddons,
     InstalledAddons,

@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- The Add-ons Updates view reported "No add-ons match these filters." when
+  nothing was filtered at all, which reads like the view is broken rather than
+  like good news. With no search term and no state filter it now says
+  everything is up to date; with either applied it still reports the filter
+  miss, because a filter can hide a pending update.
 - Two rendering defects in the Settings > Add-ons manager. An "Add-on
   repositories" caption sat in the page header, where it labelled all four
   views instead of the repository list it describes; it now heads that list in

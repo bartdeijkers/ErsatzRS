@@ -386,7 +386,7 @@ fn manager_body(
             {addon_grid(update_cards.into_iter().map(|item| {
                 let trust = repository_tiers.get(&item.repository_id).cloned();
                 available_card(item, trust)
-            }).collect(), tr(TextKey::NoAddonsMatch))}
+            }).collect(), updates_empty_message(search_value, filter_value))}
         </section>
 
         <section class=style::sources style:display=if view_name == "sources" { "" } else { "none" }>
@@ -528,6 +528,22 @@ fn filter_options(view_name: &str, selected: &str) -> AnyView {
             <option value="incompatible" selected=selected == "incompatible">{tr(TextKey::Incompatible)}</option>
         }
         .into_any()
+    }
+}
+
+/// Empty-state text for the Updates view.
+///
+/// An empty Updates list means two different things. With a search or state
+/// filter applied it means the filter excluded everything, which is what
+/// `NoAddonsMatch` says. Unfiltered it means there is genuinely nothing to
+/// update — reporting that as a filter miss reads like the view is broken, so
+/// say so plainly instead. The other views have no such second meaning: an
+/// unfiltered empty Installed or Browse list is not good news to report.
+fn updates_empty_message(search_value: &str, filter_value: &str) -> &'static str {
+    if search_value.trim().is_empty() && filter_value == "all" {
+        tr(TextKey::AddonsUpToDate)
+    } else {
+        tr(TextKey::NoAddonsMatch)
     }
 }
 
@@ -1153,8 +1169,37 @@ fn reload_page() {
 
 #[cfg(test)]
 mod tests {
-    use super::localized_for_code;
+    use super::{localized_for_code, updates_empty_message};
+    use crate::admin::i18n::{tr, TextKey};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn updates_empty_state_only_claims_up_to_date_when_nothing_is_filtered() {
+        assert_eq!(
+            updates_empty_message("", "all"),
+            tr(TextKey::AddonsUpToDate),
+            "an unfiltered empty Updates list means there is nothing to update"
+        );
+        assert_eq!(
+            updates_empty_message("   ", "all"),
+            tr(TextKey::AddonsUpToDate)
+        );
+
+        // A search or a state filter can hide a pending update, so the list
+        // being empty no longer proves anything is up to date.
+        assert_eq!(
+            updates_empty_message("yt-dlp", "all"),
+            tr(TextKey::NoAddonsMatch)
+        );
+        assert_eq!(
+            updates_empty_message("", "verified"),
+            tr(TextKey::NoAddonsMatch)
+        );
+        assert_eq!(
+            updates_empty_message("yt-dlp", "verified"),
+            tr(TextKey::NoAddonsMatch)
+        );
+    }
 
     #[test]
     fn localized_manifest_text_matches_bcp47_codes_case_insensitively() {

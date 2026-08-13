@@ -385,6 +385,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ViewSourceCode => "Ver el código fuente",
         TextKey::Version => "Versión",
         TextKey::NoAddonsMatch => "Ningún complemento coincide con estos filtros.",
+        TextKey::AddonsUpToDate => "Todo está actualizado.",
         TextKey::AddonRepositories => "Repositorios de complementos",
         TextKey::AvailableAddons => "Complementos disponibles",
         TextKey::InstalledAddons => "Complementos instalados",
