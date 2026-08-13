@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Connecting to MySQL 8 failed outright with "RSA auth backend disabled".
+  MySQL 8 defaults to the `caching_sha2_password` plugin, whose first
+  password exchange on a connection needs either TLS or an RSA public-key
+  exchange, and sqlx 0.9 moved its RSA backend behind an opt-in feature that
+  the `mysql` build did not enable. The feature is now enabled, so a plaintext
+  MySQL 8 connection authenticates instead of being refused at startup.
+  MariaDB and MySQL 5.7, which default to `mysql_native_password`, were
+  unaffected.
 - Saving almost anything could silently delete related data. Repository writes
   used SQL `REPLACE INTO`, which is not an update: on both SQLite and MySQL it
   deletes the conflicting row before re-inserting it, and that delete fires

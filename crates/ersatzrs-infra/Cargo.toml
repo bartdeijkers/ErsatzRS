@@ -7,7 +7,13 @@ license.workspace = true
 
 [features]
 default = []
-mysql = ["sqlx/any", "sqlx/mysql"]
+# `mysql-rsa` is required, not cosmetic: MySQL 8 defaults to
+# `caching_sha2_password`, whose first-time password exchange needs either TLS
+# or an RSA public-key exchange. sqlx 0.9 moved the RSA backend behind this
+# feature, so without it every plaintext MySQL 8 connection fails with
+# "RSA auth backend disabled". Pulls in the `rsa` crate (see the
+# RUSTSEC-2023-0071 note in deny.toml).
+mysql = ["sqlx/any", "sqlx/mysql", "sqlx/mysql-rsa"]
 mysql-integration = ["mysql"]
 
 [dependencies]
