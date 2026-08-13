@@ -44,8 +44,13 @@ const languages: LanguageExpectation[] = [
       { path: '/settings/playout', heading: 'Playout', marker: 'Skip Missing Items' },
       { path: '/settings/ui', heading: 'UI', marker: 'Theme' },
       { path: '/settings/xmltv', heading: 'XMLTV', marker: 'XMLTV Time Zone' },
+      // `?view=sources` is load-bearing: the "Add-on repositories" marker
+      // heads the repository list, which the manager renders only in the
+      // Sources view. It used to be a caption in the page header, visible on
+      // every view, so the default route was enough. Every language entry
+      // below points at the same view for the same reason.
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Add-ons',
         marker: 'Add-on repositories',
         settingsSave: false,
@@ -97,7 +102,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Dodatki',
         marker: 'Repozytoria dodatków',
         englishMarker: 'Add-on repositories',
@@ -150,7 +155,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Complementos',
         marker: 'Repositórios de complementos',
         englishMarker: 'Add-on repositories',
@@ -203,7 +208,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Add-ons',
         marker: 'Add-onrepositories',
         englishMarker: 'Add-on repositories',
@@ -256,7 +261,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Extensions',
         marker: 'Dépôts d’extensions',
         englishMarker: 'Add-on repositories',
@@ -314,7 +319,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Add-ons',
         marker: 'Add-on-Repositorys',
         englishMarker: 'Add-on repositories',
@@ -335,7 +340,7 @@ const languages: LanguageExpectation[] = [
       { path: '/settings/playout', heading: 'Playout', marker: 'Salta gli elementi mancanti', englishMarker: 'Skip Missing Items' },
       { path: '/settings/ui', heading: 'Interfaccia utente', marker: 'Tema', englishMarker: 'Theme' },
       { path: '/settings/xmltv', heading: 'XMLTV', marker: 'XMLTV Fuso orario', englishMarker: 'XMLTV Time Zone' },
-      { path: '/settings/addons', heading: 'Componenti aggiuntivi', marker: 'Repository dei componenti aggiuntivi', englishMarker: 'Add-on repositories', settingsSave: false },
+      { path: '/settings/addons?view=sources', heading: 'Componenti aggiuntivi', marker: 'Repository dei componenti aggiuntivi', englishMarker: 'Add-on repositories', settingsSave: false },
     ],
   },
   {
@@ -383,7 +388,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Complementos',
         marker: 'Repositorios de complementos',
         englishMarker: 'Add-on repositories',
@@ -436,7 +441,7 @@ const languages: LanguageExpectation[] = [
         englishMarker: 'XMLTV Time Zone',
       },
       {
-        path: '/settings/addons',
+        path: '/settings/addons?view=sources',
         heading: 'Complementos',
         marker: 'Repositorios de complementos',
         englishMarker: 'Add-on repositories',
