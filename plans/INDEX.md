@@ -152,6 +152,12 @@ changelog, and git history for evidence. The authoritative live state is always
 - `epg-timeline-scroll-container.md` - admin UI plan behind the channel watch
   route's programme guide never being a real scroll container, and the browser
   assertion that silently passed because of it.
+- `ux-complaint-inventory.md` — evidence base, not an implementation plan: all
+  400 `ErsatzTV/legacy` issues classified by close reason, with the
+  `NOT_PLANNED` pile clustered by theme, used to decide where ErsatzRS should
+  deliberately diverge from inherited ErsatzTV UX instead of porting it
+  faithfully. Cite it when a slice argues for a divergence; the divergence
+  itself still belongs in an ADR or `docs/progress/parity/`.
 
 ## Deferred Contract Work
 
