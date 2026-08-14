@@ -70,7 +70,8 @@ CREATE TABLE `AddonMediaListItemGuid` (
     `AddonMediaListItemId` INT NOT NULL,
     `Guid` LONGTEXT NOT NULL,
     CONSTRAINT `PK_AddonMediaListItemGuid` PRIMARY KEY (`Id`),
-    CONSTRAINT `FK_AddonMediaListItemGuid_AddonMediaListItem_AddonMediaListItemId`
+    -- MySQL limits identifiers to 64 characters; retain the dependent column meaning.
+    CONSTRAINT `FK_AddonMediaListItemGuid_AddonMediaListItem_ListItemId`
         FOREIGN KEY (`AddonMediaListItemId`) REFERENCES `AddonMediaListItem` (`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

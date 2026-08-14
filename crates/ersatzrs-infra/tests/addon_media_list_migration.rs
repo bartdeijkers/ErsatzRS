@@ -2,6 +2,20 @@
 
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row};
 
+#[test]
+fn mysql_migration_constraint_names_fit_the_identifier_limit() {
+    for name in include_str!("../../../migrations/mysql/202608131200_addon_media_lists.sql")
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("CONSTRAINT `"))
+        .filter_map(|line| line.split('`').next())
+    {
+        assert!(
+            name.len() <= 64,
+            "MySQL constraint name exceeds 64 characters: {name}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn destructive_migration_removes_legacy_trakt_schema_and_data() {
     let pool = SqlitePoolOptions::new()
