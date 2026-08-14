@@ -266,8 +266,8 @@ impl LanguageStrings for PortugueseBrazilStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -1020,23 +1020,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("Não foi possível acessar o Trakt: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("O add-on retornou dados de lista inválidos: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "A lista do Trakt não existe.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "A lista do add-on não existe.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "URL da lista do Trakt inválida.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "O ClientId do Trakt não está configurado; defina TRAKT__CLIENTID.".to_owned()
+        "Invalid add-on list url" => "URL da lista do add-on inválida.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Configure a referência das credenciais nas configurações do complemento.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "O cliente da API do Trakt não está configurado para esta operação.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "O cliente da API do add-on não está configurado para esta operação.".to_owned()
         }
         _ => error.to_owned(),
     }
@@ -1142,7 +1142,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Adicionar coleção de reprises",
         TextKey::AddTemplate => "Adicionar modelo",
         TextKey::AddTemplateGroup => "Adicionar grupo de modelos",
-        TextKey::AddTraktList => "Adicionar lista Trakt",
+        TextKey::AddAddonMediaList => "Adicionar lista add-on",
         TextKey::AddToCollection => "Adicionar à coleção",
         TextKey::AddToEllipsis => "Adicionar a ...",
         TextKey::AddToPlaylist => "Adicionar à playlist",
@@ -1334,7 +1334,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Excluir coleção de reprises",
         TextKey::DeleteTemplate => "Excluir modelo",
         TextKey::DeleteTemplateGroup => "Excluir grupo de modelos",
-        TextKey::DeleteTraktList => "Excluir lista Trakt",
+        TextKey::DeleteAddonMediaList => "Excluir lista add-on",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Coleções desativadas já estão presentes nesta multi-coleção"
         },
@@ -1414,7 +1414,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Coleções manuais",
         TextKey::MatchFailed => "Falha ao combinar",
         TextKey::MatchStatus => "Status de combinação",
-        TextKey::MatchTraktListItems => "Combinar itens da lista Trakt",
+        TextKey::MatchAddonMediaListItems => "Combinar itens da lista add-on",
         TextKey::Members => "Membros",
         TextKey::MultiCollection => "Multi-coleção",
         TextKey::MultiCollectionDeleted => "Multi-coleção excluída.",
@@ -1440,7 +1440,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "Nenhum item de bloco.",
         TextKey::NoItems => "Nenhum item.",
         TextKey::NoItemsToDisplay => "Nenhum item para exibir.",
-        TextKey::NoTraktListsYet => "Ainda não há listas Trakt.",
+        TextKey::NoAddonMediaListsYet => "Ainda não há listas add-on.",
         TextKey::No => "Não",
         TextKey::NoCollections => "Ainda não há coleções.",
         TextKey::NoMembers => "Ainda não há membros.",
@@ -1819,7 +1819,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Search => "Pesquisar",
         TextKey::SearchMedia => "Pesquisar mídia",
         TextKey::SearchMoviesOrShows => "Pesquisar filmes ou séries...",
-        TextKey::SearchTraktList => "Pesquisar lista Trakt",
+        TextKey::SearchAddonMediaList => "Pesquisar lista add-on",
         TextKey::SearchingMinimumLogLevel => "Nível mínimo de log da pesquisa",
         TextKey::Settings => "Definições",
         TextKey::SettingsSaveFailed => "Falha ao salvar definições",
@@ -1832,7 +1832,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Coleção inteligente excluída.",
         TextKey::SmartCollectionQueryPlaceholder => "ex.: genre:action OR genre:comedy",
         TextKey::SmartCollectionSaved => "Coleção inteligente salva.",
-        TextKey::SaveTraktList => "Salvar lista Trakt",
+        TextKey::SaveAddonMediaList => "Salvar lista add-on",
         TextKey::Songs => "Músicas",
         TextKey::SplitTimeEvenly => "Dividir tempo uniformemente",
         TextKey::StreamingMinimumLogLevel => "Nível mínimo de log do streaming",
@@ -1859,16 +1859,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "duração total do conteúdo, em segundos",
         TextKey::TotalPointsHelp => "número total de pontos mid-roll possíveis",
         TextKey::TotalProgressHelp => "posição normalizada de 0 a 1",
-        TextKey::TraktList => "Lista Trakt",
-        TextKey::TraktListActionFailed => "Falha na ação da lista Trakt.",
-        TextKey::TraktListAdded => "Lista Trakt adicionada.",
-        TextKey::TraktListDeleted => "Lista Trakt excluída.",
-        TextKey::TraktListMatched => "Lista Trakt combinada.",
-        TextKey::TraktListNotFound => "Lista Trakt não encontrada.",
-        TextKey::TraktListSaveFailed => "Falha ao salvar lista Trakt.",
-        TextKey::TraktListSaved => "Lista Trakt salva.",
-        TextKey::TraktLists => "Listas Trakt",
-        TextKey::TraktListUrl => "URL da lista Trakt",
+        TextKey::AddonMediaList => "Lista add-on",
+        TextKey::AddonMediaListActionFailed => "Falha na ação da lista add-on.",
+        TextKey::AddonMediaListAdded => "Lista add-on adicionada.",
+        TextKey::AddonMediaListDeleted => "Lista add-on excluída.",
+        TextKey::AddonMediaListMatched => "Lista add-on combinada.",
+        TextKey::AddonMediaListNotFound => "Lista add-on não encontrada.",
+        TextKey::AddonMediaListSaveFailed => "Falha ao salvar lista add-on.",
+        TextKey::AddonMediaListSaved => "Lista add-on salva.",
+        TextKey::AddonMediaLists => "Listas add-on",
+        TextKey::AddonMediaListUrl => "URL da lista add-on",
         TextKey::Trash => "Lixo",
         TextKey::TrashAlreadyEmpty => "O lixo já está vazio.",
         TextKey::TrashEmpty => "O lixo está vazio.",
@@ -2018,16 +2018,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "Nome da coleção é obrigatório",
         TextKey::CollectionNotFound => "Coleção não encontrada",
         TextKey::CollectionRenamed => "Coleção renomeada.",
-        TextKey::EditTraktListProperties => "Editar propriedades da lista Trakt",
-        TextKey::EnterTraktListUrl => "Insira a URL da lista Trakt",
+        TextKey::EditAddonMediaListProperties => "Editar propriedades da lista add-on",
+        TextKey::EnterAddonMediaListUrl => "Insira a URL da lista add-on",
         TextKey::EnterSearchQuery => "Digite uma consulta de pesquisa.",
         TextKey::Episodes => "Episódios",
         TextKey::LoadingCollections => "Carregando coleções...",
         TextKey::LoadingPlaylistGroups => "Carregando grupos de playlists...",
         TextKey::LoadingPlaylists => "Carregando playlists...",
         TextKey::GeneratePlaylist => "Gerar playlist",
-        TextKey::GeneratePlaylistFromSortedTraktItems => {
-            "Gerar uma playlist a partir dos itens ordenados da lista Trakt"
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
+            "Gerar uma playlist a partir dos itens ordenados da lista add-on"
         },
         TextKey::MusicVideos => "Vídeos musicais",
         TextKey::NewCollectionName => "Nome da nova coleção",
@@ -2341,7 +2341,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Não foi possível carregar o contexto de solução de problemas de reprodução"
         },
-        TextKey::UpdateListFromTraktDaily => "Atualizar a lista do trakt.tv uma vez por dia",
+        TextKey::UpdateAddonMediaListDaily => "Atualizar a lista do provedor uma vez por dia",
         TextKey::UploadLogo => "Enviar logotipo",
         TextKey::UploadLogoHelp => "Escolha uma imagem local para substituir o logotipo do canal armazenado ao salvar",
         TextKey::Warning => "Aviso",
@@ -2484,7 +2484,7 @@ mod tests {
         hardware_acceleration_option_text, log_level_text, media_action_error_text,
         media_browser_error_text, media_kind_text, media_source_error_text,
         playout_schedule_kind_text, schedule_error_text, scheduling_content_error_text,
-        settings_error_text, trakt_error_text, upload_error_text, watermark_error_text, UiLanguage,
+        settings_error_text, addon_media_list_error_text, upload_error_text, watermark_error_text, UiLanguage,
     };
 
     #[test]
@@ -2634,11 +2634,11 @@ mod tests {
             "Não foi possível acessar o Jellyfin: connection refused"
         );
         assert_eq!(
-            trakt_error_text(
+            addon_media_list_error_text(
                 UiLanguage::PortugueseBrazil,
-                "failed to decode trakt http: status 404 Not Found"
+                "failed to decode media-list add-on output: status 404 Not Found"
             ),
-            "Não foi possível acessar o Trakt: status 404 Not Found"
+            "O add-on retornou dados de lista inválidos: status 404 Not Found"
         );
         assert_eq!(
             upload_error_text(

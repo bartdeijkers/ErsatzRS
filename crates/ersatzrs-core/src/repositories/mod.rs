@@ -1,3 +1,4 @@
+mod addon_media_list;
 mod admin_media;
 mod admin_search;
 mod admin_settings;
@@ -21,10 +22,12 @@ mod playout;
 mod program_schedule;
 mod television;
 mod template;
-mod trakt;
 mod troubleshooting;
 mod watermark;
 
+pub use addon_media_list::{
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository,
+};
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,
     AdminCommentarySubtitle, AdminFacetedMediaDetail, AdminFacetedMediaKind, AdminMediaCard,
@@ -110,7 +113,6 @@ pub use template::{
     TemplateAdminRow, TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow,
     TemplateItemAdmin, TemplateRepository,
 };
-pub use trakt::{TraktListAdminForm, TraktListAdminRow, TraktRepository};
 pub use troubleshooting::{
     BlockPlayoutHistoryAdmin, BlockPlayoutOptionAdmin, MpegTroubleshootingChannelAdmin,
     PlaybackChannelSummaryAdmin, PlaybackMediaSummaryAdmin, PlaybackSubtitleAdmin,

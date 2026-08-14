@@ -201,16 +201,16 @@ routes = ['/watermarks']
 notes  = 'List island; hydrated copy/delete smoke clean.'
 
 [[page]]
-name   = 'TraktListsPage'
+name   = 'AddonMediaListsPage'
 status = '✅'
-routes = ['/media/trakt/lists']
-notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Add dialog, Search/Match/Delete row actions, delete persistence, editor fallback save POST, and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
+routes = ['/media/addon-lists']
+notes  = '2026-08-14: provider-neutral migration of the existing hydrated Add dialog, Search/Match/Delete row actions, delete persistence, and editor fallback save POST coverage.'
 
 [[page]]
-name   = 'TraktListEditorPage'
+name   = 'AddonMediaListEditorPage'
 status = '✅'
-routes = ['/media/trakt/lists/:id']
-notes  = '2026-06-28: editor initial form resolves before island emission; `tests/e2e/hydration-pending-routes.spec.ts` covers seeded form render plus save POST fallback persistence; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
+routes = ['/media/addon-lists/:id']
+notes  = '2026-08-14: editor initial form resolves before island emission; the provider-neutral fallback save preserves refresh and generated-playlist settings.'
 
 [[page]]
 name   = 'FillerPresetsPage'

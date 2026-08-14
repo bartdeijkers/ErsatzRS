@@ -42,7 +42,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/media/multi-collections" label=tr(TextKey::MultiCollections) icon=IconName::Copy/>
                     <NavLink href="/media/rerun-collections" label=tr(TextKey::RerunCollections) icon=IconName::Refresh/>
                     <NavLink href="/media/playlists" label=tr(TextKey::Playlists) icon=IconName::Play/>
-                    <NavLink href="/media/trakt/lists" label=tr(TextKey::TraktLists) icon=IconName::Download/>
+                    <NavLink href="/media/addon-lists" label=tr(TextKey::AddonMediaLists) icon=IconName::Download/>
                     <NavLink href="/media/filler/presets" label=tr(TextKey::FillerPresets) icon=IconName::Settings/>
                 </NavGroup>
 

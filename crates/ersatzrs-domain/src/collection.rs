@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{CollectionEnumeratorState, EntityId, PlaybackOrder};
+use crate::{EntityId, PlaybackOrder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CollectionType {
@@ -27,8 +27,10 @@ pub enum CollectionType {
     FakePlaylistItem,
 }
 
+/// Media kinds accepted from a provider-neutral add-on list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum TraktListItemKind {
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemKind {
     #[default]
     Movie,
     Show,
@@ -160,12 +162,12 @@ pub struct PlexTag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct TraktList {
+pub struct AddonMediaList {
     pub id: EntityId,
-    pub trakt_id: i32,
+    pub addon_id: String,
+    pub source_url: String,
+    pub provider_id: String,
     pub name: String,
-    pub user: String,
-    pub list: String,
     pub description: Option<String>,
     pub item_count: i32,
     pub auto_refresh: bool,
@@ -173,28 +175,27 @@ pub struct TraktList {
     pub playlist_id: Option<EntityId>,
     pub last_update: Option<DateTime<Utc>>,
     pub last_match: Option<DateTime<Utc>>,
-    pub item_ids: Vec<EntityId>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct TraktListItem {
+pub struct AddonMediaListItem {
     pub id: EntityId,
-    pub trakt_list_id: EntityId,
-    pub kind: TraktListItemKind,
-    pub trakt_id: i32,
+    pub addon_media_list_id: EntityId,
+    pub provider_id: String,
     pub rank: i32,
+    pub display_title: String,
     pub title: String,
     pub year: Option<i32>,
-    pub media_item_id: Option<EntityId>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
-    pub guid_ids: Vec<EntityId>,
-    pub enumerator_state: CollectionEnumeratorState,
+    pub kind: AddonMediaListItemKind,
+    pub media_item_id: Option<EntityId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct TraktListItemGuid {
+pub struct AddonMediaListItemGuid {
     pub id: EntityId,
-    pub trakt_list_item_id: EntityId,
+    pub addon_media_list_item_id: EntityId,
     pub guid: String,
 }

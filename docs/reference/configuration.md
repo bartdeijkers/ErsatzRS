@@ -161,20 +161,14 @@ a bearer token or an `access_token` query value.
 Treat the signing key and generated tokens as secrets. See the
 [HTTP endpoint reference](http-endpoints.md) for request forms.
 
-## Trakt
+## Provider add-on credentials
 
-Trakt list add and refresh operations require a client ID:
-
-| Variable | Notes |
-|---|---|
-| `TRAKT__CLIENTID` | ErsatzTV-compatible spelling |
-| `ErsatzRS_TRAKT__CLIENTID` | ErsatzRS compatibility spelling |
-
-An optional `ErsatzRS_TRAKT__BASEURL` override exists for controlled testing;
-normal deployments should use the default Trakt API URL.
-
-Keep the client ID in the process environment or a deployment secret manager.
-Existing database-only Trakt list operations do not require a live client ID.
+ErsatzRS has no process-wide Trakt configuration. Provider credentials are
+declared by installed add-ons and configured as environment-variable or file
+references in **Settings > Add-ons**. The database stores only the reference
+kind and reference name/path. See the [add-on package setting
+contract](addon-packages.md#settings-and-panels) and [runtime environment
+reference](addon-runtime.md#process-environment).
 
 ## Healthcheck binary
 
@@ -229,7 +223,7 @@ administrator through a service manager such as systemd.
 Treat these values as secrets:
 
 - database passwords;
-- Plex, Jellyfin, Emby, and Trakt tokens;
+- Plex, Jellyfin, and Emby tokens;
 - JWT signing keys and access tokens; and
 - add-on values resolved through environment or secret-file references;
 - reverse-proxy or session credentials.

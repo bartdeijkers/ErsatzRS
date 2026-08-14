@@ -24,6 +24,7 @@ setting values use these names:
 | `ERSATZRS_REMOTE_STREAM_URL` | URL for `remote-stream.play.v1`. |
 | `ERSATZRS_REMOTE_STREAM_SEEK` | Current source offset for play. |
 | `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL` | URL for `remote-stream.list.v1`. |
+| `ERSATZRS_MEDIA_LIST_URL` | Source hyperlink for `media-list.list.v1`. |
 
 ## Operations
 
@@ -35,6 +36,9 @@ lowercase `code`, and a safe message.
 The list and play payloads, environment, output bounds, and NDJSON fields are
 defined by the [Remote Stream playlist reference](remote-stream-playlist-manifests.md).
 Unknown capability versions are rejected.
+
+The provider-neutral list payload is defined by the
+[add-on media-list reference](addon-media-lists.md).
 
 Every invocation runs in an owned Unix process group or Windows Job Object.
 Timeout, cancellation, output-drain failure, and invocation-owner teardown
@@ -62,11 +66,13 @@ New installs and updates are disabled by default. Enable validates settings,
 required dependency versions, RID and host compatibility, package integrity,
 and readiness. An `unavailable` result blocks enablement. A package cannot be
 disabled while an enabled package requires it, and uninstall is blocked by
-installed required dependents or active Remote Stream references through the
-normal administration flow.
+installed required dependents, active Remote Stream references, or owned
+add-on media lists through the normal administration flow.
 
-Uninstall removes package executables and disposable cache but retains the
-installation's repository-scoped persistent add-on data.
+Forced uninstall detaches Remote Stream references and removes owned media-list
+snapshots plus their generated system playlists. Uninstall removes package
+executables and disposable cache but retains the installation's
+repository-scoped persistent add-on data.
 Removing a repository retains installed packages while clearing their stored
 repository association; their stable data namespace remains retained. Changing
 a repository URL or public key clears its catalog, refresh sequence,

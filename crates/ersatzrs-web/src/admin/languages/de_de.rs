@@ -271,8 +271,8 @@ impl LanguageStrings for GermanStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -428,7 +428,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Wiederholungssammlung hinzufügen",
         TextKey::AddTemplate => "Vorlage hinzufügen",
         TextKey::AddTemplateGroup => "Vorlagen-Gruppe hinzufügen",
-        TextKey::AddTraktList => "Trakt-Liste hinzufügen",
+        TextKey::AddAddonMediaList => "add-on-Liste hinzufügen",
         TextKey::AddToCollection => "Zur Sammlung hinzufügen",
         TextKey::AddToEllipsis => "Zu ... hinzufügen",
         TextKey::AddToPlaylist => "Zur Wiedergabeliste hinzufügen",
@@ -619,7 +619,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Wiedergabesammlung löschen",
         TextKey::DeleteTemplate => "Vorlage löschen",
         TextKey::DeleteTemplateGroup => "Vorlagengruppe löschen",
-        TextKey::DeleteTraktList => "Trakt-Liste löschen",
+        TextKey::DeleteAddonMediaList => "add-on-Liste löschen",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Deaktivierte Sammlungen sind bereits in dieser Mehrsammlung vorhanden"
         },
@@ -695,7 +695,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Manuelle Sammlungen",
         TextKey::MatchFailed => "Abgleich fehlgeschlagen",
         TextKey::MatchStatus => "Abgleichstatus",
-        TextKey::MatchTraktListItems => "Trakt-Listenelemente abgleichen",
+        TextKey::MatchAddonMediaListItems => "add-on-Listenelemente abgleichen",
         TextKey::Members => "Mitglieder",
         TextKey::MultiCollection => "Mehrsammlung",
         TextKey::MultiCollectionDeleted => "Mehrsammlung gelöscht.",
@@ -721,7 +721,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "Keine Blockelemente.",
         TextKey::NoItems => "Keine Elemente.",
         TextKey::NoItemsToDisplay => "Keine Elemente zur Anzeige.",
-        TextKey::NoTraktListsYet => "Noch keine Trakt-Listen vorhanden.",
+        TextKey::NoAddonMediaListsYet => "Noch keine add-on-Listen vorhanden.",
         TextKey::No => "Keine",
         TextKey::NoCollections => "Noch keine Sammlungen vorhanden.",
         TextKey::NoMembers => "Noch keine Mitglieder vorhanden.",
@@ -872,7 +872,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RemoteStream => "Ferngesteuerter Stream",
         TextKey::RemoteStreamPlaylists => "Wiedergabelisten für Ferngesteuerte Streams",
         TextKey::PlaylistUrl => "Wiedergabeliste URL",
-        TextKey::Extractor => "Extraktor",
+        TextKey::Extractor => "Exadd-onor",
         TextKey::DestinationFolder => "Zielordner",
         TextKey::SyncInterval => "Synchronisationsintervall",
         TextKey::MaxItems => "Maximale Anzahl der Elemente",
@@ -1090,7 +1090,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Search => "Suchen",
         TextKey::SearchMedia => "Medien suchen",
         TextKey::SearchMoviesOrShows => "Filme oder Serien suchen …",
-        TextKey::SearchTraktList => "Trakt-Liste suchen",
+        TextKey::SearchAddonMediaList => "add-on-Liste suchen",
         TextKey::SearchingMinimumLogLevel => "Mindest-Protokollebene bei der Suche",
         TextKey::Settings => "Einstellungen",
         TextKey::SettingsSaveFailed => "Speichern der Einstellungen fehlgeschlagen",
@@ -1103,7 +1103,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Intelligente Sammlung gelöscht.",
         TextKey::SmartCollectionQueryPlaceholder => "z. B. genre:action OR genre:comedy",
         TextKey::SmartCollectionSaved => "Intelligente Sammlung gespeichert.",
-        TextKey::SaveTraktList => "Trakt-Liste speichern",
+        TextKey::SaveAddonMediaList => "add-on-Liste speichern",
         TextKey::Songs => "Lieder",
         TextKey::SplitTimeEvenly => "Zeit gleichmäßig aufteilen",
         TextKey::StreamingMinimumLogLevel => "Mindest-Protokollebene beim Streaming",
@@ -1130,16 +1130,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "Gesamtdauer des Inhalts, in Sekunden",
         TextKey::TotalPointsHelp => "Gesamtzahl möglicher Mid-Roll-Punkte",
         TextKey::TotalProgressHelp => "normalisierte Position von 0 bis 1",
-        TextKey::TraktList => "Trakt-Liste",
-        TextKey::TraktListActionFailed => "Trakt-Listenaktion fehlgeschlagen.",
-        TextKey::TraktListAdded => "Trakt-Liste hinzugefügt.",
-        TextKey::TraktListDeleted => "Trakt-Liste gelöscht.",
-        TextKey::TraktListMatched => "Trakt-Liste abgeglichen.",
-        TextKey::TraktListNotFound => "Trakt-Liste nicht gefunden.",
-        TextKey::TraktListSaveFailed => "Speichern der Trakt-Liste fehlgeschlagen.",
-        TextKey::TraktListSaved => "Trakt-Liste gespeichert.",
-        TextKey::TraktLists => "Trakt-Listen",
-        TextKey::TraktListUrl => "Trakt-Listen-URL",
+        TextKey::AddonMediaList => "add-on-Liste",
+        TextKey::AddonMediaListActionFailed => "add-on-Listenaktion fehlgeschlagen.",
+        TextKey::AddonMediaListAdded => "add-on-Liste hinzugefügt.",
+        TextKey::AddonMediaListDeleted => "add-on-Liste gelöscht.",
+        TextKey::AddonMediaListMatched => "add-on-Liste abgeglichen.",
+        TextKey::AddonMediaListNotFound => "add-on-Liste nicht gefunden.",
+        TextKey::AddonMediaListSaveFailed => "Speichern der add-on-Liste fehlgeschlagen.",
+        TextKey::AddonMediaListSaved => "add-on-Liste gespeichert.",
+        TextKey::AddonMediaLists => "add-on-Listen",
+        TextKey::AddonMediaListUrl => "add-on-Listen-URL",
         TextKey::Trash => "Papierkorb",
         TextKey::TrashAlreadyEmpty => "Der Papierkorb ist bereits leer.",
         TextKey::TrashEmpty => "Der Papierkorb ist leer.",
@@ -1273,15 +1273,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "Der Sammlungsname ist erforderlich",
         TextKey::CollectionNotFound => "Sammlung nicht gefunden",
         TextKey::CollectionRenamed => "Sammlung umbenannt.",
-        TextKey::EditTraktListProperties => "Eigenschaften der Trakt-Liste bearbeiten",
-        TextKey::EnterTraktListUrl => "Trakt-Listen-URL eingeben",
+        TextKey::EditAddonMediaListProperties => "Eigenschaften der add-on-Liste bearbeiten",
+        TextKey::EnterAddonMediaListUrl => "add-on-Listen-URL eingeben",
         TextKey::EnterSearchQuery => "Geben Sie eine Suchabfrage ein.",
         TextKey::Episodes => "Folgen",
         TextKey::LoadingCollections => "Sammlungen werden geladen …",
         TextKey::LoadingPlaylistGroups => "Wiedergabelistengruppen werden geladen …",
         TextKey::LoadingPlaylists => "Wiedergabelisten werden geladen …",
         TextKey::GeneratePlaylist => "Wiedergabeliste erzeugen",
-        TextKey::GeneratePlaylistFromSortedTraktItems => "Eine Wiedergabeliste aus den sortierten Trakt-Listenelementen erzeugen",
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => "Eine Wiedergabeliste aus den sortierten add-on-Listenelementen erzeugen",
         TextKey::MusicVideos => "Musikvideos",
         TextKey::NewCollectionName => "Neuer Sammlungsname",
         TextKey::NoMediaMatched => "Keine Medien gefunden.",
@@ -1571,7 +1571,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TroubleshootingPlaybackStartDebt => "Die Wiedergabevorschau für Medienelemente und Kanäle schreibt jetzt FFmpeg-Berichte, Protokolle, media_info.json, troubleshooting_info.json, ausgewähltes Stream-Selektor-YAML und Fähigkeitsdateien, wendet Stream-Selektor-Regeln an und leitet auf /iptv/session/.troubleshooting/live.m3u8 weiter.",
         TextKey::UnableToLoadMediaInfo => "Medieninfo konnte nicht geladen werden",
         TextKey::UnableToLoadPlaybackTroubleshooting => "Kontext für die Wiedergabefehlerbehebung konnte nicht geladen werden",
-        TextKey::UpdateListFromTraktDaily => "Liste einmal täglich von trakt.tv aktualisieren",
+        TextKey::UpdateAddonMediaListDaily => "Liste einmal täglich von dem Anbieter aktualisieren",
         TextKey::UploadLogo => "Logo hochladen",
         TextKey::UploadLogoHelp => "Wählen Sie ein lokales Bild, das beim Speichern das gespeicherte Kanallogo ersetzt",
         TextKey::Warning => "Warnung",
@@ -2314,23 +2314,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("Trakt konnte nicht erreicht werden: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("Add-on hat ungültige Listendaten zurückgegeben: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "Die Trakt-Liste existiert nicht.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "Die add-on-Liste existiert nicht.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "Ungültige Trakt-Listen-URL.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "Die Trakt-ClientId ist nicht konfiguriert; setzen Sie TRAKT__CLIENTID.".to_owned()
+        "Invalid add-on list url" => "Ungültige add-on-Listen-URL.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Konfigurieren Sie die Anmeldedaten-Referenz in den Add-on-Einstellungen.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "Der Trakt-API-Client ist für diesen Vorgang nicht konfiguriert.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "Der add-on-API-Client ist für diesen Vorgang nicht konfiguriert.".to_owned()
         }
         _ => error.to_owned(),
     }
@@ -2508,8 +2508,8 @@ mod tests {
             "Die Deckkraft muss zwischen 1 und 100 liegen"
         );
         assert_eq!(
-            STRINGS.trakt_error_message("Invalid Trakt list url"),
-            "Ungültige Trakt-Listen-URL."
+            STRINGS.addon_media_list_error_message("Invalid add-on list url"),
+            "Ungültige add-on-Listen-URL."
         );
     }
 

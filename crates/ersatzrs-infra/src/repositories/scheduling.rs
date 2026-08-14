@@ -124,7 +124,7 @@ const SEARCH_NEED_DURATIONS: u64 = 1 << 16;
 const SEARCH_NEED_SHOW_GENRES: u64 = 1 << 17;
 const SEARCH_NEED_SHOW_TAGS: u64 = 1 << 18;
 const SEARCH_NEED_SHOW_STUDIOS: u64 = 1 << 19;
-const SEARCH_NEED_TRAKT_LISTS: u64 = 1 << 20;
+const SEARCH_NEED_ADDON_LISTS: u64 = 1 << 20;
 const SEARCH_NEED_PROVIDER_GUIDS: u64 = 1 << 21;
 const SEARCH_NEED_COLLECTIONS: u64 = 1 << 22;
 const SEARCH_NEED_NETWORKS: u64 = 1 << 23;
@@ -253,7 +253,7 @@ impl SearchHydrationNeeds {
             SearchField::ShowStudio => self.insert(SEARCH_NEED_SHOW_STUDIOS),
             SearchField::ShowNetwork => self.insert(SEARCH_NEED_SHOW_NETWORKS),
             SearchField::ShowContentRating => self.insert(SEARCH_NEED_SHOW_CONTENT_RATINGS),
-            SearchField::TraktList => self.insert(SEARCH_NEED_TRAKT_LISTS),
+            SearchField::AddonList => self.insert(SEARCH_NEED_ADDON_LISTS),
             SearchField::Style => self.insert(SEARCH_NEED_STYLES),
             SearchField::Mood => self.insert(SEARCH_NEED_MOODS),
             SearchField::Album => self.insert(SEARCH_NEED_ALBUMS),
@@ -1875,8 +1875,8 @@ impl SqliteSchedulingContentRepository {
             },
             season_number: row.try_get("season_number").repository()?,
             episode_number: row.try_get("episode_number").repository()?,
-            trakt_lists: if hydration.contains(SEARCH_NEED_TRAKT_LISTS) {
-                self.trakt_list_values(item_id).await?
+            addon_lists: if hydration.contains(SEARCH_NEED_ADDON_LISTS) {
+                self.addon_list_values(item_id).await?
             } else {
                 Vec::new()
             },
@@ -1987,13 +1987,14 @@ impl SqliteSchedulingContentRepository {
             .repository()
     }
 
-    async fn trakt_list_values(&self, item_id: EntityId) -> Result<Vec<String>> {
+    async fn addon_list_values(&self, item_id: EntityId) -> Result<Vec<String>> {
         let rows = sqlx::query(
-            r#"SELECT "tl"."TraktId"
-               FROM "TraktListItem" AS "tli"
-               JOIN "TraktList" AS "tl" ON "tl"."Id" = "tli"."TraktListId"
-               WHERE "tli"."MediaItemId" = ?
-               ORDER BY "tl"."TraktId""#,
+            r#"SELECT "list"."Id"
+               FROM "AddonMediaListItem" AS "item"
+               JOIN "AddonMediaList" AS "list"
+                 ON "list"."Id" = "item"."AddonMediaListId"
+               WHERE "item"."MediaItemId" = ?
+               ORDER BY "list"."Id""#,
         )
         .bind(item_id)
         .fetch_all(&self.0)
@@ -2002,8 +2003,8 @@ impl SqliteSchedulingContentRepository {
 
         rows.iter()
             .map(|row| {
-                let trakt_id: i32 = row.try_get("TraktId").repository()?;
-                Ok(trakt_id.to_string())
+                let addon_list_id: EntityId = row.try_get("Id").repository()?;
+                Ok(addon_list_id.to_string())
             })
             .collect()
     }

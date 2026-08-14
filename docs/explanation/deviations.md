@@ -151,6 +151,16 @@ ABI.
 
 ADR: [0066](../adr/0066-repository-backed-add-ons.md)
 
+## Provider lists through add-ons
+
+ErsatzTV owns Trakt lists and their HTTP client directly in the host. ErsatzRS
+uses one provider-neutral list contract: the host retains local matching,
+refresh state, search, and generated playlists, while repository-installed
+add-ons own provider access and configuration. The forward migration removes
+the legacy Trakt tables and data rather than importing them into the new schema.
+
+ADR: [0067](../adr/0067-move-provider-lists-into-addons.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

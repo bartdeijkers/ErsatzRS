@@ -321,45 +321,57 @@ impl ApplicationServices {
         queries::stop_channel_session(number, self.ports.channel_runtime()).await
     }
 
-    /// List Trakt admin rows and persist the chosen page size.
-    pub async fn list_trakt_lists(
+    /// List add-on media-list admin rows and persist the chosen page size.
+    pub async fn list_addon_media_lists(
         &self,
-        query: queries::ListTraktLists,
-    ) -> Result<(Vec<ersatzrs_core::repositories::TraktListAdminRow>, u64)> {
-        queries::list_trakt_lists(query, self.ports.trakt()).await
+        query: queries::ListAddonMediaLists,
+    ) -> Result<(
+        Vec<ersatzrs_core::repositories::AddonMediaListAdminRow>,
+        u64,
+    )> {
+        queries::list_addon_media_lists(query, self.ports.addon_media_lists()).await
     }
 
-    /// Load one Trakt list editor state.
-    pub async fn get_trakt_list(
+    /// Load one Add-on media list editor state.
+    pub async fn get_addon_media_list(
         &self,
         id: i64,
-    ) -> Result<Option<ersatzrs_core::repositories::TraktListAdminForm>> {
-        queries::get_trakt_list(id, self.ports.trakt()).await
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListAdminForm>> {
+        queries::get_addon_media_list(id, self.ports.addon_media_lists()).await
     }
 
-    /// Load the configured Trakt page size.
-    pub async fn get_trakt_page_size(&self) -> Result<u32> {
-        queries::get_trakt_page_size(self.ports.trakt()).await
+    /// Load the configured add-on media-list page size.
+    pub async fn get_addon_media_lists_page_size(&self) -> Result<u32> {
+        queries::get_addon_media_lists_page_size(self.ports.addon_media_lists()).await
     }
 
-    /// Import or refresh one Trakt list.
-    pub async fn add_trakt_list(&self, command: commands::AddTraktList) -> Result<i64> {
-        commands::add_trakt_list(command, self.ports.trakt()).await
+    /// Import or refresh one Add-on media list.
+    pub async fn add_addon_media_list(&self, command: commands::AddAddonMediaList) -> Result<i64> {
+        commands::add_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
-    /// Re-run local matching for one Trakt list.
-    pub async fn match_trakt_list(&self, command: commands::MatchTraktList) -> Result<()> {
-        commands::match_trakt_list(command, self.ports.trakt()).await
+    /// Re-run local matching for one Add-on media list.
+    pub async fn match_addon_media_list(
+        &self,
+        command: commands::MatchAddonMediaList,
+    ) -> Result<()> {
+        commands::match_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
-    /// Save user-editable Trakt list settings.
-    pub async fn update_trakt_list(&self, command: commands::UpdateTraktList) -> Result<()> {
-        commands::update_trakt_list(command, self.ports.trakt()).await
+    /// Save user-editable Add-on media list settings.
+    pub async fn update_addon_media_list(
+        &self,
+        command: commands::UpdateAddonMediaList,
+    ) -> Result<()> {
+        commands::update_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
-    /// Delete one Trakt list.
-    pub async fn delete_trakt_list(&self, command: commands::DeleteTraktList) -> Result<()> {
-        commands::delete_trakt_list(command, self.ports.trakt()).await
+    /// Delete one Add-on media list.
+    pub async fn delete_addon_media_list(
+        &self,
+        command: commands::DeleteAddonMediaList,
+    ) -> Result<()> {
+        commands::delete_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
     /// Load one optional admin setting.

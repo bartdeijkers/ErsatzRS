@@ -1,4 +1,5 @@
 pub mod add_to_schedule_modal;
+pub mod addon_lists;
 pub mod artists;
 pub mod browser;
 pub mod collection_detail;
@@ -19,6 +20,5 @@ pub mod see_all_lists;
 pub mod shows;
 pub mod smart_collections;
 pub mod songs;
-pub mod trakt_lists;
 pub mod trash;
 pub mod tv_specials;

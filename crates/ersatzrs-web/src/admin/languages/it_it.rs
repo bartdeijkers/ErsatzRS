@@ -270,8 +270,8 @@ impl LanguageStrings for ItalianStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -430,7 +430,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Aggiungi raccolta di ripetizioni",
         TextKey::AddTemplate => "Aggiungi Modello",
         TextKey::AddTemplateGroup => "Aggiungi Gruppo di Modelli",
-        TextKey::AddTraktList => "Aggiungi Lista Trakt",
+        TextKey::AddAddonMediaList => "Aggiungi Lista add-on",
         TextKey::AddToCollection => "Aggiungi alla raccolta",
         TextKey::AddToEllipsis => "Aggiungi a...",
         TextKey::AddToPlaylist => "Aggiungi alla playlist",
@@ -623,7 +623,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Elimina raccolta di ripetizioni",
         TextKey::DeleteTemplate => "Elimina Modello",
         TextKey::DeleteTemplateGroup => "Elimina Gruppo Modelli",
-        TextKey::DeleteTraktList => "Elimina Lista Trakt",
+        TextKey::DeleteAddonMediaList => "Elimina Lista add-on",
         TextKey::DisabledCollectionsAlreadyPresent => "Le raccolte disabilitate sono già presenti in questa raccolta multipla",
         TextKey::EmptyTrash => "Svuota Cestino",
         TextKey::ExtractEmbeddedSubtitles => "Estrai Sottotitoli Incorporati (Testo)",
@@ -705,7 +705,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Raccolte manuali",
         TextKey::MatchFailed => "Abbinamento fallito",
         TextKey::MatchStatus => "Stato abbinamento",
-        TextKey::MatchTraktListItems => "Elenco elementi Trakt",
+        TextKey::MatchAddonMediaListItems => "Elenco elementi add-on",
         TextKey::Members => "Membri",
         TextKey::MultiCollection => "Raccolta multipla",
         TextKey::MultiCollectionDeleted => "Raccolta multipla eliminata.",
@@ -731,7 +731,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "Nessun elemento blocco.",
         TextKey::NoItems => "Nessun elemento.",
         TextKey::NoItemsToDisplay => "Nessun elemento da visualizzare.",
-        TextKey::NoTraktListsYet => "Nessun elenco Trakt presente.",
+        TextKey::NoAddonMediaListsYet => "Nessun elenco add-on presente.",
         TextKey::No => "Nessuno",
         TextKey::NoCollections => "Nessuna raccolta presente.",
         TextKey::NoMembers => "Nessun membro presente.",
@@ -1120,7 +1120,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Search => "Cerca",
         TextKey::SearchMedia => "Cerca media",
         TextKey::SearchMoviesOrShows => "Cerca film o serie...",
-        TextKey::SearchTraktList => "Cerca lista Trakt",
+        TextKey::SearchAddonMediaList => "Cerca lista add-on",
         TextKey::SearchingMinimumLogLevel => "Livello minimo di registro durante la ricerca",
         TextKey::Settings => "Impostazioni",
         TextKey::SettingsSaveFailed => "Salvataggio impostazioni fallito",
@@ -1135,7 +1135,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Raccolta intelligente eliminata.",
         TextKey::SmartCollectionQueryPlaceholder => "ad es. genere:azione OPPURE genere:commedia",
         TextKey::SmartCollectionSaved => "Raccolta intelligente salvata.",
-        TextKey::SaveTraktList => "Salva lista Trakt",
+        TextKey::SaveAddonMediaList => "Salva lista add-on",
         TextKey::Songs => "Canzoni",
         TextKey::SplitTimeEvenly => "Dividi il tempo in modo uniforme",
         TextKey::StreamingMinimumLogLevel => "Livello minimo di registro per lo streaming",
@@ -1162,16 +1162,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "durata totale del contenuto, in secondi",
         TextKey::TotalPointsHelp => "numero totale di punti potenziali mid-roll",
         TextKey::TotalProgressHelp => "posizione normalizzata da 0 a 1",
-        TextKey::TraktList => "Lista Trakt",
-        TextKey::TraktListActionFailed => "Trakt l'azione della lista non è riuscita.",
-        TextKey::TraktListAdded => "Lista Trakt aggiunta.",
-        TextKey::TraktListDeleted => "Lista Trakt eliminata.",
-        TextKey::TraktListMatched => "Lista Trakt trovata.",
-        TextKey::TraktListNotFound => "Lista Trakt non trovata.",
-        TextKey::TraktListSaveFailed => "Trakt il salvataggio della lista non è riuscito.",
-        TextKey::TraktListSaved => "Lista Trakt salvata.",
-        TextKey::TraktLists => "Trakt Liste",
-        TextKey::TraktListUrl => "URL della lista Trakt",
+        TextKey::AddonMediaList => "Lista add-on",
+        TextKey::AddonMediaListActionFailed => "add-on l'azione della lista non è riuscita.",
+        TextKey::AddonMediaListAdded => "Lista add-on aggiunta.",
+        TextKey::AddonMediaListDeleted => "Lista add-on eliminata.",
+        TextKey::AddonMediaListMatched => "Lista add-on trovata.",
+        TextKey::AddonMediaListNotFound => "Lista add-on non trovata.",
+        TextKey::AddonMediaListSaveFailed => "add-on il salvataggio della lista non è riuscito.",
+        TextKey::AddonMediaListSaved => "Lista add-on salvata.",
+        TextKey::AddonMediaLists => "add-on Liste",
+        TextKey::AddonMediaListUrl => "URL della lista add-on",
         TextKey::Trash => "Cestino",
         TextKey::TrashAlreadyEmpty => "Il cestino è già vuoto.",
         TextKey::TrashEmpty => "Il cestino è vuoto.",
@@ -1327,16 +1327,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "Il nome della raccolta è obbligatorio",
         TextKey::CollectionNotFound => "Raccolta non trovata",
         TextKey::CollectionRenamed => "Raccolta rinominata.",
-        TextKey::EditTraktListProperties => "Modifica proprietà elenco Trakt",
-        TextKey::EnterTraktListUrl => "Inserisci elenco Trakt URL",
+        TextKey::EditAddonMediaListProperties => "Modifica proprietà elenco add-on",
+        TextKey::EnterAddonMediaListUrl => "Inserisci elenco add-on URL",
         TextKey::EnterSearchQuery => "Inserisci una query di ricerca.",
         TextKey::Episodes => "Episodi",
         TextKey::LoadingCollections => "Caricamento raccolte...",
         TextKey::LoadingPlaylistGroups => "Caricamento gruppi playlist...",
         TextKey::LoadingPlaylists => "Caricamento playlist...",
         TextKey::GeneratePlaylist => "Genera playlist",
-        TextKey::GeneratePlaylistFromSortedTraktItems => {
-            "Genera una playlist dagli elementi della lista trakt ordinata"
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
+            "Genera una playlist dagli elementi della lista add-on ordinata"
         }
         TextKey::MusicVideos => "Video musicali",
         TextKey::NewCollectionName => "Nuovo nome della raccolta",
@@ -1661,7 +1661,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Impossibile caricare il contesto di risoluzione problemi della riproduzione"
         }
-        TextKey::UpdateListFromTraktDaily => "Aggiorna l'elenco da trakt.tv una volta al giorno",
+        TextKey::UpdateAddonMediaListDaily => "Aggiorna l'elenco dal provider una volta al giorno",
         TextKey::UploadLogo => "Carica Logo",
         TextKey::UploadLogoHelp => {
             "Scegli un'immagine locale per sostituire il logo del canale memorizzato al salvataggio"
@@ -2403,23 +2403,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("Impossibile raggiungere Trakt: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("L'add-on ha restituito dati di elenco non validi: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "L'elenco Trakt non esiste.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "L'elenco add-on non esiste.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "Elenco Trakt URL non valido.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "Il ClientId Trakt non è configurato; impostare TRAKT__CLIENTID.".to_owned()
+        "Invalid add-on list url" => "Elenco add-on URL non valido.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Configura il riferimento alle credenziali nelle impostazioni dell'add-on.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "Il client Trakt API non è configurato per questa operazione.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "Il client add-on API non è configurato per questa operazione.".to_owned()
         }
         _ => error.to_owned(),
     }

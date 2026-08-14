@@ -1,8 +1,10 @@
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
+use ersatzrs_infra::addon_media_list::InstalledAddonMediaListProvider;
+use ersatzrs_infra::addon_media_list_sync::{
+    AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
+};
 use ersatzrs_infra::db::DbPool;
-use ersatzrs_infra::trakt::TraktApiClient;
-use ersatzrs_infra::trakt_sync::{TraktRemoteSynchronizer, TraktSynchronizer};
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
 use std::sync::{atomic::AtomicI32, Arc};
 use tokio::sync::mpsc;
@@ -24,7 +26,7 @@ pub fn spawn_background_tasks(
             hdhr.listen_port,
             shutdown.clone(),
         )),
-        tokio::spawn(run_trakt_maintenance(
+        tokio::spawn(run_addon_media_list_maintenance(
             maintenance.pool.clone(),
             shutdown.clone(),
         )),
@@ -83,7 +85,7 @@ async fn run_maintenance_scheduler(
     }
 }
 
-async fn run_trakt_maintenance(pool: DbPool, shutdown: CancellationToken) {
+async fn run_addon_media_list_maintenance(pool: DbPool, shutdown: CancellationToken) {
     let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
     loop {
         tokio::select! {
@@ -91,16 +93,15 @@ async fn run_trakt_maintenance(pool: DbPool, shutdown: CancellationToken) {
             _ = interval.tick() => {}
         }
 
-        if let Ok(client) = TraktApiClient::from_env() {
-            let sync = TraktRemoteSynchronizer::new(pool.clone(), client);
-            if let Err(error) = sync.refresh_due_auto_lists().await {
-                tracing::warn!(error = %error, "failed to refresh due Trakt lists");
-            }
+        let provider = InstalledAddonMediaListProvider::new(pool.clone());
+        let sync = AddonMediaListRemoteSynchronizer::new(pool.clone(), provider);
+        if let Err(error) = sync.refresh_due_auto_lists().await {
+            tracing::warn!(error = %error, "failed to refresh due add-on media lists");
         }
 
-        let sync = TraktSynchronizer::new(pool.clone());
+        let sync = AddonMediaListSynchronizer::new(pool.clone());
         if let Err(error) = sync.match_due_lists().await {
-            tracing::warn!(error = %error, "failed to match due Trakt lists");
+            tracing::warn!(error = %error, "failed to match due Add-on media lists");
         }
     }
 }

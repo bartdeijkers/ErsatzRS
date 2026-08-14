@@ -12,6 +12,7 @@ support retroactively.
 | `addon.check.v1` | Required for every executable package; reports readiness. |
 | `remote-stream.list.v1` | Enumerates bounded Remote Stream playlist entries. |
 | `remote-stream.play.v1` | Produces media bytes for one Remote Stream URL. |
+| `media-list.list.v1` | Enumerates a bounded provider list for local matching and optional playlist generation. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 
 Unknown capability versions are never executed. The v1 platform does not
@@ -23,4 +24,5 @@ video-jukebox request API.
 - [Package manifest, layout, permissions, and limits](addon-packages.md)
 - [Repository trust, catalog, allowlist, and refresh](addon-repositories.md)
 - [Invocation, environment, persistence, and lifecycle](addon-runtime.md)
+- [Add-on media-list NDJSON contract](addon-media-lists.md)
 - [Remote Stream playlist and NDJSON contracts](remote-stream-playlist-manifests.md)

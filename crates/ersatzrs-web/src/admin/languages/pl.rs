@@ -266,8 +266,8 @@ impl LanguageStrings for PolishStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -1006,23 +1006,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("Nie można połączyć się z Trakt: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("Add-on zwrócił nieprawidłowe dane listy: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "Lista Trakt nie istnieje.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "Lista add-on nie istnieje.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "Nieprawidłowy URL listy Trakt.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "Identyfikator klienta Trakt nie jest skonfigurowany; ustaw TRAKT__CLIENTID.".to_owned()
+        "Invalid add-on list url" => "Nieprawidłowy URL listy add-on.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Skonfiguruj odwołanie do poświadczeń w ustawieniach dodatku.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "Klient API Trakt nie jest skonfigurowany dla tej operacji.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "Klient API add-on nie jest skonfigurowany dla tej operacji.".to_owned()
         }
         _ => error.to_owned(),
     }
@@ -1128,7 +1128,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Dodaj kolekcję powtórek",
         TextKey::AddTemplate => "Dodaj szablon",
         TextKey::AddTemplateGroup => "Dodaj grupę szablonów",
-        TextKey::AddTraktList => "Dodaj listę Trakt",
+        TextKey::AddAddonMediaList => "Dodaj listę add-on",
         TextKey::AddToCollection => "Dodaj do kolekcji",
         TextKey::AddToEllipsis => "Dodaj do ...",
         TextKey::AddToPlaylist => "Dodaj do playlisty",
@@ -1320,7 +1320,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Usuń kolekcję powtórek",
         TextKey::DeleteTemplate => "Usuń szablon",
         TextKey::DeleteTemplateGroup => "Usuń grupę szablonów",
-        TextKey::DeleteTraktList => "Usuń listę Trakt",
+        TextKey::DeleteAddonMediaList => "Usuń listę add-on",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Wyłączone kolekcje są już obecne w tej multi-kolekcji"
         },
@@ -1398,7 +1398,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Kolekcje ręczne",
         TextKey::MatchFailed => "Dopasowanie nie powiodło się",
         TextKey::MatchStatus => "Status dopasowania",
-        TextKey::MatchTraktListItems => "Dopasuj elementy listy Trakt",
+        TextKey::MatchAddonMediaListItems => "Dopasuj elementy listy add-on",
         TextKey::Members => "Elementy",
         TextKey::MultiCollection => "Multi-kolekcja",
         TextKey::MultiCollectionDeleted => "Multi-kolekcja została usunięta.",
@@ -1424,7 +1424,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "Brak elementów bloku.",
         TextKey::NoItems => "Brak elementów.",
         TextKey::NoItemsToDisplay => "Brak elementów do wyświetlenia.",
-        TextKey::NoTraktListsYet => "Brak list Trakt.",
+        TextKey::NoAddonMediaListsYet => "Brak list add-on.",
         TextKey::No => "Nie",
         TextKey::NoCollections => "Brak kolekcji.",
         TextKey::NoMembers => "Brak elementów.",
@@ -1577,7 +1577,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RemoteStream => "Zdalny strumień",
         TextKey::RemoteStreamPlaylists => "Playlisty zdalnych strumieni",
         TextKey::PlaylistUrl => "Adres URL playlisty",
-        TextKey::Extractor => "Ekstraktor",
+        TextKey::Extractor => "Eksadd-onor",
         TextKey::DestinationFolder => "Folder docelowy",
         TextKey::SyncInterval => "Interwał synchronizacji",
         TextKey::MaxItems => "Maksymalna liczba elementów",
@@ -1796,14 +1796,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Tail => "Końcówka",
         TextKey::TelevisionSeason => "Sezon TV",
         TextKey::TelevisionShow => "Serial TV",
-        TextKey::TreatCollectionsAsShows => "Traktuj kolekcje jak seriale",
+        TextKey::TreatCollectionsAsShows => "add-onuj kolekcje jak seriale",
         TextKey::TreatCollectionsAsShowsHelp => "Przydatne dla wieloczęściowych odcinków crossover",
         TextKey::Type => "Typ",
         TextKey::TypeToSearch => "Wpisz, aby wyszukać...",
         TextKey::Search => "Szukaj",
         TextKey::SearchMedia => "Szukaj multimediów",
         TextKey::SearchMoviesOrShows => "Szukaj filmów lub seriali...",
-        TextKey::SearchTraktList => "Szukaj listy Trakt",
+        TextKey::SearchAddonMediaList => "Szukaj listy add-on",
         TextKey::SearchingMinimumLogLevel => "Minimalny poziom logów wyszukiwania",
         TextKey::Settings => "Ustawienia",
         TextKey::SettingsSaveFailed => "Nie udało się zapisać ustawień",
@@ -1816,7 +1816,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Inteligentna kolekcja została usunięta.",
         TextKey::SmartCollectionQueryPlaceholder => "np. genre:action OR genre:comedy",
         TextKey::SmartCollectionSaved => "Inteligentna kolekcja została zapisana.",
-        TextKey::SaveTraktList => "Zapisz listę Trakt",
+        TextKey::SaveAddonMediaList => "Zapisz listę add-on",
         TextKey::Songs => "Utwory",
         TextKey::SplitTimeEvenly => "Podziel czas równomiernie",
         TextKey::StreamingMinimumLogLevel => "Minimalny poziom logów strumieniowania",
@@ -1843,16 +1843,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "łączny czas trwania treści, w sekundach",
         TextKey::TotalPointsHelp => "łączna liczba możliwych punktów śródemisji",
         TextKey::TotalProgressHelp => "znormalizowana pozycja od 0 do 1",
-        TextKey::TraktList => "Lista Trakt",
-        TextKey::TraktListActionFailed => "Akcja listy Trakt nie powiodła się.",
-        TextKey::TraktListAdded => "Lista Trakt została dodana.",
-        TextKey::TraktListDeleted => "Lista Trakt została usunięta.",
-        TextKey::TraktListMatched => "Lista Trakt została dopasowana.",
-        TextKey::TraktListNotFound => "Nie znaleziono listy Trakt.",
-        TextKey::TraktListSaveFailed => "Zapis listy Trakt nie powiódł się.",
-        TextKey::TraktListSaved => "Lista Trakt została zapisana.",
-        TextKey::TraktLists => "Listy Trakt",
-        TextKey::TraktListUrl => "URL listy Trakt",
+        TextKey::AddonMediaList => "Lista add-on",
+        TextKey::AddonMediaListActionFailed => "Akcja listy add-on nie powiodła się.",
+        TextKey::AddonMediaListAdded => "Lista add-on została dodana.",
+        TextKey::AddonMediaListDeleted => "Lista add-on została usunięta.",
+        TextKey::AddonMediaListMatched => "Lista add-on została dopasowana.",
+        TextKey::AddonMediaListNotFound => "Nie znaleziono listy add-on.",
+        TextKey::AddonMediaListSaveFailed => "Zapis listy add-on nie powiódł się.",
+        TextKey::AddonMediaListSaved => "Lista add-on została zapisana.",
+        TextKey::AddonMediaLists => "Listy add-on",
+        TextKey::AddonMediaListUrl => "URL listy add-on",
         TextKey::Trash => "Kosz",
         TextKey::TrashAlreadyEmpty => "Kosz jest już pusty.",
         TextKey::TrashEmpty => "Kosz jest pusty.",
@@ -2002,16 +2002,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "Nazwa kolekcji jest wymagana",
         TextKey::CollectionNotFound => "Nie znaleziono kolekcji",
         TextKey::CollectionRenamed => "Zmieniono nazwę kolekcji.",
-        TextKey::EditTraktListProperties => "Edytuj właściwości listy Trakt",
-        TextKey::EnterTraktListUrl => "Wpisz URL listy Trakt",
+        TextKey::EditAddonMediaListProperties => "Edytuj właściwości listy add-on",
+        TextKey::EnterAddonMediaListUrl => "Wpisz URL listy add-on",
         TextKey::EnterSearchQuery => "Wpisz zapytanie wyszukiwania.",
         TextKey::Episodes => "Odcinki",
         TextKey::LoadingCollections => "Ładowanie kolekcji...",
         TextKey::LoadingPlaylistGroups => "Ładowanie grup playlist...",
         TextKey::LoadingPlaylists => "Ładowanie playlist...",
         TextKey::GeneratePlaylist => "Generuj playlistę",
-        TextKey::GeneratePlaylistFromSortedTraktItems => {
-            "Generuj playlistę z posortowanych elementów listy Trakt"
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
+            "Generuj playlistę z posortowanych elementów listy add-on"
         },
         TextKey::MusicVideos => "Teledyski",
         TextKey::NewCollectionName => "Nazwa nowej kolekcji",
@@ -2323,7 +2323,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Nie można wczytać kontekstu diagnostyki odtwarzania"
         },
-        TextKey::UpdateListFromTraktDaily => "Aktualizuj listę z trakt.tv raz dziennie",
+        TextKey::UpdateAddonMediaListDaily => "Aktualizuj listę z dostawcy raz dziennie",
         TextKey::UploadLogo => "Prześlij logo",
         TextKey::UploadLogoHelp => "Wybierz lokalny obraz, aby zastąpić zapisane logo kanału przy zapisie",
         TextKey::Warning => "Ostrzeżenie",
@@ -2463,7 +2463,7 @@ mod tests {
         ffmpeg_tonemap_algorithm_text, filler_error_text, hardware_acceleration_option_text,
         library_kind_text, log_level_text, media_action_error_text, media_browser_error_text,
         media_kind_text, media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, trakt_error_text, upload_error_text,
+        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
         watermark_error_text, UiLanguage,
     };
 
@@ -2591,11 +2591,11 @@ mod tests {
             "Klucz API jest wymagany."
         );
         assert_eq!(
-            trakt_error_text(
+            addon_media_list_error_text(
                 UiLanguage::Polish,
-                "conflict: Trakt ClientId is not configured; set TRAKT__CLIENTID"
+                "invoke media-list add-on is unavailable: add-on validation failed: required setting CLIENT_ID is not configured"
             ),
-            "Identyfikator klienta Trakt nie jest skonfigurowany; ustaw TRAKT__CLIENTID."
+            "Skonfiguruj odwołanie do poświadczeń w ustawieniach dodatku."
         );
         assert_eq!(
             upload_error_text(UiLanguage::Polish, "No file field"),

@@ -71,6 +71,15 @@ release section when tagging a release.
 
 ### Added
 
+- Repository-installed add-ons can now expose bounded provider lists through
+  `media-list.list.v1`. The new `/media/addon-lists` manager imports and
+  refreshes those links, matches movies/shows/seasons/episodes to local media,
+  supports `addon_list:<id>` search, and can maintain a playlist in provider
+  order. The official Trakt add-on owns Trakt API access and configures its
+  client ID only through an environment/file secret reference; Beeld & Geluid
+  supports the same workflow for Schatkamer series, shared-list, and saved
+  `/zoeken?...` links.
+
 - The Beeld & Geluid streaming add-on can now synchronize public, user-made
   Schatkamer `/lijst/<uuid>` links as ordered Remote Stream playlists alongside
   series links. Duplicate programmes keep their first position, unavailable
@@ -142,6 +151,11 @@ release section when tagging a release.
   silently downgrade known Dolby Vision to ordinary HEVC/PQ.
 
 ### Changed
+
+- Trakt lists are no longer a built-in ErsatzRS feature (ADR 0067). Upgrading
+  deliberately deletes legacy Trakt list/item/GUID rows, their generated
+  system playlists and page-size preference, then drops all three Trakt tables;
+  no existing Trakt data is imported into the provider-neutral add-on schema.
 
 - The tag facets on the remote-streams browser no longer push the card grid off
   the screen. On a tag-heavy library the wrapped chip cloud grew without limit

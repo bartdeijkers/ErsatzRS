@@ -270,8 +270,8 @@ impl LanguageStrings for DutchStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -997,23 +997,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("Kan Trakt niet bereiken: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("Add-on gaf ongeldige lijstgegevens terug: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "Trakt-lijst bestaat niet.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "add-on-lijst bestaat niet.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "Ongeldige Trakt-lijst-URL.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "Trakt ClientId is niet geconfigureerd; stel TRAKT__CLIENTID in.".to_owned()
+        "Invalid add-on list url" => "Ongeldige add-on-lijst-URL.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Configureer de referentie naar de aanmeldgegevens in de add-on-instellingen.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "Trakt API-client is niet geconfigureerd voor deze bewerking.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "add-on API-client is niet geconfigureerd voor deze bewerking.".to_owned()
         }
         _ => error.to_owned(),
     }
@@ -1119,7 +1119,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Herhalingscollectie toevoegen",
         TextKey::AddTemplate => "Sjabloon toevoegen",
         TextKey::AddTemplateGroup => "Sjabloongroep toevoegen",
-        TextKey::AddTraktList => "Trakt-lijst toevoegen",
+        TextKey::AddAddonMediaList => "Add-on-lijst toevoegen",
         TextKey::AddToCollection => "Toevoegen aan collectie",
         TextKey::AddToEllipsis => "Toevoegen aan ...",
         TextKey::AddToPlaylist => "Toevoegen aan afspeellijst",
@@ -1309,7 +1309,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Herhalingscollectie verwijderen",
         TextKey::DeleteTemplate => "Sjabloon verwijderen",
         TextKey::DeleteTemplateGroup => "Sjabloongroep verwijderen",
-        TextKey::DeleteTraktList => "Trakt-lijst verwijderen",
+        TextKey::DeleteAddonMediaList => "add-on-lijst verwijderen",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Uitgeschakelde collecties staan al in deze multi-collectie"
         },
@@ -1387,7 +1387,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Handmatige collecties",
         TextKey::MatchFailed => "Koppelen mislukt",
         TextKey::MatchStatus => "Koppelstatus",
-        TextKey::MatchTraktListItems => "Items van Trakt-lijst koppelen",
+        TextKey::MatchAddonMediaListItems => "Items van add-on-lijst koppelen",
         TextKey::Members => "Leden",
         TextKey::MultiCollection => "Multi-collectie",
         TextKey::MultiCollectionDeleted => "Multi-collectie verwijderd.",
@@ -1413,7 +1413,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "Geen blokitems.",
         TextKey::NoItems => "Geen items.",
         TextKey::NoItemsToDisplay => "Geen items om weer te geven.",
-        TextKey::NoTraktListsYet => "Nog geen Trakt-lijsten.",
+        TextKey::NoAddonMediaListsYet => "Nog geen add-on-lijsten.",
         TextKey::No => "Nee",
         TextKey::NoCollections => "Nog geen collecties.",
         TextKey::NoMembers => "Nog geen leden.",
@@ -1792,7 +1792,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Search => "Zoeken",
         TextKey::SearchMedia => "Media zoeken",
         TextKey::SearchMoviesOrShows => "Films of series zoeken...",
-        TextKey::SearchTraktList => "Trakt-lijst zoeken",
+        TextKey::SearchAddonMediaList => "add-on-lijst zoeken",
         TextKey::SearchingMinimumLogLevel => "Minimaal logniveau voor zoeken",
         TextKey::Settings => "Instellingen",
         TextKey::SettingsSaveFailed => "Instellingen opslaan mislukt",
@@ -1805,7 +1805,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Slimme collectie verwijderd.",
         TextKey::SmartCollectionQueryPlaceholder => "bijv. genre:action OR genre:comedy",
         TextKey::SmartCollectionSaved => "Slimme collectie opgeslagen.",
-        TextKey::SaveTraktList => "Trakt-lijst opslaan",
+        TextKey::SaveAddonMediaList => "add-on-lijst opslaan",
         TextKey::Songs => "Nummers",
         TextKey::SplitTimeEvenly => "Tijd gelijk verdelen",
         TextKey::StreamingMinimumLogLevel => "Minimaal logniveau voor streaming",
@@ -1832,16 +1832,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "totale duur van de inhoud, in seconden",
         TextKey::TotalPointsHelp => "totaal aantal mogelijke mid-roll-punten",
         TextKey::TotalProgressHelp => "genormaliseerde positie van 0 tot 1",
-        TextKey::TraktList => "Trakt-lijst",
-        TextKey::TraktListActionFailed => "Actie voor Trakt-lijst mislukt.",
-        TextKey::TraktListAdded => "Trakt-lijst toegevoegd.",
-        TextKey::TraktListDeleted => "Trakt-lijst verwijderd.",
-        TextKey::TraktListMatched => "Trakt-lijst gekoppeld.",
-        TextKey::TraktListNotFound => "Trakt-lijst niet gevonden.",
-        TextKey::TraktListSaveFailed => "Opslaan van Trakt-lijst mislukt.",
-        TextKey::TraktListSaved => "Trakt-lijst opgeslagen.",
-        TextKey::TraktLists => "Trakt-lijsten",
-        TextKey::TraktListUrl => "URL van Trakt-lijst",
+        TextKey::AddonMediaList => "Add-on-lijst",
+        TextKey::AddonMediaListActionFailed => "Actie voor add-on-lijst mislukt.",
+        TextKey::AddonMediaListAdded => "add-on-lijst toegevoegd.",
+        TextKey::AddonMediaListDeleted => "add-on-lijst verwijderd.",
+        TextKey::AddonMediaListMatched => "add-on-lijst gekoppeld.",
+        TextKey::AddonMediaListNotFound => "add-on-lijst niet gevonden.",
+        TextKey::AddonMediaListSaveFailed => "Opslaan van add-on-lijst mislukt.",
+        TextKey::AddonMediaListSaved => "add-on-lijst opgeslagen.",
+        TextKey::AddonMediaLists => "Add-on-lijsten",
+        TextKey::AddonMediaListUrl => "URL van add-on-lijst",
         TextKey::Trash => "Prullenbak",
         TextKey::TrashAlreadyEmpty => "De prullenbak is al leeg.",
         TextKey::TrashEmpty => "De prullenbak is leeg.",
@@ -1991,16 +1991,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "Collectienaam is verplicht",
         TextKey::CollectionNotFound => "Collectie niet gevonden",
         TextKey::CollectionRenamed => "Collectie hernoemd.",
-        TextKey::EditTraktListProperties => "Eigenschappen van Trakt-lijst bewerken",
-        TextKey::EnterTraktListUrl => "Voer URL van Trakt-lijst in",
+        TextKey::EditAddonMediaListProperties => "Eigenschappen van add-on-lijst bewerken",
+        TextKey::EnterAddonMediaListUrl => "Voer URL van add-on-lijst in",
         TextKey::EnterSearchQuery => "Voer een zoekopdracht in.",
         TextKey::Episodes => "Afleveringen",
         TextKey::LoadingCollections => "Collecties laden...",
         TextKey::LoadingPlaylistGroups => "Afspeellijstgroepen laden...",
         TextKey::LoadingPlaylists => "Afspeellijsten laden...",
         TextKey::GeneratePlaylist => "Afspeellijst genereren",
-        TextKey::GeneratePlaylistFromSortedTraktItems => {
-            "Genereer een afspeellijst van de gesorteerde Trakt-lijstitems"
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
+            "Genereer een afspeellijst van de gesorteerde add-on-lijstitems"
         },
         TextKey::MusicVideos => "Muziekvideo's",
         TextKey::NewCollectionName => "Nieuwe collectienaam",
@@ -2314,7 +2314,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Kan context voor afspeelprobleemoplossing niet laden"
         },
-        TextKey::UpdateListFromTraktDaily => "Lijst eenmaal per dag bijwerken vanaf trakt.tv",
+        TextKey::UpdateAddonMediaListDaily => "Lijst eenmaal per dag bijwerken vanaf de provider",
         TextKey::UploadLogo => "Logo uploaden",
         TextKey::UploadLogoHelp => "Kies een lokale afbeelding om het opgeslagen kanaallogo bij opslaan te vervangen",
         TextKey::Warning => "Waarschuwing",
@@ -2457,7 +2457,7 @@ mod tests {
         filler_error_text, hardware_acceleration_option_text, library_kind_text, log_level_text,
         media_action_error_text, media_browser_error_text, media_kind_text,
         media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, trakt_error_text, upload_error_text,
+        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
         watermark_error_text, UiLanguage,
     };
 
@@ -2650,11 +2650,11 @@ mod tests {
             "custom database failure"
         );
         assert_eq!(
-            trakt_error_text(UiLanguage::Dutch, "trakt list with id 42 not found"),
-            "Trakt-lijst bestaat niet."
+            addon_media_list_error_text(UiLanguage::Dutch, "add-on media list with id 42 not found"),
+            "add-on-lijst bestaat niet."
         );
         assert_eq!(
-            trakt_error_text(UiLanguage::Dutch, "custom database failure"),
+            addon_media_list_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
         assert_eq!(

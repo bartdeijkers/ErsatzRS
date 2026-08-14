@@ -1,40 +1,47 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    RepositoryError, Result, TraktListAdminForm, TraktListAdminRow, TraktRepository,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository, RepositoryError,
+    Result,
 };
-use ersatzrs_core::trakt::TraktListLocator;
 use ersatzrs_domain::EntityId;
 use sqlx::{Pool, Row};
 
-use crate::repositories::common::decode_bool_column;
+use crate::addon_media_list::InstalledAddonMediaListProvider;
+use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer};
+use crate::repositories::common::{decode_bool_column, decode_optional_datetime};
 use crate::repositories::SqlxResultExt as _;
-use crate::trakt::TraktApiClient;
-use crate::trakt_sync::{TraktRemoteSynchronizer, TraktSynchronizer};
 
-const PAGE_SIZE_KEY: &str = "pages.trakt.lists_page_size";
+const PAGE_SIZE_KEY: &str = "pages.addon_media_lists.page_size";
 
 #[derive(Clone)]
-pub struct SqliteTraktRepository(pub Pool<crate::db::Db>);
+pub struct SqliteAddonMediaListRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
-impl TraktRepository for SqliteTraktRepository {
-    async fn list_admin(&self, page: u32, page_size: u32) -> Result<(Vec<TraktListAdminRow>, u64)> {
-        let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TraktList""#)
+impl AddonMediaListRepository for SqliteAddonMediaListRepository {
+    async fn list_admin(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
+        let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaList""#)
             .fetch_one(&self.0)
             .await
             .repository()?;
         let rows = sqlx::query(
-            r#"SELECT "tl"."Id", "tl"."TraktId", "tl"."User", "tl"."List",
-                      COALESCE("tl"."Name", '') AS "Name",
-                      "tl"."ItemCount", "tl"."AutoRefresh", "tl"."GeneratePlaylist",
+            r#"SELECT "list"."Id", "list"."AddonId", "list"."ProviderId",
+                      "list"."SourceUrl", COALESCE("list"."Name", '') AS "Name",
+                      "list"."ItemCount", "list"."AutoRefresh", "list"."GeneratePlaylist",
+                      "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                       COUNT("matched"."Id") AS "MatchCount"
-               FROM "TraktList" AS "tl"
-               LEFT JOIN "TraktListItem" AS "matched"
-                 ON "matched"."TraktListId" = "tl"."Id" AND "matched"."MediaItemId" IS NOT NULL
-               GROUP BY "tl"."Id", "tl"."TraktId", "tl"."User", "tl"."List",
-                        "tl"."Name", "tl"."ItemCount", "tl"."AutoRefresh",
-                        "tl"."GeneratePlaylist"
-               ORDER BY "tl"."Name", "tl"."Id"
+               FROM "AddonMediaList" AS "list"
+               LEFT JOIN "AddonMediaListItem" AS "matched"
+                 ON "matched"."AddonMediaListId" = "list"."Id"
+                AND "matched"."MediaItemId" IS NOT NULL
+               GROUP BY "list"."Id", "list"."AddonId", "list"."ProviderId",
+                        "list"."SourceUrl", "list"."Name", "list"."ItemCount",
+                        "list"."AutoRefresh", "list"."GeneratePlaylist",
+                        "list"."LastUpdate", "list"."LastMatch", "list"."LastError"
+               ORDER BY "list"."Name", "list"."Id"
                LIMIT ? OFFSET ?"#,
         )
         .bind(i64::from(page_size))
@@ -47,41 +54,46 @@ impl TraktRepository for SqliteTraktRepository {
             .iter()
             .map(|row| {
                 let match_count: i64 = row.try_get("MatchCount").repository()?;
-                Ok(TraktListAdminRow {
+                Ok(AddonMediaListAdminRow {
                     id: row.try_get("Id").repository()?,
-                    trakt_id: row.try_get("TraktId").repository()?,
-                    user: row
-                        .try_get::<Option<String>, _>("User")
-                        .repository()?
-                        .unwrap_or_default(),
-                    list: row
-                        .try_get::<Option<String>, _>("List")
-                        .repository()?
-                        .unwrap_or_default(),
+                    addon_id: row.try_get("AddonId").repository()?,
+                    provider_id: row.try_get("ProviderId").repository()?,
+                    source_url: row.try_get("SourceUrl").repository()?,
                     name: row.try_get("Name").repository()?,
                     item_count: row.try_get("ItemCount").repository()?,
                     match_count: i32::try_from(match_count).map_err(|_| {
                         RepositoryError::Decode {
-                            kind: "Trakt list match count",
+                            kind: "Add-on media list match count",
                             value: match_count.to_string(),
                         }
                     })?,
                     auto_refresh: decode_bool_column(row, "AutoRefresh")?,
                     generate_playlist: decode_bool_column(row, "GeneratePlaylist")?,
+                    last_update: decode_optional_datetime(
+                        "AddonMediaList.LastUpdate",
+                        row.try_get("LastUpdate").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    last_match: decode_optional_datetime(
+                        "AddonMediaList.LastMatch",
+                        row.try_get("LastMatch").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    last_error: row.try_get("LastError").repository()?,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         let total = u64::try_from(total).map_err(|_| RepositoryError::Decode {
-            kind: "Trakt list count",
+            kind: "Add-on media list count",
             value: total.to_string(),
         })?;
         Ok((rows, total))
     }
 
-    async fn get_admin_form(&self, id: EntityId) -> Result<Option<TraktListAdminForm>> {
+    async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
-            r#"SELECT "Id", "User", "List", "AutoRefresh", "GeneratePlaylist"
-               FROM "TraktList"
+            r#"SELECT "Id", "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist"
+               FROM "AddonMediaList"
                WHERE "Id" = ?"#,
         )
         .bind(id)
@@ -89,16 +101,10 @@ impl TraktRepository for SqliteTraktRepository {
         .await
         .repository()?;
         row.map(|row| {
-            Ok(TraktListAdminForm {
+            Ok(AddonMediaListAdminForm {
                 id: row.try_get("Id").repository()?,
-                user: row
-                    .try_get::<Option<String>, _>("User")
-                    .repository()?
-                    .unwrap_or_default(),
-                list: row
-                    .try_get::<Option<String>, _>("List")
-                    .repository()?
-                    .unwrap_or_default(),
+                addon_id: row.try_get("AddonId").repository()?,
+                source_url: row.try_get("SourceUrl").repository()?,
                 auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
                 generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
             })
@@ -106,15 +112,15 @@ impl TraktRepository for SqliteTraktRepository {
         .transpose()
     }
 
-    async fn add_or_refresh(&self, locator: &TraktListLocator) -> Result<EntityId> {
-        let client = TraktApiClient::from_env()?;
-        TraktRemoteSynchronizer::new(self.0.clone(), client)
-            .add_or_refresh(locator)
+    async fn add_or_refresh(&self, addon_id: &str, source_url: &str) -> Result<EntityId> {
+        let provider = InstalledAddonMediaListProvider::new(self.0.clone());
+        AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
+            .add_or_refresh(addon_id, source_url)
             .await
     }
 
     async fn match_items(&self, id: EntityId) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone())
+        AddonMediaListSynchronizer::new(self.0.clone())
             .match_list_items(id)
             .await
     }
@@ -125,13 +131,15 @@ impl TraktRepository for SqliteTraktRepository {
         auto_refresh: bool,
         generate_playlist: bool,
     ) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone())
+        AddonMediaListSynchronizer::new(self.0.clone())
             .update_settings(id, auto_refresh, generate_playlist)
             .await
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        TraktSynchronizer::new(self.0.clone()).delete_list(id).await
+        AddonMediaListSynchronizer::new(self.0.clone())
+            .delete_list(id)
+            .await
     }
 
     async fn get_page_size(&self) -> Result<u32> {

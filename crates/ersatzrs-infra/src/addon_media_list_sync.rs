@@ -1,10 +1,10 @@
 use crate::repositories::SqlxResultExt as _;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Duration, Utc};
+use ersatzrs_core::addon_media_list::{AddonMediaListProvider, EnumeratedAddonMediaListItem};
 use ersatzrs_core::repositories::{RepositoryError, Result};
-use ersatzrs_core::trakt::{TraktApiClient, TraktListItemWithGuids, TraktListLocator};
-use ersatzrs_domain::{EntityId, TraktList, TraktListItemKind};
+use ersatzrs_domain::{AddonMediaList, AddonMediaListItemKind, EntityId};
 use sqlx::{Pool, Row};
 
 use crate::db::{last_insert_id, Db, DbPool};
@@ -18,18 +18,18 @@ const COLLECTION_TYPE_SEASON: i32 = 2;
 const COLLECTION_TYPE_MOVIE: i32 = 10;
 const COLLECTION_TYPE_EPISODE: i32 = 20;
 
-/// Maintains locally persisted Trakt lists and generated playlists.
-pub struct TraktSynchronizer {
+/// Maintains locally persisted Add-on media lists and generated playlists.
+pub struct AddonMediaListSynchronizer {
     pool: DbPool,
 }
 
-impl TraktSynchronizer {
+impl AddonMediaListSynchronizer {
     #[must_use]
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
     }
 
-    /// Match a saved Trakt list against local metadata and update generated
+    /// Match a saved Add-on media list against local metadata and update generated
     /// playlist rows when enabled.
     ///
     /// # Errors
@@ -45,8 +45,8 @@ impl TraktSynchronizer {
 
         let rows = sqlx::query(
             r#"SELECT "Id", "Kind", "Title", "Year", "Season", "Episode", "Rank"
-               FROM "TraktListItem"
-               WHERE "TraktListId" = ?
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ?
                ORDER BY "Title", "Year", "Season", "Episode""#,
         )
         .bind(list_id)
@@ -54,10 +54,21 @@ impl TraktSynchronizer {
         .await
         .repository()?;
 
+        if let Some(playlist_id) = playlist_id {
+            // Generated playlists are a projection of the current provider
+            // snapshot. Rebuild their items so removed entries and changed
+            // ranks cannot leave stale rows behind.
+            sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+                .bind(playlist_id)
+                .execute(&self.pool)
+                .await
+                .repository()?;
+        }
+
         for row in rows {
-            let item = TraktMatchItem {
+            let item = MatchItem {
                 id: row.try_get("Id").repository()?,
-                kind: decode_enum_column("TraktListItemKind", &row, "Kind")?,
+                kind: decode_enum_column("AddonMediaListItemKind", &row, "Kind")?,
                 title: row
                     .try_get::<Option<String>, _>("Title")
                     .repository()?
@@ -72,7 +83,7 @@ impl TraktSynchronizer {
             };
 
             let matched_id = self.identify_item(&item).await?;
-            sqlx::query(r#"UPDATE "TraktListItem" SET "MediaItemId" = ? WHERE "Id" = ?"#)
+            sqlx::query(r#"UPDATE "AddonMediaListItem" SET "MediaItemId" = ? WHERE "Id" = ?"#)
                 .bind(matched_id)
                 .bind(item.id)
                 .execute(&self.pool)
@@ -83,14 +94,11 @@ impl TraktSynchronizer {
                 if let Some(media_item_id) = matched_id {
                     self.upsert_playlist_item(playlist_id, &item, media_item_id)
                         .await?;
-                } else {
-                    self.delete_playlist_item_at_rank(playlist_id, item.rank)
-                        .await?;
                 }
             }
         }
 
-        sqlx::query(r#"UPDATE "TraktList" SET "LastMatch" = ? WHERE "Id" = ?"#)
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastMatch" = ? WHERE "Id" = ?"#)
             .bind(encode_datetime(Utc::now()))
             .bind(list_id)
             .execute(&self.pool)
@@ -100,7 +108,7 @@ impl TraktSynchronizer {
         Ok(())
     }
 
-    /// Update user-editable Trakt list settings.
+    /// Update user-editable Add-on media list settings.
     ///
     /// # Errors
     ///
@@ -113,7 +121,7 @@ impl TraktSynchronizer {
     ) -> Result<()> {
         let list = self.load_list(list_id).await?;
         sqlx::query(
-            r#"UPDATE "TraktList"
+            r#"UPDATE "AddonMediaList"
                SET "AutoRefresh" = ?, "GeneratePlaylist" = ?
                WHERE "Id" = ?"#,
         )
@@ -125,7 +133,7 @@ impl TraktSynchronizer {
         .repository()?;
 
         if generate_playlist {
-            self.ensure_generated_playlist(&TraktList {
+            self.ensure_generated_playlist(&AddonMediaList {
                 auto_refresh,
                 generate_playlist,
                 ..list
@@ -138,7 +146,7 @@ impl TraktSynchronizer {
                 .execute(&self.pool)
                 .await
                 .repository()?;
-            sqlx::query(r#"UPDATE "TraktList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
                 .bind(list_id)
                 .execute(&self.pool)
                 .await
@@ -148,14 +156,14 @@ impl TraktSynchronizer {
         Ok(())
     }
 
-    /// Delete a Trakt list and its generated playlist if present.
+    /// Delete a Add-on media list and its generated playlist if present.
     ///
     /// # Errors
     ///
     /// Returns an error when persistence fails.
     pub async fn delete_list(&self, list_id: EntityId) -> Result<()> {
         let maybe_playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
-            r#"SELECT "PlaylistId" FROM "TraktList" WHERE "Id" = ?"#,
+            r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
         .bind(list_id)
         .fetch_optional(&self.pool)
@@ -163,7 +171,7 @@ impl TraktSynchronizer {
         .repository()?
         .flatten();
 
-        sqlx::query(r#"DELETE FROM "TraktList" WHERE "Id" = ?"#)
+        sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "Id" = ?"#)
             .bind(list_id)
             .execute(&self.pool)
             .await
@@ -189,7 +197,7 @@ impl TraktSynchronizer {
         let cutoff = Utc::now() - Duration::hours(1);
         let rows = sqlx::query(
             r#"SELECT "Id"
-               FROM "TraktList"
+               FROM "AddonMediaList"
                WHERE "LastMatch" IS NULL OR "LastMatch" <= ?
                ORDER BY "Id""#,
         )
@@ -208,16 +216,16 @@ impl TraktSynchronizer {
         Ok(count)
     }
 
-    async fn save_list(&self, list: &TraktList) -> Result<EntityId> {
+    async fn save_list(&self, list: &AddonMediaList) -> Result<EntityId> {
         let maybe_existing = sqlx::query(
             r#"SELECT "Id"
-               FROM "TraktList"
-               WHERE "User" = ? AND "List" = ?
+               FROM "AddonMediaList"
+               WHERE "AddonId" = ? AND "ProviderId" = ?
                ORDER BY "Id"
                LIMIT 1"#,
         )
-        .bind(&list.user)
-        .bind(&list.list)
+        .bind(&list.addon_id)
+        .bind(&list.provider_id)
         .fetch_optional(&self.pool)
         .await
         .repository()?;
@@ -225,11 +233,12 @@ impl TraktSynchronizer {
         if let Some(row) = maybe_existing {
             let id = row.try_get("Id").repository()?;
             sqlx::query(
-                r#"UPDATE "TraktList"
-                   SET "TraktId" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?
+                r#"UPDATE "AddonMediaList"
+                   SET "SourceUrl" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?,
+                       "LastError" = NULL
                    WHERE "Id" = ?"#,
             )
-            .bind(list.trakt_id)
+            .bind(&list.source_url)
             .bind(&list.name)
             .bind(&list.description)
             .bind(list.item_count)
@@ -240,18 +249,18 @@ impl TraktSynchronizer {
             Ok(id)
         } else {
             let result = sqlx::query(
-                r#"INSERT INTO "TraktList" (
-                    "AutoRefresh", "Description", "GeneratePlaylist", "ItemCount",
-                    "LastMatch", "LastUpdate", "List", "Name", "PlaylistId",
-                    "TraktId", "User"
-                   ) VALUES (0, ?, 0, ?, NULL, NULL, ?, ?, NULL, ?, ?)"#,
+                r#"INSERT INTO "AddonMediaList" (
+                    "AddonId", "SourceUrl", "ProviderId", "Name", "Description",
+                    "AutoRefresh", "GeneratePlaylist", "ItemCount", "PlaylistId",
+                    "LastUpdate", "LastMatch", "LastError"
+                   ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, NULL, NULL, NULL, NULL)"#,
             )
+            .bind(&list.addon_id)
+            .bind(&list.source_url)
+            .bind(&list.provider_id)
+            .bind(&list.name)
             .bind(&list.description)
             .bind(list.item_count)
-            .bind(&list.list)
-            .bind(&list.name)
-            .bind(list.trakt_id)
-            .bind(&list.user)
             .execute(&self.pool)
             .await
             .repository()?;
@@ -259,28 +268,25 @@ impl TraktSynchronizer {
         }
     }
 
-    async fn save_list_items<C>(&self, api_client: &C, list_id: EntityId) -> Result<TraktList>
-    where
-        C: TraktApiClient,
-    {
-        let list = self.load_list(list_id).await?;
-        let incoming = api_client
-            .get_user_list_items(&list.user, &list.list)
-            .await?;
+    async fn save_list_items(
+        &self,
+        list_id: EntityId,
+        incoming: &[EnumeratedAddonMediaListItem],
+    ) -> Result<AddonMediaList> {
         let incoming_ids = incoming
             .iter()
-            .map(|item| item.trakt_id)
+            .map(|item| item.provider_id.as_str())
             .collect::<HashSet<_>>();
         let existing = self.load_existing_items(list_id).await?;
         let existing_ids = existing
             .iter()
-            .map(|item| item.trakt_id)
-            .collect::<HashSet<_>>();
+            .map(|item| (item.provider_id.as_str(), item.id))
+            .collect::<HashMap<_, _>>();
 
         let mut tx = self.pool.begin().await.repository()?;
         for item in &existing {
-            if !incoming_ids.contains(&item.trakt_id) {
-                sqlx::query(r#"DELETE FROM "TraktListItem" WHERE "Id" = ?"#)
+            if !incoming_ids.contains(item.provider_id.as_str()) {
+                sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#)
                     .bind(item.id)
                     .execute(&mut *tx)
                     .await
@@ -288,112 +294,95 @@ impl TraktSynchronizer {
             }
         }
 
-        for item in &incoming {
-            if existing_ids.contains(&item.trakt_id) {
-                let existing = existing
-                    .iter()
-                    .find(|candidate| candidate.trakt_id == item.trakt_id)
-                    .expect("existing id set and rows are aligned");
+        for item in incoming {
+            if let Some(existing_id) = existing_ids.get(item.provider_id.as_str()).copied() {
                 sqlx::query(
-                    r#"UPDATE "TraktListItem"
+                    r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
-                           "Season" = ?, "Episode" = ?, "MediaItemId" = NULL
+                           "DisplayTitle" = ?, "Season" = ?, "Episode" = ?,
+                           "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                 )
                 .bind(encode_enum(item.kind))
                 .bind(item.rank)
                 .bind(&item.title)
                 .bind(item.year)
-                .bind(zero_as_none(item.season))
-                .bind(zero_as_none(item.episode))
-                .bind(existing.id)
+                .bind(&item.display_title)
+                .bind(item.season)
+                .bind(item.episode)
+                .bind(existing_id)
                 .execute(&mut *tx)
                 .await
                 .repository()?;
-                sqlx::query(r#"DELETE FROM "TraktListItemGuid" WHERE "TraktListItemId" = ?"#)
-                    .bind(existing.id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-                insert_item_guids(&mut tx, existing.id, &item.guids).await?;
+                sqlx::query(
+                    r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#,
+                )
+                .bind(existing_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+                insert_item_guids(&mut tx, existing_id, &item.guids).await?;
             } else {
                 let item_id = insert_item(&mut tx, list_id, item).await?;
                 insert_item_guids(&mut tx, item_id, &item.guids).await?;
             }
         }
 
-        sqlx::query(r#"UPDATE "TraktList" SET "LastUpdate" = ? WHERE "Id" = ?"#)
-            .bind(encode_datetime(Utc::now()))
-            .bind(list_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "LastUpdate" = ?, "ItemCount" = ?, "LastError" = NULL
+               WHERE "Id" = ?"#,
+        )
+        .bind(encode_datetime(Utc::now()))
+        .bind(i32::try_from(incoming.len()).unwrap_or(i32::MAX))
+        .bind(list_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
         tx.commit().await.repository()?;
 
         self.load_list(list_id).await
     }
 
-    async fn load_list(&self, list_id: EntityId) -> Result<TraktList> {
-        let row = sqlx::query(r#"SELECT * FROM "TraktList" WHERE "Id" = ?"#)
+    async fn load_list(&self, list_id: EntityId) -> Result<AddonMediaList> {
+        let row = sqlx::query(r#"SELECT * FROM "AddonMediaList" WHERE "Id" = ?"#)
             .bind(list_id)
             .fetch_optional(&self.pool)
             .await
             .repository()?
             .ok_or(RepositoryError::NotFound {
-                kind: "trakt list",
+                kind: "add-on media list",
                 id: list_id,
             })?;
 
-        Ok(TraktList {
+        Ok(AddonMediaList {
             id: row.try_get("Id").repository()?,
-            trakt_id: row.try_get("TraktId").repository()?,
-            name: row
-                .try_get::<Option<String>, _>("Name")
-                .repository()?
-                .unwrap_or_default(),
-            user: row
-                .try_get::<Option<String>, _>("User")
-                .repository()?
-                .unwrap_or_default(),
-            list: row
-                .try_get::<Option<String>, _>("List")
-                .repository()?
-                .unwrap_or_default(),
+            addon_id: row.try_get("AddonId").repository()?,
+            source_url: row.try_get("SourceUrl").repository()?,
+            provider_id: row.try_get("ProviderId").repository()?,
+            name: row.try_get("Name").repository()?,
             description: row.try_get("Description").repository()?,
             item_count: row.try_get("ItemCount").repository()?,
             auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
             generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
             playlist_id: row.try_get("PlaylistId").repository()?,
             last_update: decode_optional_datetime(
-                "TraktList.LastUpdate",
+                "AddonMediaList.LastUpdate",
                 row.try_get("LastUpdate").repository()?,
             )?,
             last_match: decode_optional_datetime(
-                "TraktList.LastMatch",
+                "AddonMediaList.LastMatch",
                 row.try_get("LastMatch").repository()?,
             )?,
-            item_ids: self.load_item_ids(list_id).await?,
+            last_error: row.try_get("LastError").repository()?,
         })
-    }
-
-    async fn load_item_ids(&self, list_id: EntityId) -> Result<Vec<EntityId>> {
-        let rows = sqlx::query(
-            r#"SELECT "Id" FROM "TraktListItem" WHERE "TraktListId" = ? ORDER BY "Rank", "Id""#,
-        )
-        .bind(list_id)
-        .fetch_all(&self.pool)
-        .await
-        .repository()?;
-        rows.iter()
-            .map(|row| row.try_get("Id").repository())
-            .collect()
     }
 
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
-            r#"SELECT "Id", "TraktId"
-               FROM "TraktListItem"
-               WHERE "TraktListId" = ?
+            r#"SELECT "Id", "ProviderId"
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ?
                ORDER BY "Id""#,
         )
         .bind(list_id)
@@ -405,7 +394,7 @@ impl TraktSynchronizer {
             .map(|row| {
                 Ok(ExistingItem {
                     id: row.try_get("Id").repository()?,
-                    trakt_id: row.try_get("TraktId").repository()?,
+                    provider_id: row.try_get("ProviderId").repository()?,
                 })
             })
             .collect()
@@ -414,8 +403,8 @@ impl TraktSynchronizer {
     async fn load_item_guids(&self, item_id: EntityId) -> Result<Vec<String>> {
         let rows = sqlx::query(
             r#"SELECT "Guid"
-               FROM "TraktListItemGuid"
-               WHERE "TraktListItemId" = ?
+               FROM "AddonMediaListItemGuid"
+               WHERE "AddonMediaListItemId" = ?
                ORDER BY "Id""#,
         )
         .bind(item_id)
@@ -433,16 +422,16 @@ impl TraktSynchronizer {
             .collect()
     }
 
-    async fn identify_item(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
+    async fn identify_item(&self, item: &MatchItem) -> Result<Option<EntityId>> {
         match item.kind {
-            TraktListItemKind::Movie => self.identify_movie(item).await,
-            TraktListItemKind::Show => self.identify_show(item).await,
-            TraktListItemKind::Season => self.identify_season(item).await,
-            TraktListItemKind::Episode => self.identify_episode(item).await,
+            AddonMediaListItemKind::Movie => self.identify_movie(item).await,
+            AddonMediaListItemKind::Show => self.identify_show(item).await,
+            AddonMediaListItemKind::Season => self.identify_season(item).await,
+            AddonMediaListItemKind::Episode => self.identify_episode(item).await,
         }
     }
 
-    async fn identify_movie(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
+    async fn identify_movie(&self, item: &MatchItem) -> Result<Option<EntityId>> {
         if let Some(id) = self
             .identify_by_guid("MovieMetadata", "MovieMetadataId", "MovieId", &item.guids)
             .await?
@@ -465,7 +454,7 @@ impl TraktSynchronizer {
         .repository()
     }
 
-    async fn identify_show(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
+    async fn identify_show(&self, item: &MatchItem) -> Result<Option<EntityId>> {
         if let Some(id) = self
             .identify_by_guid("ShowMetadata", "ShowMetadataId", "ShowId", &item.guids)
             .await?
@@ -488,7 +477,7 @@ impl TraktSynchronizer {
         .repository()
     }
 
-    async fn identify_season(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
+    async fn identify_season(&self, item: &MatchItem) -> Result<Option<EntityId>> {
         if let Some(id) = self
             .identify_by_guid(
                 "SeasonMetadata",
@@ -522,7 +511,7 @@ impl TraktSynchronizer {
         .repository()
     }
 
-    async fn identify_episode(&self, item: &TraktMatchItem) -> Result<Option<EntityId>> {
+    async fn identify_episode(&self, item: &MatchItem) -> Result<Option<EntityId>> {
         if let Some(id) = self
             .identify_by_guid(
                 "EpisodeMetadata",
@@ -589,13 +578,13 @@ impl TraktSynchronizer {
         Ok(None)
     }
 
-    async fn ensure_generated_playlist(&self, list: &TraktList) -> Result<EntityId> {
+    async fn ensure_generated_playlist(&self, list: &AddonMediaList) -> Result<EntityId> {
         if let Some(playlist_id) = list.playlist_id {
             return Ok(playlist_id);
         }
 
         let group_id = system_playlist_group_id(&self.pool).await?;
-        let name = format!("{}/{}", list.user, list.list);
+        let name = list.name.clone();
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId")
                VALUES (1, ?, ?)"#,
@@ -607,7 +596,7 @@ impl TraktSynchronizer {
         .repository()?;
         let playlist_id = last_insert_id(result);
 
-        sqlx::query(r#"UPDATE "TraktList" SET "PlaylistId" = ? WHERE "Id" = ?"#)
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = ? WHERE "Id" = ?"#)
             .bind(playlist_id)
             .bind(list.id)
             .execute(&self.pool)
@@ -620,14 +609,14 @@ impl TraktSynchronizer {
     async fn upsert_playlist_item(
         &self,
         playlist_id: EntityId,
-        item: &TraktMatchItem,
+        item: &MatchItem,
         media_item_id: EntityId,
     ) -> Result<()> {
         let collection_type = match item.kind {
-            TraktListItemKind::Movie => COLLECTION_TYPE_MOVIE,
-            TraktListItemKind::Show => COLLECTION_TYPE_SHOW,
-            TraktListItemKind::Season => COLLECTION_TYPE_SEASON,
-            TraktListItemKind::Episode => COLLECTION_TYPE_EPISODE,
+            AddonMediaListItemKind::Movie => COLLECTION_TYPE_MOVIE,
+            AddonMediaListItemKind::Show => COLLECTION_TYPE_SHOW,
+            AddonMediaListItemKind::Season => COLLECTION_TYPE_SEASON,
+            AddonMediaListItemKind::Episode => COLLECTION_TYPE_EPISODE,
         };
         let existing_id = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "Id" FROM "PlaylistItem" WHERE "PlaylistId" = ? AND "Index" = ?"#,
@@ -674,57 +663,73 @@ impl TraktSynchronizer {
 
         Ok(())
     }
-
-    async fn delete_playlist_item_at_rank(&self, playlist_id: EntityId, rank: i32) -> Result<()> {
-        sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ? AND "Index" = ?"#)
-            .bind(playlist_id)
-            .bind(rank)
-            .execute(&self.pool)
-            .await
-            .repository()?;
-        Ok(())
-    }
 }
 
-/// Imports and refreshes Trakt data using a configured remote API capability.
-pub struct TraktRemoteSynchronizer<C> {
-    local: TraktSynchronizer,
-    api_client: C,
+/// Imports and refreshes provider data through an installed add-on.
+pub struct AddonMediaListRemoteSynchronizer<P> {
+    local: AddonMediaListSynchronizer,
+    provider: P,
 }
 
-impl<C> TraktRemoteSynchronizer<C>
+impl<P> AddonMediaListRemoteSynchronizer<P>
 where
-    C: TraktApiClient,
+    P: AddonMediaListProvider,
 {
     #[must_use]
-    pub fn new(pool: DbPool, api_client: C) -> Self {
+    pub fn new(pool: DbPool, provider: P) -> Self {
         Self {
-            local: TraktSynchronizer::new(pool),
-            api_client,
+            local: AddonMediaListSynchronizer::new(pool),
+            provider,
         }
     }
 
-    /// Add or refresh a Trakt list, then immediately match its persisted items.
+    /// Add or refresh an add-on media list, then match its persisted items.
     ///
     /// # Errors
     ///
-    /// Returns an error when the Trakt API request fails or persistence fails.
-    pub async fn add_or_refresh(&self, locator: &TraktListLocator) -> Result<EntityId> {
-        let mut list = self
-            .api_client
-            .get_user_list(&locator.user, &locator.list)
-            .await?;
-        list.user = locator.user.to_ascii_lowercase();
+    /// Returns an error when provider invocation or persistence fails.
+    pub async fn add_or_refresh(&self, addon_id: &str, source_url: &str) -> Result<EntityId> {
+        let enumerated = match self.provider.enumerate(addon_id, source_url).await {
+            Ok(enumerated) => enumerated,
+            Err(error) => {
+                sqlx::query(
+                    r#"UPDATE "AddonMediaList" SET "LastError" = ?
+                       WHERE "AddonId" = ? AND "SourceUrl" = ?"#,
+                )
+                .bind(error.to_string())
+                .bind(addon_id)
+                .bind(source_url)
+                .execute(&self.local.pool)
+                .await
+                .repository()?;
+                return Err(error);
+            }
+        };
+        let list = AddonMediaList {
+            id: 0,
+            addon_id: addon_id.to_owned(),
+            source_url: source_url.to_owned(),
+            provider_id: enumerated.provider_id,
+            name: enumerated.name,
+            description: enumerated.description,
+            item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
+            auto_refresh: false,
+            generate_playlist: false,
+            playlist_id: None,
+            last_update: None,
+            last_match: None,
+            last_error: None,
+        };
         let list_id = self.local.save_list(&list).await?;
         let list = self
             .local
-            .save_list_items(&self.api_client, list_id)
+            .save_list_items(list_id, &enumerated.items)
             .await?;
         self.local.match_list_items(list.id).await?;
         Ok(list.id)
     }
 
-    /// Refresh auto-refresh lists whose last Trakt download is older than one day.
+    /// Refresh auto-refresh lists whose provider update is older than one day.
     ///
     /// # Errors
     ///
@@ -732,10 +737,14 @@ where
     pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
         let cutoff = Utc::now() - Duration::days(1);
         let rows = sqlx::query(
-            r#"SELECT "User", "List"
-               FROM "TraktList"
-               WHERE "AutoRefresh" = 1 AND ("LastUpdate" IS NULL OR "LastUpdate" <= ?)
-               ORDER BY "Id""#,
+            r#"SELECT "list"."AddonId", "list"."SourceUrl"
+               FROM "AddonMediaList" AS "list"
+               JOIN "AddonInstallation" AS "addon"
+                 ON "addon"."AddonId" = "list"."AddonId"
+               WHERE "list"."AutoRefresh" = 1
+                 AND "addon"."Enabled" = 1
+                 AND ("list"."LastUpdate" IS NULL OR "list"."LastUpdate" <= ?)
+               ORDER BY "list"."Id""#,
         )
         .bind(encode_datetime(cutoff))
         .fetch_all(&self.local.pool)
@@ -744,18 +753,11 @@ where
 
         let mut count = 0;
         for row in rows {
-            let locator = TraktListLocator {
-                user: row
-                    .try_get::<Option<String>, _>("User")
-                    .repository()?
-                    .unwrap_or_default(),
-                list: row
-                    .try_get::<Option<String>, _>("List")
-                    .repository()?
-                    .unwrap_or_default(),
-            };
-            self.add_or_refresh(&locator).await?;
-            count += 1;
+            let addon_id: String = row.try_get("AddonId").repository()?;
+            let source_url: String = row.try_get("SourceUrl").repository()?;
+            if self.add_or_refresh(&addon_id, &source_url).await.is_ok() {
+                count += 1;
+            }
         }
         Ok(count)
     }
@@ -779,20 +781,21 @@ async fn system_playlist_group_id(pool: &Pool<Db>) -> Result<EntityId> {
 async fn insert_item(
     tx: &mut sqlx::Transaction<'_, Db>,
     list_id: EntityId,
-    item: &TraktListItemWithGuids,
+    item: &EnumeratedAddonMediaListItem,
 ) -> Result<EntityId> {
     let result = sqlx::query(
-        r#"INSERT INTO "TraktListItem" (
-            "Episode", "Kind", "MediaItemId", "Rank", "Season", "Title",
-            "TraktId", "TraktListId", "Year"
-           ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO "AddonMediaListItem" (
+            "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
+            "Rank", "Season", "Title", "AddonMediaListId", "Year"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)"#,
     )
-    .bind(zero_as_none(item.episode))
+    .bind(&item.provider_id)
+    .bind(&item.display_title)
+    .bind(item.episode)
     .bind(encode_enum(item.kind))
     .bind(item.rank)
-    .bind(zero_as_none(item.season))
+    .bind(item.season)
     .bind(&item.title)
-    .bind(item.trakt_id)
     .bind(list_id)
     .bind(item.year)
     .execute(&mut **tx)
@@ -807,7 +810,7 @@ async fn insert_item_guids(
     guids: &[String],
 ) -> Result<()> {
     for guid in guids {
-        sqlx::query(r#"INSERT INTO "TraktListItemGuid" ("Guid", "TraktListItemId") VALUES (?, ?)"#)
+        sqlx::query(r#"INSERT INTO "AddonMediaListItemGuid" ("Guid", "AddonMediaListItemId") VALUES (?, ?)"#)
             .bind(guid)
             .bind(item_id)
             .execute(&mut **tx)
@@ -817,20 +820,16 @@ async fn insert_item_guids(
     Ok(())
 }
 
-fn zero_as_none(value: i32) -> Option<i32> {
-    (value != 0).then_some(value)
-}
-
 #[derive(Debug)]
 struct ExistingItem {
     id: EntityId,
-    trakt_id: i32,
+    provider_id: String,
 }
 
 #[derive(Debug)]
-struct TraktMatchItem {
+struct MatchItem {
     id: EntityId,
-    kind: TraktListItemKind,
+    kind: AddonMediaListItemKind,
     title: String,
     year: Option<i32>,
     season: Option<i32>,

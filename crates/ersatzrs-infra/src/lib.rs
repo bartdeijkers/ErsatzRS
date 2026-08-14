@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod addon_media_list;
+pub mod addon_media_list_sync;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;
@@ -33,8 +35,6 @@ pub mod repositories;
 pub(crate) mod runtime_identity;
 pub mod startup_config;
 pub mod subtitles;
-pub mod trakt;
-pub mod trakt_sync;
 pub mod transcode_capacity;
 pub mod tsduck;
 pub mod xmltv;

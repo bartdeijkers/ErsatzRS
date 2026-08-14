@@ -1000,13 +1000,29 @@ fn setting_editor(
             .or_else(|| definition.default.clone())
             .unwrap_or_default(),
     );
+    let suggested = definition.suggested_reference.as_ref();
     let reference_kind = RwSignal::new(
         stored
             .as_ref()
             .and_then(|item| item.reference_kind.clone())
+            .or_else(|| {
+                suggested.map(|item| match item.kind {
+                    ersatzrs_addon_contract::AddonSuggestedSecretReferenceKind::Environment => {
+                        "environment".to_owned()
+                    }
+                    ersatzrs_addon_contract::AddonSuggestedSecretReferenceKind::File => {
+                        "file".to_owned()
+                    }
+                })
+            })
             .unwrap_or_else(|| "environment".to_owned()),
     );
-    let reference = RwSignal::new(stored.and_then(|item| item.reference).unwrap_or_default());
+    let reference = RwSignal::new(
+        stored
+            .and_then(|item| item.reference)
+            .or_else(|| suggested.map(|item| item.reference.clone()))
+            .unwrap_or_default(),
+    );
     let label = localized(&definition.label);
     let key = definition.key.clone();
     let input = match definition.kind {

@@ -138,7 +138,7 @@ pub enum TextKey {
     AddRerunCollection,
     AddTemplate,
     AddTemplateGroup,
-    AddTraktList,
+    AddAddonMediaList,
     AddToCollection,
     AddToEllipsis,
     AddToPlaylist,
@@ -313,7 +313,7 @@ pub enum TextKey {
     DeleteRerunCollection,
     DeleteTemplate,
     DeleteTemplateGroup,
-    DeleteTraktList,
+    DeleteAddonMediaList,
     Disable,
     DisabledCollectionsAlreadyPresent,
     EmptyTrash,
@@ -388,7 +388,7 @@ pub enum TextKey {
     ManualCollections,
     MatchFailed,
     MatchStatus,
-    MatchTraktListItems,
+    MatchAddonMediaListItems,
     Members,
     Merge,
     Music,
@@ -663,7 +663,7 @@ pub enum TextKey {
     Search,
     SearchMedia,
     SearchMoviesOrShows,
-    SearchTraktList,
+    SearchAddonMediaList,
     SearchingMinimumLogLevel,
     Settings,
     SettingsSaveFailed,
@@ -676,7 +676,7 @@ pub enum TextKey {
     SmartCollectionDeleted,
     SmartCollectionQueryPlaceholder,
     SmartCollectionSaved,
-    SaveTraktList,
+    SaveAddonMediaList,
     Songs,
     SplitTimeEvenly,
     StreamingMinimumLogLevel,
@@ -703,16 +703,16 @@ pub enum TextKey {
     TotalDurationHelp,
     TotalPointsHelp,
     TotalProgressHelp,
-    TraktList,
-    TraktListActionFailed,
-    TraktListAdded,
-    TraktListDeleted,
-    TraktListMatched,
-    TraktListNotFound,
-    TraktListSaveFailed,
-    TraktListSaved,
-    TraktLists,
-    TraktListUrl,
+    AddonMediaList,
+    AddonMediaListActionFailed,
+    AddonMediaListAdded,
+    AddonMediaListDeleted,
+    AddonMediaListMatched,
+    AddonMediaListNotFound,
+    AddonMediaListSaveFailed,
+    AddonMediaListSaved,
+    AddonMediaLists,
+    AddonMediaListUrl,
     Trash,
     TrashAlreadyEmpty,
     TrashEmpty,
@@ -850,19 +850,19 @@ pub enum TextKey {
     CollectionNameRequired,
     CollectionNotFound,
     CollectionRenamed,
-    EditTraktListProperties,
-    EnterTraktListUrl,
+    EditAddonMediaListProperties,
+    EnterAddonMediaListUrl,
     EnterSearchQuery,
     Episodes,
     LoadingCollections,
     LoadingPlaylistGroups,
     LoadingPlaylists,
     GeneratePlaylist,
-    GeneratePlaylistFromSortedTraktItems,
+    GeneratePlaylistFromSortedAddonMediaListItems,
     MusicVideos,
     NewCollectionName,
     NoMediaMatched,
-    NoTraktListsYet,
+    NoAddonMediaListsYet,
     NoItemsToAdd,
     NoItemsToPreview,
     NoPlaylistsInGroup,
@@ -1150,7 +1150,7 @@ pub enum TextKey {
     CollectionName,
     MediaItemType,
     MediaItemTitle,
-    UpdateListFromTraktDaily,
+    UpdateAddonMediaListDaily,
     ActualSize,
     AnalysisJson,
     ArchivePath,
@@ -1437,7 +1437,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddRerunCollection,
     TextKey::AddTemplate,
     TextKey::AddTemplateGroup,
-    TextKey::AddTraktList,
+    TextKey::AddAddonMediaList,
     TextKey::AddToCollection,
     TextKey::AddToEllipsis,
     TextKey::AddToPlaylist,
@@ -1611,7 +1611,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::DeleteRerunCollection,
     TextKey::DeleteTemplate,
     TextKey::DeleteTemplateGroup,
-    TextKey::DeleteTraktList,
+    TextKey::DeleteAddonMediaList,
     TextKey::Disable,
     TextKey::DisabledCollectionsAlreadyPresent,
     TextKey::EmptyTrash,
@@ -1683,7 +1683,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ManualCollections,
     TextKey::MatchFailed,
     TextKey::MatchStatus,
-    TextKey::MatchTraktListItems,
+    TextKey::MatchAddonMediaListItems,
     TextKey::Members,
     TextKey::Merge,
     TextKey::MultiCollection,
@@ -1708,7 +1708,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::NoBlockItems,
     TextKey::NoItems,
     TextKey::NoItemsToDisplay,
-    TextKey::NoTraktListsYet,
+    TextKey::NoAddonMediaListsYet,
     TextKey::No,
     TextKey::NoCollections,
     TextKey::NoDecosFound,
@@ -1957,7 +1957,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Search,
     TextKey::SearchMedia,
     TextKey::SearchMoviesOrShows,
-    TextKey::SearchTraktList,
+    TextKey::SearchAddonMediaList,
     TextKey::SearchingMinimumLogLevel,
     TextKey::Settings,
     TextKey::SettingsSaveFailed,
@@ -1970,7 +1970,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SmartCollectionDeleted,
     TextKey::SmartCollectionQueryPlaceholder,
     TextKey::SmartCollectionSaved,
-    TextKey::SaveTraktList,
+    TextKey::SaveAddonMediaList,
     TextKey::Songs,
     TextKey::SplitTimeEvenly,
     TextKey::StreamingMinimumLogLevel,
@@ -1997,16 +1997,16 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TotalDurationHelp,
     TextKey::TotalPointsHelp,
     TextKey::TotalProgressHelp,
-    TextKey::TraktList,
-    TextKey::TraktListActionFailed,
-    TextKey::TraktListAdded,
-    TextKey::TraktListDeleted,
-    TextKey::TraktListMatched,
-    TextKey::TraktListNotFound,
-    TextKey::TraktListSaveFailed,
-    TextKey::TraktListSaved,
-    TextKey::TraktLists,
-    TextKey::TraktListUrl,
+    TextKey::AddonMediaList,
+    TextKey::AddonMediaListActionFailed,
+    TextKey::AddonMediaListAdded,
+    TextKey::AddonMediaListDeleted,
+    TextKey::AddonMediaListMatched,
+    TextKey::AddonMediaListNotFound,
+    TextKey::AddonMediaListSaveFailed,
+    TextKey::AddonMediaListSaved,
+    TextKey::AddonMediaLists,
+    TextKey::AddonMediaListUrl,
     TextKey::Trash,
     TextKey::TrashAlreadyEmpty,
     TextKey::TrashEmpty,
@@ -2144,15 +2144,15 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::CollectionNameRequired,
     TextKey::CollectionNotFound,
     TextKey::CollectionRenamed,
-    TextKey::EditTraktListProperties,
-    TextKey::EnterTraktListUrl,
+    TextKey::EditAddonMediaListProperties,
+    TextKey::EnterAddonMediaListUrl,
     TextKey::EnterSearchQuery,
     TextKey::Episodes,
     TextKey::LoadingCollections,
     TextKey::LoadingPlaylistGroups,
     TextKey::LoadingPlaylists,
     TextKey::GeneratePlaylist,
-    TextKey::GeneratePlaylistFromSortedTraktItems,
+    TextKey::GeneratePlaylistFromSortedAddonMediaListItems,
     TextKey::MusicVideos,
     TextKey::NewCollectionName,
     TextKey::NoMediaMatched,
@@ -2435,7 +2435,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::CollectionName,
     TextKey::MediaItemType,
     TextKey::MediaItemTitle,
-    TextKey::UpdateListFromTraktDaily,
+    TextKey::UpdateAddonMediaListDaily,
     TextKey::ActualSize,
     TextKey::AddWatermark,
     TextKey::AspectRatioGuides,
@@ -2930,13 +2930,25 @@ pub fn media_source_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).media_source_error_message(error)
 }
 
-pub fn trakt_error_message(error: impl std::fmt::Display) -> String {
-    let message = error.to_string();
-    languages_for(use_i18n()).trakt_error_message(&message)
+pub fn addon_media_list_error_message(error: impl std::fmt::Display) -> String {
+    let message = canonical_addon_media_list_error(&error.to_string());
+    languages_for(use_i18n()).addon_media_list_error_message(&message)
 }
 
-pub fn trakt_error_text(language: UiLanguage, error: &str) -> String {
-    languages_for(language).trakt_error_message(error)
+pub fn addon_media_list_error_text(language: UiLanguage, error: &str) -> String {
+    let message = canonical_addon_media_list_error(error);
+    languages_for(language).addon_media_list_error_message(&message)
+}
+
+fn canonical_addon_media_list_error(error: &str) -> String {
+    if error.contains("required setting CLIENT_ID is not configured")
+        || error.contains("environment reference for CLIENT_ID is unavailable")
+        || error.contains("Trakt client ID reference is not configured")
+    {
+        "Add-on credential reference is not configured".to_owned()
+    } else {
+        error.to_owned()
+    }
 }
 
 pub fn upload_error_text(language: UiLanguage, error: &str) -> String {
@@ -3160,7 +3172,7 @@ pub trait LanguageStrings: Sync {
     fn filler_error_message(&self, error: &str) -> String;
     fn media_browser_error_message(&self, error: &str) -> String;
     fn media_source_error_message(&self, error: &str) -> String;
-    fn trakt_error_message(&self, error: &str) -> String;
+    fn addon_media_list_error_message(&self, error: &str) -> String;
     fn upload_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;

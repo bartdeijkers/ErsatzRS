@@ -100,7 +100,7 @@ const ISLAND_ROUTES: IslandRoute[] = [
   { route: '/media/rerun-collections', islands: 'RerunCollectionsIsland' },
   { route: '/media/rerun-collections/add', islands: 'RerunCollectionEditorIsland' },
   { route: '/media/playlists', islands: 'PlaylistsIsland' },
-  { route: '/media/trakt/lists', islands: 'TraktListsIsland' },
+  { route: '/media/addon-lists', islands: 'AddonMediaListsIsland' },
 
   // Filler presets
   { route: '/media/filler/presets', islands: 'FillerPresetsIsland' },

@@ -116,8 +116,8 @@ backing = 'list/tree + `:id` editor with HTML POST fallback create/save/delete; 
 routed  = true
 
 [[route]]
-nav     = '/media/trakt/lists'
-backing = 'list + `:id` editor; add/search/match/delete actions with HTML POST fallbacks and persisted rows-per-page'
+nav     = '/media/addon-lists'
+backing = 'provider-neutral list + `:id` editor; add/search/match/delete actions with HTML POST fallbacks and persisted rows-per-page'
 routed  = true
 
 [[route]]
@@ -127,7 +127,7 @@ routed  = true
 
 [[route]]
 nav     = '/search'
-backing = 'scheduling search result page, including `trakt_list:{id}` queries'
+backing = 'scheduling search result page, including `addon_list:{id}` queries'
 routed  = true
 
 [[route]]

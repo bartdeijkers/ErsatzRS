@@ -142,7 +142,7 @@ impl AppState {
                     Arc::clone(&hls_sessions),
                     Arc::clone(&preview_hls_sessions),
                 )),
-                Arc::new(repositories.trakt.clone()),
+                Arc::new(repositories.addon_media_lists.clone()),
                 Arc::new(repositories.admin_settings.clone()),
                 Arc::new(NativeSettingsRuntime::new(
                     pool.clone(),

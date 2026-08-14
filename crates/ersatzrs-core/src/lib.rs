@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod addon_media_list;
 pub mod content_variants;
 pub mod health;
 pub mod hls;
@@ -12,5 +13,4 @@ pub mod playout_builder;
 pub mod repositories;
 pub mod scheduling;
 pub mod search;
-pub mod trakt;
 pub mod xmltv;

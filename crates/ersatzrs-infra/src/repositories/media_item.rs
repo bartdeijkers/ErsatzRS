@@ -101,7 +101,7 @@ fn map_media_item(row: &DbRow) -> Result<MediaItem> {
         id: row.try_get("Id").repository()?,
         library_path_id: row.try_get("LibraryPathId").repository()?,
         collection_ids: Vec::new(),
-        trakt_list_item_ids: Vec::new(),
+        addon_media_list_item_ids: Vec::new(),
         state: decode_enum_column("media item state", row, "State")?,
         content_kind: decode_enum_column("content kind", row, "ContentKind")?,
         sub_kind: row.try_get("SubKind").repository()?,

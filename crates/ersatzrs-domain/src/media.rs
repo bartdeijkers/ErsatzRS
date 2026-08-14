@@ -179,7 +179,7 @@ pub struct MediaItem {
     pub id: EntityId,
     pub library_path_id: EntityId,
     pub collection_ids: Vec<EntityId>,
-    pub trakt_list_item_ids: Vec<EntityId>,
+    pub addon_media_list_item_ids: Vec<EntityId>,
     pub state: MediaItemState,
     pub content_kind: ContentKind,
     pub sub_kind: Option<String>,

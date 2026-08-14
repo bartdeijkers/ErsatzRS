@@ -5,11 +5,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{
-    AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository, BlockRepository,
-    ChannelRepository, CollectionRepository, DecoRepository, FfmpegProfileRepository,
-    FillerRepository, LibraryRepository, MediaItemRepository, MediaSourceRepository,
-    PlayoutRepository, ProgramScheduleRepository, SettingsMutation, TelevisionRepository,
-    TemplateRepository, TraktRepository, TroubleshootingRepository, WatermarkRepository,
+    AddonMediaListRepository, AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository,
+    BlockRepository, ChannelRepository, CollectionRepository, DecoRepository,
+    FfmpegProfileRepository, FillerRepository, LibraryRepository, MediaItemRepository,
+    MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SettingsMutation,
+    TelevisionRepository, TemplateRepository, TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -660,7 +660,7 @@ pub trait MediaSourceRuntime: Send + Sync {
 pub struct ApplicationPorts {
     channels: Arc<dyn ChannelRepository>,
     channel_runtime: Arc<dyn ChannelRuntime>,
-    trakt: Arc<dyn TraktRepository>,
+    addon_media_lists: Arc<dyn AddonMediaListRepository>,
     admin_settings: Arc<dyn AdminSettingsRepository>,
     settings_runtime: Arc<dyn SettingsRuntime>,
     collections: Arc<dyn CollectionRepository>,
@@ -698,7 +698,7 @@ impl ApplicationPorts {
     pub fn new(
         channels: Arc<dyn ChannelRepository>,
         channel_runtime: Arc<dyn ChannelRuntime>,
-        trakt: Arc<dyn TraktRepository>,
+        addon_media_lists: Arc<dyn AddonMediaListRepository>,
         admin_settings: Arc<dyn AdminSettingsRepository>,
         settings_runtime: Arc<dyn SettingsRuntime>,
         collections: Arc<dyn CollectionRepository>,
@@ -731,7 +731,7 @@ impl ApplicationPorts {
         Self {
             channels,
             channel_runtime,
-            trakt,
+            addon_media_lists,
             admin_settings,
             settings_runtime,
             collections,
@@ -775,10 +775,10 @@ impl ApplicationPorts {
         self.channel_runtime.as_ref()
     }
 
-    /// Trakt list persistence and synchronizer adapter.
+    /// Add-on media list persistence and synchronizer adapter.
     #[must_use]
-    pub fn trakt(&self) -> &(dyn TraktRepository + 'static) {
-        self.trakt.as_ref()
+    pub fn addon_media_lists(&self) -> &(dyn AddonMediaListRepository + 'static) {
+        self.addon_media_lists.as_ref()
     }
 
     /// Settings persistence used by typed settings commands and queries.
@@ -953,7 +953,7 @@ impl std::fmt::Debug for ApplicationPorts {
             .debug_struct("ApplicationPorts")
             .field("channels", &"dyn ChannelRepository")
             .field("channel_runtime", &"dyn ChannelRuntime")
-            .field("trakt", &"dyn TraktRepository")
+            .field("addon_media_lists", &"dyn AddonMediaListRepository")
             .field("admin_settings", &"dyn AdminSettingsRepository")
             .field("settings_runtime", &"dyn SettingsRuntime")
             .field("collections", &"dyn CollectionRepository")

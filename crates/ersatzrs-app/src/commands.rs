@@ -2,15 +2,16 @@
 
 use ersatzrs_core::locking::PlayoutBuildAdmission;
 use ersatzrs_core::repositories::{
-    AdminSettingsRepository, BlockAdminRow, BlockItemAdmin, BlockRepository, ChannelEditorForm,
-    ChannelNumberUpdate, ChannelRepository, ChannelValidationError, ChannelValidationState,
-    CollectionRepository, DecoAdminRecord, DecoBreakContentAdmin, DecoRepository,
-    DecoTemplateItemAdmin, FfmpegProfileRepository, FillerRepository, LibraryRepository,
-    MediaItemRepository, MultiCollectionItem, PlaybackOverrides, PlaylistEditorAdmin,
-    PlaylistItemInsert, PlayoutAlternateScheduleItemAdmin, PlayoutCreateAdmin, PlayoutRepository,
-    PlayoutTemplateItemAdmin, ProgramScheduleRepository, RepositoryError, RerunCollectionAdmin,
-    RerunCollectionReferenceKind, ScheduleAdminForm, ScheduleItemAdmin, SettingsMutation,
-    TemplateItemAdmin, TemplateRepository, TraktRepository, WatermarkRepository,
+    AddonMediaListRepository, AdminSettingsRepository, BlockAdminRow, BlockItemAdmin,
+    BlockRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelRepository,
+    ChannelValidationError, ChannelValidationState, CollectionRepository, DecoAdminRecord,
+    DecoBreakContentAdmin, DecoRepository, DecoTemplateItemAdmin, FfmpegProfileRepository,
+    FillerRepository, LibraryRepository, MediaItemRepository, MultiCollectionItem,
+    PlaybackOverrides, PlaylistEditorAdmin, PlaylistItemInsert, PlayoutAlternateScheduleItemAdmin,
+    PlayoutCreateAdmin, PlayoutRepository, PlayoutTemplateItemAdmin, ProgramScheduleRepository,
+    RepositoryError, RerunCollectionAdmin, RerunCollectionReferenceKind, ScheduleAdminForm,
+    ScheduleItemAdmin, SettingsMutation, TemplateItemAdmin, TemplateRepository,
+    WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, SchedulingSmartShufflePreset,
@@ -4328,83 +4329,84 @@ fn validation_error<T>(field: &'static str, message: impl Into<String>) -> crate
     })
 }
 
-/// Import or refresh one Trakt list from its public locator.
+/// Import or refresh one add-on media list from its public URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AddTraktList {
-    /// URL or supported user/list locator.
-    pub input: String,
+pub struct AddAddonMediaList {
+    /// Installed provider add-on identity.
+    pub addon_id: String,
+    /// Provider-specific public list or saved-search URL.
+    pub source_url: String,
 }
 
-/// Re-run local matching for one persisted Trakt list.
+/// Re-run local matching for one persisted Add-on media list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MatchTraktList {
-    /// Persisted Trakt list identity.
+pub struct MatchAddonMediaList {
+    /// Persisted Add-on media list identity.
     pub id: EntityId,
 }
 
-/// Update user-editable Trakt list settings.
+/// Update user-editable Add-on media list settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UpdateTraktList {
-    /// Persisted Trakt list identity.
+pub struct UpdateAddonMediaList {
+    /// Persisted Add-on media list identity.
     pub id: EntityId,
-    /// Refresh the list from Trakt on the daily cadence.
+    /// Refresh the list from its provider on the daily cadence.
     pub auto_refresh: bool,
     /// Maintain a generated playlist for matched rows.
     pub generate_playlist: bool,
 }
 
-/// Delete one Trakt list and any generated playlist.
+/// Delete one Add-on media list and any generated playlist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DeleteTraktList {
-    /// Persisted Trakt list identity.
+pub struct DeleteAddonMediaList {
+    /// Persisted Add-on media list identity.
     pub id: EntityId,
 }
 
-/// Import or refresh one Trakt list.
-pub async fn add_trakt_list(
-    command: AddTraktList,
-    repository: &dyn TraktRepository,
+/// Import or refresh one Add-on media list.
+pub async fn add_addon_media_list(
+    command: AddAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
 ) -> crate::Result<EntityId> {
-    let locator =
-        ersatzrs_core::trakt::parse_trakt_list_locator(&command.input).map_err(|message| {
-            ApplicationError::Validation {
-                field: "url",
-                message,
-            }
-        })?;
+    if command.addon_id.trim().is_empty() {
+        return validation_error("addon_id", "An add-on is required");
+    }
+    if command.source_url.trim().is_empty() {
+        return validation_error("source_url", "A source URL is required");
+    }
     repository
-        .add_or_refresh(&locator)
+        .add_or_refresh(command.addon_id.trim(), command.source_url.trim())
         .await
         .map_err(Into::into)
 }
 
-/// Re-run local item matching for one Trakt list.
-pub async fn match_trakt_list(
-    command: MatchTraktList,
-    repository: &dyn TraktRepository,
+/// Re-run local item matching for one Add-on media list.
+pub async fn match_addon_media_list(
+    command: MatchAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
 ) -> crate::Result<()> {
-    validate_positive_id(command.id, "trakt_list_id")?;
+    validate_positive_id(command.id, "addon_media_list_id")?;
     repository.match_items(command.id).await.map_err(Into::into)
 }
 
-/// Persist Trakt list settings.
-pub async fn update_trakt_list(
-    command: UpdateTraktList,
-    repository: &dyn TraktRepository,
+/// Persist Add-on media list settings.
+pub async fn update_addon_media_list(
+    command: UpdateAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
 ) -> crate::Result<()> {
-    validate_positive_id(command.id, "trakt_list_id")?;
+    validate_positive_id(command.id, "addon_media_list_id")?;
     repository
         .update_settings(command.id, command.auto_refresh, command.generate_playlist)
         .await
         .map_err(Into::into)
 }
 
-/// Delete one Trakt list.
-pub async fn delete_trakt_list(
-    command: DeleteTraktList,
-    repository: &dyn TraktRepository,
+/// Delete one Add-on media list.
+pub async fn delete_addon_media_list(
+    command: DeleteAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
 ) -> crate::Result<()> {
-    validate_positive_id(command.id, "trakt_list_id")?;
+    validate_positive_id(command.id, "addon_media_list_id")?;
     repository.delete(command.id).await.map_err(Into::into)
 }
 
@@ -8061,16 +8063,16 @@ mod tests {
     }
 
     #[test]
-    fn trakt_identity_validation_stays_in_the_application_layer() {
-        let error = super::validate_positive_id(0, "trakt_list_id").unwrap_err();
+    fn addon_media_list_identity_validation_stays_in_the_application_layer() {
+        let error = super::validate_positive_id(0, "addon_media_list_id").unwrap_err();
         assert!(matches!(
             error,
             crate::ApplicationError::Validation {
-                field: "trakt_list_id",
+                field: "addon_media_list_id",
                 ..
             }
         ));
-        assert!(super::validate_positive_id(42, "trakt_list_id").is_ok());
+        assert!(super::validate_positive_id(42, "addon_media_list_id").is_ok());
     }
 
     #[test]

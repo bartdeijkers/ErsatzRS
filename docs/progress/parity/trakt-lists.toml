@@ -1,15 +1,16 @@
-feature    = 'Trakt lists'
+feature    = 'Add-on media lists and Trakt provider package'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`, `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`, `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`, `ErsatzTV/Shared/AddTraktListDialog.razor`'
-rs_target  = '`crates/ersatzrs-core/src/trakt.rs`, `crates/ersatzrs-infra/src/{trakt,trakt_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/trakt,pages/media/trakt_lists}.rs`, `crates/ersatzrs-web/src/api/trakt.rs`, `crates/ersatzrs-web/src/admin/languages/`'
+rs_target  = '`crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-infra/src/{addon_media_list,addon_media_list_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/addon_media_lists,pages/media/addon_lists}.rs`, `crates/ersatzrs-web/src/api/addon_media_lists.rs`, and `org.ersatzrs.addon.trakt` in the official add-ons repository'
 status     = 'Ported'
-adr        = []
+adr        = ['0066', '0067']
 summary    = '''
-Completed 2026-07-25. Local matching, generated-playlist maintenance, settings
-updates, deletion, and due-local matching use a client-free synchronizer.
-Remote import and scheduled refresh require a configured Trakt API client and
-persist remote data before local matching. Public admin/API behavior, list
-identity, matching rules, timestamps, generated-playlist ordering, and
-maintenance cadence remain unchanged.
+Replaced on 2026-08-14 by provider-neutral add-on media lists. Local matching,
+generated-playlist maintenance, settings, deletion, search, and refresh cadence
+remain host-owned. Trakt HTTP/API behavior and its client-ID reference are
+owned by the official Trakt add-on. The destructive forward migration deletes
+legacy Trakt-generated playlists and configuration, drops every Trakt table,
+and imports no legacy rows. Beeld & Geluid implements the same capability for
+series, public shared-list, and saved-search hyperlinks.
 '''
 
 [[debt]]

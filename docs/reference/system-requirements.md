@@ -32,7 +32,7 @@ publish macOS archives.
 | Admin, IPTV, XMLTV, and HDHomeRun HTTP | TCP port `8409` |
 | HDHomeRun discovery | local-network UDP discovery |
 | Managed FFmpeg acquisition | outbound HTTPS to GitHub Releases |
-| Provider and Trakt integrations | outbound HTTPS to the configured service |
+| Provider add-ons | outbound HTTPS to the hosts declared by each installed package |
 
 Do not expose an unauthenticated admin UI directly to the public internet. Use
 a trusted LAN, VPN, or an authenticated reverse proxy.

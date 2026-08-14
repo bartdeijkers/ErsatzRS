@@ -1,3 +1,4 @@
+mod addon_media_list;
 mod addon_platform;
 mod classic_playout_state;
 mod dirty_migration;
@@ -31,6 +32,7 @@ mod vaapi_device;
 mod vaapi_driver;
 mod zero_duration;
 
+pub(super) use addon_media_list::AddonMediaListHealthCheck;
 pub(super) use addon_platform::AddonPlatformHealthCheck;
 pub(super) use classic_playout_state::ClassicPlayoutStateHealthCheck;
 pub(super) use dirty_migration::DirtyMigrationHealthCheck;

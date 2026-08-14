@@ -10,7 +10,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 /// Current package-manifest schema. Schema v1 remains readable.
-pub const ADDON_MANIFEST_VERSION: u32 = 2;
+pub const ADDON_MANIFEST_VERSION: u32 = 3;
 /// Current repository-index schema. Schema v1 remains readable.
 pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 /// Health capability implemented by every executable add-on.
@@ -19,6 +19,8 @@ pub const CAPABILITY_ADDON_CHECK_V1: &str = "addon.check.v1";
 pub const CAPABILITY_REMOTE_STREAM_LIST_V1: &str = "remote-stream.list.v1";
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
+/// Enumerate a provider list whose entries are matched to local media.
+pub const CAPABILITY_MEDIA_LIST_LIST_V1: &str = "media-list.list.v1";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 const MAX_PACKAGE_VERSION_BYTES: usize = 128;
@@ -135,7 +137,7 @@ impl AddonManifest {
 
         let mut setting_keys = BTreeSet::new();
         for setting in &self.settings {
-            setting.validate()?;
+            setting.validate(self.manifest_version)?;
             if !setting_keys.insert(setting.key.as_str()) {
                 return invalid("settings", "duplicate setting key");
             }
@@ -336,10 +338,13 @@ pub struct AddonSettingDefinition {
     /// Allowed values for enum settings.
     #[serde(default)]
     pub options: Vec<String>,
+    /// Safe host-rendered default for a secret *reference*, never its value.
+    #[serde(default)]
+    pub suggested_reference: Option<AddonSuggestedSecretReference>,
 }
 
 impl AddonSettingDefinition {
-    fn validate(&self) -> Result<(), ContractError> {
+    fn validate(&self, manifest_version: u32) -> Result<(), ContractError> {
         if !is_setting_key(&self.key) {
             return invalid("settings.key", "must be uppercase snake case");
         }
@@ -347,11 +352,64 @@ impl AddonSettingDefinition {
         if self.kind == AddonSettingKind::SecretReference && self.default.is_some() {
             return invalid("settings.default", "secret references cannot have defaults");
         }
+        if let Some(reference) = &self.suggested_reference {
+            if manifest_version < 3 {
+                return invalid(
+                    "settings.suggested_reference",
+                    "requires manifest schema version 3",
+                );
+            }
+            if self.kind != AddonSettingKind::SecretReference {
+                return invalid(
+                    "settings.suggested_reference",
+                    "only secret references can have a suggested reference",
+                );
+            }
+            reference.validate()?;
+        }
         if self.kind == AddonSettingKind::Enum && self.options.is_empty() {
             return invalid("settings.options", "enum settings require options");
         }
         Ok(())
     }
+}
+
+/// Non-sensitive location suggested by an add-on for a protected setting.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonSuggestedSecretReference {
+    /// Secret-store location type.
+    pub kind: AddonSuggestedSecretReferenceKind,
+    /// Environment-variable name or file path, never the resolved value.
+    pub reference: String,
+}
+
+impl AddonSuggestedSecretReference {
+    fn validate(&self) -> Result<(), ContractError> {
+        match self.kind {
+            AddonSuggestedSecretReferenceKind::Environment
+                if !is_environment_reference_name(&self.reference) =>
+            {
+                invalid(
+                    "settings.suggested_reference.reference",
+                    "environment reference must be uppercase snake case",
+                )
+            }
+            AddonSuggestedSecretReferenceKind::File if self.reference.trim().is_empty() => invalid(
+                "settings.suggested_reference.reference",
+                "file reference must not be empty",
+            ),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Supported safe locations for an add-on secret.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonSuggestedSecretReferenceKind {
+    Environment,
+    File,
 }
 
 /// Supported host-rendered setting types.
@@ -755,6 +813,10 @@ fn is_setting_key(value: &str) -> bool {
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
+fn is_environment_reference_name(value: &str) -> bool {
+    is_setting_key(value) && !value.starts_with(|character: char| character.is_ascii_digit())
+}
+
 fn is_lower_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -848,6 +910,40 @@ mod tests {
 
         manifest.manifest_version = 2;
         manifest.validate().expect("schema v2 icon");
+    }
+
+    #[test]
+    fn schema_v3_secret_setting_can_suggest_only_a_reference_location() {
+        let mut manifest = valid_manifest();
+        manifest.manifest_version = 3;
+        manifest.settings.push(AddonSettingDefinition {
+            key: "CLIENT_ID".to_owned(),
+            label: localized("Client ID"),
+            kind: AddonSettingKind::SecretReference,
+            required: true,
+            default: None,
+            options: Vec::new(),
+            suggested_reference: Some(AddonSuggestedSecretReference {
+                kind: AddonSuggestedSecretReferenceKind::Environment,
+                reference: "TRAKT__CLIENTID".to_owned(),
+            }),
+        });
+        manifest.validate().expect("safe suggested reference");
+
+        manifest.manifest_version = 1;
+        assert!(manifest.validate().is_err());
+
+        manifest.manifest_version = 2;
+        assert!(manifest.validate().is_err());
+
+        manifest.manifest_version = 3;
+
+        manifest.settings[0]
+            .suggested_reference
+            .as_mut()
+            .unwrap()
+            .reference = "literal value".to_owned();
+        assert!(manifest.validate().is_err());
     }
 
     #[test]

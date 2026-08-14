@@ -21,11 +21,12 @@ type MediaSeed = {
   trashMovieTitle: string;
 };
 
-type TraktSeed = {
+type AddonListSeed = {
   editorListId: number;
   editorListName: string;
-  editorTraktId: number;
-  editorSlug: string;
+  addonId: string;
+  editorProviderId: string;
+  editorSourceUrl: string;
   deleteListId: number;
   deleteListName: string;
 };
@@ -244,41 +245,83 @@ INSERT INTO "MovieMetadata" (
   return seed;
 }
 
-function seedTrakt(testInfo: TestInfo): TraktSeed {
+function seedAddonLists(testInfo: TestInfo): AddonListSeed {
   const base = projectBase(testInfo);
   const suffix = testInfo.project.name;
+  const addonId = `org.example.e2e-lists-${suffix.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const manifest = JSON.stringify({
+    manifest_version: 3,
+    id: addonId,
+    version: '1.0.0',
+    name: { 'en-US': 'E2E List Provider' },
+    summary: { 'en-US': 'E2E media-list provider' },
+    icon: null,
+    license: 'Zlib',
+    source_url: 'https://example.invalid/e2e-addon',
+    host_version: '*',
+    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v1' }],
+    dependencies: [],
+    entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' } },
+    permissions: {
+      network_hosts: ['example.invalid'],
+      media_read: false,
+      managed_ffmpeg: false,
+      external_commands: [],
+    },
+    settings: [],
+    panels: [],
+  });
   const seed = {
     editorListId: base + 501,
-    editorListName: `E2E Trakt Editor ${suffix}`,
-    editorTraktId: base + 505,
-    editorSlug: `hydration-editor-${suffix}`,
+    editorListName: `E2E Add-on List Editor ${suffix}`,
+    addonId,
+    editorProviderId: `hydration-editor-${suffix}`,
+    editorSourceUrl: `https://example.invalid/lists/hydration-editor-${suffix}`,
     deleteListId: base + 502,
-    deleteListName: `E2E Trakt Delete ${suffix}`,
+    deleteListName: `E2E Add-on List Delete ${suffix}`,
   };
 
   sqlite(`
-DELETE FROM "TraktListItemGuid" WHERE "TraktListItemId" IN (
-  SELECT "Id" FROM "TraktListItem" WHERE "TraktListId" IN (${seed.editorListId}, ${seed.deleteListId})
+DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" IN (
+  SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" IN (${seed.editorListId}, ${seed.deleteListId})
 );
-DELETE FROM "TraktListItem" WHERE "TraktListId" IN (${seed.editorListId}, ${seed.deleteListId});
-DELETE FROM "TraktList" WHERE "Id" IN (${seed.editorListId}, ${seed.deleteListId});
+DELETE FROM "AddonMediaListItem" WHERE "AddonMediaListId" IN (${seed.editorListId}, ${seed.deleteListId});
+DELETE FROM "AddonMediaList" WHERE "Id" IN (${seed.editorListId}, ${seed.deleteListId});
 
-INSERT INTO "TraktList" (
-  "Id", "TraktId", "User", "List", "Name", "Description", "ItemCount",
+INSERT INTO "AddonInstallation" (
+  "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+  "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "TrustTier"
+) VALUES (
+  '${sqlEscape(addonId)}', '1.0.0', 1, 'e2e-package', 'e2e-content',
+  '${sqlEscape(manifest)}', 'e2e/addon', '2026-08-14T00:00:00Z',
+  '2026-08-14T00:00:00Z', 'verified'
+) ON CONFLICT("AddonId") DO UPDATE SET
+  "Version" = excluded."Version",
+  "Enabled" = excluded."Enabled",
+  "ManifestJson" = excluded."ManifestJson",
+  "UpdatedAt" = excluded."UpdatedAt";
+
+INSERT INTO "AddonMediaList" (
+  "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "Description", "ItemCount",
   "AutoRefresh", "GeneratePlaylist"
 ) VALUES (
-  ${seed.editorListId}, ${seed.editorTraktId}, 'e2e-user', '${sqlEscape(seed.editorSlug)}',
+  ${seed.editorListId}, '${sqlEscape(addonId)}', '${sqlEscape(seed.editorProviderId)}',
+  '${sqlEscape(seed.editorSourceUrl)}',
   '${sqlEscape(seed.editorListName)}', 'Editor proof', 1, 0, 1
 );
-INSERT INTO "TraktListItem" (
-  "Id", "TraktListId", "TraktId", "Kind", "Rank", "Title"
-) VALUES (${base + 503}, ${seed.editorListId}, 99003, 0, 1, 'Hydration Pending Movie');
+INSERT INTO "AddonMediaListItem" (
+  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title"
+) VALUES (
+  ${base + 503}, ${seed.editorListId}, 'movie:99003',
+  'Hydration Pending Movie', 0, 1, 'Hydration Pending Movie'
+);
 
-INSERT INTO "TraktList" (
-  "Id", "TraktId", "User", "List", "Name", "Description", "ItemCount",
+INSERT INTO "AddonMediaList" (
+  "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "Description", "ItemCount",
   "AutoRefresh", "GeneratePlaylist"
 ) VALUES (
-  ${seed.deleteListId}, ${base + 506}, 'e2e-user', 'hydration-delete-${suffix}',
+  ${seed.deleteListId}, '${sqlEscape(addonId)}', 'hydration-delete-${suffix}',
+  'https://example.invalid/lists/hydration-delete-${suffix}',
   '${sqlEscape(seed.deleteListName)}', 'Delete proof', 0, 0, 0
 );
 `);
@@ -415,36 +458,36 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
     expect(runtimeErrors).toEqual([]);
   });
 
-  test('trakt list actions and editor fallback persist without hydration errors', async ({
+  test('add-on list actions and editor fallback persist without hydration errors', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
-    const seed = seedTrakt(testInfo);
+    const seed = seedAddonLists(testInfo);
     await forceEnglish(page);
 
-    await gotoHydrated(page, '/media/trakt/lists');
+    await gotoHydrated(page, '/media/addon-lists');
     await expect(page.getByText(seed.editorListName)).toBeVisible();
-    await page.getByRole('button', { name: /^add trakt list$/i }).click();
+    await page.getByRole('button', { name: /^add add-on list$/i }).click();
     const addDialog = page
       .locator('div[class*="panel"]')
-      .filter({ has: page.getByRole('heading', { name: 'Add Trakt List' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
       .last();
     await expect(addDialog).toBeVisible();
     await addDialog.getByRole('button', { name: /^cancel$/i }).click();
     const editorRow = page.locator('tr').filter({ hasText: seed.editorListName });
-    await expect(editorRow.getByRole('link', { name: /^search trakt list$/i })).toHaveAttribute(
+    await expect(editorRow.getByRole('link', { name: /^search add-on list$/i })).toHaveAttribute(
       'href',
-      `/search?query=trakt_list%3a${seed.editorTraktId}`,
+      `/search?query=addon_list%3a${seed.editorListId}`,
     );
-    await editorRow.getByRole('button', { name: /^match trakt list items$/i }).click();
+    await editorRow.getByRole('button', { name: /^match add-on list items$/i }).click();
     await expect.poll(() => sqlite(`
-SELECT COALESCE("PlaylistId", '') FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `)).not.toBe('');
     const generatedPlaylistId = sqlite(`
-SELECT "PlaylistId" FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `);
     const deleteRow = page.locator('tr').filter({ hasText: seed.deleteListName });
-    await deleteRow.getByRole('button', { name: /^delete trakt list$/i }).click();
+    await deleteRow.getByRole('button', { name: /^delete add-on list$/i }).click();
     const deleteDialog = page
       .locator('div[class*="panel"]')
       .filter({ has: page.getByRole('heading', { name: 'Confirm Delete' }) })
@@ -452,15 +495,16 @@ SELECT "PlaylistId" FROM "TraktList" WHERE "Id" = ${seed.editorListId};
     await expect(deleteDialog).toBeVisible();
     await deleteDialog.getByRole('button', { name: /^delete$/i }).click();
     await expect.poll(() => sqlite(`
-SELECT COUNT(*) FROM "TraktList" WHERE "Id" = ${seed.deleteListId};
+SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
 `)).toBe('0');
 
-    await gotoHydrated(page, `/media/trakt/lists/${seed.editorListId}`);
-    await expect(page.locator('form[action="/api/trakt-lists/save"]')).toBeVisible();
-    await page.request.post('/api/trakt-lists/save', {
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    await expect(page.locator('form[action="/api/addon-lists/save"]')).toBeVisible();
+    await page.request.post('/api/addon-lists/save', {
       form: {
         id: seed.editorListId.toString(),
-        slug: `e2e-user/${seed.editorSlug}`,
+        addon_id: seed.addonId,
+        source_url: seed.editorSourceUrl,
         auto_refresh: 'true',
       },
       maxRedirects: 0,
@@ -468,10 +512,10 @@ SELECT COUNT(*) FROM "TraktList" WHERE "Id" = ${seed.deleteListId};
 
     expect(sqlite(`
 SELECT "AutoRefresh" || ',' || "GeneratePlaylist"
-FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `)).toBe('1,0');
     expect(sqlite(`
-SELECT COALESCE("PlaylistId", '') FROM "TraktList" WHERE "Id" = ${seed.editorListId};
+SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `)).toBe('');
     expect(sqlite(`
 SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};

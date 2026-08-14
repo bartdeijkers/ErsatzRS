@@ -272,8 +272,8 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
         media_source_error_message(error)
     }
 
-    fn trakt_error_message(&self, error: &str) -> String {
-        trakt_error_message(error)
+    fn addon_media_list_error_message(&self, error: &str) -> String {
+        addon_media_list_error_message(error)
     }
 
     fn upload_error_message(&self, error: &str) -> String {
@@ -432,7 +432,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddRerunCollection => "Añadir colección de reposiciones",
         TextKey::AddTemplate => "Añadir plantilla",
         TextKey::AddTemplateGroup => "Añadir grupo de plantillas",
-        TextKey::AddTraktList => "Añadir lista de Trakt",
+        TextKey::AddAddonMediaList => "Añadir lista de add-on",
         TextKey::AddToCollection => "Añadir a la colección",
         TextKey::AddToEllipsis => "Añadir a...",
         TextKey::AddToPlaylist => "Añadir a la lista de reproducción",
@@ -625,7 +625,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteRerunCollection => "Eliminar colección de reposiciones",
         TextKey::DeleteTemplate => "Eliminar plantilla",
         TextKey::DeleteTemplateGroup => "Eliminar grupo de plantillas",
-        TextKey::DeleteTraktList => "Eliminar lista de Trakt",
+        TextKey::DeleteAddonMediaList => "Eliminar lista de add-on",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Las colecciones desactivadas ya están presentes en esta multicolección"
         }
@@ -707,8 +707,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ManualCollections => "Colecciones manuales",
         TextKey::MatchFailed => "No se ha podido encontrar una coincidencia",
         TextKey::MatchStatus => "Estado de coincidencia",
-        TextKey::MatchTraktListItems => {
-            "Buscar coincidencias para los elementos de la lista de Trakt"
+        TextKey::MatchAddonMediaListItems => {
+            "Buscar coincidencias para los elementos de la lista de add-on"
         }
         TextKey::Members => "Miembros",
         TextKey::MultiCollection => "Multicolección",
@@ -735,7 +735,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoBlockItems => "No hay elementos en el bloque.",
         TextKey::NoItems => "No hay elementos.",
         TextKey::NoItemsToDisplay => "No hay elementos que mostrar.",
-        TextKey::NoTraktListsYet => "Aún no hay listas de Trakt.",
+        TextKey::NoAddonMediaListsYet => "Aún no hay listas de add-on.",
         TextKey::No => "No",
         TextKey::NoCollections => "Aún no hay colecciones.",
         TextKey::NoMembers => "Aún no hay miembros.",
@@ -1128,7 +1128,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Search => "Buscar",
         TextKey::SearchMedia => "Buscar contenido multimedia",
         TextKey::SearchMoviesOrShows => "Buscar películas o series...",
-        TextKey::SearchTraktList => "Buscar lista de Trakt",
+        TextKey::SearchAddonMediaList => "Buscar lista de add-on",
         TextKey::SearchingMinimumLogLevel => "Nivel mínimo de registro de búsquedas",
         TextKey::Settings => "Configuración",
         TextKey::SettingsSaveFailed => "No se ha podido guardar la configuración",
@@ -1141,7 +1141,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartCollectionDeleted => "Colección inteligente eliminada.",
         TextKey::SmartCollectionQueryPlaceholder => "p. ej. genre:action OR genre:comedy",
         TextKey::SmartCollectionSaved => "Colección inteligente guardada.",
-        TextKey::SaveTraktList => "Guardar lista de Trakt",
+        TextKey::SaveAddonMediaList => "Guardar lista de add-on",
         TextKey::Songs => "Canciones",
         TextKey::SplitTimeEvenly => "Dividir el tiempo de forma uniforme",
         TextKey::StreamingMinimumLogLevel => "Nivel mínimo de registro de emisiones",
@@ -1168,16 +1168,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TotalDurationHelp => "duración total del contenido, en segundos",
         TextKey::TotalPointsHelp => "número total de posibles puntos intermedios",
         TextKey::TotalProgressHelp => "posición normalizada de 0 a 1",
-        TextKey::TraktList => "Lista de Trakt",
-        TextKey::TraktListActionFailed => "La acción de la lista de Trakt ha fallado.",
-        TextKey::TraktListAdded => "Lista de Trakt añadida.",
-        TextKey::TraktListDeleted => "Lista de Trakt eliminada.",
-        TextKey::TraktListMatched => "Se han encontrado coincidencias para la lista de Trakt.",
-        TextKey::TraktListNotFound => "No se ha encontrado la lista de Trakt.",
-        TextKey::TraktListSaveFailed => "No se ha podido guardar la lista de Trakt.",
-        TextKey::TraktListSaved => "Lista de Trakt guardada.",
-        TextKey::TraktLists => "Listas de Trakt",
-        TextKey::TraktListUrl => "URL de la lista de Trakt",
+        TextKey::AddonMediaList => "Lista de add-on",
+        TextKey::AddonMediaListActionFailed => "La acción de la lista de add-on ha fallado.",
+        TextKey::AddonMediaListAdded => "Lista de add-on añadida.",
+        TextKey::AddonMediaListDeleted => "Lista de add-on eliminada.",
+        TextKey::AddonMediaListMatched => "Se han encontrado coincidencias para la lista de add-on.",
+        TextKey::AddonMediaListNotFound => "No se ha encontrado la lista de add-on.",
+        TextKey::AddonMediaListSaveFailed => "No se ha podido guardar la lista de add-on.",
+        TextKey::AddonMediaListSaved => "Lista de add-on guardada.",
+        TextKey::AddonMediaLists => "Listas de add-on",
+        TextKey::AddonMediaListUrl => "URL de la lista de add-on",
         TextKey::Trash => "Papelera",
         TextKey::TrashAlreadyEmpty => "La papelera ya está vacía.",
         TextKey::TrashEmpty => "La papelera está vacía.",
@@ -1335,16 +1335,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::CollectionNameRequired => "El nombre de la colección es obligatorio",
         TextKey::CollectionNotFound => "No se ha encontrado la colección",
         TextKey::CollectionRenamed => "Colección renombrada.",
-        TextKey::EditTraktListProperties => "Editar propiedades de la lista de Trakt",
-        TextKey::EnterTraktListUrl => "Introduce la URL de la lista de Trakt",
+        TextKey::EditAddonMediaListProperties => "Editar propiedades de la lista de add-on",
+        TextKey::EnterAddonMediaListUrl => "Introduce la URL de la lista de add-on",
         TextKey::EnterSearchQuery => "Introduce una consulta de búsqueda.",
         TextKey::Episodes => "Episodios",
         TextKey::LoadingCollections => "Cargando colecciones...",
         TextKey::LoadingPlaylistGroups => "Cargando grupos de listas de reproducción...",
         TextKey::LoadingPlaylists => "Cargando listas de reproducción...",
         TextKey::GeneratePlaylist => "Generar lista de reproducción",
-        TextKey::GeneratePlaylistFromSortedTraktItems => {
-            "Generar una lista de reproducción a partir de los elementos ordenados de la lista de Trakt"
+        TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
+            "Generar una lista de reproducción a partir de los elementos ordenados de la lista de add-on"
         }
         TextKey::MusicVideos => "Videos musicales",
         TextKey::NewCollectionName => "Nuevo nombre de colección",
@@ -1675,7 +1675,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "No se ha podido cargar el contexto de diagnóstico de reproducción"
         }
-        TextKey::UpdateListFromTraktDaily => "Actualizar la lista desde trakt.tv una vez al día",
+        TextKey::UpdateAddonMediaListDaily => "Actualizar la lista desde el proveedor una vez al día",
         TextKey::UploadLogo => "Cargar logotipo",
         TextKey::UploadLogoHelp => {
             "Elige una imagen local para sustituir el logotipo guardado del canal al guardar"
@@ -2431,23 +2431,23 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
-fn trakt_error_message(error: &str) -> String {
+fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
-    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
-        return format!("No se ha podido contactar con Trakt: {error}");
+    if let Some(error) = normalized.strip_prefix("failed to decode media-list add-on output: ") {
+        return format!("El add-on devolvió datos de lista no válidos: {error}");
     }
-    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
-        return "La lista de Trakt no existe.".to_owned();
+    if normalized.starts_with("add-on media list with id ") && normalized.ends_with(" not found") {
+        return "La lista de add-on no existe.".to_owned();
     }
 
     match normalized {
-        "Invalid Trakt list url" => "La URL de la lista de Trakt no es válida.".to_owned(),
-        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
-            "El ClientId de Trakt no está configurado; establece TRAKT__CLIENTID.".to_owned()
+        "Invalid add-on list url" => "La URL de la lista de add-on no es válida.".to_owned(),
+        "Add-on credential reference is not configured" => {
+            "Configura la referencia de credenciales en los ajustes del complemento.".to_owned()
         }
-        "Trakt API client is not configured for this operation" => {
-            "El cliente de la API de Trakt no está configurado para esta operación.".to_owned()
+        "add-on API client is not configured for this operation" => {
+            "El cliente de la API de add-on no está configurado para esta operación.".to_owned()
         }
         _ => error.to_owned(),
     }

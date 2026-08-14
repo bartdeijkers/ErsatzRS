@@ -1,3 +1,4 @@
+pub mod addon_media_lists;
 pub mod addons;
 pub mod artwork;
 pub mod blocks;
@@ -14,6 +15,5 @@ pub mod rerun_collections;
 pub mod schedules;
 pub mod settings;
 pub mod templates;
-pub mod trakt;
 pub mod troubleshooting;
 pub mod watermarks;

@@ -26,7 +26,7 @@ crates/ersatzrs-web/src/admin/pages/media/multi_collections.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/filler_presets.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/collections.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/trash.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/media/trakt_lists.rs:rule-2
+crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/playlists.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/remote_streams.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media/smart_collections.rs:rule-2
@@ -35,4 +35,3 @@ crates/ersatzrs-web/src/admin/pages/media/rerun_collections.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/watermarks/editor.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.rs:rule-2
-

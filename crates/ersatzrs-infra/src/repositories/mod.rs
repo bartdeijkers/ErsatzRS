@@ -1,3 +1,4 @@
+mod addon_media_list;
 mod admin_media;
 mod admin_settings;
 mod artwork;
@@ -19,10 +20,10 @@ mod program_schedule;
 mod scheduling;
 mod television;
 mod template;
-mod trakt;
 mod troubleshooting;
 mod watermark;
 
+pub use addon_media_list::SqliteAddonMediaListRepository;
 pub use admin_settings::SqliteAdminSettingsRepository;
 pub use artwork::SqliteArtworkRepository;
 pub use block::SqliteBlockRepository;
@@ -44,7 +45,6 @@ pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;
-pub use trakt::SqliteTraktRepository;
 pub use troubleshooting::SqliteTroubleshootingRepository;
 pub use watermark::SqliteWatermarkRepository;
 
@@ -87,7 +87,7 @@ pub struct Repositories {
     pub config: SqliteConfigRepository,
     pub scheduling: SqliteSchedulingContentRepository,
     pub television: SqliteTelevisionRepository,
-    pub trakt: SqliteTraktRepository,
+    pub addon_media_lists: SqliteAddonMediaListRepository,
     pub troubleshooting: SqliteTroubleshootingRepository,
     pub watermark: SqliteWatermarkRepository,
 }
@@ -115,7 +115,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         config: SqliteConfigRepository(pool.clone()),
         scheduling: SqliteSchedulingContentRepository::new(pool.clone()),
         television: SqliteTelevisionRepository(pool.clone()),
-        trakt: SqliteTraktRepository(pool.clone()),
+        addon_media_lists: SqliteAddonMediaListRepository(pool.clone()),
         troubleshooting: SqliteTroubleshootingRepository(pool.clone()),
         watermark: SqliteWatermarkRepository(pool),
     }

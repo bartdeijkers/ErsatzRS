@@ -3,17 +3,18 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    ArtworkKind, BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode,
-    ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode,
-    ChannelSubtitleMode, ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode,
-    CollectionType, ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat,
-    FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat,
-    FillWithGroupMode, FillerKind, FillerMode, FilterMode, FixedStartTimeBehavior,
-    GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy,
-    MediaItemState, MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
-    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind,
-    ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, TraktListItemKind,
-    VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
+    AddonMediaListItemKind, ArtworkKind, BlockStopScheduling, ChannelIdleBehavior,
+    ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode,
+    ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
+    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
+    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
+    FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
+    HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
+    MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
+    OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, ScalingBehavior,
+    StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
+    WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -602,11 +603,11 @@ db_enum!(TailMode {
     2 => TailMode::Slate,
     3 => TailMode::Filler,
 });
-db_enum!(TraktListItemKind {
-    0 => TraktListItemKind::Movie,
-    1 => TraktListItemKind::Show,
-    2 => TraktListItemKind::Season,
-    3 => TraktListItemKind::Episode,
+db_enum!(AddonMediaListItemKind {
+    0 => AddonMediaListItemKind::Movie,
+    1 => AddonMediaListItemKind::Show,
+    2 => AddonMediaListItemKind::Season,
+    3 => AddonMediaListItemKind::Episode,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

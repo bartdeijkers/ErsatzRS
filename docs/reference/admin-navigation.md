@@ -47,7 +47,7 @@ published beta archives do not gain that route retroactively.
 | Multi Collections | `/media/multi-collections` | Groups composed from other collections |
 | Rerun Collections | `/media/rerun-collections` | Collections that track rerun state |
 | Playlists | `/media/playlists` | Ordered media lists |
-| Trakt Lists | `/media/trakt/lists` | Lists imported from Trakt |
+| Add-on Lists | `/media/addon-lists` | Provider links imported through installed list add-ons |
 | Filler Presets | `/media/filler/presets` | Reusable pre-roll, post-roll, and padding rules |
 
 ## Scheduling

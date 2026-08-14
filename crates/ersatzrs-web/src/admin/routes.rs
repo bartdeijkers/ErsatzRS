@@ -18,6 +18,7 @@ use crate::admin::pages::ffmpeg_profiles::{
     editor::FfmpegProfileEditorPage, list::FfmpegProfilesListPage,
 };
 use crate::admin::pages::libraries::LibrariesPage;
+use crate::admin::pages::media::addon_lists::{AddonMediaListEditorPage, AddonMediaListsPage};
 use crate::admin::pages::media::artists::{ArtistPage, ArtistsPage};
 use crate::admin::pages::media::collection_detail::CollectionDetailPage;
 use crate::admin::pages::media::collections::{CollectionEditorPage, CollectionsPage};
@@ -44,7 +45,6 @@ use crate::admin::pages::media::smart_collections::{
     SmartCollectionEditorPage, SmartCollectionsPage,
 };
 use crate::admin::pages::media::songs::SongsPage;
-use crate::admin::pages::media::trakt_lists::{TraktListEditorPage, TraktListsPage};
 use crate::admin::pages::media::trash::TrashPage;
 use crate::admin::pages::media_sources::{
     emby::{EmbyConnectionPage, EmbyLibrariesPage, EmbyPathsPage, EmbySourcesPage},
@@ -552,17 +552,16 @@ pub fn AdminRoutes() -> impl IntoView {
             />
 
             <Route
-                path=(StaticSegment("media"), StaticSegment("trakt"), StaticSegment("lists"))
-                view=TraktListsPage
+                path=(StaticSegment("media"), StaticSegment("addon-lists"))
+                view=AddonMediaListsPage
             />
             <Route
                 path=(
                     StaticSegment("media"),
-                    StaticSegment("trakt"),
-                    StaticSegment("lists"),
+                    StaticSegment("addon-lists"),
                     ParamSegment("id"),
                 )
-                view=TraktListEditorPage
+                view=AddonMediaListEditorPage
             />
 
             <Route

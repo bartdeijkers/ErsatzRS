@@ -17,7 +17,8 @@ use ersatzrs_addon_contract::{
     validate_addon_id, AddonCheckResult, AddonCheckStatus, AddonEntrypointKind, AddonIconMediaType,
     AddonManifest, AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon,
     CatalogPackage, RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -1780,8 +1781,9 @@ pub async fn disable_addon(pool: &DbPool, addon_id: &str) -> Result<(), AddonErr
     Ok(())
 }
 
-/// Uninstall a package. Linked Remote Streams block removal unless `force` is
-/// explicit; persistent add-on data is retained for recovery/reinstallation.
+/// Uninstall a package. Linked Remote Streams and provider media lists block
+/// removal unless `force` is explicit; persistent private add-on data is
+/// retained for recovery/reinstallation.
 ///
 /// # Errors
 ///
@@ -1802,15 +1804,23 @@ pub async fn uninstall_addon(pool: &DbPool, addon_id: &str, force: bool) -> Resu
             "installed add-on changed while uninstall was starting".to_owned(),
         ));
     }
-    let references =
+    let remote_stream_references =
         sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "RemoteStream" WHERE "AddonId" = ?"#)
             .bind(addon_id)
             .fetch_one(&mut *transaction)
             .await
             .map_err(database_error)?;
-    if references > 0 && !force {
+    let media_list_references = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "AddonId" = ?"#,
+    )
+    .bind(addon_id)
+    .fetch_one(&mut *transaction)
+    .await
+    .map_err(database_error)?;
+    if (remote_stream_references > 0 || media_list_references > 0) && !force {
         return Err(AddonError::Validation(format!(
-            "add-on is referenced by {references} Remote Stream item(s)"
+            "add-on is referenced by {remote_stream_references} Remote Stream item(s) and \
+             {media_list_references} add-on media list(s)"
         )));
     }
     let installed = list_installed_addons_in_transaction(&mut transaction).await?;
@@ -1828,12 +1838,15 @@ pub async fn uninstall_addon(pool: &DbPool, addon_id: &str, force: bool) -> Resu
             dependents.join(", ")
         )));
     }
-    if force && references > 0 {
+    if force && remote_stream_references > 0 {
         sqlx::query(r#"UPDATE "RemoteStream" SET "AddonId" = NULL WHERE "AddonId" = ?"#)
             .bind(addon_id)
             .execute(&mut *transaction)
             .await
             .map_err(database_error)?;
+    }
+    if force && media_list_references > 0 {
+        remove_owned_media_lists(&mut transaction, addon_id).await?;
     }
     let deleted = sqlx::query(
         r#"DELETE FROM "AddonInstallation" WHERE "AddonId" = ? AND "StateRevision" = ?"#,
@@ -1852,6 +1865,30 @@ pub async fn uninstall_addon(pool: &DbPool, addon_id: &str, force: bool) -> Resu
 
     remove_directory_if_present(&install_path).await?;
     remove_directory_if_present(&cache_path).await
+}
+
+async fn remove_owned_media_lists(
+    transaction: &mut Transaction<'_, crate::db::Db>,
+    addon_id: &str,
+) -> Result<(), AddonError> {
+    sqlx::query(
+        r#"DELETE FROM "Playlist"
+           WHERE "IsSystem" = 1
+             AND "Id" IN (
+                 SELECT "PlaylistId" FROM "AddonMediaList"
+                 WHERE "AddonId" = ? AND "PlaylistId" IS NOT NULL
+             )"#,
+    )
+    .bind(addon_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "AddonId" = ?"#)
+        .bind(addon_id)
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_error)?;
+    Ok(())
 }
 
 async fn remove_directory_if_present(path: &Path) -> Result<(), AddonError> {
@@ -1939,7 +1976,10 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
     let supported = matches!(
         (capability, operation),
         (CAPABILITY_ADDON_CHECK_V1, "check")
-            | (CAPABILITY_REMOTE_STREAM_LIST_V1, "list")
+            | (
+                CAPABILITY_MEDIA_LIST_LIST_V1 | CAPABILITY_REMOTE_STREAM_LIST_V1,
+                "list",
+            )
             | (CAPABILITY_REMOTE_STREAM_PLAY_V1, "play")
     );
     if !supported {
@@ -3692,6 +3732,7 @@ mod tests {
             required: true,
             default: None,
             options: Vec::new(),
+            suggested_reference: None,
         };
         let value = AddonSettingValue {
             key: "API_TOKEN".to_owned(),
@@ -3926,6 +3967,7 @@ mod tests {
     #[test]
     fn only_host_supported_capability_operations_can_dispatch() {
         assert!(validate_supported_operation(CAPABILITY_ADDON_CHECK_V1, "check").is_ok());
+        assert!(validate_supported_operation(CAPABILITY_MEDIA_LIST_LIST_V1, "list").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_LIST_V1, "list").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "play").is_ok());
         assert!(validate_supported_operation("remote-stream.play.v2", "play").is_err());
@@ -4079,6 +4121,75 @@ mod tests {
             .is_err());
     }
 
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn forced_reference_cleanup_removes_media_lists_and_only_generated_playlists() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+        insert_fixture_installation(&pool, &manifest, true).await;
+        let group_id = 699_i64;
+        sqlx::query(
+            r#"INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+               VALUES (?, 'Fixture', 1)"#,
+        )
+        .bind(group_id)
+        .execute(&pool)
+        .await
+        .expect("insert playlist group");
+        for (id, is_system) in [(700_i64, 1_i64), (701, 0)] {
+            sqlx::query(
+                r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
+                   VALUES (?, ?, ?, ?)"#,
+            )
+            .bind(id)
+            .bind(is_system)
+            .bind(format!("Fixture {id}"))
+            .bind(group_id)
+            .execute(&pool)
+            .await
+            .expect("insert playlist");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaList" (
+                       "AddonId", "ProviderId", "SourceUrl", "Name", "PlaylistId"
+                   ) VALUES (?, ?, 'https://example.test/list', 'Fixture', ?)"#,
+            )
+            .bind(&manifest.id)
+            .bind(format!("fixture-{id}"))
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("insert add-on media list");
+        }
+
+        let mut transaction = pool.begin().await.expect("begin transaction");
+        remove_owned_media_lists(&mut transaction, &manifest.id)
+            .await
+            .expect("remove owned lists");
+        transaction.commit().await.expect("commit cleanup");
+
+        let media_list_count =
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "AddonMediaList""#)
+                .fetch_one(&pool)
+                .await
+                .expect("count media lists");
+        let remaining_playlists =
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" >= 700"#)
+                .fetch_one(&pool)
+                .await
+                .expect("count fixture playlists");
+        let remaining_playlist_id =
+            sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "Playlist" WHERE "Id" >= 700"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load remaining playlist");
+        assert_eq!(media_list_count, 0);
+        assert_eq!((remaining_playlists, remaining_playlist_id), (1, 701));
+    }
+
     #[tokio::test]
     async fn optional_secret_reference_can_be_cleared() {
         let temp = tempfile::tempdir().expect("temp directory");
@@ -4096,6 +4207,7 @@ mod tests {
                 required: false,
                 default: None,
                 options: Vec::new(),
+                suggested_reference: None,
             });
         insert_fixture_installation(&pool, &manifest, false).await;
         let configured = AddonSettingValue {

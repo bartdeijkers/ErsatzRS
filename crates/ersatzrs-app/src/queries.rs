@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::repositories::{
-    AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot, AdminSettingsRepository,
-    BlockAdminRow, BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow,
-    BlockRepository, ChannelAdminListRow, ChannelEditorState, ChannelNumberRow, ChannelRepository,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository, AdminSearchKind,
+    AdminSearchRepository, AdminSearchSnapshot, AdminSettingsRepository, BlockAdminRow,
+    BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow, BlockRepository,
+    ChannelAdminListRow, ChannelEditorState, ChannelNumberRow, ChannelRepository,
     ChannelSelectOption, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
     CollectionRepository, DecoAdminRecord, DecoAdminRow, DecoEditorOptionsAdmin, DecoGroupAdminRow,
     DecoRepository, DecoTemplateAdminRow, DecoTemplateGroupAdminRow, DecoTemplateItemAdmin,
@@ -19,8 +20,7 @@ use ersatzrs_core::repositories::{
     ScheduleAdminRow, ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin,
     SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow,
     TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin,
-    TemplateRepository, TraktListAdminForm, TraktListAdminRow, TraktRepository,
-    WatermarkRepository,
+    TemplateRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
@@ -1801,20 +1801,20 @@ pub async fn list_settings_playout_ids(
     repository.list_playout_ids().await.map_err(Into::into)
 }
 
-/// Page through persisted Trakt lists.
+/// Page through persisted Add-on media lists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ListTraktLists {
+pub struct ListAddonMediaLists {
     /// Zero-based page index.
     pub page: u32,
     /// Page size persisted for the next visit.
     pub page_size: u32,
 }
 
-/// List Trakt rows and preserve the existing page-size preference.
-pub async fn list_trakt_lists(
-    query: ListTraktLists,
-    repository: &dyn TraktRepository,
-) -> Result<(Vec<TraktListAdminRow>, u64)> {
+/// List add-on media-list rows and preserve the existing page-size preference.
+pub async fn list_addon_media_lists(
+    query: ListAddonMediaLists,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
     let page_size = query.page_size.max(1);
     repository.set_page_size(page_size).await?;
     repository
@@ -1823,22 +1823,24 @@ pub async fn list_trakt_lists(
         .map_err(Into::into)
 }
 
-/// Load one Trakt list editor form.
-pub async fn get_trakt_list(
+/// Load one Add-on media list editor form.
+pub async fn get_addon_media_list(
     id: EntityId,
-    repository: &dyn TraktRepository,
-) -> Result<Option<TraktListAdminForm>> {
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Option<AddonMediaListAdminForm>> {
     if id <= 0 {
         return Err(ApplicationError::Validation {
-            field: "trakt_list_id",
+            field: "addon_media_list_id",
             message: "must be greater than zero".to_owned(),
         });
     }
     repository.get_admin_form(id).await.map_err(Into::into)
 }
 
-/// Load the persisted Trakt list page size.
-pub async fn get_trakt_page_size(repository: &dyn TraktRepository) -> Result<u32> {
+/// Load the persisted Add-on media list page size.
+pub async fn get_addon_media_lists_page_size(
+    repository: &dyn AddonMediaListRepository,
+) -> Result<u32> {
     repository.get_page_size().await.map_err(Into::into)
 }
 

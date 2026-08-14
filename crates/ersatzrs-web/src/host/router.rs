@@ -288,20 +288,20 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::decos::save_deco_template_items_form),
         )
         .route(
-            "/api/trakt-lists/add",
-            post(api::trakt::add_trakt_list_form),
+            "/api/addon-lists/add",
+            post(api::addon_media_lists::add_addon_media_list_form),
         )
         .route(
-            "/api/trakt-lists/match",
-            post(api::trakt::match_trakt_list_form),
+            "/api/addon-lists/match",
+            post(api::addon_media_lists::match_addon_media_list_form),
         )
         .route(
-            "/api/trakt-lists/save",
-            post(api::trakt::save_trakt_list_form),
+            "/api/addon-lists/save",
+            post(api::addon_media_lists::save_addon_media_list_form),
         )
         .route(
-            "/api/trakt-lists/delete",
-            post(api::trakt::delete_trakt_list_form),
+            "/api/addon-lists/delete",
+            post(api::addon_media_lists::delete_addon_media_list_form),
         )
         .route(
             "/api/media-sources/local/save",

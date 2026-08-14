@@ -18,17 +18,17 @@ use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
 
 use checks::{
-    AddonPlatformHealthCheck, ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck,
-    DolbyVisionHealthCheck, DowngradeHealthCheck, EmptyScheduleHealthCheck,
-    EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
-    FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
-    HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck,
-    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
-    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck,
-    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
-    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
-    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    AddonMediaListHealthCheck, AddonPlatformHealthCheck, ClassicPlayoutStateHealthCheck,
+    DirtyMigrationHealthCheck, DolbyVisionHealthCheck, DowngradeHealthCheck,
+    EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
+    FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
+    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
+    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
+    MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
+    RemoteStreamPlaylistHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
+    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -52,7 +52,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 32] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 33] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -73,6 +73,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 32] = [
     "Remote Streams",
     "Remote Stream playlists",
     "Add-ons",
+    "Add-on media lists",
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
@@ -235,6 +236,7 @@ fn registered_health_checks(
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamPlaylistHealthCheck::new(pool.clone())),
         Box::new(AddonPlatformHealthCheck::new(pool.clone())),
+        Box::new(AddonMediaListHealthCheck::new(pool.clone())),
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),

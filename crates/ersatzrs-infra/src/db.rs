@@ -75,7 +75,7 @@ pub const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
 pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
 pub(crate) const SQLITE_BUSY_TIMEOUT_MS: u32 = 30_000;
 
-const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
+const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Add-on Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
 const DEFAULT_CHANNEL_NUMBER: &str = "1";
 const DEFAULT_CHANNEL_NAME: &str = "ErsatzRS";
@@ -1507,7 +1507,7 @@ mod tests {
         assert_default_ffmpeg_profiles(&profiles);
         assert_eq!(channel_name, "ErsatzRS");
         assert_eq!(channel_group, "ErsatzRS");
-        assert_eq!(group_name, "Trakt Lists");
+        assert_eq!(group_name, "Add-on Lists");
         let config_rows: std::collections::HashMap<String, String> = config_rows
             .into_iter()
             .map(|row| {

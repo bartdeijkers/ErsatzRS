@@ -25,6 +25,7 @@ supported combinations. Procedures and background are indexed from the
 - [Add-on packages](addon-packages.md)
 - [Add-on repositories](addon-repositories.md)
 - [Add-on runtime](addon-runtime.md)
+- [Add-on media lists](addon-media-lists.md)
 
 ## Contributor lookup
 

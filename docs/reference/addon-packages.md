@@ -23,7 +23,7 @@ every invocation and by health checks.
 
 | Field | Contract |
 |---|---|
-| `manifest_version` | Integer `1` or `2`; version 2 adds the optional `icon` object. |
+| `manifest_version` | Integer `1`, `2`, or `3`; version 2 adds the optional `icon` object and version 3 adds safe suggested secret-reference locations. |
 | `id` | Lowercase reverse-DNS identity with at least three components. |
 | `version` | SemVer. |
 | `name`, `summary` | Locale maps with a non-empty `en-US` value. |
@@ -54,7 +54,10 @@ letter placeholder.
 Setting kinds are `string`, `boolean`, `integer`, `enum`, `path`, `executable`,
 and `secret_reference`. Secret definitions cannot have defaults. A secret
 setting stores an environment-variable name or file path, never the resolved
-secret value.
+secret value. A schema-v3 secret definition may declare
+`suggested_reference = { kind = "environment" | "file", reference = "..." }`.
+This prefills only the reference location in the host-rendered editor and is
+not a secret default; non-secret settings cannot declare it.
 
 Declarative panels accept text, status, key/value, and HTTPS link blocks without
 URL userinfo. Packages cannot inject HTML, CSS, JavaScript, or WASM into the
