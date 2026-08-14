@@ -2947,6 +2947,12 @@ pub fn addon_media_list_error_text(language: UiLanguage, error: &str) -> String 
 }
 
 fn canonical_addon_media_list_error(error: &str) -> String {
+    // Server functions wrap a repository failure in transport plumbing, while
+    // the localized messages match the repository wording.
+    let error = error.trim();
+    let error = error
+        .strip_prefix("error running server function: ")
+        .unwrap_or(error);
     if error.contains("required setting CLIENT_ID is not configured")
         || error.contains("environment reference for CLIENT_ID is unavailable")
         || error.contains("Trakt client ID reference is not configured")

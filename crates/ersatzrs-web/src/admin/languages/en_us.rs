@@ -2330,6 +2330,15 @@ fn addon_media_list_error_message(error: &str) -> String {
         return "add-on list does not exist.".to_owned();
     }
 
+    if let Some(folder) =
+        normalized.strip_prefix("another list of this add-on already uses the folder ")
+    {
+        return format!("Another list of this add-on already uses the folder \"{folder}\".");
+    }
+    if let Some(folder) = normalized.strip_suffix(" is not usable as a folder name") {
+        return format!("\"{folder}\" is not usable as a folder name.");
+    }
+
     match normalized {
         "Invalid add-on list url" => "Invalid add-on list URL.".to_owned(),
         "Add-on credential reference is not configured" => {
@@ -2571,6 +2580,21 @@ mod tests {
         assert_eq!(
             addon_media_list_error_text(UiLanguage::English, "Invalid add-on list url"),
             "Invalid add-on list URL."
+        );
+        // Server functions wrap the repository message in transport plumbing.
+        assert_eq!(
+            addon_media_list_error_text(
+                UiLanguage::English,
+                "error running server function: conflict: another list of this add-on already uses the folder teleac"
+            ),
+            "Another list of this add-on already uses the folder \"teleac\"."
+        );
+        assert_eq!(
+            addon_media_list_error_text(
+                UiLanguage::English,
+                "conflict: /// is not usable as a folder name"
+            ),
+            "\"///\" is not usable as a folder name."
         );
         assert_eq!(
             upload_error_text(UiLanguage::English, "Upload exceeds maximum allowed size"),

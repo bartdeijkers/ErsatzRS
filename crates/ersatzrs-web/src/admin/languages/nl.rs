@@ -1007,6 +1007,15 @@ fn addon_media_list_error_message(error: &str) -> String {
         return "add-on-lijst bestaat niet.".to_owned();
     }
 
+    if let Some(folder) =
+        normalized.strip_prefix("another list of this add-on already uses the folder ")
+    {
+        return format!("Een andere lijst van deze add-on gebruikt de map \"{folder}\" al.");
+    }
+    if let Some(folder) = normalized.strip_suffix(" is not usable as a folder name") {
+        return format!("\"{folder}\" is niet bruikbaar als mapnaam.");
+    }
+
     match normalized {
         "Invalid add-on list url" => "Ongeldige add-on-lijst-URL.".to_owned(),
         "Add-on credential reference is not configured" => {
@@ -2659,6 +2668,13 @@ mod tests {
         assert_eq!(
             addon_media_list_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
+        );
+        assert_eq!(
+            addon_media_list_error_text(
+                UiLanguage::Dutch,
+                "error running server function: conflict: another list of this add-on already uses the folder teleac"
+            ),
+            "Een andere lijst van deze add-on gebruikt de map \"teleac\" al."
         );
         assert_eq!(
             upload_error_text(UiLanguage::Dutch, "Read field: connection reset"),

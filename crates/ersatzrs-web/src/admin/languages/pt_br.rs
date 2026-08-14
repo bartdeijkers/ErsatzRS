@@ -1030,6 +1030,15 @@ fn addon_media_list_error_message(error: &str) -> String {
         return "A lista do add-on não existe.".to_owned();
     }
 
+    if let Some(folder) =
+        normalized.strip_prefix("another list of this add-on already uses the folder ")
+    {
+        return format!("Outra lista deste complemento já usa a pasta \"{folder}\".");
+    }
+    if let Some(folder) = normalized.strip_suffix(" is not usable as a folder name") {
+        return format!("\"{folder}\" não pode ser usada como nome de pasta.");
+    }
+
     match normalized {
         "Invalid add-on list url" => "URL da lista do add-on inválida.".to_owned(),
         "Add-on credential reference is not configured" => {

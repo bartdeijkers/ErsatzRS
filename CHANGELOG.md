@@ -24,6 +24,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Add-on list failures reached the operator wrapped in transport plumbing —
+  "error running server function: conflict: …" — because the localized
+  messages match the repository wording and nothing stripped the server
+  function's own prefix, so every message dispatched through a server function
+  fell through to the raw string. The prefix is now removed before matching,
+  which also lands the storage-folder rejections (taken, or unusable as a
+  folder name) as ordinary sentences in every supported culture.
 - No add-on that declares managed FFmpeg could serve as a media-list provider.
   Resolving an add-on's environment requires both managed paths whenever its
   manifest declares `managed_ffmpeg`, but list enumeration was the one
