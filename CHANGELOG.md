@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- No add-on that declares managed FFmpeg could serve as a media-list provider.
+  Resolving an add-on's environment requires both managed paths whenever its
+  manifest declares `managed_ffmpeg`, but list enumeration was the one
+  invocation path that passed an empty runtime context — so adding a Beeld &
+  Geluid list failed with "managed FFmpeg path is unavailable" before a single
+  request left the machine. List invocations now supply the managed FFmpeg and
+  ffprobe paths, the way every other invocation path already did.
 - Local Libraries rendered the storage root each add-on manages as a loose
   block of text above the library table, with its own Settings link, so
   add-on-owned storage read as something other than a media source. Those

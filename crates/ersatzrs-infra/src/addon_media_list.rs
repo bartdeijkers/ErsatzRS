@@ -40,13 +40,21 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
     ) -> Result<EnumeratedAddonMediaList> {
         let mut environment = BTreeMap::new();
         environment.insert(SOURCE_URL_ENVIRONMENT.to_owned(), source_url.to_owned());
+        // Every other invocation path supplies the managed runtime; a list
+        // enumeration that omitted it could not run an add-on that declares
+        // `managed_ffmpeg`, because resolving its environment requires both
+        // paths.
+        let runtime = AddonRuntimeContext {
+            ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+            ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
+        };
         let output = invoke_enabled_addon(
             &self.pool,
             addon_id,
             AddonInvocation {
                 capability: CAPABILITY_MEDIA_LIST_LIST_V1,
                 operation: "list",
-                runtime: &AddonRuntimeContext::default(),
+                runtime: &runtime,
                 extra_environment: &environment,
                 timeout: Duration::from_mins(1),
                 max_output_bytes: MAX_OUTPUT_BYTES,
@@ -177,6 +185,113 @@ fn decode_record(line: &str) -> Result<AddonMediaListRecord> {
 #[cfg(test)]
 mod tests {
     use super::decode_media_list_output;
+
+    /// Refuses to enumerate unless the host supplied its managed `FFmpeg`
+    /// paths, the way a manifest declaring `managed_ffmpeg` expects.
+    #[cfg(unix)]
+    const FIXTURE_SCRIPT: &str = r#"#!/bin/sh
+set -eu
+: "${FFMPEG_BIN:?managed ffmpeg is required}"
+: "${FFPROBE_BIN:?managed ffprobe is required}"
+printf '%s\n' '{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}'
+printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Arrival","title":"Arrival","kind":"movie","guids":[]}'
+"#;
+
+    #[cfg(unix)]
+    async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        tokio::fs::create_dir_all(root)
+            .await
+            .expect("fixture package folder");
+        let script = root.join("fixture.sh");
+        tokio::fs::write(&script, FIXTURE_SCRIPT)
+            .await
+            .expect("fixture script");
+        let mut permissions = tokio::fs::metadata(&script)
+            .await
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        tokio::fs::set_permissions(&script, permissions)
+            .await
+            .expect("fixture permissions");
+
+        let database_url = format!(
+            "sqlite:{}",
+            root.parent()
+                .expect("fixture package has a parent")
+                .join("addons.db")
+                .display()
+        );
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("fixture database");
+        let manifest = serde_json::json!({
+            "manifest_version": 1,
+            "id": "org.ersatzrs.addon.fixture",
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture media-list add-on"},
+            "license": "GPL-3.0-or-later",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": [
+                {"id": "addon.check.v1"},
+                {"id": "media-list.list.v1"}
+            ],
+            "entrypoints": {
+                "any": {"path": "fixture.sh", "kind": "posix_shell"}
+            },
+            "permissions": {
+                "network_hosts": [],
+                "media_read": false,
+                "managed_ffmpeg": true,
+                "external_commands": []
+            },
+            "settings": [],
+            "panels": []
+        });
+        let now = chrono::Utc::now().to_rfc3339();
+        let content_sha256 = crate::addons::calculate_addon_content_sha256(root)
+            .await
+            .expect("hash fixture package");
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, NULL, '1.0.0', 1, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .bind("a".repeat(64))
+        .bind(content_sha256)
+        .bind(manifest.to_string())
+        .bind(root.to_string_lossy().into_owned())
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("fixture add-on installation");
+        pool
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn list_invocations_supply_the_managed_ffmpeg_runtime() {
+        use ersatzrs_core::addon_media_list::AddonMediaListProvider as _;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool = fixture_media_list_addon(&root).await;
+
+        let list = super::InstalledAddonMediaListProvider::new(pool)
+            .enumerate("org.ersatzrs.addon.fixture", "https://example.test/list")
+            .await
+            .expect("enumerate fixture list");
+
+        assert_eq!(list.provider_id, "fixture/list");
+        assert_eq!(list.items.len(), 1);
+    }
 
     #[test]
     fn decodes_bounded_ndjson_contract() {
