@@ -1,4 +1,3 @@
-#![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
@@ -18,7 +17,14 @@ use crate::admin::ui::primitives::resource_state::{
 };
 use crate::admin::ui::primitives::toast::{load_failed_message, load_or_notify, use_toast};
 
-stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
+// `shared.module.css` is shared across the media-source pages (emby, jellyfin,
+// local, plex); not every class is used by this particular page.
+#[allow(dead_code)]
+mod style_mod {
+    stylance::import_crate_style!(s, "src/admin/pages/media_sources/shared.module.css");
+    pub use s::*;
+}
+use style_mod as style;
 
 #[cfg(target_arch = "wasm32")]
 fn set_browser_location(path: &str) {
