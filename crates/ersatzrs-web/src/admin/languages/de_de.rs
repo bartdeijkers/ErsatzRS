@@ -1140,6 +1140,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListSaved => "add-on-Liste gespeichert.",
         TextKey::AddonMediaLists => "add-on-Listen",
         TextKey::AddonMediaListUrl => "add-on-Listen-URL",
+        TextKey::AddonMediaListFolder => "Speicherordner",
+        TextKey::AddonMediaListFolderHelp => "Optional; sonst aus dem Listennamen abgeleitet",
         TextKey::ManagedByAddon => "Von einem Add-on verwaltet",
         TextKey::Trash => "Papierkorb",
         TextKey::TrashAlreadyEmpty => "Der Papierkorb ist bereits leer.",

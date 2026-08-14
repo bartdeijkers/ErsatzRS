@@ -144,11 +144,12 @@ pub async fn get_addon_media_list_form(
 pub async fn add_addon_media_list(
     addon_id: String,
     source_url: String,
+    folder_name: String,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    add_addon_media_list_with_state(&state, addon_id, source_url)
+    add_addon_media_list_with_state(&state, addon_id, source_url, folder_name)
         .await
         .map_err(ServerFnError::new)
 }
@@ -188,12 +189,14 @@ pub async fn add_addon_media_list_with_state(
     state: &crate::host::state::AppState,
     addon_id: String,
     source_url: String,
+    folder_name: String,
 ) -> ersatzrs_app::Result<i64> {
     let list_id = state
         .application
         .add_addon_media_list(ersatzrs_app::commands::AddAddonMediaList {
             addon_id,
             source_url,
+            folder_name,
         })
         .await?;
     if let Some(library_id) = state

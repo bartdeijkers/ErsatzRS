@@ -112,10 +112,15 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .transpose()
     }
 
-    async fn add_or_refresh(&self, addon_id: &str, source_url: &str) -> Result<EntityId> {
+    async fn add_or_refresh(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+    ) -> Result<EntityId> {
         let provider = InstalledAddonMediaListProvider::new(self.0.clone());
         AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
-            .add_or_refresh(addon_id, source_url)
+            .add_or_refresh(addon_id, source_url, requested_folder)
             .await
     }
 

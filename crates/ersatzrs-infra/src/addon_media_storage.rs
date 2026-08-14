@@ -173,6 +173,7 @@ pub async fn ensure_list_library(
     addon_id: &str,
     list_name: &str,
     source_url: &str,
+    requested_folder: Option<&str>,
 ) -> Result<EntityId> {
     let source = sqlx::query(
         r#"SELECT "MediaSourceId", "RootPath" FROM "AddonMediaSource" WHERE "AddonId" = ?"#,
@@ -203,7 +204,13 @@ pub async fn ensure_list_library(
             row.try_get::<String, _>("FolderName").repository()?,
         )
     } else {
-        let folder_name = available_folder_name(pool, addon_id, list_id, list_name).await?;
+        // An operator-supplied folder name is already sanitized and checked for
+        // conflicts by `validated_folder_name`; only the derived name needs the
+        // per-add-on uniqueness suffix.
+        let folder_name = match requested_folder {
+            Some(folder_name) => folder_name.to_owned(),
+            None => available_folder_name(pool, addon_id, list_id, list_name).await?,
+        };
         (0, folder_name)
     };
     let folder = root.join(&folder_name);
@@ -342,6 +349,52 @@ pub async fn delete_list_library(pool: &DbPool, list_id: EntityId) -> Result<()>
             .repository()?;
     }
     Ok(())
+}
+
+/// Sanitize an operator-supplied folder name and reject one another list of the
+/// same add-on already owns.
+///
+/// The check runs before the list is persisted, so a rejected name leaves no
+/// half-imported list behind. A list that already owns the name keeps it, which
+/// makes re-adding the same source URL idempotent.
+///
+/// # Errors
+///
+/// Returns an error when the name is empty after sanitization, when it
+/// collides with another list's folder, or when the conflict cannot be queried.
+pub async fn validated_folder_name(
+    pool: &DbPool,
+    addon_id: &str,
+    source_url: &str,
+    requested: &str,
+) -> Result<String> {
+    if !requested.chars().any(char::is_alphanumeric) {
+        return Err(RepositoryError::Conflict(format!(
+            "{requested} is not usable as a folder name"
+        )));
+    }
+    let folder_name = safe_folder_name(requested);
+    let conflict: Option<String> = sqlx::query_scalar(
+        r#"SELECT "managed"."FolderName"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "managed"."AddonMediaListId"
+           WHERE "list"."AddonId" = ?
+             AND LOWER("managed"."FolderName") = LOWER(?)
+             AND "list"."SourceUrl" <> ?
+           LIMIT 1"#,
+    )
+    .bind(addon_id)
+    .bind(&folder_name)
+    .bind(source_url)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    if conflict.is_some() {
+        return Err(RepositoryError::Conflict(format!(
+            "another list of this add-on already uses the folder {folder_name}"
+        )));
+    }
+    Ok(folder_name)
 }
 
 async fn available_folder_name(
@@ -526,6 +579,7 @@ pub async fn reconcile_list_libraries(pool: &DbPool, addon_id: &str) -> Result<(
             addon_id,
             &row.try_get::<String, _>("Name").repository()?,
             &row.try_get::<String, _>("SourceUrl").repository()?,
+            None,
         )
         .await?;
     }
@@ -562,7 +616,7 @@ mod tests {
 
     use super::{
         ensure_list_library, ensure_media_source_in_transaction, is_windows_reserved_name,
-        safe_folder_name,
+        safe_folder_name, validated_folder_name, EntityId, RepositoryError,
     };
 
     #[test]
@@ -645,6 +699,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            None,
         )
         .await
         .expect("move library projection");
@@ -663,6 +718,102 @@ mod tests {
                 .join("list.playlist.yml")
                 .to_string_lossy()
         );
+    }
+
+    async fn fixture_pool_with_source(root: &std::path::Path, addon_id: &str) -> crate::db::DbPool {
+        let database_url = format!("sqlite:{}", root.join("storage.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let (manifest, storage) = storage_manifest(addon_id);
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, '1.0.0', 1, 'package', 'content', ?, 'fixture', 'now', 'now')"#,
+        )
+        .bind(addon_id)
+        .bind(serde_json::to_string(&manifest).expect("manifest JSON"))
+        .execute(&pool)
+        .await
+        .expect("insert installation");
+        let media_root = root.join("fixture_media");
+        tokio::fs::create_dir_all(&media_root)
+            .await
+            .expect("create root");
+        let mut transaction = pool.begin().await.expect("begin transaction");
+        ensure_media_source_in_transaction(&mut transaction, addon_id, &storage, &media_root)
+            .await
+            .expect("create source");
+        transaction.commit().await.expect("commit source");
+        pool
+    }
+
+    async fn insert_fixture_list(
+        pool: &crate::db::DbPool,
+        addon_id: &str,
+        source_url: &str,
+        name: &str,
+    ) -> EntityId {
+        let inserted = sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("AddonId", "ProviderId", "SourceUrl", "Name")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(addon_id)
+        .bind(source_url)
+        .bind(source_url)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("insert list");
+        let mut transaction = pool.begin().await.expect("begin id transaction");
+        let id = crate::db::inserted_id(&mut transaction, inserted)
+            .await
+            .expect("read list id");
+        transaction.commit().await.expect("commit id transaction");
+        id
+    }
+
+    #[tokio::test]
+    async fn operator_folder_name_is_sanitized_and_kept_unique() {
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let addon_id = "org.ersatzrs.addon.fixture";
+        let pool = fixture_pool_with_source(temporary.path(), addon_id).await;
+        let first_url = "https://example.test/list/one";
+        let second_url = "https://example.test/list/two";
+        let first = insert_fixture_list(&pool, addon_id, first_url, "Beeld & Geluid").await;
+        insert_fixture_list(&pool, addon_id, second_url, "Another list").await;
+
+        let folder_name = validated_folder_name(&pool, addon_id, first_url, "Teleac / Deel 1")
+            .await
+            .expect("sanitize requested folder");
+        assert_eq!(folder_name, "Teleac - Deel 1");
+        ensure_list_library(
+            &pool,
+            first,
+            addon_id,
+            "Beeld & Geluid",
+            first_url,
+            Some(&folder_name),
+        )
+        .await
+        .expect("create library");
+        assert!(temporary
+            .path()
+            .join("fixture_media")
+            .join("Teleac - Deel 1")
+            .join("list.playlist.yml")
+            .is_file());
+
+        // Re-adding the same source keeps its own folder available, while
+        // another list of the same add-on may not claim it.
+        validated_folder_name(&pool, addon_id, first_url, "Teleac / Deel 1")
+            .await
+            .expect("same list keeps its folder");
+        let conflict = validated_folder_name(&pool, addon_id, second_url, "teleac - deel 1").await;
+        assert!(matches!(conflict, Err(RepositoryError::Conflict(_))));
+        let unusable = validated_folder_name(&pool, addon_id, second_url, "///").await;
+        assert!(matches!(unusable, Err(RepositoryError::Conflict(_))));
     }
 
     #[tokio::test]
@@ -719,6 +870,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            None,
         )
         .await
         .expect("create library");
@@ -728,6 +880,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            None,
         )
         .await
         .expect("reuse library");

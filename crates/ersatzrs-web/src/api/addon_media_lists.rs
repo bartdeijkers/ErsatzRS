@@ -16,6 +16,8 @@ use crate::{
 pub struct AddonMediaListAddForm {
     addon_id: String,
     source_url: String,
+    #[serde(default)]
+    folder_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +40,14 @@ pub async fn add_addon_media_list_form(
     State(state): State<AppState>,
     Form(input): Form<AddonMediaListAddForm>,
 ) -> Redirect {
-    match add_addon_media_list_with_state(&state, input.addon_id, input.source_url).await {
+    match add_addon_media_list_with_state(
+        &state,
+        input.addon_id,
+        input.source_url,
+        input.folder_name,
+    )
+    .await
+    {
         Ok(_) => Redirect::to("/media/addon-lists"),
         Err(error) => {
             tracing::error!(%error, "failed to add add-on media list from HTML form");

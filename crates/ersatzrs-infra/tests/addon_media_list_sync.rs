@@ -99,7 +99,11 @@ async fn add_refresh_match_and_generate_playlist() {
 
     let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeListProvider);
     let list_id = remote
-        .add_or_refresh("org.example.lists", "https://example.invalid/some-list")
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/some-list",
+            None,
+        )
         .await
         .unwrap();
 
@@ -179,7 +183,7 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
 
     let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider);
     let list_id = remote
-        .add_or_refresh("org.example.lists", "https://example.invalid/list")
+        .add_or_refresh("org.example.lists", "https://example.invalid/list", None)
         .await
         .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
@@ -285,7 +289,11 @@ async fn remote_failure_is_typed_and_persists_no_plausible_list() {
     let pool = common::test_db().await;
     let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FailingListProvider);
     let error = remote
-        .add_or_refresh("org.example.lists", "https://example.invalid/some-list")
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/some-list",
+            None,
+        )
         .await
         .expect_err("remote failure must propagate");
     assert!(matches!(error, RepositoryError::Conflict(_)));

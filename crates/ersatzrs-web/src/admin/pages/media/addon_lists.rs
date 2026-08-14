@@ -86,6 +86,7 @@ fn AddonMediaListsIsland(
             .unwrap_or_default(),
     );
     let add_source_url = RwSignal::new(String::new());
+    let add_folder_name = RwSignal::new(String::new());
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
     let toast = use_toast();
@@ -101,9 +102,9 @@ fn AddonMediaListsIsland(
         }
     });
 
-    let add_action = Action::new(|value: &(String, String)| {
-        let (addon_id, source_url) = value.clone();
-        async move { add_addon_media_list(addon_id, source_url).await }
+    let add_action = Action::new(|value: &(String, String, String)| {
+        let (addon_id, source_url, folder_name) = value.clone();
+        async move { add_addon_media_list(addon_id, source_url, folder_name).await }
     });
     let match_action = Action::new(|id: &i64| match_addon_media_list(*id));
     let delete_action = Action::new(|id: &i64| delete_addon_media_list(*id));
@@ -120,6 +121,7 @@ fn AddonMediaListsIsland(
                         ToastSeverity::Success,
                     );
                     add_source_url.set(String::new());
+                    add_folder_name.set(String::new());
                     add_open.set(false);
                     data.refetch();
                 }
@@ -364,8 +366,9 @@ fn AddonMediaListsIsland(
                 open=add_open
                 addon_id=add_addon_id
                 source_url=add_source_url
+                folder_name=add_folder_name
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String)| {
+                on_submit=Callback::new(move |value: (String, String, String)| {
                     add_action.dispatch(value);
                 })
             />
@@ -395,8 +398,9 @@ fn AddAddonMediaListDialog(
     open: RwSignal<bool>,
     addon_id: RwSignal<String>,
     source_url: RwSignal<String>,
+    folder_name: RwSignal<String>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String)>,
+    on_submit: Callback<(String, String, String)>,
 ) -> impl IntoView {
     view! {
         <div
@@ -417,8 +421,9 @@ fn AddAddonMediaListDialog(
                         event.prevent_default();
                         let addon_id = addon_id.get_untracked();
                         let source_url = source_url.get_untracked();
+                        let folder_name = folder_name.get_untracked();
                         if !addon_id.trim().is_empty() && !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url));
+                            on_submit.run((addon_id, source_url, folder_name));
                         }
                     }
                 >
@@ -444,6 +449,16 @@ fn AddAddonMediaListDialog(
                                 placeholder="https://example.invalid/lists/list-name"
                                 prop:value=move || source_url.get()
                                 on:input=move |event| source_url.set(event_target_value(&event))
+                            />
+                        </label>
+                        <label class=style::dialog_field>
+                            <span>{tr(TextKey::AddonMediaListFolder)}</span>
+                            <input
+                                type="text"
+                                name="folder_name"
+                                placeholder=tr(TextKey::AddonMediaListFolderHelp)
+                                prop:value=move || folder_name.get()
+                                on:input=move |event| folder_name.set(event_target_value(&event))
                             />
                         </label>
                     </div>

@@ -1,4 +1,6 @@
-use crate::addon_media_storage::{delete_list_library, ensure_list_library, has_media_source};
+use crate::addon_media_storage::{
+    delete_list_library, ensure_list_library, has_media_source, validated_folder_name,
+};
 use crate::db::inserted_id;
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
@@ -711,10 +713,31 @@ where
 
     /// Add or refresh an add-on media list, then match its persisted items.
     ///
+    /// `requested_folder` names the storage folder for a list imported for the
+    /// first time; an empty value derives the name from the list itself, and a
+    /// list that already owns a folder keeps it.
+    ///
     /// # Errors
     ///
-    /// Returns an error when provider invocation or persistence fails.
-    pub async fn add_or_refresh(&self, addon_id: &str, source_url: &str) -> Result<EntityId> {
+    /// Returns an error when the requested folder is unusable or taken, or when
+    /// provider invocation or persistence fails.
+    pub async fn add_or_refresh(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+    ) -> Result<EntityId> {
+        // Validate before enumerating so a rejected folder name costs no
+        // provider call and leaves no half-imported list behind.
+        let requested_folder = match requested_folder
+            .map(str::trim)
+            .filter(|folder| !folder.is_empty())
+        {
+            Some(folder) => {
+                Some(validated_folder_name(&self.local.pool, addon_id, source_url, folder).await?)
+            }
+            None => None,
+        };
         let enumerated = match self.provider.enumerate(addon_id, source_url).await {
             Ok(enumerated) => enumerated,
             Err(error) => {
@@ -758,6 +781,7 @@ where
                 &list.addon_id,
                 &list.name,
                 &list.source_url,
+                requested_folder.as_deref(),
             )
             .await?;
         }
@@ -791,7 +815,11 @@ where
         for row in rows {
             let addon_id: String = row.try_get("AddonId").repository()?;
             let source_url: String = row.try_get("SourceUrl").repository()?;
-            if self.add_or_refresh(&addon_id, &source_url).await.is_ok() {
+            if self
+                .add_or_refresh(&addon_id, &source_url, None)
+                .await
+                .is_ok()
+            {
                 count += 1;
             }
         }

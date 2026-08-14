@@ -4336,6 +4336,9 @@ pub struct AddAddonMediaList {
     pub addon_id: String,
     /// Provider-specific public list or saved-search URL.
     pub source_url: String,
+    /// Optional storage folder name for a first import; empty derives it from
+    /// the list name.
+    pub folder_name: String,
 }
 
 /// Re-run local matching for one persisted Add-on media list.
@@ -4374,8 +4377,13 @@ pub async fn add_addon_media_list(
     if command.source_url.trim().is_empty() {
         return validation_error("source_url", "A source URL is required");
     }
+    let folder_name = command.folder_name.trim();
     repository
-        .add_or_refresh(command.addon_id.trim(), command.source_url.trim())
+        .add_or_refresh(
+            command.addon_id.trim(),
+            command.source_url.trim(),
+            (!folder_name.is_empty()).then_some(folder_name),
+        )
         .await
         .map_err(Into::into)
 }

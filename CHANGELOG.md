@@ -13,6 +13,15 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Importing an add-on list now takes an optional storage folder name next to
+  the URL. Leaving it empty keeps the current behaviour — the folder is derived
+  from the list name the provider reports — while a supplied name is sanitized
+  the same way and refused when another list of the same add-on already owns
+  it. The check runs before the provider is invoked, so a rejected name costs
+  no provider call and leaves no half-imported list behind.
+
 ### Fixed
 
 - No add-on that declares managed FFmpeg could serve as a media-list provider.

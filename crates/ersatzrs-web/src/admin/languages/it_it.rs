@@ -1172,6 +1172,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListSaved => "Lista add-on salvata.",
         TextKey::AddonMediaLists => "add-on Liste",
         TextKey::AddonMediaListUrl => "URL della lista add-on",
+        TextKey::AddonMediaListFolder => "Cartella di archiviazione",
+        TextKey::AddonMediaListFolderHelp => "Facoltativo; altrimenti derivato dal nome della lista",
         TextKey::ManagedByAddon => "Gestito da un componente aggiuntivo",
         TextKey::Trash => "Cestino",
         TextKey::TrashAlreadyEmpty => "Il cestino è già vuoto.",
