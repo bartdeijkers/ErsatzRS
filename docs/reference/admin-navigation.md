@@ -20,6 +20,7 @@ published beta archives do not gain that route retroactively.
 | Page | Route | Purpose |
 |---|---|---|
 | Local | `/media/sources/local` | Filesystem-backed libraries |
+| Add-on Lists | `/media/addon-lists` | Provider lists materialized as file-backed local Remote Stream libraries |
 | Emby | `/media/sources/emby` | Emby connection, library, and path settings |
 | Jellyfin | `/media/sources/jellyfin` | Jellyfin connection, library, and path settings |
 | Plex | `/media/sources/plex` | Plex sign-in, server, library, and path settings |
@@ -47,7 +48,6 @@ published beta archives do not gain that route retroactively.
 | Multi Collections | `/media/multi-collections` | Groups composed from other collections |
 | Rerun Collections | `/media/rerun-collections` | Collections that track rerun state |
 | Playlists | `/media/playlists` | Ordered media lists |
-| Add-on Lists | `/media/addon-lists` | Provider links imported through installed list add-ons |
 | Filler Presets | `/media/filler/presets` | Reusable pre-roll, post-roll, and padding rules |
 
 ## Scheduling

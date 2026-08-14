@@ -44,6 +44,9 @@ pub enum AddonMediaListRecord {
         /// Provider GUID candidates in ErsatzRS metadata format.
         #[serde(default)]
         guids: Vec<String>,
+        /// Optional stable source URL used to match generated Remote Streams.
+        #[serde(default)]
+        source_url: Option<String>,
     },
 }
 
@@ -81,6 +84,8 @@ pub struct EnumeratedAddonMediaListItem {
     pub kind: AddonMediaListItemKind,
     /// Provider GUID candidates in ErsatzRS metadata format.
     pub guids: Vec<String>,
+    /// Optional stable source URL used to match generated Remote Streams.
+    pub source_url: Option<String>,
 }
 
 /// Host adapter that invokes one installed list-provider add-on.

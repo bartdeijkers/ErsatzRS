@@ -119,6 +119,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
     }
 
+    async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>> {
+        crate::addon_media_storage::list_library_id(&self.0, id).await
+    }
+
     async fn match_items(&self, id: EntityId) -> Result<()> {
         AddonMediaListSynchronizer::new(self.0.clone())
             .match_list_items(id)

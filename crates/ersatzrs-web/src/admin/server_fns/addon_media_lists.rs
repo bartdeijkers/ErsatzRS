@@ -189,13 +189,32 @@ pub async fn add_addon_media_list_with_state(
     addon_id: String,
     source_url: String,
 ) -> ersatzrs_app::Result<i64> {
-    state
+    let list_id = state
         .application
         .add_addon_media_list(ersatzrs_app::commands::AddAddonMediaList {
             addon_id,
             source_url,
         })
-        .await
+        .await?;
+    if let Some(library_id) = state
+        .application
+        .addon_media_list_library_id(list_id)
+        .await?
+    {
+        let outcome = state
+            .application
+            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
+                library_id, false,
+            ))
+            .await;
+        tracing::info!(
+            list_id,
+            library_id,
+            ?outcome,
+            "queued managed add-on list library scan"
+        );
+    }
+    Ok(list_id)
 }
 
 #[cfg(feature = "ssr")]

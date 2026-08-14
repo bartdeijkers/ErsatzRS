@@ -92,8 +92,8 @@ pub use library::{
 pub use media_item::MediaItemRepository;
 pub use media_source::{
     LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
-    MediaSourceRepository, PathReplacementAdmin, PlexArtworkConnectionAdmin, RemoteConnectionAdmin,
-    RemoteMediaSourceKind, RemoteSourceAdminRow,
+    ManagedAddonMediaSourceAdminRow, MediaSourceRepository, PathReplacementAdmin,
+    PlexArtworkConnectionAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind, RemoteSourceAdminRow,
 };
 pub use metadata::MetadataRepository;
 pub use playout::{

@@ -19,6 +19,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
 
                 <NavGroup storage_key="media-sources" label=tr(TextKey::MediaSources)>
                     <NavLink href="/media/sources/local" label=tr(TextKey::Local) icon=IconName::Download/>
+                    <NavLink href="/media/addon-lists" label=tr(TextKey::AddonMediaLists) icon=IconName::Download/>
                     <NavLink href="/media/sources/emby" label="Emby" icon=IconName::Download/>
                     <NavLink href="/media/sources/jellyfin" label="Jellyfin" icon=IconName::Download/>
                     <NavLink href="/media/sources/plex" label="Plex" icon=IconName::Download/>
@@ -42,7 +43,6 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/media/multi-collections" label=tr(TextKey::MultiCollections) icon=IconName::Copy/>
                     <NavLink href="/media/rerun-collections" label=tr(TextKey::RerunCollections) icon=IconName::Refresh/>
                     <NavLink href="/media/playlists" label=tr(TextKey::Playlists) icon=IconName::Play/>
-                    <NavLink href="/media/addon-lists" label=tr(TextKey::AddonMediaLists) icon=IconName::Download/>
                     <NavLink href="/media/filler/presets" label=tr(TextKey::FillerPresets) icon=IconName::Settings/>
                 </NavGroup>
 

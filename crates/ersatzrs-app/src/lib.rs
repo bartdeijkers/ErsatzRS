@@ -350,6 +350,15 @@ impl ApplicationServices {
         commands::add_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
+    /// Load the managed Local library created for one Add-on media list.
+    pub async fn addon_media_list_library_id(&self, id: i64) -> Result<Option<i64>> {
+        Ok(self
+            .ports
+            .addon_media_lists()
+            .managed_library_id(id)
+            .await?)
+    }
+
     /// Re-run local matching for one Add-on media list.
     pub async fn match_addon_media_list(
         &self,
@@ -1730,6 +1739,16 @@ impl ApplicationServices {
         self.ports
             .media_sources()
             .list_local_libraries_admin()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_managed_addon_media_sources(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::ManagedAddonMediaSourceAdminRow>> {
+        self.ports
+            .media_sources()
+            .list_managed_addon_media_sources_admin()
             .await
             .map_err(Into::into)
     }

@@ -21,10 +21,15 @@ impl HealthCheck for AddonMediaListHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
-            r#"SELECT "list"."Name", "list"."LastError", "addon"."Enabled"
+            r#"SELECT "list"."Name", "list"."LastError", "addon"."Enabled",
+                      "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
                FROM "AddonMediaList" AS "list"
                JOIN "AddonInstallation" AS "addon"
                  ON "addon"."AddonId" = "list"."AddonId"
+               LEFT JOIN "AddonMediaSource" AS "source"
+                 ON "source"."AddonId" = "list"."AddonId"
+               LEFT JOIN "AddonMediaListLibrary" AS "managed"
+                 ON "managed"."AddonMediaListId" = "list"."Id"
                ORDER BY "list"."Name", "list"."Id""#,
         )
         .fetch_all(&self.pool)
@@ -34,6 +39,28 @@ impl HealthCheck for AddonMediaListHealthCheck {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
 
+        let storage_failures = rows
+            .iter()
+            .filter_map(|row| {
+                row.try_get::<Option<i64>, _>("MediaSourceId")
+                    .ok()
+                    .flatten()?;
+                let name = row
+                    .try_get::<String, _>("Name")
+                    .unwrap_or_else(|_| "List".to_owned());
+                let library_id = row.try_get::<Option<i64>, _>("LibraryId").ok().flatten();
+                let manifest_path = row
+                    .try_get::<Option<String>, _>("ManifestPath")
+                    .ok()
+                    .flatten();
+                (library_id.is_none()
+                    || manifest_path
+                        .as_deref()
+                        .is_none_or(|path| !std::path::Path::new(path).is_file()))
+                .then(|| format!("{name}: managed local library is unavailable"))
+            })
+            .take(5)
+            .collect::<Vec<_>>();
         let failures = rows
             .iter()
             .filter_map(|row| {
@@ -46,6 +73,11 @@ impl HealthCheck for AddonMediaListHealthCheck {
                     .unwrap_or_else(|_| "List".to_owned());
                 Some(format!("{name}: {error}"))
             })
+            .take(5)
+            .collect::<Vec<_>>();
+        let failures = storage_failures
+            .into_iter()
+            .chain(failures)
             .take(5)
             .collect::<Vec<_>>();
         if !failures.is_empty() {
@@ -100,6 +132,15 @@ mod tests {
                 "AddonId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL,
                 "LastError" TEXT NULL
+            );
+            CREATE TABLE "AddonMediaSource" (
+                "AddonId" TEXT PRIMARY KEY,
+                "MediaSourceId" INTEGER NOT NULL
+            );
+            CREATE TABLE "AddonMediaListLibrary" (
+                "AddonMediaListId" INTEGER PRIMARY KEY,
+                "LibraryId" INTEGER NOT NULL,
+                "ManifestPath" TEXT NOT NULL
             );
             INSERT INTO "AddonInstallation" ("AddonId", "Enabled") VALUES ('org.example.list', 1);
             INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name", "LastError")

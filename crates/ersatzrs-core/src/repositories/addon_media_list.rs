@@ -61,6 +61,8 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>>;
     /// Import or refresh a provider list and rerun local matching.
     async fn add_or_refresh(&self, addon_id: &str, source_url: &str) -> Result<EntityId>;
+    /// Return the managed Local library projected for a provider list.
+    async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
     /// Update refresh and generated-playlist settings.

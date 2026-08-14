@@ -908,6 +908,10 @@ async fn build_app_state(
     scan_work_tx: tokio::sync::mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
     playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> ersatzrs_app::Result<AppState> {
+    if let Err(error) = ersatzrs_infra::addon_media_storage::reconcile_enabled_sources(&pool).await
+    {
+        tracing::warn!(%error, "failed to reconcile enabled add-on media sources");
+    }
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
         IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());

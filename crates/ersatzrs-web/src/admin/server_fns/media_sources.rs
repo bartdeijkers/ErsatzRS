@@ -11,6 +11,14 @@ pub struct LocalLibraryRow {
     pub name: String,
     pub media_kind: i32,
     pub path_count: i64,
+    pub managed_by_addon: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ManagedAddonMediaSourceRow {
+    pub addon_id: String,
+    pub name: String,
+    pub root_path: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -86,6 +94,26 @@ pub async fn list_local_libraries() -> Result<Vec<LocalLibraryRow>, ServerFnErro
             name: row.name,
             media_kind: row.media_kind,
             path_count: i64::try_from(row.path_count).unwrap_or(i64::MAX),
+            managed_by_addon: row.managed_by_addon,
+        })
+        .collect())
+}
+
+#[server]
+pub async fn list_managed_addon_media_sources(
+) -> Result<Vec<ManagedAddonMediaSourceRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state
+        .application
+        .list_managed_addon_media_sources()
+        .await?
+        .into_iter()
+        .map(|row| ManagedAddonMediaSourceRow {
+            addon_id: row.addon_id,
+            name: row.name,
+            root_path: row.root_path,
         })
         .collect())
 }

@@ -23,7 +23,7 @@ every invocation and by health checks.
 
 | Field | Contract |
 |---|---|
-| `manifest_version` | Integer `1`, `2`, or `3`; version 2 adds the optional `icon` object and version 3 adds safe suggested secret-reference locations. |
+| `manifest_version` | Integer `1`, `2`, or `3`; version 2 adds the optional `icon` object and version 3 adds safe suggested secret-reference locations and managed media-list storage. |
 | `id` | Lowercase reverse-DNS identity with at least three components. |
 | `version` | SemVer. |
 | `name`, `summary` | Locale maps with a non-empty `en-US` value. |
@@ -36,6 +36,7 @@ every invocation and by health checks.
 | `entrypoints` | Exact release RID keys or `any`, with a package-relative path and launcher kind. |
 | `permissions` | Declared network hosts, media-read access, managed FFmpeg access, and external commands. |
 | `settings` | Host-rendered definitions with unique uppercase snake-case keys. |
+| `media_list_storage` | Optional schema-v3 link between a path setting, a safe profile-relative default folder, and an add-on-owned local media source. |
 | `panels` | Optional host-rendered declarative blocks. |
 
 Required dependencies must be installed and enabled at a compatible version.

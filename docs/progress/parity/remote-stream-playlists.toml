@@ -26,6 +26,10 @@ prove persistence, search facets, and compatible Kodi/EPG projection without
 flattening the lossless YAML source. Version 0.1.2 of the official Beeld &
 Geluid add-on also accepts public user-made Schatkamer lists, preserving their
 playable-item order while skipping duplicate and unavailable entries safely.
+Beeld & Geluid and yt-dlp media-list items can now carry Remote Stream URLs;
+the host materializes one managed playlist manifest and Local library per
+saved list below the add-on's profile-relative storage root, without requiring
+Python or permanently downloading the media.
 '''
 
 [[debt]]

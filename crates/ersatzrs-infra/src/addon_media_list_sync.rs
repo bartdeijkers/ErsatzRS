@@ -1,3 +1,5 @@
+use crate::addon_media_storage::{delete_list_library, ensure_list_library, has_media_source};
+use crate::db::inserted_id;
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
 
@@ -7,7 +9,7 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{AddonMediaList, AddonMediaListItemKind, EntityId};
 use sqlx::{Pool, Row};
 
-use crate::db::{last_insert_id, Db, DbPool};
+use crate::db::{Db, DbPool};
 use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
 };
@@ -17,6 +19,7 @@ const COLLECTION_TYPE_SHOW: i32 = 1;
 const COLLECTION_TYPE_SEASON: i32 = 2;
 const COLLECTION_TYPE_MOVIE: i32 = 10;
 const COLLECTION_TYPE_EPISODE: i32 = 20;
+const COLLECTION_TYPE_REMOTE_STREAM: i32 = 70;
 
 /// Maintains locally persisted Add-on media lists and generated playlists.
 pub struct AddonMediaListSynchronizer {
@@ -44,7 +47,7 @@ impl AddonMediaListSynchronizer {
         };
 
         let rows = sqlx::query(
-            r#"SELECT "Id", "Kind", "Title", "Year", "Season", "Episode", "Rank"
+            r#"SELECT "Id", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Title", "Year", "Season", "Episode""#,
@@ -77,6 +80,7 @@ impl AddonMediaListSynchronizer {
                 season: row.try_get("Season").repository()?,
                 episode: row.try_get("Episode").repository()?,
                 rank: row.try_get("Rank").repository()?,
+                source_url: row.try_get("SourceUrl").repository()?,
                 guids: self
                     .load_item_guids(row.try_get("Id").repository()?)
                     .await?,
@@ -162,6 +166,7 @@ impl AddonMediaListSynchronizer {
     ///
     /// Returns an error when persistence fails.
     pub async fn delete_list(&self, list_id: EntityId) -> Result<()> {
+        delete_list_library(&self.pool, list_id).await?;
         let maybe_playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
             r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
@@ -248,6 +253,7 @@ impl AddonMediaListSynchronizer {
             .repository()?;
             Ok(id)
         } else {
+            let mut transaction = self.pool.begin().await.repository()?;
             let result = sqlx::query(
                 r#"INSERT INTO "AddonMediaList" (
                     "AddonId", "SourceUrl", "ProviderId", "Name", "Description",
@@ -261,10 +267,12 @@ impl AddonMediaListSynchronizer {
             .bind(&list.name)
             .bind(&list.description)
             .bind(list.item_count)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await
             .repository()?;
-            Ok(last_insert_id(result))
+            let id = inserted_id(&mut transaction, result).await.repository()?;
+            transaction.commit().await.repository()?;
+            Ok(id)
         }
     }
 
@@ -300,7 +308,7 @@ impl AddonMediaListSynchronizer {
                     r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
                            "DisplayTitle" = ?, "Season" = ?, "Episode" = ?,
-                           "MediaItemId" = NULL
+                           "SourceUrl" = ?, "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                 )
                 .bind(encode_enum(item.kind))
@@ -310,6 +318,7 @@ impl AddonMediaListSynchronizer {
                 .bind(&item.display_title)
                 .bind(item.season)
                 .bind(item.episode)
+                .bind(&item.source_url)
                 .bind(existing_id)
                 .execute(&mut *tx)
                 .await
@@ -428,7 +437,21 @@ impl AddonMediaListSynchronizer {
             AddonMediaListItemKind::Show => self.identify_show(item).await,
             AddonMediaListItemKind::Season => self.identify_season(item).await,
             AddonMediaListItemKind::Episode => self.identify_episode(item).await,
+            AddonMediaListItemKind::RemoteStream => self.identify_remote_stream(item).await,
         }
+    }
+
+    async fn identify_remote_stream(&self, item: &MatchItem) -> Result<Option<EntityId>> {
+        let Some(source_url) = item.source_url.as_deref() else {
+            return Ok(None);
+        };
+        sqlx::query_scalar(
+            r#"SELECT "Id" FROM "RemoteStream" WHERE "Url" = ? ORDER BY "Id" LIMIT 1"#,
+        )
+        .bind(source_url)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()
     }
 
     async fn identify_movie(&self, item: &MatchItem) -> Result<Option<EntityId>> {
@@ -585,23 +608,25 @@ impl AddonMediaListSynchronizer {
 
         let group_id = system_playlist_group_id(&self.pool).await?;
         let name = list.name.clone();
+        let mut transaction = self.pool.begin().await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId")
                VALUES (1, ?, ?)"#,
         )
         .bind(&name)
         .bind(group_id)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .repository()?;
-        let playlist_id = last_insert_id(result);
+        let playlist_id = inserted_id(&mut transaction, result).await.repository()?;
 
         sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = ? WHERE "Id" = ?"#)
             .bind(playlist_id)
             .bind(list.id)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await
             .repository()?;
+        transaction.commit().await.repository()?;
 
         Ok(playlist_id)
     }
@@ -617,6 +642,7 @@ impl AddonMediaListSynchronizer {
             AddonMediaListItemKind::Show => COLLECTION_TYPE_SHOW,
             AddonMediaListItemKind::Season => COLLECTION_TYPE_SEASON,
             AddonMediaListItemKind::Episode => COLLECTION_TYPE_EPISODE,
+            AddonMediaListItemKind::RemoteStream => COLLECTION_TYPE_REMOTE_STREAM,
         };
         let existing_id = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "Id" FROM "PlaylistItem" WHERE "PlaylistId" = ? AND "Index" = ?"#,
@@ -725,6 +751,16 @@ where
             .local
             .save_list_items(list_id, &enumerated.items)
             .await?;
+        if has_media_source(&self.local.pool, &list.addon_id).await? {
+            ensure_list_library(
+                &self.local.pool,
+                list.id,
+                &list.addon_id,
+                &list.name,
+                &list.source_url,
+            )
+            .await?;
+        }
         self.local.match_list_items(list.id).await?;
         Ok(list.id)
     }
@@ -786,8 +822,8 @@ async fn insert_item(
     let result = sqlx::query(
         r#"INSERT INTO "AddonMediaListItem" (
             "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
-            "Rank", "Season", "Title", "AddonMediaListId", "Year"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)"#,
+            "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -798,10 +834,11 @@ async fn insert_item(
     .bind(&item.title)
     .bind(list_id)
     .bind(item.year)
+    .bind(&item.source_url)
     .execute(&mut **tx)
     .await
     .repository()?;
-    Ok(last_insert_id(result))
+    inserted_id(tx, result).await.repository()
 }
 
 async fn insert_item_guids(
@@ -836,4 +873,5 @@ struct MatchItem {
     episode: Option<i32>,
     rank: i32,
     guids: Vec<String>,
+    source_url: Option<String>,
 }

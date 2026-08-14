@@ -177,6 +177,29 @@ async fn installation_findings(
     } else {
         true
     };
+    let storage_valid = if enabled
+        && manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.media_list_storage.is_some())
+    {
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT "RootPath" FROM "AddonMediaSource" WHERE "AddonId" = ?"#,
+        )
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|path| std::path::Path::new(&path).is_dir())
+    } else {
+        true
+    };
+    if !storage_valid {
+        return (
+            Some(format!("{id} has unavailable managed media storage")),
+            None,
+        );
+    }
     if !manifest_valid || !content_valid || !dependencies_valid {
         return (
             Some(format!(

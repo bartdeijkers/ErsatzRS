@@ -10,7 +10,10 @@ remain host-owned. Trakt HTTP/API behavior and its client-ID reference are
 owned by the official Trakt add-on. The destructive forward migration deletes
 legacy Trakt-generated playlists and configuration, drops every Trakt table,
 and imports no legacy rows. Beeld & Geluid implements the same capability for
-series, public shared-list, and saved-search hyperlinks.
+series, public shared-list, and saved-search hyperlinks. Schema-v3 add-ons may
+also expose Remote Stream list items through a host-managed Local Media Source:
+each saved list becomes a separately scanned, file-backed library while the
+actual video stays remote.
 '''
 
 [[debt]]

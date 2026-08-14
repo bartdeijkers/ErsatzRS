@@ -35,6 +35,9 @@ use tokio::io::AsyncReadExt as _;
 use tokio::process::Command;
 use uuid::Uuid;
 
+use crate::addon_media_storage::{
+    effective_storage_path, ensure_media_source_in_transaction, prepare_storage_root,
+};
 use crate::db::{DbPool, DbRow};
 use crate::file_system_layout::{addon_cache_folder, addon_data_folder, addon_packages_folder};
 use crate::repositories::common::{decode_bool_column, decode_optional_string_column};
@@ -1528,14 +1531,10 @@ pub async fn save_addon_setting(
         .iter()
         .find(|item| item.key == setting.key)
         .ok_or_else(|| AddonError::Validation("setting is not declared by manifest".to_owned()))?;
-    let clear_optional_secret = definition.kind == AddonSettingKind::SecretReference
-        && !definition.required
-        && setting
-            .reference
-            .as_deref()
-            .is_none_or(|value| value.trim().is_empty());
-    if !clear_optional_secret {
+    let clear_setting = should_clear_optional_setting(&installation.manifest, definition, setting);
+    if !clear_setting {
         validate_setting_value(definition, setting)?;
+        validate_storage_path_override(&installation.manifest, setting)?;
     }
 
     let mut transaction = pool.begin().await.map_err(database_error)?;
@@ -1549,7 +1548,7 @@ pub async fn save_addon_setting(
             enabled_dependents.join(", ")
         )));
     }
-    if clear_optional_secret {
+    if clear_setting {
         sqlx::query(r#"DELETE FROM "AddonSetting" WHERE "AddonId" = ? AND "Key" = ?"#)
             .bind(addon_id)
             .bind(&setting.key)
@@ -1706,6 +1705,15 @@ pub async fn enable_addon(
             result.code
         )));
     }
+    let settings = load_addon_settings(pool, addon_id).await?;
+    let storage_root = prepare_storage_root(
+        &load_installed_addon(pool, addon_id)
+            .await?
+            .ok_or_else(|| AddonError::NotFound("add-on is not installed".to_owned()))?
+            .manifest,
+        &settings,
+    )
+    .await?;
     let mut transaction = pool.begin().await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installation = load_installed_addon_in_transaction(&mut transaction, addon_id)
@@ -1718,6 +1726,12 @@ pub async fn enable_addon(
     }
     let installed = list_installed_addons_in_transaction(&mut transaction).await?;
     validate_dependencies_from_installations(&installed, &installation.manifest)?;
+    if let (Some(storage), Some(root)) = (
+        installation.manifest.media_list_storage.as_ref(),
+        storage_root.as_deref(),
+    ) {
+        ensure_media_source_in_transaction(&mut transaction, addon_id, storage, root).await?;
+    }
     let next_revision = Uuid::new_v4().to_string();
     let changed = sqlx::query(
         r#"UPDATE "AddonInstallation"
@@ -1848,6 +1862,16 @@ pub async fn uninstall_addon(pool: &DbPool, addon_id: &str, force: bool) -> Resu
     if force && media_list_references > 0 {
         remove_owned_media_lists(&mut transaction, addon_id).await?;
     }
+    sqlx::query(
+        r#"DELETE FROM "MediaSource"
+           WHERE "Id" IN (
+               SELECT "MediaSourceId" FROM "AddonMediaSource" WHERE "AddonId" = ?
+           )"#,
+    )
+    .bind(addon_id)
+    .execute(&mut *transaction)
+    .await
+    .map_err(database_error)?;
     let deleted = sqlx::query(
         r#"DELETE FROM "AddonInstallation" WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
@@ -2476,9 +2500,18 @@ fn resolve_setting_environment(
                 None => unreachable!("validated secret reference"),
             }
         } else {
-            let value = setting
+            let mut value = setting
                 .and_then(|item| item.value.clone())
                 .or_else(|| definition.default.clone());
+            if value.is_none()
+                && manifest
+                    .media_list_storage
+                    .as_ref()
+                    .is_some_and(|storage| storage.path_setting == definition.key)
+            {
+                value = effective_storage_path(manifest, settings)?
+                    .map(|path| path.to_string_lossy().into_owned());
+            }
             if definition.required && value.as_deref().is_none_or(str::is_empty) {
                 return Err(AddonError::Validation(format!(
                     "required setting {} is not configured",
@@ -2501,6 +2534,50 @@ fn resolve_setting_environment(
         environment.insert("FFPROBE_BIN".to_owned(), ffprobe.clone());
     }
     Ok(environment)
+}
+
+fn should_clear_optional_setting(
+    manifest: &AddonManifest,
+    definition: &ersatzrs_addon_contract::AddonSettingDefinition,
+    setting: &AddonSettingValue,
+) -> bool {
+    if definition.required {
+        return false;
+    }
+    (definition.kind == AddonSettingKind::SecretReference
+        && setting
+            .reference
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty()))
+        || (manifest
+            .media_list_storage
+            .as_ref()
+            .is_some_and(|storage| storage.path_setting == setting.key)
+            && setting
+                .value
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty()))
+}
+
+fn validate_storage_path_override(
+    manifest: &AddonManifest,
+    setting: &AddonSettingValue,
+) -> Result<(), AddonError> {
+    if manifest
+        .media_list_storage
+        .as_ref()
+        .is_some_and(|storage| storage.path_setting == setting.key)
+        && setting
+            .value
+            .as_deref()
+            .is_some_and(|value| !Path::new(value.trim()).is_absolute())
+    {
+        return Err(AddonError::Validation(format!(
+            "{} must be an absolute path",
+            setting.key
+        )));
+    }
+    Ok(())
 }
 
 fn validate_setting_value(
@@ -3614,6 +3691,7 @@ mod tests {
             )]),
             permissions: AddonPermissions::default(),
             settings: Vec::new(),
+            media_list_storage: None,
             panels: Vec::new(),
         }
     }
@@ -4232,6 +4310,77 @@ mod tests {
             .await
             .expect("load settings")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn empty_storage_override_restores_the_profile_default() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let mut manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+        manifest.manifest_version = 3;
+        manifest.capabilities.extend(
+            [
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_PLAY_V1,
+            ]
+            .into_iter()
+            .map(|id| AddonCapability { id: id.to_owned() }),
+        );
+        manifest
+            .settings
+            .push(ersatzrs_addon_contract::AddonSettingDefinition {
+                key: "MEDIA_STORAGE_PATH".to_owned(),
+                label: localized("Media storage location"),
+                kind: AddonSettingKind::Path,
+                required: false,
+                default: None,
+                options: Vec::new(),
+                suggested_reference: None,
+            });
+        manifest.media_list_storage = Some(ersatzrs_addon_contract::AddonMediaListStorage {
+            path_setting: "MEDIA_STORAGE_PATH".to_owned(),
+            default_subdirectory: "fixture_media".to_owned(),
+            source_name: "fixture".to_owned(),
+        });
+        insert_fixture_installation(&pool, &manifest, false).await;
+        save_addon_setting(
+            &pool,
+            &manifest.id,
+            &AddonSettingValue {
+                key: "MEDIA_STORAGE_PATH".to_owned(),
+                value: Some(temp.path().join("custom").to_string_lossy().into_owned()),
+                reference_kind: None,
+                reference: None,
+            },
+        )
+        .await
+        .expect("save storage override");
+
+        save_addon_setting(
+            &pool,
+            &manifest.id,
+            &AddonSettingValue {
+                key: "MEDIA_STORAGE_PATH".to_owned(),
+                value: Some(String::new()),
+                reference_kind: None,
+                reference: None,
+            },
+        )
+        .await
+        .expect("clear storage override");
+
+        let settings = load_addon_settings(&pool, &manifest.id)
+            .await
+            .expect("load settings");
+        assert!(settings.is_empty());
+        assert_eq!(
+            effective_storage_path(&manifest, &settings).expect("resolve storage"),
+            Some(crate::file_system_layout::app_state_folder().join("fixture_media"))
+        );
     }
 
     #[test]

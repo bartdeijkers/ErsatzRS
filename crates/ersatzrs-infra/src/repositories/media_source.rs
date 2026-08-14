@@ -2,8 +2,9 @@ use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     LibraryPreferenceAdmin, LocalLibraryAdmin, LocalLibraryAdminRow, LocalLibraryPathAdmin,
-    MediaSourceRepository, PathReplacementAdmin, PlexArtworkConnectionAdmin, RemoteConnectionAdmin,
-    RemoteMediaSourceKind, RemoteSourceAdminRow, RepositoryError, Result,
+    ManagedAddonMediaSourceAdminRow, MediaSourceRepository, PathReplacementAdmin,
+    PlexArtworkConnectionAdmin, RemoteConnectionAdmin, RemoteMediaSourceKind, RemoteSourceAdminRow,
+    RepositoryError, Result,
 };
 use ersatzrs_domain::{
     EmbyConnection, EmbyMediaSource, EmbyPathReplacement, EntityId, JellyfinConnection,
@@ -13,7 +14,9 @@ use ersatzrs_domain::{
 use sqlx::{Pool, Row};
 
 use super::common::upsert_sql;
-use super::common::{decode_optional_datetime, encode_optional_datetime, not_found};
+use super::common::{
+    decode_bool_column, decode_optional_datetime, encode_optional_datetime, not_found,
+};
 
 #[derive(Clone)]
 pub struct SqliteMediaSourceRepository(pub Pool<crate::db::Db>);
@@ -345,11 +348,13 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn list_local_libraries_admin(&self) -> Result<Vec<LocalLibraryAdminRow>> {
         let rows = sqlx::query(
-            r#"SELECT l."Id", l."Name", l."MediaKind", COUNT(lp."Id") AS "PathCount"
+            r#"SELECT l."Id", l."Name", l."MediaKind", COUNT(lp."Id") AS "PathCount",
+                      CASE WHEN aml."LibraryId" IS NULL THEN 0 ELSE 1 END AS "ManagedByAddon"
                FROM "Library" l
                JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
                LEFT JOIN "LibraryPath" lp ON lp."LibraryId" = l."Id"
-               GROUP BY l."Id", l."Name", l."MediaKind"
+               LEFT JOIN "AddonMediaListLibrary" aml ON aml."LibraryId" = l."Id"
+               GROUP BY l."Id", l."Name", l."MediaKind", aml."LibraryId"
                ORDER BY l."Name""#,
         )
         .fetch_all(&self.0)
@@ -368,6 +373,28 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                             value: error.to_string(),
                         }
                     })?,
+                    managed_by_addon: decode_bool_column(row, "ManagedByAddon")?,
+                })
+            })
+            .collect()
+    }
+
+    async fn list_managed_addon_media_sources_admin(
+        &self,
+    ) -> Result<Vec<ManagedAddonMediaSourceAdminRow>> {
+        let rows = sqlx::query(
+            r#"SELECT "AddonId", "Name", "RootPath"
+               FROM "AddonMediaSource" ORDER BY "Name", "AddonId""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ManagedAddonMediaSourceAdminRow {
+                    addon_id: row.try_get("AddonId").repository()?,
+                    name: row.try_get("Name").repository()?,
+                    root_path: row.try_get("RootPath").repository()?,
                 })
             })
             .collect()
@@ -412,6 +439,20 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn save_local_library_admin(&self, library: &LocalLibraryAdmin) -> Result<EntityId> {
+        if library.id != 0 {
+            let managed: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListLibrary" WHERE "LibraryId" = ?"#,
+            )
+            .bind(library.id)
+            .fetch_one(&self.0)
+            .await
+            .repository()?;
+            if managed > 0 {
+                return Err(RepositoryError::Conflict(
+                    "managed add-on libraries must be changed through Add-on Lists".to_owned(),
+                ));
+            }
+        }
         let mut tx = self.0.begin().await.repository()?;
         let id = if library.id == 0 {
             let source = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
@@ -469,6 +510,18 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn delete_local_library_admin(&self, id: EntityId) -> Result<()> {
+        let managed: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "AddonMediaListLibrary" WHERE "LibraryId" = ?"#,
+        )
+        .bind(id)
+        .fetch_one(&self.0)
+        .await
+        .repository()?;
+        if managed > 0 {
+            return Err(RepositoryError::Conflict(
+                "managed add-on libraries must be deleted through Add-on Lists".to_owned(),
+            ));
+        }
         sqlx::query(
             r#"DELETE FROM "MediaSource"
                WHERE "Id" = (SELECT "MediaSourceId" FROM "Library" WHERE "Id" = ?)"#,

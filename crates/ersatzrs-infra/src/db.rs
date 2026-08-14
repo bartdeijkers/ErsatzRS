@@ -584,6 +584,28 @@ pub fn last_insert_id(result: DbQueryResult) -> i64 {
     }
 }
 
+#[allow(clippy::unused_async)]
+pub(crate) async fn inserted_id(
+    transaction: &mut sqlx::Transaction<'_, Db>,
+    result: DbQueryResult,
+) -> Result<i64, sqlx::Error> {
+    #[cfg(feature = "mysql")]
+    {
+        let _ = result;
+        let sql = if transaction.as_mut().backend_name() == "MySQL" {
+            "SELECT LAST_INSERT_ID()"
+        } else {
+            "SELECT last_insert_rowid()"
+        };
+        sqlx::query_scalar(sql).fetch_one(&mut **transaction).await
+    }
+    #[cfg(not(feature = "mysql"))]
+    {
+        let _ = transaction;
+        Ok(result.last_insert_rowid())
+    }
+}
+
 #[must_use]
 pub fn random_order_expression(database_backend: DatabaseBackend) -> &'static str {
     match database_backend {

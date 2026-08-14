@@ -75,6 +75,9 @@ pub struct AddonManifest {
     /// Host-rendered configuration fields.
     #[serde(default)]
     pub settings: Vec<AddonSettingDefinition>,
+    /// Optional host-managed storage for file-backed media-list libraries.
+    #[serde(default)]
+    pub media_list_storage: Option<AddonMediaListStorage>,
     /// Host-rendered declarative panels.
     #[serde(default)]
     pub panels: Vec<AddonPanel>,
@@ -142,6 +145,21 @@ impl AddonManifest {
                 return invalid("settings", "duplicate setting key");
             }
         }
+        if let Some(storage) = &self.media_list_storage {
+            if self.manifest_version < 3 {
+                return invalid("media_list_storage", "requires manifest schema version 3");
+            }
+            storage.validate(&self.settings)?;
+            for capability in [
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_PLAY_V1,
+            ] {
+                if !self.has_capability(capability) {
+                    return invalid("media_list_storage", format!("requires {capability}"));
+                }
+            }
+        }
 
         let mut panel_ids = BTreeSet::new();
         if !self.panels.is_empty() && !self.has_capability(CAPABILITY_DECLARATIVE_PANEL_V1) {
@@ -168,6 +186,65 @@ impl AddonManifest {
     #[must_use]
     pub fn has_capability(&self, capability: &str) -> bool {
         self.capabilities.iter().any(|item| item.id == capability)
+    }
+}
+
+/// Host-owned file storage used to materialize add-on lists as local Remote
+/// Stream libraries.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonMediaListStorage {
+    /// Manifest setting that allows the operator to override the root path.
+    pub path_setting: String,
+    /// Safe folder below the ErsatzRS profile used when no override is stored.
+    pub default_subdirectory: String,
+    /// Stable operator-facing name for the managed local media source.
+    pub source_name: String,
+}
+
+impl AddonMediaListStorage {
+    fn validate(&self, settings: &[AddonSettingDefinition]) -> Result<(), ContractError> {
+        let setting = settings
+            .iter()
+            .find(|setting| setting.key == self.path_setting)
+            .ok_or_else(|| ContractError::Invalid {
+                field: "media_list_storage.path_setting",
+                message: "must reference a declared setting".to_owned(),
+            })?;
+        if setting.kind != AddonSettingKind::Path {
+            return invalid(
+                "media_list_storage.path_setting",
+                "must reference a path setting",
+            );
+        }
+        if setting.default.is_some() {
+            return invalid(
+                "media_list_storage.path_setting",
+                "host-managed path defaults must not declare a static default",
+            );
+        }
+        if setting.required {
+            return invalid(
+                "media_list_storage.path_setting",
+                "must be optional so the host default can be used",
+            );
+        }
+        if !is_safe_single_component(&self.default_subdirectory) {
+            return invalid(
+                "media_list_storage.default_subdirectory",
+                "must be one safe folder name",
+            );
+        }
+        if self.source_name.trim().is_empty()
+            || self.source_name.len() > 128
+            || self.source_name.chars().any(char::is_control)
+        {
+            return invalid(
+                "media_list_storage.source_name",
+                "must be a non-empty display-safe name",
+            );
+        }
+        Ok(())
     }
 }
 
@@ -803,6 +880,10 @@ fn is_safe_relative_path(value: &str) -> bool {
             .all(|part| !part.is_empty() && part != "." && part != "..")
 }
 
+fn is_safe_single_component(value: &str) -> bool {
+    is_safe_relative_path(value) && !value.contains(['/', '\\'])
+}
+
 fn is_setting_key(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -888,6 +969,7 @@ mod tests {
             )]),
             permissions: AddonPermissions::default(),
             settings: Vec::new(),
+            media_list_storage: None,
             panels: Vec::new(),
         }
     }
@@ -943,6 +1025,43 @@ mod tests {
             .as_mut()
             .unwrap()
             .reference = "literal value".to_owned();
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn schema_v3_media_list_storage_requires_the_complete_stream_contract() {
+        let mut manifest = valid_manifest();
+        manifest.manifest_version = 3;
+        manifest.settings.push(AddonSettingDefinition {
+            key: "MEDIA_STORAGE_PATH".to_owned(),
+            label: localized("Media storage location"),
+            kind: AddonSettingKind::Path,
+            required: false,
+            default: None,
+            options: Vec::new(),
+            suggested_reference: None,
+        });
+        manifest.media_list_storage = Some(AddonMediaListStorage {
+            path_setting: "MEDIA_STORAGE_PATH".to_owned(),
+            default_subdirectory: "fixture_media".to_owned(),
+            source_name: "fixture".to_owned(),
+        });
+        assert!(manifest.validate().is_err());
+
+        manifest.capabilities.extend(
+            [
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_LIST_V1,
+                CAPABILITY_REMOTE_STREAM_PLAY_V1,
+            ]
+            .into_iter()
+            .map(|id| AddonCapability { id: id.to_owned() }),
+        );
+        manifest
+            .validate()
+            .expect("complete managed storage contract");
+
+        manifest.manifest_version = 2;
         assert!(manifest.validate().is_err());
     }
 

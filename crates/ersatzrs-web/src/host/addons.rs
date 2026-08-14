@@ -70,10 +70,12 @@ impl AddonRuntime for NativeAddonRuntime {
             .await
             .map_err(runtime_error)?
         {
-            let settings = load_addon_settings(&self.pool, &value.addon_id)
+            let stored_settings = load_addon_settings(&self.pool, &value.addon_id)
                 .await
-                .map_err(runtime_error)?
-                .into_iter()
+                .map_err(runtime_error)?;
+            let settings = stored_settings
+                .iter()
+                .cloned()
                 .map(|setting| AddonSettingRead {
                     key: setting.key,
                     value: setting.value,
@@ -84,9 +86,14 @@ impl AddonRuntime for NativeAddonRuntime {
                     reference: setting.reference,
                 })
                 .collect();
+            let mut manifest = value.manifest;
+            ersatzrs_infra::addon_media_storage::apply_effective_storage_default(
+                &mut manifest,
+                &stored_settings,
+            )
+            .map_err(runtime_error)?;
             installed.push(InstalledAddonRead {
-                icon_url: value
-                    .manifest
+                icon_url: manifest
                     .icon
                     .as_ref()
                     .map(|_| format!("/api/addons/installed-icon/{}", value.addon_id)),
@@ -95,7 +102,7 @@ impl AddonRuntime for NativeAddonRuntime {
                 version: value.version.to_string(),
                 enabled: value.enabled,
                 trust_tier: value.trust_tier.as_str().to_owned(),
-                manifest: value.manifest,
+                manifest,
                 settings,
                 last_check_code: value.last_check_code,
                 last_check_message: value.last_check_message,

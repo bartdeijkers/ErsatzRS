@@ -4,8 +4,8 @@ use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{media_kind_label, tr, TextKey};
 use crate::admin::server_fns::media_sources::{
-    delete_local_library, get_local_library_form, list_local_libraries, LocalLibraryForm,
-    LocalLibraryRow,
+    delete_local_library, get_local_library_form, list_local_libraries,
+    list_managed_addon_media_sources, LocalLibraryForm, LocalLibraryRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -28,6 +28,9 @@ fn LocalLibrariesIsland() -> impl IntoView {
     let load_toast = use_toast();
     let rows: LocalResource<Vec<LocalLibraryRow>> = LocalResource::new(move || async move {
         load_or_notify(list_local_libraries().await, load_toast)
+    });
+    let managed_sources = LocalResource::new(move || async move {
+        load_or_notify(list_managed_addon_media_sources().await, load_toast)
     });
 
     let total = Signal::derive(move || rows.get().map(|r| r.len() as u64));
@@ -60,6 +63,12 @@ fn LocalLibrariesIsland() -> impl IntoView {
     ];
 
     let row_actions: RowActionsRenderer<LocalLibraryRow> = Box::new(move |r| {
+        if r.managed_by_addon {
+            return view! {
+                <a href="/media/addon-lists" class=style::row_btn>{tr(TextKey::AddonMediaLists)}</a>
+            }
+            .into_any();
+        }
         let id = r.id;
         let r_clone = r.clone();
         view! {
@@ -87,6 +96,25 @@ fn LocalLibrariesIsland() -> impl IntoView {
                     <a href="/media/sources/local/add" class=style::btn_primary>{format!("+ {}", tr(TextKey::AddLibrary))}</a>
                 </div>
             </div>
+
+            {move || {
+                let sources = managed_sources.get().unwrap_or_default();
+                (!sources.is_empty()).then(|| view! {
+                    <section class=style::editor_form data-testid="managed-addon-media-sources">
+                        <h2>{tr(TextKey::Addons)}</h2>
+                        {sources.into_iter().map(|source| {
+                            let settings_href = format!("/settings/addons/{}", source.addon_id);
+                            view! {
+                                <div class=style::form_row>
+                                    <span class=style::form_label>{source.name}</span>
+                                    <span>{source.root_path}</span>
+                                    <a href=settings_href class=style::row_btn>{tr(TextKey::Settings)}</a>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </section>
+                })
+            }}
 
             <PagedTable
                 rows=rows

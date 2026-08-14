@@ -32,7 +32,7 @@ than importing or retaining those rows under a generic name.
 
 The host owns a provider-neutral `media-list.list.v1` capability. An enabled
 add-on receives one source hyperlink and emits bounded NDJSON: exactly one list
-record followed by ordered movie, show, season, or episode records. ErsatzRS
+record followed by ordered movie, show, season, episode, or Remote Stream records. ErsatzRS
 validates size, count, identity, and rank bounds before it persists or matches
 anything. Local metadata matching and optional generated-playlist maintenance
 remain host responsibilities.
@@ -50,6 +50,23 @@ capabilities. Series, `/lijst/<uuid>`, and `/zoeken?...` Schatkamer links can
 therefore be managed through the add-on list surface and can still be used as
 Remote Stream playlist sources where applicable.
 
+Schema v3 also permits a package to declare `media_list_storage`. The section
+links one manifest-rendered path setting to a safe profile-relative default and
+a stable local-source name. The host resolves that default below the ErsatzRS
+profile (`beeldengeluid_media` or `yt-dlp_media` for the official packages),
+creates the source idempotently when the add-on is enabled, and never asks the
+add-on process to edit the database.
+
+For a storage-backed provider, each imported list owns one filesystem-safe
+subfolder whose name is also the local library name. ErsatzRS writes a managed
+Remote Stream playlist manifest in that folder and registers it as a Remote
+Streams local library under the add-on-owned media source. The established ADR
+0065 scanner then enumerates, materializes, and refreshes ordinary YAML Remote
+Stream definitions. Deleting an add-on list removes its database registration
+but retains its files
+for recovery. Disabling its add-on retains both registration and files; the
+host never recursively deletes an operator-configurable media path.
+
 The forward SQLite and MySQL migration is deliberately destructive. It deletes
 legacy Trakt-generated system playlists and page-size configuration, drops
 `TraktListItemGuid`, `TraktListItem`, and `TraktList`, and creates new
@@ -61,6 +78,8 @@ again.
 The canonical admin routes are `/media/addon-lists` and
 `/media/addon-lists/{id}`. Search uses the provider-neutral `addon_list:<id>`
 field. The old Trakt route and built-in HTTP client have no compatibility alias.
+The navigation groups Add-on Lists under Media Sources immediately after Local
+because storage-backed lists create local libraries.
 
 ## Consequences
 
@@ -70,6 +89,8 @@ field. The old Trakt route and built-in HTTP client have no compatibility alias.
   provider instead of duplicating it per integration.
 - Administrators can manage Schatkamer programme selectors with the same list
   workflow as Trakt links.
+- Beeld & Geluid and yt-dlp lists become separately scannable, file-backed
+  Remote Streams libraries without Python or permanent video downloads.
 - Upgrading irreversibly removes existing Trakt lists, items, GUIDs, page-size
   preference, and generated system playlists. Re-adding a list starts from a
   fresh provider snapshot.
@@ -98,6 +119,7 @@ field. The old Trakt route and built-in HTTP client have no compatibility alias.
 
 ## References
 
+- [ADR 0065: Managed Remote Stream playlists](0065-managed-remote-stream-playlists.md)
 - [ADR 0066: Repository-backed add-ons](0066-repository-backed-add-ons.md)
 - [Add-on media-list contract reference](../reference/addon-media-lists.md)
 - [Add-on package reference](../reference/addon-packages.md)

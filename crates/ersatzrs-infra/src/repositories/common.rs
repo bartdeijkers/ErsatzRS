@@ -608,6 +608,7 @@ db_enum!(AddonMediaListItemKind {
     1 => AddonMediaListItemKind::Show,
     2 => AddonMediaListItemKind::Season,
     3 => AddonMediaListItemKind::Episode,
+    4 => AddonMediaListItemKind::RemoteStream,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

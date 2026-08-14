@@ -36,6 +36,7 @@ pub enum AddonMediaListItemKind {
     Show,
     Season,
     Episode,
+    RemoteStream,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

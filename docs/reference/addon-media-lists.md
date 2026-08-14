@@ -30,8 +30,9 @@ record. Unknown fields are rejected.
 | `year` | integer or null | Optional matching year. |
 | `season` | integer or null | Optional season number. |
 | `episode` | integer or null | Optional episode number. |
-| `kind` | string | `movie`, `show`, `season`, or `episode`. |
+| `kind` | string | `movie`, `show`, `season`, `episode`, or `remote_stream`. |
 | `guids` | string array | Optional local metadata GUID candidates. |
+| `source_url` | string or null | Required for `remote_stream`; stable URL used after the generated library is scanned. |
 
 One invocation may return at most 10,000 items. A second list record,
 duplicate item identity, duplicate rank, invalid UTF-8, malformed JSON, or a
@@ -48,3 +49,32 @@ Deleting a media list also deletes its generated system playlist. Uninstalling
 an add-on is blocked while it owns media lists through the normal administration
 flow. A forced uninstall deletes those list snapshots and their generated
 system playlists, while leaving unrelated user playlists intact.
+
+## File-backed list storage
+
+A schema-v3 manifest can opt into host-owned storage:
+
+```toml
+[media_list_storage]
+path_setting = "MEDIA_STORAGE_PATH"
+default_subdirectory = "provider_media"
+source_name = "provider"
+```
+
+`path_setting` must name a declared `path` setting without a static default.
+The host renders an absolute default below the ErsatzRS profile/SQLite folder,
+while an operator can save another absolute path. The package must implement
+`media-list.list.v1`, `remote-stream.list.v1`, and `remote-stream.play.v1`.
+
+Enabling the add-on creates the root and an add-on-owned local media source if
+missing. Adding a list creates one portable subfolder, uses that folder name as
+the Remote Streams library name, and writes `list.playlist.yml` inside it. The
+ordinary Remote Stream scanner owns enumeration and generated YAML definitions,
+so no permanent video download or separate interpreter is introduced. A scan is
+queued immediately after import; the normal scheduled scanner remains the
+recovery path.
+
+Changing the configured root while the add-on is disabled causes the host to
+repoint its managed libraries on the next enable/startup. Old files are retained.
+Deleting a list unregisters its library but also retains the folder: ErsatzRS
+does not recursively delete content below an operator-configurable path.

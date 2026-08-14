@@ -71,6 +71,12 @@ release section when tagging a release.
 
 ### Added
 
+- Schema-v3 add-ons can now declare file-backed media-list storage. Enabling
+  Beeld & Geluid or yt-dlp creates its profile-relative media root and managed
+  local source; each imported list becomes a separately named Remote Streams
+  library backed by the existing safe playlist synchronizer. Add-on Lists now
+  appears under Media Sources immediately below Local, and configured storage
+  paths remain portable across Linux, Windows, and macOS.
 - Repository-installed add-ons can now expose bounded provider lists through
   `media-list.list.v1`. The new `/media/addon-lists` manager imports and
   refreshes those links, matches movies/shows/seasons/episodes to local media,

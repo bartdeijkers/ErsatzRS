@@ -31,6 +31,14 @@ pub struct LocalLibraryAdminRow {
     pub name: String,
     pub media_kind: i32,
     pub path_count: u64,
+    pub managed_by_addon: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ManagedAddonMediaSourceAdminRow {
+    pub addon_id: String,
+    pub name: String,
+    pub root_path: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,6 +105,9 @@ pub trait MediaSourceRepository: Send + Sync {
     async fn first_jellyfin_address_admin(&self) -> Result<Option<String>>;
     async fn first_emby_address_admin(&self) -> Result<Option<String>>;
     async fn list_local_libraries_admin(&self) -> Result<Vec<LocalLibraryAdminRow>>;
+    async fn list_managed_addon_media_sources_admin(
+        &self,
+    ) -> Result<Vec<ManagedAddonMediaSourceAdminRow>>;
     async fn get_local_library_admin(&self, id: EntityId) -> Result<Option<LocalLibraryAdmin>>;
     async fn save_local_library_admin(&self, library: &LocalLibraryAdmin) -> Result<EntityId>;
     async fn delete_local_library_admin(&self, id: EntityId) -> Result<()>;

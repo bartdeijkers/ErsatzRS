@@ -2,6 +2,7 @@
 
 pub mod addon_media_list;
 pub mod addon_media_list_sync;
+pub mod addon_media_storage;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;

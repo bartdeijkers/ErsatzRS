@@ -110,6 +110,7 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             episode,
             kind,
             guids,
+            source_url,
         } = decode_record(record)?
         else {
             return Err(RepositoryError::Decode {
@@ -129,6 +130,14 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
                     .to_owned(),
             });
         }
+        if kind == ersatzrs_domain::AddonMediaListItemKind::RemoteStream
+            && source_url.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(RepositoryError::Decode {
+                kind: "media-list add-on output",
+                value: "remote_stream items require source_url".to_owned(),
+            });
+        }
         if !provider_ids.insert(provider_id.clone()) || !ranks.insert(rank) {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
@@ -145,6 +154,7 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             episode,
             kind,
             guids,
+            source_url,
         });
     }
     items.sort_by_key(|item| item.rank);

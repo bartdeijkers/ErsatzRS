@@ -2,7 +2,7 @@ feature    = 'Repository-backed add-on platform with tiered trust'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066']
+adr        = ['0051', '0066', '0067']
 
 summary = '''
 The host implementation is substantial: strict package and catalog schemas,
@@ -30,6 +30,13 @@ optional icons, and manual source-owned updates. The localized manager provides
 Installed, Browse, Updates, and Sources views plus canonical
 `/settings/addons/{addon_id}` detail pages for metadata, permissions,
 configuration, readiness, source offers, and lifecycle actions.
+
+Schema-v3 add-ons can declare host-owned media-list storage. Enabling such an
+add-on resolves its configured absolute path or a profile-relative default,
+creates an idempotent managed Local Media Source, and projects every saved
+add-on list as a separately scanned library whose name and folder derive from
+the list. The source, libraries, manifest files, bootstrap reconciliation, and
+health checks remain host-owned; disabling does not delete user-visible files.
 '''
 
 [[debt]]
