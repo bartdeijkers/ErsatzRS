@@ -110,6 +110,14 @@
 }
 .row-btn-del:hover { background-color: var(--color-error-20); }
 
+.row-btn:disabled,
+.row-btn-del:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.row-btn:disabled:hover,
+.row-btn-del:disabled:hover { background-color: transparent; }
+
 .cell-muted { color: var(--color-muted); }
 
 /* Editor form layout */

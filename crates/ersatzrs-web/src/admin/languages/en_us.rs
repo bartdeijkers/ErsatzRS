@@ -1156,6 +1156,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListSaved => "add-on list saved.",
         TextKey::AddonMediaLists => "Add-on lists",
         TextKey::AddonMediaListUrl => "Add-on list URL",
+        TextKey::ManagedByAddon => "Managed by an add-on",
         TextKey::Trash => "Trash",
         TextKey::TrashAlreadyEmpty => "Trash is already empty.",
         TextKey::TrashEmpty => "Trash is empty.",

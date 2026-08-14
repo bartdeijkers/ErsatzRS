@@ -15,6 +15,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Local Libraries rendered the storage root each add-on manages as a loose
+  block of text above the library table, with its own Settings link, so
+  add-on-owned storage read as something other than a media source. Those
+  roots are now ordinary rows in the table, sorted in with the libraries and
+  labelled "Add-on" as their media kind. Their edit action opens the owning
+  add-on's settings page rather than the library editor, and their delete
+  action stays visible but disabled, because the add-on — not the operator —
+  owns the registration; add-on-managed list libraries now show the same
+  disabled delete instead of no delete action at all.
 - The Add-ons Updates view reported "No add-ons match these filters." when
   nothing was filtered at all, which reads like the view is broken rather than
   like good news. With no search term and no state filter it now says

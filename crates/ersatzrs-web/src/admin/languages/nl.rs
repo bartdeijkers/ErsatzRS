@@ -1842,6 +1842,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListSaved => "add-on-lijst opgeslagen.",
         TextKey::AddonMediaLists => "Add-on-lijsten",
         TextKey::AddonMediaListUrl => "URL van add-on-lijst",
+        TextKey::ManagedByAddon => "Beheerd door een add-on",
         TextKey::Trash => "Prullenbak",
         TextKey::TrashAlreadyEmpty => "De prullenbak is al leeg.",
         TextKey::TrashEmpty => "De prullenbak is leeg.",
