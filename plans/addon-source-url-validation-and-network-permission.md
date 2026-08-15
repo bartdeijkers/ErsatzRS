@@ -36,6 +36,17 @@ into the wrong provider's list.
 Outcome: an operator-supplied URL is validated once, in the host, and a package
 that declares specific hosts cannot be pointed at a different one.
 
+## Implemented decision
+
+Operator source URLs accept absolute HTTP and HTTPS so local and on-premise
+providers remain usable, but reject userinfo and every other scheme. Empty
+`network_hosts` and `*` are unrestricted; plain hosts match exactly; leading
+`.` and `*.` patterns match subdomains only. Matching is ASCII
+case-insensitive. Rejections use the shared `unsupported-url` diagnostic and
+name the host without echoing the full URL.
+The validated parser result is serialized canonically and that exact value is
+stored and forwarded to the add-on, preventing authority parser differentials.
+
 ---
 
 ## Step 1 — Validate the URL in the host

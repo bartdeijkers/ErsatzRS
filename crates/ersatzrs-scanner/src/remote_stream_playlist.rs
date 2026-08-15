@@ -18,6 +18,9 @@ use ersatzrs_addon_contract::{
     MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_PROVIDER_ID_BYTES,
     MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
+use ersatzrs_addon_contract::{
+    validate_operator_source_url, AddonOperationError, OPERATION_CODE_UNSUPPORTED_URL,
+};
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_infra::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
@@ -241,7 +244,7 @@ pub fn is_playlist_manifest(path: &Path) -> bool {
 ///
 /// Returns an error when YAML decoding or any manifest invariant fails.
 pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlaylistManifest> {
-    let manifest: RemoteStreamPlaylistManifest =
+    let mut manifest: RemoteStreamPlaylistManifest =
         serde_yaml::from_str(yaml).map_err(|error| PlaylistError::Manifest(error.to_string()))?;
     let stem = manifest_stem(path)?;
     let name = non_empty(manifest.name.as_deref())
@@ -254,6 +257,13 @@ pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlayl
     if non_empty(Some(&manifest.url)).is_none() {
         return Err(PlaylistError::Manifest("url is required".to_owned()));
     }
+    let untrimmed_url = std::mem::take(&mut manifest.url);
+    untrimmed_url.trim().clone_into(&mut manifest.url);
+    manifest.url = validate_operator_source_url(&manifest.url, &[]).map_err(|error| {
+        PlaylistError::Manifest(
+            AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string()).to_string(),
+        )
+    })?;
     if validate_addon_id(manifest.addon.trim()).is_err() {
         return Err(PlaylistError::Manifest(
             "addon must be a reverse-DNS identifier".to_owned(),
@@ -358,6 +368,14 @@ pub async fn enumerate_playlist(
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistEnumeration> {
     let addon = resolve_playlist_addon(pool, addon_id).await?;
+    let playlist_url =
+        validate_operator_source_url(playlist_url, &addon.manifest.permissions.network_hosts)
+            .map_err(|error| {
+                PlaylistError::Enumeration(
+                    AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
+                        .to_string(),
+                )
+            })?;
     let capability = if addon
         .manifest
         .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
@@ -368,7 +386,7 @@ pub async fn enumerate_playlist(
     };
     let environment = BTreeMap::from([(
         "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
-        playlist_url.to_owned(),
+        playlist_url,
     )]);
     let stdout = invoke_enabled_addon(
         pool,
@@ -1595,6 +1613,38 @@ create_playlist: true
     }
 
     #[test]
+    fn manifest_rejects_unsafe_operator_source_urls() {
+        for url in [
+            "file:///tmp/list",
+            "javascript:alert(1)",
+            "example.test/list",
+            "https://user:secret@example.test/list",
+        ] {
+            let yaml = valid_yaml().replace("https://example.test/playlist", url);
+            let error = parse_playlist_manifest(&yaml, Path::new("x.playlist.yml"))
+                .expect_err("unsafe source URL")
+                .to_string();
+            assert!(error.contains("unsupported-url"), "{url}: {error}");
+            assert!(!error.contains("user:secret"));
+        }
+    }
+
+    #[test]
+    fn manifest_stores_the_validated_canonical_source_url() {
+        let yaml = valid_yaml().replace(
+            "https://example.test/playlist",
+            r"https://allowed.example\\@evil.example/playlist",
+        );
+        let manifest = parse_playlist_manifest(&yaml, Path::new("x.playlist.yml"))
+            .expect("canonical source URL manifest");
+
+        assert_eq!(
+            manifest.manifest.url,
+            "https://allowed.example/@evil.example/playlist"
+        );
+    }
+
+    #[test]
     fn ndjson_is_atomic_and_rejects_duplicate_ids() {
         let duplicate = concat!(
             r#"{"id":"one","url":"https://example.test/1","title":"One"}"#,
@@ -1678,6 +1728,74 @@ create_playlist: true
         assert!(message.contains("bounded playlist item JSON contract"));
         assert!(!message.contains("maybe_later"));
         assert!(message.len() < 512);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn playlist_enumeration_enforces_installed_addon_network_hosts() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/bin/sh\n",
+                "set -eu\n",
+                "test \"$ERSATZRS_REMOTE_STREAM_PLAYLIST_URL\" = ",
+                "'https://allowed.example.test/@evil.example/list'\n",
+                "printf '%s\\n' ",
+                "'{\"id\":\"one\",\"url\":\"https://example.test/1\",\"title\":\"One\"}'\n"
+            ),
+        )
+        .expect("fixture script");
+        let mut permissions = std::fs::metadata(&script)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).expect("fixture permissions");
+        let pool = fixture_addon_pool(&package_root).await;
+        let manifest_json: String = sqlx::query_scalar(
+            r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .fetch_one(&pool)
+        .await
+        .expect("installed manifest");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&manifest_json).expect("manifest JSON");
+        manifest["permissions"]["network_hosts"] = serde_json::json!(["allowed.example.test"]);
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = ? WHERE "AddonId" = ?"#)
+            .bind(manifest.to_string())
+            .bind("org.ersatzrs.addon.fixture")
+            .execute(&pool)
+            .await
+            .expect("restrict network hosts");
+
+        let error = enumerate_playlist(
+            &pool,
+            "org.ersatzrs.addon.fixture",
+            "https://example.test/list",
+            &AddonRuntimeContext::default(),
+        )
+        .await
+        .expect_err("undeclared host");
+        let message = error.to_string();
+        assert!(message.contains("unsupported-url"));
+        assert!(message.contains("example.test"));
+        assert!(!message.contains("/list"));
+
+        let enumeration = enumerate_playlist(
+            &pool,
+            "org.ersatzrs.addon.fixture",
+            r"https://allowed.example.test\@evil.example/list",
+            &AddonRuntimeContext::default(),
+        )
+        .await
+        .expect("add-on receives the validated canonical URL");
+        assert_eq!(enumeration.entries.len(), 1);
     }
 
     #[test]

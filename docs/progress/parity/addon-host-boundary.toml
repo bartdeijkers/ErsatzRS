@@ -23,10 +23,10 @@ taken — a provider vocabulary table inside the host, and host localization tha
 string-matches an add-on's English error text across a repository boundary.
 
 Each debt item below has a standalone plan under `plans/` and a milestone under
-the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 and ab-02 are
-complete, and ab-03 is in progress pending publication of the independently
-versioned contract crate. The remaining recommended order is ab-04
-(independent), then ab-05 and ab-06 after ab-03 completes.
+the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01, ab-02, and
+ab-04 are complete, and ab-03 is in progress pending publication of the
+independently versioned contract crate. The remaining recommended order is
+ab-05 and ab-06 after ab-03 completes.
 '''
 
 [[debt]]
@@ -57,9 +57,9 @@ resolved    = false
 id          = 'operator-source-url-is-unvalidated'
 description = 'Validate the operator-supplied add-on list and playlist manifest URL in the host (scheme, no userinfo) and, when the installed manifest declares specific `network_hosts`, require the URL host to match one of them.'
 discovered  = '2026-08-15'
-evidence    = '`add_addon_media_list` (`crates/ersatzrs-app/src/commands.rs:4390`) and `parse_playlist_manifest` (`crates/ersatzrs-scanner/src/remote_stream_playlist.rs:332`) check only for an empty string before the value reaches `ERSATZRS_MEDIA_LIST_URL` / `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL`, while the contract crate rejects non-HTTPS URLs and userinfo everywhere else (`lib.rs:934-947`). Scheme defence currently lives in each package. Of the four `AddonPermissions` fields only `managed_ffmpeg` has runtime meaning (`crates/ersatzrs-infra/src/addons.rs:2530`); the rest are rendered only at `crates/ersatzrs-web/src/admin/pages/addons.rs:1094-1097`.'
+evidence    = 'Resolved by milestone `ab-04` on 2026-08-15. One shared contract validator accepts bounded absolute HTTP(S) without userinfo, enforces exact, leading-dot, wildcard-suffix, or unrestricted host declarations, and returns the canonical URL serialization that every host path stores or forwards. Add-on List import and Remote Stream manifest parsing reject unsafe URLs before provider invocation through the localized `unsupported-url` diagnostic; installed provider adapters enforce `network_hosts`; existing saved lists remain visible with `LastError`; parser-sensitive authority input is forwarded exactly as validated; and reference docs distinguish this host-input check from process confinement. Official Beeld & Geluid, Trakt, and yt-dlp manifests cover their supported source hosts. Focused tests passed, followed by both workspace Clippy configurations, all 1,533 nextest tests and doctests, the Leptos bundle build, the complete parity gate, `cargo deny check`, and package verification for `ersatzrs-addon-contract`.'
 adr         = '0066'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'list-contracts-have-opposite-strictness'

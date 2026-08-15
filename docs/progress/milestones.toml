@@ -1222,7 +1222,7 @@ final unrestricted full run was completely green without runner retries.
 id         = 'ab-04'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Validate the operator source URL and enforce network_hosts'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-source-url-validation-and-network-permission.md'
 depends_on = []
@@ -1234,7 +1234,23 @@ pattern semantics are documented; the rejection renders as a localized
 operator error before any provider call; and an existing saved list that would
 now fail stays visible and reports the failure.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-15. `ersatzrs-addon-contract` now owns the bounded HTTP(S),
+no-userinfo, exact/suffix/wildcard host validator. Add-on List import and Remote
+Stream manifest parsing reject unsafe URLs with the localized
+`unsupported-url` diagnostic before provider invocation; both installed
+provider adapters enforce restrictive `network_hosts`. Reference docs define
+the matching, canonical-forwarding, and non-sandbox semantics. Regressions
+cover unsafe schemes, userinfo redaction, exact/suffix/wildcard behavior,
+parser-sensitive authority canonicalization, operational rejection, and
+retaining an existing saved list with `LastError`. The official Beeld & Geluid,
+Trakt, and yt-dlp manifests were checked against their supported source hosts.
+Focused contract, app, infra, scanner, and web localization tests plus strict
+all-target Clippy passed. Full closeout also passed both workspace Clippy
+configurations, all 1,533 nextest tests and doctests, the Leptos bundle build,
+the complete parity gate, `cargo deny check`, and package verification for
+`ersatzrs-addon-contract`.
+'''
 
 [[milestone]]
 id         = 'ab-05'

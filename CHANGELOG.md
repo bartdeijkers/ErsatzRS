@@ -60,6 +60,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Operator-supplied Add-on List and Remote Stream playlist URLs are now
+  restricted to absolute HTTP(S) URLs without embedded credentials. Before a
+  provider call, the host also enforces the installed add-on's declared exact,
+  suffix, or wildcard `network_hosts`; rejected saved lists remain visible
+  with a localized failure instead of disappearing from administration. The
+  add-on receives the same canonical URL serialization used for validation,
+  preventing authority parser differences from bypassing the host restriction.
 - Add-on list failures reached the operator wrapped in transport plumbing —
   "error running server function: conflict: …" — because the localized
   messages match the repository wording and nothing stripped the server

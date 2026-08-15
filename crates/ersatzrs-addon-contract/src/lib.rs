@@ -1172,6 +1172,76 @@ pub fn is_supported_rid(value: &str) -> bool {
     )
 }
 
+/// Validate and canonicalize one operator-supplied source URL against an
+/// add-on's declared network hosts.
+///
+/// Empty host declarations and `*` allow every HTTP(S) host. Exact patterns
+/// match one host; patterns beginning with `.` or `*.` match subdomains only.
+///
+/// # Errors
+///
+/// Returns the canonical URL serialization that must be forwarded to the
+/// add-on. Returns an error when the URL is not bounded HTTP(S), contains
+/// userinfo, or targets a host outside a restrictive declaration.
+pub fn validate_operator_source_url(
+    value: &str,
+    network_hosts: &[String],
+) -> Result<String, ContractError> {
+    let value = value.trim();
+    if value.len() > 2_048 {
+        return invalid(
+            "operator source URL",
+            "must use HTTP or HTTPS without credentials",
+        );
+    }
+    let parsed = url::Url::parse(value).map_err(|_| ContractError::Invalid {
+        field: "operator source URL",
+        message: "must use HTTP or HTTPS without credentials".to_owned(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| ContractError::Invalid {
+        field: "operator source URL",
+        message: "must use HTTP or HTTPS without credentials".to_owned(),
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return invalid(
+            "operator source URL",
+            "must use HTTP or HTTPS without credentials",
+        );
+    }
+    if !network_hosts.is_empty()
+        && !network_hosts
+            .iter()
+            .any(|pattern| network_host_pattern_matches(pattern, host))
+    {
+        return invalid(
+            "operator source URL",
+            format!("host '{host}' is not declared by this add-on"),
+        );
+    }
+    Ok(parsed.to_string())
+}
+
+fn network_host_pattern_matches(pattern: &str, host: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    let pattern = pattern.to_ascii_lowercase();
+    let host = host.to_ascii_lowercase();
+    let suffix = pattern
+        .strip_prefix("*.")
+        .or_else(|| pattern.strip_prefix('.'));
+    match suffix {
+        Some(suffix) => host
+            .strip_suffix(suffix)
+            .and_then(|prefix| prefix.strip_suffix('.'))
+            .is_some_and(|subdomain| !subdomain.is_empty()),
+        None => host == pattern,
+    }
+}
+
 /// Parse and validate captured `media-list.list.v1` or v2 NDJSON output.
 ///
 /// This function is intended for both host ingestion and add-on conformance
@@ -1758,5 +1828,59 @@ mod tests {
             chrono::Utc::now().year() + 6
         );
         assert!(conform_remote_stream_list_output(too_far_in_future.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn operator_source_urls_are_bounded_http_without_userinfo() {
+        for valid in ["https://example.test/list", "http://localhost:8080/list"] {
+            validate_operator_source_url(valid, &[]).expect("valid operator URL");
+        }
+        for invalid in [
+            "file:///tmp/list",
+            "javascript:alert(1)",
+            "example.test/list",
+            "https://user:secret@example.test/list",
+        ] {
+            assert!(
+                validate_operator_source_url(invalid, &[]).is_err(),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn operator_source_urls_return_the_validated_canonical_serialization() {
+        let canonical = validate_operator_source_url(
+            r"https://allowed.example\@evil.example/list",
+            &["allowed.example".to_owned()],
+        )
+        .expect("URL parser assigns the declared host");
+
+        assert_eq!(canonical, "https://allowed.example/@evil.example/list");
+        let reparsed = url::Url::parse(&canonical).expect("canonical URL");
+        assert_eq!(reparsed.host_str(), Some("allowed.example"));
+    }
+
+    #[test]
+    fn operator_source_urls_honor_exact_suffix_and_wildcard_hosts() {
+        let url = "https://video.media.example.test/list";
+        validate_operator_source_url(url, &["*".to_owned()]).expect("wildcard host");
+        validate_operator_source_url(url, &["VIDEO.MEDIA.EXAMPLE.TEST".to_owned()])
+            .expect("case-insensitive exact host");
+        validate_operator_source_url(url, &[".example.test".to_owned()])
+            .expect("leading-dot suffix");
+        validate_operator_source_url(url, &["*.media.example.test".to_owned()])
+            .expect("wildcard suffix");
+        assert!(validate_operator_source_url(url, &["example.test".to_owned()]).is_err());
+        assert!(validate_operator_source_url(
+            "https://example.test/list",
+            &["*.example.test".to_owned()]
+        )
+        .is_err());
+        assert!(validate_operator_source_url(
+            "https://badexample.test/list",
+            &[".example.test".to_owned()]
+        )
+        .is_err());
     }
 }

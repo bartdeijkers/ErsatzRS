@@ -5,6 +5,14 @@ list through an enabled add-on. The host invokes the add-on with positional oper
 `ERSATZRS_MEDIA_LIST_URL` to the configured source hyperlink, and applies a
 60-second timeout and a 16 MiB stdout limit.
 
+The source hyperlink is validated before the provider is invoked. It must be
+an absolute HTTP or HTTPS URL without userinfo, and its host must satisfy the
+installed package's [`network_hosts`](addon-packages.md#permission-declarations)
+declaration. A rejection is reported as an `unsupported-url` operator error.
+Previously saved lists remain visible with that failure in administration.
+The host forwards the URL parser's canonical serialization, so the add-on
+receives the same authority and host that passed validation.
+
 Output is UTF-8 newline-delimited JSON. Blank lines are ignored. The first
 non-blank line must be one list record; every remaining line must be one item
 record. Unknown fields are rejected.

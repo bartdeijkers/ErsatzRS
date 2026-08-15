@@ -4390,11 +4390,26 @@ pub async fn add_addon_media_list(
     if command.source_url.trim().is_empty() {
         return validation_error("source_url", "A source URL is required");
     }
+    let source_url =
+        match ersatzrs_addon_contract::validate_operator_source_url(command.source_url.trim(), &[])
+        {
+            Ok(source_url) => source_url,
+            Err(error) => {
+                return validation_error(
+                    "source_url",
+                    ersatzrs_addon_contract::AddonOperationError::new(
+                        ersatzrs_addon_contract::OPERATION_CODE_UNSUPPORTED_URL,
+                        error.to_string(),
+                    )
+                    .to_string(),
+                );
+            }
+        };
     let folder_name = command.folder_name.trim();
     repository
         .add_or_refresh(
             command.addon_id.trim(),
-            command.source_url.trim(),
+            &source_url,
             (!folder_name.is_empty()).then_some(folder_name),
             command.content_kind_override,
         )
@@ -5754,13 +5769,15 @@ mod tests {
     use async_trait::async_trait;
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_core::repositories::{
-        AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow,
-        ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
-        CollectionRepository, FfmpegProfileRepository, LibraryRepository, LibraryScanTarget,
-        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
-        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
-        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
-        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
+        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
+        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
+        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
+        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, MediaItemSuggestionAdmin,
+        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
+        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
+        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
+        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
@@ -5771,23 +5788,24 @@ mod tests {
     };
 
     use super::{
-        add_default_collection_item, add_media_item_to_collection, create_playlist_group,
-        delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
-        normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
-        normalized_hdr_metadata, parse_hdr_content_light, parse_hdr_mastering_display,
-        request_library_scan, request_playout_build, request_scheduled_library_scan,
-        request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
-        save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
-        save_rerun_collection, save_smart_collection, set_windows_startup, validate_channel_form,
-        validate_channel_number_updates, validate_output_dynamic_range, validate_schedule_items,
-        validate_template_group_name, validate_template_name, validate_watermark,
-        AddMediaItemToCollection, BlockItemAdminForm, ChangeCollectionItem, CreatePlaylistGroup,
-        DeletePlaylist, FfmpegProfileAdminForm, RequestLibraryScan, RequestPlayoutBuild,
-        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
-        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
-        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
-        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
-        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
+        add_addon_media_list, add_default_collection_item, add_media_item_to_collection,
+        create_playlist_group, delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune,
+        normalize_channel_form, normalize_channel_number_updates, normalize_legacy_nvenc_preset,
+        normalize_schedule_item, normalized_hdr_metadata, parse_hdr_content_light,
+        parse_hdr_mastering_display, request_library_scan, request_playout_build,
+        request_scheduled_library_scan, request_show_scan, save_collection, save_ffmpeg_profile,
+        save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
+        save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
+        validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
+        validate_schedule_items, validate_template_group_name, validate_template_name,
+        validate_watermark, AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm,
+        ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
+        RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
+        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
+        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
+        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
+        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
@@ -5801,6 +5819,99 @@ mod tests {
         values: Mutex<BTreeMap<String, String>>,
         batches: Mutex<Vec<Vec<SettingsMutation>>>,
         playout_ids: Vec<EntityId>,
+    }
+
+    #[derive(Default)]
+    struct RecordingAddonMediaListRepository {
+        added_source_urls: Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl AddonMediaListRepository for RecordingAddonMediaListRepository {
+        async fn list_admin(
+            &self,
+            _page: u32,
+            _page_size: u32,
+        ) -> ersatzrs_core::repositories::Result<(Vec<AddonMediaListAdminRow>, u64)> {
+            Ok((Vec::new(), 0))
+        }
+
+        async fn get_admin_form(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListAdminForm>> {
+            Ok(None)
+        }
+
+        async fn list_items(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Vec<AddonMediaListItemAdminRow>> {
+            Ok(Vec::new())
+        }
+
+        async fn search_replacement_candidates(
+            &self,
+            _query: &str,
+            _limit: u32,
+        ) -> ersatzrs_core::repositories::Result<Vec<AddonMediaListReplacementCandidate>> {
+            Ok(Vec::new())
+        }
+
+        async fn set_replacement(
+            &self,
+            _item_id: EntityId,
+            _replacement: Option<(EntityId, EntityId)>,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn add_or_refresh(
+            &self,
+            _addon_id: &str,
+            source_url: &str,
+            _requested_folder: Option<&str>,
+            _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+        ) -> ersatzrs_core::repositories::Result<EntityId> {
+            self.added_source_urls
+                .lock()
+                .expect("added source URLs")
+                .push(source_url.to_owned());
+            Ok(1)
+        }
+
+        async fn managed_library_id(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<EntityId>> {
+            Ok(None)
+        }
+
+        async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn update_settings(
+            &self,
+            _id: EntityId,
+            _auto_refresh: bool,
+            _generate_playlist: bool,
+            _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn delete(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn get_page_size(&self) -> ersatzrs_core::repositories::Result<u32> {
+            Ok(10)
+        }
+
+        async fn set_page_size(&self, _page_size: u32) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
     }
 
     #[async_trait]
@@ -6743,6 +6854,64 @@ mod tests {
             hls_direct_output_format: 2,
             default_mpeg_ts_script: "default".to_owned(),
         }
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_rejects_unsafe_urls_before_repository_work() {
+        let repository = RecordingAddonMediaListRepository::default();
+        for source_url in [
+            "file:///tmp/list",
+            "javascript:alert(1)",
+            "example.test/list",
+            "https://user:secret@example.test/list",
+        ] {
+            let error = add_addon_media_list(
+                AddAddonMediaList {
+                    addon_id: "org.ersatzrs.addon.fixture".to_owned(),
+                    source_url: source_url.to_owned(),
+                    folder_name: String::new(),
+                    content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
+                },
+                &repository,
+            )
+            .await
+            .expect_err("unsafe source URL");
+            let message = error.to_string();
+            assert!(
+                message.contains("unsupported-url"),
+                "{source_url}: {message}"
+            );
+            assert!(!message.contains("user:secret"));
+        }
+        assert!(repository
+            .added_source_urls
+            .lock()
+            .expect("added source URLs")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_forwards_the_validated_canonical_url() {
+        let repository = RecordingAddonMediaListRepository::default();
+        add_addon_media_list(
+            AddAddonMediaList {
+                addon_id: "org.ersatzrs.addon.fixture".to_owned(),
+                source_url: r"https://allowed.example\@evil.example/list".to_owned(),
+                folder_name: String::new(),
+                content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
+            },
+            &repository,
+        )
+        .await
+        .expect("canonical source URL import");
+
+        assert_eq!(
+            *repository
+                .added_source_urls
+                .lock()
+                .expect("added source URLs"),
+            ["https://allowed.example/@evil.example/list"]
+        );
     }
 
     // ── ADR 0064: HDR10 output validation ───────────────────────────────

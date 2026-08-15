@@ -94,6 +94,24 @@ Permissions are displayed before installation and enablement. They describe
 the network hosts, media paths, managed tools, and external executables a
 package expects; they are not a portable operating-system sandbox.
 
+`network_hosts` also constrains the one operator-supplied source URL that the
+host passes to a `media-list.list` or `remote-stream.list` operation. An empty
+list or `*` accepts every host. A plain host such as `media.example.test`
+matches only that exact host. `.example.test` and `*.example.test` match real
+subdomains such as `media.example.test`, but not the apex `example.test` and
+not lookalikes such as `badexample.test`. Host matching is ASCII
+case-insensitive. Operator source URLs may use HTTP or HTTPS, including local
+and on-premise HTTP services, but must be absolute, bounded, and contain no
+username or password.
+The host passes the parser's canonical URL serialization to the add-on rather
+than the original input, preventing the host and add-on from interpreting
+different authorities around parser-sensitive characters.
+
+This check validates a host-controlled input before invocation; it does not
+confine the child process or prevent it from contacting other destinations.
+See [ADR 0066](../adr/0066-repository-backed-add-ons.md#what-trust-does-not-mean)
+for the runtime trust boundary.
+
 The catalog repeats identity, version, display/source metadata, host range,
 capabilities, and permissions. Repository installation succeeds only when
 those values match the package manifest exactly. Sideload installation has no

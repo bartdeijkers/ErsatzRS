@@ -12,7 +12,7 @@ Unknown fields are rejected.
 | Field | Required | Default | Contract |
 |---|---:|---|---|
 | `name` | No | Manifest stem | Display name and managed playlist name. |
-| `url` | Yes | — | Upstream playlist or series URL supplied only to the add-on's `list` operation. |
+| `url` | Yes | — | Absolute HTTP(S) upstream playlist or series URL without userinfo, supplied only to the add-on's `list` operation. |
 | `addon` | Yes | — | Reverse-DNS identity of an installed, enabled add-on with list and play v1 capabilities. |
 | `folder` | No | Manifest stem | One relative path component; generated definitions are written here. |
 | `sync.interval` | No | `24h` | Positive compact duration of at least one minute: `m`, `h`, or `d`. |
@@ -51,6 +51,15 @@ The selected add-on must implement `addon.check.v1`, Remote Stream list v1 or
 v2, and `remote-stream.play.v1`. Add-ons are installed,
 configured, checked, and enabled under **Settings > Add-ons**; manifests never
 contain command paths.
+
+The URL is rejected before provider invocation when its host does not satisfy
+the installed package's
+[`network_hosts`](addon-packages.md#permission-declarations) declaration. The
+failure uses the localized `unsupported-url` diagnostic and names only the
+offending host, never the complete URL.
+The stored manifest and add-on environment use the URL parser's canonical
+serialization, so the invoked add-on interprets the same authority that the
+host validated.
 
 ## Enumeration result
 

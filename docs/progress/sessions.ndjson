@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-08-15","summary":"Resolved AB-04 URL parser differential by forwarding the validated canonical source URL to add-ons"}
+{"agent":"Codex","date":"2026-08-15","summary":"Completed AB-04 operator source URL validation and network_hosts enforcement across Add-on Lists and Remote Stream playlists"}
 {"agent":"Codex","date":"2026-08-15","summary":"Fixed legacy stderr tail truncation and implemented AB-03 contract-owned NDJSON through the publish-ready package and locally patched Trakt acceptance boundary"}
 {"agent":"Codex","date":"2026-08-15","summary":"Completed ab-02 structured list/play diagnostics across the host and official add-ons, with localized codes, secret-safe fallbacks, boundary linting, and full closeout evidence."}
 {"agent":"Codex","date":"2026-08-15","summary":"Completed ab-01 by moving yt-dlp availability normalization into the POSIX and Windows add-on paths, deleting host provider coercion, adding bounded operational rejection, and guarding crates against provider vocabulary."}

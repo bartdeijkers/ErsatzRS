@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
-    AddonMediaListContentKind as WireContentKind,
+    validate_operator_source_url, AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
-    AddonMediaListRecord, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
-    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_OUTPUT_BYTES,
-    MAX_PROVIDER_ID_BYTES,
+    AddonMediaListRecord, AddonOperationError, CAPABILITY_MEDIA_LIST_LIST_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V2, MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS,
+    MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES, OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
@@ -43,8 +43,6 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
         addon_id: &str,
         source_url: &str,
     ) -> Result<EnumeratedAddonMediaList> {
-        let mut environment = BTreeMap::new();
-        environment.insert(SOURCE_URL_ENVIRONMENT.to_owned(), source_url.to_owned());
         // Every other invocation path supplies the managed runtime; a list
         // enumeration that omitted it could not run an add-on that declares
         // `managed_ffmpeg`, because resolving its environment requires both
@@ -69,6 +67,18 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
         } else {
             CAPABILITY_MEDIA_LIST_LIST_V1
         };
+        let source_url = validate_operator_source_url(
+            source_url,
+            &installation.manifest.permissions.network_hosts,
+        )
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "validate media-list source URL",
+                AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
+                    .to_string(),
+            )
+        })?;
+        let environment = BTreeMap::from([(SOURCE_URL_ENVIRONMENT.to_owned(), source_url)]);
         let output = invoke_enabled_addon(
             &self.pool,
             addon_id,
@@ -281,9 +291,18 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
 "#;
 
     #[cfg(unix)]
+    const CANONICAL_URL_FIXTURE_SCRIPT: &str = r#"#!/bin/sh
+set -eu
+test "$ERSATZRS_MEDIA_LIST_URL" = 'https://allowed.example.test/@evil.example/list'
+printf '%s\n' '{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}'
+printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Arrival","title":"Arrival","kind":"movie","guids":[]}'
+"#;
+
+    #[cfg(unix)]
     async fn fixture_media_list_addon_with_script(
         root: &std::path::Path,
         source: &str,
+        network_hosts: &[&str],
     ) -> crate::db::DbPool {
         use std::os::unix::fs::PermissionsExt as _;
 
@@ -330,7 +349,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
                 "any": {"path": "fixture.sh", "kind": "posix_shell"}
             },
             "permissions": {
-                "network_hosts": [],
+                "network_hosts": network_hosts,
                 "media_read": false,
                 "managed_ffmpeg": true,
                 "external_commands": []
@@ -363,7 +382,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
 
     #[cfg(unix)]
     async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
-        fixture_media_list_addon_with_script(root, FIXTURE_SCRIPT).await
+        fixture_media_list_addon_with_script(root, FIXTURE_SCRIPT, &[]).await
     }
 
     #[cfg(unix)]
@@ -392,7 +411,8 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let temporary = tempfile::tempdir().expect("temporary folder");
         let root = temporary.path().join("package");
         let pool =
-            fixture_media_list_addon_with_script(&root, INVALID_AVAILABILITY_FIXTURE_SCRIPT).await;
+            fixture_media_list_addon_with_script(&root, INVALID_AVAILABILITY_FIXTURE_SCRIPT, &[])
+                .await;
 
         let error = super::InstalledAddonMediaListProvider::new(pool)
             .enumerate("org.ersatzrs.addon.fixture", "https://example.test/list")
@@ -402,6 +422,104 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         assert!(message.contains("bounded media-list JSON contract"));
         assert!(!message.contains("maybe_later"));
         assert!(message.len() < 512);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn source_url_must_match_the_installed_addon_network_hosts() {
+        use ersatzrs_core::addon_media_list::AddonMediaListProvider as _;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool =
+            fixture_media_list_addon_with_script(&root, FIXTURE_SCRIPT, &["allowed.example.test"])
+                .await;
+
+        let error = super::InstalledAddonMediaListProvider::new(pool)
+            .enumerate("org.ersatzrs.addon.fixture", "https://example.test/list")
+            .await
+            .expect_err("undeclared host");
+        let message = error.to_string();
+        assert!(message.contains("unsupported-url"));
+        assert!(message.contains("example.test"));
+        assert!(!message.contains("/list"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn provider_receives_the_same_canonical_url_used_for_host_validation() {
+        use ersatzrs_core::addon_media_list::AddonMediaListProvider as _;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool = fixture_media_list_addon_with_script(
+            &root,
+            CANONICAL_URL_FIXTURE_SCRIPT,
+            &["allowed.example.test"],
+        )
+        .await;
+
+        super::InstalledAddonMediaListProvider::new(pool)
+            .enumerate(
+                "org.ersatzrs.addon.fixture",
+                r"https://allowed.example.test\@evil.example/list",
+            )
+            .await
+            .expect("provider receives canonical source URL");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn existing_list_remains_visible_when_new_host_validation_fails() {
+        use ersatzrs_core::repositories::AddonMediaListRepository as _;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool = fixture_media_list_addon_with_script(&root, FIXTURE_SCRIPT, &["*"]).await;
+        let repository = crate::repositories::SqliteAddonMediaListRepository(pool.clone());
+        let source_url = "https://example.test/list";
+        let list_id = repository
+            .add_or_refresh(
+                "org.ersatzrs.addon.fixture",
+                source_url,
+                None,
+                ersatzrs_domain::AddonMediaListContentKind::Auto,
+            )
+            .await
+            .expect("initial import");
+
+        let manifest_json: String = sqlx::query_scalar(
+            r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .fetch_one(&pool)
+        .await
+        .expect("installed manifest");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&manifest_json).expect("manifest JSON");
+        manifest["permissions"]["network_hosts"] = serde_json::json!(["allowed.example.test"]);
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = ? WHERE "AddonId" = ?"#)
+            .bind(manifest.to_string())
+            .bind("org.ersatzrs.addon.fixture")
+            .execute(&pool)
+            .await
+            .expect("restrict network hosts");
+
+        repository
+            .add_or_refresh(
+                "org.ersatzrs.addon.fixture",
+                source_url,
+                None,
+                ersatzrs_domain::AddonMediaListContentKind::Auto,
+            )
+            .await
+            .expect_err("new validation must reject saved URL");
+        let (rows, total) = repository.list_admin(0, 10).await.expect("admin rows");
+        assert_eq!(total, 1);
+        assert_eq!(rows[0].id, list_id);
+        let last_error = rows[0].last_error.as_deref().expect("saved failure");
+        assert!(last_error.contains("unsupported-url"));
+        assert!(last_error.contains("example.test"));
     }
 
     #[test]
