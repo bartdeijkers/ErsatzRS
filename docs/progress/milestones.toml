@@ -1114,3 +1114,107 @@ proves multi-source submissions, duplicate idempotency, policy rejection,
 restart survival, exactly-once scheduling, and Played completion.
 '''
 evidence = ''
+
+[[milestone]]
+id         = 'ab-01'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Return provider availability vocabulary to the add-on'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-availability-vocabulary-ownership.md'
+depends_on = []
+acceptance = '''
+The yt-dlp package emits only `available`, `unavailable`, or `unknown` on both
+POSIX and Windows; the duplicated `deserialize_addon_availability` is gone from
+`ersatzrs-core` and `ersatzrs-scanner`; an unrecognized token is rejected with a
+bounded provider-neutral error instead of coerced; and a repository guard fails
+if provider vocabulary re-enters `crates/`.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'ab-02'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Give list and play a structured diagnostic channel'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-structured-operation-diagnostics.md'
+depends_on = []
+acceptance = '''
+`list` and `play` failures carry a stable validated code alongside a bounded
+message; the host emits the same codes for host-detected setting and secret
+failures; `canonical_addon_media_list_error` is deleted and translation happens
+on the code in every supported culture; an unknown code renders a generic
+localized line plus the add-on message; and secret redaction and file-secret
+suppression still hold.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'ab-03'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Make the contract crate own the NDJSON payloads'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-contract-crate-owns-ndjson.md'
+depends_on = ['ab-01']
+acceptance = '''
+Both list record types and their wire enums live in `ersatzrs-addon-contract`
+with the bytes on the boundary unchanged; the crate is consumable from outside
+the workspace by a recorded mechanism; the first-party Trakt add-on emits
+records through it instead of `serde_json::json!`; and a reference add-on plus a
+callable conformance check ship with the crate.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'ab-04'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Validate the operator source URL and enforce network_hosts'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-source-url-validation-and-network-permission.md'
+depends_on = []
+acceptance = '''
+One shared validator rejects unsupported schemes and userinfo at add-on list
+import and at playlist manifest parse; a manifest declaring specific
+`network_hosts` without `*` refuses a URL whose host does not match; the host
+pattern semantics are documented; the rejection renders as a localized
+operator error before any provider call; and an existing saved list that would
+now fail stays visible and reports the failure.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'ab-05'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Give both list contracts the same strictness'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-list-record-strictness-parity.md'
+depends_on = ['ab-03']
+acceptance = '''
+Both record types reject unknown fields and agree on null-array handling; the
+official packages emit conforming output on both platforms before the flag
+flips; rejection stays atomic with no partial persistence or generated files;
+and the capability-version bump is documented as the compatibility policy for
+adding a field.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'ab-06'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Reduce the manifest contract to one implementation'
+status     = 'Not started'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-manifest-validator-single-implementation.md'
+depends_on = ['ab-03']
+acceptance = '''
+A callable host tool validates `addon.toml` and `repository.toml` through
+`AddonManifest::validate()`; the add-ons repository CI runs it against a pinned
+host version before packaging; `tools/build_repository.py` keeps only
+publication-specific rules; and each known divergence between the two
+validators is resolved into one authoritative side.
+'''
+evidence = ''

@@ -1,0 +1,136 @@
+# Plan: make `ersatzrs-addon-contract` own the NDJSON payloads
+
+## Context
+
+ADR 0066 says: "The shared `ersatzrs-addon-contract` crate and add-on contract
+reference own these public formats." For the manifest, catalog, repository
+manifest, and check result that is true. For the payloads that actually cross
+the process boundary on every invocation it is not.
+
+The record types live in two consumer crates instead:
+
+- `AddonMediaListRecord` — `crates/ersatzrs-core/src/addon_media_list.rs:13`
+- `PlaylistEntry` (the `remote-stream.list` record) —
+  `crates/ersatzrs-scanner/src/remote_stream_playlist.rs:139`
+
+Consequences visible today:
+
+- The two contracts have drifted. `AddonMediaListRecord` carries
+  `deny_unknown_fields`; `PlaylistEntry` does not. `PlaylistEntry` tolerates
+  `null` arrays through `deserialize_string_vec`; `AddonMediaListRecord` does
+  not. The same add-on implements both.
+- The crate is not actually shared. `native/trakt` in
+  `bartdeijkers/ErsatzRS-addons` — a first-party Rust add-on written by the same
+  maintainer — does not depend on it and hand-builds JSON with
+  `serde_json::json!`. If the reference implementation does not consume the
+  contract crate, no third party will either.
+- `ersatzrs-addon-contract` declares `serde_json` in `Cargo.toml` and uses it
+  nowhere. The dependency was presumably added for exactly this purpose and then
+  the types landed elsewhere.
+
+Outcome: one crate defines every byte that crosses the boundary, and the Trakt
+add-on proves it is consumable from outside the workspace.
+
+---
+
+## Step 1 — Move the record types
+
+Move `AddonMediaListRecord`, `PlaylistEntry`, and the shared enums they need
+into `ersatzrs-addon-contract`, re-exporting from the current locations so the
+move is mechanical and reviewable.
+
+`AddonMediaListItemAvailability` and `AddonMediaListContentKind` currently live
+in `crates/ersatzrs-domain/src/collection.rs:45` and `:61`. They are wire
+vocabulary, not domain concepts — the doc comment on `AddonMediaListContentKind`
+even says it "does not change the storage identity". Move them to the contract
+crate and have `ersatzrs-domain` re-export or newtype them. Check the dependency
+direction in `ARCHITECTURE.md` before committing to this: if domain may not
+depend on the contract crate, define them in the contract crate and convert at
+the infra edge instead.
+
+Keep `EnumeratedAddonMediaList` and `EnumeratedAddonMediaListItem` in
+`ersatzrs-core`. Those are validated host-side results, not wire records, and
+the split between "what the add-on may send" and "what the host has accepted" is
+worth preserving explicitly.
+
+## Step 2 — Make the crate usable outside the workspace
+
+Add a serializer-friendly surface: constructors or builders that make an invalid
+record hard to express, plus `validate()` methods mirroring the host's bounds
+(non-empty `provider_id`, unique rank, `source_url` required for
+`remote_stream`).
+
+Decide and record how an external add-on obtains the crate:
+
+1. publish to crates.io on host release; or
+2. consume by git tag from `bartdeijkers/ErsatzRS`.
+
+Option 2 costs nothing and is enough for the first third-party authors; option 1
+is the eventual answer. Whichever is chosen, state it in
+`docs/reference/addon-packages.md` so an author does not have to guess. If
+publishing, resolve the version story first — the crate currently inherits
+`version.workspace`, which ties a public contract's version to the application's.
+
+Remove the unused `serde_json` dependency if the moved types do not need it.
+
+## Step 3 — Convert the Trakt add-on
+
+Change `native/trakt` in `bartdeijkers/ErsatzRS-addons` to depend on the
+contract crate and emit records through it instead of `serde_json::json!`.
+
+This is the acceptance test for the whole slice. If the crate cannot be
+consumed cleanly from that repository — feature flags, dependency weight,
+version pinning, offline builds in the publish workflow — the design is not
+finished, and that is worth discovering with a first-party package rather than
+a third-party bug report.
+
+## Step 4 — Ship an executable definition of "valid"
+
+There is currently no fixture, example package, or conformance harness an author
+can run. Add, in the contract crate:
+
+- a minimal reference add-on (`examples/`) implementing `addon.check.v1` and
+  `media-list.list.v2` against static data; and
+- a `#[test]`-callable conformance function that takes captured add-on output
+  and asserts it against the contract, so both repositories can exercise the
+  same checks.
+
+---
+
+## Verification
+
+```bash
+./run.sh check -p ersatzrs-addon-contract
+./run.sh test -p ersatzrs-addon-contract
+./run.sh test -p ersatzrs-core -p ersatzrs-scanner -p ersatzrs-infra
+cargo deny check
+```
+
+In `bartdeijkers/ErsatzRS-addons`:
+
+```sh
+cargo test --locked --manifest-path native/trakt/Cargo.toml
+cargo clippy --locked --manifest-path native/trakt/Cargo.toml --all-targets -- -D warnings
+python3 tools/build_repository.py --sequence 1 --base-url https://example.invalid --output dist
+```
+
+Closeout gate:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --features mysql -- -D warnings
+./run.sh test-closeout
+cargo xtask progress check
+```
+
+---
+
+## Out of scope
+
+- Changing any wire format. This is a relocation plus a published surface; the
+  bytes on the boundary must be identical before and after, and the snapshot
+  and repository tests are the proof.
+- The strictness mismatch between the two record types. It becomes a one-line
+  change once both live in one crate, and is tracked separately in
+  [`addon-list-record-strictness-parity.md`](addon-list-record-strictness-parity.md).

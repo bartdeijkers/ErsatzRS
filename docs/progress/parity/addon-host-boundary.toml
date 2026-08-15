@@ -1,0 +1,76 @@
+feature    = 'ErsatzRS/ErsatzRS-addons contract boundary hygiene'
+etv_source = 'ErsatzRS product extension; ErsatzTV has no out-of-process add-on boundary to port'
+rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-scanner/src/remote_stream_playlist.rs`, `crates/ersatzrs-app/src/commands.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, and the separate `bartdeijkers/ErsatzRS-addons` repository'
+status     = 'In progress'
+adr        = ['0066', '0068']
+
+summary = '''
+A 2026-08-15 review of the add-on backend found the host/package division
+fundamentally sound. Add-ons never touch the database, the filesystem layout,
+matching, generated playlists, NFO generation, or scanning; the host never
+contains provider protocol code. Manifest validation, bounded path-safe
+extraction, per-invocation content-hash revalidation, cleared process
+environments, managed process groups and Job Objects, secret references that
+store only a location, and persistent trust tiers are all in place and
+consistently applied. Provider names are effectively absent from host source
+outside test fixtures.
+
+The review found six specific defects, all sharing one root cause: the contract
+exists as prose plus host-side validators, with no executable artifact shared
+between the two repositories and no structured diagnostic channel for the `list`
+and `play` operations. That gap makes shortcuts attractive, and two of them were
+taken — a provider vocabulary table inside the host, and host localization that
+string-matches an add-on's English error text across a repository boundary.
+
+Each debt item below has a standalone plan under `plans/` and a milestone under
+the `Add-on boundary` phase in `milestones.toml`. The recommended order is
+ab-01, ab-02, ab-04 (independent), then ab-03, then ab-05 and ab-06.
+'''
+
+[[debt]]
+id          = 'host-contains-provider-availability-vocabulary'
+description = 'Remove the yt-dlp-specific availability tokens (`public`, `unlisted`, `private`, `premium_only`, `subscriber_only`, `needs_auth`) from the host and accept only `available`, `unavailable`, and `unknown`. Normalize inside the yt-dlp package on both POSIX and Windows first, then delete the duplicated deserializer and reject unrecognized tokens instead of silently coercing them to `unknown`.'
+discovered  = '2026-08-15'
+evidence    = 'A byte-identical `deserialize_addon_availability` exists in `crates/ersatzrs-core/src/addon_media_list.rs:65` and `crates/ersatzrs-scanner/src/remote_stream_playlist.rs:205`. Both map yt-dlp field values, because `addons/org.ersatzrs.addon.yt-dlp/addon.sh` prints `%(availability)j` raw and `libexec/youtube-list.ps1:3-9` returns the raw token. Beeld & Geluid already emits canonical values at `libexec/beeldengeluid.sh:299-304`. ADR 0068 and the NFO closeout plan both assign provider availability values to the add-on.'
+adr         = '0068'
+resolved    = false
+
+[[debt]]
+id          = 'list-and-play-have-no-structured-diagnostics'
+description = 'Give `list` and `play` the same stable `{code, message}` result shape that `addon.check.v1` already has, so the host can localize failures on a code instead of matching an add-on English sentence, and so third-party add-ons get translated failures too.'
+discovered  = '2026-08-15'
+evidence    = '`canonical_addon_media_list_error` (`crates/ersatzrs-web/src/admin/i18n.rs:2957`) matches on `"Trakt client ID reference is not configured"`, which is authored in a different repository at `native/trakt/src/main.rs:329`, and on `CLIENT_ID`, a setting key owned by one package manifest. No test binds the two, so rewording the add-on string silently disables the translation in all supported cultures. `AddonCheckResult` (`crates/ersatzrs-addon-contract/src/lib.rs:779`) shows the shape that is missing for the other two operations.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'contract-crate-does-not-own-the-ndjson-payloads'
+description = 'Move the `media-list.list` and `remote-stream.list` record types into `ersatzrs-addon-contract`, make the crate consumable from outside the workspace, convert the first-party Trakt add-on to use it, and ship a reference add-on plus a callable conformance check.'
+discovered  = '2026-08-15'
+evidence    = 'ADR 0066 states the contract crate owns the public formats, but `AddonMediaListRecord` lives in `crates/ersatzrs-core/src/addon_media_list.rs:13` and `PlaylistEntry` in `crates/ersatzrs-scanner/src/remote_stream_playlist.rs:139`. `native/trakt/Cargo.toml` in the add-ons repository does not depend on the contract crate and hand-builds JSON with `serde_json::json!`. The contract crate declares `serde_json` and never uses it. There is no fixture, example package, or conformance harness an author can run.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'operator-source-url-is-unvalidated'
+description = 'Validate the operator-supplied add-on list and playlist manifest URL in the host (scheme, no userinfo) and, when the installed manifest declares specific `network_hosts`, require the URL host to match one of them.'
+discovered  = '2026-08-15'
+evidence    = '`add_addon_media_list` (`crates/ersatzrs-app/src/commands.rs:4390`) and `parse_playlist_manifest` (`crates/ersatzrs-scanner/src/remote_stream_playlist.rs:332`) check only for an empty string before the value reaches `ERSATZRS_MEDIA_LIST_URL` / `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL`, while the contract crate rejects non-HTTPS URLs and userinfo everywhere else (`lib.rs:934-947`). Scheme defence currently lives in each package. Of the four `AddonPermissions` fields only `managed_ffmpeg` has runtime meaning (`crates/ersatzrs-infra/src/addons.rs:2530`); the rest are rendered only at `crates/ersatzrs-web/src/admin/pages/addons.rs:1094-1097`.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'list-contracts-have-opposite-strictness'
+description = 'Apply one documented strictness rule to both list record types, including `deny_unknown_fields` and shared null-array handling, and record the capability-version bump as the compatibility escape hatch.'
+discovered  = '2026-08-15'
+evidence    = '`AddonMediaListRecord` (`crates/ersatzrs-core/src/addon_media_list.rs:13`) declares `deny_unknown_fields`; `PlaylistEntry` (`crates/ersatzrs-scanner/src/remote_stream_playlist.rs:139`) does not, and tolerates `null` arrays through `deserialize_string_vec`. The same add-on implements both, so an identical typo fails loudly in one contract and is silently discarded in the other. `docs/reference/addon-media-lists.md` documents rejection; the Remote Stream reference makes that claim only about the YAML manifest.'
+adr         = '0068'
+resolved    = false
+
+[[debt]]
+id          = 'manifest-contract-has-two-implementations'
+description = 'Expose the host manifest validator as a callable tool, run it from the add-ons repository CI before packaging, and reduce `tools/build_repository.py` to publication-specific rules only.'
+discovered  = '2026-08-15'
+evidence    = '`validate_manifest` in `tools/build_repository.py` re-implements `AddonManifest::validate()` (`crates/ersatzrs-addon-contract/src/lib.rs:96`) in Python: version gating, en-US requirements, capability grammar, dependency rules, entrypoints, settings, `suggested_reference` gating, `media_list_storage` prerequisites, and permission names. No shared test exists, so drift fails at install time on a user machine rather than in either CI. The two already differ: the Python check tests a `https://` prefix where the Rust one parses the URL and also rejects userinfo, and the Python check adds an id-equals-directory rule the host does not know about.'
+adr         = '0066'
+resolved    = false

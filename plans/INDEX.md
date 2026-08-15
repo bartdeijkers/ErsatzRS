@@ -106,6 +106,33 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `addon-nfo-sidecars-and-local-replacements-closeout.md` — blocking handoff
+  for generic v2 add-on metadata/NFO sidecars, observable content-kind
+  semantics, transactional YAML/NFO publication, exact Local replacements,
+  provider-owned multilingual assets/tests, and POSIX/Windows add-on parity.
+- Add-on boundary hygiene (six standalone slices from the 2026-08-15 review of
+  the ErsatzRS ↔ `bartdeijkers/ErsatzRS-addons` division; tracked as
+  `docs/progress/parity/addon-host-boundary.toml` and milestones `ab-01`–
+  `ab-06`). The division itself is sound — add-ons never touch persistence,
+  storage layout, matching, playlists, or scanning — but the contract is prose
+  plus host-side validators with no shared executable artifact, which is what
+  produced these six:
+  - `addon-availability-vocabulary-ownership.md` — remove yt-dlp's availability
+    tokens from `ersatzrs-core`/`ersatzrs-scanner` and normalize in the package.
+  - `addon-structured-operation-diagnostics.md` — give `list`/`play` the stable
+    `{code, message}` result `addon.check.v1` already has, so host localization
+    stops string-matching an add-on's English prose across repositories.
+  - `addon-contract-crate-owns-ndjson.md` — move the list record types into
+    `ersatzrs-addon-contract`, make it consumable outside the workspace, and
+    prove it by converting the first-party Trakt add-on.
+  - `addon-source-url-validation-and-network-permission.md` — validate the one
+    operator URL the host hands to a child process, and give `network_hosts`
+    runtime meaning for it.
+  - `addon-list-record-strictness-parity.md` — one documented strictness rule
+    for both list contracts instead of opposite failure modes.
+  - `addon-manifest-validator-single-implementation.md` — stop maintaining the
+    manifest contract twice, in Rust and in the add-ons repository's Python
+    builder.
 - `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — current Phase 8 plan
   for the accepted SDR/HDR10 output contract, Dolby Vision input
   characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
