@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-15","summary":"Retired the official Trakt add-on, removed its private cross-repository build dependency, and completed AB-03 and AB-05 under ADR 0069"}
 {"agent":"Codex","date":"2026-08-15","summary":"Replaced crates.io contract publication with guarded GitHub-only tag and revision policy; host candidate awaits its commit SHA before external pinning"}
 {"agent":"Codex","date":"2026-08-15","summary":"Prepared AB-05 and contract crate 0.1.0 for clean publication; final completion awaits explicit commit, push, and crates.io publish"}
 {"agent":"Codex","date":"2026-08-15","summary":"Implemented and locally verified AB-05 strict list contracts; retained In progress until AB-03 publishes contract 0.1.0"}

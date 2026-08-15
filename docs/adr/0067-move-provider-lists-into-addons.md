@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-08-14)
+Superseded by ADR 0069
 
 ## Implementation
 

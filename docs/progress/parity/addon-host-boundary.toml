@@ -2,7 +2,7 @@ feature    = 'ErsatzRS/ErsatzRS-addons contract boundary hygiene'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no out-of-process add-on boundary to port'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-scanner/src/remote_stream_playlist.rs`, `crates/ersatzrs-app/src/commands.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, and the separate `bartdeijkers/ErsatzRS-addons` repository'
 status     = 'In progress'
-adr        = ['0066', '0068']
+adr        = ['0066', '0068', '0069']
 
 summary = '''
 A 2026-08-15 review of the add-on backend found the host/package division
@@ -23,11 +23,10 @@ taken — a provider vocabulary table inside the host, and host localization tha
 string-matches an add-on's English error text across a repository boundary.
 
 Each debt item below has a standalone plan under `plans/` and a milestone under
-the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01, ab-02, and
-ab-04 are complete. Ab-03 is in progress pending the immutable GitHub tag and
-external revision-pin proof for the independently versioned contract crate;
-ab-05 is implemented and locally verified but stays in progress behind that
-dependency. Ab-06 follows after ab-03 completes.
+the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 through
+ab-05 are complete. ADR 0069 retired the native Trakt package and its private
+cross-repository dependency while retaining the repo-local reference add-on and
+shared conformance proof. Ab-06 is the remaining boundary-hygiene slice.
 '''
 
 [[debt]]
@@ -48,11 +47,11 @@ resolved    = true
 
 [[debt]]
 id          = 'contract-crate-does-not-own-the-ndjson-payloads'
-description = 'Move the `media-list.list` and `remote-stream.list` record types into `ersatzrs-addon-contract`, make the crate consumable from outside the workspace, convert the first-party Trakt add-on to use it, and ship a reference add-on plus a callable conformance check.'
+description = 'Move the `media-list.list` and `remote-stream.list` record types into `ersatzrs-addon-contract`, keep the crate independently versioned and packageable without registry publication, and ship a reference add-on plus a callable conformance check.'
 discovered  = '2026-08-15'
-evidence    = 'Implementation is present: both wire records and enums live in `ersatzrs-addon-contract`; host edges convert them to separate persisted domain enums; shared conformance functions and a runnable reference add-on ship with the independently versioned 0.1.0 crate; and native Trakt emits typed records and passes locked tests/clippy through the local inner-loop patch. The accepted distribution is GitHub-only: guarded `publish = false`, an immutable `addon-contract-v<version>` tag, and a full commit-SHA pin in official Rust add-ons. The 7-file, 21.1 KiB compressed package passes 21 packaged tests and warning-free rustdoc and declares the canonical repository and Zlib license. The debt remains open until the clean candidate is pushed and tagged and the external lockfile and CI pass against the GitHub revision without a local patch.'
+evidence    = 'Resolved through milestone `ab-03` on 2026-08-16. Both wire records and enums live in `ersatzrs-addon-contract`; host edges convert them to separate persisted domain enums; shared conformance functions and a runnable reference add-on ship with independently versioned crate 0.1.0. The crate has guarded `publish = false`, canonical GitHub metadata, immutable tag `addon-contract-v0.1.0`, package verification, 21 packaged tests, and warning-free rustdoc. ADR 0069 retired the only native official consumer instead of granting the public add-ons workflow access to the private host repository; the contract therefore remains private and no official package has a cross-repository Cargo dependency.'
 adr         = '0066'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'operator-source-url-is-unvalidated'
@@ -66,9 +65,9 @@ resolved    = true
 id          = 'list-contracts-have-opposite-strictness'
 description = 'Apply one documented strictness rule to both list record types, including `deny_unknown_fields` and shared null-array handling, and record the capability-version bump as the compatibility escape hatch.'
 discovered  = '2026-08-15'
-evidence    = 'Implementation and local acceptance completed through milestone `ab-05` on 2026-08-15. Both contract-owned records now reject unknown fields with a bounded diagnostic naming the field, share omitted/null optional-array handling, and are decoded by host adapters through the shared conformance functions. Atomic refresh regressions preserve the prior complete Remote Stream generation and the existing media list, items, and GUIDs. The references freeze existing capability versions and require a version bump for new fields. Official POSIX fixtures passed; real Windows PowerShell fixtures covered Beeld & Geluid and yt-dlp in both list modes and exposed then verified the fix for yt-dlp `[null]` genres/tags; the external suite and locally patched native Trakt gates passed. The debt remains open only until prerequisite `ab-03` has its immutable GitHub tag and exact external revision pin and those external gates pass without a local patch.'
+evidence    = 'Resolved through milestone `ab-05` on 2026-08-16. Both contract-owned records reject unknown fields with a bounded diagnostic naming the field, share omitted/null optional-array handling, and are decoded by host adapters through the shared conformance functions. Atomic refresh regressions preserve the prior complete Remote Stream generation and the existing media list, items, and GUIDs. The references freeze existing capability versions and require a version bump for new fields. Official POSIX fixtures and real Windows PowerShell fixtures cover Beeld & Geluid and yt-dlp in media-list and Remote Stream modes; the external repository passes 16 tests and builds a deterministic two-package catalog without native artifacts. ADR 0069 retired native Trakt, so no external revision pin remains part of this acceptance.'
 adr         = '0066'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'manifest-contract-has-two-implementations'

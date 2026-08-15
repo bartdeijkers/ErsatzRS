@@ -48,10 +48,8 @@ release section when tagging a release.
 - The independently versioned `ersatzrs-addon-contract` crate now owns the
   media-list and Remote Stream NDJSON records, their wire enums, validation,
   and reusable stdout conformance checks. A runnable reference add-on ships as
-  a Cargo example, and the official native Trakt add-on emits typed contract
-  records instead of assembling boundary JSON by hand. Rust add-ons consume
-  immutable GitHub contract tags through an exact commit revision; registry
-  publication is disabled and guarded.
+  a Cargo example. Registry publication is disabled and guarded; the crate
+  remains private to the ErsatzRS GitHub repository.
 - Failed add-on `list` and `play` operations now carry a stable, bounded JSON
   diagnostic code on stderr. Host-detected missing settings and secrets use the
   same vocabulary, the admin UI localizes recognized codes in every supported
@@ -64,6 +62,15 @@ release section when tagging a release.
   atomically with a bounded provider-neutral error instead of silently
   coercing it. Architecture lint prevents provider tokens from returning to
   host crates.
+
+### Removed
+
+- The official Trakt add-on and its native cross-platform build matrix have
+  been retired. The public add-ons repository no longer needs credentials for
+  the private ErsatzRS repository and publishes only Beeld & Geluid and yt-dlp.
+  Provider-neutral Add-on Lists remain available, but Trakt list parity is
+  deliberately dropped and the legacy built-in Trakt implementation is not
+  restored.
 
 ### Fixed
 

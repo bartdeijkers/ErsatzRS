@@ -1,19 +1,20 @@
-feature    = 'Add-on media lists and Trakt provider package'
+feature    = 'Trakt provider lists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`, `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`, `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`, `ErsatzTV/Shared/AddTraktListDialog.razor`'
-rs_target  = '`crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-infra/src/{addon_media_list,addon_media_list_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/addon_media_lists,pages/media/addon_lists}.rs`, `crates/ersatzrs-web/src/api/addon_media_lists.rs`, and `org.ersatzrs.addon.trakt` in the official add-ons repository'
-status     = 'Ported'
-adr        = ['0066', '0067']
+rs_target  = 'Deliberately not implemented; provider-neutral Add-on Lists remain available to other packages'
+status     = 'Dropped'
+adr        = ['0066', '0067', '0069']
 summary    = '''
-Replaced on 2026-08-14 by provider-neutral add-on media lists. Local matching,
-generated-playlist maintenance, settings, deletion, search, and refresh cadence
-remain host-owned. Trakt HTTP/API behavior and its client-ID reference are
-owned by the official Trakt add-on. The destructive forward migration deletes
-legacy Trakt-generated playlists and configuration, drops every Trakt table,
-and imports no legacy rows. Beeld & Geluid implements the same capability for
-series, public shared-list, and saved-search hyperlinks. Schema-v3 add-ons may
-also expose Remote Stream list items through a host-managed Local Media Source:
-each saved list becomes a separately scanned, file-backed library while the
-actual video stays remote.
+The native official Trakt add-on was retired on 2026-08-16 by ADR 0069. Its
+public GitHub Actions build otherwise required a credential for the private
+ErsatzRS repository that owns `ersatzrs-addon-contract`; publishing the crate
+to crates.io is explicitly prohibited. The legacy host implementation is not
+restored. The earlier destructive migration still removes its tables,
+configuration, and generated playlists without importing them.
+
+Provider-neutral Add-on Lists remain ported and host-owned for matching,
+generated-playlist maintenance, settings, deletion, search, and refresh
+cadence. Beeld & Geluid continues to use the capability for Schatkamer series,
+public shared-list, and saved-search hyperlinks.
 '''
 
 [[debt]]

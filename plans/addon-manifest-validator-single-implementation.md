@@ -40,7 +40,7 @@ in `ersatzrs-addon-contract` — that reads one or more `addon.toml` (and
 `repository.toml`) files and exits non-zero with the exact `ContractError` text:
 
 ```bash
-cargo xtask validate-addon-manifest addons/org.ersatzrs.addon.trakt/addon.toml
+cargo xtask validate-addon-manifest addons/org.ersatzrs.addon.beeldengeluid/addon.toml
 ```
 
 This is the same code path the host runs at install time, so a pass is a real

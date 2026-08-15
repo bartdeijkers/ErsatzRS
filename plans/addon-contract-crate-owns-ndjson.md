@@ -1,5 +1,10 @@
 # Plan: make `ersatzrs-addon-contract` own the NDJSON payloads
 
+> Amended by ADR 0069: the official native Trakt add-on was retired. The
+> independently versioned crate, runnable reference add-on, and callable
+> conformance checks remain the acceptance proof; no public add-ons workflow
+> consumes the private repository.
+
 ## Context
 
 ADR 0066 says: "The shared `ersatzrs-addon-contract` crate and add-on contract
@@ -19,17 +24,16 @@ Consequences visible today:
   `deny_unknown_fields`; `PlaylistEntry` does not. `PlaylistEntry` tolerates
   `null` arrays through `deserialize_string_vec`; `AddonMediaListRecord` does
   not. The same add-on implements both.
-- The crate is not actually shared. `native/trakt` in
-  `bartdeijkers/ErsatzRS-addons` — a first-party Rust add-on written by the same
-  maintainer — does not depend on it and hand-builds JSON with
-  `serde_json::json!`. If the reference implementation does not consume the
-  contract crate, no third party will either.
+- At review time, the first-party native Trakt add-on hand-built JSON instead
+  of consuming the contract crate. ADR 0069 subsequently retired that package
+  and its private cross-repository build dependency.
 - `ersatzrs-addon-contract` declares `serde_json` in `Cargo.toml` and uses it
   nowhere. The dependency was presumably added for exactly this purpose and then
   the types landed elsewhere.
 
-Outcome: one crate defines every byte that crosses the boundary, and the Trakt
-add-on proves it is consumable from outside the workspace.
+Outcome: one crate defines every byte that crosses the boundary, with a
+runnable reference add-on and callable conformance checks proving its public
+Rust surface without registry publication.
 
 ---
 
@@ -74,16 +78,13 @@ completion evidence.
 
 Remove the unused `serde_json` dependency if the moved types do not need it.
 
-## Step 3 — Convert the Trakt add-on
+## Step 3 — Provide a reference consumer
 
-Change `native/trakt` in `bartdeijkers/ErsatzRS-addons` to depend on the
-contract crate and emit records through it instead of `serde_json::json!`.
-
-This is the acceptance test for the whole slice. If the crate cannot be
-consumed cleanly from that repository — feature flags, dependency weight,
-version pinning, offline builds in the publish workflow — the design is not
-finished, and that is worth discovering with a first-party package rather than
-a third-party bug report.
+Ship a runnable Cargo example that consumes the same public constructors,
+validation, and serializers available to an external Rust add-on. Keep the
+crate independently versioned and packageable, but set and guard
+`publish = false`. ADR 0069 removes the earlier external native Trakt consumer
+and its Git credential requirement from the acceptance contract.
 
 ## Step 4 — Ship an executable definition of "valid"
 
@@ -110,8 +111,6 @@ cargo deny check
 In `bartdeijkers/ErsatzRS-addons`:
 
 ```sh
-cargo test --locked --manifest-path native/trakt/Cargo.toml
-cargo clippy --locked --manifest-path native/trakt/Cargo.toml --all-targets -- -D warnings
 python3 tools/build_repository.py --sequence 1 --base-url https://example.invalid --output dist
 ```
 

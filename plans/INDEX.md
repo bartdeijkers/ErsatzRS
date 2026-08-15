@@ -123,8 +123,9 @@ changelog, and git history for evidence. The authoritative live state is always
     `{code, message}` result `addon.check.v1` already has, so host localization
     stops string-matching an add-on's English prose across repositories.
   - `addon-contract-crate-owns-ndjson.md` — move the list record types into
-    `ersatzrs-addon-contract`, make it consumable outside the workspace, and
-    prove it by converting the first-party Trakt add-on.
+    `ersatzrs-addon-contract`, keep it independently packageable without
+    registry publication, and prove its public surface through the runnable
+    reference add-on and conformance checks.
   - `addon-source-url-validation-and-network-permission.md` — validate the one
     operator URL the host hands to a child process, and give `network_hosts`
     runtime meaning for it.
