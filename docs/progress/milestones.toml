@@ -1119,7 +1119,7 @@ evidence = ''
 id         = 'ab-01'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Return provider availability vocabulary to the add-on'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-availability-vocabulary-ownership.md'
 depends_on = []
@@ -1130,13 +1130,24 @@ POSIX and Windows; the duplicated `deserialize_addon_availability` is gone from
 bounded provider-neutral error instead of coerced; and a repository guard fails
 if provider vocabulary re-enters `crates/`.
 '''
-evidence = ''
+evidence = '''
+The official yt-dlp POSIX entrypoint now derives and normalizes availability
+inside yt-dlp metadata processing, and its PowerShell path returns the same
+three canonical tokens; package fixtures cover all known provider tokens plus
+missing and unrecognized fallback behavior. Core and scanner use the derived
+provider-neutral enum directly with the v1 omitted-field default. Infra and
+scanner regressions prove canonical decoding and bounded operational rejection
+without echoing an invalid token. `cargo xtask architecture-lint` recursively
+guards `crates/` against provider vocabulary. Focused evidence: 15 add-on
+repository tests, 10 infra add-on-list tests, 16 scanner Remote Stream playlist
+tests, and 17 xtask architecture-lint tests passed on 2026-08-15.
+'''
 
 [[milestone]]
 id         = 'ab-02'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Give list and play a structured diagnostic channel'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-structured-operation-diagnostics.md'
 depends_on = []
@@ -1148,13 +1159,30 @@ on the code in every supported culture; an unknown code renders a generic
 localized line plus the add-on message; and secret redaction and file-secret
 suppression still hold.
 '''
-evidence = ''
+evidence = '''
+`ersatzrs-addon-contract` owns the bounded `AddonOperationError` shape and the
+stable final-stderr-line contract. Host-detected missing settings and secret
+references use the same reserved codes as packages; list invocation parses and
+redacts the final JSON line, while play supervision logs the validated code and
+message without exposing environment or file-backed secrets. The admin UI no
+longer matches package prose or setting keys and localizes every reserved code,
+with a generic localized fallback for unknown third-party codes. Official
+Beeld & Geluid and yt-dlp POSIX and Windows entrypoints and the native Trakt
+package emit the contract. Architecture lint prevents package-owned setting
+keys and Trakt prose from re-entering host crates.
+
+Verification on 2026-08-15: 17 official repository tests and 5 native Trakt
+tests passed; focused host suites passed (37 add-on, 20 play/runtime, 4 i18n,
+18 architecture-lint tests); both workspace clippy configurations passed;
+`./run.sh test-closeout` passed 1,519 tests plus doctests; `cargo leptos build`
+passed; and `cargo xtask parity-check` plus `cargo xtask progress check` passed.
+'''
 
 [[milestone]]
 id         = 'ab-03'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Make the contract crate own the NDJSON payloads'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-contract-crate-owns-ndjson.md'
 depends_on = ['ab-01']
@@ -1165,7 +1193,30 @@ the workspace by a recorded mechanism; the first-party Trakt add-on emits
 records through it instead of `serde_json::json!`; and a reference add-on plus a
 callable conformance check ship with the crate.
 '''
-evidence = ''
+evidence = '''
+The contract crate now owns both NDJSON records, their wire enums and people
+records, shared output/item bounds, constructors, per-record validation, and
+callable media-list and Remote Stream stdout conformance functions. Host
+adapters convert explicitly to the separate persisted domain enums;
+`RemoteStreamPerson` and `PlaylistEntry` retain compatibility re-exports. The
+crate includes a runnable `reference_addon` example and passes `cargo package`
+as an independently versioned 0.1.0 package. The first-party native Trakt
+add-on depends on exact version 0.1.0, emits typed check/error/list records, and
+passes its locked tests and clippy with a local crates.io patch to the verified
+package candidate. Remaining publication work is to publish contract version
+0.1.0, regenerate the add-on lockfile from crates.io without the local patch,
+and run the unpatched external repository gates.
+
+Verification on 2026-08-15: the P2 stderr-tail regression and all focused
+contract/infra/scanner suites passed; the contract package and packaged source
+compiled; 17 external repository tests and 5 locked native Trakt tests plus
+clippy passed; both workspace clippy configurations passed; terminal
+`./run.sh test-closeout` passed 1,524 tests plus doctests; and `cargo deny
+check`, architecture-lint, and progress validation passed. The first sandboxed
+closeout exposed three localhost socket denials, and one later full run exposed
+a storage-test concurrency flake that passed immediately in isolation; the
+final unrestricted full run was completely green without runner retries.
+'''
 
 [[milestone]]
 id         = 'ab-04'

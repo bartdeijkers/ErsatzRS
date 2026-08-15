@@ -1,5 +1,13 @@
 # Plan: give `list` and `play` a structured diagnostic channel
 
+## Implementation status
+
+Implemented on local `main` on 2026-08-15. The shared contract, host-generated
+setting and secret codes, list and play consumers, localized admin rendering,
+official POSIX and Windows packages, secret-handling regressions, and
+architecture guard are present. Verification evidence is recorded under
+milestone `ab-02`; this plan remains the implementation-history owner.
+
 ## Context
 
 `addon.check.v1` returns `{status, code, message}` with a stable lowercase

@@ -7,7 +7,7 @@ boundaries explicit.
 
 ```text
 crates/
-  ersatzrs-addon-contract/ versioned package, catalog, settings, and panel DTOs
+  ersatzrs-addon-contract/ versioned package, runtime, and NDJSON wire DTOs
   ersatzrs-domain/    entities, enums, value objects
   ersatzrs-core/      business logic, scheduling traits, repository traits
   ersatzrs-hwprobe/   native OS/GPU capability probes behind a safe API

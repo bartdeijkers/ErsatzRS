@@ -1,3 +1,4 @@
+use ersatzrs_addon_contract::{AddonOperationError, ADDON_OPERATION_ERROR_MARKER};
 use leptos::prelude::*;
 
 use crate::admin::server_fns::settings::SelectOption;
@@ -2947,30 +2948,33 @@ pub fn media_source_error_text(language: UiLanguage, error: &str) -> String {
 }
 
 pub fn addon_media_list_error_message(error: impl std::fmt::Display) -> String {
-    let message = canonical_addon_media_list_error(&error.to_string());
-    languages_for(use_i18n()).addon_media_list_error_message(&message)
+    addon_media_list_error_text(use_i18n(), &error.to_string())
 }
 
 pub fn addon_media_list_error_text(language: UiLanguage, error: &str) -> String {
-    let message = canonical_addon_media_list_error(error);
-    languages_for(language).addon_media_list_error_message(&message)
+    let message = unwrap_server_function_error(error);
+    if let Some(diagnostic) = parse_addon_operation_error(&message) {
+        languages_for(language).addon_operation_error_message(&diagnostic.code, &diagnostic.message)
+    } else {
+        languages_for(language).addon_media_list_error_message(&message)
+    }
 }
 
-fn canonical_addon_media_list_error(error: &str) -> String {
+fn unwrap_server_function_error(error: &str) -> String {
     // Server functions wrap a repository failure in transport plumbing, while
     // the localized messages match the repository wording.
     let error = error.trim();
-    let error = error
+    error
         .strip_prefix("error running server function: ")
-        .unwrap_or(error);
-    if error.contains("required setting CLIENT_ID is not configured")
-        || error.contains("environment reference for CLIENT_ID is unavailable")
-        || error.contains("Trakt client ID reference is not configured")
-    {
-        "Add-on credential reference is not configured".to_owned()
-    } else {
-        error.to_owned()
-    }
+        .unwrap_or(error)
+        .to_owned()
+}
+
+fn parse_addon_operation_error(error: &str) -> Option<AddonOperationError> {
+    let (_, json) = error.rsplit_once(ADDON_OPERATION_ERROR_MARKER)?;
+    let diagnostic = serde_json::from_str::<AddonOperationError>(json.trim()).ok()?;
+    diagnostic.validate().ok()?;
+    Some(diagnostic)
 }
 
 pub fn upload_error_text(language: UiLanguage, error: &str) -> String {
@@ -3195,6 +3199,7 @@ pub trait LanguageStrings: Sync {
     fn media_browser_error_message(&self, error: &str) -> String;
     fn media_source_error_message(&self, error: &str) -> String;
     fn addon_media_list_error_message(&self, error: &str) -> String;
+    fn addon_operation_error_message(&self, code: &str, detail: &str) -> String;
     fn upload_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
@@ -3314,6 +3319,35 @@ mod tests {
                     "{} has an empty translation for {key:?}",
                     definition.code
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn addon_operation_codes_are_localized_for_every_language() {
+        let codes = [
+            "missing-setting",
+            "missing-secret",
+            "provider-unreachable",
+            "provider-rejected",
+            "provider-rate-limited",
+            "not-found",
+            "unsupported-url",
+            "future-provider-code",
+        ];
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for code in codes {
+                let diagnostic = AddonOperationError::new(code, "safe detail");
+                let error = format!("repository failure: {diagnostic}");
+                let localized = addon_media_list_error_text(language, &error);
+                assert!(
+                    localized.contains("safe detail"),
+                    "{}: {code}",
+                    definition.code
+                );
+                assert!(!localized.contains(ADDON_OPERATION_ERROR_MARKER));
+                assert!(!localized.starts_with(code));
             }
         }
     }

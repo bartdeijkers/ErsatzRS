@@ -5,12 +5,14 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
-    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, MAX_AVAILABILITY_REASON_BYTES,
+    AddonMediaListContentKind as WireContentKind,
+    AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
+    AddonMediaListRecord, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_OUTPUT_BYTES,
     MAX_PROVIDER_ID_BYTES,
 };
 use ersatzrs_core::addon_media_list::{
-    AddonMediaListProvider, AddonMediaListRecord, EnumeratedAddonMediaList,
-    EnumeratedAddonMediaListItem,
+    AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
 use ersatzrs_core::repositories::{RepositoryError, Result};
 
@@ -20,8 +22,6 @@ use crate::addons::{
 use crate::db::DbPool;
 
 const SOURCE_URL_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_URL";
-const MAX_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
-const MAX_ITEMS: usize = 10_000;
 
 /// Invokes installed add-ons that implement media-list list v1 or v2.
 #[derive(Clone)]
@@ -78,7 +78,7 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
                 runtime: &runtime,
                 extra_environment: &environment,
                 timeout: Duration::from_mins(1),
-                max_output_bytes: MAX_OUTPUT_BYTES,
+                max_output_bytes: MAX_MEDIA_LIST_OUTPUT_BYTES,
             },
         )
         .await
@@ -128,10 +128,10 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
     let mut provider_ids = HashSet::new();
     let mut ranks = HashSet::new();
     for record in records {
-        if items.len() == MAX_ITEMS {
+        if items.len() == MAX_LIST_ITEMS {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
-                value: format!("list exceeds the {MAX_ITEMS}-item limit"),
+                value: format!("list exceeds the {MAX_LIST_ITEMS}-item limit"),
             });
         }
         let AddonMediaListRecord::Item {
@@ -172,9 +172,7 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
                         .to_owned(),
             });
         }
-        if kind == ersatzrs_domain::AddonMediaListItemKind::RemoteStream
-            && source_url.as_deref().is_none_or(str::is_empty)
-        {
+        if kind == WireItemKind::RemoteStream && source_url.as_deref().is_none_or(str::is_empty) {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
                 value: "remote_stream items require source_url".to_owned(),
@@ -194,12 +192,12 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             year,
             season,
             episode,
-            kind,
+            kind: domain_item_kind(kind),
             guids,
             source_url,
-            availability,
+            availability: domain_availability(availability),
             availability_reason,
-            content_kind,
+            content_kind: domain_content_kind(content_kind),
         });
     }
     items.sort_by_key(|item| item.rank);
@@ -213,10 +211,51 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
 }
 
 fn decode_record(line: &str) -> Result<AddonMediaListRecord> {
-    serde_json::from_str(line).map_err(|error| RepositoryError::Decode {
+    let record = serde_json::from_str::<AddonMediaListRecord>(line).map_err(|_| {
+        RepositoryError::Decode {
+            kind: "media-list add-on output",
+            value: "record violates the bounded media-list JSON contract".to_owned(),
+        }
+    })?;
+    record.validate().map_err(|_| RepositoryError::Decode {
         kind: "media-list add-on output",
-        value: error.to_string(),
-    })
+        value: "record violates the bounded media-list JSON contract".to_owned(),
+    })?;
+    Ok(record)
+}
+
+const fn domain_item_kind(kind: WireItemKind) -> ersatzrs_domain::AddonMediaListItemKind {
+    match kind {
+        WireItemKind::Movie => ersatzrs_domain::AddonMediaListItemKind::Movie,
+        WireItemKind::Show => ersatzrs_domain::AddonMediaListItemKind::Show,
+        WireItemKind::Season => ersatzrs_domain::AddonMediaListItemKind::Season,
+        WireItemKind::Episode => ersatzrs_domain::AddonMediaListItemKind::Episode,
+        WireItemKind::RemoteStream => ersatzrs_domain::AddonMediaListItemKind::RemoteStream,
+    }
+}
+
+const fn domain_availability(
+    availability: WireAvailability,
+) -> ersatzrs_domain::AddonMediaListItemAvailability {
+    match availability {
+        WireAvailability::Available => ersatzrs_domain::AddonMediaListItemAvailability::Available,
+        WireAvailability::Unavailable => {
+            ersatzrs_domain::AddonMediaListItemAvailability::Unavailable
+        }
+        WireAvailability::Unknown => ersatzrs_domain::AddonMediaListItemAvailability::Unknown,
+    }
+}
+
+const fn domain_content_kind(kind: WireContentKind) -> ersatzrs_domain::AddonMediaListContentKind {
+    match kind {
+        WireContentKind::Auto => ersatzrs_domain::AddonMediaListContentKind::Auto,
+        WireContentKind::TelevisionEpisode => {
+            ersatzrs_domain::AddonMediaListContentKind::TelevisionEpisode
+        }
+        WireContentKind::Movie => ersatzrs_domain::AddonMediaListContentKind::Movie,
+        WireContentKind::MusicVideo => ersatzrs_domain::AddonMediaListContentKind::MusicVideo,
+        WireContentKind::OtherVideo => ersatzrs_domain::AddonMediaListContentKind::OtherVideo,
+    }
 }
 
 #[cfg(test)]
@@ -235,14 +274,24 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
 "#;
 
     #[cfg(unix)]
-    async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
+    const INVALID_AVAILABILITY_FIXTURE_SCRIPT: &str = r#"#!/bin/sh
+set -eu
+printf '%s\n' '{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}'
+printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Arrival","title":"Arrival","kind":"movie","guids":[],"availability":"maybe_later"}'
+"#;
+
+    #[cfg(unix)]
+    async fn fixture_media_list_addon_with_script(
+        root: &std::path::Path,
+        source: &str,
+    ) -> crate::db::DbPool {
         use std::os::unix::fs::PermissionsExt as _;
 
         tokio::fs::create_dir_all(root)
             .await
             .expect("fixture package folder");
         let script = root.join("fixture.sh");
-        tokio::fs::write(&script, FIXTURE_SCRIPT)
+        tokio::fs::write(&script, source)
             .await
             .expect("fixture script");
         let mut permissions = tokio::fs::metadata(&script)
@@ -313,6 +362,11 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     }
 
     #[cfg(unix)]
+    async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
+        fixture_media_list_addon_with_script(root, FIXTURE_SCRIPT).await
+    }
+
+    #[cfg(unix)]
     #[tokio::test]
     async fn list_invocations_supply_the_managed_ffmpeg_runtime() {
         use ersatzrs_core::addon_media_list::AddonMediaListProvider as _;
@@ -330,6 +384,26 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         assert_eq!(list.items.len(), 1);
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn provider_enumeration_rejects_unknown_availability_without_echoing_it() {
+        use ersatzrs_core::addon_media_list::AddonMediaListProvider as _;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool =
+            fixture_media_list_addon_with_script(&root, INVALID_AVAILABILITY_FIXTURE_SCRIPT).await;
+
+        let error = super::InstalledAddonMediaListProvider::new(pool)
+            .enumerate("org.ersatzrs.addon.fixture", "https://example.test/list")
+            .await
+            .expect_err("unknown availability must reject the enumeration");
+        let message = error.to_string();
+        assert!(message.contains("bounded media-list JSON contract"));
+        assert!(!message.contains("maybe_later"));
+        assert!(message.len() < 512);
+    }
+
     #[test]
     fn decodes_bounded_ndjson_contract() {
         let output = br#"{"record_type":"list","provider_id":"alice/watchlist","name":"Watchlist"}
@@ -338,6 +412,29 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let list = decode_media_list_output(output).expect("valid output");
         assert_eq!(list.provider_id, "alice/watchlist");
         assert_eq!(list.items.len(), 1);
+    }
+
+    #[test]
+    fn availability_contract_accepts_canonical_and_omitted_values() {
+        let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
+{"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"movie","availability":"available"}
+{"record_type":"item","provider_id":"two","rank":1,"display_title":"Two","title":"Two","kind":"movie","availability":"unavailable"}
+{"record_type":"item","provider_id":"three","rank":2,"display_title":"Three","title":"Three","kind":"movie","availability":"unknown"}
+{"record_type":"item","provider_id":"legacy","rank":3,"display_title":"Legacy","title":"Legacy","kind":"movie"}
+"#;
+        let list = decode_media_list_output(output).expect("canonical availability");
+        assert_eq!(
+            list.items
+                .iter()
+                .map(|item| item.availability)
+                .collect::<Vec<_>>(),
+            [
+                ersatzrs_domain::AddonMediaListItemAvailability::Available,
+                ersatzrs_domain::AddonMediaListItemAvailability::Unavailable,
+                ersatzrs_domain::AddonMediaListItemAvailability::Unknown,
+                ersatzrs_domain::AddonMediaListItemAvailability::Available,
+            ]
+        );
     }
 
     #[test]

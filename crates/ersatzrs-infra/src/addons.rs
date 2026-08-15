@@ -14,11 +14,13 @@ use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use ersatzrs_addon_contract::{
-    validate_addon_id, AddonCheckResult, AddonCheckStatus, AddonEntrypointKind, AddonIconMediaType,
-    AddonManifest, AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon,
-    CatalogPackage, RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
+    sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
+    AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
+    AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
+    RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
     CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
+    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -97,6 +99,23 @@ pub enum AddonError {
     /// The add-on process failed its bounded invocation contract.
     #[error("add-on process failed: {0}")]
     Process(String),
+    /// A list or play operation returned one structured bounded failure.
+    #[error("{0}")]
+    Operation(AddonOperationError),
+}
+
+impl AddonError {
+    #[must_use]
+    pub fn operation(code: &str, message: impl Into<String>) -> Self {
+        Self::Operation(AddonOperationError::new(code, message))
+    }
+
+    fn into_operation(self) -> Self {
+        match self {
+            Self::Operation(_) => self,
+            other => Self::operation(OPERATION_CODE_FAILED, other.to_string()),
+        }
+    }
 }
 
 /// One repository currently allowed by database or deployment configuration.
@@ -1660,7 +1679,10 @@ async fn check_addon_with_revision(
     let stdout = run_bounded_command(&command, CHECK_TIMEOUT, MAX_CHECK_OUTPUT_BYTES).await?;
     let mut result: AddonCheckResult = serde_json::from_slice(&stdout)
         .map_err(|_| AddonError::Process("check returned invalid JSON".to_owned()))?;
-    result.code = sanitize_check_code(&result.code);
+    result.code = sanitize_addon_diagnostic_code(&result.code);
+    if result.code == "invalid-operation-code" {
+        "invalid-check-code".clone_into(&mut result.code);
+    }
     result.message = redact_and_bound(&result.message, &command.environment, 1_024);
     sqlx::query(
         r#"UPDATE "AddonInstallation"
@@ -2085,7 +2107,8 @@ pub async fn invoke_enabled_addon(
         invocation.operation,
         invocation.runtime,
     )
-    .await?;
+    .await
+    .map_err(AddonError::into_operation)?;
     command
         .environment
         .extend(invocation.extra_environment.clone());
@@ -2093,7 +2116,9 @@ pub async fn invoke_enabled_addon(
         "ERSATZRS_ADDON_CAPABILITY".to_owned(),
         invocation.capability.to_owned(),
     );
-    run_bounded_command(&command, invocation.timeout, invocation.max_output_bytes).await
+    run_bounded_command(&command, invocation.timeout, invocation.max_output_bytes)
+        .await
+        .map_err(AddonError::into_operation)
 }
 
 async fn run_bounded_command(
@@ -2146,21 +2171,48 @@ async fn run_bounded_command(
         ));
     }
     if !status.success() {
-        let detail = redact_and_bound(
-            &String::from_utf8_lossy(&stderr),
+        return Err(AddonError::Operation(operation_error_from_stderr(
+            &stderr,
             &command.environment,
-            1_024,
-        );
-        let suffix = if detail.is_empty() {
-            String::new()
-        } else {
-            format!(": {detail}")
-        };
-        return Err(AddonError::Process(format!(
-            "entrypoint exited with {status}{suffix}"
+            status,
         )));
     }
     Ok(stdout)
+}
+
+fn operation_error_from_stderr(
+    stderr: &[u8],
+    environment: &BTreeMap<String, String>,
+    status: ExitStatus,
+) -> AddonOperationError {
+    let raw = String::from_utf8_lossy(stderr);
+    if let Some(diagnostic) = structured_operation_error(&raw, environment) {
+        return diagnostic;
+    }
+    let detail = redact_and_bound(&raw, environment, 1_024);
+    let message = if detail.is_empty() {
+        format!("add-on entrypoint exited with {status}")
+    } else {
+        detail
+    };
+    AddonOperationError::new(OPERATION_CODE_FAILED, message)
+}
+
+fn structured_operation_error(
+    stderr: &str,
+    environment: &BTreeMap<String, String>,
+) -> Option<AddonOperationError> {
+    if let Some(line) = stderr.lines().rev().find(|line| !line.trim().is_empty()) {
+        if let Ok(diagnostic) = serde_json::from_str::<AddonOperationError>(line.trim()) {
+            if diagnostic.validate().is_ok() {
+                return Some(AddonOperationError::new(
+                    &diagnostic.code,
+                    redact_and_bound(&diagnostic.message, environment, 1_024),
+                ));
+            }
+        }
+    }
+    None
 }
 
 async fn collect_bounded_output(
@@ -2477,10 +2529,10 @@ fn resolve_setting_environment(
         if definition.kind == AddonSettingKind::SecretReference {
             let Some(setting) = setting else {
                 if definition.required {
-                    return Err(AddonError::Validation(format!(
-                        "required setting {} is not configured",
-                        definition.key
-                    )));
+                    return Err(AddonError::operation(
+                        OPERATION_CODE_MISSING_SECRET,
+                        "required add-on secret reference is not configured",
+                    ));
                 }
                 continue;
             };
@@ -2491,10 +2543,10 @@ fn resolve_setting_environment(
                     let secret = crate::startup_config::environment_variable(reference)
                         .and_then(|value| value.into_string().ok())
                         .ok_or_else(|| {
-                            AddonError::Validation(format!(
-                                "environment reference for {} is unavailable",
-                                definition.key
-                            ))
+                            AddonError::operation(
+                                OPERATION_CODE_MISSING_SECRET,
+                                "configured add-on secret reference is unavailable",
+                            )
                         })?;
                     environment.insert(format!("ERSATZRS_ADDON_SECRET_{}", definition.key), secret);
                 }
@@ -2520,10 +2572,10 @@ fn resolve_setting_environment(
                     .map(|path| path.to_string_lossy().into_owned());
             }
             if definition.required && value.as_deref().is_none_or(str::is_empty) {
-                return Err(AddonError::Validation(format!(
-                    "required setting {} is not configured",
-                    definition.key
-                )));
+                return Err(AddonError::operation(
+                    OPERATION_CODE_MISSING_SETTING,
+                    "required add-on setting is not configured",
+                ));
             }
             if let Some(value) = value {
                 environment.insert(format!("ERSATZRS_ADDON_SETTING_{}", definition.key), value);
@@ -3582,23 +3634,6 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
     output
 }
 
-fn sanitize_check_code(value: &str) -> String {
-    let sanitized = value
-        .chars()
-        .filter(|character| {
-            character.is_ascii_lowercase()
-                || character.is_ascii_digit()
-                || matches!(character, '-' | '_' | '.')
-        })
-        .take(128)
-        .collect::<String>();
-    if sanitized.is_empty() {
-        "invalid-check-code".to_owned()
-    } else {
-        sanitized
-    }
-}
-
 fn redact_and_bound(value: &str, environment: &BTreeMap<String, String>, limit: usize) -> String {
     if environment
         .keys()
@@ -3826,6 +3861,42 @@ mod tests {
             reference: None,
         };
         assert!(validate_setting_value(&definition, &value).is_err());
+    }
+
+    #[test]
+    fn missing_required_settings_use_stable_operation_codes() {
+        for (kind, expected) in [
+            (AddonSettingKind::String, OPERATION_CODE_MISSING_SETTING),
+            (
+                AddonSettingKind::SecretReference,
+                OPERATION_CODE_MISSING_SECRET,
+            ),
+        ] {
+            let mut manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+            manifest
+                .settings
+                .push(ersatzrs_addon_contract::AddonSettingDefinition {
+                    key: "TOKEN".to_owned(),
+                    label: localized("Credential"),
+                    kind,
+                    required: true,
+                    default: None,
+                    options: Vec::new(),
+                    suggested_reference: None,
+                });
+            let error = resolve_setting_environment(
+                &manifest,
+                "fixture",
+                &[],
+                &AddonRuntimeContext::default(),
+            )
+            .expect_err("required setting must fail");
+            let AddonError::Operation(diagnostic) = error else {
+                panic!("expected structured operation error");
+            };
+            assert_eq!(diagnostic.code, expected);
+            assert!(!diagnostic.message.contains("TOKEN"));
+        }
     }
 
     #[test]
@@ -4680,5 +4751,35 @@ mod tests {
             .expect("invalid repository remains isolated");
 
         assert!(available.is_empty());
+    }
+
+    #[test]
+    fn structured_operation_diagnostics_use_the_final_stderr_line_and_redact_secrets() {
+        let environment = BTreeMap::from([(
+            "ERSATZRS_ADDON_SECRET_TOKEN".to_owned(),
+            "secret-value".to_owned(),
+        )]);
+        let diagnostic = structured_operation_error(
+            "provider prose\n{\"code\":\"provider-rejected\",\"message\":\"secret-value was rejected\"}\n",
+            &environment,
+        )
+        .expect("structured diagnostic");
+        assert_eq!(diagnostic.code, "provider-rejected");
+        assert_eq!(diagnostic.message, "[redacted] was rejected");
+    }
+
+    #[test]
+    fn structured_operation_diagnostics_suppress_file_secret_details() {
+        let environment = BTreeMap::from([(
+            "ERSATZRS_ADDON_SECRET_FILE_TOKEN".to_owned(),
+            "/run/secrets/token".to_owned(),
+        )]);
+        let diagnostic = structured_operation_error(
+            "{\"code\":\"future-provider-code\",\"message\":\"provider detail\"}",
+            &environment,
+        )
+        .expect("structured diagnostic");
+        assert_eq!(diagnostic.code, "future-provider-code");
+        assert_eq!(diagnostic.message, FILE_SECRET_DIAGNOSTIC);
     }
 }

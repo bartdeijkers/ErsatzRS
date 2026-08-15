@@ -18,6 +18,10 @@ const CORE_MANIFEST: &str = "crates/ersatzrs-core/Cargo.toml";
 const SCAN_STATE_SOURCE: &str = "crates/ersatzrs-web/src/host/state.rs";
 const SCAN_SERVER_FN_SOURCE: &str = "crates/ersatzrs-web/src/admin/server_fns/libraries.rs";
 const SCAN_MAINTENANCE_SOURCE: &str = "crates/ersatzrs-infra/src/maintenance.rs";
+const CRATES_ROOT: &str = "crates";
+const ADDON_CONTRACT_ROOT: &str = "crates/ersatzrs-addon-contract";
+const PROVIDER_AVAILABILITY_TOKENS: &[&str] =
+    &["premium_only", "subscriber_only", "needs_auth", "unlisted"];
 const ADMIN_ROOTS: &[&str] = &[
     "crates/ersatzrs-web/src/admin",
     "crates/ersatzrs-web/src/api",
@@ -62,6 +66,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     check_app_crate(workspace)?;
     check_core_crate(workspace)?;
     check_scan_orchestration_boundary(workspace)?;
+    check_provider_availability_vocabulary_boundary(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
     if opts.print_baseline {
@@ -98,6 +103,93 @@ fn run_inner(opts: &Opts) -> Result<()> {
         counts.row_decode_default.values().sum::<usize>()
     );
     Ok(())
+}
+
+fn check_provider_availability_vocabulary_boundary(workspace: &Path) -> Result<()> {
+    let mut pending = vec![workspace.join(CRATES_ROOT)];
+    let mut problems = Vec::new();
+    while let Some(path) = pending.pop() {
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("inspect architecture path {}", path.display()))?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            if path
+                .file_name()
+                .is_some_and(|name| name == "target" || name == ".git")
+            {
+                continue;
+            }
+            for entry in fs::read_dir(&path)
+                .with_context(|| format!("read architecture directory {}", path.display()))?
+            {
+                pending.push(entry?.path());
+            }
+            continue;
+        }
+        if !metadata.is_file() {
+            continue;
+        }
+        let contents = fs::read(&path)
+            .with_context(|| format!("read architecture source {}", path.display()))?;
+        for token in forbidden_provider_vocabulary(&contents) {
+            problems.push(format!("{} contains `{token}`", path.display()));
+        }
+        if !path.starts_with(workspace.join(ADDON_CONTRACT_ROOT)) {
+            if contains_ascii_identifier_token(&contents, b"CLIENT_ID") {
+                problems.push(format!(
+                    "{} contains add-on-owned `CLIENT_ID`",
+                    path.display()
+                ));
+            }
+            if contents
+                .windows(b"Trakt client ID".len())
+                .any(|window| window == b"Trakt client ID")
+            {
+                problems.push(format!(
+                    "{} contains add-on-owned `Trakt client ID` prose",
+                    path.display()
+                ));
+            }
+        }
+    }
+    problems.sort();
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "provider availability vocabulary belongs to add-on packages, not host crates: {}",
+            problems.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn contains_ascii_identifier_token(contents: &[u8], token: &[u8]) -> bool {
+    contents
+        .windows(token.len())
+        .enumerate()
+        .any(|(index, window)| {
+            if window != token {
+                return false;
+            }
+            let is_identifier = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+            let before = index.checked_sub(1).and_then(|before| contents.get(before));
+            let after = contents.get(index + token.len());
+            before.is_none_or(|byte| !is_identifier(*byte))
+                && after.is_none_or(|byte| !is_identifier(*byte))
+        })
+}
+
+fn forbidden_provider_vocabulary(contents: &[u8]) -> Vec<&'static str> {
+    PROVIDER_AVAILABILITY_TOKENS
+        .iter()
+        .copied()
+        .filter(|token| {
+            contents
+                .windows(token.len())
+                .any(|window| window == token.as_bytes())
+        })
+        .collect()
 }
 
 fn print_help() {
@@ -1060,6 +1152,27 @@ fn compare_rule(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_availability_vocabulary_cannot_reenter_host_crates() {
+        assert!(forbidden_provider_vocabulary(b"available unavailable unknown").is_empty());
+        assert_eq!(
+            forbidden_provider_vocabulary(b"premium_only and needs_auth"),
+            ["premium_only", "needs_auth"]
+        );
+    }
+
+    #[test]
+    fn add_on_owned_setting_keys_are_detected_without_matching_host_identifiers() {
+        assert!(contains_ascii_identifier_token(
+            b"required setting CLIENT_ID is absent",
+            b"CLIENT_ID"
+        ));
+        assert!(!contains_ascii_identifier_token(
+            b"PLEX_CLIENT_IDENTIFIER_KEY",
+            b"CLIENT_ID"
+        ));
+    }
 
     #[test]
     fn scan_transport_owners_cannot_reintroduce_web_or_subprocess_orchestration() {

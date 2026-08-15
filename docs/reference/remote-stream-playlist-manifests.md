@@ -79,6 +79,11 @@ Optional playback fields are `duration_seconds`, `thumbnail_url`, and
 Version 2 also accepts stable `provider_id`, `availability`,
 `availability_reason`, `content_kind`, `original_title`, `sort_title`,
 `outline`, `tagline`, `show_title`, `season`, `episode`, and `guids` fields.
+`availability` may be omitted for the v1-compatible `available` default; an
+explicit value must be `available`, `unavailable`, or `unknown`. Every other
+value rejects the complete enumeration with a bounded provider-neutral
+contract error. Add-ons normalize their provider vocabulary before emitting a
+record.
 The add-on owns provider-specific classification; a saved list content-kind
 override takes precedence when it is not `auto`.
 

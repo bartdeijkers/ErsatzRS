@@ -270,6 +270,10 @@ impl LanguageStrings for PolishStrings {
         addon_media_list_error_message(error)
     }
 
+    fn addon_operation_error_message(&self, code: &str, detail: &str) -> String {
+        addon_operation_error_message(code, detail)
+    }
+
     fn upload_error_message(&self, error: &str) -> String {
         upload_error_message(error)
     }
@@ -1006,6 +1010,20 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
+fn addon_operation_error_message(code: &str, detail: &str) -> String {
+    let summary = match code {
+        "missing-setting" => "Skonfiguruj wymagane ustawienie dodatku.",
+        "missing-secret" => "Skonfiguruj wymagane odwołanie do sekretu w ustawieniach dodatku.",
+        "provider-unreachable" => "Dodatek nie mógł połączyć się z dostawcą.",
+        "provider-rejected" => "Dostawca odrzucił żądanie dodatku.",
+        "provider-rate-limited" => "Dostawca tymczasowo ograniczył dodatek.",
+        "not-found" => "Nie znaleziono żądanego elementu dodatku.",
+        "unsupported-url" => "Dodatek nie obsługuje tego adresu URL.",
+        _ => "Dodatek zgłosił błąd.",
+    };
+    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+}
+
 fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
@@ -1027,9 +1045,6 @@ fn addon_media_list_error_message(error: &str) -> String {
 
     match normalized {
         "Invalid add-on list url" => "Nieprawidłowy URL listy add-on.".to_owned(),
-        "Add-on credential reference is not configured" => {
-            "Skonfiguruj odwołanie do poświadczeń w ustawieniach dodatku.".to_owned()
-        }
         "add-on API client is not configured for this operation" => {
             "Klient API add-on nie jest skonfigurowany dla tej operacji.".to_owned()
         }
@@ -2610,9 +2625,15 @@ mod tests {
         assert_eq!(
             addon_media_list_error_text(
                 UiLanguage::Polish,
-                "invoke media-list add-on is unavailable: add-on validation failed: required setting CLIENT_ID is not configured"
+                &format!(
+                    "invoke media-list add-on is unavailable: {}",
+                    ersatzrs_addon_contract::AddonOperationError::new(
+                        "missing-secret",
+                        "Provider detail."
+                    )
+                )
             ),
-            "Skonfiguruj odwołanie do poświadczeń w ustawieniach dodatku."
+            "Skonfiguruj wymagane odwołanie do sekretu w ustawieniach dodatku. Provider detail."
         );
         assert_eq!(
             upload_error_text(UiLanguage::Polish, "No file field"),

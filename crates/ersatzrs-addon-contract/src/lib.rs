@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::Datelike;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +32,295 @@ pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 pub const MAX_PROVIDER_ID_BYTES: usize = 384;
 /// Maximum UTF-8 bytes for a provider-neutral availability diagnostic.
 pub const MAX_AVAILABILITY_REASON_BYTES: usize = 2_048;
+/// Maximum UTF-8 bytes in one add-on operation diagnostic message.
+pub const MAX_OPERATION_ERROR_MESSAGE_BYTES: usize = 1_024;
+/// Maximum captured output accepted from `media-list.list`.
+pub const MAX_MEDIA_LIST_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum captured output accepted from `remote-stream.list`.
+pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+/// Maximum number of items accepted from one list invocation.
+pub const MAX_LIST_ITEMS: usize = 10_000;
+/// Prefix used when a structured operation failure crosses a textual host boundary.
+pub const ADDON_OPERATION_ERROR_MARKER: &str = "ERSATZRS_ADDON_OPERATION_ERROR:";
+pub const OPERATION_CODE_MISSING_SETTING: &str = "missing-setting";
+pub const OPERATION_CODE_MISSING_SECRET: &str = "missing-secret";
+pub const OPERATION_CODE_PROVIDER_UNREACHABLE: &str = "provider-unreachable";
+pub const OPERATION_CODE_PROVIDER_REJECTED: &str = "provider-rejected";
+pub const OPERATION_CODE_PROVIDER_RATE_LIMITED: &str = "provider-rate-limited";
+pub const OPERATION_CODE_NOT_FOUND: &str = "not-found";
+pub const OPERATION_CODE_UNSUPPORTED_URL: &str = "unsupported-url";
+pub const OPERATION_CODE_FAILED: &str = "operation-failed";
 const MAX_PACKAGE_VERSION_BYTES: usize = 128;
+
+/// Media kinds accepted from a provider-neutral add-on list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemKind {
+    #[default]
+    Movie,
+    Show,
+    Season,
+    Episode,
+    RemoteStream,
+}
+
+/// Provider-reported availability for an add-on supplied item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemAvailability {
+    #[default]
+    Available,
+    Unavailable,
+    Unknown,
+}
+
+/// Descriptive content classification for an add-on supplied stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListContentKind {
+    #[default]
+    Auto,
+    TelevisionEpisode,
+    Movie,
+    MusicVideo,
+    OtherVideo,
+}
+
+/// One bounded `media-list.list.v1` or `media-list.list.v2` NDJSON record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AddonMediaListRecord {
+    List {
+        provider_id: String,
+        name: String,
+        #[serde(default)]
+        description: Option<String>,
+    },
+    Item {
+        provider_id: String,
+        rank: i32,
+        display_title: String,
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        year: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        season: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        episode: Option<i32>,
+        kind: AddonMediaListItemKind,
+        #[serde(default)]
+        guids: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_url: Option<String>,
+        #[serde(default, skip_serializing_if = "availability_is_available")]
+        availability: AddonMediaListItemAvailability,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        availability_reason: Option<String>,
+        #[serde(default, skip_serializing_if = "content_kind_is_auto")]
+        content_kind: AddonMediaListContentKind,
+    },
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde skip predicate signature
+const fn availability_is_available(value: &AddonMediaListItemAvailability) -> bool {
+    matches!(value, AddonMediaListItemAvailability::Available)
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde skip predicate signature
+const fn content_kind_is_auto(value: &AddonMediaListContentKind) -> bool {
+    matches!(value, AddonMediaListContentKind::Auto)
+}
+
+impl AddonMediaListRecord {
+    /// Construct a list header with the required fields populated.
+    #[must_use]
+    pub fn list(provider_id: impl Into<String>, name: impl Into<String>) -> Self {
+        Self::List {
+            provider_id: provider_id.into(),
+            name: name.into(),
+            description: None,
+        }
+    }
+
+    /// Construct a list item with safe defaults for optional v2 metadata.
+    #[must_use]
+    pub fn item(
+        provider_id: impl Into<String>,
+        rank: i32,
+        display_title: impl Into<String>,
+        title: impl Into<String>,
+        kind: AddonMediaListItemKind,
+    ) -> Self {
+        Self::Item {
+            provider_id: provider_id.into(),
+            rank,
+            display_title: display_title.into(),
+            title: title.into(),
+            year: None,
+            season: None,
+            episode: None,
+            kind,
+            guids: Vec::new(),
+            source_url: None,
+            availability: AddonMediaListItemAvailability::Available,
+            availability_reason: None,
+            content_kind: AddonMediaListContentKind::Auto,
+        }
+    }
+
+    /// Validate the bounds and cross-field rules for one record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the record is not safe for host ingestion.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        match self {
+            Self::List {
+                provider_id, name, ..
+            } => {
+                validate_provider_id(provider_id)?;
+                if name.trim().is_empty() {
+                    return invalid("media list name", "must not be empty");
+                }
+            }
+            Self::Item {
+                provider_id,
+                rank,
+                display_title,
+                title,
+                kind,
+                source_url,
+                availability_reason,
+                ..
+            } => {
+                validate_provider_id(provider_id)?;
+                if *rank < 0 {
+                    return invalid("media list item rank", "must not be negative");
+                }
+                if display_title.trim().is_empty() || title.trim().is_empty() {
+                    return invalid("media list item title", "must not be empty");
+                }
+                if *kind == AddonMediaListItemKind::RemoteStream
+                    && source_url.as_deref().is_none_or(str::is_empty)
+                {
+                    return invalid(
+                        "media list item source_url",
+                        "is required for remote_stream items",
+                    );
+                }
+                validate_availability_reason(availability_reason.as_deref())?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One credited person in a Remote Stream list record.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteStreamPerson {
+    pub name: String,
+    pub role: String,
+}
+
+/// One provider entry emitted by `remote-stream.list.v1` or v2.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct PlaylistEntry {
+    pub id: String,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    pub url: String,
+    pub title: String,
+    #[serde(default)]
+    pub original_title: Option<String>,
+    #[serde(default)]
+    pub sort_title: Option<String>,
+    #[serde(default)]
+    pub outline: Option<String>,
+    #[serde(default)]
+    pub tagline: Option<String>,
+    #[serde(default)]
+    pub duration_seconds: Option<u64>,
+    #[serde(default)]
+    pub plot: Option<String>,
+    #[serde(default)]
+    pub year: Option<i32>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub content_rating: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub genres: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub collection: Option<String>,
+    #[serde(default)]
+    pub people: Vec<RemoteStreamPerson>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub producers: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub original_broadcasters: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub broadcasters: Vec<String>,
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
+    #[serde(default)]
+    pub is_live: bool,
+    #[serde(default)]
+    pub availability: AddonMediaListItemAvailability,
+    #[serde(default)]
+    pub availability_reason: Option<String>,
+    #[serde(default)]
+    pub content_kind: AddonMediaListContentKind,
+    #[serde(default)]
+    pub show_title: Option<String>,
+    #[serde(default)]
+    pub season: Option<i32>,
+    #[serde(default)]
+    pub episode: Option<i32>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub guids: Vec<String>,
+}
+
+impl PlaylistEntry {
+    /// Construct a Remote Stream list entry with safe optional defaults.
+    #[must_use]
+    pub fn new(id: impl Into<String>, url: impl Into<String>, title: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            url: url.into(),
+            title: title.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Validate one Remote Stream list record before emitting or accepting it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when required identity, URL, or bounds are invalid.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_provider_id(&self.id)?;
+        if let Some(provider_id) = &self.provider_id {
+            validate_provider_id(provider_id)?;
+        }
+        if self.url.trim().is_empty() {
+            return invalid("remote stream URL", "must not be empty");
+        }
+        if self.title.trim().is_empty() {
+            return invalid("remote stream title", "must not be empty");
+        }
+        validate_availability_reason(self.availability_reason.as_deref())
+    }
+}
+
+fn deserialize_string_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_default())
+}
 
 /// Manifest validation failure.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -788,6 +1077,83 @@ pub struct AddonCheckResult {
     pub message: String,
 }
 
+/// One bounded structured failure emitted as the final stderr line by `list`
+/// and `play` operations.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonOperationError {
+    pub code: String,
+    pub message: String,
+}
+
+impl AddonOperationError {
+    #[must_use]
+    pub fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: sanitize_addon_diagnostic_code(code),
+            message: bound_utf8(&message.into(), MAX_OPERATION_ERROR_MESSAGE_BYTES),
+        }
+    }
+
+    /// Validate an add-on-authored operation diagnostic before the host trusts
+    /// its code as a localization key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a non-canonical code or an overlong message.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.code != sanitize_addon_diagnostic_code(&self.code) {
+            return invalid(
+                "operation error code",
+                "must be 1 to 128 lowercase ASCII code characters",
+            );
+        }
+        if self.message.len() > MAX_OPERATION_ERROR_MESSAGE_BYTES {
+            return invalid("operation error message", "exceeds the 1024-byte limit");
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for AddonOperationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        write!(formatter, "{ADDON_OPERATION_ERROR_MARKER}{json}")
+    }
+}
+
+/// Normalize one diagnostic code using the same vocabulary rules as readiness
+/// check codes.
+#[must_use]
+pub fn sanitize_addon_diagnostic_code(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .filter(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '-' | '_' | '.')
+        })
+        .take(128)
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "invalid-operation-code".to_owned()
+    } else {
+        sanitized
+    }
+}
+
+fn bound_utf8(value: &str, limit: usize) -> String {
+    if value.len() <= limit {
+        return value.to_owned();
+    }
+    let mut end = limit;
+    while !value.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    value[..end].to_owned()
+}
+
 /// Stable readiness state returned by an add-on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -804,6 +1170,139 @@ pub fn is_supported_rid(value: &str) -> bool {
         value,
         "linux-x64" | "linux-arm64" | "linux-arm" | "osx-x64" | "osx-arm64" | "win-x64"
     )
+}
+
+/// Parse and validate captured `media-list.list.v1` or v2 NDJSON output.
+///
+/// This function is intended for both host ingestion and add-on conformance
+/// tests. It validates record order, per-record bounds, and list-wide identity
+/// and rank uniqueness.
+///
+/// # Errors
+///
+/// Returns an error when the bytes are not valid UTF-8 NDJSON or violate the
+/// bounded media-list contract.
+pub fn conform_media_list_output(
+    output: &[u8],
+) -> Result<Vec<AddonMediaListRecord>, ContractError> {
+    if output.len() > MAX_MEDIA_LIST_OUTPUT_BYTES {
+        return invalid("media list output", "exceeds the 16 MiB limit");
+    }
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "media list output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let mut records = Vec::new();
+    let mut provider_ids = BTreeSet::new();
+    let mut ranks = BTreeSet::new();
+    for (index, line) in text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .enumerate()
+    {
+        let record = serde_json::from_str::<AddonMediaListRecord>(line).map_err(|_| {
+            ContractError::Invalid {
+                field: "media list output",
+                message: format!("line {} is not a valid record", index + 1),
+            }
+        })?;
+        record.validate()?;
+        match &record {
+            AddonMediaListRecord::List { .. } if index == 0 => {}
+            AddonMediaListRecord::List { .. } => {
+                return invalid("media list output", "list header may only appear first");
+            }
+            AddonMediaListRecord::Item {
+                provider_id, rank, ..
+            } if index > 0 => {
+                if records.len() > MAX_LIST_ITEMS {
+                    return invalid("media list output", "contains more than 10000 items");
+                }
+                if !provider_ids.insert(provider_id.clone()) || !ranks.insert(*rank) {
+                    return invalid(
+                        "media list output",
+                        "item provider_id and rank must be unique",
+                    );
+                }
+            }
+            AddonMediaListRecord::Item { .. } => {
+                return invalid("media list output", "first record must be a list header");
+            }
+        }
+        records.push(record);
+    }
+    if records.is_empty() {
+        return invalid("media list output", "is missing a list header");
+    }
+    Ok(records)
+}
+
+/// Parse and validate captured `remote-stream.list.v1` or v2 NDJSON output.
+///
+/// # Errors
+///
+/// Returns an error when the bytes are not valid UTF-8 NDJSON, an entry is
+/// invalid, or case-insensitive provider identities are duplicated.
+pub fn conform_remote_stream_list_output(
+    output: &[u8],
+) -> Result<Vec<PlaylistEntry>, ContractError> {
+    if output.len() > MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES {
+        return invalid("remote stream list output", "exceeds the 8 MiB limit");
+    }
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "remote stream list output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let mut entries = Vec::new();
+    let mut ids = BTreeSet::new();
+    for (index, line) in text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .enumerate()
+    {
+        let mut entry =
+            serde_json::from_str::<PlaylistEntry>(line).map_err(|_| ContractError::Invalid {
+                field: "remote stream list output",
+                message: format!("line {} is not a valid record", index + 1),
+            })?;
+        let untrimmed_id = std::mem::take(&mut entry.id);
+        untrimmed_id.trim().clone_into(&mut entry.id);
+        entry.validate()?;
+        if entry
+            .year
+            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+        {
+            return invalid("remote stream year", "must be valid host metadata");
+        }
+        if !ids.insert(entry.id.to_ascii_lowercase()) {
+            return invalid("remote stream list output", "entry id must be unique");
+        }
+        entries.push(entry);
+        if entries.len() > MAX_LIST_ITEMS {
+            return invalid(
+                "remote stream list output",
+                "contains more than 10000 entries",
+            );
+        }
+    }
+    Ok(entries)
+}
+
+fn validate_provider_id(value: &str) -> Result<(), ContractError> {
+    if value.trim().is_empty() || value.len() > MAX_PROVIDER_ID_BYTES {
+        return invalid(
+            "provider_id",
+            "must be non-empty and at most 384 UTF-8 bytes",
+        );
+    }
+    Ok(())
+}
+
+fn validate_availability_reason(value: Option<&str>) -> Result<(), ContractError> {
+    if value.is_some_and(|reason| reason.len() > MAX_AVAILABILITY_REASON_BYTES) {
+        return invalid("availability_reason", "exceeds the 2048-byte limit");
+    }
+    Ok(())
 }
 
 /// Validate a reverse-DNS add-on identifier.
@@ -1160,5 +1659,104 @@ mod tests {
             }],
         };
         assert!(panel.validate().is_err());
+    }
+
+    #[test]
+    fn operation_errors_are_bounded_validated_and_textually_round_trip() {
+        let diagnostic = AddonOperationError::new(
+            OPERATION_CODE_PROVIDER_UNREACHABLE,
+            "provider request failed",
+        );
+        diagnostic.validate().expect("valid operation diagnostic");
+        let rendered = diagnostic.to_string();
+        let json = rendered
+            .strip_prefix(ADDON_OPERATION_ERROR_MARKER)
+            .expect("stable diagnostic marker");
+        assert_eq!(
+            serde_json::from_str::<AddonOperationError>(json).expect("diagnostic JSON"),
+            diagnostic
+        );
+
+        let invalid = AddonOperationError {
+            code: "Provider Failed".to_owned(),
+            message: "failure".to_owned(),
+        };
+        assert!(invalid.validate().is_err());
+        assert_eq!(
+            AddonOperationError::new("Provider Failed", "failure").code,
+            "providerfailed"
+        );
+
+        let bounded = AddonOperationError::new("failure", "é".repeat(1_024));
+        assert!(bounded.message.len() <= MAX_OPERATION_ERROR_MESSAGE_BYTES);
+        assert!(bounded.message.is_char_boundary(bounded.message.len()));
+    }
+
+    #[test]
+    fn media_list_conformance_enforces_order_and_uniqueness() {
+        let valid = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie"}
+"#;
+        assert_eq!(conform_media_list_output(valid).unwrap().len(), 2);
+
+        let duplicate = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie"}
+{"record_type":"item","provider_id":"movie:1","rank":1,"display_title":"Other","title":"Other","kind":"movie"}
+"#;
+        assert!(conform_media_list_output(duplicate).is_err());
+    }
+
+    #[test]
+    fn typed_media_list_defaults_keep_the_v1_boundary_shape() {
+        let record = AddonMediaListRecord::item(
+            "movie:1",
+            0,
+            "Movie",
+            "Movie",
+            AddonMediaListItemKind::Movie,
+        );
+        assert_eq!(
+            serde_json::to_string(&record).unwrap(),
+            r#"{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","guids":[]}"#
+        );
+    }
+
+    #[test]
+    fn remote_stream_conformance_preserves_null_array_compatibility() {
+        let output = br#"{"id":"video:1","url":"https://example.test/video","title":"Video","genres":null,"tags":null}
+"#;
+        let entries = conform_remote_stream_list_output(output).unwrap();
+        assert!(entries[0].genres.is_empty());
+        assert!(entries[0].tags.is_empty());
+    }
+
+    #[test]
+    fn remote_stream_conformance_rejects_case_insensitive_duplicate_ids() {
+        let output = br#"{"id":"Video:1","url":"https://example.test/one","title":"One"}
+{"id":"video:1","url":"https://example.test/two","title":"Two"}
+"#;
+        assert!(conform_remote_stream_list_output(output).is_err());
+    }
+
+    #[test]
+    fn remote_stream_conformance_rejects_whitespace_normalized_duplicate_ids() {
+        let output = br#"{"id":"video:1","url":"https://example.test/one","title":"One"}
+{"id":" video:1 ","url":"https://example.test/two","title":"Two"}
+"#;
+        assert!(conform_remote_stream_list_output(output).is_err());
+    }
+
+    #[test]
+    fn remote_stream_conformance_rejects_years_the_host_rejects() {
+        let year_zero =
+            br#"{"id":"video:1","url":"https://example.test/one","title":"One","year":0}
+"#;
+        assert!(conform_remote_stream_list_output(year_zero).is_err());
+
+        let too_far_in_future = format!(
+            "{{\"id\":\"video:1\",\"url\":\"https://example.test/one\",\"title\":\"One\",\"year\":{}}}\n",
+            chrono::Utc::now().year() + 6
+        );
+        assert!(conform_remote_stream_list_output(too_far_in_future.as_bytes()).is_err());
     }
 }

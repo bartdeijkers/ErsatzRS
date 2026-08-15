@@ -4,6 +4,30 @@ An add-on package is a ZIP archive whose root contains `addon.toml`. The
 manifest is parsed strictly; unknown fields and invalid cross-field
 combinations are rejected.
 
+## Rust contract crate
+
+The distribution mechanism for Rust add-ons is the independently versioned
+`ersatzrs-addon-contract` crate on crates.io. After version `0.1.0` is
+published, add-ons declare:
+
+```toml
+[dependencies]
+ersatzrs-addon-contract = "=0.1.0"
+```
+
+The source package is validated with `cargo package` before publication.
+ErsatzRS publishes a compatible contract-crate version before the corresponding
+official add-on change is published. Add-ons pin an exact version and update
+deliberately; they do not depend on the application workspace by path.
+
+`AddonMediaListRecord` owns `media-list.list.v1` and v2 records.
+`PlaylistEntry` owns `remote-stream.list.v1` and v2 records. Their shared wire
+enums are distinct from the host's persisted domain enums. The crate also
+exports `conform_media_list_output` and
+`conform_remote_stream_list_output` for tests that validate captured stdout
+with the same bounds and record rules as the host contract. A minimal executable
+implementation is available as the `reference_addon` Cargo example.
+
 ## Package limits
 
 | Limit | Value |

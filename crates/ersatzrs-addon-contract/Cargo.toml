@@ -1,12 +1,17 @@
 [package]
 name = "ersatzrs-addon-contract"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Versioned out-of-process add-on contracts for ErsatzRS"
+repository = "https://github.com/bartdeijkers/ErsatzRS"
+readme = "README.md"
+keywords = ["ersatzrs", "addon", "media-server"]
+categories = ["api-bindings"]
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

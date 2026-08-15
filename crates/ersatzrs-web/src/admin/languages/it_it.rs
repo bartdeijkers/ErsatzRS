@@ -274,6 +274,10 @@ impl LanguageStrings for ItalianStrings {
         addon_media_list_error_message(error)
     }
 
+    fn addon_operation_error_message(&self, code: &str, detail: &str) -> String {
+        addon_operation_error_message(code, detail)
+    }
+
     fn upload_error_message(&self, error: &str) -> String {
         upload_error_message(error)
     }
@@ -2411,6 +2415,20 @@ fn media_source_error_message(error: &str) -> String {
     }
 }
 
+fn addon_operation_error_message(code: &str, detail: &str) -> String {
+    let summary = match code {
+        "missing-setting" => "Configura l’impostazione obbligatoria dell’add-on.",
+        "missing-secret" => "Configura il riferimento segreto obbligatorio nelle impostazioni dell’add-on.",
+        "provider-unreachable" => "L’add-on non ha potuto raggiungere il provider.",
+        "provider-rejected" => "Il provider ha rifiutato la richiesta dell’add-on.",
+        "provider-rate-limited" => "Il provider ha limitato temporaneamente l’add-on.",
+        "not-found" => "L’elemento richiesto dell’add-on non è stato trovato.",
+        "unsupported-url" => "L’add-on non supporta questo URL.",
+        _ => "L’add-on ha segnalato un errore.",
+    };
+    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+}
+
 fn addon_media_list_error_message(error: &str) -> String {
     let trimmed = error.trim();
     let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
@@ -2432,9 +2450,6 @@ fn addon_media_list_error_message(error: &str) -> String {
 
     match normalized {
         "Invalid add-on list url" => "Elenco add-on URL non valido.".to_owned(),
-        "Add-on credential reference is not configured" => {
-            "Configura il riferimento alle credenziali nelle impostazioni dell'add-on.".to_owned()
-        }
         "add-on API client is not configured for this operation" => {
             "Il client add-on API non è configurato per questa operazione.".to_owned()
         }

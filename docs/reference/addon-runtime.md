@@ -40,6 +40,38 @@ Unknown capability versions are rejected.
 The provider-neutral list payload is defined by the
 [add-on media-list reference](addon-media-lists.md).
 
+### Operation diagnostics
+
+A failed `list` or `play` operation exits non-zero and writes one diagnostic
+JSON object as the final non-empty stderr line:
+
+```json
+{"code":"provider-unreachable","message":"The provider request failed."}
+```
+
+`code` is 1–128 lowercase ASCII letters, digits, hyphens, underscores, or
+periods. `message` is diagnostic detail limited to 1,024 UTF-8 bytes. Earlier
+stderr lines may contain bounded process diagnostics, but only the final line
+is interpreted as the operation diagnostic. Stdout remains reserved for list
+NDJSON or play media bytes.
+
+The host recognizes these provider-neutral codes:
+
+| Code | Condition |
+|---|---|
+| `missing-setting` | A required non-secret setting is absent. |
+| `missing-secret` | A required secret reference is absent or unavailable. |
+| `provider-unreachable` | The add-on could not reach its external provider. |
+| `provider-rejected` | The provider rejected the request or response contract. |
+| `provider-rate-limited` | The provider temporarily limited requests. |
+| `not-found` | The requested provider item does not exist. |
+| `unsupported-url` | The supplied URL is not supported by the add-on. |
+
+Other valid codes are allowed. The admin UI renders a generic localized
+failure line for an unknown code and appends the bounded add-on message. A
+missing or invalid final JSON object is treated as `operation-failed` for
+compatibility with older packages.
+
 Every invocation runs in an owned Unix process group or Windows Job Object.
 Timeout, cancellation, output-drain failure, and invocation-owner teardown
 terminate every member that remains in that managed group or job. Control,

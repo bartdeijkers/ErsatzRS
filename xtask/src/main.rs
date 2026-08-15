@@ -44,7 +44,7 @@ fn print_help() {
     eprintln!("    cargo xtask <SUBCOMMAND>");
     eprintln!();
     eprintln!("SUBCOMMANDS:");
-    eprintln!("    architecture-lint Check application-boundary and admin-debt guardrails");
+    eprintln!("    architecture-lint Check crate-boundary and admin-debt guardrails");
     eprintln!("    clippy-ledger     Regenerate the clippy exemption ledger / pick next fix");
     eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
     eprintln!("    parity-check      Run the fast parity gate ladder");

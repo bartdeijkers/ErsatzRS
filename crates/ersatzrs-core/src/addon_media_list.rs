@@ -4,79 +4,8 @@ use async_trait::async_trait;
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::repositories::Result;
-
-/// One bounded media-list list v1 or v2 NDJSON record.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
-pub enum AddonMediaListRecord {
-    /// Header describing the provider-selected list.
-    List {
-        /// Stable provider identity within the owning add-on.
-        provider_id: String,
-        /// Human-readable provider list name.
-        name: String,
-        /// Optional provider description.
-        #[serde(default)]
-        description: Option<String>,
-    },
-    /// One ordered item that may be matched to local metadata.
-    Item {
-        /// Stable item identity within this list.
-        provider_id: String,
-        /// Zero-based provider order.
-        rank: i32,
-        /// Human-readable label shown by administration surfaces.
-        display_title: String,
-        /// Movie or show title used for local matching.
-        title: String,
-        /// Optional release year used for local matching.
-        #[serde(default)]
-        year: Option<i32>,
-        /// Optional season number used for season or episode matching.
-        #[serde(default)]
-        season: Option<i32>,
-        /// Optional episode number used for episode matching.
-        #[serde(default)]
-        episode: Option<i32>,
-        /// Local media kind represented by this record.
-        kind: AddonMediaListItemKind,
-        /// Provider GUID candidates in ErsatzRS metadata format.
-        #[serde(default)]
-        guids: Vec<String>,
-        /// Optional stable source URL used to match generated Remote Streams.
-        #[serde(default)]
-        source_url: Option<String>,
-        /// Provider-reported availability. V1 records omit this and are
-        /// therefore treated as available.
-        #[serde(default, deserialize_with = "deserialize_addon_availability")]
-        availability: AddonMediaListItemAvailability,
-        /// Optional stable provider reason code.
-        #[serde(default)]
-        availability_reason: Option<String>,
-        /// Provider-inferred descriptive content type.
-        #[serde(default)]
-        content_kind: AddonMediaListContentKind,
-    },
-}
-
-fn deserialize_addon_availability<'de, D>(
-    deserializer: D,
-) -> std::result::Result<AddonMediaListItemAvailability, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = Option::<String>::deserialize(deserializer)?;
-    Ok(match value.as_deref() {
-        Some("available" | "public" | "unlisted") => AddonMediaListItemAvailability::Available,
-        Some("unavailable" | "private" | "premium_only" | "subscriber_only" | "needs_auth") => {
-            AddonMediaListItemAvailability::Unavailable
-        }
-        _ => AddonMediaListItemAvailability::Unknown,
-    })
-}
 
 /// One complete, validated provider enumeration.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -42,6 +42,11 @@ Version 2 adds these item fields:
 | `availability_reason` | string or null | Optional provider diagnostic code or short reason; at most 2,048 UTF-8 bytes. |
 | `content_kind` | string | `auto`, `television_episode`, `movie`, `music_video`, or `other_video`. |
 
+An explicit `availability` value outside the three documented strings rejects
+the complete enumeration with a bounded provider-neutral contract error. The
+host does not translate provider-specific availability values. Add-ons must
+normalize missing, null, or provider-specific values before emitting a record.
+
 The add-on owns provider-specific availability and classification. ErsatzRS
 does not contain provider keyword tables or language-specific classification
 assets. An imported list can set a host-side content-kind override; `auto`

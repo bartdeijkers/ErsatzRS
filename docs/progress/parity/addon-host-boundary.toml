@@ -23,31 +23,33 @@ taken — a provider vocabulary table inside the host, and host localization tha
 string-matches an add-on's English error text across a repository boundary.
 
 Each debt item below has a standalone plan under `plans/` and a milestone under
-the `Add-on boundary` phase in `milestones.toml`. The recommended order is
-ab-01, ab-02, ab-04 (independent), then ab-03, then ab-05 and ab-06.
+the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 and ab-02 are
+complete, and ab-03 is in progress pending publication of the independently
+versioned contract crate. The remaining recommended order is ab-04
+(independent), then ab-05 and ab-06 after ab-03 completes.
 '''
 
 [[debt]]
 id          = 'host-contains-provider-availability-vocabulary'
 description = 'Remove the yt-dlp-specific availability tokens (`public`, `unlisted`, `private`, `premium_only`, `subscriber_only`, `needs_auth`) from the host and accept only `available`, `unavailable`, and `unknown`. Normalize inside the yt-dlp package on both POSIX and Windows first, then delete the duplicated deserializer and reject unrecognized tokens instead of silently coercing them to `unknown`.'
 discovered  = '2026-08-15'
-evidence    = 'A byte-identical `deserialize_addon_availability` exists in `crates/ersatzrs-core/src/addon_media_list.rs:65` and `crates/ersatzrs-scanner/src/remote_stream_playlist.rs:205`. Both map yt-dlp field values, because `addons/org.ersatzrs.addon.yt-dlp/addon.sh` prints `%(availability)j` raw and `libexec/youtube-list.ps1:3-9` returns the raw token. Beeld & Geluid already emits canonical values at `libexec/beeldengeluid.sh:299-304`. ADR 0068 and the NFO closeout plan both assign provider availability values to the add-on.'
+evidence    = 'Resolved by milestone `ab-01` on 2026-08-15. The official yt-dlp POSIX and PowerShell paths emit only the three canonical availability values; core and scanner use direct enum deserialization with the omitted-v1 default; both operational adapters reject an unknown explicit value with a bounded provider-neutral error; and `cargo xtask architecture-lint` prevents the provider vocabulary from re-entering `crates/`. Focused package, infra, scanner, and xtask regressions passed.'
 adr         = '0068'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'list-and-play-have-no-structured-diagnostics'
 description = 'Give `list` and `play` the same stable `{code, message}` result shape that `addon.check.v1` already has, so the host can localize failures on a code instead of matching an add-on English sentence, and so third-party add-ons get translated failures too.'
 discovered  = '2026-08-15'
-evidence    = '`canonical_addon_media_list_error` (`crates/ersatzrs-web/src/admin/i18n.rs:2957`) matches on `"Trakt client ID reference is not configured"`, which is authored in a different repository at `native/trakt/src/main.rs:329`, and on `CLIENT_ID`, a setting key owned by one package manifest. No test binds the two, so rewording the add-on string silently disables the translation in all supported cultures. `AddonCheckResult` (`crates/ersatzrs-addon-contract/src/lib.rs:779`) shows the shape that is missing for the other two operations.'
+evidence    = 'Resolved by milestone `ab-02` on 2026-08-15. The shared contract validates and bounds final-stderr-line operation diagnostics; list and play host paths preserve codes while redacting or suppressing add-on text; host-detected setting and secret failures use the same vocabulary; every supported culture translates recognized codes and unknown codes use a generic localized fallback; official POSIX, Windows, and native packages emit the contract; and architecture lint keeps package-specific prose and setting keys out of host crates. Focused package and host suites, both workspace clippy configurations, 1,519 closeout tests plus doctests, the Leptos build, parity-check, and progress validation passed.'
 adr         = '0066'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'contract-crate-does-not-own-the-ndjson-payloads'
 description = 'Move the `media-list.list` and `remote-stream.list` record types into `ersatzrs-addon-contract`, make the crate consumable from outside the workspace, convert the first-party Trakt add-on to use it, and ship a reference add-on plus a callable conformance check.'
 discovered  = '2026-08-15'
-evidence    = 'ADR 0066 states the contract crate owns the public formats, but `AddonMediaListRecord` lives in `crates/ersatzrs-core/src/addon_media_list.rs:13` and `PlaylistEntry` in `crates/ersatzrs-scanner/src/remote_stream_playlist.rs:139`. `native/trakt/Cargo.toml` in the add-ons repository does not depend on the contract crate and hand-builds JSON with `serde_json::json!`. The contract crate declares `serde_json` and never uses it. There is no fixture, example package, or conformance harness an author can run.'
+evidence    = 'Implementation is present: both wire records and enums live in `ersatzrs-addon-contract`; host edges convert them to separate persisted domain enums; shared conformance functions and a runnable reference add-on ship with the independently versioned, successfully packaged 0.1.0 crate; and native Trakt emits typed records and passes locked tests/clippy through a local crates.io patch. The debt remains open until 0.1.0 is published and the external lockfile and CI pass against crates.io without that patch.'
 adr         = '0066'
 resolved    = false
 

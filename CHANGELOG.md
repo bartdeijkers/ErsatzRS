@@ -38,6 +38,26 @@ release section when tagging a release.
   it. The check runs before the provider is invoked, so a rejected name costs
   no provider call and leaves no half-imported list behind.
 
+### Changed
+
+- The independently versioned `ersatzrs-addon-contract` crate now owns the
+  media-list and Remote Stream NDJSON records, their wire enums, validation,
+  and reusable stdout conformance checks. A runnable reference add-on ships as
+  a Cargo example, and the official native Trakt add-on emits typed contract
+  records instead of assembling boundary JSON by hand.
+- Failed add-on `list` and `play` operations now carry a stable, bounded JSON
+  diagnostic code on stderr. Host-detected missing settings and secrets use the
+  same vocabulary, the admin UI localizes recognized codes in every supported
+  culture, and unknown third-party codes retain a generic localized fallback.
+  Provider-specific error prose and setting keys no longer live in the host;
+  environment secrets are redacted and file-secret diagnostics stay suppressed.
+- Availability vocabulary is now owned by each add-on package. The official
+  yt-dlp package normalizes provider results to `available`, `unavailable`, or
+  `unknown` on POSIX and Windows; the host rejects every other explicit value
+  atomically with a bounded provider-neutral error instead of silently
+  coercing it. Architecture lint prevents provider tokens from returning to
+  host crates.
+
 ### Fixed
 
 - Add-on list failures reached the operator wrapped in transport plumbing —

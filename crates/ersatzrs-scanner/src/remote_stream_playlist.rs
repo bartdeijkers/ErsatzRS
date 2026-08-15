@@ -10,9 +10,13 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Utc};
+pub use ersatzrs_addon_contract::PlaylistEntry;
 use ersatzrs_addon_contract::{
-    validate_addon_id, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_AVAILABILITY_REASON_BYTES, MAX_PROVIDER_ID_BYTES,
+    validate_addon_id, AddonMediaListContentKind as WireContentKind,
+    AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_PROVIDER_ID_BYTES,
+    MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_infra::addons::{
@@ -29,8 +33,6 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const ENUMERATION_TIMEOUT: Duration = Duration::from_mins(2);
-const MAX_ENUMERATION_BYTES: usize = 8 * 1024 * 1024;
-const MAX_ENUMERATION_ENTRIES: usize = 10_000;
 
 /// Suffixes that distinguish playlist manifests from ordinary definitions.
 pub const MANIFEST_SUFFIXES: &[&str] = &[".playlist.yml", ".playlist.yaml"];
@@ -133,89 +135,6 @@ pub struct ValidatedPlaylistManifest {
     pub exclude_title: Option<Regex>,
     pub min_duration_seconds: Option<u64>,
     pub max_duration_seconds: Option<u64>,
-}
-
-/// One provider entry emitted by `remote-stream.list.v1`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-pub struct PlaylistEntry {
-    pub id: String,
-    #[serde(default)]
-    pub provider_id: Option<String>,
-    pub url: String,
-    pub title: String,
-    #[serde(default)]
-    pub original_title: Option<String>,
-    #[serde(default)]
-    pub sort_title: Option<String>,
-    #[serde(default)]
-    pub outline: Option<String>,
-    #[serde(default)]
-    pub tagline: Option<String>,
-    #[serde(default)]
-    pub duration_seconds: Option<u64>,
-    #[serde(default)]
-    pub plot: Option<String>,
-    #[serde(default)]
-    pub year: Option<i32>,
-    #[serde(default)]
-    pub release_date: Option<String>,
-    #[serde(default)]
-    pub content_rating: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub genres: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub tags: Vec<String>,
-    #[serde(default)]
-    pub collection: Option<String>,
-    #[serde(default)]
-    pub people: Vec<RemoteStreamPerson>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub producers: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub original_broadcasters: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub broadcasters: Vec<String>,
-    #[serde(default)]
-    pub thumbnail_url: Option<String>,
-    #[serde(default)]
-    pub is_live: bool,
-    #[serde(default, deserialize_with = "deserialize_addon_availability")]
-    pub availability: AddonMediaListItemAvailability,
-    #[serde(default)]
-    pub availability_reason: Option<String>,
-    #[serde(default)]
-    pub content_kind: AddonMediaListContentKind,
-    #[serde(default)]
-    pub show_title: Option<String>,
-    #[serde(default)]
-    pub season: Option<i32>,
-    #[serde(default)]
-    pub episode: Option<i32>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
-    pub guids: Vec<String>,
-}
-
-fn deserialize_string_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Ok(Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_default())
-}
-
-fn deserialize_addon_availability<'de, D>(
-    deserializer: D,
-) -> std::result::Result<AddonMediaListItemAvailability, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = Option::<String>::deserialize(deserializer)?;
-    Ok(match value.as_deref() {
-        Some("available" | "public" | "unlisted") => AddonMediaListItemAvailability::Available,
-        Some("unavailable" | "private" | "premium_only" | "subscriber_only" | "needs_auth") => {
-            AddonMediaListItemAvailability::Unavailable
-        }
-        _ => AddonMediaListItemAvailability::Unknown,
-    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -340,9 +259,9 @@ pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlayl
             "addon must be a reverse-DNS identifier".to_owned(),
         ));
     }
-    if manifest.sync.max_items > MAX_ENUMERATION_ENTRIES {
+    if manifest.sync.max_items > MAX_LIST_ITEMS {
         return Err(PlaylistError::Manifest(format!(
-            "sync.max_items must be at most {MAX_ENUMERATION_ENTRIES}"
+            "sync.max_items must be at most {MAX_LIST_ITEMS}"
         )));
     }
     let interval = parse_interval(&manifest.sync.interval)?;
@@ -460,7 +379,7 @@ pub async fn enumerate_playlist(
             runtime,
             extra_environment: &environment,
             timeout: ENUMERATION_TIMEOUT,
-            max_output_bytes: MAX_ENUMERATION_BYTES,
+            max_output_bytes: MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
         },
     )
     .await
@@ -538,7 +457,7 @@ pub async fn sync_playlist_files(
     let mut selected = select_entries(manifest, eligible);
     if content_kind_override != AddonMediaListContentKind::Auto {
         for entry in &mut selected {
-            entry.content_kind = content_kind_override;
+            entry.content_kind = wire_content_kind(content_kind_override);
         }
     }
     let overrides = existing
@@ -580,7 +499,7 @@ pub async fn sync_playlist_files(
             duration_seconds: entry.duration_seconds,
             active: true,
             nfo_file: Some(nfo_file),
-            availability: entry.availability,
+            availability: domain_availability(entry.availability),
             definition_sha256: Some(hex_hash(&definition_bytes)),
             nfo_sha256: Some(hex_hash(&nfo_bytes)),
         });
@@ -774,12 +693,21 @@ fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
         if line.trim().is_empty() {
             continue;
         }
-        let mut entry: PlaylistEntry = serde_json::from_str(line).map_err(|error| {
-            PlaylistError::Enumeration(format!("line {} is invalid JSON: {error}", index + 1))
+        let mut entry: PlaylistEntry = serde_json::from_str(line).map_err(|_| {
+            PlaylistError::Enumeration(format!(
+                "line {} violates the bounded playlist item JSON contract",
+                index + 1
+            ))
         })?;
         entry.id = entry.id.trim().to_owned();
         entry.url = entry.url.trim().to_owned();
         entry.title = entry.title.trim().to_owned();
+        entry.validate().map_err(|_| {
+            PlaylistError::Enumeration(format!(
+                "line {} violates the bounded playlist item JSON contract",
+                index + 1
+            ))
+        })?;
         if entry.id.is_empty() || entry.url.is_empty() || entry.title.is_empty() {
             return Err(PlaylistError::Enumeration(format!(
                 "line {} requires non-empty id, url, and title",
@@ -818,13 +746,41 @@ fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
             )));
         }
         entries.push(entry);
-        if entries.len() > MAX_ENUMERATION_ENTRIES {
+        if entries.len() > MAX_LIST_ITEMS {
             return Err(PlaylistError::Enumeration(format!(
-                "add-on returned more than {MAX_ENUMERATION_ENTRIES} entries"
+                "add-on returned more than {MAX_LIST_ITEMS} entries"
             )));
         }
     }
     Ok(entries)
+}
+
+const fn wire_content_kind(kind: AddonMediaListContentKind) -> WireContentKind {
+    match kind {
+        AddonMediaListContentKind::Auto => WireContentKind::Auto,
+        AddonMediaListContentKind::TelevisionEpisode => WireContentKind::TelevisionEpisode,
+        AddonMediaListContentKind::Movie => WireContentKind::Movie,
+        AddonMediaListContentKind::MusicVideo => WireContentKind::MusicVideo,
+        AddonMediaListContentKind::OtherVideo => WireContentKind::OtherVideo,
+    }
+}
+
+const fn domain_content_kind(kind: WireContentKind) -> AddonMediaListContentKind {
+    match kind {
+        WireContentKind::Auto => AddonMediaListContentKind::Auto,
+        WireContentKind::TelevisionEpisode => AddonMediaListContentKind::TelevisionEpisode,
+        WireContentKind::Movie => AddonMediaListContentKind::Movie,
+        WireContentKind::MusicVideo => AddonMediaListContentKind::MusicVideo,
+        WireContentKind::OtherVideo => AddonMediaListContentKind::OtherVideo,
+    }
+}
+
+const fn domain_availability(availability: WireAvailability) -> AddonMediaListItemAvailability {
+    match availability {
+        WireAvailability::Available => AddonMediaListItemAvailability::Available,
+        WireAvailability::Unavailable => AddonMediaListItemAvailability::Unavailable,
+        WireAvailability::Unknown => AddonMediaListItemAvailability::Unknown,
+    }
 }
 
 fn load_sidecar(path: &Path) -> Result<Option<PlaylistSidecarState>> {
@@ -930,9 +886,9 @@ fn generated_definition_bytes(
         addon: &manifest.manifest.addon,
         is_live: entry.is_live || manifest.manifest.defaults.is_live,
         duration: entry.duration_seconds.map(format_clock_duration),
-        availability: entry.availability,
+        availability: domain_availability(entry.availability),
         availability_reason: entry.availability_reason.as_deref(),
-        content_kind: entry.content_kind,
+        content_kind: domain_content_kind(entry.content_kind),
     };
     let yaml = serde_yaml::to_string(&definition).map_err(|error| {
         PlaylistError::Enumeration(format!("unable to encode a managed definition: {error}"))
@@ -964,11 +920,9 @@ fn generated_nfo_bytes(
         Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)),
     )?;
     let root_name = match entry.content_kind {
-        AddonMediaListContentKind::TelevisionEpisode => "episodedetails",
-        AddonMediaListContentKind::MusicVideo => "musicvideo",
-        AddonMediaListContentKind::Auto
-        | AddonMediaListContentKind::Movie
-        | AddonMediaListContentKind::OtherVideo => "movie",
+        WireContentKind::TelevisionEpisode => "episodedetails",
+        WireContentKind::MusicVideo => "musicvideo",
+        WireContentKind::Auto | WireContentKind::Movie | WireContentKind::OtherVideo => "movie",
     };
     let mut root = BytesStart::new(root_name);
     root.push_attribute(("xmlns:ersatzrs", "urn:ersatzrs:nfo:1"));
@@ -1654,6 +1608,79 @@ create_playlist: true
     }
 
     #[test]
+    fn ndjson_availability_accepts_only_canonical_or_omitted_values() {
+        let canonical = concat!(
+            r#"{"id":"available","url":"https://example.test/1","title":"Available","availability":"available"}"#,
+            "\n",
+            r#"{"id":"unavailable","url":"https://example.test/2","title":"Unavailable","availability":"unavailable"}"#,
+            "\n",
+            r#"{"id":"unknown","url":"https://example.test/3","title":"Unknown","availability":"unknown"}"#,
+            "\n",
+            r#"{"id":"legacy","url":"https://example.test/4","title":"Legacy"}"#
+        );
+        let entries = parse_ndjson_entries(canonical).expect("canonical availability");
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry.availability)
+                .collect::<Vec<_>>(),
+            [
+                WireAvailability::Available,
+                WireAvailability::Unavailable,
+                WireAvailability::Unknown,
+                WireAvailability::Available,
+            ]
+        );
+
+        let invalid = r#"{"id":"invalid","url":"https://example.test/5","title":"Invalid","availability":"maybe_later"}"#;
+        let error = parse_ndjson_entries(invalid).expect_err("unknown availability must fail");
+        let message = error.to_string();
+        assert!(message.contains("bounded playlist item JSON contract"));
+        assert!(!message.contains("maybe_later"));
+        assert!(message.len() < 512);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn playlist_enumeration_rejects_unknown_availability_operationally() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '%s\\n' ",
+                "'{\"id\":\"invalid\",\"url\":\"https://example.test/1\",",
+                "\"title\":\"Invalid\",\"availability\":\"maybe_later\"}'\n"
+            ),
+        )
+        .expect("fixture script");
+        let mut permissions = std::fs::metadata(&script)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).expect("fixture permissions");
+        let pool = fixture_addon_pool(&package_root).await;
+
+        let error = enumerate_playlist(
+            &pool,
+            "org.ersatzrs.addon.fixture",
+            "https://example.test/list",
+            &AddonRuntimeContext::default(),
+        )
+        .await
+        .expect_err("unknown availability must reject enumeration");
+        let message = error.to_string();
+        assert!(message.contains("bounded playlist item JSON contract"));
+        assert!(!message.contains("maybe_later"));
+        assert!(message.len() < 512);
+    }
+
+    #[test]
     #[allow(clippy::too_many_lines)]
     fn generated_nfo_round_trips_every_generic_content_kind() {
         let temp = tempfile::TempDir::new().expect("temp dir");
@@ -1698,7 +1725,7 @@ create_playlist: true
             original_broadcasters: vec!["Original Network".to_owned()],
             broadcasters: vec!["Current Network".to_owned()],
             thumbnail_url: Some("https://example.test/thumb.jpg".to_owned()),
-            availability: AddonMediaListItemAvailability::Available,
+            availability: WireAvailability::Available,
             show_title: Some("Example Show".to_owned()),
             season: Some(2),
             episode: Some(3),
@@ -1707,13 +1734,10 @@ create_playlist: true
         };
 
         for (content_kind, expected_root) in [
-            (
-                AddonMediaListContentKind::TelevisionEpisode,
-                "episodedetails",
-            ),
-            (AddonMediaListContentKind::Movie, "movie"),
-            (AddonMediaListContentKind::MusicVideo, "musicvideo"),
-            (AddonMediaListContentKind::OtherVideo, "movie"),
+            (WireContentKind::TelevisionEpisode, "episodedetails"),
+            (WireContentKind::Movie, "movie"),
+            (WireContentKind::MusicVideo, "musicvideo"),
+            (WireContentKind::OtherVideo, "movie"),
         ] {
             let entry = PlaylistEntry {
                 content_kind,
@@ -1756,7 +1780,7 @@ create_playlist: true
             assert_eq!(parsed.directors, ["Drew Director"]);
             assert_eq!(parsed.writers, ["Robin Writer"]);
             assert_eq!(parsed.guids.len(), 2);
-            if content_kind == AddonMediaListContentKind::TelevisionEpisode {
+            if content_kind == WireContentKind::TelevisionEpisode {
                 assert_eq!(parsed.show_title.as_deref(), Some("Example Show"));
                 assert_eq!(parsed.season, Some(2));
                 assert_eq!(parsed.episode, Some(3));
@@ -1765,7 +1789,7 @@ create_playlist: true
                 assert!(parsed.season.is_none());
                 assert!(parsed.episode.is_none());
             }
-            if content_kind == AddonMediaListContentKind::MusicVideo {
+            if content_kind == WireContentKind::MusicVideo {
                 assert_eq!(parsed.artists, ["Sam Artist"]);
             } else {
                 assert!(parsed.artists.is_empty());
@@ -1773,7 +1797,7 @@ create_playlist: true
         }
 
         let entry = PlaylistEntry {
-            content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            content_kind: WireContentKind::TelevisionEpisode,
             show_title: None,
             season: None,
             episode: None,

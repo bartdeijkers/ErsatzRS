@@ -1,5 +1,11 @@
 # Plan: return provider availability vocabulary to the add-on
 
+## Implementation status
+
+Implemented on 2026-08-15 as milestone `ab-01`. The canonical current contract
+is documented in the add-on media-list and Remote Stream playlist references;
+delivery evidence lives in `docs/progress/`.
+
 ## Context
 
 ADR 0068 states that the generic contracts contain "no provider names,

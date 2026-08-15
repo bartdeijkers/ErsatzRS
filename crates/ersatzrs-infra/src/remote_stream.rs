@@ -4,14 +4,18 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use ersatzrs_addon_contract::validate_addon_id;
+pub use ersatzrs_addon_contract::RemoteStreamPerson;
+use ersatzrs_addon_contract::{
+    validate_addon_id, AddonOperationError, MAX_OPERATION_ERROR_MESSAGE_BYTES,
+    OPERATION_CODE_FAILED,
+};
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
 
@@ -75,14 +79,6 @@ pub struct RemoteStreamDefinition {
     pub availability_reason: Option<String>,
     #[serde(default)]
     pub content_kind: AddonMediaListContentKind,
-}
-
-/// One credited person in a Remote Stream definition.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RemoteStreamPerson {
-    pub name: String,
-    pub role: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1011,7 +1007,7 @@ async fn run_remote_stream_producer(
             "remote stream producer stopped after the consumer closed its input"
         ),
         Ok(status) => {
-            let stderr_excerpt = producer_stderr_excerpt(&stderr, &secrets, suppress_diagnostics);
+            let diagnostic = producer_operation_diagnostic(&stderr, &secrets, suppress_diagnostics);
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1020,13 +1016,14 @@ async fn run_remote_stream_producer(
                 %status,
                 failure_kind = "producer-exit",
                 stderr_bytes = stderr.len(),
-                stderr_excerpt = %stderr_excerpt,
+                operation_code = %diagnostic.code,
+                operation_message = %diagnostic.message,
                 copy_error = ?copy_result.as_ref().and_then(|result| result.as_ref().err()),
                 "remote stream producer stopped"
             );
         }
         Err(error) => {
-            let stderr_excerpt = producer_stderr_excerpt(&stderr, &secrets, suppress_diagnostics);
+            let diagnostic = producer_operation_diagnostic(&stderr, &secrets, suppress_diagnostics);
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1035,7 +1032,8 @@ async fn run_remote_stream_producer(
                 %error,
                 failure_kind = "producer-wait",
                 stderr_bytes = stderr.len(),
-                stderr_excerpt = %stderr_excerpt,
+                operation_code = %diagnostic.code,
+                operation_message = %diagnostic.message,
                 "failed to wait for remote stream producer"
             );
         }
@@ -1052,11 +1050,35 @@ async fn finish_stderr_task(mut task: JoinHandle<String>) -> String {
     }
 }
 
-fn producer_stderr_excerpt(stderr: &str, secrets: &[String], suppress_diagnostics: bool) -> String {
-    if suppress_diagnostics {
-        return FILE_SECRET_DIAGNOSTIC.to_owned();
+fn producer_operation_diagnostic(
+    stderr: &str,
+    secrets: &[String],
+    suppress_diagnostics: bool,
+) -> AddonOperationError {
+    if let Some(line) = stderr.lines().rev().find(|line| !line.trim().is_empty()) {
+        if let Ok(diagnostic) = serde_json::from_str::<AddonOperationError>(line.trim()) {
+            if diagnostic.validate().is_ok() {
+                let message = if suppress_diagnostics {
+                    FILE_SECRET_DIAGNOSTIC.to_owned()
+                } else {
+                    sanitize_remote_stream_diagnostic(&redact_exact_secrets(
+                        &diagnostic.message,
+                        secrets,
+                    ))
+                };
+                return AddonOperationError::new(&diagnostic.code, message);
+            }
+        }
     }
-    sanitize_remote_stream_diagnostic(&redact_exact_secrets(stderr, secrets))
+    let message = if suppress_diagnostics {
+        FILE_SECRET_DIAGNOSTIC.to_owned()
+    } else {
+        bounded_tail(
+            &sanitize_remote_stream_diagnostic(&redact_exact_secrets(stderr, secrets)),
+            MAX_OPERATION_ERROR_MESSAGE_BYTES,
+        )
+    };
+    AddonOperationError::new(OPERATION_CODE_FAILED, message)
 }
 
 fn consumer_closed_remote_stream_pipe(copy_result: Option<&io::Result<()>>) -> bool {
@@ -1705,6 +1727,40 @@ content_rating: PG
             redact_remote_stream_output("raw secret contents", &file_secret_stream),
             FILE_SECRET_DIAGNOSTIC
         );
+    }
+
+    #[test]
+    fn parses_and_redacts_structured_producer_diagnostics() {
+        let stderr = "provider details\n{\"code\":\"provider-rejected\",\"message\":\"token secret-value rejected\"}\n";
+        let diagnostic = producer_operation_diagnostic(stderr, &["secret-value".to_owned()], false);
+        assert_eq!(diagnostic.code, "provider-rejected");
+        assert!(diagnostic.message.contains("[redacted]"));
+        assert!(!diagnostic.message.contains("secret-value"));
+
+        let suppressed = producer_operation_diagnostic(stderr, &[], true);
+        assert_eq!(suppressed.code, "provider-rejected");
+        assert_eq!(suppressed.message, FILE_SECRET_DIAGNOSTIC);
+    }
+
+    #[test]
+    fn legacy_producer_stderr_uses_generic_operation_code() {
+        let diagnostic = producer_operation_diagnostic("legacy failure", &[], false);
+        assert_eq!(diagnostic.code, OPERATION_CODE_FAILED);
+        assert_eq!(diagnostic.message, "legacy failure");
+    }
+
+    #[test]
+    fn legacy_producer_diagnostic_preserves_the_final_bounded_stderr_bytes() {
+        let stderr = format!("old diagnostic {} final failure �", "x".repeat(2_048));
+        let diagnostic = producer_operation_diagnostic(&stderr, &[], false);
+
+        assert_eq!(diagnostic.code, OPERATION_CODE_FAILED);
+        assert!(diagnostic.message.len() <= MAX_OPERATION_ERROR_MESSAGE_BYTES);
+        assert!(diagnostic.message.ends_with(" final failure �"));
+        assert!(!diagnostic.message.contains("old diagnostic"));
+        assert!(diagnostic
+            .message
+            .is_char_boundary(diagnostic.message.len()));
     }
 
     #[test]
