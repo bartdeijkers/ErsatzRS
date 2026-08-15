@@ -66,7 +66,14 @@ host validated.
 For `remote-stream.list.v1`, ErsatzRS invokes the package-local entrypoint with
 the operation argument `list` and supplies the manifest URL in
 `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL`. Standard output must be UTF-8 NDJSON
-with one object per line. Each line requires `id`, `url`, and `title`.
+with one object per line. Each line requires `id`, `url`, and `title`. Unknown
+fields are rejected with a bounded error that names the offending field.
+Optional arrays treat an omitted field and explicit `null` as the same absent
+value.
+
+Capability versions are frozen wire contracts. Add optional or required
+fields under a new capability version instead of emitting them speculatively
+against an existing version.
 
 Optional playback fields are `duration_seconds`, `thumbnail_url`, and
 `is_live`. Optional metadata fields are:
@@ -77,13 +84,13 @@ Optional playback fields are `duration_seconds`, `thumbnail_url`, and
 | `year` | integer | Fallback year when no `release_date` is present. |
 | `release_date` | RFC 3339 string | Full publication/broadcast instant; XMLTV `<date>` uses its calendar date. |
 | `content_rating` | string | Provider content rating; known rating-system prefixes may be projected by consumers. |
-| `genres` | string array | Genre facets and XMLTV `<category>` values. |
-| `tags` | string array | Subject/keyword facets and XMLTV `<category>` values. |
+| `genres` | string array or null | Genre facets and XMLTV `<category>` values. |
+| `tags` | string array or null | Subject/keyword facets and XMLTV `<category>` values. |
 | `collection` | string | Provider collection, retained separately and indexed as a tag. |
-| `people` | `{name, role}` array | Credited people mapped to matching XMLTV credit roles where supported. |
-| `producers` | string array | Producer credits and studio facets. |
-| `original_broadcasters` | string array | Original broadcasters and studio search facets. |
-| `broadcasters` | string array | Current broadcasters and studio search facets. |
+| `people` | `{name, role}` array or null | Credited people mapped to matching XMLTV credit roles where supported. |
+| `producers` | string array or null | Producer credits and studio facets. |
+| `original_broadcasters` | string array or null | Original broadcasters and studio search facets. |
+| `broadcasters` | string array or null | Current broadcasters and studio search facets. |
 
 Version 2 also accepts stable `provider_id`, `availability`,
 `availability_reason`, `content_kind`, `original_title`, `sort_title`,

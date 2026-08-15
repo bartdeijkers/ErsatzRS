@@ -60,16 +60,17 @@ record hard to express, plus `validate()` methods mirroring the host's bounds
 (non-empty `provider_id`, unique rank, `source_url` required for
 `remote_stream`).
 
-Decide and record how an external add-on obtains the crate:
+External add-ons obtain the crate only from `bartdeijkers/ErsatzRS`. Give each
+contract release an immutable `addon-contract-v<version>` tag and have official
+Rust add-ons pin its full commit SHA with Cargo's `git` and `rev` dependency
+fields. Keep the independent package version as the public API version, set
+`publish = false`, and guard that setting so the crate cannot accidentally be
+uploaded to crates.io or another registry. Record the exact declaration in
+`docs/reference/addon-packages.md` so an author does not have to guess.
 
-1. publish to crates.io on host release; or
-2. consume by git tag from `bartdeijkers/ErsatzRS`.
-
-Option 2 costs nothing and is enough for the first third-party authors; option 1
-is the eventual answer. Whichever is chosen, state it in
-`docs/reference/addon-packages.md` so an author does not have to guess. If
-publishing, resolve the version story first — the crate currently inherits
-`version.workspace`, which ties a public contract's version to the application's.
+Validate a fresh external checkout against the GitHub revision and its committed
+lockfile. A local path or Cargo patch is an inner-loop aid only and is not
+completion evidence.
 
 Remove the unused `serde_json` dependency if the moved types do not need it.
 

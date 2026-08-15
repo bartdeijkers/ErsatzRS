@@ -15,6 +15,8 @@ const DEFAULT_BASELINE: &str = ".architecture-lint-baseline.toml";
 const APP_MANIFEST: &str = "crates/ersatzrs-app/Cargo.toml";
 const APP_SOURCE: &str = "crates/ersatzrs-app/src/lib.rs";
 const CORE_MANIFEST: &str = "crates/ersatzrs-core/Cargo.toml";
+const ADDON_CONTRACT_MANIFEST: &str = "crates/ersatzrs-addon-contract/Cargo.toml";
+const ADDON_CONTRACT_REPOSITORY: &str = "https://github.com/bartdeijkers/ErsatzRS";
 const SCAN_STATE_SOURCE: &str = "crates/ersatzrs-web/src/host/state.rs";
 const SCAN_SERVER_FN_SOURCE: &str = "crates/ersatzrs-web/src/admin/server_fns/libraries.rs";
 const SCAN_MAINTENANCE_SOURCE: &str = "crates/ersatzrs-infra/src/maintenance.rs";
@@ -65,6 +67,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     let workspace = Path::new(".");
     check_app_crate(workspace)?;
     check_core_crate(workspace)?;
+    check_addon_contract_distribution(workspace)?;
     check_scan_orchestration_boundary(workspace)?;
     check_provider_availability_vocabulary_boundary(workspace)?;
     let counts = scan_admin_trees(workspace)?;
@@ -103,6 +106,38 @@ fn run_inner(opts: &Opts) -> Result<()> {
         counts.row_decode_default.values().sum::<usize>()
     );
     Ok(())
+}
+
+fn check_addon_contract_distribution(workspace: &Path) -> Result<()> {
+    let manifest_path = workspace.join(ADDON_CONTRACT_MANIFEST);
+    let manifest_source = fs::read_to_string(&manifest_path)
+        .with_context(|| format!("read {}", manifest_path.display()))?;
+    let manifest: toml::Value = toml::from_str(&manifest_source)
+        .with_context(|| format!("parse {}", manifest_path.display()))?;
+    let problems = addon_contract_distribution_problems(&manifest);
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "{ADDON_CONTRACT_MANIFEST} must remain GitHub-only: {}",
+            problems.join("; ")
+        );
+    }
+    Ok(())
+}
+
+fn addon_contract_distribution_problems(manifest: &toml::Value) -> Vec<String> {
+    let Some(package) = manifest.get("package").and_then(toml::Value::as_table) else {
+        return vec!["missing [package] table".to_owned()];
+    };
+    let mut problems = Vec::new();
+    if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
+        problems.push("`publish = false` is required to block registry publication".to_owned());
+    }
+    if package.get("repository").and_then(toml::Value::as_str) != Some(ADDON_CONTRACT_REPOSITORY) {
+        problems.push(format!(
+            "`repository` must be `{ADDON_CONTRACT_REPOSITORY}`"
+        ));
+    }
+    problems
 }
 
 fn check_provider_availability_vocabulary_boundary(workspace: &Path) -> Result<()> {
@@ -1152,6 +1187,34 @@ fn compare_rule(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn add_on_contract_distribution_stays_github_only() {
+        let valid: toml::Value = toml::from_str(
+            r#"
+            [package]
+            publish = false
+            repository = "https://github.com/bartdeijkers/ErsatzRS"
+            "#,
+        )
+        .expect("fixture should parse");
+        assert!(addon_contract_distribution_problems(&valid).is_empty());
+
+        let publishable: toml::Value = toml::from_str(
+            r#"
+            [package]
+            repository = "https://example.invalid/fork"
+            "#,
+        )
+        .expect("fixture should parse");
+        let problems = addon_contract_distribution_problems(&publishable);
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("publish = false")));
+        assert!(problems
+            .iter()
+            .any(|problem| problem.contains("repository")));
+    }
 
     #[test]
     fn provider_availability_vocabulary_cannot_reenter_host_crates() {

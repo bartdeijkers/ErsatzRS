@@ -529,6 +529,61 @@ async fn remote_failure_is_typed_and_persists_no_plausible_list() {
 }
 
 #[tokio::test]
+async fn remote_failure_preserves_the_complete_existing_list() {
+    let pool = common::test_db().await;
+    seed_local_addon_media_list(&pool, 60, false).await;
+
+    let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FailingListProvider);
+    let error = remote
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/local-list",
+            None,
+            AddonMediaListContentKind::Auto,
+        )
+        .await
+        .expect_err("remote failure must reject the complete refresh");
+    assert!(matches!(error, RepositoryError::Conflict(_)));
+
+    let list = sqlx::query(
+        r#"SELECT "ProviderId", "Name", "ItemCount", "LastError"
+           FROM "AddonMediaList" WHERE "Id" = 60"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(list.get::<String, _>("ProviderId"), "local-user/local-list");
+    assert_eq!(list.get::<String, _>("Name"), "Local List");
+    assert_eq!(list.get::<i32, _>("ItemCount"), 1);
+    assert_eq!(
+        list.get::<Option<String>, _>("LastError").as_deref(),
+        Some("conflict: deterministic remote failure")
+    );
+
+    let item = sqlx::query(
+        r#"SELECT "ProviderId", "DisplayTitle", "Rank"
+           FROM "AddonMediaListItem" WHERE "AddonMediaListId" = 60"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(item.get::<String, _>("ProviderId"), "movie:100");
+    assert_eq!(
+        item.get::<String, _>("DisplayTitle"),
+        "Fixture Movie (1999)"
+    );
+    assert_eq!(item.get::<i32, _>("Rank"), 3);
+    let guids: Vec<String> = sqlx::query_scalar(
+        r#"SELECT "Guid" FROM "AddonMediaListItemGuid"
+           WHERE "AddonMediaListItemId" = 500 ORDER BY "Guid""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(guids, ["tmdb://123"]);
+}
+
+#[tokio::test]
 async fn automatic_refresh_skips_lists_owned_by_disabled_addons() {
     let pool = common::test_db().await;
     seed_local_addon_media_list(&pool, 60, false).await;

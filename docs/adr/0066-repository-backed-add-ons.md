@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (2026-08-12; drafted 2026-08-11 and reworked before acceptance to
-adopt Kodi-shaped distribution).
+Accepted (2026-08-12; drafted 2026-08-11, reworked before acceptance to adopt
+Kodi-shaped distribution, and amended 2026-08-15 to keep the Rust contract
+crate GitHub-only).
 
 ## Implementation
 
@@ -72,6 +73,21 @@ capabilities, package-local entrypoints, declared permissions, host-rendered
 settings, localized metadata, and declarative panels. The shared
 `ersatzrs-addon-contract` crate and add-on contract reference own these public
 formats.
+
+### Rust contract distribution
+
+The Rust contract crate is distributed only from the canonical
+`bartdeijkers/ErsatzRS` GitHub repository. Each contract release has an
+immutable `addon-contract-v<version>` tag, while official Rust add-ons pin the
+tag's full commit SHA through Cargo's `git` and `rev` dependency fields. The
+human-readable tag records the contract version; the SHA is the reproducible
+build identity and remains authoritative if a tag is ever moved accidentally.
+
+The crate retains its own SemVer package version but declares
+`publish = false`; it is never uploaded to crates.io or another package
+registry. A correction is released as a new version and tag rather than by
+moving an existing tag. Host changes land and receive their immutable tag
+before an official add-on updates its pinned revision and lockfile.
 
 ### Tiered trust
 
@@ -237,6 +253,11 @@ user's access whether it was signed, unsigned, or sideloaded.
 - The official signing private key remains operational secret material held only
   by the repository release secret store. Only its public key is committed or
   accepted through configuration.
+- Rust add-on builds require Git access to the canonical ErsatzRS repository on
+  their first dependency fetch. Their committed Cargo lockfile and exact
+  revision prevent a moving branch or tag from changing the selected contract.
+- Contract API documentation remains in the repository and generated rustdoc;
+  no crates.io or docs.rs discovery surface exists.
 
 ## Alternatives Considered
 
@@ -262,6 +283,14 @@ user's access whether it was signed, unsigned, or sideloaded.
 - **Highest-compatible-version resolution across repositories, as Kodi does**:
   rejected because it lets any added repository take ownership of an already
   installed add-on identifier.
+- **Publish the Rust contract crate to crates.io**: rejected because the
+  project requires contract publication to remain inside its own GitHub
+  repositories. Registry discovery is not worth introducing another public
+  distribution channel and credential boundary.
+- **Depend on the moving `main` branch or only on a Git tag**: rejected because
+  neither declaration makes the reviewed commit identity explicit in the
+  consuming manifest. Official Rust add-ons pin the full revision and use the
+  immutable tag only as its human-readable release name.
 - Keep named extractor commands: rejected because it lacks package provenance,
   lifecycle, configuration, and reusable capability discovery.
 - Retain raw `script:` as an escape hatch: rejected because it bypasses the
@@ -280,6 +309,7 @@ user's access whether it was signed, unsigned, or sideloaded.
 - [ADR 0051: Application boundary and composition root](0051-application-boundary-and-composition-root.md)
 - [ADR 0065: Managed Remote Stream playlists](0065-managed-remote-stream-playlists.md)
 - [Add-on contract reference](../reference/addons.md)
+- [Add-on package reference](../reference/addon-packages.md)
 - [Add-on repository reference](../reference/addon-repositories.md)
 - [Add-on trust boundary](../explanation/addon-trust-boundary.md)
 - [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md)

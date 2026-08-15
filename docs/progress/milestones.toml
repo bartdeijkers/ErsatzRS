@@ -1201,11 +1201,16 @@ adapters convert explicitly to the separate persisted domain enums;
 `RemoteStreamPerson` and `PlaylistEntry` retain compatibility re-exports. The
 crate includes a runnable `reference_addon` example and passes `cargo package`
 as an independently versioned 0.1.0 package. The first-party native Trakt
-add-on depends on exact version 0.1.0, emits typed check/error/list records, and
-passes its locked tests and clippy with a local crates.io patch to the verified
-package candidate. Remaining publication work is to publish contract version
-0.1.0, regenerate the add-on lockfile from crates.io without the local patch,
-and run the unpatched external repository gates.
+add-on emits typed check/error/list records and passes its locked tests and
+clippy through the local inner-loop patch. The accepted distribution contract
+is now GitHub-only: the crate declares guarded `publish = false`, each release
+uses an immutable `addon-contract-v<version>` tag, and official Rust add-ons
+pin the tag's full commit SHA. The 7-file, 21.1 KiB compressed archive declares
+the canonical repository and Zlib license; its 21 packaged tests and
+warning-free rustdoc build pass. Remaining work is to commit and push the clean
+candidate, create `addon-contract-v0.1.0`, pin that revision in native Trakt,
+regenerate its lockfile from GitHub without a local patch, and run the external
+repository gates from a fresh checkout.
 
 Verification on 2026-08-15: the P2 stderr-tail regression and all focused
 contract/infra/scanner suites passed; the contract package and packaged source
@@ -1256,7 +1261,7 @@ the complete parity gate, `cargo deny check`, and package verification for
 id         = 'ab-05'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Give both list contracts the same strictness'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-list-record-strictness-parity.md'
 depends_on = ['ab-03']
@@ -1267,7 +1272,35 @@ flips; rejection stays atomic with no partial persistence or generated files;
 and the capability-version bump is documented as the compatibility policy for
 adding a field.
 '''
-evidence = ''
+evidence = '''
+Implementation and local acceptance completed 2026-08-15. The contract-owned
+Remote Stream record now rejects unknown fields just like the media-list
+record, while one generic deserializer treats omitted and null optional arrays
+as absent in both contracts. Host adapters consume the shared whole-output
+conformance functions, whose bounded diagnostics name unknown fields without
+echoing invalid values. Regressions prove both wire rules and prove that a
+second-line rejection publishes no partial YAML/NFO generation while retaining
+the previous complete definitions and playlist identity. A failed media-list
+refresh likewise preserves the complete existing list, items, and GUIDs while
+recording only `LastError`. The capability references now freeze existing
+versions and require a version bump for new fields.
+
+The official POSIX fixture suite passed. Real Windows PowerShell fixture runs
+covered Beeld & Geluid and yt-dlp in media-list and Remote Stream modes; this
+found and fixed yt-dlp emitting `[null]` for missing genres/tags, and the rerun
+emitted empty arrays. The external repository's 17 tests passed, and native
+Trakt passed 5 locked tests plus Clippy against the local contract patch. The
+contract package verified; both workspace Clippy configurations passed; and
+the final unrestricted closeout passed all 1,540 nextest tests plus doctests.
+A pre-existing flaky storage test was corrected by keeping its fixture insert
+and `last_insert_rowid()` read on one SQLite transaction.
+
+The milestone remains In progress only because its declared `ab-03` dependency
+cannot complete until contract version 0.1.0 has a clean, remote-backed GitHub
+commit and immutable tag. After that tag exists, pin its full SHA in native
+Trakt, regenerate the external lockfile without the local patch, and rerun those
+gates before changing this milestone to Complete.
+'''
 
 [[milestone]]
 id         = 'ab-06'

@@ -40,11 +40,18 @@ release section when tagging a release.
 
 ### Changed
 
+- Add-on media-list and Remote Stream list output now share one strict parsing
+  policy: unknown fields reject the complete enumeration with a bounded error
+  naming the field, while omitted and `null` optional arrays both mean absent.
+  Existing capability versions are frozen; new fields require a capability
+  version bump instead of speculative emission.
 - The independently versioned `ersatzrs-addon-contract` crate now owns the
   media-list and Remote Stream NDJSON records, their wire enums, validation,
   and reusable stdout conformance checks. A runnable reference add-on ships as
   a Cargo example, and the official native Trakt add-on emits typed contract
-  records instead of assembling boundary JSON by hand.
+  records instead of assembling boundary JSON by hand. Rust add-ons consume
+  immutable GitHub contract tags through an exact commit revision; registry
+  publication is disabled and guarded.
 - Failed add-on `list` and `play` operations now carry a stable, bounded JSON
   diagnostic code on stderr. Host-detected missing settings and secrets use the
   same vocabulary, the admin UI localizes recognized codes in every supported
@@ -60,6 +67,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Cargo package metadata now points to the canonical ErsatzRS repository and
+  declares the same Zlib license as the repository `LICENSE`, so packaged
+  add-on contract metadata carries accurate source and licensing links.
 - Operator-supplied Add-on List and Remote Stream playlist URLs are now
   restricted to absolute HTTP(S) URLs without embedded credentials. Before a
   provider call, the host also enforces the installed add-on's declared exact,

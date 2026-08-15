@@ -28,8 +28,8 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.97.1"
 authors = ["Bart Deijkers <bartdeijkers@gmail.com>"]
-license = "GPL-3.0-or-later"
-repository = "https://github.com/bart/ErsatzRS"
+license = "Zlib"
+repository = "https://github.com/bartdeijkers/ErsatzRS"
 
 # Shared sqlx dependency. The union of all crate features (runtime-tokio,
 # sqlite, migrate, chrono, uuid, macros) is declared here so cargo compiles

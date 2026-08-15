@@ -24,9 +24,10 @@ string-matches an add-on's English error text across a repository boundary.
 
 Each debt item below has a standalone plan under `plans/` and a milestone under
 the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01, ab-02, and
-ab-04 are complete, and ab-03 is in progress pending publication of the
-independently versioned contract crate. The remaining recommended order is
-ab-05 and ab-06 after ab-03 completes.
+ab-04 are complete. Ab-03 is in progress pending the immutable GitHub tag and
+external revision-pin proof for the independently versioned contract crate;
+ab-05 is implemented and locally verified but stays in progress behind that
+dependency. Ab-06 follows after ab-03 completes.
 '''
 
 [[debt]]
@@ -49,7 +50,7 @@ resolved    = true
 id          = 'contract-crate-does-not-own-the-ndjson-payloads'
 description = 'Move the `media-list.list` and `remote-stream.list` record types into `ersatzrs-addon-contract`, make the crate consumable from outside the workspace, convert the first-party Trakt add-on to use it, and ship a reference add-on plus a callable conformance check.'
 discovered  = '2026-08-15'
-evidence    = 'Implementation is present: both wire records and enums live in `ersatzrs-addon-contract`; host edges convert them to separate persisted domain enums; shared conformance functions and a runnable reference add-on ship with the independently versioned, successfully packaged 0.1.0 crate; and native Trakt emits typed records and passes locked tests/clippy through a local crates.io patch. The debt remains open until 0.1.0 is published and the external lockfile and CI pass against crates.io without that patch.'
+evidence    = 'Implementation is present: both wire records and enums live in `ersatzrs-addon-contract`; host edges convert them to separate persisted domain enums; shared conformance functions and a runnable reference add-on ship with the independently versioned 0.1.0 crate; and native Trakt emits typed records and passes locked tests/clippy through the local inner-loop patch. The accepted distribution is GitHub-only: guarded `publish = false`, an immutable `addon-contract-v<version>` tag, and a full commit-SHA pin in official Rust add-ons. The 7-file, 21.1 KiB compressed package passes 21 packaged tests and warning-free rustdoc and declares the canonical repository and Zlib license. The debt remains open until the clean candidate is pushed and tagged and the external lockfile and CI pass against the GitHub revision without a local patch.'
 adr         = '0066'
 resolved    = false
 
@@ -65,8 +66,8 @@ resolved    = true
 id          = 'list-contracts-have-opposite-strictness'
 description = 'Apply one documented strictness rule to both list record types, including `deny_unknown_fields` and shared null-array handling, and record the capability-version bump as the compatibility escape hatch.'
 discovered  = '2026-08-15'
-evidence    = '`AddonMediaListRecord` (`crates/ersatzrs-core/src/addon_media_list.rs:13`) declares `deny_unknown_fields`; `PlaylistEntry` (`crates/ersatzrs-scanner/src/remote_stream_playlist.rs:139`) does not, and tolerates `null` arrays through `deserialize_string_vec`. The same add-on implements both, so an identical typo fails loudly in one contract and is silently discarded in the other. `docs/reference/addon-media-lists.md` documents rejection; the Remote Stream reference makes that claim only about the YAML manifest.'
-adr         = '0068'
+evidence    = 'Implementation and local acceptance completed through milestone `ab-05` on 2026-08-15. Both contract-owned records now reject unknown fields with a bounded diagnostic naming the field, share omitted/null optional-array handling, and are decoded by host adapters through the shared conformance functions. Atomic refresh regressions preserve the prior complete Remote Stream generation and the existing media list, items, and GUIDs. The references freeze existing capability versions and require a version bump for new fields. Official POSIX fixtures passed; real Windows PowerShell fixtures covered Beeld & Geluid and yt-dlp in both list modes and exposed then verified the fix for yt-dlp `[null]` genres/tags; the external suite and locally patched native Trakt gates passed. The debt remains open only until prerequisite `ab-03` has its immutable GitHub tag and exact external revision pin and those external gates pass without a local patch.'
+adr         = '0066'
 resolved    = false
 
 [[debt]]

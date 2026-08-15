@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
-    validate_operator_source_url, AddonMediaListContentKind as WireContentKind,
+    conform_media_list_output, validate_operator_source_url,
+    AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
     AddonMediaListRecord, AddonOperationError, CAPABILITY_MEDIA_LIST_LIST_V1,
     CAPABILITY_MEDIA_LIST_LIST_V2, MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS,
@@ -102,11 +103,12 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
 
 #[allow(clippy::too_many_lines)]
 fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
-    let text = std::str::from_utf8(output).map_err(|_| RepositoryError::Decode {
-        kind: "media-list add-on output",
-        value: "output is not UTF-8".to_owned(),
-    })?;
-    let mut records = text.lines().filter(|line| !line.trim().is_empty());
+    let mut records = conform_media_list_output(output)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "media-list add-on output",
+            value: error.to_string(),
+        })?
+        .into_iter();
     let header = records.next().ok_or_else(|| RepositoryError::Decode {
         kind: "media-list add-on output",
         value: "missing list record".to_owned(),
@@ -115,7 +117,7 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
         provider_id,
         name,
         description,
-    } = decode_record(header)?
+    } = header
     else {
         return Err(RepositoryError::Decode {
             kind: "media-list add-on output",
@@ -158,7 +160,7 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             availability,
             availability_reason,
             content_kind,
-        } = decode_record(record)?
+        } = record
         else {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
@@ -218,20 +220,6 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
         description,
         items,
     })
-}
-
-fn decode_record(line: &str) -> Result<AddonMediaListRecord> {
-    let record = serde_json::from_str::<AddonMediaListRecord>(line).map_err(|_| {
-        RepositoryError::Decode {
-            kind: "media-list add-on output",
-            value: "record violates the bounded media-list JSON contract".to_owned(),
-        }
-    })?;
-    record.validate().map_err(|_| RepositoryError::Decode {
-        kind: "media-list add-on output",
-        value: "record violates the bounded media-list JSON contract".to_owned(),
-    })?;
-    Ok(record)
 }
 
 const fn domain_item_kind(kind: WireItemKind) -> ersatzrs_domain::AddonMediaListItemKind {
@@ -419,7 +407,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
             .await
             .expect_err("unknown availability must reject the enumeration");
         let message = error.to_string();
-        assert!(message.contains("bounded media-list JSON contract"));
+        assert!(message.contains("is not a valid record"));
         assert!(!message.contains("maybe_later"));
         assert!(message.len() < 512);
     }
@@ -530,6 +518,17 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let list = decode_media_list_output(output).expect("valid output");
         assert_eq!(list.provider_id, "alice/watchlist");
         assert_eq!(list.items.len(), 1);
+    }
+
+    #[test]
+    fn rejects_and_names_unknown_media_list_fields() {
+        let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
+{"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"movie","geners":[]}
+"#;
+        let error = decode_media_list_output(output).expect_err("unknown field must reject");
+        let message = error.to_string();
+        assert!(message.contains("unknown field `geners`"));
+        assert!(message.len() < 512);
     }
 
     #[test]

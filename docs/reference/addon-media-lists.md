@@ -15,7 +15,13 @@ receives the same authority and host that passed validation.
 
 Output is UTF-8 newline-delimited JSON. Blank lines are ignored. The first
 non-blank line must be one list record; every remaining line must be one item
-record. Unknown fields are rejected.
+record. Unknown fields are rejected, and the bounded contract error names the
+offending field. Optional arrays treat an omitted field and explicit `null` as
+the same absent value.
+
+Capability versions are frozen wire contracts. A new optional or required
+field must be introduced under a new capability version; the host does not
+silently accept speculative fields emitted against an existing version.
 
 ## List record
 
@@ -39,7 +45,7 @@ record. Unknown fields are rejected.
 | `season` | integer or null | Optional season number. |
 | `episode` | integer or null | Optional episode number. |
 | `kind` | string | `movie`, `show`, `season`, `episode`, or `remote_stream`. |
-| `guids` | string array | Optional local metadata GUID candidates. |
+| `guids` | string array or null | Optional local metadata GUID candidates; omitted and `null` both mean no candidates. |
 | `source_url` | string or null | Required for `remote_stream`; stable URL used after the generated library is scanned. |
 
 Version 2 adds these item fields:

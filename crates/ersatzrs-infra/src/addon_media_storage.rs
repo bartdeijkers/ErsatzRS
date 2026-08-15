@@ -755,6 +755,7 @@ mod tests {
         source_url: &str,
         name: &str,
     ) -> EntityId {
+        let mut transaction = pool.begin().await.expect("begin list transaction");
         let inserted = sqlx::query(
             r#"INSERT INTO "AddonMediaList" ("AddonId", "ProviderId", "SourceUrl", "Name")
                VALUES (?, ?, ?, ?)"#,
@@ -763,10 +764,9 @@ mod tests {
         .bind(source_url)
         .bind(source_url)
         .bind(name)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await
         .expect("insert list");
-        let mut transaction = pool.begin().await.expect("begin id transaction");
         let id = crate::db::inserted_id(&mut transaction, inserted)
             .await
             .expect("read list id");

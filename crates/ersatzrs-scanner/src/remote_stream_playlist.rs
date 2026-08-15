@@ -9,13 +9,13 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Utc};
 pub use ersatzrs_addon_contract::PlaylistEntry;
 use ersatzrs_addon_contract::{
-    validate_addon_id, AddonMediaListContentKind as WireContentKind,
+    conform_remote_stream_list_output, validate_addon_id,
+    AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1,
-    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_PROVIDER_ID_BYTES,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS,
     MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
 use ersatzrs_addon_contract::{
@@ -703,74 +703,9 @@ pub fn select_entries(
     selected
 }
 
-#[allow(clippy::assigning_clones)]
 fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
-    let mut entries = Vec::new();
-    let mut ids = BTreeMap::new();
-    for (index, line) in value.lines().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let mut entry: PlaylistEntry = serde_json::from_str(line).map_err(|_| {
-            PlaylistError::Enumeration(format!(
-                "line {} violates the bounded playlist item JSON contract",
-                index + 1
-            ))
-        })?;
-        entry.id = entry.id.trim().to_owned();
-        entry.url = entry.url.trim().to_owned();
-        entry.title = entry.title.trim().to_owned();
-        entry.validate().map_err(|_| {
-            PlaylistError::Enumeration(format!(
-                "line {} violates the bounded playlist item JSON contract",
-                index + 1
-            ))
-        })?;
-        if entry.id.is_empty() || entry.url.is_empty() || entry.title.is_empty() {
-            return Err(PlaylistError::Enumeration(format!(
-                "line {} requires non-empty id, url, and title",
-                index + 1
-            )));
-        }
-        if entry.id.len() > MAX_PROVIDER_ID_BYTES
-            || entry
-                .provider_id
-                .as_ref()
-                .is_some_and(|provider_id| provider_id.len() > MAX_PROVIDER_ID_BYTES)
-            || entry
-                .availability_reason
-                .as_ref()
-                .is_some_and(|reason| reason.len() > MAX_AVAILABILITY_REASON_BYTES)
-        {
-            return Err(PlaylistError::Enumeration(format!(
-                "line {} has an overlong provider identity or availability reason",
-                index + 1
-            )));
-        }
-        if entry
-            .year
-            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
-        {
-            return Err(PlaylistError::Enumeration(format!(
-                "line {} has an invalid year",
-                index + 1
-            )));
-        }
-        let normalized_id = entry.id.to_ascii_lowercase();
-        if let Some(previous) = ids.insert(normalized_id, index + 1) {
-            return Err(PlaylistError::Enumeration(format!(
-                "line {} duplicates the id from line {previous}",
-                index + 1
-            )));
-        }
-        entries.push(entry);
-        if entries.len() > MAX_LIST_ITEMS {
-            return Err(PlaylistError::Enumeration(format!(
-                "add-on returned more than {MAX_LIST_ITEMS} entries"
-            )));
-        }
-    }
-    Ok(entries)
+    conform_remote_stream_list_output(value.as_bytes())
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
 }
 
 const fn wire_content_kind(kind: AddonMediaListContentKind) -> WireContentKind {
@@ -1685,7 +1620,7 @@ create_playlist: true
         let invalid = r#"{"id":"invalid","url":"https://example.test/5","title":"Invalid","availability":"maybe_later"}"#;
         let error = parse_ndjson_entries(invalid).expect_err("unknown availability must fail");
         let message = error.to_string();
-        assert!(message.contains("bounded playlist item JSON contract"));
+        assert!(message.contains("is not a valid record"));
         assert!(!message.contains("maybe_later"));
         assert!(message.len() < 512);
     }
@@ -1725,9 +1660,77 @@ create_playlist: true
         .await
         .expect_err("unknown availability must reject enumeration");
         let message = error.to_string();
-        assert!(message.contains("bounded playlist item JSON contract"));
+        assert!(message.contains("is not a valid record"));
         assert!(!message.contains("maybe_later"));
         assert!(message.len() < 512);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unknown_field_refresh_preserves_complete_managed_generation() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        write_fixture_playlist_script(&script, "https://example.test/1", true);
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
+        let manifest_path = temp.path().join("Strict.playlist.yml");
+        let manifest =
+            parse_playlist_manifest(valid_yaml(), &manifest_path).expect("strict manifest");
+        let first = sync_playlist_files(
+            &pool,
+            &manifest_path,
+            valid_yaml().as_bytes(),
+            &manifest,
+            &runtime,
+        )
+        .await
+        .expect("initial complete generation");
+        let folder = temp.path().join("Strict");
+        let original_files = ["one.yml", "one.nfo", "two.yml", "two.nfo"].map(|name| {
+            (
+                name,
+                std::fs::read(folder.join(name)).expect("original managed file"),
+            )
+        });
+
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '%s\\n' \\\n",
+                "  '{\"id\":\"new\",\"url\":\"https://example.test/new\",\"title\":\"New\",\"duration_seconds\":60}' \\\n",
+                "  '{\"id\":\"invalid\",\"url\":\"https://example.test/invalid\",\"title\":\"Invalid\",\"duration_seconds\":60,\"geners\":[]}'\n"
+            ),
+        )
+        .expect("write strictness failure fixture");
+        update_fixture_content_hash(&pool, &package_root).await;
+
+        let error = sync_playlist_files(
+            &pool,
+            &manifest_path,
+            valid_yaml().as_bytes(),
+            &manifest,
+            &runtime,
+        )
+        .await
+        .expect_err("unknown field must reject the complete refresh");
+        assert!(error.to_string().contains("unknown field `geners`"));
+        assert!(!folder.join("new.yml").exists());
+        assert!(!folder.join("new.nfo").exists());
+        for (name, bytes) in original_files {
+            assert_eq!(
+                std::fs::read(folder.join(name)).expect("preserved managed file"),
+                bytes
+            );
+        }
+        let failed = load_sidecar(&folder.join(".ersatzrs-playlist.json"))
+            .expect("failed state")
+            .expect("persisted failed state");
+        assert_eq!(failed.playlist_etag, first.state.playlist_etag);
+        assert_eq!(failed.entries, first.state.entries);
+        assert_eq!(failed.last_result.kind, "failed");
     }
 
     #[cfg(unix)]

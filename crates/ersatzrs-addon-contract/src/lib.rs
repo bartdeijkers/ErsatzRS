@@ -51,6 +51,7 @@ pub const OPERATION_CODE_NOT_FOUND: &str = "not-found";
 pub const OPERATION_CODE_UNSUPPORTED_URL: &str = "unsupported-url";
 pub const OPERATION_CODE_FAILED: &str = "operation-failed";
 const MAX_PACKAGE_VERSION_BYTES: usize = 128;
+const MAX_RECORD_PARSE_DETAIL_BYTES: usize = 256;
 
 /// Media kinds accepted from a provider-neutral add-on list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -108,7 +109,7 @@ pub enum AddonMediaListRecord {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         episode: Option<i32>,
         kind: AddonMediaListItemKind,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_vec_or_default")]
         guids: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         source_url: Option<String>,
@@ -225,6 +226,7 @@ pub struct RemoteStreamPerson {
 
 /// One provider entry emitted by `remote-stream.list.v1` or v2.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlaylistEntry {
     pub id: String,
     #[serde(default)]
@@ -249,19 +251,19 @@ pub struct PlaylistEntry {
     pub release_date: Option<String>,
     #[serde(default)]
     pub content_rating: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub genres: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub tags: Vec<String>,
     #[serde(default)]
     pub collection: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub people: Vec<RemoteStreamPerson>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub producers: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub original_broadcasters: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub broadcasters: Vec<String>,
     #[serde(default)]
     pub thumbnail_url: Option<String>,
@@ -279,7 +281,7 @@ pub struct PlaylistEntry {
     pub season: Option<i32>,
     #[serde(default)]
     pub episode: Option<i32>,
-    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub guids: Vec<String>,
 }
 
@@ -315,11 +317,12 @@ impl PlaylistEntry {
     }
 }
 
-fn deserialize_string_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+fn deserialize_vec_or_default<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
 {
-    Ok(Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_default())
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// Manifest validation failure.
@@ -605,7 +608,7 @@ impl AddonIconMediaType {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AddonCapability {
-    /// Capability identifier ending in .v<major>.
+    /// Capability identifier ending in `.v<major>`.
     pub id: String,
 }
 
@@ -1270,12 +1273,8 @@ pub fn conform_media_list_output(
         .filter(|line| !line.trim().is_empty())
         .enumerate()
     {
-        let record = serde_json::from_str::<AddonMediaListRecord>(line).map_err(|_| {
-            ContractError::Invalid {
-                field: "media list output",
-                message: format!("line {} is not a valid record", index + 1),
-            }
-        })?;
+        let record = serde_json::from_str::<AddonMediaListRecord>(line)
+            .map_err(|error| record_parse_error("media list output", index, &error))?;
         record.validate()?;
         match &record {
             AddonMediaListRecord::List { .. } if index == 0 => {}
@@ -1330,13 +1329,14 @@ pub fn conform_remote_stream_list_output(
         .filter(|line| !line.trim().is_empty())
         .enumerate()
     {
-        let mut entry =
-            serde_json::from_str::<PlaylistEntry>(line).map_err(|_| ContractError::Invalid {
-                field: "remote stream list output",
-                message: format!("line {} is not a valid record", index + 1),
-            })?;
+        let mut entry = serde_json::from_str::<PlaylistEntry>(line)
+            .map_err(|error| record_parse_error("remote stream list output", index, &error))?;
         let untrimmed_id = std::mem::take(&mut entry.id);
         untrimmed_id.trim().clone_into(&mut entry.id);
+        let untrimmed_url = std::mem::take(&mut entry.url);
+        untrimmed_url.trim().clone_into(&mut entry.url);
+        let untrimmed_title = std::mem::take(&mut entry.title);
+        untrimmed_title.trim().clone_into(&mut entry.title);
         entry.validate()?;
         if entry
             .year
@@ -1345,7 +1345,10 @@ pub fn conform_remote_stream_list_output(
             return invalid("remote stream year", "must be valid host metadata");
         }
         if !ids.insert(entry.id.to_ascii_lowercase()) {
-            return invalid("remote stream list output", "entry id must be unique");
+            return invalid(
+                "remote stream list output",
+                "entry duplicates an earlier entry id",
+            );
         }
         entries.push(entry);
         if entries.len() > MAX_LIST_ITEMS {
@@ -1356,6 +1359,27 @@ pub fn conform_remote_stream_list_output(
         }
     }
     Ok(entries)
+}
+
+fn record_parse_error(
+    field: &'static str,
+    index: usize,
+    error: &serde_json::Error,
+) -> ContractError {
+    let raw = error.to_string();
+    let message = if raw.starts_with("unknown field ") {
+        let detail = raw
+            .split_once(", expected")
+            .map_or(raw.as_str(), |(detail, _)| detail);
+        format!(
+            "line {} contains {}",
+            index + 1,
+            bound_utf8(detail, MAX_RECORD_PARSE_DETAIL_BYTES)
+        )
+    } else {
+        format!("line {} is not a valid record", index + 1)
+    };
+    ContractError::Invalid { field, message }
 }
 
 fn validate_provider_id(value: &str) -> Result<(), ContractError> {
@@ -1777,6 +1801,37 @@ mod tests {
     }
 
     #[test]
+    fn list_contracts_reject_and_name_unknown_fields() {
+        let media_list = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","geners":[]}
+"#;
+        let media_error = conform_media_list_output(media_list)
+            .expect_err("media-list unknown field must reject the complete output")
+            .to_string();
+        assert!(media_error.contains("unknown field `geners`"));
+        assert!(media_error.len() < 512);
+
+        let remote_stream =
+            br#"{"id":"video:1","url":"https://example.test/video","title":"Video","geners":[]}
+"#;
+        let remote_error = conform_remote_stream_list_output(remote_stream)
+            .expect_err("Remote Stream unknown field must reject the complete output")
+            .to_string();
+        assert!(remote_error.contains("unknown field `geners`"));
+        assert!(remote_error.len() < 512);
+
+        let oversized_field = "x".repeat(4_096);
+        let oversized = format!(
+            "{{\"id\":\"video:1\",\"url\":\"https://example.test/video\",\"title\":\"Video\",\"{oversized_field}\":[]}}\n"
+        );
+        let bounded = conform_remote_stream_list_output(oversized.as_bytes())
+            .expect_err("oversized unknown field must stay bounded")
+            .to_string();
+        assert!(bounded.contains("unknown field `"));
+        assert!(bounded.len() < 512);
+    }
+
+    #[test]
     fn typed_media_list_defaults_keep_the_v1_boundary_shape() {
         let record = AddonMediaListRecord::item(
             "movie:1",
@@ -1792,12 +1847,27 @@ mod tests {
     }
 
     #[test]
-    fn remote_stream_conformance_preserves_null_array_compatibility() {
-        let output = br#"{"id":"video:1","url":"https://example.test/video","title":"Video","genres":null,"tags":null}
+    fn list_contracts_treat_null_and_omitted_arrays_as_absent() {
+        let media_null = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","guids":null}
 "#;
-        let entries = conform_remote_stream_list_output(output).unwrap();
-        assert!(entries[0].genres.is_empty());
-        assert!(entries[0].tags.is_empty());
+        let media_omitted = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie"}
+"#;
+        assert_eq!(
+            conform_media_list_output(media_null).unwrap(),
+            conform_media_list_output(media_omitted).unwrap()
+        );
+
+        let remote_null = br#"{"id":"video:1","url":"https://example.test/video","title":"Video","genres":null,"tags":null,"people":null,"producers":null,"original_broadcasters":null,"broadcasters":null,"guids":null}
+"#;
+        let remote_omitted =
+            br#"{"id":"video:1","url":"https://example.test/video","title":"Video"}
+"#;
+        assert_eq!(
+            conform_remote_stream_list_output(remote_null).unwrap(),
+            conform_remote_stream_list_output(remote_omitted).unwrap()
+        );
     }
 
     #[test]

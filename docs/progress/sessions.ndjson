@@ -1,3 +1,6 @@
+{"agent":"Codex","date":"2026-08-15","summary":"Replaced crates.io contract publication with guarded GitHub-only tag and revision policy; host candidate awaits its commit SHA before external pinning"}
+{"agent":"Codex","date":"2026-08-15","summary":"Prepared AB-05 and contract crate 0.1.0 for clean publication; final completion awaits explicit commit, push, and crates.io publish"}
+{"agent":"Codex","date":"2026-08-15","summary":"Implemented and locally verified AB-05 strict list contracts; retained In progress until AB-03 publishes contract 0.1.0"}
 {"agent":"Codex","date":"2026-08-15","summary":"Resolved AB-04 URL parser differential by forwarding the validated canonical source URL to add-ons"}
 {"agent":"Codex","date":"2026-08-15","summary":"Completed AB-04 operator source URL validation and network_hosts enforcement across Add-on Lists and Remote Stream playlists"}
 {"agent":"Codex","date":"2026-08-15","summary":"Fixed legacy stderr tail truncation and implemented AB-03 contract-owned NDJSON through the publish-ready package and locally patched Trakt acceptance boundary"}

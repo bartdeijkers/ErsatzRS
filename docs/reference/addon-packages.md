@@ -7,18 +7,23 @@ combinations are rejected.
 ## Rust contract crate
 
 The distribution mechanism for Rust add-ons is the independently versioned
-`ersatzrs-addon-contract` crate on crates.io. After version `0.1.0` is
-published, add-ons declare:
+`ersatzrs-addon-contract` crate in the canonical ErsatzRS GitHub repository.
+Contract version `0.1.0` is identified by the immutable
+`addon-contract-v0.1.0` tag. Add-ons pin the tag's full commit SHA:
 
 ```toml
-[dependencies]
-ersatzrs-addon-contract = "=0.1.0"
+[dependencies.ersatzrs-addon-contract]
+git = "https://github.com/bartdeijkers/ErsatzRS"
+rev = "<contract-commit-sha>"
 ```
 
-The source package is validated with `cargo package` before publication.
-ErsatzRS publishes a compatible contract-crate version before the corresponding
-official add-on change is published. Add-ons pin an exact version and update
-deliberately; they do not depend on the application workspace by path.
+The `rev` value is the 40-character commit named by the contract tag. The crate
+declares `publish = false` and is not distributed through crates.io or another
+registry. Its source package, tests, and rustdoc are validated before the tag is
+pushed. ErsatzRS tags a compatible contract version before the corresponding
+official add-on change is published. Add-ons update the revision and lockfile
+deliberately; they do not depend on a moving branch or the application
+workspace by path.
 
 `AddonMediaListRecord` owns `media-list.list.v1` and v2 records.
 `PlaylistEntry` owns `remote-stream.list.v1` and v2 records. Their shared wire
