@@ -4339,6 +4339,8 @@ pub struct AddAddonMediaList {
     /// Optional storage folder name for a first import; empty derives it from
     /// the list name.
     pub folder_name: String,
+    /// Optional list-wide content classification override.
+    pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
 }
 
 /// Re-run local matching for one persisted Add-on media list.
@@ -4357,6 +4359,9 @@ pub struct UpdateAddonMediaList {
     pub auto_refresh: bool,
     /// Maintain a generated playlist for matched rows.
     pub generate_playlist: bool,
+    /// Force one descriptive content type for all entries, or retain
+    /// provider inference with `Auto`.
+    pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
 }
 
 /// Delete one Add-on media list and any generated playlist.
@@ -4364,6 +4369,14 @@ pub struct UpdateAddonMediaList {
 pub struct DeleteAddonMediaList {
     /// Persisted Add-on media list identity.
     pub id: EntityId,
+}
+
+/// Set or clear the exact local replacement for one add-on list item.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetAddonMediaListItemReplacement {
+    pub item_id: EntityId,
+    pub media_item_id: Option<EntityId>,
+    pub media_version_id: Option<EntityId>,
 }
 
 /// Import or refresh one Add-on media list.
@@ -4383,6 +4396,7 @@ pub async fn add_addon_media_list(
             command.addon_id.trim(),
             command.source_url.trim(),
             (!folder_name.is_empty()).then_some(folder_name),
+            command.content_kind_override,
         )
         .await
         .map_err(Into::into)
@@ -4404,7 +4418,12 @@ pub async fn update_addon_media_list(
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     repository
-        .update_settings(command.id, command.auto_refresh, command.generate_playlist)
+        .update_settings(
+            command.id,
+            command.auto_refresh,
+            command.generate_playlist,
+            command.content_kind_override,
+        )
         .await
         .map_err(Into::into)
 }
@@ -4416,6 +4435,32 @@ pub async fn delete_addon_media_list(
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     repository.delete(command.id).await.map_err(Into::into)
+}
+
+/// Persist one exact replacement mapping and rebuild the generated playlist.
+pub async fn set_addon_media_list_item_replacement(
+    command: SetAddonMediaListItemReplacement,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    let replacement = match (command.media_item_id, command.media_version_id) {
+        (None, None) => None,
+        (Some(media_item_id), Some(media_version_id)) => {
+            validate_positive_id(media_item_id, "media_item_id")?;
+            validate_positive_id(media_version_id, "media_version_id")?;
+            Some((media_item_id, media_version_id))
+        }
+        _ => {
+            return validation_error(
+                "replacement",
+                "media item and media version must be supplied together",
+            )
+        }
+    };
+    repository
+        .set_replacement(command.item_id, replacement)
+        .await
+        .map_err(Into::into)
 }
 
 fn validate_positive_id(id: EntityId, field: &'static str) -> crate::Result<()> {

@@ -12,6 +12,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use ersatzrs_addon_contract::validate_addon_id;
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
 
 use crate::addons::{
@@ -30,12 +31,21 @@ const FILE_SECRET_DIAGNOSTIC: &str =
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteStreamDefinition {
+    /// Stable provider item identity used to correlate list and stream records.
+    pub provider_id: Option<String>,
     pub url: Option<String>,
     pub addon: Option<String>,
     pub duration: Option<String>,
     pub fallback_query: Option<String>,
     pub is_live: bool,
     pub title: Option<String>,
+    pub original_title: Option<String>,
+    pub sort_title: Option<String>,
+    pub outline: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
     pub plot: Option<String>,
     pub year: Option<i32>,
     /// Original publication/broadcast instant in RFC 3339 form.
@@ -54,6 +64,17 @@ pub struct RemoteStreamDefinition {
     pub original_broadcasters: Vec<String>,
     #[serde(default)]
     pub broadcasters: Vec<String>,
+    #[serde(default)]
+    pub studios: Vec<String>,
+    #[serde(default)]
+    pub languages: Vec<String>,
+    #[serde(default)]
+    pub guids: Vec<String>,
+    #[serde(default)]
+    pub availability: AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
+    #[serde(default)]
+    pub content_kind: AddonMediaListContentKind,
 }
 
 /// One credited person in a Remote Stream definition.

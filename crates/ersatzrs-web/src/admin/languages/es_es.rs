@@ -480,6 +480,11 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::Cancel => "Cancelar",
         TextKey::Clear => "Limpiar",
+        TextKey::Available => "Disponible",
+        TextKey::UnknownAvailability => "Desconocido",
+        TextKey::LocalReplacement => "Sustitución local",
+        TextKey::NoReplacement => "Sin sustitución",
+        TextKey::InvalidReplacement => "Sustitución no válida",
         TextKey::Channels => "Canales",
         TextKey::Close => "Cerrar",
         TextKey::Collections => "Colecciones",

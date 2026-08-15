@@ -2,6 +2,7 @@
 //! `Pages/TraktLists.razor`, `Pages/TraktListEditor.razor`, and
 //! `Shared/AddTraktListDialog.razor`; ADR 0067 owns the deliberate boundary change.
 
+use ersatzrs_domain::AddonMediaListContentKind;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -10,8 +11,10 @@ use crate::admin::i18n::{
 };
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_lists_page_size, list_addon_media_list_providers, list_addon_media_lists,
-    match_addon_media_list, update_addon_media_list, AddonMediaListForm, AddonMediaListProviderRow,
+    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
+    list_addon_media_lists, match_addon_media_list, search_addon_media_list_replacements,
+    set_addon_media_list_item_replacement, update_addon_media_list, AddonMediaListForm,
+    AddonMediaListItemRow, AddonMediaListProviderRow, AddonMediaListReplacementRow,
     AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
@@ -32,6 +35,26 @@ fn set_browser_location(path: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn set_browser_location(_path: &str) {}
+
+fn content_kind_from_value(value: &str) -> AddonMediaListContentKind {
+    match value {
+        "television_episode" => AddonMediaListContentKind::TelevisionEpisode,
+        "movie" => AddonMediaListContentKind::Movie,
+        "music_video" => AddonMediaListContentKind::MusicVideo,
+        "other_video" => AddonMediaListContentKind::OtherVideo,
+        _ => AddonMediaListContentKind::Auto,
+    }
+}
+
+const fn content_kind_value(value: AddonMediaListContentKind) -> &'static str {
+    match value {
+        AddonMediaListContentKind::Auto => "auto",
+        AddonMediaListContentKind::TelevisionEpisode => "television_episode",
+        AddonMediaListContentKind::Movie => "movie",
+        AddonMediaListContentKind::MusicVideo => "music_video",
+        AddonMediaListContentKind::OtherVideo => "other_video",
+    }
+}
 
 #[component]
 pub fn AddonMediaListsPage() -> impl IntoView {
@@ -87,6 +110,7 @@ fn AddonMediaListsIsland(
     );
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
+    let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
     let toast = use_toast();
@@ -102,10 +126,14 @@ fn AddonMediaListsIsland(
         }
     });
 
-    let add_action = Action::new(|value: &(String, String, String)| {
-        let (addon_id, source_url, folder_name) = value.clone();
-        async move { add_addon_media_list(addon_id, source_url, folder_name).await }
-    });
+    let add_action = Action::new(
+        |value: &(String, String, String, AddonMediaListContentKind)| {
+            let (addon_id, source_url, folder_name, content_kind_override) = value.clone();
+            async move {
+                add_addon_media_list(addon_id, source_url, folder_name, content_kind_override).await
+            }
+        },
+    );
     let match_action = Action::new(|id: &i64| match_addon_media_list(*id));
     let delete_action = Action::new(|id: &i64| delete_addon_media_list(*id));
 
@@ -367,8 +395,9 @@ fn AddonMediaListsIsland(
                 addon_id=add_addon_id
                 source_url=add_source_url
                 folder_name=add_folder_name
+                content_kind=add_content_kind
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind)| {
                     add_action.dispatch(value);
                 })
             />
@@ -399,8 +428,9 @@ fn AddAddonMediaListDialog(
     addon_id: RwSignal<String>,
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
+    content_kind: RwSignal<AddonMediaListContentKind>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String, String)>,
+    on_submit: Callback<(String, String, String, AddonMediaListContentKind)>,
 ) -> impl IntoView {
     view! {
         <div
@@ -422,8 +452,9 @@ fn AddAddonMediaListDialog(
                         let addon_id = addon_id.get_untracked();
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
+                        let content_kind = content_kind.get_untracked();
                         if !addon_id.trim().is_empty() && !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind));
                         }
                     }
                 >
@@ -439,6 +470,22 @@ fn AddAddonMediaListDialog(
                                 {providers.into_iter().map(|provider| view! {
                                     <option value=provider.addon_id>{provider.name}</option>
                                 }).collect_view()}
+                            </select>
+                        </label>
+                        <label class=style::dialog_field>
+                            <span>{tr(TextKey::MediaKind)}</span>
+                            <select
+                                name="content_kind_override"
+                                prop:value=move || content_kind_value(content_kind.get())
+                                on:change=move |event| {
+                                    content_kind.set(content_kind_from_value(&event_target_value(&event)));
+                                }
+                            >
+                                <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                                <option value="television_episode">{tr(TextKey::TelevisionShow)}</option>
+                                <option value="movie">{tr(TextKey::Movie)}</option>
+                                <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                                <option value="other_video">{tr(TextKey::OtherVideo)}</option>
                             </select>
                         </label>
                         <label class=style::dialog_field>
@@ -493,18 +540,26 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             .unwrap_or(0)
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial = Resource::new_blocking(move || id, get_addon_media_list_form);
+    let initial = Resource::new_blocking(
+        move || id,
+        |id| async move {
+            let form = get_addon_media_list_form(id).await?;
+            let items = list_addon_media_list_items(id).await?;
+            Ok::<_, ServerFnError>((form, items))
+        },
+    );
 
     view! {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |result| admin_result_view(result, |initial_form| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items)| {
                     view! {
                         <AddonMediaListEditorIsland
                             id=id
                             initial_error=error.clone()
                             initial_form=initial_form
+                            initial_items=initial_items
                         />
                     }
                     .into_any()
@@ -519,6 +574,7 @@ fn AddonMediaListEditorIsland(
     id: i64,
     initial_error: String,
     initial_form: Option<AddonMediaListForm>,
+    initial_items: Vec<AddonMediaListItemRow>,
 ) -> impl IntoView {
     let has_initial_error = !initial_error.is_empty();
     let form = initial_form.unwrap_or_default();
@@ -530,14 +586,32 @@ fn AddonMediaListEditorIsland(
     let submit_source_url = source_url.clone();
     let auto_refresh = RwSignal::new(form.auto_refresh);
     let generate_playlist = RwSignal::new(form.generate_playlist);
+    let content_kind_override = RwSignal::new(form.content_kind_override);
     let display_id = format!("{} / {}", form.addon_id, form.source_url);
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
+    let items = RwSignal::new(initial_items);
+    let replacement_target = RwSignal::new(None::<i64>);
+    let replacement_query = RwSignal::new(String::new());
+    let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
 
     let save_action = Action::new(|form: &AddonMediaListForm| {
         let form = form.clone();
         async move { update_addon_media_list(form).await }
     });
+    let search_action = Action::new(|query: &String| {
+        let query = query.clone();
+        async move { search_addon_media_list_replacements(query).await }
+    });
+    let replacement_action = Action::new(|value: &(i64, Option<(i64, i64)>)| {
+        let (item_id, replacement) = *value;
+        async move {
+            let (media_item_id, media_version_id) =
+                replacement.map_or((None, None), |(item, version)| (Some(item), Some(version)));
+            set_addon_media_list_item_replacement(item_id, media_item_id, media_version_id).await
+        }
+    });
+    let refresh_items_action = Action::new(move |(): &()| list_addon_media_list_items(id));
 
     let toast = use_toast();
     Effect::new(move |_| {
@@ -557,6 +631,40 @@ fn AddonMediaListEditorIsland(
             }
         }
     });
+    Effect::new(move |_| {
+        if let Some(result) = search_action.value().get() {
+            match result {
+                Ok(rows) => replacement_results.set(rows),
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = replacement_action.value().get() {
+            match result {
+                Ok(()) => {
+                    replacement_target.set(None);
+                    refresh_items_action.dispatch(());
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = refresh_items_action.value().get() {
+            match result {
+                Ok(rows) => items.set(rows),
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
+                }
+            }
+        }
+    });
 
     view! {
         <div class=style::page>
@@ -573,6 +681,7 @@ fn AddonMediaListEditorIsland(
                             source_url: submit_source_url.clone(),
                             auto_refresh: auto_refresh.get_untracked(),
                             generate_playlist: generate_playlist.get_untracked(),
+                            content_kind_override: content_kind_override.get_untracked(),
                         });
                     }
                 >
@@ -595,6 +704,22 @@ fn AddonMediaListEditorIsland(
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>
                             <input type="hidden" name="addon_id" value=addon_id/>
                             <input type="hidden" name="source_url" value=source_url/>
+                            <div class=style::field_row>
+                                <div class=style::field_label>{tr(TextKey::MediaKind)}</div>
+                                <select
+                                    name="content_kind_override"
+                                    prop:value=move || content_kind_value(content_kind_override.get())
+                                    on:change=move |event| {
+                                        content_kind_override.set(content_kind_from_value(&event_target_value(&event)));
+                                    }
+                                >
+                                    <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                                    <option value="television_episode">{tr(TextKey::TelevisionShow)}</option>
+                                    <option value="movie">{tr(TextKey::Movie)}</option>
+                                    <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                                    <option value="other_video">{tr(TextKey::OtherVideo)}</option>
+                                </select>
+                            </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Id)}</div>
                                 <input
@@ -637,6 +762,95 @@ fn AddonMediaListEditorIsland(
                                 </label>
                             </div>
             </form>
+            <section class=style::content style:display=move || if form_found { "" } else { "none" }>
+                <h2>{tr(TextKey::LocalReplacement)}</h2>
+                <div class=style::table_wrap>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>{tr(TextKey::Name)}</th>
+                                <th>{tr(TextKey::Status)}</th>
+                                <th>{tr(TextKey::LocalReplacement)}</th>
+                                <th/>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {move || items.get().into_iter().map(|item| {
+                                let item_id = item.id;
+                                let title = item.display_title.clone();
+                                let status = match item.availability {
+                                    ersatzrs_domain::AddonMediaListItemAvailability::Available => tr(TextKey::Available).to_string(),
+                                    ersatzrs_domain::AddonMediaListItemAvailability::Unavailable => tr(TextKey::Unavailable).to_string(),
+                                    ersatzrs_domain::AddonMediaListItemAvailability::Unknown => tr(TextKey::UnknownAvailability).to_string(),
+                                };
+                                let has_replacement = item.replacement_media_version_id.is_some();
+                                let replacement_state = if !has_replacement {
+                                    "none"
+                                } else if item.replacement_valid {
+                                    "valid"
+                                } else {
+                                    "invalid"
+                                };
+                                let replacement = if replacement_state == "invalid" {
+                                    tr(TextKey::InvalidReplacement).to_string()
+                                } else {
+                                    item.replacement_title.clone().unwrap_or_else(|| tr(TextKey::NoReplacement).to_string())
+                                };
+                                view! {
+                                    <tr>
+                                        <td>{title.clone()}</td>
+                                        <td title=item.availability_reason.unwrap_or_default()>{status}</td>
+                                        <td
+                                            data-replacement-state=replacement_state
+                                            title=item.replacement_path.unwrap_or_default()
+                                        >{replacement}</td>
+                                        <td>
+                                            <div class=style::row_actions>
+                                                <button type="button" class=style::icon_button on:click=move |_| {
+                                                    replacement_target.set(Some(item_id));
+                                                    replacement_query.set(title.clone());
+                                                    search_action.dispatch(title.clone());
+                                                }>{tr(TextKey::Replace)}</button>
+                                                <button type="button" class=style::icon_button disabled=!has_replacement on:click=move |_| {
+                                                    replacement_action.dispatch((item_id, None));
+                                                }>{tr(TextKey::Clear)}</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }).collect_view()}
+                        </tbody>
+                    </table>
+                </div>
+                <div class=style::editor style:display=move || if replacement_target.get().is_some() { "" } else { "none" }>
+                    <div class=style::field_row>
+                        <input class=style::text_input type="search" prop:value=move || replacement_query.get() on:input=move |event| replacement_query.set(event_target_value(&event))/>
+                        <button type="button" class=style::btn_add on:click=move |_| {
+                            search_action.dispatch(replacement_query.get_untracked());
+                        }>{tr(TextKey::Search)}</button>
+                    </div>
+                    <div class=style::table_wrap>
+                        <table>
+                            <tbody>
+                                {move || replacement_results.get().into_iter().map(|candidate| {
+                                    let target = replacement_target.get_untracked();
+                                    view! {
+                                        <tr>
+                                            <td>{candidate.title}</td>
+                                            <td>{candidate.path}</td>
+                                            <td><button type="button" class=style::btn_add on:click=move |_| {
+                                                if let Some(item_id) = target {
+                                                    replacement_action.dispatch((item_id, Some((candidate.media_item_id, candidate.media_version_id))));
+                                                }
+                                            }>{tr(TextKey::Replace)}</button></td>
+                                        </tr>
+                                    }
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
             <p
                 class=style::empty
                 style:display=move || if form_found { "none" } else { "" }

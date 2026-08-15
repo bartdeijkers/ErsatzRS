@@ -30,7 +30,7 @@ use ersatzrs_infra::remote_stream::{
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 
 mod folder_etag;
 mod library_folder;
@@ -1723,6 +1723,108 @@ fn locate_music_video_artwork(
     None
 }
 
+fn remote_stream_definition_with_nfo(
+    path: &Path,
+    definition: &ersatzrs_infra::remote_stream::RemoteStreamDefinition,
+) -> ersatzrs_infra::remote_stream::RemoteStreamDefinition {
+    let mut effective = definition.clone();
+    let nfo_path = path.with_extension("nfo");
+    if !nfo_path.is_file() {
+        return effective;
+    }
+    let parsed = match nfo::parse_other_video_nfo(&nfo_path) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            warn!(path = %nfo_path.display(), error = %error, "failed to parse Remote Stream NFO; retaining definition metadata");
+            return effective;
+        }
+    };
+    effective.title = parsed.title.or(effective.title);
+    effective.original_title = parsed.original_title.or(effective.original_title);
+    effective.sort_title = parsed.sort_title.or(effective.sort_title);
+    effective.outline = parsed.outline.or(effective.outline);
+    effective.plot = parsed.plot.or(effective.plot);
+    effective.tagline = parsed.tagline.or(effective.tagline);
+    effective.show_title = parsed.show_title.or(effective.show_title);
+    effective.season = parsed.season.or(effective.season);
+    effective.episode = parsed.episode.or(effective.episode);
+    effective.year = parsed.year.or(effective.year);
+    effective.release_date = parsed
+        .release_datetime
+        .or(parsed.premiered)
+        .map(|value| value.to_rfc3339())
+        .or(effective.release_date);
+    effective.content_rating = parsed
+        .content_ratings
+        .first()
+        .cloned()
+        .or(effective.content_rating);
+    if !parsed.genres.is_empty() {
+        effective.genres = parsed.genres;
+    }
+    if !parsed.tags.is_empty() {
+        effective.tags = parsed.tags;
+    }
+    if !parsed.studios.is_empty() {
+        effective.studios = parsed.studios;
+    }
+    effective.collection = parsed.collection.or(effective.collection);
+    if !parsed.producers.is_empty() {
+        effective.producers = parsed.producers;
+    }
+    if !parsed.original_broadcasters.is_empty() {
+        effective.original_broadcasters = parsed.original_broadcasters;
+    }
+    if !parsed.broadcasters.is_empty() {
+        effective.broadcasters = parsed.broadcasters;
+    }
+    if !parsed.languages.is_empty() {
+        effective.languages = parsed.languages;
+    }
+    let mut people = parsed
+        .actors
+        .into_iter()
+        .filter_map(|actor| {
+            actor
+                .name
+                .map(|name| ersatzrs_infra::remote_stream::RemoteStreamPerson {
+                    name,
+                    role: actor.role.unwrap_or_else(|| "actor".to_owned()),
+                })
+        })
+        .collect::<Vec<_>>();
+    people.extend(parsed.writers.into_iter().map(|name| {
+        ersatzrs_infra::remote_stream::RemoteStreamPerson {
+            name,
+            role: "writer".to_owned(),
+        }
+    }));
+    people.extend(parsed.directors.into_iter().map(|name| {
+        ersatzrs_infra::remote_stream::RemoteStreamPerson {
+            name,
+            role: "director".to_owned(),
+        }
+    }));
+    people.extend(parsed.artists.into_iter().map(|name| {
+        ersatzrs_infra::remote_stream::RemoteStreamPerson {
+            name,
+            role: "artist".to_owned(),
+        }
+    }));
+    if !people.is_empty() {
+        effective.people = people;
+    }
+    let guids = parsed
+        .guids
+        .iter()
+        .filter_map(nfo::NfoGuid::as_metadata_guid)
+        .collect::<Vec<_>>();
+    if !guids.is_empty() {
+        effective.guids = guids;
+    }
+    effective
+}
+
 #[allow(clippy::too_many_lines)]
 async fn upsert_local_remote_stream(
     pool: &DbPool,
@@ -1732,6 +1834,8 @@ async fn upsert_local_remote_stream(
     resolved: &ersatzrs_infra::remote_stream::ResolvedRemoteStream,
     probed: Option<&FfprobeMediaVersion>,
 ) -> Result<i64> {
+    let definition = remote_stream_definition_with_nfo(path, definition);
+    let definition = &definition;
     let mut tx = pool.begin().await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
@@ -1762,11 +1866,13 @@ async fn upsert_local_remote_stream(
         .filter(|title| !title.is_empty())
         .unwrap_or(&fallback_title)
         .to_owned();
-    let original_title = path
-        .strip_prefix(&library_path.path)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/");
+    let original_title = definition.original_title.clone().unwrap_or_else(|| {
+        path.strip_prefix(&library_path.path)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/")
+    });
+    let sort_title = definition.sort_title.as_deref().unwrap_or(&title);
     let now = Utc::now();
 
     let (item_id, metadata_id, version_id, existed) = if let Some(row) = maybe_existing {
@@ -1778,6 +1884,8 @@ async fn upsert_local_remote_stream(
                SET "DateUpdated" = ?, "MetadataKind" = 1, "Title" = ?,
                    "OriginalTitle" = ?, "SortTitle" = ?, "Year" = ?,
                    "ReleaseDate" = ?, "ContentRating" = ?, "Plot" = ?,
+                   "Outline" = ?, "Tagline" = ?, "ShowTitle" = ?,
+                   "SeasonNumber" = ?, "EpisodeNumber" = ?,
                    "CollectionName" = ?, "OriginalBroadcasters" = ?,
                    "Broadcasters" = ?
                WHERE "Id" = ?"#,
@@ -1785,11 +1893,16 @@ async fn upsert_local_remote_stream(
         .bind(encode_datetime(now))
         .bind(&title)
         .bind(&original_title)
-        .bind(&title)
+        .bind(sort_title)
         .bind(definition.year)
         .bind(definition.release_date.as_deref())
         .bind(definition.content_rating.as_deref())
         .bind(definition.plot.as_deref())
+        .bind(definition.outline.as_deref())
+        .bind(definition.tagline.as_deref())
+        .bind(definition.show_title.as_deref())
+        .bind(definition.season)
+        .bind(definition.episode)
         .bind(definition.collection.as_deref())
         .bind(encode_nonempty_string_list(
             &definition.original_broadcasters,
@@ -1810,15 +1923,16 @@ async fn upsert_local_remote_stream(
                 "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind",
                 "Title", "OriginalTitle", "SortTitle", "Year", "ReleaseDate",
                 "ContentRating", "Plot", "CollectionName", "OriginalBroadcasters",
-                "Broadcasters"
-            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Broadcasters", "Outline", "Tagline", "ShowTitle", "SeasonNumber",
+                "EpisodeNumber"
+            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item_id)
         .bind(encode_datetime(now))
         .bind(encode_datetime(now))
         .bind(&title)
         .bind(&original_title)
-        .bind(&title)
+        .bind(sort_title)
         .bind(definition.year)
         .bind(definition.release_date.as_deref())
         .bind(definition.content_rating.as_deref())
@@ -1828,6 +1942,11 @@ async fn upsert_local_remote_stream(
             &definition.original_broadcasters,
         ))
         .bind(encode_nonempty_string_list(&definition.broadcasters))
+        .bind(definition.outline.as_deref())
+        .bind(definition.tagline.as_deref())
+        .bind(definition.show_title.as_deref())
+        .bind(definition.season)
+        .bind(definition.episode)
         .execute(&mut *tx)
         .await?;
         let metadata_id = ersatzrs_infra::db::last_insert_id(metadata_result);
@@ -1863,8 +1982,10 @@ async fn upsert_local_remote_stream(
 
     sqlx::query(
         r#"UPDATE "RemoteStream"
-           SET "Duration" = ?, "FallbackQuery" = ?, "AddonId" = ?,
-               "Script" = NULL, "Url" = ?, "IsLive" = ?
+               SET "Duration" = ?, "FallbackQuery" = ?, "AddonId" = ?,
+               "Script" = NULL, "Url" = ?, "IsLive" = ?,
+               "Availability" = ?, "AvailabilityReason" = ?, "ContentKind" = ?,
+               "ProviderId" = ?
            WHERE "Id" = ?"#,
     )
     .bind(definition.duration.as_deref())
@@ -1872,6 +1993,20 @@ async fn upsert_local_remote_stream(
     .bind(definition.addon.as_deref())
     .bind(definition.url.as_deref())
     .bind(i32::from(resolved.is_live))
+    .bind(match definition.availability {
+        ersatzrs_domain::AddonMediaListItemAvailability::Available => 0,
+        ersatzrs_domain::AddonMediaListItemAvailability::Unavailable => 1,
+        ersatzrs_domain::AddonMediaListItemAvailability::Unknown => 2,
+    })
+    .bind(definition.availability_reason.as_deref())
+    .bind(match definition.content_kind {
+        ersatzrs_domain::AddonMediaListContentKind::Auto => 0,
+        ersatzrs_domain::AddonMediaListContentKind::TelevisionEpisode => 1,
+        ersatzrs_domain::AddonMediaListContentKind::Movie => 2,
+        ersatzrs_domain::AddonMediaListContentKind::MusicVideo => 3,
+        ersatzrs_domain::AddonMediaListContentKind::OtherVideo => 4,
+    })
+    .bind(definition.provider_id.as_deref())
     .bind(item_id)
     .execute(&mut *tx)
     .await?;
@@ -1909,11 +2044,18 @@ async fn upsert_local_remote_stream(
 
     sqlx::query(
         r#"UPDATE "MediaItem"
-           SET "LibraryPathId" = ?, "State" = 0, "ContentKind" = ?,
+           SET "LibraryPathId" = ?, "State" = ?, "ContentKind" = ?,
                "SubKind" = NULL, "ParentMediaItemId" = NULL
            WHERE "Id" = ?"#,
     )
     .bind(library_path.id)
+    .bind(
+        if definition.availability == ersatzrs_domain::AddonMediaListItemAvailability::Unavailable {
+            2
+        } else {
+            0
+        },
+    )
     .bind(ContentKind::Primary.db_value())
     .bind(item_id)
     .execute(&mut *tx)
@@ -1938,7 +2080,7 @@ async fn upsert_local_remote_stream(
     replace_strings(&mut tx, "Tag", "RemoteStreamMetadataId", metadata_id, &tags).await?;
     let studios = union_facet_values(
         &union_facet_values(&definition.broadcasters, &definition.original_broadcasters),
-        &definition.producers,
+        &union_facet_values(&definition.producers, &definition.studios),
     );
     replace_strings(
         &mut tx,
@@ -1979,6 +2121,20 @@ async fn upsert_local_remote_stream(
         "RemoteStreamMetadataId",
         metadata_id,
         &people,
+    )
+    .await?;
+    replace_guids(
+        &mut tx,
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &definition.guids,
+    )
+    .await?;
+    replace_metadata_languages(
+        &mut tx,
+        "RemoteStreamMetadataId",
+        metadata_id,
+        &definition.languages,
     )
     .await?;
     let artwork = locate_remote_stream_artwork(path)
@@ -2810,14 +2966,55 @@ fn original_title_for_path(library_path: &LocalLibraryPath, path: &Path) -> Opti
         .map(str::to_owned)
 }
 
-fn locate_movie_nfo(video_path: &Path) -> Option<PathBuf> {
+/// Movie sidecar candidates, most specific first.
+///
+/// Both Kodi names are returned when both exist. A folder frequently holds the
+/// scene-release `.nfo` under the video's basename *and* the metadata sidecar
+/// Jellyfin writes as `movie.nfo`; returning only the first hid the real
+/// metadata behind release art.
+fn locate_movie_nfos(video_path: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
     let file_nfo = video_path.with_extension("nfo");
     if file_nfo.is_file() {
-        return Some(file_nfo);
+        candidates.push(file_nfo);
     }
 
-    let movie_nfo = video_path.parent()?.join("movie.nfo");
-    movie_nfo.is_file().then_some(movie_nfo)
+    if let Some(movie_nfo) = video_path.parent().map(|parent| parent.join("movie.nfo")) {
+        if movie_nfo.is_file() && !candidates.contains(&movie_nfo) {
+            candidates.push(movie_nfo);
+        }
+    }
+
+    candidates
+}
+
+/// Parse the first movie sidecar that carries a `<movie>` root.
+///
+/// A candidate without that root is not a metadata sidecar — release art and
+/// forum-markup dumps share the extension — so it is skipped quietly. Only a
+/// sidecar that claims to be metadata and then fails to parse is worth warning.
+fn load_movie_nfo(video_path: &Path) -> Option<nfo::MovieNfo> {
+    for candidate in locate_movie_nfos(video_path) {
+        match nfo::parse_movie_nfo(&candidate) {
+            Ok(parsed) => return Some(parsed),
+            Err(nfo::NfoError::MissingRoot(_)) => {
+                debug!(
+                    path = %candidate.display(),
+                    "sidecar carries no <movie> root; trying next candidate"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    path = %candidate.display(),
+                    error = %error,
+                    "failed to parse movie NFO; trying next candidate"
+                );
+            }
+        }
+    }
+
+    None
 }
 
 fn locate_same_basename_nfo(path: &Path) -> Option<PathBuf> {
@@ -2878,6 +3075,10 @@ async fn enrich_other_video_metadata(
     let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
         match nfo::parse_other_video_nfo(&nfo_path) {
             Ok(parsed) => Some(parsed),
+            Err(nfo::NfoError::MissingRoot(_)) => {
+                debug!(path = %nfo_path.display(), "sidecar carries no metadata root; falling back");
+                None
+            }
             Err(error) => {
                 warn!(path = %nfo_path.display(), error = %error, "failed to parse other-video nfo; falling back");
                 None
@@ -3040,6 +3241,10 @@ async fn enrich_song_metadata(
     let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
         match nfo::parse_song_nfo(&nfo_path) {
             Ok(parsed) => Some(parsed),
+            Err(nfo::NfoError::MissingRoot(_)) => {
+                debug!(path = %nfo_path.display(), "sidecar carries no <song> root; falling back");
+                None
+            }
             Err(error) => {
                 warn!(path = %nfo_path.display(), error = %error, "failed to parse song nfo; falling back");
                 None
@@ -3209,6 +3414,10 @@ async fn enrich_image_metadata(
     let parsed = locate_same_basename_nfo(path).and_then(|nfo_path| {
         match nfo::parse_image_nfo(&nfo_path) {
             Ok(parsed) => Some(parsed),
+            Err(nfo::NfoError::MissingRoot(_)) => {
+                debug!(path = %nfo_path.display(), "sidecar carries no <image> root; falling back");
+                None
+            }
             Err(error) => {
                 warn!(path = %nfo_path.display(), error = %error, "failed to parse image nfo; falling back");
                 None
@@ -3360,20 +3569,7 @@ async fn enrich_movie_metadata(
     path: &Path,
     probed: &FfprobeMediaVersion,
 ) -> Result<i64> {
-    let nfo_path = locate_movie_nfo(path);
-    let movie_nfo = nfo_path
-        .as_ref()
-        .and_then(|path| match nfo::parse_movie_nfo(path) {
-            Ok(parsed) => Some(parsed),
-            Err(err) => {
-                warn!(
-                    path = %path.display(),
-                    error = %err,
-                    "failed to parse movie.nfo; falling back"
-                );
-                None
-            }
-        });
+    let movie_nfo = load_movie_nfo(path);
 
     let fallback_title = path
         .file_stem()
@@ -3922,15 +4118,56 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_scannable_for_kind, local_metadata_kind, locate_music_video_artwork, path_hash,
-        retry_sqlite_busy, EmbeddedFacets, METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK,
-        METADATA_KIND_SIDECAR,
+        is_scannable_for_kind, load_movie_nfo, local_metadata_kind, locate_movie_nfos,
+        locate_music_video_artwork, path_hash, retry_sqlite_busy, EmbeddedFacets,
+        METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
     };
     use ersatzrs_domain::{
         classify_alternate_version, classify_extra_directory_name, classify_extra_video,
         ExtraParentHint, LibraryMediaKind,
     };
     use std::path::Path;
+
+    #[test]
+    fn movie_sidecar_falls_through_release_art_to_the_jellyfin_sidecar() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let video = dir.path().join("Movie (1984).mkv");
+        std::fs::write(&video, b"").expect("write video");
+        // Release art under the video's basename, real metadata in movie.nfo.
+        std::fs::write(dir.path().join("Movie (1984).nfo"), [0xdb_u8; 64])
+            .expect("write release art");
+        std::fs::write(
+            dir.path().join("movie.nfo"),
+            b"<movie><title>Real Title</title><year>1984</year></movie>",
+        )
+        .expect("write sidecar");
+
+        assert_eq!(locate_movie_nfos(&video).len(), 2);
+
+        let parsed = load_movie_nfo(&video).expect("movie.nfo should be reached");
+        assert_eq!(parsed.title.as_deref(), Some("Real Title"));
+        assert_eq!(parsed.year, Some(1984));
+    }
+
+    #[test]
+    fn movie_sidecar_prefers_the_basename_file_when_it_carries_metadata() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let video = dir.path().join("Movie (1984).mkv");
+        std::fs::write(&video, b"").expect("write video");
+        std::fs::write(
+            dir.path().join("Movie (1984).nfo"),
+            b"<movie><title>Basename Wins</title></movie>",
+        )
+        .expect("write basename sidecar");
+        std::fs::write(
+            dir.path().join("movie.nfo"),
+            b"<movie><title>Folder Sidecar</title></movie>",
+        )
+        .expect("write folder sidecar");
+
+        let parsed = load_movie_nfo(&video).expect("basename sidecar should parse");
+        assert_eq!(parsed.title.as_deref(), Some("Basename Wins"));
+    }
 
     #[test]
     fn path_hash_matches_sha256sum_output() {
@@ -4735,18 +4972,18 @@ title: Example Live
 plot: Example plot
 year: 2024
 release_date: 2024-03-17T21:15:00+01:00
-content_rating: nl:12
+content_rating: example:12
 genres: [Magazine]
 tags: [Television]
-collection: Public broadcasters
+collection: Example collection
 people:
   - name: Example Presenter
     role: presenter
   - name: Example Director
     role: director
 producers: [Example Productions]
-original_broadcasters: [AVRO]
-broadcasters: [AVROTROS]
+original_broadcasters: [Original Network]
+broadcasters: [Current Network]
 ",
         )
         .expect("definition");
@@ -4823,20 +5060,20 @@ broadcasters: [AVROTROS]
         );
         assert_eq!(
             row.get::<Option<String>, _>("ContentRating").as_deref(),
-            Some("nl:12")
+            Some("example:12")
         );
         assert_eq!(
             row.get::<Option<String>, _>("CollectionName").as_deref(),
-            Some("Public broadcasters")
+            Some("Example collection")
         );
         assert_eq!(
             row.get::<Option<String>, _>("OriginalBroadcasters")
                 .as_deref(),
-            Some(r#"["AVRO"]"#)
+            Some(r#"["Original Network"]"#)
         );
         assert_eq!(
             row.get::<Option<String>, _>("Broadcasters").as_deref(),
-            Some(r#"["AVROTROS"]"#)
+            Some(r#"["Current Network"]"#)
         );
         assert_eq!(row.get::<String, _>("VersionDuration"), "01:02:03");
         assert_eq!(
@@ -4850,7 +5087,7 @@ broadcasters: [AVROTROS]
             .expect("tags");
         assert!(tags.contains(&"News".to_owned()));
         assert!(tags.contains(&"Television".to_owned()));
-        assert!(tags.contains(&"Public broadcasters".to_owned()));
+        assert!(tags.contains(&"Example collection".to_owned()));
         assert!(tags.contains(
             &temp
                 .path()
@@ -4905,9 +5142,9 @@ broadcasters: [AVROTROS]
         for query in [
             "actor:\"Example Presenter\"",
             "genre:Magazine",
-            "studio:AVROTROS",
+            "studio:\"Current Network\"",
             "tag:Television",
-            "tag:\"Public broadcasters\"",
+            "tag:\"Example collection\"",
         ] {
             assert_eq!(search_ids(&repository, query).await, vec![media_item_id]);
         }
@@ -5543,7 +5780,7 @@ broadcasters: [AVROTROS]
             concat!(
                 "#!/bin/sh\n",
                 "printf '%s\\n' \\\n",
-                "  '{\"id\":\"first\",\"url\":\"https://example.test/1\",\"title\":\"First\",\"duration_seconds\":60}' \\\n",
+                "  '{\"id\":\"first\",\"provider_id\":\"item:first\",\"url\":\"https://example.test/1\",\"title\":\"First\",\"original_title\":\"Original First\",\"sort_title\":\"A First\",\"outline\":\"First outline\",\"plot\":\"First plot\",\"tagline\":\"First tagline\",\"duration_seconds\":60,\"year\":2001,\"release_date\":\"2001-02-03T04:05:06Z\",\"content_rating\":\"12\",\"collection\":\"Example Collection\",\"original_broadcasters\":[\"Original Network\"],\"broadcasters\":[\"Current Network\"],\"content_kind\":\"other_video\"}' \\\n",
                 "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
             ),
         )
@@ -5553,8 +5790,9 @@ broadcasters: [AVROTROS]
             .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&script, permissions).expect("add-on permissions");
+        let manifest_path = library_root.join("Fixture.playlist.yml");
         std::fs::write(
-            library_root.join("Fixture.playlist.yml"),
+            &manifest_path,
             r"name: Fixture order
 url: https://example.test/playlist
 addon: org.ersatzrs.addon.fixture
@@ -5613,7 +5851,7 @@ tags: [Fixture Tag]
             "host_version": "*",
             "capabilities": [
                 {"id": "addon.check.v1"},
-                {"id": "remote-stream.list.v1"},
+                {"id": "remote-stream.list.v2"},
                 {"id": "remote-stream.play.v1"}
             ],
             "entrypoints": {
@@ -5643,6 +5881,24 @@ tags: [Fixture Tag]
         .execute(&pool)
         .await
         .expect("add-on installation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ContentKindOverride"
+               ) VALUES (50, 'org.ersatzrs.addon.fixture', 'fixture/list',
+                         'https://example.test/playlist', 'Fixture order', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("saved add-on list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (50, 1, 'Fixture', ?)"#,
+        )
+        .bind(manifest_path.to_string_lossy().into_owned())
+        .execute(&pool)
+        .await
+        .expect("managed list library");
 
         let report = scan_local_library(
             &pool,
@@ -5655,6 +5911,154 @@ tags: [Fixture Tag]
         .expect("playlist scan");
         assert_eq!(report.failed_files, 0, "issues: {:?}", report.issues);
         assert_eq!(report.scanned_files, 1);
+        let metadata = sqlx::query(
+            r#"SELECT "rsm"."Title", "rsm"."OriginalTitle", "rsm"."SortTitle",
+                      "rsm"."Outline", "rsm"."Plot", "rsm"."Tagline", "rsm"."Year",
+                      "rsm"."ReleaseDate", "rsm"."ContentRating", "rsm"."CollectionName",
+                      "rsm"."OriginalBroadcasters", "rsm"."Broadcasters"
+               FROM "RemoteStreamMetadata" AS "rsm"
+               JOIN "RemoteStream" AS "rs" ON "rs"."Id" = "rsm"."RemoteStreamId"
+               WHERE "rs"."ProviderId" = 'item:first'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("first metadata");
+        assert_eq!(metadata.get::<String, _>("Title"), "First");
+        assert_eq!(metadata.get::<String, _>("OriginalTitle"), "Original First");
+        assert_eq!(metadata.get::<String, _>("SortTitle"), "A First");
+        assert_eq!(metadata.get::<String, _>("Outline"), "First outline");
+        assert_eq!(metadata.get::<String, _>("Plot"), "First plot");
+        assert_eq!(metadata.get::<String, _>("Tagline"), "First tagline");
+        assert_eq!(metadata.get::<i32, _>("Year"), 2001);
+        assert_eq!(
+            metadata.get::<String, _>("ReleaseDate"),
+            "2001-02-03T04:05:06+00:00"
+        );
+        assert_eq!(metadata.get::<String, _>("ContentRating"), "12");
+        assert_eq!(
+            metadata.get::<String, _>("CollectionName"),
+            "Example Collection"
+        );
+        assert_eq!(
+            metadata.get::<String, _>("OriginalBroadcasters"),
+            r#"["Original Network"]"#
+        );
+        assert_eq!(
+            metadata.get::<String, _>("Broadcasters"),
+            r#"["Current Network"]"#
+        );
+
+        for (override_value, expected_kind, expected_root) in [
+            (1, 1, "episodedetails"),
+            (2, 2, "movie"),
+            (3, 3, "musicvideo"),
+            (4, 4, "movie"),
+            (0, 4, "movie"),
+        ] {
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "ContentKindOverride" = ? WHERE "Id" = 50"#)
+                .bind(override_value)
+                .execute(&pool)
+                .await
+                .expect("content-kind override");
+            let override_scan = scan_local_library(
+                &pool,
+                &LocalScanConfig {
+                    library_id: 1,
+                    ffprobe_path: "unused-ffprobe".to_owned(),
+                },
+            )
+            .await
+            .expect("override rescan");
+            assert_eq!(
+                override_scan.failed_files, 0,
+                "issues: {:?}",
+                override_scan.issues
+            );
+            let persisted_kind: i32 = sqlx::query_scalar(
+                r#"SELECT "ContentKind" FROM "RemoteStream" WHERE "ProviderId" = 'item:first'"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("persisted content kind");
+            assert_eq!(persisted_kind, expected_kind);
+            let nfo = std::fs::read_to_string(library_root.join("Fixture").join("first.nfo"))
+                .expect("generated NFO");
+            assert!(nfo.contains(&format!("<{expected_root} ")));
+        }
+
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '%s\\n' \\\n",
+                "  '{\"id\":\"first\",\"provider_id\":\"item:first\",\"url\":\"https://example.test/1\",\"title\":\"Updated First\",\"original_title\":\"Updated Original\",\"sort_title\":\"Updated Sort\",\"outline\":\"Updated outline\",\"plot\":\"Updated plot\",\"tagline\":\"Updated tagline\",\"duration_seconds\":60,\"year\":2002,\"release_date\":\"2002-03-04T05:06:07Z\",\"content_rating\":\"16\",\"collection\":\"Updated Collection\",\"original_broadcasters\":[\"Earlier Network\"],\"broadcasters\":[\"Later Network\"],\"content_kind\":\"other_video\"}' \\\n",
+                "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
+            ),
+        )
+        .expect("update fixture add-on");
+        let updated_content_sha256 =
+            ersatzrs_infra::addons::calculate_addon_content_sha256(&package_root)
+                .await
+                .expect("hash updated fixture package");
+        sqlx::query(
+            r#"UPDATE "AddonInstallation"
+               SET "PackageSha256" = ?, "ContentSha256" = ?
+               WHERE "AddonId" = 'org.ersatzrs.addon.fixture'"#,
+        )
+        .bind("b".repeat(64))
+        .bind(updated_content_sha256)
+        .execute(&pool)
+        .await
+        .expect("update fixture installation integrity");
+        let rescan = scan_local_library(
+            &pool,
+            &LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("playlist rescan");
+        assert_eq!(rescan.failed_files, 0, "issues: {:?}", rescan.issues);
+        let updated = sqlx::query(
+            r#"SELECT "rsm"."Title", "rsm"."OriginalTitle", "rsm"."SortTitle",
+                      "rsm"."Outline", "rsm"."Plot", "rsm"."Tagline", "rsm"."Year",
+                      "rsm"."ReleaseDate", "rsm"."ContentRating", "rsm"."CollectionName",
+                      "rsm"."OriginalBroadcasters", "rsm"."Broadcasters"
+               FROM "RemoteStreamMetadata" AS "rsm"
+               JOIN "RemoteStream" AS "rs" ON "rs"."Id" = "rsm"."RemoteStreamId"
+               WHERE "rs"."ProviderId" = 'item:first'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("updated first metadata");
+        assert_eq!(updated.get::<String, _>("Title"), "Updated First");
+        assert_eq!(
+            updated.get::<String, _>("OriginalTitle"),
+            "Updated Original"
+        );
+        assert_eq!(updated.get::<String, _>("SortTitle"), "Updated Sort");
+        assert_eq!(updated.get::<String, _>("Outline"), "Updated outline");
+        assert_eq!(updated.get::<String, _>("Plot"), "Updated plot");
+        assert_eq!(updated.get::<String, _>("Tagline"), "Updated tagline");
+        assert_eq!(updated.get::<i32, _>("Year"), 2002);
+        assert_eq!(
+            updated.get::<String, _>("ReleaseDate"),
+            "2002-03-04T05:06:07+00:00"
+        );
+        assert_eq!(updated.get::<String, _>("ContentRating"), "16");
+        assert_eq!(
+            updated.get::<String, _>("CollectionName"),
+            "Updated Collection"
+        );
+        assert_eq!(
+            updated.get::<String, _>("OriginalBroadcasters"),
+            r#"["Earlier Network"]"#
+        );
+        assert_eq!(
+            updated.get::<String, _>("Broadcasters"),
+            r#"["Later Network"]"#
+        );
         let rows = sqlx::query(
             r#"SELECT "pi"."Index", "rsm"."Title"
                FROM "Playlist" AS "p"
@@ -5670,7 +6074,7 @@ tags: [Fixture Tag]
             rows.iter()
                 .map(|row| (row.get::<i64, _>("Index"), row.get::<String, _>("Title")))
                 .collect::<Vec<_>>(),
-            [(0, "First".to_owned()), (1, "Second".to_owned())]
+            [(0, "Updated First".to_owned()), (1, "Second".to_owned())]
         );
         let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
         let scheduled = repositories
@@ -5688,7 +6092,7 @@ tags: [Fixture Tag]
                 .flat_map(|item| item.media_items.iter())
                 .filter_map(|item| item.title.as_deref())
                 .collect::<Vec<_>>(),
-            ["First", "Second"]
+            ["Updated First", "Second"]
         );
         let tag_count: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM "Tag" WHERE "Name" IN ('Fixture', 'Fixture Tag')"#,

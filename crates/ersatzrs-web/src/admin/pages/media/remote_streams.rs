@@ -166,8 +166,8 @@ fn RemoteStreamsNoScriptFallback(query: String, page: u32) -> impl IntoView {
                                 view! {
                                     <div class=style::grid>
                                         {items.into_iter().map(|row| {
+                                            let subtitle = remote_stream_card_subtitle(&row);
                                             let title = row.title;
-                                            let subtitle = row.subtitle;
                                             let placeholder = first_letter_placeholder(&row.sort_title);
                                             view! {
                                                 <div class=card_style::card>
@@ -666,7 +666,7 @@ fn RemoteStreamCard(
 ) -> impl IntoView {
     let item_id = row.id;
     let title = row.title.clone();
-    let subtitle = row.subtitle.clone().unwrap_or_default();
+    let subtitle = remote_stream_card_subtitle(&row).unwrap_or_default();
     let has_subtitle = !subtitle.is_empty();
     let artwork = row.artwork_path.clone();
     let placeholder = first_letter_placeholder(&row.sort_title);
@@ -799,17 +799,36 @@ fn RemoteStreamCard(
     }
 }
 
+fn remote_stream_card_subtitle(row: &MediaCardRow) -> Option<String> {
+    let kind = match row.variant.sub_kind.as_deref() {
+        Some("television_episode") => Some(tr(TextKey::TelevisionShow)),
+        Some("movie") => Some(tr(TextKey::Movie)),
+        Some("music_video") => Some(tr(TextKey::MusicVideo)),
+        Some("other_video") => Some(tr(TextKey::OtherVideo)),
+        _ => None,
+    };
+    match (
+        kind,
+        row.subtitle.as_deref().filter(|value| !value.is_empty()),
+    ) {
+        (Some(kind), Some(subtitle)) => Some(format!("{kind} · {subtitle}")),
+        (Some(kind), None) => Some(kind.to_owned()),
+        (None, Some(subtitle)) => Some(subtitle.to_owned()),
+        (None, None) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{active_tag, page_href, tag_query_href};
 
     #[test]
     fn active_tag_round_trips_the_facet_link_query() {
-        let href = tag_query_href("Dutch TV");
+        let href = tag_query_href("Archive TV");
         let query = href.split_once("?query=").expect("query string").1;
         let decoded = urlencoding::decode(query).expect("valid encoding");
 
-        assert_eq!(active_tag(&decoded).as_deref(), Some("Dutch TV"));
+        assert_eq!(active_tag(&decoded).as_deref(), Some("Archive TV"));
     }
 
     #[test]

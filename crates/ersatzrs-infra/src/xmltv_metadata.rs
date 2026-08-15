@@ -292,15 +292,20 @@ async fn load_remote_streams(
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
         pool,
-        r#"SELECT "RemoteStreamId" AS "ItemId", "Id" AS "MetadataId", "Title", "Plot", "Year",
-                  "ReleaseDate", "ContentRating", "CollectionName",
-                  "OriginalBroadcasters", "Broadcasters"
-           FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN"#,
+        r#"SELECT rsm."RemoteStreamId" AS "ItemId", rsm."Id" AS "MetadataId", rsm."Title",
+                  rsm."ShowTitle", rsm."SeasonNumber", rsm."EpisodeNumber", rsm."Plot", rsm."Year",
+                  rsm."ReleaseDate", rsm."ContentRating", rsm."CollectionName",
+                  rsm."OriginalBroadcasters", rsm."Broadcasters", rs."ContentKind"
+           FROM "RemoteStreamMetadata" rsm
+           JOIN "RemoteStream" rs ON rs."Id" = rsm."RemoteStreamId"
+           WHERE rsm."RemoteStreamId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
     )
     .await?;
     let refs = insert_base_rows(cache, rows, XmltvItemKind::RemoteStream, |row, content| {
+        let title = nonempty(row.try_get("Title")?);
+        let show_title = nonempty(row.try_get("ShowTitle")?);
         content.description = nonempty(row.try_get("Plot")?);
         content.year = row.try_get("Year")?;
         content.release_date = nonempty(row.try_get("ReleaseDate")?);
@@ -308,7 +313,32 @@ async fn load_remote_streams(
         content.collection = nonempty(row.try_get("CollectionName")?);
         content.original_broadcasters = decode_string_list(row.try_get("OriginalBroadcasters")?);
         content.broadcasters = decode_string_list(row.try_get("Broadcasters")?);
-        Ok(nonempty(row.try_get("Title")?))
+        match row.try_get::<i32, _>("ContentKind")? {
+            1 => {
+                content.kind = XmltvItemKind::Episode;
+                content.sub_title.clone_from(&title);
+                content.season_number = row.try_get("SeasonNumber")?;
+                content.episode_number = row.try_get("EpisodeNumber")?;
+                Ok(show_title.or(title))
+            }
+            2 => {
+                content.kind = XmltvItemKind::Movie;
+                Ok(title)
+            }
+            3 => {
+                content.kind = XmltvItemKind::MusicVideo;
+                content.sub_title.clone_from(&title);
+                Ok(title)
+            }
+            4 => {
+                content.kind = XmltvItemKind::OtherVideo;
+                Ok(title)
+            }
+            _ => {
+                content.kind = XmltvItemKind::RemoteStream;
+                Ok(title)
+            }
+        }
     })?;
     hydrate_common(pool, cache, &refs, "RemoteStreamMetadataId", false).await?;
 
@@ -641,7 +671,7 @@ mod tests {
 
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
-    async fn remote_stream_projects_provider_metadata_without_flattening_roles() {
+    async fn remote_stream_projects_generic_episode_metadata_without_flattening_roles() {
         let (_root, pool) = test_db().await;
         for statement in [
             r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#,
@@ -650,10 +680,10 @@ mod tests {
             r#"INSERT INTO "LocalLibrary" ("Id") VALUES (10)"#,
             r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (10, 10, '/streams')"#,
             r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES (20, 10)"#,
-            r#"INSERT INTO "RemoteStream" ("Id", "IsLive") VALUES (20, 0)"#,
-            r#"INSERT INTO "RemoteStreamMetadata" ("Id", "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "Plot", "Year", "ReleaseDate", "ContentRating", "CollectionName", "OriginalBroadcasters", "Broadcasters") VALUES (30, 20, '2026-01-01', '2026-01-01', 1, 'Episode', 'Plot', 1992, '1992-05-30T21:15:00Z', 'nl:12', 'Public broadcasters', '["AVRO"]', '["AVROTROS"]')"#,
-            r#"INSERT INTO "Genre" ("Name", "RemoteStreamMetadataId") VALUES ('Showbiz', 30)"#,
-            r#"INSERT INTO "Tag" ("Name", "RemoteStreamMetadataId") VALUES ('Television', 30)"#,
+            r#"INSERT INTO "RemoteStream" ("Id", "IsLive", "ContentKind") VALUES (20, 0, 1)"#,
+            r#"INSERT INTO "RemoteStreamMetadata" ("Id", "RemoteStreamId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "ShowTitle", "SeasonNumber", "EpisodeNumber", "Plot", "Year", "ReleaseDate", "ContentRating", "CollectionName", "OriginalBroadcasters", "Broadcasters") VALUES (30, 20, '2026-01-01', '2026-01-01', 1, 'Example episode', 'Example series', 2, 7, 'Plot', 1992, '1992-05-30T21:15:00Z', '12', 'Example collection', '["Original Network"]', '["Current Network"]')"#,
+            r#"INSERT INTO "Genre" ("Name", "RemoteStreamMetadataId") VALUES ('Documentary', 30)"#,
+            r#"INSERT INTO "Tag" ("Name", "RemoteStreamMetadataId") VALUES ('Archive', 30)"#,
             r#"INSERT INTO "Actor" ("Name", "Role", "Order", "RemoteStreamMetadataId") VALUES ('Presenter', 'presenter', 0, 30), ('Director', 'director', 1, 30), ('Producer', 'producer', 2, 30)"#,
         ] {
             sqlx::query(statement)
@@ -665,16 +695,21 @@ mod tests {
         let cache = load_content_cache(&pool, &[20])
             .await
             .expect("load metadata");
-        let (_, content) = cache.get(&20).expect("remote stream content");
+        let (title, content) = cache.get(&20).expect("remote stream content");
+        assert_eq!(title.as_deref(), Some("Example series"));
+        assert_eq!(content.kind, XmltvItemKind::Episode);
+        assert_eq!(content.sub_title.as_deref(), Some("Example episode"));
+        assert_eq!(content.season_number, Some(2));
+        assert_eq!(content.episode_number, Some(7));
         assert_eq!(
             content.release_date.as_deref(),
             Some("1992-05-30T21:15:00Z")
         );
-        assert_eq!(content.genres, ["Showbiz"]);
-        assert_eq!(content.tags, ["Television"]);
-        assert_eq!(content.collection.as_deref(), Some("Public broadcasters"));
-        assert_eq!(content.original_broadcasters, ["AVRO"]);
-        assert_eq!(content.broadcasters, ["AVROTROS"]);
+        assert_eq!(content.genres, ["Documentary"]);
+        assert_eq!(content.tags, ["Archive"]);
+        assert_eq!(content.collection.as_deref(), Some("Example collection"));
+        assert_eq!(content.original_broadcasters, ["Original Network"]);
+        assert_eq!(content.broadcasters, ["Current Network"]);
         assert_eq!(content.people.len(), 3);
         assert_eq!(content.people[0].role, "presenter");
         assert_eq!(content.people[1].role, "director");

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
-use ersatzrs_domain::{normalize_sub_kind_token, ContentKind};
+use ersatzrs_domain::{normalize_sub_kind_token, AddonMediaListContentKind, ContentKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchExpression {
@@ -143,6 +143,8 @@ pub struct SearchDocument {
     pub library_name: Option<String>,
     pub library_folder_ids: Vec<i64>,
     pub content_kind: ContentKind,
+    /// Descriptive kind for Remote Stream metadata; storage identity remains Remote Stream.
+    pub remote_stream_content_kind: AddonMediaListContentKind,
     pub sub_kind: Option<String>,
     pub parent_title: Option<String>,
     pub content_ratings: Vec<String>,

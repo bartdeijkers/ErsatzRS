@@ -3,11 +3,11 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    AddonMediaListItemKind, ArtworkKind, BlockStopScheduling, ChannelIdleBehavior,
-    ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode,
-    ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
-    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
-    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind, ArtworkKind,
+    BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode,
+    ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
+    ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType,
+    ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
     FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
     FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
     HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
@@ -609,6 +609,18 @@ db_enum!(AddonMediaListItemKind {
     2 => AddonMediaListItemKind::Season,
     3 => AddonMediaListItemKind::Episode,
     4 => AddonMediaListItemKind::RemoteStream,
+});
+db_enum!(AddonMediaListItemAvailability {
+    0 => AddonMediaListItemAvailability::Available,
+    1 => AddonMediaListItemAvailability::Unavailable,
+    2 => AddonMediaListItemAvailability::Unknown,
+});
+db_enum!(AddonMediaListContentKind {
+    0 => AddonMediaListContentKind::Auto,
+    1 => AddonMediaListContentKind::TelevisionEpisode,
+    2 => AddonMediaListContentKind::Movie,
+    3 => AddonMediaListContentKind::MusicVideo,
+    4 => AddonMediaListContentKind::OtherVideo,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

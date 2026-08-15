@@ -47,8 +47,8 @@ tags:
   - Example series
 ```
 
-The selected add-on must implement `addon.check.v1`,
-`remote-stream.list.v1`, and `remote-stream.play.v1`. Add-ons are installed,
+The selected add-on must implement `addon.check.v1`, Remote Stream list v1 or
+v2, and `remote-stream.play.v1`. Add-ons are installed,
 configured, checked, and enabled under **Settings > Add-ons**; manifests never
 contain command paths.
 
@@ -67,7 +67,7 @@ Optional playback fields are `duration_seconds`, `thumbnail_url`, and
 | `plot` | string | Remote Stream plot; XMLTV `<desc>`. |
 | `year` | integer | Fallback year when no `release_date` is present. |
 | `release_date` | RFC 3339 string | Full publication/broadcast instant; XMLTV `<date>` uses its calendar date. |
-| `content_rating` | string | Content rating; `nl:` values render with XMLTV system `Kijkwijzer`. |
+| `content_rating` | string | Provider content rating; known rating-system prefixes may be projected by consumers. |
 | `genres` | string array | Genre facets and XMLTV `<category>` values. |
 | `tags` | string array | Subject/keyword facets and XMLTV `<category>` values. |
 | `collection` | string | Provider collection, retained separately and indexed as a tag. |
@@ -76,8 +76,23 @@ Optional playback fields are `duration_seconds`, `thumbnail_url`, and
 | `original_broadcasters` | string array | Original broadcasters and studio search facets. |
 | `broadcasters` | string array | Current broadcasters and studio search facets. |
 
-The generated episode YAML preserves these fields. Duplicate IDs, a malformed
-line, or output after the configured item bound rejects the whole enumeration.
+Version 2 also accepts stable `provider_id`, `availability`,
+`availability_reason`, `content_kind`, `original_title`, `sort_title`,
+`outline`, `tagline`, `show_title`, `season`, `episode`, and `guids` fields.
+The add-on owns provider-specific classification; a saved list content-kind
+override takes precedence when it is not `auto`.
+
+The host writes playback and availability fields to generated YAML and writes
+descriptive metadata to a same-stem UTF-8 `.nfo` sidecar. Television episodes
+use `episodedetails`, music videos use `musicvideo`, and movies and other videos
+use `movie`. Standard Kodi-style fields are used where available; collection,
+full release timestamp, producer, and original/current broadcaster distinctions
+use the `urn:ersatzrs:nfo:1` namespace. Kodi, Jellyfin, and Emby can ignore
+unknown namespaced elements. Plex requires a metadata agent to consume NFO and
+is not a native sidecar compatibility target.
+
+Duplicate IDs, a malformed line, or output after the configured item bound
+rejects the whole enumeration.
 The process is limited to 120 seconds, 8 MiB of stdout, 64 KiB of stderr, and
 10,000 entries. A non-zero exit exposes at most 1 KiB of redacted stderr.
 
@@ -87,8 +102,9 @@ For `remote-stream.play.v1`, the host invokes `play`, supplies the item URL in
 
 ## Owned state
 
-The expansion folder contains `.ersatzrs-playlist.json` and generated `.yml`
-definitions. Only files named in that sidecar are synchronization-owned.
+The expansion folder contains `.ersatzrs-playlist.json` plus generated `.yml`
+definitions and `.nfo` sidecars. Only files named in that versioned state are
+synchronization-owned.
 Hand-authored sibling definitions are never rewritten or removed. A failed
 enumeration records a redacted failed outcome and preserves the last complete
 definitions and playlist. Changing the manifest, add-on identity, installed

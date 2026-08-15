@@ -52,6 +52,14 @@ mod remote_stream_tests {
         assert_eq!(cards[0].title, "Nurburgring broadcast");
         assert_eq!(cards[0].sort_title, "nurburgring broadcast");
         assert_eq!(cards[0].subtitle.as_deref(), Some("Racing"));
+        assert_eq!(cards[0].variant.sub_kind.as_deref(), Some("movie"));
+
+        let (kind_cards, kind_total) =
+            list_remote_streams("library_id:7 AND sub_kind:movie".to_owned(), 0, 100)
+                .await
+                .unwrap();
+        assert_eq!(kind_total, 1);
+        assert_eq!(kind_cards[0].id, 701);
 
         let page_map = remote_stream_page_map("library_id:7".to_owned(), 100)
             .await
@@ -135,7 +143,15 @@ mod remote_stream_tests {
                 "Racing",
                 "nurburgring broadcast",
             ),
-            (80, 8, 800, 801, "Visdeurbel", "Vis", "visdeurbel"),
+            (
+                80,
+                8,
+                800,
+                801,
+                "Second stream",
+                "Second original",
+                "second stream",
+            ),
         ] {
             sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (?)"#)
                 .bind(source_id)
@@ -182,11 +198,12 @@ mod remote_stream_tests {
             .await
             .unwrap();
             sqlx::query(
-                r#"INSERT INTO "RemoteStream" ("Id", "Url", "Script", "IsLive")
-                   VALUES (?, ?, NULL, 1)"#,
+                r#"INSERT INTO "RemoteStream" ("Id", "Url", "Script", "IsLive", "ContentKind")
+                   VALUES (?, ?, NULL, 1, ?)"#,
             )
             .bind(item_id)
             .bind(format!("https://example.test/{item_id}.m3u8"))
+            .bind(if item_id == 701 { 2 } else { 0 })
             .execute(pool)
             .await
             .unwrap();

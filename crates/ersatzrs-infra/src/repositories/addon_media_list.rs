@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository, RepositoryError,
-    Result,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
+    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
 };
-use ersatzrs_domain::EntityId;
+use ersatzrs_domain::{AddonMediaListContentKind, EntityId};
 use sqlx::{Pool, Row};
 
 use crate::addon_media_list::InstalledAddonMediaListProvider;
@@ -92,7 +92,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
-            r#"SELECT "Id", "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist"
+            r#"SELECT "Id", "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist",
+                      "ContentKindOverride"
                FROM "AddonMediaList"
                WHERE "Id" = ?"#,
         )
@@ -107,9 +108,146 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 source_url: row.try_get("SourceUrl").repository()?,
                 auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
                 generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
+                content_kind_override: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListContentKind",
+                    &row,
+                    "ContentKindOverride",
+                )?,
             })
         })
         .transpose()
+    }
+
+    async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>> {
+        let rows = sqlx::query(
+            r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle",
+                      "item"."Availability", "item"."AvailabilityReason",
+                      "replacement"."MediaItemId" AS "ReplacementMediaItemId",
+                      "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
+               FROM "AddonMediaListItem" AS "item"
+               LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
+                 ON "replacement"."AddonMediaListItemId" = "item"."Id"
+               WHERE "item"."AddonMediaListId" = ?
+               ORDER BY "item"."Rank", "item"."Id""#,
+        )
+        .bind(id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            let replacement_media_item_id = row
+                .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
+                .repository()?;
+            let replacement_media_version_id = row
+                .try_get::<Option<EntityId>, _>("ReplacementMediaVersionId")
+                .repository()?;
+            let candidate = match replacement_media_item_id.zip(replacement_media_version_id) {
+                Some((media_item_id, media_version_id)) => {
+                    load_replacement_candidate(&self.0, media_item_id, media_version_id).await?
+                }
+                None => None,
+            };
+            result.push(AddonMediaListItemAdminRow {
+                id: row.try_get("Id").repository()?,
+                rank: row.try_get("Rank").repository()?,
+                display_title: row.try_get("DisplayTitle").repository()?,
+                availability: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListItemAvailability",
+                    &row,
+                    "Availability",
+                )?,
+                availability_reason: row.try_get("AvailabilityReason").repository()?,
+                replacement_media_item_id,
+                replacement_media_version_id,
+                replacement_title: candidate.as_ref().map(|item| item.title.clone()),
+                replacement_path: candidate.as_ref().map(|item| item.path.clone()),
+                replacement_valid: candidate.is_some(),
+            });
+        }
+        Ok(result)
+    }
+
+    async fn search_replacement_candidates(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<AddonMediaListReplacementCandidate>> {
+        let pattern = format!("%{}%", query.trim());
+        let rows = sqlx::query(replacement_candidate_query(true))
+            .bind(&pattern)
+            .bind(i64::from(limit.clamp(1, 100)))
+            .fetch_all(&self.0)
+            .await
+            .repository()?;
+        rows.iter().map(decode_replacement_candidate).collect()
+    }
+
+    async fn set_replacement(
+        &self,
+        item_id: EntityId,
+        replacement: Option<(EntityId, EntityId)>,
+    ) -> Result<()> {
+        let list_id = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+        )
+        .bind(item_id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list item",
+            id: item_id,
+        })?;
+        if let Some((media_item_id, media_version_id)) = replacement {
+            if load_replacement_candidate(&self.0, media_item_id, media_version_id)
+                .await?
+                .is_none()
+            {
+                return Err(RepositoryError::Conflict(
+                    "replacement must be an available Local video version".to_owned(),
+                ));
+            }
+            let now = chrono::Utc::now().to_rfc3339();
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListItemReplacement"
+                   SET "MediaItemId" = ?, "MediaVersionId" = ?, "UpdatedAt" = ?
+                   WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(media_item_id)
+            .bind(media_version_id)
+            .bind(&now)
+            .bind(item_id)
+            .execute(&self.0)
+            .await
+            .repository()?;
+            if updated.rows_affected() == 0 {
+                sqlx::query(
+                    r#"INSERT INTO "AddonMediaListItemReplacement" (
+                        "AddonMediaListItemId", "MediaItemId", "MediaVersionId", "CreatedAt", "UpdatedAt"
+                       ) VALUES (?, ?, ?, ?, ?)"#,
+                )
+                .bind(item_id)
+                .bind(media_item_id)
+                .bind(media_version_id)
+                .bind(&now)
+                .bind(&now)
+                .execute(&self.0)
+                .await
+                .repository()?;
+            }
+        } else {
+            sqlx::query(
+                r#"DELETE FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(item_id)
+            .execute(&self.0)
+            .await
+            .repository()?;
+        }
+        AddonMediaListSynchronizer::new(self.0.clone())
+            .match_list_items(list_id)
+            .await
     }
 
     async fn add_or_refresh(
@@ -117,10 +255,16 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         addon_id: &str,
         source_url: &str,
         requested_folder: Option<&str>,
+        content_kind_override: AddonMediaListContentKind,
     ) -> Result<EntityId> {
         let provider = InstalledAddonMediaListProvider::new(self.0.clone());
         AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
-            .add_or_refresh(addon_id, source_url, requested_folder)
+            .add_or_refresh(
+                addon_id,
+                source_url,
+                requested_folder,
+                content_kind_override,
+            )
             .await
     }
 
@@ -139,9 +283,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         id: EntityId,
         auto_refresh: bool,
         generate_playlist: bool,
+        content_kind_override: AddonMediaListContentKind,
     ) -> Result<()> {
         AddonMediaListSynchronizer::new(self.0.clone())
-            .update_settings(id, auto_refresh, generate_playlist)
+            .update_settings(id, auto_refresh, generate_playlist, content_kind_override)
             .await
     }
 
@@ -181,4 +326,114 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         }
         Ok(())
     }
+}
+
+fn replacement_candidate_query(search: bool) -> &'static str {
+    if search {
+        r#"SELECT "item"."Id" AS "MediaItemId", "version"."Id" AS "MediaVersionId",
+                  COALESCE(
+                    (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    "file"."Path", '') AS "Title",
+                  COALESCE("file"."Path", '') AS "Path",
+                  CASE
+                    WHEN "version"."MovieId" IS NOT NULL THEN 10
+                    WHEN "version"."EpisodeId" IS NOT NULL THEN 20
+                    WHEN "version"."MusicVideoId" IS NOT NULL THEN 30
+                    WHEN "version"."OtherVideoId" IS NOT NULL THEN 40
+                  END AS "CollectionType",
+                  (SELECT MIN("stream"."Index") FROM "MediaStream" AS "stream"
+                   WHERE "stream"."MediaVersionId" = "version"."Id"
+                     AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                    AS "VideoStreamIndex"
+           FROM "MediaItem" AS "item"
+           JOIN "LibraryPath" AS "path" ON "path"."Id" = "item"."LibraryPathId"
+           JOIN "Library" AS "library" ON "library"."Id" = "path"."LibraryId"
+           JOIN "LocalMediaSource" AS "local" ON "local"."Id" = "library"."MediaSourceId"
+           JOIN "MediaVersion" AS "version" ON (
+                "version"."MovieId" = "item"."Id"
+                OR "version"."EpisodeId" = "item"."Id"
+                OR "version"."MusicVideoId" = "item"."Id"
+                OR "version"."OtherVideoId" = "item"."Id")
+           JOIN "MediaFile" AS "file" ON "file"."MediaVersionId" = "version"."Id"
+           WHERE "item"."State" = 0
+             AND EXISTS (
+                SELECT 1 FROM "MediaStream" AS "stream"
+                WHERE "stream"."MediaVersionId" = "version"."Id"
+                  AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+             AND LOWER(COALESCE(
+                    (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    "file"."Path", '')) LIKE LOWER(?)
+           ORDER BY "Title", "file"."Path", "version"."Id"
+           LIMIT ?"#
+    } else {
+        r#"SELECT "item"."Id" AS "MediaItemId", "version"."Id" AS "MediaVersionId",
+                  COALESCE(
+                    (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "item"."Id" ORDER BY "Id" LIMIT 1),
+                    "file"."Path", '') AS "Title",
+                  COALESCE("file"."Path", '') AS "Path",
+                  CASE
+                    WHEN "version"."MovieId" IS NOT NULL THEN 10
+                    WHEN "version"."EpisodeId" IS NOT NULL THEN 20
+                    WHEN "version"."MusicVideoId" IS NOT NULL THEN 30
+                    WHEN "version"."OtherVideoId" IS NOT NULL THEN 40
+                  END AS "CollectionType",
+                  (SELECT MIN("stream"."Index") FROM "MediaStream" AS "stream"
+                   WHERE "stream"."MediaVersionId" = "version"."Id"
+                     AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                    AS "VideoStreamIndex"
+           FROM "MediaItem" AS "item"
+           JOIN "LibraryPath" AS "path" ON "path"."Id" = "item"."LibraryPathId"
+           JOIN "Library" AS "library" ON "library"."Id" = "path"."LibraryId"
+           JOIN "LocalMediaSource" AS "local" ON "local"."Id" = "library"."MediaSourceId"
+           JOIN "MediaVersion" AS "version" ON (
+                "version"."MovieId" = "item"."Id"
+                OR "version"."EpisodeId" = "item"."Id"
+                OR "version"."MusicVideoId" = "item"."Id"
+                OR "version"."OtherVideoId" = "item"."Id")
+           JOIN "MediaFile" AS "file" ON "file"."MediaVersionId" = "version"."Id"
+           WHERE "item"."Id" = ? AND "version"."Id" = ? AND "item"."State" = 0
+             AND EXISTS (
+                SELECT 1 FROM "MediaStream" AS "stream"
+                WHERE "stream"."MediaVersionId" = "version"."Id"
+                  AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+           LIMIT 1"#
+    }
+}
+
+pub(crate) async fn load_replacement_candidate(
+    pool: &Pool<crate::db::Db>,
+    media_item_id: EntityId,
+    media_version_id: EntityId,
+) -> Result<Option<AddonMediaListReplacementCandidate>> {
+    sqlx::query(replacement_candidate_query(false))
+        .bind(media_item_id)
+        .bind(media_version_id)
+        .fetch_optional(pool)
+        .await
+        .repository()?
+        .as_ref()
+        .map(decode_replacement_candidate)
+        .transpose()
+}
+
+fn decode_replacement_candidate(
+    row: &crate::db::DbRow,
+) -> Result<AddonMediaListReplacementCandidate> {
+    Ok(AddonMediaListReplacementCandidate {
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        media_version_id: row.try_get("MediaVersionId").repository()?,
+        title: row.try_get("Title").repository()?,
+        path: row.try_get("Path").repository()?,
+        collection_type: row.try_get("CollectionType").repository()?,
+        video_stream_index: row.try_get("VideoStreamIndex").repository()?,
+    })
 }

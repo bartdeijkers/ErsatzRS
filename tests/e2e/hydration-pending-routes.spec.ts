@@ -1,5 +1,8 @@
 import { expect, Page, TestInfo, test } from '@playwright/test';
+import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { dirname, join, relative } from 'path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -29,6 +32,15 @@ type AddonListSeed = {
   editorSourceUrl: string;
   deleteListId: number;
   deleteListName: string;
+  editorItemId: number;
+  replacementMediaItemId: number;
+  replacementMediaVersionId: number;
+  replacementMediaStreamId: number;
+  replacementTitle: string;
+  importProviderId: string;
+  importListName: string;
+  importSourceUrl: string;
+  recoveryFlagPath: string;
 };
 
 function projectBase(testInfo: TestInfo): number {
@@ -51,6 +63,41 @@ function sqlite(sql: string): string {
     input: `.timeout 10000\n${sql}`,
     encoding: 'utf8',
   }).trim();
+}
+
+function addonContentHash(root: string): string {
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile()) {
+        files.push(path);
+      } else {
+        throw new Error(`Unsupported add-on fixture entry: ${path}`);
+      }
+    }
+  };
+  visit(root);
+  files.sort();
+
+  const hash = createHash('sha256');
+  hash.update(Buffer.from('ersatzrs-addon-content-v1\0'));
+  for (const path of files) {
+    const encodedPath = Buffer.from(relative(root, path).split('\\').join('/'));
+    const pathLength = Buffer.alloc(8);
+    pathLength.writeBigUInt64LE(BigInt(encodedPath.length));
+    const contents = readFileSync(path);
+    const fileLength = Buffer.alloc(8);
+    fileLength.writeBigUInt64LE(BigInt(contents.length));
+    hash.update(pathLength);
+    hash.update(encodedPath);
+    hash.update(fileLength);
+    hash.update(contents);
+    hash.update(Buffer.from([0]));
+  }
+  return hash.digest('hex');
 }
 
 function isBenignAbortError(text: string): boolean {
@@ -249,6 +296,74 @@ function seedAddonLists(testInfo: TestInfo): AddonListSeed {
   const base = projectBase(testInfo);
   const suffix = testInfo.project.name;
   const addonId = `org.example.e2e-lists-${suffix.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const editorProviderId = `hydration-editor-${suffix}`;
+  const editorSourceUrl = `https://example.invalid/lists/hydration-editor-${suffix}`;
+  const importProviderId = `hydration-import-${suffix}`;
+  const importSourceUrl = `https://example.invalid/lists/hydration-import-${suffix}`;
+  const replacementTitle = `E2E Local Replacement ${suffix}`;
+  const packageRoot = join(dirname(dbPath!), `addon-list-fixture-${suffix.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+  const recoveryFlagPath = join(dirname(packageRoot), `${addonId}-recovered.flag`);
+  mkdirSync(packageRoot, { recursive: true });
+  const editorListRecord = JSON.stringify({
+    record_type: 'list',
+    provider_id: editorProviderId,
+    name: `E2E Recovered List ${suffix}`,
+    description: 'Hydrated provider recovery proof',
+  });
+  const editorItemBase = {
+    record_type: 'item',
+    provider_id: `remote:editor-${suffix}`,
+    rank: 0,
+    display_title: replacementTitle,
+    title: replacementTitle,
+    kind: 'remote_stream',
+    guids: [`fixture://editor-${suffix}`],
+    source_url: `https://example.invalid/watch/editor-${suffix}`,
+    content_kind: 'other_video',
+  };
+  const editorUnavailableRecord = JSON.stringify({
+    ...editorItemBase,
+    availability: 'unavailable',
+    availability_reason: 'fixture_missing',
+  });
+  const editorAvailableRecord = JSON.stringify({
+    ...editorItemBase,
+    availability: 'available',
+  });
+  const importListName = `E2E Imported Movie List ${suffix}`;
+  const importListRecord = JSON.stringify({
+    record_type: 'list',
+    provider_id: importProviderId,
+    name: importListName,
+    description: 'Hydrated import override proof',
+  });
+  const importItemRecord = JSON.stringify({
+    record_type: 'item',
+    provider_id: `remote:import-${suffix}`,
+    rank: 0,
+    display_title: `Imported item ${suffix}`,
+    title: `Imported item ${suffix}`,
+    kind: 'remote_stream',
+    guids: [`fixture://import-${suffix}`],
+    source_url: `https://example.invalid/watch/import-${suffix}`,
+    availability: 'available',
+    content_kind: 'auto',
+  });
+  const shell = `#!/bin/sh
+if [ "$ERSATZRS_MEDIA_LIST_URL" = "${editorSourceUrl}" ]; then
+  printf '%s\\n' '${editorListRecord}'
+  if [ -f ../${addonId}-recovered.flag ]; then
+    printf '%s\\n' '${editorAvailableRecord}'
+  else
+    printf '%s\\n' '${editorUnavailableRecord}'
+  fi
+else
+  printf '%s\\n' '${importListRecord}' '${importItemRecord}'
+fi
+`;
+  writeFileSync(join(packageRoot, 'addon.sh'), shell);
+  chmodSync(join(packageRoot, 'addon.sh'), 0o755);
+  const contentSha256 = addonContentHash(packageRoot);
   const manifest = JSON.stringify({
     manifest_version: 3,
     id: addonId,
@@ -259,11 +374,11 @@ function seedAddonLists(testInfo: TestInfo): AddonListSeed {
     license: 'Zlib',
     source_url: 'https://example.invalid/e2e-addon',
     host_version: '*',
-    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v1' }],
+    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v2' }],
     dependencies: [],
     entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' } },
     permissions: {
-      network_hosts: ['example.invalid'],
+      network_hosts: [],
       media_read: false,
       managed_ffmpeg: false,
       external_commands: [],
@@ -275,30 +390,59 @@ function seedAddonLists(testInfo: TestInfo): AddonListSeed {
     editorListId: base + 501,
     editorListName: `E2E Add-on List Editor ${suffix}`,
     addonId,
-    editorProviderId: `hydration-editor-${suffix}`,
-    editorSourceUrl: `https://example.invalid/lists/hydration-editor-${suffix}`,
+    editorProviderId,
+    editorSourceUrl,
     deleteListId: base + 502,
     deleteListName: `E2E Add-on List Delete ${suffix}`,
+    editorItemId: base + 503,
+    replacementMediaItemId: base + 510,
+    replacementMediaVersionId: base + 511,
+    replacementMediaStreamId: base + 512,
+    replacementTitle,
+    importProviderId,
+    importListName,
+    importSourceUrl,
+    recoveryFlagPath,
   };
+  const replacementMediaSourceId = base + 513;
+  const replacementLibraryId = base + 514;
+  const replacementLibraryPathId = base + 515;
+  const replacementMediaFileId = base + 516;
 
   sqlite(`
+DELETE FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId" IN (
+  SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" IN (${seed.editorListId}, ${seed.deleteListId})
+);
 DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" IN (
   SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" IN (${seed.editorListId}, ${seed.deleteListId})
 );
 DELETE FROM "AddonMediaListItem" WHERE "AddonMediaListId" IN (${seed.editorListId}, ${seed.deleteListId});
 DELETE FROM "AddonMediaList" WHERE "Id" IN (${seed.editorListId}, ${seed.deleteListId});
+DELETE FROM "MediaStream" WHERE "Id" = ${seed.replacementMediaStreamId};
+DELETE FROM "MediaFile" WHERE "Id" = ${replacementMediaFileId};
+DELETE FROM "MediaVersion" WHERE "Id" = ${seed.replacementMediaVersionId};
+DELETE FROM "MovieMetadata" WHERE "MovieId" = ${seed.replacementMediaItemId};
+DELETE FROM "Movie" WHERE "Id" = ${seed.replacementMediaItemId};
+DELETE FROM "MediaItem" WHERE "Id" = ${seed.replacementMediaItemId};
+DELETE FROM "LibraryPath" WHERE "Id" = ${replacementLibraryPathId};
+DELETE FROM "LocalLibrary" WHERE "Id" = ${replacementLibraryId};
+DELETE FROM "Library" WHERE "Id" = ${replacementLibraryId};
+DELETE FROM "LocalMediaSource" WHERE "Id" = ${replacementMediaSourceId};
+DELETE FROM "MediaSource" WHERE "Id" = ${replacementMediaSourceId};
 
 INSERT INTO "AddonInstallation" (
   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "TrustTier"
 ) VALUES (
-  '${sqlEscape(addonId)}', '1.0.0', 1, 'e2e-package', 'e2e-content',
-  '${sqlEscape(manifest)}', 'e2e/addon', '2026-08-14T00:00:00Z',
+  '${sqlEscape(addonId)}', '1.0.0', 1, 'e2e-package', '${contentSha256}',
+  '${sqlEscape(manifest)}', '${sqlEscape(packageRoot)}', '2026-08-14T00:00:00Z',
   '2026-08-14T00:00:00Z', 'verified'
 ) ON CONFLICT("AddonId") DO UPDATE SET
   "Version" = excluded."Version",
   "Enabled" = excluded."Enabled",
+  "ContentSha256" = excluded."ContentSha256",
   "ManifestJson" = excluded."ManifestJson",
+  "InstallPath" = excluded."InstallPath",
   "UpdatedAt" = excluded."UpdatedAt";
 
 INSERT INTO "AddonMediaList" (
@@ -310,10 +454,12 @@ INSERT INTO "AddonMediaList" (
   '${sqlEscape(seed.editorListName)}', 'Editor proof', 1, 0, 1
 );
 INSERT INTO "AddonMediaListItem" (
-  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title"
+  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title",
+  "Availability", "AvailabilityReason", "ContentKind"
 ) VALUES (
-  ${base + 503}, ${seed.editorListId}, 'movie:99003',
-  'Hydration Pending Movie', 0, 1, 'Hydration Pending Movie'
+  ${seed.editorItemId}, ${seed.editorListId}, 'remote:editor-${suffix}',
+  '${sqlEscape(seed.replacementTitle)}', 4, 0, '${sqlEscape(seed.replacementTitle)}',
+  1, 'fixture_missing', 4
 );
 
 INSERT INTO "AddonMediaList" (
@@ -323,6 +469,43 @@ INSERT INTO "AddonMediaList" (
   ${seed.deleteListId}, '${sqlEscape(addonId)}', 'hydration-delete-${suffix}',
   'https://example.invalid/lists/hydration-delete-${suffix}',
   '${sqlEscape(seed.deleteListName)}', 'Delete proof', 0, 0, 0
+);
+
+INSERT INTO "MediaSource" ("Id") VALUES (${replacementMediaSourceId});
+INSERT INTO "LocalMediaSource" ("Id") VALUES (${replacementMediaSourceId});
+INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+  VALUES (${replacementLibraryId}, 'E2E Replacement Movies', 1, ${replacementMediaSourceId});
+INSERT INTO "LocalLibrary" ("Id") VALUES (${replacementLibraryId});
+INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId")
+  VALUES (${replacementLibraryPathId}, '/e2e/addon-replacements/${suffix}', ${replacementLibraryId});
+INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+  VALUES (${seed.replacementMediaItemId}, ${replacementLibraryPathId}, 0);
+INSERT INTO "Movie" ("Id") VALUES (${seed.replacementMediaItemId});
+INSERT INTO "MovieMetadata" (
+  "MovieId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
+  "DateAdded", "DateUpdated", "Year"
+) VALUES (
+  ${seed.replacementMediaItemId}, 0, '${sqlEscape(seed.replacementTitle)}',
+  '${sqlEscape(seed.replacementTitle)}', '${sqlEscape(seed.replacementTitle.toLowerCase())}',
+  '2026-08-15T00:00:00Z', '2026-08-15T00:00:00Z', 2026
+);
+INSERT INTO "MediaVersion" (
+  "Id", "DateAdded", "DateUpdated", "Duration", "Height", "MovieId",
+  "VideoScanKind", "Width"
+) VALUES (
+  ${seed.replacementMediaVersionId}, '2026-08-15T00:00:00Z', '2026-08-15T00:00:00Z',
+  '00:01:00', 1080, ${seed.replacementMediaItemId}, 0, 1920
+);
+INSERT INTO "MediaFile" ("Id", "MediaVersionId", "Path", "PathHash")
+  VALUES (${replacementMediaFileId}, ${seed.replacementMediaVersionId},
+          '/e2e/addon-replacements/${suffix}/replacement.mp4',
+          'e2e-replacement-hash-${sqlEscape(suffix)}');
+INSERT INTO "MediaStream" (
+  "Id", "Index", "Codec", "MediaStreamKind", "Channels", "Default", "Forced",
+  "MediaVersionId", "AttachedPic"
+) VALUES (
+  ${seed.replacementMediaStreamId}, 2, 'h264', 0, 0, 1, 0,
+  ${seed.replacementMediaVersionId}, 0
 );
 `);
 
@@ -458,7 +641,7 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
     expect(runtimeErrors).toEqual([]);
   });
 
-  test('add-on list actions and editor fallback persist without hydration errors', async ({
+  test('add-on list import, overrides, replacement lifecycle, and recovery stay hydrated', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
@@ -473,7 +656,20 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
       .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
       .last();
     await expect(addDialog).toBeVisible();
-    await addDialog.getByRole('button', { name: /^cancel$/i }).click();
+    await addDialog.locator('select[name="addon_id"]').selectOption(seed.addonId);
+    await addDialog
+      .locator('select[name="content_kind_override"]')
+      .selectOption('movie');
+    await addDialog.locator('input[name="source_url"]').fill(seed.importSourceUrl);
+    await addDialog.locator('input[name="folder_name"]').fill(`E2E Import ${testInfo.project.name}`);
+    await addDialog.getByRole('button', { name: /^add$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT "ContentKindOverride" FROM "AddonMediaList"
+WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
+  AND "ProviderId" = '${sqlEscape(seed.importProviderId)}';
+`)).toBe('2');
+    await expect(page.getByText(seed.importListName)).toBeVisible();
+
     const editorRow = page.locator('tr').filter({ hasText: seed.editorListName });
     await expect(editorRow.getByRole('link', { name: /^search add-on list$/i })).toHaveAttribute(
       'href',
@@ -500,26 +696,107 @@ SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
     await expect(page.locator('form[action="/api/addon-lists/save"]')).toBeVisible();
-    await page.request.post('/api/addon-lists/save', {
-      form: {
-        id: seed.editorListId.toString(),
-        addon_id: seed.addonId,
-        source_url: seed.editorSourceUrl,
-        auto_refresh: 'true',
-      },
-      maxRedirects: 0,
-    });
+    await page
+      .locator('select[name="content_kind_override"]')
+      .selectOption('music_video');
+    await page.locator('input[name="auto_refresh"]').check();
+    await page.locator('input[name="generate_playlist"]').uncheck();
+    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await expect(page).toHaveURL(/\/media\/addon-lists$/);
 
     expect(sqlite(`
-SELECT "AutoRefresh" || ',' || "GeneratePlaylist"
+SELECT "AutoRefresh" || ',' || "GeneratePlaylist" || ',' || "ContentKindOverride"
 FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
-`)).toBe('1,0');
+`)).toBe('1,0,3');
     expect(sqlite(`
 SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `)).toBe('');
     expect(sqlite(`
 SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
 `)).toBe('0');
+
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    let itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow.getByText(/^unavailable$/i)).toBeVisible();
+    await itemRow.getByRole('button', { name: /^replace$/i }).click();
+    const replacementPicker = page
+      .locator('div[class*="editor"]')
+      .filter({ has: page.locator('input[type="search"]') })
+      .last();
+    const candidateRow = replacementPicker
+      .locator('tr')
+      .filter({ hasText: seed.replacementTitle });
+    await expect(candidateRow).toBeVisible();
+    await candidateRow.getByRole('button', { name: /^replace$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+WHERE "AddonMediaListItemId" = ${seed.editorItemId}
+  AND "MediaItemId" = ${seed.replacementMediaItemId}
+  AND "MediaVersionId" = ${seed.replacementMediaVersionId};
+`)).toBe('1');
+    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
+
+    sqlite(`DELETE FROM "MediaStream" WHERE "Id" = ${seed.replacementMediaStreamId};`);
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow.locator('[data-replacement-state="invalid"]')).toHaveText(
+      'Invalid replacement',
+    );
+    await itemRow.getByRole('button', { name: /^clear$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+WHERE "AddonMediaListItemId" = ${seed.editorItemId};
+`)).toBe('0');
+
+    sqlite(`
+INSERT INTO "MediaStream" (
+  "Id", "Index", "Codec", "MediaStreamKind", "Channels", "Default", "Forced",
+  "MediaVersionId", "AttachedPic"
+) VALUES (
+  ${seed.replacementMediaStreamId}, 2, 'h264', 0, 0, 1, 0,
+  ${seed.replacementMediaVersionId}, 0
+);
+`);
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await itemRow.getByRole('button', { name: /^replace$/i }).click();
+    const recoveredCandidateRow = page
+      .locator('div[class*="editor"]')
+      .filter({ has: page.locator('input[type="search"]') })
+      .last()
+      .locator('tr')
+      .filter({ hasText: seed.replacementTitle });
+    await expect(recoveredCandidateRow).toBeVisible();
+    await recoveredCandidateRow.getByRole('button', { name: /^replace$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+WHERE "AddonMediaListItemId" = ${seed.editorItemId};
+`)).toBe('1');
+
+    writeFileSync(seed.recoveryFlagPath, 'recovered\n');
+    await gotoHydrated(page, '/media/addon-lists');
+    await page.getByRole('button', { name: /^add add-on list$/i }).click();
+    const recoveryDialog = page
+      .locator('div[class*="panel"]')
+      .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
+      .last();
+    await recoveryDialog.locator('select[name="addon_id"]').selectOption(seed.addonId);
+    await recoveryDialog.locator('input[name="source_url"]').fill(seed.editorSourceUrl);
+    await recoveryDialog.getByRole('button', { name: /^add$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT "Availability" FROM "AddonMediaListItem"
+WHERE "Id" = ${seed.editorItemId};
+`)).toBe('0');
+    expect(sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+WHERE "AddonMediaListItemId" = ${seed.editorItemId};
+`)).toBe('1');
+
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow.getByText(/^available$/i)).toBeVisible();
+    await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
     expect(runtimeErrors).toEqual([]);
   });
 

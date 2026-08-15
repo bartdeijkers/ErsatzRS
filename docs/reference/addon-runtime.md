@@ -23,8 +23,8 @@ setting values use these names:
 | `FFMPEG_BIN`, `FFPROBE_BIN` | Managed tool paths when `managed_ffmpeg` is declared. |
 | `ERSATZRS_REMOTE_STREAM_URL` | URL for `remote-stream.play.v1`. |
 | `ERSATZRS_REMOTE_STREAM_SEEK` | Current source offset for play. |
-| `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL` | URL for `remote-stream.list.v1`. |
-| `ERSATZRS_MEDIA_LIST_URL` | Source hyperlink for `media-list.list.v1`. |
+| `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL` | URL for Remote Stream list v1 or v2. |
+| `ERSATZRS_MEDIA_LIST_URL` | Source hyperlink for media-list list v1 or v2. |
 
 ## Operations
 

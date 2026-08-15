@@ -11,14 +11,18 @@ use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Utc};
 use ersatzrs_addon_contract::{
-    validate_addon_id, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    validate_addon_id, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_AVAILABILITY_REASON_BYTES, MAX_PROVIDER_ID_BYTES,
 };
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_infra::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
     InstalledAddon,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::Writer;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -135,8 +139,18 @@ pub struct ValidatedPlaylistManifest {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PlaylistEntry {
     pub id: String,
+    #[serde(default)]
+    pub provider_id: Option<String>,
     pub url: String,
     pub title: String,
+    #[serde(default)]
+    pub original_title: Option<String>,
+    #[serde(default)]
+    pub sort_title: Option<String>,
+    #[serde(default)]
+    pub outline: Option<String>,
+    #[serde(default)]
+    pub tagline: Option<String>,
     #[serde(default)]
     pub duration_seconds: Option<u64>,
     #[serde(default)]
@@ -147,24 +161,61 @@ pub struct PlaylistEntry {
     pub release_date: Option<String>,
     #[serde(default)]
     pub content_rating: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     pub genres: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     pub tags: Vec<String>,
     #[serde(default)]
     pub collection: Option<String>,
     #[serde(default)]
     pub people: Vec<RemoteStreamPerson>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     pub producers: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     pub original_broadcasters: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     pub broadcasters: Vec<String>,
     #[serde(default)]
     pub thumbnail_url: Option<String>,
     #[serde(default)]
     pub is_live: bool,
+    #[serde(default, deserialize_with = "deserialize_addon_availability")]
+    pub availability: AddonMediaListItemAvailability,
+    #[serde(default)]
+    pub availability_reason: Option<String>,
+    #[serde(default)]
+    pub content_kind: AddonMediaListContentKind,
+    #[serde(default)]
+    pub show_title: Option<String>,
+    #[serde(default)]
+    pub season: Option<i32>,
+    #[serde(default)]
+    pub episode: Option<i32>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    pub guids: Vec<String>,
+}
+
+fn deserialize_string_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn deserialize_addon_availability<'de, D>(
+    deserializer: D,
+) -> std::result::Result<AddonMediaListItemAvailability, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(match value.as_deref() {
+        Some("available" | "public" | "unlisted") => AddonMediaListItemAvailability::Available,
+        Some("unavailable" | "private" | "premium_only" | "subscriber_only" | "needs_auth") => {
+            AddonMediaListItemAvailability::Unavailable
+        }
+        _ => AddonMediaListItemAvailability::Unknown,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,6 +231,14 @@ pub struct PlaylistSidecarEntry {
     pub title: String,
     pub duration_seconds: Option<u64>,
     pub active: bool,
+    #[serde(default)]
+    pub nfo_file: Option<String>,
+    #[serde(default)]
+    pub availability: AddonMediaListItemAvailability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nfo_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -199,6 +258,8 @@ pub struct PlaylistSidecarState {
     pub last_sync: DateTime<Utc>,
     pub last_result: PlaylistSyncOutcome,
     pub managed_files: BTreeMap<String, String>,
+    #[serde(default)]
+    pub managed_nfo_files: BTreeMap<String, String>,
     pub entries: Vec<PlaylistSidecarEntry>,
     #[serde(default)]
     pub overrides: PlaylistOverrides,
@@ -230,34 +291,16 @@ pub struct PlaylistFileSync {
 
 #[derive(Serialize)]
 struct GeneratedRemoteStreamDefinition<'a> {
+    provider_id: &'a str,
     url: &'a str,
     addon: &'a str,
     is_live: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration: Option<String>,
-    title: &'a str,
+    availability: AddonMediaListItemAvailability,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plot: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    year: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    release_date: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content_rating: Option<&'a str>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    genres: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tags: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    collection: Option<&'a str>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    people: Vec<RemoteStreamPerson>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    producers: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    original_broadcasters: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    broadcasters: Vec<String>,
+    availability_reason: Option<&'a str>,
+    content_kind: AddonMediaListContentKind,
 }
 
 /// Return whether `path` is a playlist manifest rather than a stream definition.
@@ -362,15 +405,24 @@ async fn resolve_playlist_addon(pool: &DbPool, addon_id: &str) -> Result<Install
     if !addon.enabled {
         return Err(PlaylistError::Addon(format!("{addon_id} is disabled")));
     }
-    for capability in [
-        CAPABILITY_REMOTE_STREAM_LIST_V1,
-        CAPABILITY_REMOTE_STREAM_PLAY_V1,
-    ] {
-        if !addon.manifest.has_capability(capability) {
-            return Err(PlaylistError::Addon(format!(
-                "{addon_id} does not implement {capability}"
-            )));
-        }
+    if !addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+        && !addon
+            .manifest
+            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+    {
+        return Err(PlaylistError::Addon(format!(
+            "{addon_id} does not implement a Remote Stream list capability"
+        )));
+    }
+    if !addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+    {
+        return Err(PlaylistError::Addon(format!(
+            "{addon_id} does not implement {CAPABILITY_REMOTE_STREAM_PLAY_V1}"
+        )));
     }
     Ok(addon)
 }
@@ -386,6 +438,15 @@ pub async fn enumerate_playlist(
     playlist_url: &str,
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistEnumeration> {
+    let addon = resolve_playlist_addon(pool, addon_id).await?;
+    let capability = if addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+    {
+        CAPABILITY_REMOTE_STREAM_LIST_V2
+    } else {
+        CAPABILITY_REMOTE_STREAM_LIST_V1
+    };
     let environment = BTreeMap::from([(
         "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
         playlist_url.to_owned(),
@@ -394,7 +455,7 @@ pub async fn enumerate_playlist(
         pool,
         addon_id,
         AddonInvocation {
-            capability: CAPABILITY_REMOTE_STREAM_LIST_V1,
+            capability,
             operation: "list",
             runtime,
             extra_environment: &environment,
@@ -413,7 +474,7 @@ pub async fn enumerate_playlist(
     })
 }
 
-/// Synchronize one validated manifest into ordinary generated YAML files and a
+/// Synchronize one validated manifest into generated YAML/NFO pairs and a
 /// versioned ownership sidecar. Database playlist materialization happens only
 /// after the scanner has resolved these files to media-item IDs.
 ///
@@ -429,16 +490,18 @@ pub async fn sync_playlist_files(
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistFileSync> {
     let addon = resolve_playlist_addon(pool, &manifest.manifest.addon).await?;
+    let content_kind_override = load_content_kind_override(pool, manifest_path).await?;
     let parent = manifest_path.parent().unwrap_or_else(|| Path::new("."));
     let folder = parent.join(&manifest.folder);
     let sidecar_path = folder.join(".ersatzrs-playlist.json");
     let existing = load_sidecar(&sidecar_path)?;
-    let manifest_etag = manifest_etag(manifest_bytes, &addon);
+    let manifest_etag = manifest_etag(manifest_bytes, &addon, content_kind_override);
     let now = Utc::now();
     if let Some(state) = existing.as_ref().filter(|state| {
-        state.version == 1
+        matches!(state.version, 1 | 2)
             && state.last_result.kind == "ok"
             && state.manifest_etag == manifest_etag
+            && managed_files_intact(&folder, state)
             && now
                 .signed_duration_since(state.last_sync)
                 .to_std()
@@ -472,7 +535,12 @@ pub async fn sync_playlist_files(
     let eligible = select_entries(&unbounded, enumeration.entries);
     let truncated =
         manifest.manifest.sync.max_items > 0 && eligible.len() > manifest.manifest.sync.max_items;
-    let selected = select_entries(manifest, eligible);
+    let mut selected = select_entries(manifest, eligible);
+    if content_kind_override != AddonMediaListContentKind::Auto {
+        for entry in &mut selected {
+            entry.content_kind = content_kind_override;
+        }
+    }
     let overrides = existing
         .as_ref()
         .map(|state| state.overrides.clone())
@@ -488,47 +556,33 @@ pub async fn sync_playlist_files(
         .collect::<Vec<_>>();
     let playlist_etag = playlist_etag(&selected)?;
 
-    if let Some(previous) = existing.as_ref().filter(|state| {
-        state.manifest_etag == manifest_etag && state.playlist_etag == playlist_etag
-    }) {
-        let mut state = previous.clone();
-        state.last_sync = now;
-        state.last_result = PlaylistSyncOutcome {
-            kind: "ok".to_owned(),
-            entries: selected.len(),
-            truncated,
-            error: None,
-        };
-        std::fs::create_dir_all(&folder).map_err(|error| {
-            PlaylistError::Enumeration(format!("unable to create the managed folder: {error}"))
-        })?;
-        write_json_atomically(&sidecar_path, &state)?;
-        return Ok(PlaylistFileSync {
-            definitions: definitions_from_state(&folder, &state),
-            state,
-            changed: false,
-            membership_changed: false,
-            enumerated: true,
-        });
-    }
-
     std::fs::create_dir_all(&folder).map_err(|error| {
         PlaylistError::Enumeration(format!("unable to create the managed folder: {error}"))
     })?;
     let mut managed_files = BTreeMap::new();
+    let mut managed_nfo_files = BTreeMap::new();
     let mut entries = Vec::new();
     let mut definitions = Vec::new();
     for entry in &selected {
         let file = managed_file_name(&entry.id);
         let path = folder.join(&file);
-        write_generated_definition(&path, manifest, entry)?;
+        let nfo_file = managed_nfo_file_name(&file);
+        let nfo_path = folder.join(&nfo_file);
+        let definition_bytes = generated_definition_bytes(manifest, entry)?;
+        let nfo_bytes = generated_nfo_bytes(manifest, entry)?;
+        write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
         managed_files.insert(entry.id.clone(), file.clone());
+        managed_nfo_files.insert(entry.id.clone(), nfo_file.clone());
         entries.push(PlaylistSidecarEntry {
             id: entry.id.clone(),
             file: file.clone(),
             title: entry.title.clone(),
             duration_seconds: entry.duration_seconds,
             active: true,
+            nfo_file: Some(nfo_file),
+            availability: entry.availability,
+            definition_sha256: Some(hex_hash(&definition_bytes)),
+            nfo_sha256: Some(hex_hash(&nfo_bytes)),
         });
         definitions.push(ManagedPlaylistDefinition {
             id: entry.id.clone(),
@@ -548,13 +602,25 @@ pub async fn sync_playlist_files(
                 continue;
             };
             let old_path = folder.join(old_file);
+            let old_nfo_path = previous
+                .managed_nfo_files
+                .get(&old.id)
+                .map(|file| folder.join(file));
             if !old_path.is_file() {
                 continue;
             }
             match manifest.manifest.sync.on_removed {
-                RemovedEntryPolicy::Trash => move_to_managed_trash(&folder, &old_path, now)?,
+                RemovedEntryPolicy::Trash => {
+                    move_to_managed_trash(&folder, &old_path, now)?;
+                    if let Some(old_nfo_path) = old_nfo_path.filter(|path| path.is_file()) {
+                        move_to_managed_trash(&folder, &old_nfo_path, now)?;
+                    }
+                }
                 RemovedEntryPolicy::Keep => {
                     managed_files.insert(old.id.clone(), old_file.clone());
+                    if let Some(nfo_file) = previous.managed_nfo_files.get(&old.id) {
+                        managed_nfo_files.insert(old.id.clone(), nfo_file.clone());
+                    }
                     entries.push(PlaylistSidecarEntry {
                         active: false,
                         ..old.clone()
@@ -579,7 +645,7 @@ pub async fn sync_playlist_files(
             .as_ref()
             .is_none_or(|state| state.manifest_etag != manifest_etag);
     let state = PlaylistSidecarState {
-        version: 1,
+        version: 2,
         manifest_etag,
         playlist_etag,
         last_sync: now,
@@ -590,6 +656,7 @@ pub async fn sync_playlist_files(
             error: None,
         },
         managed_files,
+        managed_nfo_files,
         entries,
         overrides,
     };
@@ -613,7 +680,7 @@ fn persist_failed_sync(
         PlaylistError::Enumeration(format!("unable to create the managed folder: {error}"))
     })?;
     let mut state = existing.cloned().unwrap_or_else(|| PlaylistSidecarState {
-        version: 1,
+        version: 2,
         manifest_etag: manifest_etag.clone(),
         playlist_etag: String::new(),
         last_sync: now,
@@ -624,6 +691,7 @@ fn persist_failed_sync(
             error: Some("playlist enumeration failed".to_owned()),
         },
         managed_files: BTreeMap::new(),
+        managed_nfo_files: BTreeMap::new(),
         entries: Vec::new(),
         overrides: PlaylistOverrides::default(),
     });
@@ -718,6 +786,21 @@ fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
                 index + 1
             )));
         }
+        if entry.id.len() > MAX_PROVIDER_ID_BYTES
+            || entry
+                .provider_id
+                .as_ref()
+                .is_some_and(|provider_id| provider_id.len() > MAX_PROVIDER_ID_BYTES)
+            || entry
+                .availability_reason
+                .as_ref()
+                .is_some_and(|reason| reason.len() > MAX_AVAILABILITY_REASON_BYTES)
+        {
+            return Err(PlaylistError::Enumeration(format!(
+                "line {} has an overlong provider identity or availability reason",
+                index + 1
+            )));
+        }
         if entry
             .year
             .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
@@ -757,13 +840,67 @@ fn load_sidecar(path: &Path) -> Result<Option<PlaylistSidecarState>> {
     let state: PlaylistSidecarState = serde_json::from_str(&value).map_err(|error| {
         PlaylistError::Enumeration(format!("managed playlist state is invalid: {error}"))
     })?;
-    if state.version != 1 {
+    if !matches!(state.version, 1 | 2) {
         return Err(PlaylistError::Enumeration(format!(
             "managed playlist state version {} is unsupported",
             state.version
         )));
     }
     Ok(Some(state))
+}
+
+async fn load_content_kind_override(
+    pool: &DbPool,
+    manifest_path: &Path,
+) -> Result<AddonMediaListContentKind> {
+    let value = sqlx::query_scalar::<_, i32>(
+        r#"SELECT "list"."ContentKindOverride"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "managed"."AddonMediaListId"
+           WHERE "managed"."ManifestPath" = ?
+           LIMIT 1"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to load content-kind override: {error}"))
+    })?;
+    match value.unwrap_or(0) {
+        0 => Ok(AddonMediaListContentKind::Auto),
+        1 => Ok(AddonMediaListContentKind::TelevisionEpisode),
+        2 => Ok(AddonMediaListContentKind::Movie),
+        3 => Ok(AddonMediaListContentKind::MusicVideo),
+        4 => Ok(AddonMediaListContentKind::OtherVideo),
+        value => Err(PlaylistError::Enumeration(format!(
+            "stored content-kind override {value} is invalid"
+        ))),
+    }
+}
+
+fn managed_files_intact(folder: &Path, state: &PlaylistSidecarState) -> bool {
+    state.entries.iter().all(|entry| {
+        let definition_path = folder.join(&entry.file);
+        let Some(definition_hash) = entry.definition_sha256.as_deref() else {
+            return false;
+        };
+        let Some(nfo_file) = entry
+            .nfo_file
+            .as_deref()
+            .or_else(|| state.managed_nfo_files.get(&entry.id).map(String::as_str))
+        else {
+            return false;
+        };
+        let Some(nfo_hash) = entry.nfo_sha256.as_deref() else {
+            return false;
+        };
+        file_has_hash(&definition_path, definition_hash)
+            && file_has_hash(&folder.join(nfo_file), nfo_hash)
+    })
+}
+
+fn file_has_hash(path: &Path, expected: &str) -> bool {
+    std::fs::read(path).is_ok_and(|bytes| hex_hash(&bytes) == expected)
 }
 
 fn definitions_from_state(
@@ -783,32 +920,19 @@ fn definitions_from_state(
         .collect()
 }
 
-fn write_generated_definition(
-    path: &Path,
+fn generated_definition_bytes(
     manifest: &ValidatedPlaylistManifest,
     entry: &PlaylistEntry,
-) -> Result<()> {
+) -> Result<Vec<u8>> {
     let definition = GeneratedRemoteStreamDefinition {
+        provider_id: entry.provider_id.as_deref().unwrap_or(&entry.id),
         url: &entry.url,
         addon: &manifest.manifest.addon,
         is_live: entry.is_live || manifest.manifest.defaults.is_live,
         duration: entry.duration_seconds.map(format_clock_duration),
-        title: &entry.title,
-        plot: entry.plot.as_deref(),
-        year: entry.year.or(manifest.manifest.defaults.year),
-        release_date: entry.release_date.as_deref(),
-        content_rating: entry.content_rating.as_deref().or(manifest
-            .manifest
-            .defaults
-            .content_rating
-            .as_deref()),
-        genres: entry.genres.clone(),
-        tags: union_values(&manifest.manifest.tags, &entry.tags),
-        collection: entry.collection.as_deref(),
-        people: entry.people.clone(),
-        producers: entry.producers.clone(),
-        original_broadcasters: entry.original_broadcasters.clone(),
-        broadcasters: entry.broadcasters.clone(),
+        availability: entry.availability,
+        availability_reason: entry.availability_reason.as_deref(),
+        content_kind: entry.content_kind,
     };
     let yaml = serde_yaml::to_string(&definition).map_err(|error| {
         PlaylistError::Enumeration(format!("unable to encode a managed definition: {error}"))
@@ -816,7 +940,274 @@ fn write_generated_definition(
     let content = format!(
         "# Generated by ErsatzRS from a Remote Stream playlist manifest. Do not edit.\n{yaml}"
     );
-    write_bytes_atomically(path, content.as_bytes())
+    Ok(content.into_bytes())
+}
+
+#[cfg(test)]
+fn write_generated_nfo(
+    path: &Path,
+    manifest: &ValidatedPlaylistManifest,
+    entry: &PlaylistEntry,
+) -> Result<()> {
+    let bytes = generated_nfo_bytes(manifest, entry)?;
+    write_bytes_atomically(path, &bytes)
+}
+
+#[allow(clippy::too_many_lines)]
+fn generated_nfo_bytes(
+    manifest: &ValidatedPlaylistManifest,
+    entry: &PlaylistEntry,
+) -> Result<Vec<u8>> {
+    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
+    write_xml_event(
+        &mut writer,
+        Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)),
+    )?;
+    let root_name = match entry.content_kind {
+        AddonMediaListContentKind::TelevisionEpisode => "episodedetails",
+        AddonMediaListContentKind::MusicVideo => "musicvideo",
+        AddonMediaListContentKind::Auto
+        | AddonMediaListContentKind::Movie
+        | AddonMediaListContentKind::OtherVideo => "movie",
+    };
+    let mut root = BytesStart::new(root_name);
+    root.push_attribute(("xmlns:ersatzrs", "urn:ersatzrs:nfo:1"));
+    write_xml_event(&mut writer, Event::Start(root))?;
+
+    write_xml_text(&mut writer, "title", Some(&entry.title))?;
+    write_xml_text(
+        &mut writer,
+        "originaltitle",
+        entry.original_title.as_deref(),
+    )?;
+    write_xml_text(&mut writer, "sorttitle", entry.sort_title.as_deref())?;
+    write_xml_text(&mut writer, "outline", entry.outline.as_deref())?;
+    write_xml_text(&mut writer, "plot", entry.plot.as_deref())?;
+    write_xml_text(&mut writer, "tagline", entry.tagline.as_deref())?;
+    let year = entry.year.or(manifest.manifest.defaults.year);
+    write_xml_text(
+        &mut writer,
+        "year",
+        year.as_ref().map(ToString::to_string).as_deref(),
+    )?;
+    let release_day = entry
+        .release_date
+        .as_deref()
+        .and_then(|value| value.get(..10))
+        .filter(|value| {
+            value.chars().enumerate().all(|(index, character)| {
+                matches!(index, 4 | 7) && character == '-'
+                    || !matches!(index, 4 | 7) && character.is_ascii_digit()
+            })
+        });
+    write_xml_text(&mut writer, "premiered", release_day)?;
+    write_xml_text(&mut writer, "releasedate", release_day)?;
+    let runtime = entry
+        .duration_seconds
+        .filter(|seconds| *seconds > 0)
+        .map(|seconds| seconds.div_ceil(60).to_string());
+    write_xml_text(&mut writer, "runtime", runtime.as_deref())?;
+    write_xml_text(
+        &mut writer,
+        "mpaa",
+        entry
+            .content_rating
+            .as_deref()
+            .or(manifest.manifest.defaults.content_rating.as_deref()),
+    )?;
+    if root_name == "episodedetails" {
+        write_xml_text(&mut writer, "showtitle", entry.show_title.as_deref())?;
+        write_xml_text(
+            &mut writer,
+            "season",
+            entry.season.as_ref().map(ToString::to_string).as_deref(),
+        )?;
+        write_xml_text(
+            &mut writer,
+            "episode",
+            entry.episode.as_ref().map(ToString::to_string).as_deref(),
+        )?;
+    }
+    for value in &entry.genres {
+        write_xml_text(&mut writer, "genre", Some(value))?;
+    }
+    for value in union_values(&manifest.manifest.tags, &entry.tags) {
+        write_xml_text(&mut writer, "tag", Some(&value))?;
+    }
+    if let Some(collection) = entry.collection.as_deref() {
+        write_xml_text(&mut writer, "tag", Some(collection))?;
+    }
+    let studios = union_values(
+        &union_values(&entry.original_broadcasters, &entry.broadcasters),
+        &entry.producers,
+    );
+    for value in studios {
+        write_xml_text(&mut writer, "studio", Some(&value))?;
+    }
+    let mut directors = Vec::new();
+    let mut writers = Vec::new();
+    let mut actors = Vec::new();
+    let mut artists = Vec::new();
+    for person in &entry.people {
+        match person.role.trim().to_ascii_lowercase().as_str() {
+            "director" => directors.push(person.name.as_str()),
+            "writer" | "screenplay" => writers.push(person.name.as_str()),
+            "artist" if root_name == "musicvideo" => artists.push(person.name.as_str()),
+            "producer" => {}
+            _ => actors.push(person),
+        }
+    }
+    for person in actors {
+        write_nfo_actor(&mut writer, person)?;
+    }
+    for director in directors {
+        write_xml_text(&mut writer, "director", Some(director))?;
+    }
+    for writer_name in writers {
+        write_xml_text(&mut writer, "credits", Some(writer_name))?;
+    }
+    for artist in artists {
+        write_xml_text(&mut writer, "artist", Some(artist))?;
+    }
+    write_unique_id(
+        &mut writer,
+        &manifest.manifest.addon,
+        entry.provider_id.as_deref().unwrap_or(&entry.id),
+        true,
+    )?;
+    for guid in &entry.guids {
+        if let Some((source, value)) = guid.split_once("://") {
+            write_unique_id(&mut writer, source, value, false)?;
+        }
+    }
+    write_xml_text(&mut writer, "thumb", entry.thumbnail_url.as_deref())?;
+    write_xml_text(
+        &mut writer,
+        "ersatzrs:release_datetime",
+        entry.release_date.as_deref(),
+    )?;
+    write_xml_text(
+        &mut writer,
+        "ersatzrs:collection",
+        entry.collection.as_deref(),
+    )?;
+    for producer in &entry.producers {
+        write_xml_text(&mut writer, "ersatzrs:producer", Some(producer))?;
+    }
+    for broadcaster in &entry.original_broadcasters {
+        write_xml_text(
+            &mut writer,
+            "ersatzrs:original_broadcaster",
+            Some(broadcaster),
+        )?;
+    }
+    for broadcaster in &entry.broadcasters {
+        write_xml_text(&mut writer, "ersatzrs:broadcaster", Some(broadcaster))?;
+    }
+    write_xml_event(&mut writer, Event::End(BytesEnd::new(root_name)))?;
+    let mut bytes = writer.into_inner();
+    bytes.push(b'\n');
+    let xml = std::str::from_utf8(&bytes).map_err(|error| {
+        PlaylistError::Enumeration(format!("generated NFO is not UTF-8: {error}"))
+    })?;
+    crate::nfo::parse_other_video_nfo_str(xml).map_err(|error| {
+        PlaylistError::Enumeration(format!("generated NFO failed validation: {error}"))
+    })?;
+    Ok(bytes)
+}
+
+fn write_generated_pair(
+    definition_path: &Path,
+    definition_bytes: &[u8],
+    nfo_path: &Path,
+    nfo_bytes: &[u8],
+) -> Result<()> {
+    if std::fs::read(definition_path).is_ok_and(|current| current == definition_bytes)
+        && std::fs::read(nfo_path).is_ok_and(|current| current == nfo_bytes)
+    {
+        return Ok(());
+    }
+    let definition_previous = std::fs::read(definition_path).ok();
+    let definition_temporary = stage_bytes(definition_path, definition_bytes)?;
+    let nfo_temporary = stage_bytes(nfo_path, nfo_bytes)?;
+
+    definition_temporary
+        .persist(definition_path)
+        .map_err(|error| {
+            PlaylistError::Enumeration(format!(
+                "unable to publish managed definition atomically: {error}"
+            ))
+        })?;
+    if let Err(error) = nfo_temporary.persist(nfo_path) {
+        let rollback = restore_previous_file(definition_path, definition_previous.as_deref());
+        return Err(PlaylistError::Enumeration(match rollback {
+            Ok(()) => format!("unable to publish managed NFO atomically: {error}"),
+            Err(rollback_error) => format!(
+                "unable to publish managed NFO atomically: {error}; definition rollback failed: {rollback_error}"
+            ),
+        }));
+    }
+    Ok(())
+}
+
+fn stage_bytes(path: &Path, bytes: &[u8]) -> Result<tempfile::NamedTempFile> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to create managed temporary file: {error}"))
+    })?;
+    temporary.write_all(bytes).map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to write managed temporary file: {error}"))
+    })?;
+    temporary.flush().map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to flush managed temporary file: {error}"))
+    })?;
+    Ok(temporary)
+}
+
+fn restore_previous_file(path: &Path, previous: Option<&[u8]>) -> Result<()> {
+    if let Some(previous) = previous {
+        write_bytes_atomically(path, previous)
+    } else {
+        std::fs::remove_file(path).map_err(|error| {
+            PlaylistError::Enumeration(format!("unable to remove rolled-back definition: {error}"))
+        })
+    }
+}
+
+fn write_nfo_actor(writer: &mut Writer<Vec<u8>>, person: &RemoteStreamPerson) -> Result<()> {
+    write_xml_event(writer, Event::Start(BytesStart::new("actor")))?;
+    write_xml_text(writer, "name", Some(&person.name))?;
+    write_xml_text(writer, "role", Some(&person.role))?;
+    write_xml_event(writer, Event::End(BytesEnd::new("actor")))
+}
+
+fn write_unique_id(
+    writer: &mut Writer<Vec<u8>>,
+    source: &str,
+    value: &str,
+    is_default: bool,
+) -> Result<()> {
+    let mut element = BytesStart::new("uniqueid");
+    element.push_attribute(("type", source));
+    element.push_attribute(("default", if is_default { "true" } else { "false" }));
+    write_xml_event(writer, Event::Start(element))?;
+    write_xml_event(writer, Event::Text(BytesText::new(value)))?;
+    write_xml_event(writer, Event::End(BytesEnd::new("uniqueid")))
+}
+
+fn write_xml_text(writer: &mut Writer<Vec<u8>>, name: &str, value: Option<&str>) -> Result<()> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    write_xml_event(writer, Event::Start(BytesStart::new(name)))?;
+    write_xml_event(writer, Event::Text(BytesText::new(value)))?;
+    write_xml_event(writer, Event::End(BytesEnd::new(name)))
+}
+
+fn write_xml_event(writer: &mut Writer<Vec<u8>>, event: Event<'_>) -> Result<()> {
+    writer.write_event(event).map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to encode generated NFO: {error}"))
+    })
 }
 
 fn union_values(left: &[String], right: &[String]) -> Vec<String> {
@@ -842,6 +1233,15 @@ fn managed_file_name(id: &str) -> String {
     }
 }
 
+fn managed_nfo_file_name(definition_file: &str) -> String {
+    Path::new(definition_file)
+        .with_extension("nfo")
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("entry.nfo")
+        .to_owned()
+}
+
 fn move_to_managed_trash(folder: &Path, path: &Path, now: DateTime<Utc>) -> Result<()> {
     let trash = folder.join(".ersatzrs-trash");
     std::fs::create_dir_all(&trash).map_err(|error| {
@@ -865,19 +1265,10 @@ fn write_json_atomically(path: &Path, value: &PlaylistSidecarState) -> Result<()
 }
 
 fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
     if std::fs::read(path).is_ok_and(|current| current == bytes) {
         return Ok(());
     }
-    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|error| {
-        PlaylistError::Enumeration(format!("unable to create managed temporary state: {error}"))
-    })?;
-    temporary.write_all(bytes).map_err(|error| {
-        PlaylistError::Enumeration(format!("unable to write managed temporary state: {error}"))
-    })?;
-    temporary.flush().map_err(|error| {
-        PlaylistError::Enumeration(format!("unable to flush managed temporary state: {error}"))
-    })?;
+    let temporary = stage_bytes(path, bytes)?;
     temporary.persist(path).map_err(|error| {
         PlaylistError::Enumeration(format!(
             "unable to publish managed state atomically: {error}"
@@ -886,7 +1277,11 @@ fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn manifest_etag(bytes: &[u8], addon: &InstalledAddon) -> String {
+fn manifest_etag(
+    bytes: &[u8],
+    addon: &InstalledAddon,
+    content_kind_override: AddonMediaListContentKind,
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.update([0]);
@@ -895,6 +1290,14 @@ fn manifest_etag(bytes: &[u8], addon: &InstalledAddon) -> String {
     hasher.update(addon.version.to_string().as_bytes());
     hasher.update([0]);
     hasher.update(addon.package_sha256.as_bytes());
+    hasher.update([0]);
+    hasher.update([match content_kind_override {
+        AddonMediaListContentKind::Auto => 0,
+        AddonMediaListContentKind::TelevisionEpisode => 1,
+        AddonMediaListContentKind::Movie => 2,
+        AddonMediaListContentKind::MusicVideo => 3,
+        AddonMediaListContentKind::OtherVideo => 4,
+    }]);
     bytes_to_hex(&hasher.finalize())
 }
 
@@ -1110,12 +1513,42 @@ create_playlist: true
         let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(root)
             .await
             .expect("hash updated fixture package");
-        sqlx::query(r#"UPDATE "AddonInstallation" SET "ContentSha256" = ? WHERE "AddonId" = ?"#)
-            .bind(content_sha256)
-            .bind("org.ersatzrs.addon.fixture")
-            .execute(pool)
-            .await
-            .expect("record updated fixture content");
+        sqlx::query(
+            r#"UPDATE "AddonInstallation"
+               SET "PackageSha256" = ?, "ContentSha256" = ?
+               WHERE "AddonId" = ?"#,
+        )
+        .bind(&content_sha256)
+        .bind(content_sha256)
+        .bind("org.ersatzrs.addon.fixture")
+        .execute(pool)
+        .await
+        .expect("record updated fixture content");
+    }
+
+    #[cfg(unix)]
+    fn write_fixture_playlist_script(script: &Path, first_url: &str, include_second: bool) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let mut lines = vec![format!(
+            r#"'{{"id":"one","url":"{first_url}","title":"One","duration_seconds":60}}'"#
+        )];
+        if include_second {
+            lines.push(
+                r#"'{"id":"two","url":"https://example.test/2","title":"Two","duration_seconds":120}'"#
+                    .to_owned(),
+            );
+        }
+        std::fs::write(
+            script,
+            format!("#!/bin/sh\nprintf '%s\\n' {}\n", lines.join(" ")),
+        )
+        .expect("write fixture script");
+        let mut permissions = std::fs::metadata(script)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(script, permissions).expect("fixture permissions");
     }
 
     #[test]
@@ -1220,8 +1653,255 @@ create_playlist: true
             .contains("duplicates"));
     }
 
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn generated_nfo_round_trips_every_generic_content_kind() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let manifest = parse_playlist_manifest(valid_yaml(), Path::new("Fixture.playlist.yml"))
+            .expect("manifest");
+        let base = PlaylistEntry {
+            id: "entry".to_owned(),
+            provider_id: Some("provider-entry".to_owned()),
+            url: "https://example.test/watch/entry".to_owned(),
+            title: "Example title".to_owned(),
+            original_title: Some("Original example".to_owned()),
+            sort_title: Some("Example, The".to_owned()),
+            outline: Some("Example outline".to_owned()),
+            tagline: Some("Example tagline".to_owned()),
+            duration_seconds: Some(121),
+            plot: Some("Example plot".to_owned()),
+            year: Some(2001),
+            release_date: Some("2001-02-03T04:05:06Z".to_owned()),
+            content_rating: Some("12".to_owned()),
+            genres: vec!["Documentary".to_owned()],
+            tags: vec!["Archive".to_owned()],
+            collection: Some("Example Collection".to_owned()),
+            people: vec![
+                RemoteStreamPerson {
+                    name: "Alex Actor".to_owned(),
+                    role: "Example role".to_owned(),
+                },
+                RemoteStreamPerson {
+                    name: "Drew Director".to_owned(),
+                    role: "director".to_owned(),
+                },
+                RemoteStreamPerson {
+                    name: "Robin Writer".to_owned(),
+                    role: "writer".to_owned(),
+                },
+                RemoteStreamPerson {
+                    name: "Sam Artist".to_owned(),
+                    role: "artist".to_owned(),
+                },
+            ],
+            producers: vec!["Example Producer".to_owned()],
+            original_broadcasters: vec!["Original Network".to_owned()],
+            broadcasters: vec!["Current Network".to_owned()],
+            thumbnail_url: Some("https://example.test/thumb.jpg".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            show_title: Some("Example Show".to_owned()),
+            season: Some(2),
+            episode: Some(3),
+            guids: vec!["catalog://abc-123".to_owned()],
+            ..PlaylistEntry::default()
+        };
+
+        for (content_kind, expected_root) in [
+            (
+                AddonMediaListContentKind::TelevisionEpisode,
+                "episodedetails",
+            ),
+            (AddonMediaListContentKind::Movie, "movie"),
+            (AddonMediaListContentKind::MusicVideo, "musicvideo"),
+            (AddonMediaListContentKind::OtherVideo, "movie"),
+        ] {
+            let entry = PlaylistEntry {
+                content_kind,
+                ..base.clone()
+            };
+            let path = temp.path().join(format!("{content_kind:?}.nfo"));
+            write_generated_nfo(&path, &manifest, &entry).expect("write generated NFO");
+            let xml = std::fs::read_to_string(&path).expect("read generated NFO");
+            assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"));
+            assert!(xml.contains(&format!(
+                "<{expected_root} xmlns:ersatzrs=\"urn:ersatzrs:nfo:1\">"
+            )));
+            assert!(xml.ends_with(&format!("</{expected_root}>\n")));
+            assert!(xml.contains("<runtime>3</runtime>"));
+            assert!(xml.contains("<thumb>https://example.test/thumb.jpg</thumb>"));
+
+            let parsed = crate::nfo::parse_other_video_nfo(&path).expect("round-trip NFO");
+            assert_eq!(parsed.title.as_deref(), Some("Example title"));
+            assert_eq!(parsed.original_title.as_deref(), Some("Original example"));
+            assert_eq!(parsed.sort_title.as_deref(), Some("Example, The"));
+            assert_eq!(parsed.outline.as_deref(), Some("Example outline"));
+            assert_eq!(parsed.plot.as_deref(), Some("Example plot"));
+            assert_eq!(parsed.tagline.as_deref(), Some("Example tagline"));
+            assert_eq!(parsed.year, Some(2001));
+            assert_eq!(
+                parsed
+                    .release_datetime
+                    .map(|value| value.to_rfc3339())
+                    .as_deref(),
+                Some("2001-02-03T04:05:06+00:00")
+            );
+            assert_eq!(parsed.content_ratings, ["12"]);
+            assert_eq!(parsed.genres, ["Documentary"]);
+            assert!(parsed.tags.contains(&"Archive".to_owned()));
+            assert!(parsed.tags.contains(&"Example Collection".to_owned()));
+            assert_eq!(parsed.collection.as_deref(), Some("Example Collection"));
+            assert_eq!(parsed.producers, ["Example Producer"]);
+            assert_eq!(parsed.original_broadcasters, ["Original Network"]);
+            assert_eq!(parsed.broadcasters, ["Current Network"]);
+            assert_eq!(parsed.directors, ["Drew Director"]);
+            assert_eq!(parsed.writers, ["Robin Writer"]);
+            assert_eq!(parsed.guids.len(), 2);
+            if content_kind == AddonMediaListContentKind::TelevisionEpisode {
+                assert_eq!(parsed.show_title.as_deref(), Some("Example Show"));
+                assert_eq!(parsed.season, Some(2));
+                assert_eq!(parsed.episode, Some(3));
+            } else {
+                assert!(parsed.show_title.is_none());
+                assert!(parsed.season.is_none());
+                assert!(parsed.episode.is_none());
+            }
+            if content_kind == AddonMediaListContentKind::MusicVideo {
+                assert_eq!(parsed.artists, ["Sam Artist"]);
+            } else {
+                assert!(parsed.artists.is_empty());
+            }
+        }
+
+        let entry = PlaylistEntry {
+            content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            show_title: None,
+            season: None,
+            episode: None,
+            ..base
+        };
+        let path = temp.path().join("episode-without-numbers.nfo");
+        write_generated_nfo(&path, &manifest, &entry).expect("write numberless episode NFO");
+        let xml = std::fs::read_to_string(path).expect("read numberless episode NFO");
+        assert!(!xml.contains("<showtitle>"));
+        assert!(!xml.contains("<season>"));
+        assert!(!xml.contains("<episode>"));
+    }
+
+    #[test]
+    fn generated_pair_rolls_back_definition_when_nfo_publication_fails() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let definition_path = temp.path().join("entry.yml");
+        let nfo_path = temp.path().join("entry.nfo");
+        std::fs::write(&definition_path, b"old definition").expect("old definition");
+        std::fs::create_dir(&nfo_path).expect("blocking NFO directory");
+
+        let error =
+            write_generated_pair(&definition_path, b"new definition", &nfo_path, b"new NFO")
+                .expect_err("NFO publication must fail");
+
+        assert!(error.to_string().contains("publish managed NFO"));
+        assert_eq!(
+            std::fs::read(&definition_path).expect("restored definition"),
+            b"old definition"
+        );
+        assert!(nfo_path.is_dir());
+    }
+
+    #[test]
+    fn generated_pair_does_not_publish_nfo_when_definition_publication_fails() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let definition_path = temp.path().join("entry.yml");
+        let nfo_path = temp.path().join("entry.nfo");
+        std::fs::create_dir(&definition_path).expect("blocking definition directory");
+        std::fs::write(&nfo_path, b"old NFO").expect("old NFO");
+
+        let error =
+            write_generated_pair(&definition_path, b"new definition", &nfo_path, b"new NFO")
+                .expect_err("definition publication must fail");
+
+        assert!(error.to_string().contains("publish managed definition"));
+        assert!(definition_path.is_dir());
+        assert_eq!(std::fs::read(&nfo_path).expect("unchanged NFO"), b"old NFO");
+    }
+
+    #[test]
+    fn state_publication_failure_cannot_create_a_partial_sidecar() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let sidecar_path = temp.path().join(".ersatzrs-playlist.json");
+        std::fs::create_dir(&sidecar_path).expect("blocking sidecar directory");
+        let state = PlaylistSidecarState {
+            version: 2,
+            manifest_etag: "manifest".to_owned(),
+            playlist_etag: "playlist".to_owned(),
+            last_sync: Utc::now(),
+            last_result: PlaylistSyncOutcome {
+                kind: "ok".to_owned(),
+                entries: 0,
+                truncated: false,
+                error: None,
+            },
+            managed_files: BTreeMap::new(),
+            managed_nfo_files: BTreeMap::new(),
+            entries: Vec::new(),
+            overrides: PlaylistOverrides::default(),
+        };
+
+        let error =
+            write_json_atomically(&sidecar_path, &state).expect_err("state publication must fail");
+        assert!(error.to_string().contains("publish managed state"));
+        assert!(sidecar_path.is_dir());
+        assert!(std::fs::read_dir(temp.path())
+            .expect("read temp folder")
+            .all(|entry| !entry
+                .expect("directory entry")
+                .file_name()
+                .to_string_lossy()
+                .contains("tmp")));
+    }
+
+    #[test]
+    fn sidecar_integrity_hashes_reject_a_mixed_generation() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let definition = b"definition";
+        let nfo = b"nfo";
+        std::fs::write(temp.path().join("entry.yml"), definition).expect("definition");
+        std::fs::write(temp.path().join("entry.nfo"), nfo).expect("NFO");
+        let state = PlaylistSidecarState {
+            version: 2,
+            manifest_etag: "manifest".to_owned(),
+            playlist_etag: "playlist".to_owned(),
+            last_sync: Utc::now(),
+            last_result: PlaylistSyncOutcome {
+                kind: "ok".to_owned(),
+                entries: 1,
+                truncated: false,
+                error: None,
+            },
+            managed_files: BTreeMap::from([("entry".to_owned(), "entry.yml".to_owned())]),
+            managed_nfo_files: BTreeMap::from([("entry".to_owned(), "entry.nfo".to_owned())]),
+            entries: vec![PlaylistSidecarEntry {
+                id: "entry".to_owned(),
+                file: "entry.yml".to_owned(),
+                title: "Entry".to_owned(),
+                duration_seconds: None,
+                active: true,
+                nfo_file: Some("entry.nfo".to_owned()),
+                availability: AddonMediaListItemAvailability::Available,
+                definition_sha256: Some(hex_hash(definition)),
+                nfo_sha256: Some(hex_hash(nfo)),
+            }],
+            overrides: PlaylistOverrides::default(),
+        };
+        assert!(managed_files_intact(temp.path(), &state));
+
+        std::fs::write(temp.path().join("entry.nfo"), b"different generation")
+            .expect("replace NFO");
+        assert!(!managed_files_intact(temp.path(), &state));
+    }
+
     #[cfg(unix)]
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn file_sync_preserves_identity_order_and_skips_fresh_enumeration() {
         use std::os::unix::fs::PermissionsExt as _;
 
@@ -1234,7 +1914,7 @@ create_playlist: true
             concat!(
                 "#!/bin/sh\n",
                 "printf '%s\\n' \\\n",
-                "  '{\"id\":\"one\",\"url\":\"https://example.test/1\",\"title\":\"One\",\"duration_seconds\":60,\"plot\":\"Plot\",\"year\":1992,\"release_date\":\"1992-05-30T21:15:00Z\",\"content_rating\":\"nl:12\",\"genres\":[\"showbizzprogramma\"],\"tags\":[\"televisie\"],\"collection\":\"Publieke omroepen\",\"people\":[{\"name\":\"Gert-Jan Dröge\",\"role\":\"presenter\"}],\"producers\":[\"John de Mol Produkties\"],\"original_broadcasters\":[\"AVRO\"],\"broadcasters\":[\"AVROTROS\"]}' \\\n",
+                "  '{\"id\":\"one\",\"url\":\"https://example.test/1\",\"title\":\"One\",\"duration_seconds\":60,\"plot\":\"Plot\",\"year\":2001,\"release_date\":\"2001-02-03T04:05:06Z\",\"content_rating\":\"12\",\"genres\":[\"Documentary\"],\"tags\":[\"Archive\"],\"collection\":\"Example Collection\",\"people\":[{\"name\":\"Alex Example\",\"role\":\"narrator\"}],\"producers\":[\"Example Producer\"],\"original_broadcasters\":[\"Original Network\"],\"broadcasters\":[\"Current Network\"]}' \\\n",
                 "  '{\"id\":\"two\",\"url\":\"https://example.test/2\",\"title\":\"Two\",\"duration_seconds\":120}'\n"
             ),
         )
@@ -1270,15 +1950,26 @@ create_playlist: true
         assert!(generated.contains("duration: 00:01:00"));
         let parsed = ersatzrs_infra::remote_stream::parse_remote_stream_definition(&generated)
             .expect("generated YAML");
-        assert_eq!(parsed.release_date.as_deref(), Some("1992-05-30T21:15:00Z"));
-        assert_eq!(parsed.content_rating.as_deref(), Some("nl:12"));
-        assert_eq!(parsed.genres, ["showbizzprogramma"]);
-        assert_eq!(parsed.tags, ["televisie"]);
-        assert_eq!(parsed.collection.as_deref(), Some("Publieke omroepen"));
-        assert_eq!(parsed.people[0].role, "presenter");
-        assert_eq!(parsed.producers, ["John de Mol Produkties"]);
-        assert_eq!(parsed.original_broadcasters, ["AVRO"]);
-        assert_eq!(parsed.broadcasters, ["AVROTROS"]);
+        assert!(parsed.release_date.is_none());
+        assert!(parsed.content_rating.is_none());
+        assert!(parsed.genres.is_empty());
+        let nfo_path = first.definitions[0].path.with_extension("nfo");
+        let nfo = crate::nfo::parse_other_video_nfo(&nfo_path).expect("generated NFO");
+        assert_eq!(
+            nfo.release_datetime
+                .map(|value| value.to_rfc3339())
+                .as_deref(),
+            Some("2001-02-03T04:05:06+00:00")
+        );
+        assert_eq!(nfo.content_ratings, ["12"]);
+        assert_eq!(nfo.genres, ["Documentary"]);
+        assert!(nfo.tags.contains(&"Archive".to_owned()));
+        assert_eq!(nfo.collection.as_deref(), Some("Example Collection"));
+        assert_eq!(nfo.actors[0].role.as_deref(), Some("narrator"));
+        assert_eq!(nfo.producers, ["Example Producer"]);
+        assert_eq!(nfo.original_broadcasters, ["Original Network"]);
+        assert_eq!(nfo.broadcasters, ["Current Network"]);
+        assert_eq!(first.state.version, 2);
         let resolved = ersatzrs_infra::remote_stream::resolve_remote_stream_with_addons(
             &pool, &parsed, &runtime,
         )
@@ -1321,6 +2012,234 @@ create_playlist: true
             .await
             .expect_err("updated add-on must bypass the fresh interval");
         assert!(error.to_string().contains("enumeration failed"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn file_sync_heals_missing_and_v1_pairs_and_honors_removal_policies() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        write_fixture_playlist_script(&script, "https://example.test/1", true);
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
+
+        let trash_manifest_path = temp.path().join("Trash.playlist.yml");
+        let trash_manifest =
+            parse_playlist_manifest(valid_yaml(), &trash_manifest_path).expect("trash manifest");
+        let first = sync_playlist_files(
+            &pool,
+            &trash_manifest_path,
+            valid_yaml().as_bytes(),
+            &trash_manifest,
+            &runtime,
+        )
+        .await
+        .expect("initial trash-policy sync");
+        let folder = temp.path().join("Trash");
+        let sidecar_path = folder.join(".ersatzrs-playlist.json");
+        let manual_path = folder.join("operator-notes.txt");
+        std::fs::write(&manual_path, "keep me").expect("manual sibling");
+
+        std::fs::remove_file(folder.join("one.nfo")).expect("remove managed NFO");
+        let healed_nfo = sync_playlist_files(
+            &pool,
+            &trash_manifest_path,
+            valid_yaml().as_bytes(),
+            &trash_manifest,
+            &runtime,
+        )
+        .await
+        .expect("heal missing NFO");
+        assert!(healed_nfo.enumerated);
+        assert!(folder.join("one.nfo").is_file());
+
+        std::fs::remove_file(folder.join("two.yml")).expect("remove managed definition");
+        let healed_definition = sync_playlist_files(
+            &pool,
+            &trash_manifest_path,
+            valid_yaml().as_bytes(),
+            &trash_manifest,
+            &runtime,
+        )
+        .await
+        .expect("heal missing definition");
+        assert!(healed_definition.enumerated);
+        assert!(folder.join("two.yml").is_file());
+
+        let mut legacy = healed_definition.state;
+        legacy.version = 1;
+        legacy.last_sync = Utc::now();
+        for entry in &mut legacy.entries {
+            entry.definition_sha256 = None;
+            entry.nfo_sha256 = None;
+        }
+        write_json_atomically(&sidecar_path, &legacy).expect("write v1-compatible state");
+        let upgraded = sync_playlist_files(
+            &pool,
+            &trash_manifest_path,
+            valid_yaml().as_bytes(),
+            &trash_manifest,
+            &runtime,
+        )
+        .await
+        .expect("upgrade v1 state");
+        assert!(upgraded.enumerated);
+        assert_eq!(upgraded.state.version, 2);
+        assert!(upgraded
+            .state
+            .entries
+            .iter()
+            .all(|entry| { entry.definition_sha256.is_some() && entry.nfo_sha256.is_some() }));
+
+        write_fixture_playlist_script(&script, "https://example.test/1", false);
+        update_fixture_content_hash(&pool, &package_root).await;
+        let trashed = sync_playlist_files(
+            &pool,
+            &trash_manifest_path,
+            valid_yaml().as_bytes(),
+            &trash_manifest,
+            &runtime,
+        )
+        .await
+        .expect("trash removed entry");
+        assert_eq!(trashed.state.entries.len(), 1);
+        assert!(!folder.join("two.yml").exists());
+        assert!(!folder.join("two.nfo").exists());
+        let trash_names = std::fs::read_dir(folder.join(".ersatzrs-trash"))
+            .expect("managed trash")
+            .map(|entry| {
+                entry
+                    .expect("trash entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        assert!(trash_names.iter().any(|name| name.ends_with("-two.yml")));
+        assert!(trash_names.iter().any(|name| name.ends_with("-two.nfo")));
+        assert_eq!(
+            std::fs::read_to_string(&manual_path).expect("manual sibling"),
+            "keep me"
+        );
+
+        write_fixture_playlist_script(&script, "https://example.test/1", true);
+        update_fixture_content_hash(&pool, &package_root).await;
+        let keep_yaml = valid_yaml().replace("on_removed: trash", "on_removed: keep");
+        let keep_manifest_path = temp.path().join("Keep.playlist.yml");
+        let keep_manifest =
+            parse_playlist_manifest(&keep_yaml, &keep_manifest_path).expect("keep manifest");
+        sync_playlist_files(
+            &pool,
+            &keep_manifest_path,
+            keep_yaml.as_bytes(),
+            &keep_manifest,
+            &runtime,
+        )
+        .await
+        .expect("initial keep-policy sync");
+        let keep_folder = temp.path().join("Keep");
+        let keep_manual_path = keep_folder.join("operator-notes.txt");
+        std::fs::write(&keep_manual_path, "also keep me").expect("keep manual sibling");
+        write_fixture_playlist_script(&script, "https://example.test/1", false);
+        update_fixture_content_hash(&pool, &package_root).await;
+        let kept = sync_playlist_files(
+            &pool,
+            &keep_manifest_path,
+            keep_yaml.as_bytes(),
+            &keep_manifest,
+            &runtime,
+        )
+        .await
+        .expect("keep removed entry");
+        let inactive = kept
+            .state
+            .entries
+            .iter()
+            .find(|entry| entry.id == "two")
+            .expect("inactive retained entry");
+        assert!(!inactive.active);
+        assert!(keep_folder.join("two.yml").is_file());
+        assert!(keep_folder.join("two.nfo").is_file());
+        assert_eq!(
+            std::fs::read_to_string(keep_manual_path).expect("keep manual sibling"),
+            "also keep me"
+        );
+        assert!(managed_files_intact(&keep_folder, &kept.state));
+        assert_eq!(first.state.entries.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn later_pair_failure_preserves_state_and_next_sync_heals_generation() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        write_fixture_playlist_script(&script, "https://example.test/original", true);
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
+        let manifest_path = temp.path().join("Failure.playlist.yml");
+        let manifest =
+            parse_playlist_manifest(valid_yaml(), &manifest_path).expect("failure manifest");
+        let first = sync_playlist_files(
+            &pool,
+            &manifest_path,
+            valid_yaml().as_bytes(),
+            &manifest,
+            &runtime,
+        )
+        .await
+        .expect("initial sync");
+        let folder = temp.path().join("Failure");
+        let sidecar_path = folder.join(".ersatzrs-playlist.json");
+        let original_state_bytes = std::fs::read(&sidecar_path).expect("original state");
+
+        std::fs::remove_file(folder.join("two.nfo")).expect("remove second NFO");
+        std::fs::create_dir(folder.join("two.nfo")).expect("block second NFO publication");
+        write_fixture_playlist_script(&script, "https://example.test/changed", true);
+        update_fixture_content_hash(&pool, &package_root).await;
+        let error = sync_playlist_files(
+            &pool,
+            &manifest_path,
+            valid_yaml().as_bytes(),
+            &manifest,
+            &runtime,
+        )
+        .await
+        .expect_err("second pair publication must fail");
+        assert!(error.to_string().contains("publish managed NFO"));
+        assert_eq!(
+            std::fs::read(&sidecar_path).expect("unchanged state"),
+            original_state_bytes
+        );
+        assert!(std::fs::read_to_string(folder.join("one.yml"))
+            .expect("first updated definition")
+            .contains("https://example.test/changed"));
+        assert!(!managed_files_intact(&folder, &first.state));
+
+        std::fs::remove_dir(folder.join("two.nfo")).expect("remove NFO blocker");
+        let healed = sync_playlist_files(
+            &pool,
+            &manifest_path,
+            valid_yaml().as_bytes(),
+            &manifest,
+            &runtime,
+        )
+        .await
+        .expect("heal interrupted generation");
+        assert!(healed.enumerated);
+        assert!(managed_files_intact(&folder, &healed.state));
+        assert!(folder.join("two.nfo").is_file());
+        assert!(std::fs::read_dir(&folder)
+            .expect("managed folder")
+            .all(|entry| !entry
+                .expect("managed entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".tmp")));
     }
 
     #[cfg(unix)]

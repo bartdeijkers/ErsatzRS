@@ -15,6 +15,22 @@ release section when tagging a release.
 
 ### Added
 
+- Storage-backed add-on lists can now use v2 availability and content-kind
+  contracts. Their rich metadata is written to deterministic Kodi-style `.nfo`
+  sidecars beside operational Remote Stream YAML, and the scanner applies the
+  same sidecar precedence as other Local media. Add-on Lists offers a per-link
+  television/movie/music-video/other-video override and lets an explicitly
+  unavailable provider item pin one exact Local media version as its fallback;
+  unknown availability never triggers it, and provider recovery wins
+  automatically. Interrupted YAML/NFO publication is detected through managed
+  hashes and healed, while a provider item omitted from a later snapshot is
+  retained as an unavailable tombstone so its replacement intent survives.
+  An invalidated Local target is now shown explicitly as an invalid
+  replacement in Add-on Lists instead of looking like an unconfigured item.
+  Remote Stream cards and XMLTV now expose the descriptive content kind without
+  changing Remote Stream playback identity. Provider classification rules,
+  localized package resources, icons, and fixtures remain owned by each add-on
+  rather than the host.
 - Importing an add-on list now takes an optional storage folder name next to
   the URL. Leaving it empty keeps the current behaviour — the folder is derived
   from the list name the provider reports — while a supplied name is sanitized

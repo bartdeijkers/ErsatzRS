@@ -2,6 +2,7 @@ use axum::{
     extract::{Form, State},
     response::Redirect,
 };
+use ersatzrs_domain::AddonMediaListContentKind;
 use serde::Deserialize;
 
 use crate::{
@@ -18,6 +19,8 @@ pub struct AddonMediaListAddForm {
     source_url: String,
     #[serde(default)]
     folder_name: String,
+    #[serde(default)]
+    content_kind_override: AddonMediaListContentKind,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +37,8 @@ pub struct AddonMediaListSaveForm {
     auto_refresh: bool,
     #[serde(default)]
     generate_playlist: bool,
+    #[serde(default)]
+    content_kind_override: AddonMediaListContentKind,
 }
 
 pub async fn add_addon_media_list_form(
@@ -45,6 +50,7 @@ pub async fn add_addon_media_list_form(
         input.addon_id,
         input.source_url,
         input.folder_name,
+        input.content_kind_override,
     )
     .await
     {
@@ -80,6 +86,7 @@ pub async fn save_addon_media_list_form(
         source_url: input.source_url,
         auto_refresh: input.auto_refresh,
         generate_playlist: input.generate_playlist,
+        content_kind_override: input.content_kind_override,
     };
 
     match update_addon_media_list_with_state(&state, form).await {

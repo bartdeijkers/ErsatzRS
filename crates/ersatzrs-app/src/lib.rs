@@ -340,6 +340,22 @@ impl ApplicationServices {
         queries::get_addon_media_list(id, self.ports.addon_media_lists()).await
     }
 
+    /// Load the ordered provider items and replacement state.
+    pub async fn list_addon_media_list_items(
+        &self,
+        id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListItemAdminRow>> {
+        queries::list_addon_media_list_items(id, self.ports.addon_media_lists()).await
+    }
+
+    /// Search available local video versions for a replacement.
+    pub async fn search_addon_media_list_replacements(
+        &self,
+        query: &str,
+    ) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListReplacementCandidate>> {
+        queries::search_addon_media_list_replacements(query, self.ports.addon_media_lists()).await
+    }
+
     /// Load the configured add-on media-list page size.
     pub async fn get_addon_media_lists_page_size(&self) -> Result<u32> {
         queries::get_addon_media_lists_page_size(self.ports.addon_media_lists()).await
@@ -381,6 +397,15 @@ impl ApplicationServices {
         command: commands::DeleteAddonMediaList,
     ) -> Result<()> {
         commands::delete_addon_media_list(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Set or clear the exact local version replacing one unavailable item.
+    pub async fn set_addon_media_list_item_replacement(
+        &self,
+        command: commands::SetAddonMediaListItemReplacement,
+    ) -> Result<()> {
+        commands::set_addon_media_list_item_replacement(command, self.ports.addon_media_lists())
+            .await
     }
 
     /// Load one optional admin setting.

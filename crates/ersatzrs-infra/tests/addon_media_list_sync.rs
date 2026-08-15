@@ -7,7 +7,9 @@ use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
 use ersatzrs_core::repositories::{RepositoryError, Result};
-use ersatzrs_domain::AddonMediaListItemKind;
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+};
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
 };
@@ -38,6 +40,9 @@ impl AddonMediaListProvider for FakeListProvider {
                 kind: AddonMediaListItemKind::Movie,
                 guids: vec!["tmdb://123".to_string()],
                 source_url: None,
+                availability: AddonMediaListItemAvailability::Available,
+                availability_reason: None,
+                content_kind: AddonMediaListContentKind::Movie,
             }],
         })
     }
@@ -68,7 +73,29 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
                 kind: AddonMediaListItemKind::RemoteStream,
                 guids: Vec::new(),
                 source_url: Some("https://example.invalid/watch/100".to_string()),
+                availability: AddonMediaListItemAvailability::Available,
+                availability_reason: None,
+                content_kind: AddonMediaListContentKind::Auto,
             }],
+        })
+    }
+}
+
+#[derive(Clone)]
+struct EmptyRemoteStreamListProvider;
+
+#[async_trait]
+impl AddonMediaListProvider for EmptyRemoteStreamListProvider {
+    async fn enumerate(
+        &self,
+        _addon_id: &str,
+        _source_url: &str,
+    ) -> Result<EnumeratedAddonMediaList> {
+        Ok(EnumeratedAddonMediaList {
+            provider_id: "remote/list".to_string(),
+            name: "Remote List".to_string(),
+            description: None,
+            items: Vec::new(),
         })
     }
 }
@@ -103,6 +130,7 @@ async fn add_refresh_match_and_generate_playlist() {
             "org.example.lists",
             "https://example.invalid/some-list",
             None,
+            AddonMediaListContentKind::Auto,
         )
         .await
         .unwrap();
@@ -123,7 +151,7 @@ async fn add_refresh_match_and_generate_playlist() {
     assert_eq!(item.get::<i64, _>("MediaItemId"), 1);
 
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, true, true)
+        .update_settings(list_id, true, true, AddonMediaListContentKind::Auto)
         .await
         .unwrap();
 
@@ -183,11 +211,16 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
 
     let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider);
     let list_id = remote
-        .add_or_refresh("org.example.lists", "https://example.invalid/list", None)
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/list",
+            None,
+            AddonMediaListContentKind::Auto,
+        )
         .await
         .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, false, true)
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
         .await
         .unwrap();
 
@@ -203,6 +236,187 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
     .unwrap();
     assert_eq!(playlist_item.get::<i32, _>("CollectionType"), 70);
     assert_eq!(playlist_item.get::<i64, _>("MediaItemId"), 2);
+}
+
+#[tokio::test]
+async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_recovers() {
+    let pool = common::test_db().await;
+    seed_system_playlist_group(&pool).await;
+    seed_addon(&pool).await;
+    common::seed_media_graph(&pool).await;
+    seed_movie_with_guid(&pool).await;
+    seed_local_movie_version(&pool).await;
+    sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (2, 1, 0)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "RemoteStream" ("Id", "Url", "IsLive")
+           VALUES (2, 'https://example.invalid/watch/100', 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider);
+    let list_id = remote
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/list",
+            None,
+            AddonMediaListContentKind::Auto,
+        )
+        .await
+        .unwrap();
+    let list_item_id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#)
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemReplacement" (
+               "AddonMediaListItemId", "MediaItemId", "MediaVersionId", "CreatedAt", "UpdatedAt"
+           ) VALUES (?, 1, 10, '2026-08-15T00:00:00Z', '2026-08-15T00:00:00Z')"#,
+    )
+    .bind(list_item_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Availability" = 1 WHERE "Id" = ?"#)
+        .bind(list_item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+    synchronizer
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
+        .await
+        .unwrap();
+    assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
+
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Availability" = 2 WHERE "Id" = ?"#)
+        .bind(list_item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    synchronizer.match_list_items(list_id).await.unwrap();
+    assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Availability" = 0 WHERE "Id" = ?"#)
+        .bind(list_item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    synchronizer.match_list_items(list_id).await.unwrap();
+    assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+}
+
+#[tokio::test]
+async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identity() {
+    let pool = common::test_db().await;
+    seed_system_playlist_group(&pool).await;
+    seed_addon(&pool).await;
+    common::seed_media_graph(&pool).await;
+    seed_movie_with_guid(&pool).await;
+    seed_local_movie_version(&pool).await;
+    sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (2, 1, 0)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "RemoteStream" ("Id", "Url", "IsLive")
+           VALUES (2, 'https://example.invalid/watch/100', 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let source_url = "https://example.invalid/list";
+    let list_id = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source_url,
+            None,
+            AddonMediaListContentKind::Auto,
+        )
+        .await
+        .unwrap();
+    let item_id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#)
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemReplacement" (
+               "AddonMediaListItemId", "MediaItemId", "MediaVersionId", "CreatedAt", "UpdatedAt"
+           ) VALUES (?, 1, 10, '2026-08-15T00:00:00Z', '2026-08-15T00:00:00Z')"#,
+    )
+    .bind(item_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    AddonMediaListSynchronizer::new(pool.clone())
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
+        .await
+        .unwrap();
+
+    AddonMediaListRemoteSynchronizer::new(pool.clone(), EmptyRemoteStreamListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source_url,
+            None,
+            AddonMediaListContentKind::Auto,
+        )
+        .await
+        .unwrap();
+    let tombstone = sqlx::query(
+        r#"SELECT "Id", "Availability", "AvailabilityReason"
+           FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tombstone.get::<i64, _>("Id"), item_id);
+    assert_eq!(tombstone.get::<i32, _>("Availability"), 1);
+    assert_eq!(
+        tombstone.get::<String, _>("AvailabilityReason"),
+        "omitted_by_provider"
+    );
+    assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
+
+    AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source_url,
+            None,
+            AddonMediaListContentKind::Auto,
+        )
+        .await
+        .unwrap();
+    let recovered = sqlx::query(
+        r#"SELECT "Id", "Availability" FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(recovered.get::<i64, _>("Id"), item_id);
+    assert_eq!(recovered.get::<i32, _>("Availability"), 0);
+    assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+    let replacement_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+           WHERE "AddonMediaListItemId" = ?"#,
+    )
+    .bind(item_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(replacement_count, 1);
 }
 
 #[tokio::test]
@@ -231,7 +445,10 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
             .unwrap();
     assert!(last_match.is_some());
 
-    local.update_settings(50, true, true).await.unwrap();
+    local
+        .update_settings(50, true, true, AddonMediaListContentKind::Auto)
+        .await
+        .unwrap();
     let playlist_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 50"#)
             .fetch_one(&pool)
@@ -247,7 +464,10 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     .unwrap();
     assert_eq!(ranks, vec![3]);
 
-    local.update_settings(50, true, false).await.unwrap();
+    local
+        .update_settings(50, true, false, AddonMediaListContentKind::Auto)
+        .await
+        .unwrap();
     let linked_playlist: Option<i64> =
         sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 50"#)
             .fetch_one(&pool)
@@ -262,7 +482,10 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
             .unwrap();
     assert_eq!(playlist_count, 0);
 
-    local.update_settings(50, false, true).await.unwrap();
+    local
+        .update_settings(50, false, true, AddonMediaListContentKind::Auto)
+        .await
+        .unwrap();
     let replacement_playlist_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 50"#)
             .fetch_one(&pool)
@@ -293,6 +516,7 @@ async fn remote_failure_is_typed_and_persists_no_plausible_list() {
             "org.example.lists",
             "https://example.invalid/some-list",
             None,
+            AddonMediaListContentKind::Auto,
         )
         .await
         .expect_err("remote failure must propagate");
@@ -354,6 +578,64 @@ async fn seed_movie_with_guid(pool: &sqlx::SqlitePool) {
     )
     .await
     .unwrap();
+}
+
+async fn seed_local_movie_version(pool: &sqlx::SqlitePool) {
+    pool.execute(r#"UPDATE "MediaItem" SET "State" = 0 WHERE "Id" = 1"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaVersion" (
+               "Id", "DateAdded", "DateUpdated", "Duration", "Height", "MovieId",
+               "VideoScanKind", "Width"
+           ) VALUES (
+               10, '2026-08-15T00:00:00Z', '2026-08-15T00:00:00Z',
+               '00:10:00', 1080, 1, 0, 1920
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+           VALUES (10, '/media/replacement.mkv', 'replacement-hash')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaStream" (
+               "Index", "MediaStreamKind", "Channels", "Default", "Forced",
+               "MediaVersionId", "BitsPerRawSample", "AttachedPic"
+           ) VALUES (3, 0, 0, 1, 0, 10, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+}
+
+async fn assert_playlist_selection(
+    pool: &sqlx::SqlitePool,
+    list_id: i64,
+    expected: (i32, i64, Option<i64>, Option<i32>),
+) {
+    let row = sqlx::query(
+        r#"SELECT "item"."CollectionType", "item"."MediaItemId",
+                  "item"."MediaVersionId", "item"."VideoStreamIndex"
+           FROM "PlaylistItem" AS "item"
+           JOIN "AddonMediaList" AS "list" ON "list"."PlaylistId" = "item"."PlaylistId"
+           WHERE "list"."Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (
+            row.get::<i32, _>("CollectionType"),
+            row.get::<i64, _>("MediaItemId"),
+            row.get::<Option<i64>, _>("MediaVersionId"),
+            row.get::<Option<i32>, _>("VideoStreamIndex"),
+        ),
+        expected
+    );
 }
 
 async fn seed_local_addon_media_list(pool: &sqlx::SqlitePool, id: i64, generate_playlist: bool) {

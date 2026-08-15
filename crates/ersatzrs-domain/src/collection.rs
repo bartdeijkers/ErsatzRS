@@ -39,6 +39,37 @@ pub enum AddonMediaListItemKind {
     RemoteStream,
 }
 
+/// Provider-reported availability for an add-on list item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemAvailability {
+    /// The provider confirms that the item can currently be played.
+    #[default]
+    Available,
+    /// The provider confirms that the item cannot currently be played.
+    Unavailable,
+    /// The provider could not determine availability without a costly probe.
+    Unknown,
+}
+
+/// Descriptive content classification for an add-on supplied stream.
+///
+/// This does not change the storage identity: generated streams remain Remote
+/// Streams. It controls metadata projection and compatible NFO roots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListContentKind {
+    /// Let the provider classify each item, retaining `Auto` when uncertain.
+    #[default]
+    Auto,
+    /// One television episode; season and episode numbers remain optional.
+    TelevisionEpisode,
+    Movie,
+    MusicVideo,
+    /// Includes commercials, archive fragments, and uncategorized videos.
+    OtherVideo,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Collection {
     pub id: EntityId,
@@ -173,6 +204,7 @@ pub struct AddonMediaList {
     pub item_count: i32,
     pub auto_refresh: bool,
     pub generate_playlist: bool,
+    pub content_kind_override: AddonMediaListContentKind,
     pub playlist_id: Option<EntityId>,
     pub last_update: Option<DateTime<Utc>>,
     pub last_match: Option<DateTime<Utc>>,
@@ -191,6 +223,9 @@ pub struct AddonMediaListItem {
     pub season: Option<i32>,
     pub episode: Option<i32>,
     pub kind: AddonMediaListItemKind,
+    pub content_kind: AddonMediaListContentKind,
+    pub availability: AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
     pub media_item_id: Option<EntityId>,
 }
 

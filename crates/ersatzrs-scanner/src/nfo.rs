@@ -273,6 +273,7 @@ pub struct MusicVideoNfo {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct OtherVideoNfo {
     pub title: Option<String>,
+    pub original_title: Option<String>,
     pub sort_title: Option<String>,
     pub outline: Option<String>,
     pub plot: Option<String>,
@@ -288,7 +289,16 @@ pub struct OtherVideoNfo {
     pub actors: Vec<NfoActor>,
     pub writers: Vec<String>,
     pub directors: Vec<String>,
+    pub artists: Vec<String>,
     pub guids: Vec<NfoGuid>,
+    pub show_title: Option<String>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub release_datetime: Option<DateTime<Utc>>,
+    pub collection: Option<String>,
+    pub producers: Vec<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
 }
 
 /// Parsed ErsatzRS `<song>` sidecar metadata.
@@ -612,11 +622,51 @@ where
 
 fn read_sanitized_file(path: impl AsRef<Path>) -> Result<String> {
     let path = path.as_ref();
-    let input = fs::read_to_string(path).map_err(|source| NfoError::Io {
+    let bytes = fs::read(path).map_err(|source| NfoError::Io {
         path: path.display().to_string(),
         source,
     })?;
-    Ok(sanitize_nfo_text(&input))
+    Ok(sanitize_nfo_text(&decode_nfo_bytes(bytes)))
+}
+
+/// Decode sidecar bytes as UTF-8, falling back to Windows-1252.
+///
+/// Sidecars are not reliably UTF-8. Kodi files written by older tools use
+/// western-European codepages, and the scene-release `.nfo` that often sits
+/// beside a movie under the same basename is usually CP437 box-drawing art.
+/// Refusing to decode those hid the real sidecar behind an IO error, so decode
+/// with a fallback that cannot fail and let the root check decide whether the
+/// file carries metadata at all.
+fn decode_nfo_bytes(bytes: Vec<u8>) -> String {
+    match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(error) => error
+            .into_bytes()
+            .into_iter()
+            .map(windows_1252_char)
+            .collect(),
+    }
+}
+
+/// Map one byte to its Windows-1252 character.
+///
+/// Bytes outside `0x80..=0x9f` share Latin-1's identity mapping. The five
+/// positions Windows-1252 leaves undefined keep their C1 control codepoints,
+/// which [`sanitize_nfo_text`] then replaces.
+fn windows_1252_char(byte: u8) -> char {
+    /// Windows-1252 replacements for the C1 range, `0x80..=0x9f`.
+    const C1: [char; 32] = [
+        '\u{20ac}', '\u{0081}', '\u{201a}', '\u{0192}', '\u{201e}', '\u{2026}', '\u{2020}',
+        '\u{2021}', '\u{02c6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008d}',
+        '\u{017d}', '\u{008f}', '\u{0090}', '\u{2018}', '\u{2019}', '\u{201c}', '\u{201d}',
+        '\u{2022}', '\u{2013}', '\u{2014}', '\u{02dc}', '\u{2122}', '\u{0161}', '\u{203a}',
+        '\u{0153}', '\u{009d}', '\u{017e}', '\u{0178}',
+    ];
+
+    match byte {
+        0x80..=0x9f => C1[usize::from(byte - 0x80)],
+        _ => char::from(byte),
+    }
 }
 
 fn sanitize_nfo_text(input: &str) -> String {
@@ -1054,6 +1104,7 @@ impl From<RawMusicVideoNfo> for MusicVideoNfo {
 #[serde(default)]
 struct RawOtherVideoNfo {
     title: Option<String>,
+    originaltitle: Option<String>,
     sorttitle: Option<String>,
     outline: Option<String>,
     plot: Option<String>,
@@ -1078,14 +1129,33 @@ struct RawOtherVideoNfo {
     writers: Vec<String>,
     #[serde(rename = "director")]
     directors: Vec<String>,
+    #[serde(rename = "artist")]
+    artists: Vec<String>,
     #[serde(rename = "uniqueid")]
     guids: Vec<RawUniqueIdNfo>,
+    showtitle: Option<String>,
+    season: Option<String>,
+    episode: Option<String>,
+    #[serde(rename = "ersatzrs:release_datetime", alias = "release_datetime")]
+    release_datetime: Option<String>,
+    #[serde(rename = "ersatzrs:collection", alias = "collection")]
+    collection: Option<String>,
+    #[serde(rename = "ersatzrs:producer", alias = "producer")]
+    producers: Vec<String>,
+    #[serde(
+        rename = "ersatzrs:original_broadcaster",
+        alias = "original_broadcaster"
+    )]
+    original_broadcasters: Vec<String>,
+    #[serde(rename = "ersatzrs:broadcaster", alias = "broadcaster")]
+    broadcasters: Vec<String>,
 }
 
 impl From<RawOtherVideoNfo> for OtherVideoNfo {
     fn from(value: RawOtherVideoNfo) -> Self {
         Self {
             title: value.title,
+            original_title: value.originaltitle,
             sort_title: value.sorttitle,
             outline: value.outline,
             plot: value.plot,
@@ -1101,7 +1171,16 @@ impl From<RawOtherVideoNfo> for OtherVideoNfo {
             actors: value.actors.into_iter().map(NfoActor::from).collect(),
             writers: value.writers,
             directors: value.directors,
+            artists: value.artists,
             guids: value.guids.into_iter().map(NfoGuid::from).collect(),
+            show_title: value.showtitle,
+            season: parse_i32(value.season),
+            episode: parse_i32(value.episode),
+            release_datetime: parse_datetime(value.release_datetime),
+            collection: value.collection,
+            producers: value.producers,
+            original_broadcasters: value.original_broadcasters,
+            broadcasters: value.broadcasters,
         }
     }
 }
@@ -1362,6 +1441,39 @@ mod tests {
         assert_eq!(song.languages, ["nl"]);
         assert_eq!(image.genres, ["Portrait"]);
         assert_eq!(image.languages, ["fr"]);
+    }
+
+    #[test]
+    fn reads_sidecar_written_in_windows_1252() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("movie.nfo");
+        // `Am\xe9lie` and a `\x92` right single quote, neither of which is UTF-8.
+        let mut bytes = b"<movie><title>Am\xe9lie".to_vec();
+        bytes.extend_from_slice(b"\x92s Caf\xe9</title><year>2001</year></movie>");
+        fs::write(&path, bytes).expect("write sidecar");
+
+        let parsed = parse_movie_nfo(&path).expect("windows-1252 sidecar should parse");
+
+        assert_eq!(
+            parsed.title.as_deref(),
+            Some("Am\u{e9}lie\u{2019}s Caf\u{e9}")
+        );
+        assert_eq!(parsed.year, Some(2001));
+    }
+
+    #[test]
+    fn release_art_sidecar_reports_missing_root_rather_than_an_io_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("Movie (1984).nfo");
+        // CP437 box-drawing art, as scene releases ship it.
+        fs::write(&path, [0xdb_u8; 64]).expect("write sidecar");
+
+        let error = parse_movie_nfo(&path).expect_err("release art carries no metadata");
+
+        assert!(
+            matches!(error, NfoError::MissingRoot("movie")),
+            "expected a missing-root error, got {error:?}"
+        );
     }
 
     #[test]

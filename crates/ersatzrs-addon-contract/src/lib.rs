@@ -17,12 +17,20 @@ pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 pub const CAPABILITY_ADDON_CHECK_V1: &str = "addon.check.v1";
 /// Enumerate a Remote Stream playlist as bounded `NDJSON`.
 pub const CAPABILITY_REMOTE_STREAM_LIST_V1: &str = "remote-stream.list.v1";
+/// Enumerate Remote Streams with stable identity and availability metadata.
+pub const CAPABILITY_REMOTE_STREAM_LIST_V2: &str = "remote-stream.list.v2";
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
 /// Enumerate a provider list whose entries are matched to local media.
 pub const CAPABILITY_MEDIA_LIST_LIST_V1: &str = "media-list.list.v1";
+/// Enumerate a provider list with explicit per-item availability.
+pub const CAPABILITY_MEDIA_LIST_LIST_V2: &str = "media-list.list.v2";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
+/// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
+pub const MAX_PROVIDER_ID_BYTES: usize = 384;
+/// Maximum UTF-8 bytes for a provider-neutral availability diagnostic.
+pub const MAX_AVAILABILITY_REASON_BYTES: usize = 2_048;
 const MAX_PACKAGE_VERSION_BYTES: usize = 128;
 
 /// Manifest validation failure.
@@ -150,14 +158,26 @@ impl AddonManifest {
                 return invalid("media_list_storage", "requires manifest schema version 3");
             }
             storage.validate(&self.settings)?;
-            for capability in [
-                CAPABILITY_MEDIA_LIST_LIST_V1,
-                CAPABILITY_REMOTE_STREAM_LIST_V1,
-                CAPABILITY_REMOTE_STREAM_PLAY_V1,
-            ] {
+            for capability in [CAPABILITY_REMOTE_STREAM_PLAY_V1] {
                 if !self.has_capability(capability) {
                     return invalid("media_list_storage", format!("requires {capability}"));
                 }
+            }
+            if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
+                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
+            {
+                return invalid(
+                    "media_list_storage",
+                    "requires media-list.list.v1 or media-list.list.v2",
+                );
+            }
+            if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+            {
+                return invalid(
+                    "media_list_storage",
+                    "requires remote-stream.list.v1 or remote-stream.list.v2",
+                );
             }
         }
 

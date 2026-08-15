@@ -17,8 +17,8 @@ use ersatzrs_addon_contract::{
     validate_addon_id, AddonCheckResult, AddonCheckStatus, AddonEntrypointKind, AddonIconMediaType,
     AddonManifest, AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon,
     CatalogPackage, RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -2001,7 +2001,10 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
         (capability, operation),
         (CAPABILITY_ADDON_CHECK_V1, "check")
             | (
-                CAPABILITY_MEDIA_LIST_LIST_V1 | CAPABILITY_REMOTE_STREAM_LIST_V1,
+                CAPABILITY_MEDIA_LIST_LIST_V1
+                    | CAPABILITY_MEDIA_LIST_LIST_V2
+                    | CAPABILITY_REMOTE_STREAM_LIST_V1
+                    | CAPABILITY_REMOTE_STREAM_LIST_V2,
                 "list",
             )
             | (CAPABILITY_REMOTE_STREAM_PLAY_V1, "play")
@@ -2086,6 +2089,10 @@ pub async fn invoke_enabled_addon(
     command
         .environment
         .extend(invocation.extra_environment.clone());
+    command.environment.insert(
+        "ERSATZRS_ADDON_CAPABILITY".to_owned(),
+        invocation.capability.to_owned(),
+    );
     run_bounded_command(&command, invocation.timeout, invocation.max_output_bytes).await
 }
 

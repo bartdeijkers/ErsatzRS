@@ -30,7 +30,7 @@ than importing or retaining those rows under a generic name.
 
 ## Decision
 
-The host owns a provider-neutral `media-list.list.v1` capability. An enabled
+The host owns provider-neutral `media-list.list.v1` and v2 capabilities. An enabled
 add-on receives one source hyperlink and emits bounded NDJSON: exactly one list
 record followed by ordered movie, show, season, episode, or Remote Stream records. ErsatzRS
 validates size, count, identity, and rank bounds before it persists or matches

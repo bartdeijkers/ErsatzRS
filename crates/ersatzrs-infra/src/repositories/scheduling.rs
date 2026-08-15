@@ -28,10 +28,11 @@ use ersatzrs_core::search::{
     SearchProviderGuid,
 };
 use ersatzrs_domain::{
-    normalize_sub_kind_token, ChannelSubtitleMode, CollectionEnumeratorState, CollectionType,
-    DecoMode, EntityId, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
-    PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate, ProgramScheduleItem,
-    CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    normalize_sub_kind_token, AddonMediaListContentKind, ChannelSubtitleMode,
+    CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
+    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
 
@@ -1651,6 +1652,22 @@ impl SqliteSchedulingContentRepository {
         } else {
             Vec::new()
         };
+        let remote_stream_content_kind = decode_enum_column(
+            "remote stream content kind",
+            row,
+            "remote_stream_content_kind",
+        )?;
+        let stored_sub_kind = row
+            .try_get::<Option<String>, _>("sub_kind")
+            .repository()?
+            .and_then(|value| normalize_sub_kind_token(&value));
+        let sub_kind = if metadata_kind == "RemoteStream" {
+            remote_stream_content_kind_token(remote_stream_content_kind)
+                .map(str::to_owned)
+                .or(stored_sub_kind)
+        } else {
+            stored_sub_kind
+        };
 
         Ok(SearchDocument {
             media_item_id: item_id,
@@ -1826,10 +1843,8 @@ impl SqliteSchedulingContentRepository {
                 Vec::new()
             },
             content_kind: decode_enum_column("content kind", row, "content_kind")?,
-            sub_kind: row
-                .try_get::<Option<String>, _>("sub_kind")
-                .repository()?
-                .and_then(|value| normalize_sub_kind_token(&value)),
+            remote_stream_content_kind,
+            sub_kind,
             parent_title: if hydration.contains(SEARCH_NEED_PARENT_TITLE) {
                 match parent_media_item_id {
                     Some(parent_id) => self.media_item_title(parent_id).await?,
@@ -3198,6 +3213,16 @@ fn normalize_smart_shuffle_value(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
+const fn remote_stream_content_kind_token(kind: AddonMediaListContentKind) -> Option<&'static str> {
+    match kind {
+        AddonMediaListContentKind::Auto => None,
+        AddonMediaListContentKind::TelevisionEpisode => Some("television_episode"),
+        AddonMediaListContentKind::Movie => Some("movie"),
+        AddonMediaListContentKind::MusicVideo => Some("music_video"),
+        AddonMediaListContentKind::OtherVideo => Some("other_video"),
+    }
+}
+
 fn program_schedule_item_filler_ids(item: &ProgramScheduleItem) -> impl Iterator<Item = EntityId> {
     [
         item.pre_roll_filler_id,
@@ -3217,7 +3242,8 @@ SELECT
     "l"."Name" AS "library_name",
     "mi"."ContentKind" AS "content_kind",
     "mi"."SubKind" AS "sub_kind",
-    "mi"."ParentMediaItemId" AS "parent_media_item_id"
+    "mi"."ParentMediaItemId" AS "parent_media_item_id",
+    COALESCE("rs"."ContentKind", 0) AS "remote_stream_content_kind"
 FROM (
     SELECT
         "mm"."MovieId" AS "item_id",
@@ -3425,6 +3451,8 @@ FROM (
     FROM "RemoteStreamMetadata" AS "rsm"
 ) AS "documents"
 LEFT JOIN "MediaItem" AS "mi" ON "mi"."Id" = "documents"."item_id"
+LEFT JOIN "RemoteStream" AS "rs"
+    ON "rs"."Id" = "documents"."item_id" AND "documents"."metadata_kind" = 'RemoteStream'
 LEFT JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
 LEFT JOIN "Library" AS "l" ON "l"."Id" = "lp"."LibraryId"
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;

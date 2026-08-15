@@ -82,6 +82,20 @@ fn media_card_search_query(media_kind: &str, search: &str, show_variants: bool) 
 }
 
 #[cfg(feature = "ssr")]
+const fn remote_stream_content_kind_token(
+    kind: ersatzrs_domain::AddonMediaListContentKind,
+) -> Option<&'static str> {
+    use ersatzrs_domain::AddonMediaListContentKind;
+    match kind {
+        AddonMediaListContentKind::Auto => None,
+        AddonMediaListContentKind::TelevisionEpisode => Some("television_episode"),
+        AddonMediaListContentKind::Movie => Some("movie"),
+        AddonMediaListContentKind::MusicVideo => Some("music_video"),
+        AddonMediaListContentKind::OtherVideo => Some("other_video"),
+    }
+}
+
+#[cfg(feature = "ssr")]
 fn browser_card_artwork_url(
     kind: ersatzrs_core::repositories::AdminSearchKind,
     id: i64,
@@ -331,7 +345,14 @@ async fn list_media_cards_from_application_filtered(
                 season_number,
                 variant: ContentVariantInfo {
                     content_kind: document.content_kind,
-                    sub_kind: document.sub_kind,
+                    sub_kind: if kind == ersatzrs_core::repositories::AdminSearchKind::RemoteStream
+                    {
+                        remote_stream_content_kind_token(document.remote_stream_content_kind)
+                            .map(str::to_owned)
+                            .or(document.sub_kind)
+                    } else {
+                        document.sub_kind
+                    },
                     parent_title: document.parent_title,
                 },
             }

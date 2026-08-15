@@ -96,28 +96,32 @@ impl ScanRuntime for NativeScanRuntime {
                     library_id,
                     ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
                 };
-                ersatzrs_scanner::scan_local_library_with_progress(
+                let report = ersatzrs_scanner::scan_local_library_with_progress(
                     &self.pool,
                     &config,
                     Some(progress),
                 )
                 .await
-                .and_then(|report| {
-                    for playout_id in report.playout_ids_to_refresh {
-                        self.playout_builds
-                            .send(PlayoutBuildRequest {
-                                playout_id,
-                                mode: PlayoutBuildMode::Refresh,
-                            })
-                            .map_err(|error| {
-                                ersatzrs_scanner::ScannerError::Reconciliation(format!(
-                                    "unable to enqueue affected playout {playout_id}: {error}"
-                                ))
-                            })?;
-                    }
-                    Ok(())
-                })
-                .map_err(scan_error)
+                .map_err(scan_error)?;
+                for playout_id in report.playout_ids_to_refresh {
+                    self.playout_builds
+                        .send(PlayoutBuildRequest {
+                            playout_id,
+                            mode: PlayoutBuildMode::Refresh,
+                        })
+                        .map_err(|error| {
+                            ScanRuntimeError::new(format!(
+                                "unable to enqueue affected playout {playout_id}: {error}"
+                            ))
+                        })?;
+                }
+                ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer::new(
+                    self.pool.clone(),
+                )
+                .match_all_lists()
+                .await
+                .map_err(scan_error)?;
+                Ok(())
             }
         }
     }

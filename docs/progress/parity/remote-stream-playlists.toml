@@ -1,8 +1,8 @@
 feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
-status     = 'Ported'
-adr        = ['0065', '0066']
+status     = 'In progress'
+adr        = ['0065', '0066', '0068']
 
 summary = '''
 Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
@@ -19,17 +19,22 @@ out-of-process invocation. A network-free scanner regression proves generated
 definitions, tag facets, and upstream order through the real scheduling
 repository. The separate official repository packages standalone POSIX and
 Windows Beeld & Geluid implementations plus an operator-supplied yt-dlp adapter.
-Beeld & Geluid enumeration preserves plot, full original broadcast timestamp,
+ADR 0068 keeps provider and language knowledge in add-ons while the host
+generically projects v2 metadata to managed NFO sidecars and supports exact
+Local replacements for explicitly unavailable list items. Beeld & Geluid
+enumeration preserves plot, full original broadcast timestamp,
 Kijkwijzer advice, distinct genre/subject labels, collection, role-aware people,
 producer, and original/current broadcasters. Scanner and XMLTV regressions
-prove persistence, search facets, and compatible Kodi/EPG projection without
-flattening the lossless YAML source. Version 0.1.2 of the official Beeld &
+prove persistence, search facets, and compatible Kodi/EPG projection. Version
+0.4.0 of the official Beeld &
 Geluid add-on also accepts public user-made Schatkamer lists, preserving their
-playable-item order while skipping duplicate and unavailable entries safely.
+item order while retaining unavailable entries for local replacement.
 Beeld & Geluid and yt-dlp media-list items can now carry Remote Stream URLs;
 the host materializes one managed playlist manifest and Local library per
 saved list below the add-on's profile-relative storage root, without requiring
-Python or permanently downloading the media.
+Python or permanently downloading the media. Provider classification keywords,
+localized package text, icons, and fixtures remain in the separate add-on
+repository.
 '''
 
 [[debt]]
@@ -63,3 +68,11 @@ discovered  = '2026-08-10'
 evidence    = 'The generated 0.1.2 package was exercised through native CMD and Windows PowerShell against the public Teleac shared list. Its seven playable IDs and rich metadata fields matched the POSIX output; both implementations skipped the same one unavailable item.'
 resolved    = true
 resolution  = 'Live Windows package enumeration now proves ordered shared-list discovery and the rich metadata projection; deterministic packaging also normalizes batch entrypoints to CRLF.'
+
+[[debt]]
+id          = 'addon-nfo-v2-closeout'
+description = 'Close the generic v2 NFO and local-replacement slice without moving provider or language assets into the host.'
+discovered  = '2026-08-15'
+adr         = '0068'
+evidence    = 'The working tree has corrected metadata binds, four-kind NFO round trips, complete managed-pair failure and healing coverage, Remote Stream search/XMLTV classification, one shared Local replacement resolver, bounded provider values, omission tombstones, and Chromium/Firefox proof for import/edit overrides plus the replacement lifecycle. plans/addon-nfo-sidecars-and-local-replacements-closeout.md retains only the live MySQL migration and packaged Windows execution gaps.'
+resolved    = false

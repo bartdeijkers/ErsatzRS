@@ -8,6 +8,8 @@ The extractor trust and execution portions are superseded by
 [ADR 0066](0066-repository-backed-add-ons.md). Playlist manifests,
 stable enumeration identity/order, atomic sidecars, managed ownership,
 health, and ordered playlist materialization remain active.
+Metadata sidecar ownership and v2 availability/classification behavior are
+revised by [ADR 0068](0068-addon-metadata-sidecars-and-local-replacements.md).
 
 ## Implementation
 
@@ -139,9 +141,9 @@ explicit ownership make reordering cheap and cleanup safe, while the database
 marker lets existing scheduling consume upstream order directly.
 
 Generated definitions can also carry provider-native descriptive, publication,
-classification, credit, collection, and broadcaster metadata. The scanner
-projects compatible facets into search and XMLTV; the YAML remains the lossless
-source when a downstream format has no equivalent field.
+classification, credit, collection, and broadcaster metadata. Under ADR 0068,
+the host writes descriptive metadata to a same-stem NFO sidecar while YAML owns
+only playback and synchronization fields.
 
 Enumeration depends on an installed, enabled package and network availability.
 ErsatzRS installs and updates packages only through a configured signed

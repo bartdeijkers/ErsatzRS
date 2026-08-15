@@ -4,21 +4,26 @@ use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1;
+use ersatzrs_addon_contract::{
+    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, MAX_AVAILABILITY_REASON_BYTES,
+    MAX_PROVIDER_ID_BYTES,
+};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, AddonMediaListRecord, EnumeratedAddonMediaList,
     EnumeratedAddonMediaListItem,
 };
 use ersatzrs_core::repositories::{RepositoryError, Result};
 
-use crate::addons::{invoke_enabled_addon, AddonInvocation, AddonRuntimeContext};
+use crate::addons::{
+    invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
+};
 use crate::db::DbPool;
 
 const SOURCE_URL_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_URL";
 const MAX_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_ITEMS: usize = 10_000;
 
-/// Invokes installed add-ons that implement `media-list.list.v1`.
+/// Invokes installed add-ons that implement media-list list v1 or v2.
 #[derive(Clone)]
 pub struct InstalledAddonMediaListProvider {
     pool: DbPool,
@@ -48,11 +53,27 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
             ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
             ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
         };
+        let installation = load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable("load media-list add-on", error.to_string())
+            })?
+            .ok_or_else(|| {
+                RepositoryError::unavailable("load media-list add-on", "add-on is not installed")
+            })?;
+        let capability = if installation
+            .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
+        {
+            CAPABILITY_MEDIA_LIST_LIST_V2
+        } else {
+            CAPABILITY_MEDIA_LIST_LIST_V1
+        };
         let output = invoke_enabled_addon(
             &self.pool,
             addon_id,
             AddonInvocation {
-                capability: CAPABILITY_MEDIA_LIST_LIST_V1,
+                capability,
                 operation: "list",
                 runtime: &runtime,
                 extra_environment: &environment,
@@ -69,6 +90,7 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
     let text = std::str::from_utf8(output).map_err(|_| RepositoryError::Decode {
         kind: "media-list add-on output",
@@ -91,10 +113,14 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
         });
     };
 
-    if provider_id.trim().is_empty() || name.trim().is_empty() {
+    if provider_id.trim().is_empty()
+        || provider_id.len() > MAX_PROVIDER_ID_BYTES
+        || name.trim().is_empty()
+    {
         return Err(RepositoryError::Decode {
             kind: "media-list add-on output",
-            value: "list provider_id and name must not be empty".to_owned(),
+            value: "list provider_id must be non-empty and bounded; name must not be empty"
+                .to_owned(),
         });
     }
 
@@ -119,6 +145,9 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             kind,
             guids,
             source_url,
+            availability,
+            availability_reason,
+            content_kind,
         } = decode_record(record)?
         else {
             return Err(RepositoryError::Decode {
@@ -127,15 +156,20 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             });
         };
         if provider_id.trim().is_empty()
+            || provider_id.len() > MAX_PROVIDER_ID_BYTES
             || display_title.trim().is_empty()
             || title.trim().is_empty()
             || rank < 0
+            || availability_reason
+                .as_ref()
+                .is_some_and(|reason| reason.len() > MAX_AVAILABILITY_REASON_BYTES)
         {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
-                value: "item provider_id/display_title/title must be set and rank must be \
-                        non-negative"
-                    .to_owned(),
+                value:
+                    "item provider_id/display_title/title must be set and bounded; rank must be \
+                        non-negative and availability_reason must be bounded"
+                        .to_owned(),
             });
         }
         if kind == ersatzrs_domain::AddonMediaListItemKind::RemoteStream
@@ -163,6 +197,9 @@ fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
             kind,
             guids,
             source_url,
+            availability,
+            availability_reason,
+            content_kind,
         });
     }
     items.sort_by_key(|item| item.rank);
@@ -319,5 +356,15 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
 "#;
 
         assert!(decode_media_list_output(output).is_err());
+    }
+
+    #[test]
+    fn rejects_provider_values_that_exceed_cross_database_bounds() {
+        let provider_id = "x".repeat(ersatzrs_addon_contract::MAX_PROVIDER_ID_BYTES + 1);
+        let output = format!(
+            "{{\"record_type\":\"list\",\"provider_id\":\"list\",\"name\":\"List\"}}\n\
+             {{\"record_type\":\"item\",\"provider_id\":\"{provider_id}\",\"rank\":0,\"display_title\":\"Item\",\"title\":\"Item\",\"kind\":\"movie\"}}\n"
+        );
+        assert!(decode_media_list_output(output.as_bytes()).is_err());
     }
 }

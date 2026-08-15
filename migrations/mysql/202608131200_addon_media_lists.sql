@@ -17,7 +17,7 @@ DROP TABLE `TraktList`;
 CREATE TABLE `AddonMediaList` (
     `Id` INT NOT NULL AUTO_INCREMENT,
     `AddonId` VARCHAR(255) NOT NULL,
-    `ProviderId` VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    `ProviderId` VARCHAR(384) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     `SourceUrl` LONGTEXT NOT NULL,
     `Name` VARCHAR(767) NOT NULL,
     `Description` LONGTEXT NULL,
@@ -43,7 +43,7 @@ CREATE INDEX `IX_AddonMediaList_PlaylistId` ON `AddonMediaList` (`PlaylistId`);
 CREATE TABLE `AddonMediaListItem` (
     `Id` INT NOT NULL AUTO_INCREMENT,
     `AddonMediaListId` INT NOT NULL,
-    `ProviderId` VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    `ProviderId` VARCHAR(384) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     `DisplayTitle` LONGTEXT NOT NULL,
     `Kind` INT NOT NULL,
     `MediaItemId` INT NULL,

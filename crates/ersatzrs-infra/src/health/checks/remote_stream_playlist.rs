@@ -4,7 +4,8 @@ use super::super::{
 };
 use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::{
-    AddonManifest, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    AddonManifest, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
 use semver::Version;
 use serde::Deserialize;
@@ -63,6 +64,9 @@ struct HealthOutcome {
 
 #[derive(Deserialize)]
 struct HealthEntry {
+    file: String,
+    #[serde(default)]
+    nfo_file: Option<String>,
     duration_seconds: Option<u64>,
     active: bool,
 }
@@ -133,7 +137,7 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
                 .ok()
                 .and_then(|value| serde_json::from_str::<HealthSidecar>(&value).ok())
             {
-                Some(state) if state.version == 1 => state,
+                Some(state) if matches!(state.version, 1 | 2) => state,
                 _ => {
                     warnings.push(format!("{name} has never synchronized successfully"));
                     continue;
@@ -160,6 +164,24 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
                 .count();
             if missing > 0 {
                 warnings.push(format!("{name} has {missing} entries without duration"));
+            }
+            let generated_folder = path.parent().unwrap_or_else(|| Path::new(".")).join(folder);
+            let missing_sidecars = state
+                .entries
+                .iter()
+                .filter(|entry| {
+                    entry.active
+                        && (!generated_folder.join(&entry.file).is_file()
+                            || entry
+                                .nfo_file
+                                .as_deref()
+                                .is_none_or(|file| !generated_folder.join(file).is_file()))
+                })
+                .count();
+            if missing_sidecars > 0 {
+                warnings.push(format!(
+                    "{name} has {missing_sidecars} missing managed definition or NFO sidecar(s)"
+                ));
             }
             if state.last_result.truncated {
                 truncated.push(name);
@@ -250,7 +272,8 @@ async fn load_addons(pool: &Pool<Db>) -> Result<BTreeMap<String, bool>> {
                 && install_path.is_some_and(|path| Path::new(&path).is_dir())
                 && manifest.is_some_and(|manifest| {
                     manifest.validate().is_ok()
-                        && manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                        && (manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                            || manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2))
                         && manifest.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
                         && host_version
                             .as_ref()

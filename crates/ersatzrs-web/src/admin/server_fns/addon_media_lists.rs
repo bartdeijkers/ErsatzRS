@@ -1,3 +1,4 @@
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -21,12 +22,35 @@ pub struct AddonMediaListForm {
     pub source_url: String,
     pub auto_refresh: bool,
     pub generate_playlist: bool,
+    pub content_kind_override: AddonMediaListContentKind,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListProviderRow {
     pub addon_id: String,
     pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListItemRow {
+    pub id: i64,
+    pub rank: i32,
+    pub display_title: String,
+    pub availability: AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
+    pub replacement_media_item_id: Option<i64>,
+    pub replacement_media_version_id: Option<i64>,
+    pub replacement_title: Option<String>,
+    pub replacement_path: Option<String>,
+    pub replacement_valid: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListReplacementRow {
+    pub media_item_id: i64,
+    pub media_version_id: i64,
+    pub title: String,
+    pub path: String,
 }
 
 #[server]
@@ -47,6 +71,7 @@ pub async fn list_addon_media_list_providers(
         .filter(|item| {
             item.manifest.capabilities.iter().any(|capability| {
                 capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1
+                    || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2
             })
         })
         .map(|item| AddonMediaListProviderRow {
@@ -136,8 +161,85 @@ pub async fn get_addon_media_list_form(
                 source_url: form.source_url,
                 auto_refresh: form.auto_refresh,
                 generate_playlist: form.generate_playlist,
+                content_kind_override: form.content_kind_override,
             })
         })
+}
+
+#[server]
+pub async fn list_addon_media_list_items(
+    id: i64,
+) -> Result<Vec<AddonMediaListItemRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .list_addon_media_list_items(id)
+        .await
+        .map_err(ServerFnError::new)
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| AddonMediaListItemRow {
+                    id: row.id,
+                    rank: row.rank,
+                    display_title: row.display_title,
+                    availability: row.availability,
+                    availability_reason: row.availability_reason,
+                    replacement_media_item_id: row.replacement_media_item_id,
+                    replacement_media_version_id: row.replacement_media_version_id,
+                    replacement_title: row.replacement_title,
+                    replacement_path: row.replacement_path,
+                    replacement_valid: row.replacement_valid,
+                })
+                .collect()
+        })
+}
+
+#[server]
+pub async fn search_addon_media_list_replacements(
+    query: String,
+) -> Result<Vec<AddonMediaListReplacementRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .search_addon_media_list_replacements(&query)
+        .await
+        .map_err(ServerFnError::new)
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| AddonMediaListReplacementRow {
+                    media_item_id: row.media_item_id,
+                    media_version_id: row.media_version_id,
+                    title: row.title,
+                    path: row.path,
+                })
+                .collect()
+        })
+}
+
+#[server]
+pub async fn set_addon_media_list_item_replacement(
+    item_id: i64,
+    media_item_id: Option<i64>,
+    media_version_id: Option<i64>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .set_addon_media_list_item_replacement(
+            ersatzrs_app::commands::SetAddonMediaListItemReplacement {
+                item_id,
+                media_item_id,
+                media_version_id,
+            },
+        )
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -145,13 +247,20 @@ pub async fn add_addon_media_list(
     addon_id: String,
     source_url: String,
     folder_name: String,
+    content_kind_override: AddonMediaListContentKind,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    add_addon_media_list_with_state(&state, addon_id, source_url, folder_name)
-        .await
-        .map_err(ServerFnError::new)
+    add_addon_media_list_with_state(
+        &state,
+        addon_id,
+        source_url,
+        folder_name,
+        content_kind_override,
+    )
+    .await
+    .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -190,6 +299,7 @@ pub async fn add_addon_media_list_with_state(
     addon_id: String,
     source_url: String,
     folder_name: String,
+    content_kind_override: AddonMediaListContentKind,
 ) -> ersatzrs_app::Result<i64> {
     let list_id = state
         .application
@@ -197,6 +307,7 @@ pub async fn add_addon_media_list_with_state(
             addon_id,
             source_url,
             folder_name,
+            content_kind_override,
         })
         .await?;
     if let Some(library_id) = state
@@ -236,14 +347,31 @@ pub async fn update_addon_media_list_with_state(
     state: &crate::host::state::AppState,
     form: AddonMediaListForm,
 ) -> ersatzrs_app::Result<()> {
+    let id = form.id;
     state
         .application
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id: form.id,
             auto_refresh: form.auto_refresh,
             generate_playlist: form.generate_playlist,
+            content_kind_override: form.content_kind_override,
         })
-        .await
+        .await?;
+    if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {
+        let outcome = state
+            .application
+            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
+                library_id, false,
+            ))
+            .await;
+        tracing::info!(
+            id,
+            library_id,
+            ?outcome,
+            "queued add-on list rescan after settings update"
+        );
+    }
+    Ok(())
 }
 
 #[cfg(feature = "ssr")]

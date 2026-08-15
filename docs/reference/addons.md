@@ -11,8 +11,10 @@ support retroactively.
 |---|---|
 | `addon.check.v1` | Required for every executable package; reports readiness. |
 | `remote-stream.list.v1` | Enumerates bounded Remote Stream playlist entries. |
+| `remote-stream.list.v2` | Adds stable provider identity, availability, content kind, and rich sidecar metadata. |
 | `remote-stream.play.v1` | Produces media bytes for one Remote Stream URL. |
 | `media-list.list.v1` | Enumerates a bounded provider list for local matching and optional playlist generation. |
+| `media-list.list.v2` | Adds explicit item availability and provider-owned content classification. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 
 Unknown capability versions are never executed. The v1 platform does not

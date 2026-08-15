@@ -1,12 +1,14 @@
 //! Provider-neutral add-on media-list contracts.
 
 use async_trait::async_trait;
-use ersatzrs_domain::AddonMediaListItemKind;
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::repositories::Result;
 
-/// One bounded `media-list.list.v1` NDJSON record.
+/// One bounded media-list list v1 or v2 NDJSON record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AddonMediaListRecord {
@@ -47,7 +49,33 @@ pub enum AddonMediaListRecord {
         /// Optional stable source URL used to match generated Remote Streams.
         #[serde(default)]
         source_url: Option<String>,
+        /// Provider-reported availability. V1 records omit this and are
+        /// therefore treated as available.
+        #[serde(default, deserialize_with = "deserialize_addon_availability")]
+        availability: AddonMediaListItemAvailability,
+        /// Optional stable provider reason code.
+        #[serde(default)]
+        availability_reason: Option<String>,
+        /// Provider-inferred descriptive content type.
+        #[serde(default)]
+        content_kind: AddonMediaListContentKind,
     },
+}
+
+fn deserialize_addon_availability<'de, D>(
+    deserializer: D,
+) -> std::result::Result<AddonMediaListItemAvailability, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(match value.as_deref() {
+        Some("available" | "public" | "unlisted") => AddonMediaListItemAvailability::Available,
+        Some("unavailable" | "private" | "premium_only" | "subscriber_only" | "needs_auth") => {
+            AddonMediaListItemAvailability::Unavailable
+        }
+        _ => AddonMediaListItemAvailability::Unknown,
+    })
 }
 
 /// One complete, validated provider enumeration.
@@ -86,6 +114,12 @@ pub struct EnumeratedAddonMediaListItem {
     pub guids: Vec<String>,
     /// Optional stable source URL used to match generated Remote Streams.
     pub source_url: Option<String>,
+    /// Provider-reported availability.
+    pub availability: AddonMediaListItemAvailability,
+    /// Optional stable provider reason code.
+    pub availability_reason: Option<String>,
+    /// Provider-inferred descriptive content type.
+    pub content_kind: AddonMediaListContentKind,
 }
 
 /// Host adapter that invokes one installed list-provider add-on.

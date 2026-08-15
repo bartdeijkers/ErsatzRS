@@ -1837,6 +1837,31 @@ pub async fn get_addon_media_list(
     repository.get_admin_form(id).await.map_err(Into::into)
 }
 
+/// Load the ordered provider items for one add-on media list.
+pub async fn list_addon_media_list_items(
+    id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListItemAdminRow>> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository.list_items(id).await.map_err(Into::into)
+}
+
+/// Search eligible local video versions for an add-on item replacement.
+pub async fn search_addon_media_list_replacements(
+    query: &str,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListReplacementCandidate>> {
+    repository
+        .search_replacement_candidates(query, 50)
+        .await
+        .map_err(Into::into)
+}
+
 /// Load the persisted Add-on media list page size.
 pub async fn get_addon_media_lists_page_size(
     repository: &dyn AddonMediaListRepository,

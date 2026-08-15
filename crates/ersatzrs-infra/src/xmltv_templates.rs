@@ -31,7 +31,7 @@
 //! - The bundled Remote Stream template emits persisted genres that ErsatzTV
 //!   exposes to custom templates but omits from its own bundled template.
 //! - The Remote Stream template also emits provider publication date,
-//!   categories, Kijkwijzer rating, and credits when a rich playlist add-on
+//!   categories, rating, and credits when a rich playlist add-on
 //!   supplied them. ErsatzTV's YAML contract has no corresponding fields.
 
 use std::path::PathBuf;
@@ -910,25 +910,25 @@ mod tests {
         let remote_stream_content = XmltvProgrammeContent {
             genres: vec!["Documentary".to_owned(), "Culture".to_owned()],
             tags: vec!["Television".to_owned()],
-            collection: Some("Public broadcasters".to_owned()),
+            collection: Some("Example collection".to_owned()),
             release_date: Some("1992-05-30T21:15:00Z".to_owned()),
-            content_rating: Some("nl:12".to_owned()),
+            content_rating: Some("12".to_owned()),
             people: vec![
                 XmltvCredit {
-                    name: "Gert-Jan Dröge".to_owned(),
+                    name: "Example Presenter".to_owned(),
                     role: "presenter".to_owned(),
                 },
                 XmltvCredit {
-                    name: "Richard Rietveld".to_owned(),
+                    name: "Example Director".to_owned(),
                     role: "director".to_owned(),
                 },
                 XmltvCredit {
-                    name: "John de Mol Produkties".to_owned(),
+                    name: "Example Producer".to_owned(),
                     role: "producer".to_owned(),
                 },
             ],
-            original_broadcasters: vec!["AVRO".to_owned()],
-            broadcasters: vec!["AVROTROS".to_owned()],
+            original_broadcasters: vec!["Original Network".to_owned()],
+            broadcasters: vec!["Current Network".to_owned()],
             ..content(XmltvItemKind::RemoteStream)
         };
         let input = RenderProgrammeInput {
@@ -948,12 +948,12 @@ mod tests {
         assert!(xml.contains("<category lang=\"en\">Documentary</category>"));
         assert!(xml.contains("<category lang=\"en\">Culture</category>"));
         assert!(xml.contains("<category lang=\"en\">Television</category>"));
-        assert!(xml.contains("<category lang=\"en\">Public broadcasters</category>"));
+        assert!(xml.contains("<category lang=\"en\">Example collection</category>"));
         assert!(xml.contains("<date>19920530</date>"));
-        assert!(xml.contains("<presenter>Gert-Jan Dröge</presenter>"));
-        assert!(xml.contains("<director>Richard Rietveld</director>"));
-        assert!(xml.contains("<producer>John de Mol Produkties</producer>"));
-        assert!(xml.contains("<rating system=\"Kijkwijzer\"><value>12</value></rating>"));
+        assert!(xml.contains("<presenter>Example Presenter</presenter>"));
+        assert!(xml.contains("<director>Example Director</director>"));
+        assert!(xml.contains("<producer>Example Producer</producer>"));
+        assert!(xml.contains("<rating><value>12</value></rating>"));
     }
 
     #[tokio::test]

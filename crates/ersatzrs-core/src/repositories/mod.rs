@@ -26,7 +26,8 @@ mod troubleshooting;
 mod watermark;
 
 pub use addon_media_list::{
-    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
+    AddonMediaListReplacementCandidate, AddonMediaListRepository,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

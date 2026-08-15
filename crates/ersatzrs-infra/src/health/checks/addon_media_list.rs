@@ -1,6 +1,6 @@
 use super::super::{
-    async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
-    Row,
+    async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
+    HealthCheckStatus, Pool, Result, Row,
 };
 
 pub(crate) struct AddonMediaListHealthCheck {
@@ -107,8 +107,60 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .with_link("/media/addon-lists"));
         }
 
+        let missing_replacements = count_missing_replacements(&self.pool).await?;
+        let stale_replacements = count_stale_replacements(&self.pool).await?;
+        if stale_replacements > 0 || missing_replacements > 0 {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Warning,
+                format!(
+                    "{missing_replacements} unavailable item(s) have no replacement; {stale_replacements} replacement mapping(s) are stale"
+                ),
+                "One or more add-on list gaps need operator attention",
+            )
+            .with_link("/media/addon-lists"));
+        }
+
         Ok(HealthCheckResult::pass(self.title()).with_link("/media/addon-lists"))
     }
+}
+
+async fn count_missing_replacements(pool: &Pool<Db>) -> Result<i64> {
+    sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItem" AS "item"
+           LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
+             ON "replacement"."AddonMediaListItemId" = "item"."Id"
+           WHERE "item"."Availability" = 1
+             AND "replacement"."AddonMediaListItemId" IS NULL"#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)
+}
+
+async fn count_stale_replacements(pool: &Pool<Db>) -> Result<i64> {
+    let replacements = sqlx::query(
+        r#"SELECT "MediaItemId", "MediaVersionId"
+           FROM "AddonMediaListItemReplacement""#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)?;
+    let mut stale = 0_i64;
+    for replacement in replacements {
+        let media_item_id = replacement.try_get("MediaItemId").map_err(sqlx_error)?;
+        let media_version_id = replacement.try_get("MediaVersionId").map_err(sqlx_error)?;
+        let valid =
+            crate::repositories::load_replacement_candidate(pool, media_item_id, media_version_id)
+                .await
+                .map_err(|error| HealthCheckError::Database(error.to_string()))?
+                .is_some();
+        if !valid {
+            stale += 1;
+        }
+    }
+    Ok(stale)
 }
 
 #[cfg(all(test, not(feature = "mysql")))]

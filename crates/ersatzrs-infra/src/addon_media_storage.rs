@@ -781,18 +781,18 @@ mod tests {
         let pool = fixture_pool_with_source(temporary.path(), addon_id).await;
         let first_url = "https://example.test/list/one";
         let second_url = "https://example.test/list/two";
-        let first = insert_fixture_list(&pool, addon_id, first_url, "Beeld & Geluid").await;
+        let first = insert_fixture_list(&pool, addon_id, first_url, "Example provider").await;
         insert_fixture_list(&pool, addon_id, second_url, "Another list").await;
 
-        let folder_name = validated_folder_name(&pool, addon_id, first_url, "Teleac / Deel 1")
+        let folder_name = validated_folder_name(&pool, addon_id, first_url, "Archive / Part 1")
             .await
             .expect("sanitize requested folder");
-        assert_eq!(folder_name, "Teleac - Deel 1");
+        assert_eq!(folder_name, "Archive - Part 1");
         ensure_list_library(
             &pool,
             first,
             addon_id,
-            "Beeld & Geluid",
+            "Example provider",
             first_url,
             Some(&folder_name),
         )
@@ -801,16 +801,16 @@ mod tests {
         assert!(temporary
             .path()
             .join("fixture_media")
-            .join("Teleac - Deel 1")
+            .join("Archive - Part 1")
             .join("list.playlist.yml")
             .is_file());
 
         // Re-adding the same source keeps its own folder available, while
         // another list of the same add-on may not claim it.
-        validated_folder_name(&pool, addon_id, first_url, "Teleac / Deel 1")
+        validated_folder_name(&pool, addon_id, first_url, "Archive / Part 1")
             .await
             .expect("same list keeps its folder");
-        let conflict = validated_folder_name(&pool, addon_id, second_url, "teleac - deel 1").await;
+        let conflict = validated_folder_name(&pool, addon_id, second_url, "archive - part 1").await;
         assert!(matches!(conflict, Err(RepositoryError::Conflict(_))));
         let unusable = validated_folder_name(&pool, addon_id, second_url, "///").await;
         assert!(matches!(unusable, Err(RepositoryError::Conflict(_))));
