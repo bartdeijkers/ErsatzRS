@@ -4341,6 +4341,8 @@ pub struct AddAddonMediaList {
     pub folder_name: String,
     /// Optional list-wide content classification override.
     pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+    /// Optional YouTube-style chapter markers for a single-video source.
+    pub chapter_input: String,
 }
 
 /// Re-run local matching for one persisted Add-on media list.
@@ -4351,7 +4353,7 @@ pub struct MatchAddonMediaList {
 }
 
 /// Update user-editable Add-on media list settings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateAddonMediaList {
     /// Persisted Add-on media list identity.
     pub id: EntityId,
@@ -4362,6 +4364,8 @@ pub struct UpdateAddonMediaList {
     /// Force one descriptive content type for all entries, or retain
     /// provider inference with `Auto`.
     pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+    /// Optional YouTube-style chapter markers for a single-video source.
+    pub chapter_input: String,
 }
 
 /// Delete one Add-on media list and any generated playlist.
@@ -4406,12 +4410,19 @@ pub async fn add_addon_media_list(
             }
         };
     let folder_name = command.folder_name.trim();
+    ersatzrs_core::media_chapters::parse_chapter_input(&command.chapter_input, None).map_err(
+        |error| ApplicationError::Validation {
+            field: "chapter_input",
+            message: error.to_string(),
+        },
+    )?;
     repository
         .add_or_refresh(
             command.addon_id.trim(),
             &source_url,
             (!folder_name.is_empty()).then_some(folder_name),
             command.content_kind_override,
+            command.chapter_input.trim(),
         )
         .await
         .map_err(Into::into)
@@ -4432,12 +4443,19 @@ pub async fn update_addon_media_list(
     repository: &dyn AddonMediaListRepository,
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
+    ersatzrs_core::media_chapters::parse_chapter_input(&command.chapter_input, None).map_err(
+        |error| ApplicationError::Validation {
+            field: "chapter_input",
+            message: error.to_string(),
+        },
+    )?;
     repository
         .update_settings(
             command.id,
             command.auto_refresh,
             command.generate_playlist,
             command.content_kind_override,
+            command.chapter_input.trim(),
         )
         .await
         .map_err(Into::into)
@@ -5872,6 +5890,7 @@ mod tests {
             source_url: &str,
             _requested_folder: Option<&str>,
             _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+            _chapter_input: &str,
         ) -> ersatzrs_core::repositories::Result<EntityId> {
             self.added_source_urls
                 .lock()
@@ -5897,6 +5916,7 @@ mod tests {
             _auto_refresh: bool,
             _generate_playlist: bool,
             _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+            _chapter_input: &str,
         ) -> ersatzrs_core::repositories::Result<()> {
             Ok(())
         }
@@ -6871,6 +6891,7 @@ mod tests {
                     source_url: source_url.to_owned(),
                     folder_name: String::new(),
                     content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
+                    chapter_input: String::new(),
                 },
                 &repository,
             )
@@ -6899,6 +6920,7 @@ mod tests {
                 source_url: r"https://allowed.example\@evil.example/list".to_owned(),
                 folder_name: String::new(),
                 content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
+                chapter_input: String::new(),
             },
             &repository,
         )
@@ -6912,6 +6934,37 @@ mod tests {
                 .expect("added source URLs"),
             ["https://allowed.example/@evil.example/list"]
         );
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_rejects_invalid_chapters_before_repository_work() {
+        for chapter_input in [
+            "intro",
+            "0:00",
+            "0:61 Invalid",
+            "0:00 First\n00:00 Duplicate",
+            "2:00 Later\n1:59 Earlier",
+        ] {
+            let repository = RecordingAddonMediaListRepository::default();
+            let error = add_addon_media_list(
+                AddAddonMediaList {
+                    addon_id: "org.ersatzrs.addon.fixture".to_owned(),
+                    source_url: "https://example.test/episode".to_owned(),
+                    folder_name: String::new(),
+                    content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
+                    chapter_input: chapter_input.to_owned(),
+                },
+                &repository,
+            )
+            .await
+            .expect_err("invalid chapter input");
+            assert!(error.to_string().contains("chapter"));
+            assert!(repository
+                .added_source_urls
+                .lock()
+                .expect("added source URLs")
+                .is_empty());
+        }
     }
 
     // ── ADR 0064: HDR10 output validation ───────────────────────────────

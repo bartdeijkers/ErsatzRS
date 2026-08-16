@@ -15,6 +15,17 @@ release section when tagging a release.
 
 ### Added
 
+- The official Beeld & Geluid integration now recognizes personal lists,
+  series and programme pages, individual episodes, and filtered Schatkamer
+  searches through one normalized source grammar. It traverses every result
+  page without a fixed page ceiling, preserves provider order, deduplicates by
+  stable episode ID, imports editorial introductions and artwork, and reports
+  incomplete synchronization clearly. Individual episodes accept validated
+  YouTube-style chapter markers: the full episode remains available while each
+  chapter becomes a structured, independently selectable Remote Stream fragment
+  with exact `start` and optional `end` bounds. The new v3 add-on list contracts
+  carry fragment parentage, duration, and additional artwork without changing
+  the frozen v1/v2 wire shapes.
 - Storage-backed add-on lists can now use v2 availability and content-kind
   contracts. Their rich metadata is written to deterministic Kodi-style `.nfo`
   sidecars beside operational Remote Stream YAML, and the scanner applies the
@@ -85,6 +96,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Beeld & Geluid chapter input now requires the matching v3 list capability,
+  preventing older add-on packages from exposing chapter titles that play the
+  complete episode. Remote Stream playlist scans validate that every selected
+  fragment retains its full episode and link all chapter parents only after
+  the complete source-ordered batch has been materialized.
 - GitHub-hosted Playwright fallback runs now reuse the FFmpeg 9 runtime that
   server startup acquires for their calibration-media fixtures, instead of
   requiring an unrelated `ffmpeg` executable on the runner's `PATH`.

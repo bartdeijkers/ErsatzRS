@@ -93,7 +93,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
             r#"SELECT "Id", "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist",
-                      "ContentKindOverride"
+                      "ContentKindOverride", "ChapterInput"
                FROM "AddonMediaList"
                WHERE "Id" = ?"#,
         )
@@ -113,6 +113,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     &row,
                     "ContentKindOverride",
                 )?,
+                chapter_input: row
+                    .try_get::<Option<String>, _>("ChapterInput")
+                    .repository()?
+                    .unwrap_or_default(),
             })
         })
         .transpose()
@@ -256,6 +260,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         source_url: &str,
         requested_folder: Option<&str>,
         content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<EntityId> {
         let provider = InstalledAddonMediaListProvider::new(self.0.clone());
         AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
@@ -264,6 +269,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 source_url,
                 requested_folder,
                 content_kind_override,
+                chapter_input,
             )
             .await
     }
@@ -284,9 +290,37 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         auto_refresh: bool,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<()> {
+        let existing = self
+            .get_admin_form(id)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+        if existing.chapter_input != chapter_input
+            || existing.content_kind_override != content_kind_override
+        {
+            let provider = InstalledAddonMediaListProvider::new(self.0.clone());
+            AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
+                .add_or_refresh(
+                    &existing.addon_id,
+                    &existing.source_url,
+                    None,
+                    content_kind_override,
+                    chapter_input,
+                )
+                .await?;
+        }
         AddonMediaListSynchronizer::new(self.0.clone())
-            .update_settings(id, auto_refresh, generate_playlist, content_kind_override)
+            .update_settings(
+                id,
+                auto_refresh,
+                generate_playlist,
+                content_kind_override,
+                chapter_input,
+            )
             .await
     }
 

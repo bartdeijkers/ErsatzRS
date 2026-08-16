@@ -1187,6 +1187,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListUrl => "URL de la liste add-on",
         TextKey::AddonMediaListFolder => "Dossier de stockage",
         TextKey::AddonMediaListFolderHelp => "Facultatif ; sinon dérivé du nom de la liste",
+        TextKey::ChapterInput => "Chapitres",
+        TextKey::ChapterInputHelp => "Facultatif, un par ligne : 0:00 Introduction",
         TextKey::ManagedByAddon => "Géré par une extension",
         TextKey::Trash => "Corbeille",
         TextKey::TrashAlreadyEmpty => "La corbeille est déjà vide.",

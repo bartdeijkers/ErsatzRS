@@ -110,6 +110,7 @@ fn AddonMediaListsIsland(
     );
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
+    let add_chapter_input = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
@@ -127,10 +128,18 @@ fn AddonMediaListsIsland(
     });
 
     let add_action = Action::new(
-        |value: &(String, String, String, AddonMediaListContentKind)| {
-            let (addon_id, source_url, folder_name, content_kind_override) = value.clone();
+        |value: &(String, String, String, AddonMediaListContentKind, String)| {
+            let (addon_id, source_url, folder_name, content_kind_override, chapter_input) =
+                value.clone();
             async move {
-                add_addon_media_list(addon_id, source_url, folder_name, content_kind_override).await
+                add_addon_media_list(
+                    addon_id,
+                    source_url,
+                    folder_name,
+                    content_kind_override,
+                    chapter_input,
+                )
+                .await
             }
         },
     );
@@ -150,6 +159,7 @@ fn AddonMediaListsIsland(
                     );
                     add_source_url.set(String::new());
                     add_folder_name.set(String::new());
+                    add_chapter_input.set(String::new());
                     add_open.set(false);
                     data.refetch();
                 }
@@ -395,9 +405,10 @@ fn AddonMediaListsIsland(
                 addon_id=add_addon_id
                 source_url=add_source_url
                 folder_name=add_folder_name
+                chapter_input=add_chapter_input
                 content_kind=add_content_kind
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, String)| {
                     add_action.dispatch(value);
                 })
             />
@@ -428,9 +439,10 @@ fn AddAddonMediaListDialog(
     addon_id: RwSignal<String>,
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
+    chapter_input: RwSignal<String>,
     content_kind: RwSignal<AddonMediaListContentKind>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String, String, AddonMediaListContentKind)>,
+    on_submit: Callback<(String, String, String, AddonMediaListContentKind, String)>,
 ) -> impl IntoView {
     view! {
         <div
@@ -453,8 +465,9 @@ fn AddAddonMediaListDialog(
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
                         let content_kind = content_kind.get_untracked();
+                        let chapter_input = chapter_input.get_untracked();
                         if !addon_id.trim().is_empty() && !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name, content_kind));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind, chapter_input));
                         }
                     }
                 >
@@ -497,6 +510,17 @@ fn AddAddonMediaListDialog(
                                 prop:value=move || source_url.get()
                                 on:input=move |event| source_url.set(event_target_value(&event))
                             />
+                        </label>
+                        <label class=style::dialog_field>
+                            <span>{tr(TextKey::ChapterInput)}</span>
+                            <textarea
+                                name="chapter_input"
+                                rows="6"
+                                placeholder=tr(TextKey::ChapterInputHelp)
+                                prop:value=move || chapter_input.get()
+                                on:input=move |event| chapter_input.set(event_target_value(&event))
+                            />
+                            <small>{tr(TextKey::ChapterInputHelp)}</small>
                         </label>
                         <label class=style::dialog_field>
                             <span>{tr(TextKey::AddonMediaListFolder)}</span>
@@ -587,6 +611,7 @@ fn AddonMediaListEditorIsland(
     let auto_refresh = RwSignal::new(form.auto_refresh);
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let content_kind_override = RwSignal::new(form.content_kind_override);
+    let chapter_input = RwSignal::new(form.chapter_input.clone());
     let display_id = format!("{} / {}", form.addon_id, form.source_url);
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
@@ -682,6 +707,7 @@ fn AddonMediaListEditorIsland(
                             auto_refresh: auto_refresh.get_untracked(),
                             generate_playlist: generate_playlist.get_untracked(),
                             content_kind_override: content_kind_override.get_untracked(),
+                            chapter_input: chapter_input.get_untracked(),
                         });
                     }
                 >
@@ -719,6 +745,20 @@ fn AddonMediaListEditorIsland(
                                     <option value="music_video">{tr(TextKey::MusicVideo)}</option>
                                     <option value="other_video">{tr(TextKey::OtherVideo)}</option>
                                 </select>
+                            </div>
+                            <div class=style::field_row>
+                                <div class=style::field_label>{tr(TextKey::ChapterInput)}</div>
+                                <div>
+                                    <textarea
+                                        class=style::text_input
+                                        name="chapter_input"
+                                        rows="8"
+                                        placeholder=tr(TextKey::ChapterInputHelp)
+                                        prop:value=move || chapter_input.get()
+                                        on:input=move |event| chapter_input.set(event_target_value(&event))
+                                    />
+                                    <small>{tr(TextKey::ChapterInputHelp)}</small>
+                                </div>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Id)}</div>

@@ -37,6 +37,10 @@ const FILE_SECRET_DIAGNOSTIC: &str =
 pub struct RemoteStreamDefinition {
     /// Stable provider item identity used to correlate list and stream records.
     pub provider_id: Option<String>,
+    /// Stable provider identity of the full stream for chapter fragments.
+    pub parent_provider_id: Option<String>,
+    pub fragment_start_seconds: Option<u64>,
+    pub fragment_end_seconds: Option<u64>,
     pub url: Option<String>,
     pub addon: Option<String>,
     pub duration: Option<String>,
@@ -74,6 +78,8 @@ pub struct RemoteStreamDefinition {
     pub languages: Vec<String>,
     #[serde(default)]
     pub guids: Vec<String>,
+    #[serde(default)]
+    pub artwork_urls: Vec<String>,
     #[serde(default)]
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,

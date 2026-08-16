@@ -7,6 +7,7 @@ pub mod hls;
 pub mod language_codes;
 pub mod locking;
 pub mod maintenance;
+pub mod media_chapters;
 pub mod metadata_facets;
 pub mod path_replacement;
 pub mod playout_builder;

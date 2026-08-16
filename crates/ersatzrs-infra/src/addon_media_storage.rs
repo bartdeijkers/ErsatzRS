@@ -173,6 +173,7 @@ pub async fn ensure_list_library(
     addon_id: &str,
     list_name: &str,
     source_url: &str,
+    chapter_input: &str,
     requested_folder: Option<&str>,
 ) -> Result<EntityId> {
     let source = sqlx::query(
@@ -218,7 +219,14 @@ pub async fn ensure_list_library(
         RepositoryError::unavailable("create add-on list library folder", error.to_string())
     })?;
     let manifest_path = folder.join("list.playlist.yml");
-    write_playlist_manifest(&manifest_path, addon_id, list_name, source_url).await?;
+    write_playlist_manifest(
+        &manifest_path,
+        addon_id,
+        list_name,
+        source_url,
+        chapter_input,
+    )
+    .await?;
 
     let mut transaction = pool.begin().await.repository()?;
     let library_id = if library_id == 0 {
@@ -468,6 +476,8 @@ struct ManagedPlaylistManifest<'a> {
     url: &'a str,
     addon: &'a str,
     folder: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chapters: Option<&'a str>,
     sync: ManagedPlaylistSync,
 }
 
@@ -484,15 +494,17 @@ async fn write_playlist_manifest(
     addon_id: &str,
     name: &str,
     source_url: &str,
+    chapter_input: &str,
 ) -> Result<()> {
     let yaml = serde_yaml::to_string(&ManagedPlaylistManifest {
         name,
         url: source_url,
         addon: addon_id,
         folder: "streams",
+        chapters: (!chapter_input.is_empty()).then_some(chapter_input),
         sync: ManagedPlaylistSync {
             interval: "24h",
-            max_items: 500,
+            max_items: 0,
             order: "upstream",
             on_removed: "trash",
         },
@@ -565,7 +577,7 @@ pub async fn reconcile_enabled_sources(pool: &DbPool) -> std::result::Result<(),
 /// Returns an error when a list projection cannot be queried or materialized.
 pub async fn reconcile_list_libraries(pool: &DbPool, addon_id: &str) -> Result<()> {
     let rows = sqlx::query(
-        r#"SELECT "Id", "Name", "SourceUrl" FROM "AddonMediaList"
+        r#"SELECT "Id", "Name", "SourceUrl", "ChapterInput" FROM "AddonMediaList"
            WHERE "AddonId" = ? ORDER BY "Id""#,
     )
     .bind(addon_id)
@@ -579,6 +591,10 @@ pub async fn reconcile_list_libraries(pool: &DbPool, addon_id: &str) -> Result<(
             addon_id,
             &row.try_get::<String, _>("Name").repository()?,
             &row.try_get::<String, _>("SourceUrl").repository()?,
+            row.try_get::<Option<String>, _>("ChapterInput")
+                .repository()?
+                .as_deref()
+                .unwrap_or_default(),
             None,
         )
         .await?;
@@ -699,6 +715,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            "",
             None,
         )
         .await
@@ -794,6 +811,7 @@ mod tests {
             addon_id,
             "Example provider",
             first_url,
+            "",
             Some(&folder_name),
         )
         .await
@@ -870,6 +888,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            "",
             None,
         )
         .await
@@ -880,6 +899,7 @@ mod tests {
             addon_id,
             "Star Trek: TNG",
             "https://example.test/list",
+            "",
             None,
         )
         .await

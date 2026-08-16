@@ -15,16 +15,20 @@ use ersatzrs_addon_contract::{
     conform_remote_stream_list_output, validate_addon_id,
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS,
-    MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS, MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
 use ersatzrs_addon_contract::{
     validate_operator_source_url, AddonOperationError, OPERATION_CODE_UNSUPPORTED_URL,
 };
+use ersatzrs_core::media_chapters::parse_chapter_input;
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
 use ersatzrs_infra::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
     InstalledAddon,
+};
+use ersatzrs_infra::beeldengeluid::{
+    fragment_stream_url, parse_schatkamer_url, SchatkamerSource, ADDON_ID as BEELDENGELUID_ID,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
@@ -59,6 +63,8 @@ pub struct RemoteStreamPlaylistManifest {
     pub url: String,
     pub addon: String,
     pub folder: Option<String>,
+    /// Optional validated chapter markers forwarded to a capable list add-on.
+    pub chapters: Option<String>,
     #[serde(default)]
     pub sync: PlaylistSyncOptions,
     #[serde(default)]
@@ -214,6 +220,12 @@ pub struct PlaylistFileSync {
 #[derive(Serialize)]
 struct GeneratedRemoteStreamDefinition<'a> {
     provider_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_provider_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fragment_start_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fragment_end_seconds: Option<u64>,
     url: &'a str,
     addon: &'a str,
     is_live: bool,
@@ -223,6 +235,8 @@ struct GeneratedRemoteStreamDefinition<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     availability_reason: Option<&'a str>,
     content_kind: AddonMediaListContentKind,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    artwork_urls: Vec<&'a str>,
 }
 
 /// Return whether `path` is a playlist manifest rather than a stream definition.
@@ -340,6 +354,9 @@ async fn resolve_playlist_addon(pool: &DbPool, addon_id: &str) -> Result<Install
         && !addon
             .manifest
             .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+        && !addon
+            .manifest
+            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
     {
         return Err(PlaylistError::Addon(format!(
             "{addon_id} does not implement a Remote Stream list capability"
@@ -365,9 +382,23 @@ pub async fn enumerate_playlist(
     pool: &DbPool,
     addon_id: &str,
     playlist_url: &str,
+    chapter_input: Option<&str>,
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistEnumeration> {
     let addon = resolve_playlist_addon(pool, addon_id).await?;
+    let parsed_source = if addon_id == BEELDENGELUID_ID {
+        Some(parse_schatkamer_url(playlist_url).map_err(|error| {
+            PlaylistError::Enumeration(
+                AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
+                    .to_string(),
+            )
+        })?)
+    } else {
+        None
+    };
+    let playlist_url = parsed_source
+        .as_ref()
+        .map_or(playlist_url, |source| source.canonical_url.as_str());
     let playlist_url =
         validate_operator_source_url(playlist_url, &addon.manifest.permissions.network_hosts)
             .map_err(|error| {
@@ -378,16 +409,32 @@ pub async fn enumerate_playlist(
             })?;
     let capability = if addon
         .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
+    {
+        CAPABILITY_REMOTE_STREAM_LIST_V3
+    } else if addon
+        .manifest
         .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
     {
         CAPABILITY_REMOTE_STREAM_LIST_V2
     } else {
         CAPABILITY_REMOTE_STREAM_LIST_V1
     };
-    let environment = BTreeMap::from([(
+    require_chapter_capability(addon_id, capability, chapter_input)?;
+    let mut environment = BTreeMap::from([(
         "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
         playlist_url,
     )]);
+    environment.insert(
+        "ERSATZRS_MEDIA_LIST_CHAPTERS".to_owned(),
+        chapter_input.unwrap_or_default().to_owned(),
+    );
+    if let Some(source) = parsed_source.as_ref() {
+        environment.insert(
+            "ERSATZRS_MEDIA_LIST_SOURCE_KIND".to_owned(),
+            source.source.kind().to_owned(),
+        );
+    }
     let stdout = invoke_enabled_addon(
         pool,
         addon_id,
@@ -404,11 +451,87 @@ pub async fn enumerate_playlist(
     .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
     let text = String::from_utf8(stdout)
         .map_err(|_| PlaylistError::Enumeration("add-on output is not UTF-8".to_owned()))?;
-    let entries = parse_ndjson_entries(&text)?;
+    let mut entries = parse_ndjson_entries(&text)?;
+    if capability != CAPABILITY_REMOTE_STREAM_LIST_V3
+        && entries.iter().any(|entry| {
+            entry.parent_provider_id.is_some()
+                || entry.fragment_start_seconds.is_some()
+                || entry.fragment_end_seconds.is_some()
+                || !entry.additional_image_urls.is_empty()
+        })
+    {
+        return Err(PlaylistError::Enumeration(
+            "additional images and chapter-fragment fields require remote-stream.list.v3"
+                .to_owned(),
+        ));
+    }
+    if addon_id == BEELDENGELUID_ID && chapter_input.is_some_and(|input| !input.trim().is_empty()) {
+        if !matches!(
+            parsed_source.as_ref().map(|source| &source.source),
+            Some(SchatkamerSource::Video { .. })
+        ) {
+            return Err(PlaylistError::Enumeration(
+                "chapters can only be used with one Schatkamer episode URL".to_owned(),
+            ));
+        }
+        add_playlist_chapter_fragments(&mut entries, chapter_input.unwrap_or_default())?;
+    }
     Ok(PlaylistEnumeration {
         entries,
         diagnostic_tail: String::new(),
     })
+}
+
+fn require_chapter_capability(
+    addon_id: &str,
+    capability: &str,
+    chapter_input: Option<&str>,
+) -> Result<()> {
+    if addon_id == BEELDENGELUID_ID
+        && chapter_input.is_some_and(|input| !input.trim().is_empty())
+        && capability != CAPABILITY_REMOTE_STREAM_LIST_V3
+    {
+        return Err(PlaylistError::Enumeration(
+            "chapters require an installed add-on with remote-stream.list.v3 support; update the Beeld & Geluid add-on before saving chapters"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn add_playlist_chapter_fragments(entries: &mut Vec<PlaylistEntry>, input: &str) -> Result<()> {
+    if entries.len() != 1 {
+        return Err(PlaylistError::Enumeration(
+            "an episode source must resolve to exactly one full video".to_owned(),
+        ));
+    }
+    let full = entries[0].clone();
+    let parent_provider_id = full.provider_id.clone().unwrap_or_else(|| full.id.clone());
+    let chapters = parse_chapter_input(input, full.duration_seconds)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    for chapter in chapters {
+        let mut fragment = full.clone();
+        fragment.id = format!("{}-chapter-{}", full.id, chapter.start_seconds);
+        fragment.provider_id = Some(format!(
+            "{parent_provider_id}:chapter:{}",
+            chapter.start_seconds
+        ));
+        fragment.url = fragment_stream_url(&full.url, chapter.start_seconds, chapter.end_seconds)
+            .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        fragment.title = format!("{} - {}", full.title, chapter.title);
+        fragment.duration_seconds = chapter
+            .end_seconds
+            .map(|end| end.saturating_sub(chapter.start_seconds));
+        fragment.parent_provider_id = Some(parent_provider_id.clone());
+        fragment.fragment_start_seconds = Some(chapter.start_seconds);
+        fragment.fragment_end_seconds = chapter.end_seconds;
+        fragment.guids = vec![format!(
+            "beeldengeluid-chapter://{parent_provider_id}/{}",
+            chapter.start_seconds
+        )];
+        entries.push(fragment);
+    }
+    Ok(())
 }
 
 /// Synchronize one validated manifest into generated YAML/NFO pairs and a
@@ -457,6 +580,7 @@ pub async fn sync_playlist_files(
         pool,
         &manifest.manifest.addon,
         &manifest.manifest.url,
+        manifest.manifest.chapters.as_deref(),
         runtime,
     )
     .await
@@ -491,6 +615,10 @@ pub async fn sync_playlist_files(
         .into_iter()
         .filter(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()))
         .collect::<Vec<_>>();
+    if let Err(error) = validate_fragment_parents(&selected) {
+        persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
+        return Err(error);
+    }
     let playlist_etag = playlist_etag(&selected)?;
 
     std::fs::create_dir_all(&folder).map_err(|error| {
@@ -703,6 +831,26 @@ pub fn select_entries(
     selected
 }
 
+fn validate_fragment_parents(entries: &[PlaylistEntry]) -> Result<()> {
+    let full_provider_ids = entries
+        .iter()
+        .filter(|entry| entry.parent_provider_id.is_none())
+        .map(|entry| entry.provider_id.as_deref().unwrap_or(&entry.id))
+        .collect::<BTreeSet<_>>();
+    for entry in entries {
+        let Some(parent_provider_id) = entry.parent_provider_id.as_deref() else {
+            continue;
+        };
+        if !full_provider_ids.contains(parent_provider_id) {
+            return Err(PlaylistError::Enumeration(format!(
+                "chapter fragment '{}' references full episode '{}' which is not selected",
+                entry.id, parent_provider_id
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
     conform_remote_stream_list_output(value.as_bytes())
         .map_err(|error| PlaylistError::Enumeration(error.to_string()))
@@ -833,8 +981,21 @@ fn generated_definition_bytes(
     manifest: &ValidatedPlaylistManifest,
     entry: &PlaylistEntry,
 ) -> Result<Vec<u8>> {
+    let mut artwork_urls = entry
+        .thumbnail_url
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    for url in &entry.additional_image_urls {
+        if !artwork_urls.contains(&url.as_str()) {
+            artwork_urls.push(url);
+        }
+    }
     let definition = GeneratedRemoteStreamDefinition {
         provider_id: entry.provider_id.as_deref().unwrap_or(&entry.id),
+        parent_provider_id: entry.parent_provider_id.as_deref(),
+        fragment_start_seconds: entry.fragment_start_seconds,
+        fragment_end_seconds: entry.fragment_end_seconds,
         url: &entry.url,
         addon: &manifest.manifest.addon,
         is_live: entry.is_live || manifest.manifest.defaults.is_live,
@@ -842,6 +1003,7 @@ fn generated_definition_bytes(
         availability: domain_availability(entry.availability),
         availability_reason: entry.availability_reason.as_deref(),
         content_kind: domain_content_kind(entry.content_kind),
+        artwork_urls,
     };
     let yaml = serde_yaml::to_string(&definition).map_err(|error| {
         PlaylistError::Enumeration(format!("unable to encode a managed definition: {error}"))
@@ -1625,6 +1787,55 @@ create_playlist: true
         assert!(message.len() < 512);
     }
 
+    #[test]
+    fn fragment_parent_validation_is_order_independent_and_rejects_omissions() {
+        let fragment = PlaylistEntry {
+            id: "episode-chapter-0".to_owned(),
+            provider_id: Some("episode:1:chapter:0".to_owned()),
+            parent_provider_id: Some("episode:1".to_owned()),
+            url: "https://example.test/episode?start=0&end=30".to_owned(),
+            title: "Episode - Intro".to_owned(),
+            ..PlaylistEntry::default()
+        };
+        let parent = PlaylistEntry {
+            id: "episode".to_owned(),
+            provider_id: Some("episode:1".to_owned()),
+            url: "https://example.test/episode".to_owned(),
+            title: "Episode".to_owned(),
+            ..PlaylistEntry::default()
+        };
+
+        validate_fragment_parents(&[fragment.clone(), parent.clone()])
+            .expect("fragment-before-parent is valid");
+        let manifest = parse_playlist_manifest(
+            &valid_yaml().replace("exclude: [skip]", "exclude: [episode]"),
+            Path::new("x.playlist.yml"),
+        )
+        .expect("filtered manifest");
+        let selected = select_entries(&manifest, vec![fragment, parent]);
+        let error = validate_fragment_parents(&selected)
+            .expect_err("a filter that omits the full episode must reject its fragment");
+        assert!(error.to_string().contains("is not selected"));
+    }
+
+    #[test]
+    fn beeldengeluid_playlist_chapters_require_remote_stream_v3() {
+        let error = require_chapter_capability(
+            BEELDENGELUID_ID,
+            CAPABILITY_REMOTE_STREAM_LIST_V2,
+            Some("0:00 Intro"),
+        )
+        .expect_err("v2 must not derive chapter fragments");
+        assert!(error.to_string().contains("remote-stream.list.v3"));
+
+        require_chapter_capability(
+            BEELDENGELUID_ID,
+            CAPABILITY_REMOTE_STREAM_LIST_V3,
+            Some("0:00 Intro"),
+        )
+        .expect("v3 supports chapter fragments");
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn playlist_enumeration_rejects_unknown_availability_operationally() {
@@ -1655,6 +1866,7 @@ create_playlist: true
             &pool,
             "org.ersatzrs.addon.fixture",
             "https://example.test/list",
+            None,
             &AddonRuntimeContext::default(),
         )
         .await
@@ -1781,6 +1993,7 @@ create_playlist: true
             &pool,
             "org.ersatzrs.addon.fixture",
             "https://example.test/list",
+            None,
             &AddonRuntimeContext::default(),
         )
         .await
@@ -1794,6 +2007,7 @@ create_playlist: true
             &pool,
             "org.ersatzrs.addon.fixture",
             r"https://allowed.example.test\@evil.example/list",
+            None,
             &AddonRuntimeContext::default(),
         )
         .await

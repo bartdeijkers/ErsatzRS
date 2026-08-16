@@ -49,6 +49,16 @@ pub struct EnumeratedAddonMediaListItem {
     pub availability_reason: Option<String>,
     /// Provider-inferred descriptive content type.
     pub content_kind: AddonMediaListContentKind,
+    /// Provider-reported full item duration in whole seconds.
+    pub duration_seconds: Option<u64>,
+    /// Stable provider identity of the full item for a fragment row.
+    pub parent_provider_id: Option<String>,
+    /// Inclusive fragment start in whole seconds.
+    pub fragment_start_seconds: Option<u64>,
+    /// Exclusive fragment end, or open-ended when the full duration is unknown.
+    pub fragment_end_seconds: Option<u64>,
+    /// Additional provider artwork beyond the primary thumbnail.
+    pub additional_image_urls: Vec<String>,
 }
 
 /// Host adapter that invokes one installed list-provider add-on.
@@ -60,6 +70,10 @@ pub trait AddonMediaListProvider: Send + Sync {
     ///
     /// Returns an error when the add-on is unavailable or its output violates
     /// the bounded media-list contract.
-    async fn enumerate(&self, addon_id: &str, source_url: &str)
-        -> Result<EnumeratedAddonMediaList>;
+    async fn enumerate(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        chapter_input: &str,
+    ) -> Result<EnumeratedAddonMediaList>;
 }

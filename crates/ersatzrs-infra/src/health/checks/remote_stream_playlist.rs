@@ -5,7 +5,7 @@ use super::super::{
 use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::{
     AddonManifest, CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_PLAY_V1,
 };
 use semver::Version;
 use serde::Deserialize;
@@ -273,7 +273,8 @@ async fn load_addons(pool: &Pool<Db>) -> Result<BTreeMap<String, bool>> {
                 && manifest.is_some_and(|manifest| {
                     manifest.validate().is_ok()
                         && (manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
-                            || manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2))
+                            || manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+                            || manifest.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3))
                         && manifest.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
                         && host_version
                             .as_ref()

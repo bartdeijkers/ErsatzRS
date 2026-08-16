@@ -473,6 +473,7 @@ async fn troubleshoot_with_pool(
         pool,
         &manifest.manifest.addon,
         &manifest.manifest.url,
+        manifest.manifest.chapters.as_deref(),
         &AddonRuntimeContext {
             ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
             ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),

@@ -44,6 +44,11 @@ fn run(output: &mut impl io::Write) -> io::Result<()> {
                     availability: AddonMediaListItemAvailability::Available,
                     availability_reason: None,
                     content_kind: AddonMediaListContentKind::Movie,
+                    duration_seconds: Some(7_200),
+                    parent_provider_id: None,
+                    fragment_start_seconds: None,
+                    fragment_end_seconds: None,
+                    additional_image_urls: Vec::new(),
                 },
             )
         }

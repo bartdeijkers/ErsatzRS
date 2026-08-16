@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-08-16","summary":"Fixed v3 chapter capability gating and order-independent Remote Stream fragment parent linkage"}
+{"agent":"Codex","date":"2026-08-16","summary":"Expanded Beeld & Geluid Schatkamer URL sources, pagination, metadata, and structured chapter fragments"}
 {"agent":"Codex","date":"2026-08-16","summary":"Completed AB-06 single Rust validator and AB-07 Rust repository publisher with exact-SHA host CI, signed publication, and live catalog proof"}
 {"agent":"Codex","date":"2026-08-16","summary":"Implemented AB-06 shared add-on manifest and catalog validation plus AB-07 Rust official-repository publication; local gates pass and terminal public-workflow proof remains."}
 {"agent":"Codex","date":"2026-08-16","summary":"Created AB-07 as an explicitly scoped Rust migration for the official add-on repository publisher, dependent on AB-06 and preserving validator ownership, deterministic artifacts, and the secret-safe signing boundary."}

@@ -18,7 +18,7 @@ all = "warn"
 anyhow = "1"
 # `clippy-ledger` subcommand: today's date for the regenerated ledger snapshot.
 chrono = "0.4"
-ersatzrs-addon-contract = { version = "0.1.1", path = "../crates/ersatzrs-addon-contract" }
+ersatzrs-addon-contract = { version = "0.2.0", path = "../crates/ersatzrs-addon-contract" }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 # `clippy-ledger` subcommand: scans #[allow(clippy::...)] attributes.

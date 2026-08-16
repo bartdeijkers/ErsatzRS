@@ -161,6 +161,18 @@ the legacy Trakt tables and data rather than importing them into the new schema.
 
 ADR: [0067](../adr/0067-move-provider-lists-into-addons.md)
 
+## Selectable chapters for remote Schatkamer episodes
+
+ErsatzTV stores provider chapters on media versions but does not turn
+operator-authored markers for one remote episode into independently selectable
+media. ErsatzRS retains the full episode and materializes each validated marker
+as a child Remote Stream with whole-second playback bounds. A narrow,
+provider-specific source-grammar adapter normalizes Schatkamer links centrally;
+all HTTP scraping and playback protocol handling remains in the official
+add-on.
+
+ADR: [0070](../adr/0070-schatkamer-url-sources-and-chapter-fragments.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

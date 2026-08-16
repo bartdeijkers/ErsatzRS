@@ -205,6 +205,7 @@ pub struct AddonMediaList {
     pub auto_refresh: bool,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
+    pub chapter_input: String,
     pub playlist_id: Option<EntityId>,
     pub last_update: Option<DateTime<Utc>>,
     pub last_match: Option<DateTime<Utc>>,
@@ -227,6 +228,24 @@ pub struct AddonMediaListItem {
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
     pub media_item_id: Option<EntityId>,
+    pub duration_seconds: Option<u64>,
+    pub parent_provider_id: Option<String>,
+    pub fragment_start_seconds: Option<u64>,
+    pub fragment_end_seconds: Option<u64>,
+    pub additional_image_urls: Vec<String>,
+}
+
+/// One user-authored chapter linked to its full and fragment add-on items.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AddonMediaListChapter {
+    pub id: EntityId,
+    pub addon_media_list_id: EntityId,
+    pub source_item_id: EntityId,
+    pub fragment_item_id: EntityId,
+    pub chapter_index: i32,
+    pub title: String,
+    pub start_seconds: u64,
+    pub end_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

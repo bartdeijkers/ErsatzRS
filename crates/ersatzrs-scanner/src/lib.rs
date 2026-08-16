@@ -2137,14 +2137,29 @@ async fn upsert_local_remote_stream(
         &definition.languages,
     )
     .await?;
-    let artwork = locate_remote_stream_artwork(path)
+    let mut artwork = locate_remote_stream_artwork(path)
         .map(|path| vec![artwork_ref(&path, artwork_kind::THUMBNAIL)])
         .unwrap_or_default();
+    artwork.extend(
+        definition
+            .artwork_urls
+            .iter()
+            .enumerate()
+            .map(|(index, url)| ArtworkRef {
+                kind: if index == 0 {
+                    artwork_kind::THUMBNAIL
+                } else {
+                    artwork_kind::FAN_ART
+                },
+                path: url.clone(),
+                date_added: Utc::now(),
+            }),
+    );
     replace_artwork(
         &mut tx,
         "RemoteStreamMetadataId",
         metadata_id,
-        &[artwork_kind::THUMBNAIL],
+        &[artwork_kind::THUMBNAIL, artwork_kind::FAN_ART],
         &artwork,
     )
     .await?;
@@ -2224,6 +2239,7 @@ async fn synchronize_remote_stream_playlist(
     let sync =
         remote_stream_playlist::sync_playlist_files(pool, path, &yaml, &manifest, &runtime).await?;
     let mut ordered_items = Vec::new();
+    let mut materialized = Vec::new();
     for definition in &sync.definitions {
         let (parsed, source) =
             load_remote_stream_definition(pool, &definition.path, ffprobe_path).await?;
@@ -2239,7 +2255,9 @@ async fn synchronize_remote_stream_playlist(
         if definition.active && definition.duration_seconds.is_some_and(|value| value > 0) {
             ordered_items.push(item_id);
         }
+        materialized.push((item_id, parsed));
     }
+    link_materialized_remote_stream_fragments(pool, &materialized).await?;
     let relative = path
         .strip_prefix(&library_path.path)
         .unwrap_or(path)
@@ -2261,6 +2279,57 @@ async fn synchronize_remote_stream_playlist(
     affected.sort_unstable();
     affected.dedup();
     Ok(affected)
+}
+
+async fn link_materialized_remote_stream_fragments(
+    pool: &DbPool,
+    materialized: &[(i64, ersatzrs_infra::remote_stream::RemoteStreamDefinition)],
+) -> Result<()> {
+    let identities = materialized
+        .iter()
+        .filter_map(|(item_id, definition)| {
+            Some((
+                (
+                    definition.addon.as_ref()?.clone(),
+                    definition.provider_id.as_ref()?.clone(),
+                ),
+                *item_id,
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut tx = pool.begin().await?;
+    for (item_id, definition) in materialized {
+        let Some(parent_provider_id) = definition.parent_provider_id.as_deref() else {
+            continue;
+        };
+        let addon_id = definition.addon.as_deref().ok_or_else(|| {
+            remote_stream_playlist::PlaylistError::Enumeration(format!(
+                "chapter fragment '{}' has no add-on identity",
+                definition.provider_id.as_deref().unwrap_or("unknown")
+            ))
+        })?;
+        let parent_media_item_id = identities
+            .get(&(addon_id.to_owned(), parent_provider_id.to_owned()))
+            .copied()
+            .ok_or_else(|| {
+                remote_stream_playlist::PlaylistError::Enumeration(format!(
+                    "chapter fragment '{}' references full episode '{}' which was not materialized",
+                    definition.provider_id.as_deref().unwrap_or("unknown"),
+                    parent_provider_id
+                ))
+            })?;
+        sqlx::query(
+            r#"UPDATE "MediaItem"
+               SET "SubKind" = 'chapter', "ParentMediaItemId" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(parent_media_item_id)
+        .bind(item_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 fn is_managed_remote_stream_definition(path: &Path) -> bool {
@@ -5780,6 +5849,7 @@ broadcasters: [Current Network]
             concat!(
                 "#!/bin/sh\n",
                 "printf '%s\\n' \\\n",
+                "  '{\"id\":\"first-chapter\",\"provider_id\":\"item:first:chapter:0\",\"url\":\"https://example.test/1?start=0&end=30\",\"title\":\"First - Intro\",\"duration_seconds\":30,\"parent_provider_id\":\"item:first\",\"fragment_start_seconds\":0,\"fragment_end_seconds\":30}' \\\n",
                 "  '{\"id\":\"first\",\"provider_id\":\"item:first\",\"url\":\"https://example.test/1\",\"title\":\"First\",\"original_title\":\"Original First\",\"sort_title\":\"A First\",\"outline\":\"First outline\",\"plot\":\"First plot\",\"tagline\":\"First tagline\",\"duration_seconds\":60,\"year\":2001,\"release_date\":\"2001-02-03T04:05:06Z\",\"content_rating\":\"12\",\"collection\":\"Example Collection\",\"original_broadcasters\":[\"Original Network\"],\"broadcasters\":[\"Current Network\"],\"content_kind\":\"other_video\"}' \\\n",
                 "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
             ),
@@ -5851,7 +5921,7 @@ tags: [Fixture Tag]
             "host_version": "*",
             "capabilities": [
                 {"id": "addon.check.v1"},
-                {"id": "remote-stream.list.v2"},
+                {"id": "remote-stream.list.v3"},
                 {"id": "remote-stream.play.v1"}
             ],
             "entrypoints": {
@@ -5947,6 +6017,51 @@ tags: [Fixture Tag]
             metadata.get::<String, _>("Broadcasters"),
             r#"["Current Network"]"#
         );
+        let full_item_id: i64 = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "RemoteStream" WHERE "ProviderId" = 'item:first'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("full episode item");
+        let chapter_item_id: i64 = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "RemoteStream" WHERE "ProviderId" = 'item:first:chapter:0'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("chapter item");
+        let chapter_parent_id: i64 =
+            sqlx::query_scalar(r#"SELECT "ParentMediaItemId" FROM "MediaItem" WHERE "Id" = ?"#)
+                .bind(chapter_item_id)
+                .fetch_one(&pool)
+                .await
+                .expect("chapter parent");
+        assert_ne!(full_item_id, chapter_item_id);
+        assert_eq!(chapter_parent_id, full_item_id);
+        sqlx::query(
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+               VALUES (80, 'Episode and chapter', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("test collection");
+        for (index, media_item_id) in [full_item_id, chapter_item_id].into_iter().enumerate() {
+            sqlx::query(
+                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
+                   VALUES (80, ?, ?)"#,
+            )
+            .bind(media_item_id)
+            .bind(i32::try_from(index).expect("collection index"))
+            .execute(&pool)
+            .await
+            .expect("independent collection item");
+        }
+        let collection_item_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "CollectionItem" WHERE "CollectionId" = 80"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("collection item count");
+        assert_eq!(collection_item_count, 2);
 
         for (override_value, expected_kind, expected_root) in [
             (1, 1, "episodedetails"),
@@ -5991,6 +6106,7 @@ tags: [Fixture Tag]
             concat!(
                 "#!/bin/sh\n",
                 "printf '%s\\n' \\\n",
+                "  '{\"id\":\"first-chapter\",\"provider_id\":\"item:first:chapter:0\",\"url\":\"https://example.test/1?start=0&end=30\",\"title\":\"Updated First - Intro\",\"duration_seconds\":30,\"parent_provider_id\":\"item:first\",\"fragment_start_seconds\":0,\"fragment_end_seconds\":30}' \\\n",
                 "  '{\"id\":\"first\",\"provider_id\":\"item:first\",\"url\":\"https://example.test/1\",\"title\":\"Updated First\",\"original_title\":\"Updated Original\",\"sort_title\":\"Updated Sort\",\"outline\":\"Updated outline\",\"plot\":\"Updated plot\",\"tagline\":\"Updated tagline\",\"duration_seconds\":60,\"year\":2002,\"release_date\":\"2002-03-04T05:06:07Z\",\"content_rating\":\"16\",\"collection\":\"Updated Collection\",\"original_broadcasters\":[\"Earlier Network\"],\"broadcasters\":[\"Later Network\"],\"content_kind\":\"other_video\"}' \\\n",
                 "  '{\"id\":\"second\",\"url\":\"https://example.test/2\",\"title\":\"Second\",\"duration_seconds\":120}'\n"
             ),
@@ -6074,7 +6190,11 @@ tags: [Fixture Tag]
             rows.iter()
                 .map(|row| (row.get::<i64, _>("Index"), row.get::<String, _>("Title")))
                 .collect::<Vec<_>>(),
-            [(0, "Updated First".to_owned()), (1, "Second".to_owned())]
+            [
+                (0, "Updated First - Intro".to_owned()),
+                (1, "Updated First".to_owned()),
+                (2, "Second".to_owned())
+            ]
         );
         let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
         let scheduled = repositories
@@ -6092,7 +6212,7 @@ tags: [Fixture Tag]
                 .flat_map(|item| item.media_items.iter())
                 .filter_map(|item| item.title.as_deref())
                 .collect::<Vec<_>>(),
-            ["Updated First", "Second"]
+            ["Updated First - Intro", "Updated First", "Second"]
         );
         let tag_count: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM "Tag" WHERE "Name" IN ('Fixture', 'Fixture Tag')"#,
@@ -6100,7 +6220,7 @@ tags: [Fixture Tag]
         .fetch_one(&pool)
         .await
         .expect("tag count");
-        assert_eq!(tag_count, 4);
+        assert_eq!(tag_count, 6);
     }
 
     #[cfg(not(feature = "mysql"))]

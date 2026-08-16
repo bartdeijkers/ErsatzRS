@@ -20,12 +20,14 @@ pub const CAPABILITY_ADDON_CHECK_V1: &str = "addon.check.v1";
 pub const CAPABILITY_REMOTE_STREAM_LIST_V1: &str = "remote-stream.list.v1";
 /// Enumerate Remote Streams with stable identity and availability metadata.
 pub const CAPABILITY_REMOTE_STREAM_LIST_V2: &str = "remote-stream.list.v2";
+pub const CAPABILITY_REMOTE_STREAM_LIST_V3: &str = "remote-stream.list.v3";
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
 /// Enumerate a provider list whose entries are matched to local media.
 pub const CAPABILITY_MEDIA_LIST_LIST_V1: &str = "media-list.list.v1";
 /// Enumerate a provider list with explicit per-item availability.
 pub const CAPABILITY_MEDIA_LIST_LIST_V2: &str = "media-list.list.v2";
+pub const CAPABILITY_MEDIA_LIST_LIST_V3: &str = "media-list.list.v3";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 /// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
@@ -121,6 +123,20 @@ pub enum AddonMediaListRecord {
         availability_reason: Option<String>,
         #[serde(default, skip_serializing_if = "content_kind_is_auto")]
         content_kind: AddonMediaListContentKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_seconds: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_provider_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fragment_start_seconds: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fragment_end_seconds: Option<u64>,
+        #[serde(
+            default,
+            deserialize_with = "deserialize_vec_or_default",
+            skip_serializing_if = "Vec::is_empty"
+        )]
+        additional_image_urls: Vec<String>,
     },
 }
 
@@ -168,6 +184,11 @@ impl AddonMediaListRecord {
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
             content_kind: AddonMediaListContentKind::Auto,
+            duration_seconds: None,
+            parent_provider_id: None,
+            fragment_start_seconds: None,
+            fragment_end_seconds: None,
+            additional_image_urls: Vec::new(),
         }
     }
 
@@ -194,6 +215,10 @@ impl AddonMediaListRecord {
                 kind,
                 source_url,
                 availability_reason,
+                parent_provider_id,
+                fragment_start_seconds,
+                fragment_end_seconds,
+                additional_image_urls,
                 ..
             } => {
                 validate_provider_id(provider_id)?;
@@ -212,6 +237,21 @@ impl AddonMediaListRecord {
                     );
                 }
                 validate_availability_reason(availability_reason.as_deref())?;
+                validate_fragment(
+                    provider_id,
+                    parent_provider_id.as_deref(),
+                    *fragment_start_seconds,
+                    *fragment_end_seconds,
+                )?;
+                if additional_image_urls
+                    .iter()
+                    .any(|url| url.trim().is_empty())
+                {
+                    return invalid(
+                        "media list item additional_image_urls",
+                        "must not contain empty URLs",
+                    );
+                }
             }
         }
         Ok(())
@@ -269,6 +309,18 @@ pub struct PlaylistEntry {
     pub broadcasters: Vec<String>,
     #[serde(default)]
     pub thumbnail_url: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_or_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub additional_image_urls: Vec<String>,
+    #[serde(default)]
+    pub parent_provider_id: Option<String>,
+    #[serde(default)]
+    pub fragment_start_seconds: Option<u64>,
+    #[serde(default)]
+    pub fragment_end_seconds: Option<u64>,
     #[serde(default)]
     pub is_live: bool,
     #[serde(default)]
@@ -315,7 +367,52 @@ impl PlaylistEntry {
         if self.title.trim().is_empty() {
             return invalid("remote stream title", "must not be empty");
         }
-        validate_availability_reason(self.availability_reason.as_deref())
+        validate_availability_reason(self.availability_reason.as_deref())?;
+        validate_fragment(
+            self.provider_id.as_deref().unwrap_or(&self.id),
+            self.parent_provider_id.as_deref(),
+            self.fragment_start_seconds,
+            self.fragment_end_seconds,
+        )?;
+        if self
+            .additional_image_urls
+            .iter()
+            .any(|url| url.trim().is_empty())
+        {
+            return invalid(
+                "remote stream additional_image_urls",
+                "must not contain empty URLs",
+            );
+        }
+        Ok(())
+    }
+}
+
+fn validate_fragment(
+    provider_id: &str,
+    parent_provider_id: Option<&str>,
+    start_seconds: Option<u64>,
+    end_seconds: Option<u64>,
+) -> Result<(), ContractError> {
+    match (parent_provider_id, start_seconds, end_seconds) {
+        (None, None, None) => Ok(()),
+        (Some(parent), Some(start), end) => {
+            validate_provider_id(parent)?;
+            if parent == provider_id {
+                return invalid(
+                    "fragment parent_provider_id",
+                    "must differ from provider_id",
+                );
+            }
+            if end.is_some_and(|end| end <= start) {
+                return invalid("fragment end", "must be greater than start");
+            }
+            Ok(())
+        }
+        _ => invalid(
+            "fragment bounds",
+            "parent_provider_id and fragment_start_seconds are required together",
+        ),
     }
 }
 
@@ -531,6 +628,7 @@ impl AddonManifest {
             }
             if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
+                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
             {
                 return invalid(
                     "media_list_storage",
@@ -539,6 +637,7 @@ impl AddonManifest {
             }
             if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
                 && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
             {
                 return invalid(
                     "media_list_storage",

@@ -21,6 +21,8 @@ pub struct AddonMediaListAddForm {
     folder_name: String,
     #[serde(default)]
     content_kind_override: AddonMediaListContentKind,
+    #[serde(default)]
+    chapter_input: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +41,8 @@ pub struct AddonMediaListSaveForm {
     generate_playlist: bool,
     #[serde(default)]
     content_kind_override: AddonMediaListContentKind,
+    #[serde(default)]
+    chapter_input: String,
 }
 
 pub async fn add_addon_media_list_form(
@@ -51,6 +55,7 @@ pub async fn add_addon_media_list_form(
         input.source_url,
         input.folder_name,
         input.content_kind_override,
+        input.chapter_input,
     )
     .await
     {
@@ -87,6 +92,7 @@ pub async fn save_addon_media_list_form(
         auto_refresh: input.auto_refresh,
         generate_playlist: input.generate_playlist,
         content_kind_override: input.content_kind_override,
+        chapter_input: input.chapter_input,
     };
 
     match update_addon_media_list_with_state(&state, form).await {
@@ -127,5 +133,15 @@ mod tests {
         assert_eq!(parsed.addon_id, "org.example.list");
         assert!(!parsed.auto_refresh);
         assert!(!parsed.generate_playlist);
+        assert!(parsed.chapter_input.is_empty());
+    }
+
+    #[test]
+    fn save_form_preserves_multiline_chapter_input() {
+        let body = Bytes::from_static(
+            b"id=42&addon_id=org.example.list&source_url=https%3A%2F%2Fexample.invalid%2Fepisode&chapter_input=0%3A00+Intro%0A1%3A35+First+topic",
+        );
+        let parsed: AddonMediaListSaveForm = serde_urlencoded::from_bytes(&body).unwrap();
+        assert_eq!(parsed.chapter_input, "0:00 Intro\n1:35 First topic");
     }
 }

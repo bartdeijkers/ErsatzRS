@@ -2,7 +2,7 @@ feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0065', '0066', '0068']
+adr        = ['0065', '0066', '0068', '0070']
 
 summary = '''
 Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
@@ -26,9 +26,13 @@ enumeration preserves plot, full original broadcast timestamp,
 Kijkwijzer advice, distinct genre/subject labels, collection, role-aware people,
 producer, and original/current broadcasters. Scanner and XMLTV regressions
 prove persistence, search facets, and compatible Kodi/EPG projection. Version
-0.4.0 of the official Beeld &
-Geluid add-on also accepts public user-made Schatkamer lists, preserving their
-item order while retaining unavailable entries for local replacement.
+0.5.0 of the official Beeld & Geluid add-on recognizes public personal lists,
+series and programme pages, individual episodes, and filtered searches. It
+follows every result page without a fixed page ceiling, preserves first-seen
+provider order, imports series introductions and artwork, and deduplicates by
+stable episode ID. ADR 0070 adds atomically validated operator chapters: the
+full episode and structured child fragments remain independently selectable,
+with exact whole-second playback bounds and duplicate-free refresh.
 Beeld & Geluid and yt-dlp media-list items can now carry Remote Stream URLs;
 the host materializes one managed playlist manifest and Local library per
 saved list below the add-on's profile-relative storage root, without requiring
@@ -36,6 +40,15 @@ Python or permanently downloading the media. Provider classification keywords,
 localized package text, icons, and fixtures remain in the separate add-on
 repository.
 '''
+
+[[debt]]
+id          = 'schatkamer-url-and-chapter-sources'
+description = 'Recognize every supported Schatkamer hyperlink centrally, enumerate complete paginated results, and retain one full episode plus independently selectable structured chapter fragments.'
+discovered  = '2026-08-16'
+adr         = '0070'
+evidence    = 'The working tree has a typed normalized Schatkamer source parser with combined Unicode search-filter coverage, strict v3 gates before chapter derivation, unbounded page traversal with fixture-backed ordering and deduplication, structured AddonMediaListChapter reconciliation, localized chapter administration, bounded POSIX and Windows playback, and scanner proof that fragment-before-parent enumeration is linked only after the complete selected batch is materialized; a selected fragment without its full episode is rejected.'
+resolved    = true
+resolution  = 'ADR 0070 owns the source grammar, pagination, structured chapter identity, refresh, and fragment playback contracts.'
 
 [[debt]]
 id          = 'remote-stream-playlist-contract-is-undecided'

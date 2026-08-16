@@ -136,16 +136,19 @@ impl AddonMediaListSynchronizer {
         auto_refresh: bool,
         generate_playlist: bool,
         content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<()> {
         let list = self.load_list(list_id).await?;
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?
+               SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
+                   "ChapterInput" = ?
                WHERE "Id" = ?"#,
         )
         .bind(auto_refresh)
         .bind(generate_playlist)
         .bind(encode_enum(content_kind_override))
+        .bind((!chapter_input.is_empty()).then_some(chapter_input))
         .bind(list_id)
         .execute(&self.pool)
         .await
@@ -155,6 +158,8 @@ impl AddonMediaListSynchronizer {
             self.ensure_generated_playlist(&AddonMediaList {
                 auto_refresh,
                 generate_playlist,
+                content_kind_override,
+                chapter_input: chapter_input.to_owned(),
                 ..list
             })
             .await?;
@@ -273,7 +278,7 @@ impl AddonMediaListSynchronizer {
             sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "SourceUrl" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?,
-                       "ContentKindOverride" = ?, "LastError" = NULL
+                       "ContentKindOverride" = ?, "ChapterInput" = ?, "LastError" = NULL
                    WHERE "Id" = ?"#,
             )
             .bind(&list.source_url)
@@ -281,6 +286,7 @@ impl AddonMediaListSynchronizer {
             .bind(&list.description)
             .bind(list.item_count)
             .bind(encode_enum(list.content_kind_override))
+            .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
             .bind(id)
             .execute(&self.pool)
             .await
@@ -292,8 +298,8 @@ impl AddonMediaListSynchronizer {
                 r#"INSERT INTO "AddonMediaList" (
                     "AddonId", "SourceUrl", "ProviderId", "Name", "Description",
                     "AutoRefresh", "GeneratePlaylist", "ItemCount", "PlaylistId",
-                    "LastUpdate", "LastMatch", "LastError", "ContentKindOverride"
-                   ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, NULL, NULL, NULL, NULL, ?)"#,
+                    "LastUpdate", "LastMatch", "LastError", "ContentKindOverride", "ChapterInput"
+                   ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, NULL, NULL, NULL, NULL, ?, ?)"#,
             )
             .bind(&list.addon_id)
             .bind(&list.source_url)
@@ -302,6 +308,7 @@ impl AddonMediaListSynchronizer {
             .bind(&list.description)
             .bind(list.item_count)
             .bind(encode_enum(list.content_kind_override))
+            .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
             .execute(&mut *transaction)
             .await
             .repository()?;
@@ -311,6 +318,7 @@ impl AddonMediaListSynchronizer {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn save_list_items(
         &self,
         list_id: EntityId,
@@ -327,6 +335,11 @@ impl AddonMediaListSynchronizer {
             .collect::<HashMap<_, _>>();
 
         let mut tx = self.pool.begin().await.repository()?;
+        sqlx::query(r#"DELETE FROM "AddonMediaListChapter" WHERE "AddonMediaListId" = ?"#)
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
         let mut retained_count = 0_usize;
         let mut tombstone_rank = incoming
             .iter()
@@ -336,6 +349,14 @@ impl AddonMediaListSynchronizer {
             .saturating_add(1);
         for item in &existing {
             if !incoming_ids.contains(item.provider_id.as_str()) {
+                if item.parent_provider_id.is_some() {
+                    sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#)
+                        .bind(item.id)
+                        .execute(&mut *tx)
+                        .await
+                        .repository()?;
+                    continue;
+                }
                 // Provider snapshots can be incomplete because of pagination,
                 // transient availability, or permission changes. Retain a
                 // provider-neutral tombstone so an operator's pinned Local
@@ -359,46 +380,107 @@ impl AddonMediaListSynchronizer {
             }
         }
 
+        let mut persisted_ids = HashMap::new();
         for item in incoming {
-            if let Some(existing_id) = existing_ids.get(item.provider_id.as_str()).copied() {
-                sqlx::query(
-                    r#"UPDATE "AddonMediaListItem"
+            let item_id =
+                if let Some(existing_id) = existing_ids.get(item.provider_id.as_str()).copied() {
+                    let image_urls = encode_image_urls(&item.additional_image_urls)?;
+                    sqlx::query(
+                        r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
                            "DisplayTitle" = ?, "Season" = ?, "Episode" = ?,
                            "SourceUrl" = ?, "Availability" = ?,
                            "AvailabilityReason" = ?, "AvailabilityUpdated" = ?,
-                           "ContentKind" = ?,
+                           "ContentKind" = ?, "DurationSeconds" = ?,
+                           "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
+                           "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
                            "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
-                )
-                .bind(encode_enum(item.kind))
-                .bind(item.rank)
-                .bind(&item.title)
-                .bind(item.year)
-                .bind(&item.display_title)
-                .bind(item.season)
-                .bind(item.episode)
-                .bind(&item.source_url)
-                .bind(encode_enum(item.availability))
-                .bind(&item.availability_reason)
-                .bind(encode_datetime(Utc::now()))
-                .bind(encode_enum(item.content_kind))
-                .bind(existing_id)
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-                sqlx::query(
-                    r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#,
-                )
-                .bind(existing_id)
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-                insert_item_guids(&mut tx, existing_id, &item.guids).await?;
-            } else {
-                let item_id = insert_item(&mut tx, list_id, item).await?;
-                insert_item_guids(&mut tx, item_id, &item.guids).await?;
-            }
+                    )
+                    .bind(encode_enum(item.kind))
+                    .bind(item.rank)
+                    .bind(&item.title)
+                    .bind(item.year)
+                    .bind(&item.display_title)
+                    .bind(item.season)
+                    .bind(item.episode)
+                    .bind(&item.source_url)
+                    .bind(encode_enum(item.availability))
+                    .bind(&item.availability_reason)
+                    .bind(encode_datetime(Utc::now()))
+                    .bind(encode_enum(item.content_kind))
+                    .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
+                    .bind(&item.parent_provider_id)
+                    .bind(optional_fragment_bound(
+                        item.fragment_start_seconds,
+                        "fragment start",
+                    )?)
+                    .bind(optional_fragment_bound(
+                        item.fragment_end_seconds,
+                        "fragment end",
+                    )?)
+                    .bind(image_urls)
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    sqlx::query(
+                        r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#,
+                    )
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    insert_item_guids(&mut tx, existing_id, &item.guids).await?;
+                    existing_id
+                } else {
+                    let item_id = insert_item(&mut tx, list_id, item).await?;
+                    insert_item_guids(&mut tx, item_id, &item.guids).await?;
+                    item_id
+                };
+            persisted_ids.insert(item.provider_id.as_str(), item_id);
+        }
+
+        let mut chapter_indexes: HashMap<&str, i32> = HashMap::new();
+        for item in incoming {
+            let Some(parent_provider_id) = item.parent_provider_id.as_deref() else {
+                continue;
+            };
+            let source_item_id =
+                persisted_ids
+                    .get(parent_provider_id)
+                    .copied()
+                    .ok_or_else(|| {
+                        RepositoryError::Conflict(format!(
+                            "chapter fragment {} references missing parent {parent_provider_id}",
+                            item.provider_id
+                        ))
+                    })?;
+            let fragment_item_id = persisted_ids[&item.provider_id.as_str()];
+            let chapter_index = chapter_indexes.entry(parent_provider_id).or_default();
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListChapter" (
+                    "AddonMediaListId", "SourceItemId", "FragmentItemId", "ChapterIndex",
+                    "Title", "StartSeconds", "EndSeconds"
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(list_id)
+            .bind(source_item_id)
+            .bind(fragment_item_id)
+            .bind(*chapter_index)
+            .bind(&item.title)
+            .bind(fragment_bound(
+                item.fragment_start_seconds,
+                "fragment start",
+            )?)
+            .bind(optional_fragment_bound(
+                item.fragment_end_seconds,
+                "fragment end",
+            )?)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            *chapter_index = chapter_index.saturating_add(1);
         }
 
         sqlx::query(
@@ -443,6 +525,10 @@ impl AddonMediaListSynchronizer {
                 &row,
                 "ContentKindOverride",
             )?,
+            chapter_input: row
+                .try_get::<Option<String>, _>("ChapterInput")
+                .repository()?
+                .unwrap_or_default(),
             playlist_id: row.try_get("PlaylistId").repository()?,
             last_update: decode_optional_datetime(
                 "AddonMediaList.LastUpdate",
@@ -458,7 +544,7 @@ impl AddonMediaListSynchronizer {
 
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
-            r#"SELECT "Id", "ProviderId"
+            r#"SELECT "Id", "ProviderId", "ParentProviderId"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -473,6 +559,7 @@ impl AddonMediaListSynchronizer {
                 Ok(ExistingItem {
                     id: row.try_get("Id").repository()?,
                     provider_id: row.try_get("ProviderId").repository()?,
+                    parent_provider_id: row.try_get("ParentProviderId").repository()?,
                 })
             })
             .collect()
@@ -848,6 +935,7 @@ where
         source_url: &str,
         requested_folder: Option<&str>,
         content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<EntityId> {
         // Validate before enumerating so a rejected folder name costs no
         // provider call and leaves no half-imported list behind.
@@ -860,7 +948,11 @@ where
             }
             None => None,
         };
-        let enumerated = match self.provider.enumerate(addon_id, source_url).await {
+        let enumerated = match self
+            .provider
+            .enumerate(addon_id, source_url, chapter_input)
+            .await
+        {
             Ok(enumerated) => enumerated,
             Err(error) => {
                 sqlx::query(
@@ -887,6 +979,7 @@ where
             auto_refresh: false,
             generate_playlist: false,
             content_kind_override,
+            chapter_input: chapter_input.to_owned(),
             playlist_id: None,
             last_update: None,
             last_match: None,
@@ -904,6 +997,7 @@ where
                 &list.addon_id,
                 &list.name,
                 &list.source_url,
+                &list.chapter_input,
                 requested_folder.as_deref(),
             )
             .await?;
@@ -920,7 +1014,8 @@ where
     pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
         let cutoff = Utc::now() - Duration::days(1);
         let rows = sqlx::query(
-            r#"SELECT "list"."AddonId", "list"."SourceUrl", "list"."ContentKindOverride"
+            r#"SELECT "list"."AddonId", "list"."SourceUrl", "list"."ContentKindOverride",
+                      "list"."ChapterInput"
                FROM "AddonMediaList" AS "list"
                JOIN "AddonInstallation" AS "addon"
                  ON "addon"."AddonId" = "list"."AddonId"
@@ -940,8 +1035,18 @@ where
             let source_url: String = row.try_get("SourceUrl").repository()?;
             let content_kind_override =
                 decode_enum_column("AddonMediaListContentKind", &row, "ContentKindOverride")?;
+            let chapter_input = row
+                .try_get::<Option<String>, _>("ChapterInput")
+                .repository()?
+                .unwrap_or_default();
             if self
-                .add_or_refresh(&addon_id, &source_url, None, content_kind_override)
+                .add_or_refresh(
+                    &addon_id,
+                    &source_url,
+                    None,
+                    content_kind_override,
+                    &chapter_input,
+                )
                 .await
                 .is_ok()
             {
@@ -976,8 +1081,10 @@ async fn insert_item(
         r#"INSERT INTO "AddonMediaListItem" (
             "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
             "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl",
-            "Availability", "AvailabilityReason", "AvailabilityUpdated", "ContentKind"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            "Availability", "AvailabilityReason", "AvailabilityUpdated", "ContentKind",
+            "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
+            "FragmentEndSeconds", "AdditionalImageUrls"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -993,6 +1100,17 @@ async fn insert_item(
     .bind(&item.availability_reason)
     .bind(encode_datetime(Utc::now()))
     .bind(encode_enum(item.content_kind))
+    .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
+    .bind(&item.parent_provider_id)
+    .bind(optional_fragment_bound(
+        item.fragment_start_seconds,
+        "fragment start",
+    )?)
+    .bind(optional_fragment_bound(
+        item.fragment_end_seconds,
+        "fragment end",
+    )?)
+    .bind(encode_image_urls(&item.additional_image_urls)?)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -1019,6 +1137,36 @@ async fn insert_item_guids(
 struct ExistingItem {
     id: EntityId,
     provider_id: String,
+    parent_provider_id: Option<String>,
+}
+
+fn encode_image_urls(urls: &[String]) -> Result<Option<String>> {
+    if urls.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(urls)
+        .map(Some)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "add-on media list image URLs",
+            value: error.to_string(),
+        })
+}
+
+fn fragment_bound(value: Option<u64>, kind: &'static str) -> Result<i64> {
+    optional_fragment_bound(value, kind)?.ok_or_else(|| {
+        RepositoryError::Conflict(format!("{kind} is required for a chapter fragment"))
+    })
+}
+
+fn optional_fragment_bound(value: Option<u64>, kind: &'static str) -> Result<Option<i64>> {
+    value
+        .map(|value| {
+            i64::try_from(value).map_err(|_| RepositoryError::Decode {
+                kind,
+                value: value.to_string(),
+            })
+        })
+        .transpose()
 }
 
 #[derive(Debug)]

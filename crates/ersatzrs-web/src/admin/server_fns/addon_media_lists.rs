@@ -23,6 +23,7 @@ pub struct AddonMediaListForm {
     pub auto_refresh: bool,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
+    pub chapter_input: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,6 +73,7 @@ pub async fn list_addon_media_list_providers(
             item.manifest.capabilities.iter().any(|capability| {
                 capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2
+                    || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3
             })
         })
         .map(|item| AddonMediaListProviderRow {
@@ -162,6 +164,7 @@ pub async fn get_addon_media_list_form(
                 auto_refresh: form.auto_refresh,
                 generate_playlist: form.generate_playlist,
                 content_kind_override: form.content_kind_override,
+                chapter_input: form.chapter_input,
             })
         })
 }
@@ -248,6 +251,7 @@ pub async fn add_addon_media_list(
     source_url: String,
     folder_name: String,
     content_kind_override: AddonMediaListContentKind,
+    chapter_input: String,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -258,6 +262,7 @@ pub async fn add_addon_media_list(
         source_url,
         folder_name,
         content_kind_override,
+        chapter_input,
     )
     .await
     .map_err(ServerFnError::new)
@@ -300,6 +305,7 @@ pub async fn add_addon_media_list_with_state(
     source_url: String,
     folder_name: String,
     content_kind_override: AddonMediaListContentKind,
+    chapter_input: String,
 ) -> ersatzrs_app::Result<i64> {
     let list_id = state
         .application
@@ -308,6 +314,7 @@ pub async fn add_addon_media_list_with_state(
             source_url,
             folder_name,
             content_kind_override,
+            chapter_input,
         })
         .await?;
     if let Some(library_id) = state
@@ -355,6 +362,7 @@ pub async fn update_addon_media_list_with_state(
             auto_refresh: form.auto_refresh,
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
+            chapter_input: form.chapter_input,
         })
         .await?;
     if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {

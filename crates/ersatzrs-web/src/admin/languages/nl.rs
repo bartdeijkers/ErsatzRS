@@ -1873,6 +1873,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListUrl => "URL van add-on-lijst",
         TextKey::AddonMediaListFolder => "Opslagmap",
         TextKey::AddonMediaListFolderHelp => "Optioneel; anders afgeleid van de lijstnaam",
+        TextKey::ChapterInput => "Hoofdstukken",
+        TextKey::ChapterInputHelp => "Optioneel, één per regel: 0:00 Introductie",
         TextKey::ManagedByAddon => "Beheerd door een add-on",
         TextKey::Trash => "Prullenbak",
         TextKey::TrashAlreadyEmpty => "De prullenbak is al leeg.",

@@ -49,6 +49,8 @@ pub struct AddonMediaListAdminForm {
     /// Optional list-wide content classification; `Auto` keeps each
     /// provider-supplied item classification.
     pub content_kind_override: AddonMediaListContentKind,
+    /// Optional YouTube-style chapter marker input for a single-video source.
+    pub chapter_input: String,
 }
 
 /// One persisted provider item and its optional local replacement.
@@ -111,6 +113,7 @@ pub trait AddonMediaListRepository: Send + Sync {
         source_url: &str,
         requested_folder: Option<&str>,
         content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<EntityId>;
     /// Return the managed Local library projected for a provider list.
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
@@ -123,6 +126,7 @@ pub trait AddonMediaListRepository: Send + Sync {
         auto_refresh: bool,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
     ) -> Result<()>;
     /// Delete one list and its generated playlist.
     async fn delete(&self, id: EntityId) -> Result<()>;

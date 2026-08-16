@@ -24,6 +24,7 @@ impl AddonMediaListProvider for FakeListProvider {
         &self,
         _addon_id: &str,
         _source_url: &str,
+        _chapter_input: &str,
     ) -> Result<EnumeratedAddonMediaList> {
         Ok(EnumeratedAddonMediaList {
             provider_id: "api-user/api-list".to_string(),
@@ -43,6 +44,11 @@ impl AddonMediaListProvider for FakeListProvider {
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::Movie,
+                duration_seconds: None,
+                parent_provider_id: None,
+                fragment_start_seconds: None,
+                fragment_end_seconds: None,
+                additional_image_urls: Vec::new(),
             }],
         })
     }
@@ -57,6 +63,7 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
         &self,
         _addon_id: &str,
         _source_url: &str,
+        _chapter_input: &str,
     ) -> Result<EnumeratedAddonMediaList> {
         Ok(EnumeratedAddonMediaList {
             provider_id: "remote/list".to_string(),
@@ -76,6 +83,11 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::Auto,
+                duration_seconds: None,
+                parent_provider_id: None,
+                fragment_start_seconds: None,
+                fragment_end_seconds: None,
+                additional_image_urls: Vec::new(),
             }],
         })
     }
@@ -90,6 +102,7 @@ impl AddonMediaListProvider for EmptyRemoteStreamListProvider {
         &self,
         _addon_id: &str,
         _source_url: &str,
+        _chapter_input: &str,
     ) -> Result<EnumeratedAddonMediaList> {
         Ok(EnumeratedAddonMediaList {
             provider_id: "remote/list".to_string(),
@@ -109,10 +122,79 @@ impl AddonMediaListProvider for FailingListProvider {
         &self,
         _addon_id: &str,
         _source_url: &str,
+        _chapter_input: &str,
     ) -> Result<EnumeratedAddonMediaList> {
         Err(RepositoryError::Conflict(
             "deterministic remote failure".to_string(),
         ))
+    }
+}
+
+#[derive(Clone)]
+struct ChapterListProvider;
+
+#[async_trait]
+impl AddonMediaListProvider for ChapterListProvider {
+    async fn enumerate(
+        &self,
+        _addon_id: &str,
+        _source_url: &str,
+        chapter_input: &str,
+    ) -> Result<EnumeratedAddonMediaList> {
+        let full_provider_id = "episode:42".to_owned();
+        let mut items = vec![EnumeratedAddonMediaListItem {
+            provider_id: full_provider_id.clone(),
+            rank: 0,
+            display_title: "Fixture Episode".to_owned(),
+            title: "Fixture Episode".to_owned(),
+            year: None,
+            season: None,
+            episode: None,
+            kind: AddonMediaListItemKind::RemoteStream,
+            guids: vec!["beeldengeluid://42".to_owned()],
+            source_url: Some("https://example.invalid/episode/42".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            availability_reason: None,
+            content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            duration_seconds: Some(600),
+            parent_provider_id: None,
+            fragment_start_seconds: None,
+            fragment_end_seconds: None,
+            additional_image_urls: Vec::new(),
+        }];
+        for chapter in ersatzrs_core::media_chapters::parse_chapter_input(chapter_input, Some(600))
+            .expect("test chapter input")
+        {
+            items.push(EnumeratedAddonMediaListItem {
+                provider_id: format!("{full_provider_id}:chapter:{}", chapter.start_seconds),
+                rank: i32::try_from(items.len()).expect("test rank"),
+                display_title: chapter.title.clone(),
+                title: chapter.title,
+                year: None,
+                season: None,
+                episode: None,
+                kind: AddonMediaListItemKind::RemoteStream,
+                guids: Vec::new(),
+                source_url: Some(format!(
+                    "https://example.invalid/episode/42?start={}",
+                    chapter.start_seconds
+                )),
+                availability: AddonMediaListItemAvailability::Available,
+                availability_reason: None,
+                content_kind: AddonMediaListContentKind::TelevisionEpisode,
+                duration_seconds: chapter.end_seconds.map(|end| end - chapter.start_seconds),
+                parent_provider_id: Some(full_provider_id.clone()),
+                fragment_start_seconds: Some(chapter.start_seconds),
+                fragment_end_seconds: chapter.end_seconds,
+                additional_image_urls: Vec::new(),
+            });
+        }
+        Ok(EnumeratedAddonMediaList {
+            provider_id: "episode-list:42".to_owned(),
+            name: "Fixture Episode".to_owned(),
+            description: None,
+            items,
+        })
     }
 }
 
@@ -131,6 +213,7 @@ async fn add_refresh_match_and_generate_playlist() {
             "https://example.invalid/some-list",
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
@@ -151,7 +234,7 @@ async fn add_refresh_match_and_generate_playlist() {
     assert_eq!(item.get::<i64, _>("MediaItemId"), 1);
 
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, true, true, AddonMediaListContentKind::Auto)
+        .update_settings(list_id, true, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
 
@@ -216,11 +299,12 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
             "https://example.invalid/list",
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
 
@@ -265,6 +349,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
             "https://example.invalid/list",
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
@@ -291,7 +376,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
 
     let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
     synchronizer
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
     assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
@@ -314,6 +399,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identity() {
     let pool = common::test_db().await;
     seed_system_playlist_group(&pool).await;
@@ -340,6 +426,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
             source_url,
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
@@ -359,7 +446,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
     .await
     .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto)
+        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
 
@@ -369,6 +456,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
             source_url,
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
@@ -394,6 +482,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
             source_url,
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .unwrap();
@@ -446,7 +535,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert!(last_match.is_some());
 
     local
-        .update_settings(50, true, true, AddonMediaListContentKind::Auto)
+        .update_settings(50, true, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
     let playlist_id: Option<i64> =
@@ -465,7 +554,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert_eq!(ranks, vec![3]);
 
     local
-        .update_settings(50, true, false, AddonMediaListContentKind::Auto)
+        .update_settings(50, true, false, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
     let linked_playlist: Option<i64> =
@@ -483,7 +572,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert_eq!(playlist_count, 0);
 
     local
-        .update_settings(50, false, true, AddonMediaListContentKind::Auto)
+        .update_settings(50, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
     let replacement_playlist_id: Option<i64> =
@@ -517,6 +606,7 @@ async fn remote_failure_is_typed_and_persists_no_plausible_list() {
             "https://example.invalid/some-list",
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .expect_err("remote failure must propagate");
@@ -526,6 +616,71 @@ async fn remote_failure_is_typed_and_persists_no_plausible_list() {
         .await
         .unwrap();
     assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn chapter_refresh_reconciles_structured_records_without_duplicates() {
+    let pool = common::test_db().await;
+    seed_addon(&pool).await;
+    let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), ChapterListProvider);
+    let list_id = remote
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/episode/42",
+            None,
+            AddonMediaListContentKind::Auto,
+            "0:00 Intro\n1:00 Topic",
+        )
+        .await
+        .expect("first chapter import");
+    remote
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/episode/42",
+            None,
+            AddonMediaListContentKind::Auto,
+            "0:00 Introduction\n1:30 Topic\n3:00 Finish",
+        )
+        .await
+        .expect("chapter refresh");
+
+    let item_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .expect("item count");
+    let chapter_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListChapter" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .expect("chapter count");
+    let starts = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "StartSeconds" FROM "AddonMediaListChapter"
+           WHERE "AddonMediaListId" = ? ORDER BY "ChapterIndex""#,
+    )
+    .bind(list_id)
+    .fetch_all(&pool)
+    .await
+    .expect("chapter starts");
+    let duplicate_provider_ids: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM (
+               SELECT "ProviderId" FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ? GROUP BY "ProviderId" HAVING COUNT(*) > 1
+           ) AS "duplicates""#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .expect("duplicate provider ids");
+
+    assert_eq!(item_count, 4);
+    assert_eq!(chapter_count, 3);
+    assert_eq!(starts, vec![0, 90, 180]);
+    assert_eq!(duplicate_provider_ids, 0);
 }
 
 #[tokio::test]
@@ -540,6 +695,7 @@ async fn remote_failure_preserves_the_complete_existing_list() {
             "https://example.invalid/local-list",
             None,
             AddonMediaListContentKind::Auto,
+            "",
         )
         .await
         .expect_err("remote failure must reject the complete refresh");

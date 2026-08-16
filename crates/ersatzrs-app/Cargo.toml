@@ -9,7 +9,7 @@ license.workspace = true
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 dunce = "1"
-ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.1.0" }
+ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.2.0" }
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }

@@ -23,6 +23,9 @@ Capability versions are frozen wire contracts. A new optional or required
 field must be introduced under a new capability version; the host does not
 silently accept speculative fields emitted against an existing version.
 
+Version 3 adds structured Remote Stream fragment and artwork fields. The host
+rejects these fields from v1 or v2 providers.
+
 ## List record
 
 | Field | Type | Requirement |
@@ -56,6 +59,22 @@ Version 2 adds these item fields:
 | `availability_reason` | string or null | Optional provider diagnostic code or short reason; at most 2,048 UTF-8 bytes. |
 | `content_kind` | string | `auto`, `television_episode`, `movie`, `music_video`, or `other_video`. |
 
+Version 3 adds these item fields:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `duration_seconds` | non-negative integer or null | Known full-item or fragment duration in whole seconds. |
+| `additional_image_urls` | string array or null | Optional non-empty provider artwork URLs. |
+| `parent_provider_id` | string or null | Required with `fragment_start_seconds`; identifies the full item and must differ from this item. |
+| `fragment_start_seconds` | non-negative integer or null | Inclusive fragment start in whole seconds. |
+| `fragment_end_seconds` | non-negative integer or null | Optional exclusive end; when present it must be greater than the start. |
+
+The persisted `AddonMediaListChapter` row links the list, full source item, and
+fragment item and stores chapter index, title, start, and optional end. A
+refresh reconciles fragment items by provider ID, rebuilds these links, and
+deletes fragments omitted from the new chapter input. It does not retain an
+obsolete fragment as an `omitted_by_provider` tombstone.
+
 An explicit `availability` value outside the three documented strings rejects
 the complete enumeration with a bounded provider-neutral contract error. The
 host does not translate provider-specific availability values. Add-ons must
@@ -66,7 +85,8 @@ does not contain provider keyword tables or language-specific classification
 assets. An imported list can set a host-side content-kind override; `auto`
 keeps each item's add-on-provided kind.
 
-One invocation may return at most 10,000 items. A second list record,
+One invocation may return at most 10,000 items; exceeding that explicit
+contract bound fails the complete synchronization rather than truncating it. A second list record,
 duplicate item identity, duplicate rank, invalid UTF-8, malformed JSON, or a
 record beyond any bound rejects the complete enumeration before persistence.
 

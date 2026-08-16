@@ -2,7 +2,7 @@ feature    = 'ErsatzRS/ErsatzRS-addons contract boundary hygiene'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no out-of-process add-on boundary to port'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-scanner/src/remote_stream_playlist.rs`, `crates/ersatzrs-app/src/commands.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, and the separate `bartdeijkers/ErsatzRS-addons` repository'
 status     = 'Ported'
-adr        = ['0066', '0068', '0069']
+adr        = ['0066', '0068', '0069', '0070']
 
 summary = '''
 A 2026-08-15 review of the add-on backend found the host/package division
@@ -31,6 +31,11 @@ catalogs, while the official repository uses a separate Rust publisher instead
 of the Python builder. Exact-SHA host CI and official-repository publication,
 detached signing, GitHub Pages deployment, and live catalog/signature probes
 close the remaining executable-boundary debt.
+
+ADR 0070 adds one explicit narrow exception: a provider-specific host adapter
+owns only Schatkamer URL grammar and normalization so media-list and Remote
+Stream paths cannot disagree across platform scripts. HTTP scraping,
+classification, provider metadata, and playback remain in the add-on package.
 '''
 
 [[debt]]
