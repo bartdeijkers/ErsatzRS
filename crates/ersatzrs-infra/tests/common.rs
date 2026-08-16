@@ -1,6 +1,5 @@
 #![cfg(not(feature = "mysql"))]
 #![allow(dead_code)]
-#![allow(clippy::missing_panics_doc)]
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
@@ -76,6 +75,8 @@ pub fn channel(id: i64, number: &str, is_enabled: bool) -> Channel {
     }
 }
 
+/// # Panics
+/// Panics if seeding the fixture profile or channel fails.
 pub async fn seed_profile_and_channel(repos: &Repositories, channel_id: i64) {
     repos
         .ffmpeg_profile
@@ -89,6 +90,8 @@ pub async fn seed_profile_and_channel(repos: &Repositories, channel_id: i64) {
         .unwrap();
 }
 
+/// # Panics
+/// Panics if seeding the fixture media source, library, or path fails.
 pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64, path_id: i64) {
     sqlx::query(r#"INSERT OR REPLACE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(source_id)
@@ -124,6 +127,8 @@ pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64,
     .unwrap();
 }
 
+/// # Panics
+/// Panics if seeding the fixture media item fails.
 pub async fn seed_media_item(pool: &SqlitePool, item_id: i64, path_id: i64) {
     sqlx::query(
         r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, 'Normal')"#,
@@ -309,6 +314,8 @@ pub fn playout_template(
     }
 }
 
+/// # Panics
+/// Panics if seeding the fixture collection or collection item fails.
 pub async fn seed_collection_target(pool: &SqlitePool) {
     seed_media_graph(pool).await;
     pool.execute(
