@@ -1115,13 +1115,14 @@ dependencies = [
 
 [[package]]
 name = "ersatzrs-addon-contract"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "semver",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
+ "toml",
  "url",
 ]
 
@@ -6049,6 +6050,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "ersatzrs-addon-contract",
  "proc-macro2",
  "quote",
  "regex",

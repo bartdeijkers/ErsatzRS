@@ -90,6 +90,12 @@ Reusing a sequence with different bytes is rejected. Reusing it with identical
 bytes is accepted. Expired catalogs remain stored for diagnosis but cannot
 install or update packages.
 
+The shared contract crate validates the context-independent catalog structure:
+schema bounds, repository identity syntax and display name, RFC 3339 interval,
+unique add-on IDs, catalog entries, icons, package URLs, digests, and package
+size. The host then applies trust-record context such as exact repository
+identity, monotone sequence, current-time expiry, and signature verification.
+
 ## Refresh and removal
 
 The web host checks repositories when its maintenance task starts and every six

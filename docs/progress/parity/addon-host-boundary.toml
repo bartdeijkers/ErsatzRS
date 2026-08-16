@@ -26,7 +26,11 @@ Each debt item below has a standalone plan under `plans/` and a milestone under
 the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 through
 ab-05 are complete. ADR 0069 retired the native Trakt package and its private
 cross-repository dependency while retaining the repo-local reference add-on and
-shared conformance proof. Ab-06 is the remaining boundary-hygiene slice.
+shared conformance proof. Ab-06 and ab-07 are implemented locally: one
+host-owned executable now validates manifests and catalogs, and the official
+repository uses a separate Rust publisher instead of the Python builder. Their
+checked-in workflow path still needs terminal GitHub Actions proof before those
+milestones and debts are closed.
 '''
 
 [[debt]]
@@ -73,6 +77,14 @@ resolved    = true
 id          = 'manifest-contract-has-two-implementations'
 description = 'Expose the host manifest validator as a callable tool, run it from the add-ons repository CI before packaging, and reduce `tools/build_repository.py` to publication-specific rules only.'
 discovered  = '2026-08-15'
-evidence    = '`validate_manifest` in `tools/build_repository.py` re-implements `AddonManifest::validate()` (`crates/ersatzrs-addon-contract/src/lib.rs:96`) in Python: version gating, en-US requirements, capability grammar, dependency rules, entrypoints, settings, `suggested_reference` gating, `media_list_storage` prerequisites, and permission names. No shared test exists, so drift fails at install time on a user machine rather than in either CI. The two already differ: the Python check tests a `https://` prefix where the Rust one parses the URL and also rejects userinfo, and the Python check adds an id-equals-directory rule the host does not know about.'
+evidence    = 'Implemented locally on 2026-08-16. `ersatzrs-addon-contract` 0.1.1 owns bounded parsing and validation for `addon.toml`, `repository.toml`, and repository catalogs; xtask and the dependency-light `ersatzrs-addon-validator` binary call that same path. The public workflow pins the Linux validator by version and SHA-256 and runs it before packaging. Publication directory identity remains repository policy. Focused suites, package verification, both official manifests, and a generated catalog passed, followed by both workspace Clippy configurations, all 1,545 nextest tests plus doctests, architecture/progress validation, and the dependency audit. Terminal proof from the changed public workflow is still required before resolving this debt.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'official-repository-publisher-remains-python'
+description = 'After ab-06 leaves only publication policy in `tools/build_repository.py`, replace that builder with a repository-owned Rust CLI while preserving deterministic archives, fixed metadata and modes, Windows batch CRLF normalization, icon and package digests, RID artifact staging, and catalog ordering and validity. Keep detached signing and deployment as separate CI steps, and do not introduce a credential for the private host repository.'
+discovered  = '2026-08-16'
+evidence    = 'Implemented locally on 2026-08-16. The public repository now has a locked Rust `repository-publisher`, and the Python builder plus its publication test were removed. The Rust regressions prove reproducible staged output, metadata and modes, CRLF batch files, package/icon hashes and sizes, and rollback safety; all 15 provider tests, real publication through the pinned host validator, catalog validation, and ZIP integrity passed. Old/new comparison proved equal normalized catalogs, inventories, extracted bytes, modes, and timestamps. Signing and deployment remain separate. Terminal proof from the changed public workflow is still required before resolving this debt.'
 adr         = '0066'
 resolved    = false

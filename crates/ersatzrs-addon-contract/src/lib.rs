@@ -40,6 +40,8 @@ pub const MAX_MEDIA_LIST_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum number of items accepted from one list invocation.
 pub const MAX_LIST_ITEMS: usize = 10_000;
+/// Maximum compressed package size accepted from a repository catalog.
+pub const MAX_ADDON_PACKAGE_BYTES: u64 = 256 * 1024 * 1024;
 /// Prefix used when a structured operation failure crosses a textual host boundary.
 pub const ADDON_OPERATION_ERROR_MARKER: &str = "ERSATZRS_ADDON_OPERATION_ERROR:";
 pub const OPERATION_CODE_MISSING_SETTING: &str = "missing-setting";
@@ -336,6 +338,78 @@ pub enum ContractError {
         /// Safe validation detail.
         message: String,
     },
+}
+
+/// Supported standalone contract documents.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContractDocumentKind {
+    AddonManifest,
+    RepositoryManifest,
+    RepositoryIndex,
+}
+
+/// Parse or contract failure from the standalone validation entrypoint.
+#[derive(Debug, thiserror::Error)]
+pub enum ContractDocumentError {
+    #[error("invalid {document}: {message}")]
+    Parse {
+        document: &'static str,
+        message: String,
+    },
+    #[error(transparent)]
+    Contract(#[from] ContractError),
+}
+
+/// Parse and validate one public add-on contract document.
+///
+/// This is the shared implementation used by the host-facing validator tools.
+/// Filesystem publication rules such as icon existence and package-directory
+/// naming deliberately remain outside this contract.
+///
+/// # Errors
+///
+/// Returns a bounded parse diagnostic or the exact contract validation error.
+pub fn validate_contract_document(
+    kind: ContractDocumentKind,
+    contents: &str,
+) -> Result<(), ContractDocumentError> {
+    match kind {
+        ContractDocumentKind::AddonManifest => {
+            let manifest: AddonManifest = parse_toml_document("addon manifest", contents)?;
+            manifest.validate()?;
+        }
+        ContractDocumentKind::RepositoryManifest => {
+            let manifest: RepositoryManifest =
+                parse_toml_document("repository manifest", contents)?;
+            manifest.validate()?;
+        }
+        ContractDocumentKind::RepositoryIndex => {
+            let index: AddonRepositoryIndex =
+                serde_json::from_str(contents).map_err(|error| ContractDocumentError::Parse {
+                    document: "repository index",
+                    message: bounded_parse_message(&error.to_string()),
+                })?;
+            index.validate()?;
+        }
+    }
+    Ok(())
+}
+
+fn parse_toml_document<T>(
+    document: &'static str,
+    contents: &str,
+) -> Result<T, ContractDocumentError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    toml::from_str(contents).map_err(|error| ContractDocumentError::Parse {
+        document,
+        message: bounded_parse_message(&error.to_string()),
+    })
+}
+
+fn bounded_parse_message(message: &str) -> String {
+    bound_utf8(message.lines().next().unwrap_or("parse failed"), 384)
 }
 
 /// A package manifest stored at the package root.
@@ -907,6 +981,53 @@ pub struct AddonRepositoryIndex {
     pub addons: Vec<CatalogAddon>,
 }
 
+impl AddonRepositoryIndex {
+    /// Validate repository-index structure independent of one trust record and
+    /// the current wall clock.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when schema, identity, validity interval, add-on, icon,
+    /// or package metadata violates the public repository contract.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if !(1..=ADDON_REPOSITORY_SCHEMA_VERSION).contains(&self.schema_version) {
+            return invalid("schema_version", "unsupported repository schema version");
+        }
+        validate_addon_id(&self.repository_id)?;
+        if self.repository_name.trim().is_empty() || self.repository_name.len() > 200 {
+            return invalid("repository_name", "must be between 1 and 200 characters");
+        }
+        let generated_at =
+            chrono::DateTime::parse_from_rfc3339(&self.generated_at).map_err(|_| {
+                ContractError::Invalid {
+                    field: "generated_at",
+                    message: "must be RFC 3339".to_owned(),
+                }
+            })?;
+        let expires_at = chrono::DateTime::parse_from_rfc3339(&self.expires_at).map_err(|_| {
+            ContractError::Invalid {
+                field: "expires_at",
+                message: "must be RFC 3339".to_owned(),
+            }
+        })?;
+        if expires_at <= generated_at {
+            return invalid("expires_at", "must be later than generated_at");
+        }
+
+        let mut addon_ids = BTreeSet::new();
+        for addon in &self.addons {
+            if self.schema_version == 1 && addon.icon.is_some() {
+                return invalid("addons.icon", "requires repository schema version 2");
+            }
+            addon.validate()?;
+            if !addon_ids.insert(addon.id.as_str()) {
+                return invalid("addons", "duplicate add-on identifier");
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Add-on metadata shown before package download.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -973,6 +1094,9 @@ impl CatalogAddon {
             }
             if package.size == 0 {
                 return invalid("packages.size", "must be positive");
+            }
+            if package.size > MAX_ADDON_PACKAGE_BYTES {
+                return invalid("packages.size", "exceeds the 256 MiB package limit");
             }
             if !is_sha256_hex(&package.sha256) {
                 return invalid("packages.sha256", "must be a hexadecimal SHA-256 digest");
@@ -1688,6 +1812,68 @@ mod tests {
             description: localized("Example repository"),
         };
         manifest.validate().expect("valid repository package");
+    }
+
+    fn valid_repository_index() -> AddonRepositoryIndex {
+        AddonRepositoryIndex {
+            schema_version: 2,
+            repository_id: "org.example.addons".to_owned(),
+            repository_name: "Example add-ons".to_owned(),
+            sequence: 1,
+            generated_at: "2026-08-16T00:00:00Z".to_owned(),
+            expires_at: "2026-09-06T00:00:00Z".to_owned(),
+            addons: vec![CatalogAddon {
+                id: "org.example.addon.fixture".to_owned(),
+                version: Version::new(1, 0, 0),
+                name: localized("Fixture"),
+                summary: localized("Fixture add-on"),
+                icon: None,
+                license: "Zlib".to_owned(),
+                source_url: "https://example.test/source".to_owned(),
+                host_version: VersionReq::STAR,
+                capabilities: vec![CAPABILITY_ADDON_CHECK_V1.to_owned()],
+                dependencies: Vec::new(),
+                permissions: AddonPermissions::default(),
+                packages: BTreeMap::from([(
+                    "any".to_owned(),
+                    CatalogPackage {
+                        url: "https://example.test/fixture.zip".to_owned(),
+                        sha256: "a".repeat(64),
+                        size: 123,
+                    },
+                )]),
+            }],
+        }
+    }
+
+    #[test]
+    fn repository_index_validates_shared_structure() {
+        valid_repository_index()
+            .validate()
+            .expect("valid repository index");
+
+        let mut duplicate = valid_repository_index();
+        duplicate.addons.push(duplicate.addons[0].clone());
+        assert!(duplicate.validate().is_err());
+
+        let mut invalid_interval = valid_repository_index();
+        invalid_interval.expires_at = invalid_interval.generated_at.clone();
+        assert!(invalid_interval.validate().is_err());
+    }
+
+    #[test]
+    fn standalone_document_validation_uses_the_contract_types() {
+        let manifest = toml::to_string(&valid_manifest()).expect("manifest TOML");
+        validate_contract_document(ContractDocumentKind::AddonManifest, &manifest)
+            .expect("valid add-on manifest");
+
+        let mut unknown = manifest;
+        unknown.push_str("\nunknown_field = true\n");
+        assert!(validate_contract_document(ContractDocumentKind::AddonManifest, &unknown).is_err());
+
+        let catalog = serde_json::to_string(&valid_repository_index()).expect("catalog JSON");
+        validate_contract_document(ContractDocumentKind::RepositoryIndex, &catalog)
+            .expect("valid repository index");
     }
 
     #[test]

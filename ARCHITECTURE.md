@@ -40,7 +40,8 @@ Direct workspace dependencies are:
 | `ersatzrs-scanner` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
 | `ersatzrs-scheduler` | `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
 | `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-scanner`, `ersatzrs-scheduler` |
-| `ersatzrs-healthcheck`, `ersatzrs-launcher`, `xtask` | none |
+| `ersatzrs-healthcheck`, `ersatzrs-launcher` | none |
+| `xtask` | `ersatzrs-addon-contract` |
 
 Rules:
 

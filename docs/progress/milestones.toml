@@ -1296,7 +1296,7 @@ fixture insert and `last_insert_rowid()` read on one SQLite transaction.
 id         = 'ab-06'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Reduce the manifest contract to one implementation'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-manifest-validator-single-implementation.md'
 depends_on = ['ab-03']
@@ -1307,4 +1307,60 @@ host version before packaging; `tools/build_repository.py` keeps only
 publication-specific rules; and each known divergence between the two
 validators is resolved into one authoritative side.
 '''
-evidence = ''
+evidence = '''
+Implemented locally on 2026-08-16. `ersatzrs-addon-contract` 0.1.1 now owns
+bounded standalone parsing and validation for package manifests, repository
+packages, and catalogs. Both `cargo xtask validate-addon-manifest` and the
+thin `ersatzrs-addon-validator` binary call that shared implementation. The
+official add-ons workflow pins the Linux x86-64 validator by version and
+SHA-256 and runs it before publication; the copied artifact reports 0.1.1 and
+matches SHA-256
+`68c6e00ff574c03489f80d897bafb0884099ff99c989715d04c27a9d6589fc24`.
+Focused contract and xtask suites passed, the contract package verified, and
+the validator accepted both official manifests and the generated catalog. Both
+workspace Clippy configurations passed; the unrestricted canonical closeout
+passed all 1,545 nextest tests plus doctests; architecture and progress checks
+passed; and the dependency audit passed.
+AB-07 immediately removed the superseded Python builder rather than retaining
+its publication-only intermediate form. Terminal proof from the changed
+GitHub Actions workflow remains before this milestone can be marked Complete.
+'''
+
+[[milestone]]
+id         = 'ab-07'
+phase      = 'Add-on boundary — host/package contract hygiene'
+title      = 'Migrate the official repository publisher to Rust'
+status     = 'In progress'
+feature    = 'addon-host-boundary'
+plan       = 'plans/addon-repository-publisher-rust-migration.md'
+depends_on = ['ab-06']
+acceptance = '''
+The official add-ons repository builds packages, icons, and its unsigned
+catalog with a repository-owned Rust CLI instead of `build_repository.py`;
+the AB-06 host tool remains the only manifest-contract validator; fixed-input
+builds are byte-for-byte reproducible and preserve package metadata, CRLF
+normalization, hashes, sizes, RID staging, and catalog ordering and validity;
+the generated catalog passes the host contract; publication CI uses the Rust
+publisher without credentials for the private host repository; and detached
+signing plus GitHub Pages deployment remain separate secret-safe downstream
+steps.
+'''
+evidence = '''
+Implemented locally on 2026-08-16 in the official add-ons repository. A
+checked-in Rust workspace and lockfile now build the repository-owned
+`repository-publisher`; `tools/build_repository.py` and its Python-only builder
+test were removed. The publisher invokes the pinned AB-06 process validator,
+keeps only publication policy, stages output atomically, and preserves
+portable/native package selection, fixed ZIP metadata and modes, CRLF batch
+files, license injection, icon/package hashes and sizes, lexical ordering, and
+the 21-day validity interval. Signing and Pages deployment remain separate
+downstream workflow steps, and the publisher has no signing-key input.
+
+Rust format, strict Clippy, two publisher regressions, all 15 remaining Python
+provider tests, real fixed-input publication, host catalog validation, and
+independent ZIP integrity checks passed. The old Python and new Rust outputs
+also had equal normalized catalogs, package inventories, extracted bytes,
+modes, and timestamps; only implementation-dependent DEFLATE bytes differed.
+Terminal proof from the changed GitHub Actions workflow remains before this
+milestone can be marked Complete.
+'''

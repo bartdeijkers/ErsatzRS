@@ -40,6 +40,17 @@ release section when tagging a release.
 
 ### Changed
 
+- Add-on package manifests, repository-package manifests, and generated
+  repository catalogs can now be checked through one shared Rust validation
+  path exposed by `cargo xtask validate-addon-manifest` and the thin
+  `ersatzrs-addon-validator` binary. Context-independent catalog validation now
+  lives in `ersatzrs-addon-contract`, while repository identity, rollback,
+  current-time expiry, and signature checks remain host trust concerns.
+- The official add-on repository now constructs deterministic packages, icons,
+  and unsigned catalogs with a repository-owned Rust publisher. It invokes the
+  pinned host validator instead of duplicating manifest rules, publishes from
+  a rollback-safe staging tree, and keeps detached signing and deployment as
+  separate downstream CI steps.
 - Add-on media-list and Remote Stream list output now share one strict parsing
   policy: unknown fields reject the complete enumeration with a bounded error
   naming the field, while omitted and `null` optional arrays both mean absent.

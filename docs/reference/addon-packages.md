@@ -8,8 +8,9 @@ combinations are rejected.
 
 The distribution mechanism for Rust add-ons is the independently versioned
 `ersatzrs-addon-contract` crate in the canonical ErsatzRS GitHub repository.
-Contract version `0.1.0` is identified by the immutable
-`addon-contract-v0.1.0` tag. Add-ons pin the tag's full commit SHA:
+Contract version `0.1.1` is the current source version. Once its implementation
+is committed, it receives the immutable `addon-contract-v0.1.1` tag. Add-ons
+pin the tag's full commit SHA:
 
 ```toml
 [dependencies.ersatzrs-addon-contract]
@@ -32,6 +33,24 @@ exports `conform_media_list_output` and
 `conform_remote_stream_list_output` for tests that validate captured stdout
 with the same bounds and record rules as the host contract. A minimal executable
 implementation is available as the `reference_addon` Cargo example.
+
+## Standalone contract validation
+
+Validate package manifests, repository-package manifests, and generated
+repository catalogs through the same Rust types and `validate()` methods used
+by the host:
+
+```bash
+cargo xtask validate-addon-manifest path/to/addon.toml
+cargo xtask validate-addon-manifest path/to/repository.toml
+cargo xtask validate-addon-manifest --kind catalog path/to/index-v1.json
+```
+
+The dependency-light `ersatzrs-addon-validator` binary exposes the same checks
+for pinned cross-repository CI use. Publication-specific checks such as package
+directory naming, icon bytes, artifact presence, ZIP construction, and catalog
+assembly remain the publisher's responsibility; they are not a second manifest
+contract.
 
 ## Package limits
 

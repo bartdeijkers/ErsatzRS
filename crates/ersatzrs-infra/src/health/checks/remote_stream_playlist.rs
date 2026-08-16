@@ -363,7 +363,11 @@ mod tests {
             "version": 1,
             "last_sync": Utc::now(),
             "last_result": {"kind": "ok", "truncated": false},
-            "entries": [{"duration_seconds": null, "active": true}]
+            "entries": [{
+                "file": "entry.yml",
+                "duration_seconds": null,
+                "active": true
+            }]
         });
         std::fs::write(
             folder.join(".ersatzrs-playlist.json"),

@@ -7,6 +7,7 @@ mod parity_check;
 mod progress;
 mod smoke;
 mod target_size;
+mod validate_addon_manifest;
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -25,6 +26,7 @@ fn main() -> ExitCode {
             target_size::warn_if_oversized();
             ExitCode::SUCCESS
         }
+        "validate-addon-manifest" => validate_addon_manifest::run(args.collect()),
         "help" | "--help" | "-h" => {
             print_help();
             ExitCode::SUCCESS
@@ -51,4 +53,5 @@ fn print_help() {
     eprintln!("    progress          Query/maintain the porting progress index (docs/progress/)");
     eprintln!("    smoke             Boot the web host and probe IPTV/HLS runtime playback");
     eprintln!("    target-size       Warn when target/ exceeds the cargo-clean threshold");
+    eprintln!("    validate-addon-manifest Validate add-on contract documents");
 }

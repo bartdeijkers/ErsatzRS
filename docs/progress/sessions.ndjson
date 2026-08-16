@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-08-16","summary":"Implemented AB-06 shared add-on manifest and catalog validation plus AB-07 Rust official-repository publication; local gates pass and terminal public-workflow proof remains."}
+{"agent":"Codex","date":"2026-08-16","summary":"Created AB-07 as an explicitly scoped Rust migration for the official add-on repository publisher, dependent on AB-06 and preserving validator ownership, deterministic artifacts, and the secret-safe signing boundary."}
 {"agent":"Codex","date":"2026-08-15","summary":"Retired the official Trakt add-on, removed its private cross-repository build dependency, and completed AB-03 and AB-05 under ADR 0069"}
 {"agent":"Codex","date":"2026-08-15","summary":"Replaced crates.io contract publication with guarded GitHub-only tag and revision policy; host candidate awaits its commit SHA before external pinning"}
 {"agent":"Codex","date":"2026-08-15","summary":"Prepared AB-05 and contract crate 0.1.0 for clean publication; final completion awaits explicit commit, push, and crates.io publish"}

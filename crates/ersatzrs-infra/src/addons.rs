@@ -17,8 +17,8 @@ use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
-    RepositoryManifest, ADDON_REPOSITORY_SCHEMA_VERSION, CAPABILITY_ADDON_CHECK_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
     CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
     OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
@@ -3205,19 +3205,12 @@ fn validate_catalog(
     repository: &TrustedAddonRepository,
     now: DateTime<Utc>,
 ) -> Result<(), AddonError> {
-    if !(1..=ADDON_REPOSITORY_SCHEMA_VERSION).contains(&index.schema_version) {
-        return Err(AddonError::Validation(
-            "repository uses an unsupported schema version".to_owned(),
-        ));
-    }
+    index
+        .validate()
+        .map_err(|error| AddonError::Validation(error.to_string()))?;
     if index.repository_id != repository.id {
         return Err(AddonError::Trust(
             "signed repository identity does not match allowlist".to_owned(),
-        ));
-    }
-    if index.repository_name.trim().is_empty() {
-        return Err(AddonError::Validation(
-            "repository name is empty".to_owned(),
         ));
     }
     if repository
@@ -3241,67 +3234,6 @@ fn validate_catalog(
         return Err(AddonError::Validation(
             "catalog validity interval is invalid".to_owned(),
         ));
-    }
-    let mut addon_ids = BTreeSet::new();
-    for addon in &index.addons {
-        if index.schema_version == 1 && addon.icon.is_some() {
-            return Err(AddonError::Validation(
-                "catalog icons require repository schema version 2".to_owned(),
-            ));
-        }
-        addon
-            .validate()
-            .map_err(|error| AddonError::Validation(error.to_string()))?;
-        validate_addon_id(&addon.id).map_err(|error| AddonError::Validation(error.to_string()))?;
-        if !addon_ids.insert(addon.id.as_str()) {
-            return Err(AddonError::Validation(
-                "catalog contains duplicate add-on identifiers".to_owned(),
-            ));
-        }
-        if addon
-            .name
-            .get("en-US")
-            .is_none_or(|value| value.trim().is_empty())
-            || addon
-                .summary
-                .get("en-US")
-                .is_none_or(|value| value.trim().is_empty())
-        {
-            return Err(AddonError::Validation(
-                "catalog add-on requires en-US name and summary".to_owned(),
-            ));
-        }
-        validate_https_url(&addon.source_url, "add-on source")?;
-        if addon.packages.is_empty() {
-            return Err(AddonError::Validation(
-                "catalog add-on has no packages".to_owned(),
-            ));
-        }
-        for (rid, package) in &addon.packages {
-            if rid != "any" && !ersatzrs_addon_contract::is_supported_rid(rid) {
-                return Err(AddonError::Validation(
-                    "catalog contains an unsupported RID".to_owned(),
-                ));
-            }
-            validate_https_url(&package.url, "package")?;
-            let package_url = reqwest::Url::parse(&package.url)
-                .map_err(|_| AddonError::Validation("package URL is invalid".to_owned()))?;
-            if package_url.query().is_some() || package_url.fragment().is_some() {
-                return Err(AddonError::Validation(
-                    "package URL cannot contain a query or fragment".to_owned(),
-                ));
-            }
-            if package.size == 0 || package.size > MAX_PACKAGE_BYTES {
-                return Err(AddonError::Validation(
-                    "catalog package size is invalid".to_owned(),
-                ));
-            }
-            if !is_sha256_hex(&package.sha256) {
-                return Err(AddonError::Validation(
-                    "catalog package SHA-256 is invalid".to_owned(),
-                ));
-            }
-        }
     }
     Ok(())
 }
@@ -3614,10 +3546,6 @@ fn localized_name(addon: &CatalogAddon) -> &str {
         .name
         .get("en-US")
         .map_or(addon.id.as_str(), String::as_str)
-}
-
-fn is_sha256_hex(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -4648,7 +4576,7 @@ mod tests {
             .encode(signing_key.verifying_key().as_bytes());
         let now = Utc::now();
         let index = AddonRepositoryIndex {
-            schema_version: ADDON_REPOSITORY_SCHEMA_VERSION,
+            schema_version: ersatzrs_addon_contract::ADDON_REPOSITORY_SCHEMA_VERSION,
             repository_id: repository_id.to_owned(),
             repository_name: "Fixture add-ons".to_owned(),
             sequence: 7,

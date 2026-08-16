@@ -110,10 +110,11 @@ changelog, and git history for evidence. The authoritative live state is always
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,
   provider-owned multilingual assets/tests, and POSIX/Windows add-on parity.
-- Add-on boundary hygiene (six standalone slices from the 2026-08-15 review of
-  the ErsatzRS ↔ `bartdeijkers/ErsatzRS-addons` division; tracked as
+- Add-on boundary hygiene (six review slices plus one separately scoped
+  publisher migration for the ErsatzRS ↔ `bartdeijkers/ErsatzRS-addons`
+  division; tracked as
   `docs/progress/parity/addon-host-boundary.toml` and milestones `ab-01`–
-  `ab-06`). The division itself is sound — add-ons never touch persistence,
+  `ab-07`). The division itself is sound — add-ons never touch persistence,
   storage layout, matching, playlists, or scanning — but the contract is prose
   plus host-side validators with no shared executable artifact, which is what
   produced these six:
@@ -134,6 +135,9 @@ changelog, and git history for evidence. The authoritative live state is always
   - `addon-manifest-validator-single-implementation.md` — stop maintaining the
     manifest contract twice, in Rust and in the add-ons repository's Python
     builder.
+  - `addon-repository-publisher-rust-migration.md` — after validator
+    consolidation, replace the remaining Python publication builder with a
+    repository-owned Rust CLI while keeping signing and deployment separate.
 - `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — current Phase 8 plan
   for the accepted SDR/HDR10 output contract, Dolby Vision input
   characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
