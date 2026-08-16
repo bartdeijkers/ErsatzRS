@@ -85,6 +85,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- GitHub-hosted Playwright fallback runs now reuse the FFmpeg 9 runtime that
+  server startup acquires for their calibration-media fixtures, instead of
+  requiring an unrelated `ffmpeg` executable on the runner's `PATH`.
 - Cargo package metadata now points to the canonical ErsatzRS repository and
   declares the same Zlib license as the repository `LICENSE`, so packaged
   add-on contract metadata carries accurate source and licensing links.

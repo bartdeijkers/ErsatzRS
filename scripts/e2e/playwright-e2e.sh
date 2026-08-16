@@ -178,6 +178,18 @@ if [[ "$HEALTHY" != "1" ]]; then
   exit 1
 fi
 
+# Startup may acquire the managed FFmpeg runtime after this wrapper has already
+# resolved its environment. Reuse that exact binary for browser fixtures when
+# the caller did not provide an override and the runner has no FFmpeg on PATH.
+MANAGED_FFMPEG="$TMP_ROOT/home/.ersatzrs/ffmpeg/current/bin/ffmpeg"
+if [[ -z "${ErsatzRS_FFMPEG__PATH:-}" && \
+      -z "${ERSATZRS_FFMPEG__PATH:-}" && \
+      -z "${FFMPEG_PATH:-}" && \
+      -x "$MANAGED_FFMPEG" ]]; then
+  export FFMPEG_PATH="$MANAGED_FFMPEG"
+  log "using acquired managed FFmpeg for browser fixtures"
+fi
+
 if [[ "${ERSATZRS_SKIP_PW_INSTALL:-0}" != "1" ]]; then
   npx --yes playwright install chromium firefox >/dev/null 2>&1 || \
     log "playwright browser install skipped or failed; assuming browsers are present"
