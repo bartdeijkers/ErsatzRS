@@ -1296,7 +1296,7 @@ fixture insert and `last_insert_rowid()` read on one SQLite transaction.
 id         = 'ab-06'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Reduce the manifest contract to one implementation'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-manifest-validator-single-implementation.md'
 depends_on = ['ab-03']
@@ -1322,15 +1322,21 @@ workspace Clippy configurations passed; the unrestricted canonical closeout
 passed all 1,545 nextest tests plus doctests; architecture and progress checks
 passed; and the dependency audit passed.
 AB-07 immediately removed the superseded Python builder rather than retaining
-its publication-only intermediate form. Terminal proof from the changed
-GitHub Actions workflow remains before this milestone can be marked Complete.
+its publication-only intermediate form. Host commits
+`f3afc89e5295c6939ce57c2eb80908c3fcc2fab6` and
+`2bf94ea7d55dc291c591656435f8bd25390cdc7f` passed exact-SHA CI in run
+`31943829930`. Official repository commit
+`0853dc37c8435296ba680a8dfe216055fd237d7a` passed publication run
+`31941211236`, including the pinned validator SHA check, manifest and catalog
+validation, Rust/Python tests, package construction, detached signing, and
+GitHub Pages deployment.
 '''
 
 [[milestone]]
 id         = 'ab-07'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Migrate the official repository publisher to Rust'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-host-boundary'
 plan       = 'plans/addon-repository-publisher-rust-migration.md'
 depends_on = ['ab-06']
@@ -1361,6 +1367,10 @@ provider tests, real fixed-input publication, host catalog validation, and
 independent ZIP integrity checks passed. The old Python and new Rust outputs
 also had equal normalized catalogs, package inventories, extracted bytes,
 modes, and timestamps; only implementation-dependent DEFLATE bytes differed.
-Terminal proof from the changed GitHub Actions workflow remains before this
-milestone can be marked Complete.
+Official repository commit `0853dc37c8435296ba680a8dfe216055fd237d7a`
+passed publication run `31941211236`, including Rust format and strict Clippy,
+publisher and provider tests, pinned validator verification, package/catalog
+construction, detached signing, and GitHub Pages deployment. The live catalog
+and detached signature both returned HTTP 200. Host exact-SHA CI run
+`31943829930` passed on `2bf94ea7d55dc291c591656435f8bd25390cdc7f`.
 '''

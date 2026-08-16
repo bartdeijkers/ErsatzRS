@@ -1,7 +1,7 @@
 feature    = 'ErsatzRS/ErsatzRS-addons contract boundary hygiene'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no out-of-process add-on boundary to port'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-scanner/src/remote_stream_playlist.rs`, `crates/ersatzrs-app/src/commands.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, and the separate `bartdeijkers/ErsatzRS-addons` repository'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0066', '0068', '0069']
 
 summary = '''
@@ -24,13 +24,13 @@ string-matches an add-on's English error text across a repository boundary.
 
 Each debt item below has a standalone plan under `plans/` and a milestone under
 the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 through
-ab-05 are complete. ADR 0069 retired the native Trakt package and its private
+ab-07 are complete. ADR 0069 retired the native Trakt package and its private
 cross-repository dependency while retaining the repo-local reference add-on and
-shared conformance proof. Ab-06 and ab-07 are implemented locally: one
-host-owned executable now validates manifests and catalogs, and the official
-repository uses a separate Rust publisher instead of the Python builder. Their
-checked-in workflow path still needs terminal GitHub Actions proof before those
-milestones and debts are closed.
+shared conformance proof. One host-owned executable now validates manifests and
+catalogs, while the official repository uses a separate Rust publisher instead
+of the Python builder. Exact-SHA host CI and official-repository publication,
+detached signing, GitHub Pages deployment, and live catalog/signature probes
+close the remaining executable-boundary debt.
 '''
 
 [[debt]]
@@ -77,14 +77,14 @@ resolved    = true
 id          = 'manifest-contract-has-two-implementations'
 description = 'Expose the host manifest validator as a callable tool, run it from the add-ons repository CI before packaging, and reduce `tools/build_repository.py` to publication-specific rules only.'
 discovered  = '2026-08-15'
-evidence    = 'Implemented locally on 2026-08-16. `ersatzrs-addon-contract` 0.1.1 owns bounded parsing and validation for `addon.toml`, `repository.toml`, and repository catalogs; xtask and the dependency-light `ersatzrs-addon-validator` binary call that same path. The public workflow pins the Linux validator by version and SHA-256 and runs it before packaging. Publication directory identity remains repository policy. Focused suites, package verification, both official manifests, and a generated catalog passed, followed by both workspace Clippy configurations, all 1,545 nextest tests plus doctests, architecture/progress validation, and the dependency audit. Terminal proof from the changed public workflow is still required before resolving this debt.'
+evidence    = 'Resolved by milestone `ab-06` on 2026-08-16. `ersatzrs-addon-contract` 0.1.1 owns bounded parsing and validation for `addon.toml`, `repository.toml`, and repository catalogs; xtask and the dependency-light `ersatzrs-addon-validator` binary call that same path. The public workflow pins the Linux validator by version and SHA-256 and runs it before packaging. Publication directory identity remains repository policy. Focused suites, package verification, both official manifests, and a generated catalog passed, followed by both workspace Clippy configurations, all 1,545 nextest tests plus doctests, architecture/progress validation, and the dependency audit. Host exact-SHA CI run `31943829930` passed on `2bf94ea7d55dc291c591656435f8bd25390cdc7f`; official repository commit `0853dc37c8435296ba680a8dfe216055fd237d7a` passed publication run `31941211236` with the pinned validator SHA check, manifest/catalog validation, signing, and deployment.'
 adr         = '0066'
-resolved    = false
+resolved    = true
 
 [[debt]]
 id          = 'official-repository-publisher-remains-python'
 description = 'After ab-06 leaves only publication policy in `tools/build_repository.py`, replace that builder with a repository-owned Rust CLI while preserving deterministic archives, fixed metadata and modes, Windows batch CRLF normalization, icon and package digests, RID artifact staging, and catalog ordering and validity. Keep detached signing and deployment as separate CI steps, and do not introduce a credential for the private host repository.'
 discovered  = '2026-08-16'
-evidence    = 'Implemented locally on 2026-08-16. The public repository now has a locked Rust `repository-publisher`, and the Python builder plus its publication test were removed. The Rust regressions prove reproducible staged output, metadata and modes, CRLF batch files, package/icon hashes and sizes, and rollback safety; all 15 provider tests, real publication through the pinned host validator, catalog validation, and ZIP integrity passed. Old/new comparison proved equal normalized catalogs, inventories, extracted bytes, modes, and timestamps. Signing and deployment remain separate. Terminal proof from the changed public workflow is still required before resolving this debt.'
+evidence    = 'Resolved by milestone `ab-07` on 2026-08-16. The public repository now has a locked Rust `repository-publisher`, and the Python builder plus its publication test were removed. The Rust regressions prove reproducible staged output, metadata and modes, CRLF batch files, package/icon hashes and sizes, and rollback safety; all 15 provider tests, real publication through the pinned host validator, catalog validation, and ZIP integrity passed. Old/new comparison proved equal normalized catalogs, inventories, extracted bytes, modes, and timestamps. Signing and deployment remain separate. Official repository commit `0853dc37c8435296ba680a8dfe216055fd237d7a` passed publication run `31941211236`; the live catalog and detached signature both returned HTTP 200.'
 adr         = '0066'
-resolved    = false
+resolved    = true
