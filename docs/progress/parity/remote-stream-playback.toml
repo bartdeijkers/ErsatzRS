@@ -11,10 +11,9 @@ reads and HTTP reconnect options. Add-on commands come only from an
 integrity-checked signed package, receive declared settings and managed
 FFmpeg/ffprobe paths through a host-owned environment, and pipe media stdout
 directly into the managed consumer process. FFmpeg and ffprobe detect the
-producer container from its bytes, matching ErsatzTV's format-agnostic loopback
-endpoint while retaining MPEG-TS producer support. Windows batch entrypoints use
-an exact raw `cmd.exe` command line so quoted package paths survive the platform
-process boundary. The standalone Beeld & Geluid package implementations follow
+producer container from its bytes. Windows batch entrypoints use an exact raw
+`cmd.exe` command line so quoted package paths survive the platform process
+boundary. The standalone Beeld & Geluid package implementations follow
 fresh Server Action and CloudFront-cookie discovery, then select one HLS
 video/audio rendition pair so MPEG-TS output has stable video-then-audio order.
 The yt-dlp add-on keeps yt-dlp an operator-supplied tool while requiring the
@@ -34,7 +33,8 @@ evaluated at the actual HLS transcode cursor so a future live item is not
 captured before its scheduled start. Finite add-on playback receives the source
 offset through `ERSATZRS_REMOTE_STREAM_SEEK`; the consumer removes its duplicate
 post-input seek while the producer owns source-side seeking. Configured or
-probed duration feeds scheduling.
+probed duration feeds scheduling. HLS holds each finite add-on producer through
+its item; a startup burst then realtime pacing avoids internal seek replay.
 Classic Flood expands a zero-duration Remote Stream to the next fixed boundary
 or hard stop and persists the expanded duration on the PlayoutItem.
 

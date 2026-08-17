@@ -314,6 +314,25 @@ pub fn request_active_transcode_reclaim(
     })
 }
 
+/// Reclassify a running HLS work-ahead transcode after it has filled its
+/// startup buffer and continues as a realtime producer.
+///
+/// Returns `true` only when the identified slot still exists and was promoted.
+#[must_use]
+pub fn promote_hls_transcode_to_realtime(slot_id: u64) -> bool {
+    let mut slots = active_transcode_slots()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(slot) = slots.values_mut().find(|slot| slot.slot_id == slot_id) else {
+        return false;
+    };
+    if slot.kind != ActiveTranscodeKind::HlsWorkAhead {
+        return false;
+    }
+    slot.kind = ActiveTranscodeKind::HlsRealtime;
+    true
+}
+
 fn next_active_transcode_slot_id() -> u64 {
     ACTIVE_TRANSCODE_SLOT_ID.fetch_add(1, Ordering::Relaxed)
 }
@@ -385,6 +404,40 @@ mod tests {
                 true,
             ),
         )
+    }
+
+    #[test]
+    fn work_ahead_slot_can_be_promoted_without_releasing_capacity() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let slot = ActiveTranscodeSlot::new_hls_with_capacity_key(
+            "42",
+            "42",
+            ActiveTranscodeKind::HlsWorkAhead,
+            Arc::new(AtomicI64::new(Utc::now().timestamp_millis())),
+            ActiveTranscodeReclaimHandle::new(
+                Arc::new(Notify::new()),
+                Arc::new(AtomicU64::new(0)),
+                Arc::new(AtomicI64::new(0)),
+                true,
+            ),
+        );
+        let slot_id = slot.slot_id();
+        let reservation = try_reserve_active_transcode(1, slot).expect("reserve work ahead");
+
+        assert!(promote_hls_transcode_to_realtime(slot_id));
+        assert!(!promote_hls_transcode_to_realtime(slot_id));
+        assert_eq!(active_transcode_snapshot(1).active, 1);
+        assert!(request_active_transcode_reclaim(
+            "other",
+            Duration::from_secs(30),
+            Duration::from_secs(25),
+            Duration::from_millis(500),
+        )
+        .is_none());
+
+        drop(reservation);
+        reset_active_transcode_state_for_tests();
     }
 
     #[cfg(not(feature = "mysql"))]

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-29; revised 2026-08-09)
+Accepted (2026-07-29; revised 2026-08-17)
 
 The raw `script:` source and command-parsing portions are superseded by [ADR
 0066](0066-repository-backed-add-ons.md). Direct producer-to-FFmpeg
@@ -11,7 +11,7 @@ actions remain active for add-on-backed producers.
 
 ## Implementation
 
-Implemented (revised 2026-08-11). Remote Stream YAML definitions are scanned
+Implemented (revised 2026-08-17). Remote Stream YAML definitions are scanned
 into the persisted model, direct URLs and installed add-on producers are
 probed, and IPTV/HLS playback uses the resolved source instead of opening the
 YAML file. Add-on stdout is piped directly into managed FFmpeg, consumer
@@ -52,6 +52,14 @@ finite producer's source offset through `ERSATZRS_REMOTE_STREAM_SEEK`; the
 consumer does not drain that prefix again. Live Remote Streams start at zero,
 disable input read-rate pacing, and force HLS realtime admission instead of
 work-ahead.
+Finite Remote Streams use one producer for the complete remaining play item.
+When work-ahead capacity is available, FFmpeg consumes an initial bounded burst
+before pacing that same process in realtime; after the burst has filled the
+realtime buffer, its transcode slot is reclassified and its work-ahead
+reservation is released. The HLS worker never restarts an add-on producer at an
+internal work-ahead boundary because stream-copy source seeking may roll back
+to an earlier keyframe and replay content even when transport timestamps remain
+continuous.
 Liveness is evaluated at the HLS transcode cursor rather than wall-clock time,
 so work-ahead never opens a scheduled live source early. Consumer exit,
 cancellation, and ffprobe timeout signal the producer independently of stdout
@@ -84,6 +92,10 @@ Producer containers must be readable from a non-seekable pipe, and diagnostic
 text must remain on standard error instead of contaminating the media bytes.
 Source-side seeking makes late tune-in proportional to startup latency rather
 than elapsed programme time.
+Keeping a finite producer alive for the rest of one play item avoids repeated
+provider discovery and keyframe-aligned seek rollback. It intentionally does
+not keep one FFmpeg process for the whole channel: real play-item, slug, slate,
+and error boundaries still use the segmenter state machine.
 
 Per-card playlist insertion is an ErsatzRS usability extension over the pinned
 ErsatzTV Remote Stream list. Persisted playlist rows remain compatible with
@@ -106,6 +118,8 @@ ErsatzTV's existing `RemoteStream = 70` collection type.
   finite sources. Existing unmarked scripts keep consumer-side seeking.
 - **2026-08-11.** ADR 0066 superseded raw scripts and `{seek}` arguments with
   signed add-on identities and `ERSATZRS_REMOTE_STREAM_SEEK`.
+- **2026-08-17.** Finite add-on streams gained continuous per-item HLS
+  production with an initial work-ahead burst and realtime slot promotion.
 
 ## References
 

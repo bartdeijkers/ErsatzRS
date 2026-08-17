@@ -15,6 +15,11 @@ real `#EXT-X-DISCONTINUITY`, deletes stale segments, and supports fMP4
 `#EXT-X-MAP` rewriting. It ports ErsatzTV's state transitions and worker loop:
 work-ahead/buffer gates, realtime switching, initial-segment gating,
 `PlayoutUpdated`, OnDemand checkpointing, slug output, and error-ASS fallback.
+Finite add-on inputs keep one producer for the complete remaining play item:
+an initial 44-second read-rate burst fills the buffer, then the same FFmpeg
+process continues in realtime and releases its work-ahead reservation after 30
+seconds of newly generated segments. This avoids content replay when a
+stream-copy producer seeks to the keyframe before an internal chunk boundary.
 MPEG-TS HLS output keeps ErsatzTV-style segment options (`+latm` for AAC-LATM)
 while ADR 0015 synthesizes program-date-time values and normalizes MPEG-TS
 continuity/PCR in media-sequence order. The segmenter now shares the
@@ -125,6 +130,14 @@ id          = 'hls-mpegts-append-pts-rewind'
 description = 'HLS Segmenter MPEG-TS appends could replay the previous 4-second timestamp range when the next append offset was derived from lagging PCR state instead of the worker-owned successful append duration.'
 discovered  = '2026-06-30'
 evidence    = 'User reproduced freezes in VLC, Kodi, and MPC-HC. `scripts/e2e/tsduck-playback-gate.sh --seconds 60 --item-seconds 8 --frames --keep gate` reproduced 4 HLS Segmenter PTS leaps while legacy and hybrid MPEG-TS remained clean; per-segment probing showed adjacent HLS segments overlapping by one 4-second range. Fixed in `crates/ersatzrs-infra/src/hls_worker.rs` by advancing MPEG-TS HLS output timestamps from successful append duration and keeping PCR normalization only for packet continuity. The same 60-second gate then passed 64 checks with zero HLS Segmenter continuity-counter/PTS/DTS/PCR-leap faults and audio pip cadence max gap deviation 30 ms.'
+resolved    = true
+
+[[debt]]
+id          = 'finite-addon-work-ahead-seek-replay'
+adr         = '0057'
+description = 'Finite add-on HLS playback restarted the producer at the 44-second work-ahead boundary. A stream-copy producer can seek to the preceding keyframe, causing decoded video to repeat even though HLS and MPEG-TS timestamps remain continuous.'
+discovered  = '2026-08-17'
+evidence    = 'Resolved 2026-08-17: live probes of the installed Beeld & Geluid producer showed both Glamourland and Teleac requests for source offset 44.000 beginning at source second 42.000. crates/ersatzrs-infra/src/hls_worker.rs now keeps one producer for the complete remaining finite Remote Stream item, uses -readrate_initial_burst 44 before realtime pacing, and promotes the active HLS slot after 30 seconds of new segments while releasing work-ahead capacity. Focused command and capacity tests cover the pacing and promotion contracts. Sixty-five-second TSDuck captures across the former boundary reported zero continuity-counter, PTS, DTS, PCR, transport, sync, and scrambling faults for both channels; decoded-frame hash scans over the same interval found no repeated run at offsets from 1 through 100 frames.'
 resolved    = true
 
 [[debt]]

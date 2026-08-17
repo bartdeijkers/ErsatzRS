@@ -53,8 +53,9 @@ use crate::remote_stream::{
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
-    load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
-    ActiveTranscodeKind, ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
+    load_active_transcode_limit, promote_hls_transcode_to_realtime,
+    request_active_transcode_reclaim, try_reserve_active_transcode, ActiveTranscodeKind,
+    ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
 };
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -71,6 +72,8 @@ const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
 const HLS_REALTIME_BUFFER_SECONDS: i64 = 30;
 const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
+const HLS_REMOTE_INITIAL_BURST_SECONDS: u64 = HLS_WORK_AHEAD_TRANSCODE_SECONDS;
+const HLS_REMOTE_PROMOTION_BUFFER_SECONDS: u64 = 30;
 const HLS_ACTIVE_WATCH_WINDOW: Duration = Duration::from_secs(30);
 const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25);
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
@@ -176,6 +179,11 @@ enum HlsProcessOutcome {
     Failed(String),
     Cancelled,
     Reclaimed,
+}
+
+struct HlsProcessCapacity<'a> {
+    active_transcode_slot_id: Option<u64>,
+    work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
 }
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
@@ -455,7 +463,7 @@ impl HlsSessionWorker {
                 continue;
             }
 
-            let work_ahead_reservation = if force_realtime {
+            let mut work_ahead_reservation = if force_realtime {
                 None
             } else {
                 let work_ahead_limit = match load_hls_work_ahead_limit(&pool).await {
@@ -708,6 +716,11 @@ impl HlsSessionWorker {
                 .remote_stream
                 .as_ref()
                 .is_some_and(|stream| stream.is_live);
+            let is_continuous_remote = active
+                .remote_stream
+                .as_ref()
+                .is_some_and(|stream| !stream.is_live);
+            let hls_realtime = decision.realtime || is_live_remote || is_continuous_remote;
             let start_position = if is_live_remote {
                 Duration::ZERO
             } else {
@@ -718,7 +731,7 @@ impl HlsSessionWorker {
                 &active,
                 decision.request_time,
                 decision.start_at_zero,
-                decision.realtime,
+                hls_realtime,
             );
             if duration.is_none_or(|duration| duration.is_zero()) {
                 tokio::time::sleep(Duration::from_millis(250)).await;
@@ -1077,10 +1090,16 @@ impl HlsSessionWorker {
                 active.content_duration,
                 active.playout_start,
             );
-            let media_input = active.remote_stream.as_ref().map_or_else(
+            let mut media_input = active.remote_stream.as_ref().map_or_else(
                 || InputFile::video(active.media_path.clone()),
                 remote_stream_input_file,
             );
+            if is_continuous_remote && decision.working_ahead {
+                media_input = media_input.with_input_options([
+                    "-readrate_initial_burst".to_owned(),
+                    HLS_REMOTE_INITIAL_BURST_SECONDS.to_string(),
+                ]);
+            }
             let remote_stream = active.remote_stream.clone();
             let mut runtime_capabilities = self.runtime_capabilities().await;
             let command = build_hls_command_with_input_explicit_discontinuity(
@@ -1088,7 +1107,7 @@ impl HlsSessionWorker {
                 self.output_format,
                 is_first,
                 false,
-                decision.realtime || is_live_remote,
+                hls_realtime,
                 start_position,
                 duration,
                 output_ts_offset,
@@ -1127,8 +1146,13 @@ impl HlsSessionWorker {
                             &mut cleanup_interval,
                             idle_timeout,
                             watch_idle_timeout,
-                            Some(active_transcode_slot_id),
                             remote_stream,
+                            HlsProcessCapacity {
+                                active_transcode_slot_id: Some(active_transcode_slot_id),
+                                work_ahead_reservation: (is_continuous_remote
+                                    && decision.working_ahead)
+                                    .then_some(&mut work_ahead_reservation),
+                            },
                         )
                         .await;
                     (outcome, selected_graph_for_denial)
@@ -1441,8 +1465,11 @@ impl HlsSessionWorker {
             cleanup_interval,
             idle_timeout,
             watch_idle_timeout,
-            active_transcode_slot_id,
             None,
+            HlsProcessCapacity {
+                active_transcode_slot_id,
+                work_ahead_reservation: None,
+            },
         )
         .await
     }
@@ -1453,9 +1480,16 @@ impl HlsSessionWorker {
         cleanup_interval: &mut tokio::time::Interval,
         idle_timeout: Option<Duration>,
         watch_idle_timeout: Option<Duration>,
-        active_transcode_slot_id: Option<u64>,
         remote_stream: Option<ResolvedRemoteStream>,
+        mut capacity: HlsProcessCapacity<'_>,
     ) -> HlsProcessOutcome {
+        let burst_baseline = if capacity.work_ahead_reservation.is_some() {
+            playlist_segment_uris(&self.working_dir)
+                .await
+                .unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
         let producer = remote_stream.as_ref().and_then(remote_stream_producer);
         let Ok(mut child) = self.spawn_hls_child_with_remote(&command, producer) else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
@@ -1474,42 +1508,7 @@ impl HlsSessionWorker {
         loop {
             tokio::select! {
                 result = child.wait() => {
-                    match result {
-                        Ok(status) if status.success() => {
-                            let _ = self.trim_playlist_inner().await;
-                            return HlsProcessOutcome::Success;
-                        }
-                        Ok(status) => {
-                            let stderr = await_stderr_tail(stderr_task.take()).await;
-                            let error_message = if stderr.trim().is_empty() {
-                                format!("Unknown FFMPEG error; exit code {status}")
-                            } else {
-                                stderr.clone()
-                            };
-                            tracing::warn!(
-                                channel_number = %self.channel_number,
-                                %status,
-                                stderr = %stderr,
-                                "ffmpeg hls segmenter exited unsuccessfully"
-                            );
-                            return HlsProcessOutcome::Failed(error_message);
-                        }
-                        Err(error) => {
-                            let stderr = await_stderr_tail(stderr_task.take()).await;
-                            let error_message = if stderr.trim().is_empty() {
-                                format!("failed to wait for ffmpeg hls segmenter: {error}")
-                            } else {
-                                stderr.clone()
-                            };
-                            tracing::warn!(
-                                channel_number = %self.channel_number,
-                                %error,
-                                stderr = %stderr,
-                                "failed to wait for ffmpeg hls segmenter"
-                            );
-                            return HlsProcessOutcome::Failed(error_message);
-                        }
-                    }
+                    return self.hls_process_wait_outcome(result, stderr_task.take()).await;
                 }
                 () = self.cancel.notified() => {
                     self
@@ -1537,10 +1536,10 @@ impl HlsSessionWorker {
                         .await;
                     return HlsProcessOutcome::Reclaimed;
                 }
-                () = self.reclaim_transcode.notified(), if active_transcode_slot_id.is_some() => {
+                () = self.reclaim_transcode.notified(), if capacity.active_transcode_slot_id.is_some() => {
                     if let Some(outcome) = self
                         .reclaim_hls_child_for_admission(
-                            active_transcode_slot_id,
+                            capacity.active_transcode_slot_id,
                             &mut child,
                             &mut stderr_task,
                         )
@@ -1550,8 +1549,71 @@ impl HlsSessionWorker {
                     }
                 }
                 _ = cleanup_interval.tick() => {
+                    if capacity.work_ahead_reservation
+                        .as_ref()
+                        .is_some_and(|reservation| reservation.is_some())
+                        && playlist_duration_excluding_uris(&self.working_dir, &burst_baseline)
+                            .await
+                            .is_ok_and(|duration| {
+                                duration >= Duration::from_secs(HLS_REMOTE_PROMOTION_BUFFER_SECONDS)
+                            })
+                        && capacity.active_transcode_slot_id
+                            .is_some_and(promote_hls_transcode_to_realtime)
+                    {
+                        if let Some(reservation) = capacity.work_ahead_reservation.as_mut() {
+                            drop((**reservation).take());
+                        }
+                        tracing::debug!(
+                            channel_number = %self.channel_number,
+                            buffered_seconds = HLS_REMOTE_PROMOTION_BUFFER_SECONDS,
+                            "promoted continuous remote HLS producer to realtime"
+                        );
+                    }
                     let _ = self.trim_playlist_inner().await;
                 }
+            }
+        }
+    }
+
+    async fn hls_process_wait_outcome(
+        &self,
+        result: std::io::Result<std::process::ExitStatus>,
+        stderr_task: Option<tokio::task::JoinHandle<String>>,
+    ) -> HlsProcessOutcome {
+        match result {
+            Ok(status) if status.success() => {
+                let _ = self.trim_playlist_inner().await;
+                HlsProcessOutcome::Success
+            }
+            Ok(status) => {
+                let stderr = await_stderr_tail(stderr_task).await;
+                let error_message = if stderr.trim().is_empty() {
+                    format!("Unknown FFMPEG error; exit code {status}")
+                } else {
+                    stderr.clone()
+                };
+                tracing::warn!(
+                    channel_number = %self.channel_number,
+                    %status,
+                    stderr = %stderr,
+                    "ffmpeg hls segmenter exited unsuccessfully"
+                );
+                HlsProcessOutcome::Failed(error_message)
+            }
+            Err(error) => {
+                let stderr = await_stderr_tail(stderr_task).await;
+                let error_message = if stderr.trim().is_empty() {
+                    format!("failed to wait for ffmpeg hls segmenter: {error}")
+                } else {
+                    stderr.clone()
+                };
+                tracing::warn!(
+                    channel_number = %self.channel_number,
+                    %error,
+                    stderr = %stderr,
+                    "failed to wait for ffmpeg hls segmenter"
+                );
+                HlsProcessOutcome::Failed(error_message)
             }
         }
     }
@@ -3474,6 +3536,50 @@ async fn playlist_duration(working_dir: &Path) -> io::Result<Option<Duration>> {
         .to_std()
         .ok()
         .filter(|duration| !duration.is_zero()))
+}
+
+async fn playlist_segment_uris(working_dir: &Path) -> io::Result<HashSet<String>> {
+    let playlist = match tokio::fs::read_to_string(working_dir.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(HashSet::new()),
+        Err(error) => return Err(error),
+    };
+    Ok(parsed_playlist_segments(&playlist)
+        .into_iter()
+        .map(|segment| segment.uri)
+        .collect())
+}
+
+async fn playlist_duration_excluding_uris(
+    working_dir: &Path,
+    excluded_uris: &HashSet<String>,
+) -> io::Result<Duration> {
+    let playlist = match tokio::fs::read_to_string(working_dir.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Duration::ZERO),
+        Err(error) => return Err(error),
+    };
+    Ok(parsed_playlist_segments(&playlist)
+        .into_iter()
+        .filter(|segment| !excluded_uris.contains(&segment.uri))
+        .filter_map(|segment| parse_extinf_duration(&segment.extinf_line))
+        .filter_map(|duration| duration.to_std().ok())
+        .fold(Duration::ZERO, Duration::saturating_add))
+}
+
+fn parsed_playlist_segments(playlist: &str) -> Vec<PlaylistSegment> {
+    parse_playlist(playlist, Utc::now(), false)
+        .map(|parsed| {
+            parsed
+                .items
+                .into_iter()
+                .filter_map(|item| match item {
+                    PlaylistItem::Segment(segment) => Some(segment),
+                    PlaylistItem::Discontinuity => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 async fn concatenate_fmp4_init_and_segment(
@@ -6176,6 +6282,40 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }
 
+    #[tokio::test]
+    async fn remote_burst_duration_excludes_segments_from_before_the_spawn() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(
+            working_dir.join("live.m3u8"),
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n\
+#EXTINF:4.000000,\nlive000000.ts\n\
+#EXTINF:4.000000,\nlive000001.ts\n\
+#EXTINF:4.000000,\nlive000002.ts\n\
+#EXTINF:4.000000,\nlive000003.ts\n\
+#EXTINF:4.000000,\nlive000004.ts\n\
+#EXTINF:4.000000,\nlive000005.ts\n\
+#EXTINF:4.000000,\nlive000006.ts\n\
+#EXTINF:4.000000,\nlive000007.ts\n\
+#EXTINF:4.000000,\nlive000008.ts\n",
+        )
+        .await
+        .expect("write playlist");
+        let excluded = HashSet::from(["live000000.ts".to_owned()]);
+
+        assert_eq!(
+            playlist_duration_excluding_uris(&working_dir, &excluded)
+                .await
+                .expect("calculate burst duration"),
+            Duration::from_secs(32)
+        );
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
     #[test]
     fn build_hls_command_emits_initial_discontinuity_segment_options() {
         let command = build_hls_command(
@@ -6306,6 +6446,46 @@ mod tests {
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-readrate 1.05 -i /media/test.mkv"));
+    }
+
+    #[test]
+    fn build_hls_command_paces_continuous_remote_after_initial_burst() {
+        let input = InputFile::video("pipe:0")
+            .with_seek_after_input()
+            .with_input_options([
+                "-readrate_initial_burst".to_owned(),
+                HLS_REMOTE_INITIAL_BURST_SECONDS.to_string(),
+            ]);
+        let command = build_hls_command_with_input_explicit_discontinuity(
+            input,
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            Duration::ZERO,
+            Some(Duration::from_mins(30)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            PlaybackAudioSelection::Automatic,
+            None,
+            Vec::new(),
+            Vec::new(),
+            HlsDiscontinuity::Absent,
+            None,
+        )
+        .expect("the remote fixture source is playable");
+        let arguments = command.arguments.join(" ");
+
+        assert!(
+            arguments.contains("-readrate_initial_burst 44 -readrate 1.05 -i pipe:0"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-t 00:30:00.0000000"), "{arguments}");
     }
 
     #[test]

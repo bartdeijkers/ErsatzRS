@@ -104,6 +104,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Finite add-on streams now keep one HLS Segmenter producer alive for the
+  complete play item. A bounded startup burst fills the normal work-ahead
+  buffer before the producer continues at realtime speed, preventing
+  keyframe-aligned source seeking from replaying video at the former 44-second
+  process boundary. The TSDuck URL gate now also recognizes public HLS master
+  playlists instead of falsely requiring media segments in the top-level
+  variant list.
 - Channels configured for Transport Stream Hybrid, and explicit `mode=ts`
   requests, now dispatch the modern HLS segmenter wrapper promised by the
   streaming parity contract instead of silently falling through to the legacy

@@ -153,13 +153,20 @@ check_continuity_plugin() {
 
 # check_hls_playlist URL_OR_FILE LABEL  (structure of an .m3u8)
 check_hls_playlist() {
-  local src="$1" label="$2" body segs
+  local src="$1" label="$2" body segs variants
   if [[ "$src" == http* ]]; then body=$(curl -fsS --max-time 15 "$src" 2>/dev/null); else body=$(cat "$src" 2>/dev/null); fi
   if [ -z "$body" ]; then fail "$label · HLS playlist fetch" "empty/unreachable: $src"; return 1; fi
   if printf '%s' "$body" | grep -q '#EXTM3U'; then pass "$label · #EXTM3U header"; else fail "$label · #EXTM3U header" "not an HLS playlist"; fi
   segs=$(printf '%s' "$body" | grep -c '#EXTINF')
-  assert_ge "$segs" "$MIN_HLS_SEGMENTS" "$label · media segments"
-  if printf '%s' "$body" | grep -q '#EXT-X-TARGETDURATION'; then pass "$label · TARGETDURATION tag"; else warn "$label · no #EXT-X-TARGETDURATION"; fi
+  variants=$(printf '%s' "$body" | grep -c '#EXT-X-STREAM-INF')
+  if [ "$segs" -ge "$MIN_HLS_SEGMENTS" ]; then
+    assert_ge "$segs" "$MIN_HLS_SEGMENTS" "$label · media segments"
+    if printf '%s' "$body" | grep -q '#EXT-X-TARGETDURATION'; then pass "$label · TARGETDURATION tag"; else warn "$label · no #EXT-X-TARGETDURATION"; fi
+  elif [ "$variants" -gt 0 ]; then
+    assert_gt "$variants" 0 "$label · master playlist variants"
+  else
+    fail "$label · playable entries" "no media segments or master-playlist variants"
+  fi
   local disc; disc=$(printf '%s' "$body" | grep -c '#EXT-X-DISCONTINUITY')
   [ "$disc" -gt 0 ] && info "$label — playlist declares $disc discontinuity marker(s) (expected at playout-item boundaries)"
 }
