@@ -12,9 +12,10 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 pub use ersatzrs_addon_contract::PlaylistEntry;
 use ersatzrs_addon_contract::{
-    conform_remote_stream_list_output, validate_addon_id,
-    AddonMediaListContentKind as WireContentKind,
-    AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    conform_remote_stream_item_output_for_capability, conform_remote_stream_list_output,
+    validate_addon_id, AddonMediaListContentKind as WireContentKind,
+    AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_ITEM_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
     CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
     CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS, MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
@@ -23,12 +24,10 @@ use ersatzrs_addon_contract::{
 };
 use ersatzrs_core::media_chapters::parse_chapter_input;
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
+use ersatzrs_infra::addon_chapters::{fragment_guid, fragment_stream_url};
 use ersatzrs_infra::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
     InstalledAddon,
-};
-use ersatzrs_infra::beeldengeluid::{
-    fragment_stream_url, parse_schatkamer_url, SchatkamerSource, ADDON_ID as BEELDENGELUID_ID,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
@@ -386,19 +385,6 @@ pub async fn enumerate_playlist(
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistEnumeration> {
     let addon = resolve_playlist_addon(pool, addon_id).await?;
-    let parsed_source = if addon_id == BEELDENGELUID_ID {
-        Some(parse_schatkamer_url(playlist_url).map_err(|error| {
-            PlaylistError::Enumeration(
-                AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
-                    .to_string(),
-            )
-        })?)
-    } else {
-        None
-    };
-    let playlist_url = parsed_source
-        .as_ref()
-        .map_or(playlist_url, |source| source.canonical_url.as_str());
     let playlist_url =
         validate_operator_source_url(playlist_url, &addon.manifest.permissions.network_hosts)
             .map_err(|error| {
@@ -421,20 +407,16 @@ pub async fn enumerate_playlist(
         CAPABILITY_REMOTE_STREAM_LIST_V1
     };
     require_chapter_capability(addon_id, capability, chapter_input)?;
-    let mut environment = BTreeMap::from([(
-        "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
-        playlist_url,
-    )]);
-    environment.insert(
-        "ERSATZRS_MEDIA_LIST_CHAPTERS".to_owned(),
-        chapter_input.unwrap_or_default().to_owned(),
-    );
-    if let Some(source) = parsed_source.as_ref() {
-        environment.insert(
-            "ERSATZRS_MEDIA_LIST_SOURCE_KIND".to_owned(),
-            source.source.kind().to_owned(),
-        );
-    }
+    let environment = BTreeMap::from([
+        (
+            "ERSATZRS_REMOTE_STREAM_PLAYLIST_URL".to_owned(),
+            playlist_url,
+        ),
+        (
+            "ERSATZRS_MEDIA_LIST_CHAPTERS".to_owned(),
+            chapter_input.unwrap_or_default().to_owned(),
+        ),
+    ]);
     let stdout = invoke_enabled_addon(
         pool,
         addon_id,
@@ -465,16 +447,8 @@ pub async fn enumerate_playlist(
                 .to_owned(),
         ));
     }
-    if addon_id == BEELDENGELUID_ID && chapter_input.is_some_and(|input| !input.trim().is_empty()) {
-        if !matches!(
-            parsed_source.as_ref().map(|source| &source.source),
-            Some(SchatkamerSource::Video { .. })
-        ) {
-            return Err(PlaylistError::Enumeration(
-                "chapters can only be used with one Schatkamer episode URL".to_owned(),
-            ));
-        }
-        add_playlist_chapter_fragments(&mut entries, chapter_input.unwrap_or_default())?;
+    if chapter_input.is_some_and(|input| !input.trim().is_empty()) {
+        add_playlist_chapter_fragments(&mut entries, addon_id, chapter_input.unwrap_or_default())?;
     }
     Ok(PlaylistEnumeration {
         entries,
@@ -483,26 +457,28 @@ pub async fn enumerate_playlist(
 }
 
 fn require_chapter_capability(
-    addon_id: &str,
+    _addon_id: &str,
     capability: &str,
     chapter_input: Option<&str>,
 ) -> Result<()> {
-    if addon_id == BEELDENGELUID_ID
-        && chapter_input.is_some_and(|input| !input.trim().is_empty())
+    if chapter_input.is_some_and(|input| !input.trim().is_empty())
         && capability != CAPABILITY_REMOTE_STREAM_LIST_V3
     {
         return Err(PlaylistError::Enumeration(
-            "chapters require an installed add-on with remote-stream.list.v3 support; update the Beeld & Geluid add-on before saving chapters"
-                .to_owned(),
+            "chapters require an installed add-on with remote-stream.list.v3 support".to_owned(),
         ));
     }
     Ok(())
 }
 
-fn add_playlist_chapter_fragments(entries: &mut Vec<PlaylistEntry>, input: &str) -> Result<()> {
+fn add_playlist_chapter_fragments(
+    entries: &mut Vec<PlaylistEntry>,
+    addon_id: &str,
+    input: &str,
+) -> Result<()> {
     if entries.len() != 1 {
         return Err(PlaylistError::Enumeration(
-            "an episode source must resolve to exactly one full video".to_owned(),
+            "a chapter source must resolve to exactly one full video".to_owned(),
         ));
     }
     let full = entries[0].clone();
@@ -525,9 +501,10 @@ fn add_playlist_chapter_fragments(entries: &mut Vec<PlaylistEntry>, input: &str)
         fragment.parent_provider_id = Some(parent_provider_id.clone());
         fragment.fragment_start_seconds = Some(chapter.start_seconds);
         fragment.fragment_end_seconds = chapter.end_seconds;
-        fragment.guids = vec![format!(
-            "beeldengeluid-chapter://{parent_provider_id}/{}",
-            chapter.start_seconds
+        fragment.guids = vec![fragment_guid(
+            addon_id,
+            &parent_provider_id,
+            chapter.start_seconds,
         )];
         entries.push(fragment);
     }
@@ -615,18 +592,6 @@ pub async fn sync_playlist_files(
     let truncated =
         manifest.manifest.sync.max_items > 0 && eligible.len() > manifest.manifest.sync.max_items;
     let mut selected = select_entries(manifest, eligible);
-    if let Err(error) = append_item_chapter_fragments(
-        pool,
-        manifest_path,
-        &manifest.manifest.addon,
-        runtime,
-        &mut selected,
-    )
-    .await
-    {
-        persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
-        return Err(error);
-    }
     if content_kind_override != AddonMediaListContentKind::Auto {
         for entry in &mut selected {
             entry.content_kind = wire_content_kind(content_kind_override);
@@ -641,10 +606,29 @@ pub async fn sync_playlist_files(
         .iter()
         .map(|value| value.to_ascii_lowercase())
         .collect::<BTreeSet<_>>();
-    let selected = selected
+    let mut selected = selected
         .into_iter()
         .filter(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()))
         .collect::<Vec<_>>();
+    // Enrichment runs only after item limits, filters, and exclusions have been
+    // applied, so its cost is proportional to the entries actually kept rather
+    // than the whole upstream listing.
+    enrich_selected_entries(
+        pool,
+        manifest_path,
+        &manifest.manifest.addon,
+        runtime,
+        &mut selected,
+    )
+    .await;
+    if let Err(error) =
+        append_item_chapter_fragments(pool, manifest_path, &manifest.manifest.addon, &mut selected)
+            .await
+    {
+        persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
+        return Err(error);
+    }
+    selected.retain(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()));
     if let Err(error) = validate_fragment_parents(&selected) {
         persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
         return Err(error);
@@ -972,18 +956,18 @@ async fn append_item_chapter_fragments(
     pool: &DbPool,
     manifest_path: &Path,
     addon_id: &str,
-    runtime: &AddonRuntimeContext,
     selected: &mut Vec<PlaylistEntry>,
 ) -> Result<()> {
-    let requests = sqlx::query_as::<_, (String, String, String)>(
-        r#"SELECT "item"."ProviderId", "item"."SourceUrl", "item"."ChapterInput"
+    let requests = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+        r#"SELECT "item"."ProviderId", "item"."ChapterInput",
+                  "item"."ProviderChapterInput"
            FROM "AddonMediaListLibrary" AS "managed"
            JOIN "AddonMediaListItem" AS "item"
              ON "item"."AddonMediaListId" = "managed"."AddonMediaListId"
            WHERE "managed"."ManifestPath" = ?
              AND "item"."ParentProviderId" IS NULL
-             AND "item"."ChapterInput" IS NOT NULL
-             AND TRIM("item"."ChapterInput") <> ''
+             AND (COALESCE(TRIM("item"."ChapterInput"), '') <> ''
+                  OR COALESCE(TRIM("item"."ProviderChapterInput"), '') <> '')
            ORDER BY "item"."Rank", "item"."Id""#,
     )
     .bind(manifest_path.to_string_lossy().as_ref())
@@ -1003,23 +987,199 @@ async fn append_item_chapter_fragments(
         .map(|entry| entry.id.to_ascii_lowercase())
         .collect::<BTreeSet<_>>();
 
-    for (provider_id, source_url, chapters) in requests {
+    for (provider_id, operator_input, provider_input) in requests {
         if !selected_parents.contains(&provider_id) {
             continue;
         }
-        let enumeration =
-            enumerate_playlist(pool, addon_id, &source_url, Some(&chapters), runtime).await?;
-        for fragment in enumeration
-            .entries
-            .into_iter()
-            .filter(|entry| entry.parent_provider_id.as_deref() == Some(provider_id.as_str()))
-        {
+        let chapters =
+            effective_chapter_input(operator_input.as_deref(), provider_input.as_deref())
+                .unwrap_or_default();
+        let Some(parent) = selected
+            .iter()
+            .find(|entry| entry.provider_id.as_deref().unwrap_or(&entry.id) == provider_id)
+        else {
+            continue;
+        };
+        let mut expanded = vec![parent.clone()];
+        add_playlist_chapter_fragments(&mut expanded, addon_id, chapters)?;
+        for fragment in expanded.into_iter().skip(1) {
             if existing_ids.insert(fragment.id.to_ascii_lowercase()) {
                 selected.push(fragment);
             }
         }
     }
     Ok(())
+}
+
+fn effective_chapter_input<'a>(
+    operator: Option<&'a str>,
+    provider: Option<&'a str>,
+) -> Option<&'a str> {
+    operator
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| provider.filter(|value| !value.trim().is_empty()))
+}
+
+/// Ask the add-on to describe the entries this synchronization kept.
+///
+/// Enrichment is strictly additive and never fatal. An add-on without the
+/// capability, a failed or timed-out invocation, and a malformed response all
+/// leave the enumerated entries exactly as they were, because richer metadata
+/// must never turn a working synchronization into a failed one.
+async fn enrich_selected_entries(
+    pool: &DbPool,
+    manifest_path: &Path,
+    addon_id: &str,
+    runtime: &AddonRuntimeContext,
+    selected: &mut [PlaylistEntry],
+) {
+    if selected.is_empty() {
+        return;
+    }
+    let Ok(addon) = load_installed_addon(pool, addon_id).await else {
+        return;
+    };
+    let Some(addon) = addon else {
+        return;
+    };
+    let Some(capability) = retained_item_capability(&addon) else {
+        return;
+    };
+
+    // Fragments describe a slice of a parent that is itself in the request, so
+    // asking about them would duplicate provider work for no new metadata.
+    let requested = selected
+        .iter()
+        .filter(|entry| entry.parent_provider_id.is_none())
+        .map(|entry| {
+            entry
+                .provider_id
+                .clone()
+                .unwrap_or_else(|| entry.id.clone())
+        })
+        .collect::<Vec<_>>();
+    if requested.is_empty() {
+        return;
+    }
+    let environment = BTreeMap::from([(
+        "ERSATZRS_REMOTE_STREAM_ITEM_IDS".to_owned(),
+        requested.join("\n"),
+    )]);
+
+    let stdout = match invoke_enabled_addon(
+        pool,
+        addon_id,
+        AddonInvocation {
+            capability,
+            operation: "item",
+            runtime,
+            extra_environment: &environment,
+            timeout: ENUMERATION_TIMEOUT,
+            max_output_bytes: MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
+        },
+    )
+    .await
+    {
+        Ok(stdout) => stdout,
+        Err(error) => {
+            tracing::warn!(
+                addon_id,
+                requested = requested.len(),
+                failure_kind = "invoke",
+                operation_message = %error,
+                "add-on item metadata was skipped"
+            );
+            return;
+        }
+    };
+    let records = match conform_remote_stream_item_output_for_capability(
+        &stdout,
+        capability == CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    ) {
+        Ok(records) => records,
+        Err(error) => {
+            tracing::warn!(
+                addon_id,
+                requested = requested.len(),
+                failure_kind = "decode",
+                output_bytes = stdout.len(),
+                operation_message = %error,
+                "add-on item metadata was skipped"
+            );
+            return;
+        }
+    };
+
+    if capability == CAPABILITY_REMOTE_STREAM_ITEM_V2 {
+        persist_provider_chapter_inputs(pool, manifest_path, addon_id, &records).await;
+    }
+    let mut by_provider_id = records
+        .into_iter()
+        .map(|record| (record.provider_id.to_ascii_lowercase(), record))
+        .collect::<BTreeMap<_, _>>();
+    for entry in selected.iter_mut() {
+        let key = entry
+            .provider_id
+            .clone()
+            .unwrap_or_else(|| entry.id.clone())
+            .to_ascii_lowercase();
+        if let Some(record) = by_provider_id.remove(&key) {
+            record.apply_to(entry);
+        }
+    }
+}
+
+fn retained_item_capability(addon: &InstalledAddon) -> Option<&'static str> {
+    if addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_ITEM_V2)
+    {
+        Some(CAPABILITY_REMOTE_STREAM_ITEM_V2)
+    } else if addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_ITEM_V1)
+    {
+        Some(CAPABILITY_REMOTE_STREAM_ITEM_V1)
+    } else {
+        None
+    }
+}
+
+async fn persist_provider_chapter_inputs(
+    pool: &DbPool,
+    manifest_path: &Path,
+    addon_id: &str,
+    records: &[ersatzrs_addon_contract::PlaylistEntryMetadata],
+) {
+    for record in records {
+        if let Err(error) = sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "ProviderChapterInput" = ?
+               WHERE "ProviderId" = ? AND "ParentProviderId" IS NULL
+                 AND "AddonMediaListId" = (
+                     SELECT "AddonMediaListId" FROM "AddonMediaListLibrary"
+                     WHERE "ManifestPath" = ?
+                 )"#,
+        )
+        .bind(
+            record
+                .chapter_input
+                .as_deref()
+                .filter(|value| !value.trim().is_empty()),
+        )
+        .bind(&record.provider_id)
+        .bind(manifest_path.to_string_lossy().as_ref())
+        .execute(pool)
+        .await
+        {
+            tracing::warn!(
+                addon_id,
+                provider_id = %record.provider_id,
+                operation_message = %error,
+                "provider chapter text could not be persisted"
+            );
+        }
+    }
 }
 
 fn managed_files_intact(folder: &Path, state: &PlaylistSidecarState) -> bool {
@@ -1902,9 +2062,9 @@ create_playlist: true
     }
 
     #[test]
-    fn beeldengeluid_playlist_chapters_require_remote_stream_v3() {
+    fn playlist_chapters_require_remote_stream_v3() {
         let error = require_chapter_capability(
-            BEELDENGELUID_ID,
+            "org.example.video",
             CAPABILITY_REMOTE_STREAM_LIST_V2,
             Some("0:00 Intro"),
         )
@@ -1912,11 +2072,24 @@ create_playlist: true
         assert!(error.to_string().contains("remote-stream.list.v3"));
 
         require_chapter_capability(
-            BEELDENGELUID_ID,
+            "org.example.video",
             CAPABILITY_REMOTE_STREAM_LIST_V3,
             Some("0:00 Intro"),
         )
         .expect("v3 supports chapter fragments");
+    }
+
+    #[test]
+    fn operator_chapters_override_and_can_restore_provider_text() {
+        assert_eq!(
+            effective_chapter_input(Some("0:00 Corrected"), Some("0:00 Provider")),
+            Some("0:00 Corrected")
+        );
+        assert_eq!(
+            effective_chapter_input(Some("  "), Some("0:00 Provider")),
+            Some("0:00 Provider")
+        );
+        assert_eq!(effective_chapter_input(None, None), None);
     }
 
     #[cfg(unix)]

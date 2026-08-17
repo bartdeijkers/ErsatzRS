@@ -1169,6 +1169,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListFolderHelp => "Optional; derived from the list name",
         TextKey::ChapterInput => "Chapters",
         TextKey::ChapterInputHelp => "Optional, one per line: 0:00 Introduction",
+        TextKey::RestoreProviderChapters => "Restore provider chapters",
         TextKey::ManagedByAddon => "Managed by an add-on",
         TextKey::Trash => "Trash",
         TextKey::TrashAlreadyEmpty => "Trash is already empty.",

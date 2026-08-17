@@ -50,9 +50,9 @@ id          = 'schatkamer-url-and-chapter-sources'
 description = 'Recognize every supported Schatkamer hyperlink centrally, enumerate complete paginated results, and retain one full episode plus independently selectable structured chapter fragments.'
 discovered  = '2026-08-16'
 adr         = '0070'
-evidence    = 'The working tree has a typed normalized Schatkamer source parser with combined Unicode search-filter coverage, strict v3 gates before chapter derivation, unbounded page traversal with fixture-backed ordering and deduplication, structured AddonMediaListChapter reconciliation, localized chapter administration, bounded POSIX and Windows playback, and scanner proof that fragment-before-parent enumeration is linked only after the complete selected batch is materialized; a selected fragment without its full episode is rejected.'
+evidence    = 'The official package owns typed normalized Schatkamer source parsing on both platforms, unbounded page traversal with fixture-backed ordering and deduplication, and bounded fragment playback. The provider-neutral host owns strict v3 gates, structured AddonMediaListChapter reconciliation, localized chapter administration, and scanner proof that fragment-before-parent enumeration is linked only after the complete selected batch is materialized; a selected fragment without its full episode is rejected.'
 resolved    = true
-resolution  = 'ADR 0070 owns the source grammar, pagination, structured chapter identity, refresh, and fragment playback contracts.'
+resolution  = 'ADR 0070 owns the contracts while its 2026-08-17 amendment assigns source grammar and normalization to the add-on package.'
 
 [[debt]]
 id          = 'addon-list-television-presentation-and-item-metadata'
@@ -101,4 +101,11 @@ description = 'Close the generic v2 NFO and local-replacement slice without movi
 discovered  = '2026-08-15'
 adr         = '0068'
 evidence    = 'The working tree has corrected metadata binds, four-kind NFO round trips, complete managed-pair failure and healing coverage, Remote Stream search/XMLTV classification, one shared Local replacement resolver, bounded provider values, omission tombstones, and Chromium/Firefox proof for import/edit overrides plus the replacement lifecycle. plans/addon-nfo-sidecars-and-local-replacements-closeout.md retains only the live MySQL migration and packaged Windows execution gaps.'
-resolved    = false
+
+[[debt]]
+id          = 'addon-provider-supplied-chapters'
+description = 'Chapter markers must be retyped by an administrator even when the provider already publishes them. The host derives fragments from operator-authored ChapterInput text only; no list record field carries provider chapter markers, and the fragment fields are frozen to the v3 list contracts that the yt-dlp package does not declare.'
+discovered  = '2026-08-17'
+evidence    = 'remote-stream.item.v2 carries bounded provider-neutral timestamp/title text. The host stores provider and operator values separately, gives operator text precedence, derives generic fragments from the one enrichment response, and exposes an explicit restore action. The official yt-dlp add-on owns extraction and whole-second rounding on POSIX and Windows.'
+resolved    = true
+resolution  = 'Provider chapters now cross the versioned add-on boundary as bounded text and are expanded only by provider-neutral host code.'

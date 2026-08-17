@@ -156,7 +156,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle",
                       "item"."Title", "item"."Year", "item"."Season", "item"."Episode",
                       "item"."SourceUrl", "item"."DurationSeconds", "item"."ParentProviderId",
-                      "item"."ChapterInput", "projection"."EpisodeId" AS "ProjectedEpisodeId",
+                      "item"."ChapterInput", "item"."ProviderChapterInput",
+                      "projection"."EpisodeId" AS "ProjectedEpisodeId",
                       "item"."Availability", "item"."AvailabilityReason",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
                       "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
@@ -210,6 +211,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 parent_provider_id: row.try_get("ParentProviderId").repository()?,
                 chapter_input: row
                     .try_get::<Option<String>, _>("ChapterInput")
+                    .repository()?
+                    .unwrap_or_default(),
+                provider_chapter_input: row
+                    .try_get::<Option<String>, _>("ProviderChapterInput")
                     .repository()?
                     .unwrap_or_default(),
                 projected_episode_id: row.try_get("ProjectedEpisodeId").repository()?,

@@ -19,17 +19,14 @@ use ersatzrs_core::addon_media_list::{
 use ersatzrs_core::media_chapters::parse_chapter_input;
 use ersatzrs_core::repositories::{RepositoryError, Result};
 
+use crate::addon_chapters::{fragment_guid, fragment_stream_url};
 use crate::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
-};
-use crate::beeldengeluid::{
-    fragment_stream_url, parse_schatkamer_url, SchatkamerSource, ADDON_ID as BEELDENGELUID_ID,
 };
 use crate::db::DbPool;
 
 const SOURCE_URL_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_URL";
 const CHAPTER_INPUT_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_CHAPTERS";
-const SOURCE_KIND_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_SOURCE_KIND";
 
 /// Invokes installed add-ons that implement media-list list v1 or v2.
 #[derive(Clone)]
@@ -82,34 +79,7 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
         } else {
             CAPABILITY_MEDIA_LIST_LIST_V1
         };
-        require_chapter_capability(addon_id, capability, chapter_input)?;
-        let parsed_source = if addon_id == BEELDENGELUID_ID {
-            Some(parse_schatkamer_url(source_url).map_err(|error| {
-                RepositoryError::unavailable(
-                    "recognize Beeld & Geluid source URL",
-                    AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
-                        .to_string(),
-                )
-            })?)
-        } else {
-            None
-        };
-        if let Some(crate::beeldengeluid::SchatkamerUrl {
-            source: SchatkamerSource::Search(filters),
-            ..
-        }) = parsed_source.as_ref()
-        {
-            if !filters.unknown.is_empty() {
-                tracing::debug!(
-                    addon_id,
-                    parameters = ?filters.unknown.keys().collect::<Vec<_>>(),
-                    "ignoring unknown Beeld & Geluid search parameters"
-                );
-            }
-        }
-        let source_url = parsed_source
-            .as_ref()
-            .map_or(source_url, |source| source.canonical_url.as_str());
+        require_chapter_capability(capability, chapter_input)?;
         let source_url = validate_operator_source_url(
             source_url,
             &installation.manifest.permissions.network_hosts,
@@ -121,19 +91,13 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
                     .to_string(),
             )
         })?;
-        let mut environment = BTreeMap::from([
+        let environment = BTreeMap::from([
             (SOURCE_URL_ENVIRONMENT.to_owned(), source_url),
             (
                 CHAPTER_INPUT_ENVIRONMENT.to_owned(),
                 chapter_input.to_owned(),
             ),
         ]);
-        if let Some(source) = parsed_source.as_ref() {
-            environment.insert(
-                SOURCE_KIND_ENVIRONMENT.to_owned(),
-                source.source.kind().to_owned(),
-            );
-        }
         let output = invoke_enabled_addon(
             &self.pool,
             addon_id,
@@ -155,73 +119,57 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
             &output,
             capability == CAPABILITY_MEDIA_LIST_LIST_V3,
         )?;
-        if addon_id == BEELDENGELUID_ID && !chapter_input.trim().is_empty() {
-            let Some(parsed_source) = parsed_source.as_ref() else {
-                return Err(RepositoryError::unavailable(
-                    "validate Beeld & Geluid chapters",
-                    "the source URL could not be classified",
-                ));
-            };
-            if !matches!(&parsed_source.source, SchatkamerSource::Video { .. }) {
-                return Err(RepositoryError::unavailable(
-                    "validate Beeld & Geluid chapters",
-                    "chapters can only be used with one Schatkamer episode URL",
-                ));
-            }
-            add_chapter_fragments(&mut list, chapter_input)?;
+        if !chapter_input.trim().is_empty() {
+            add_chapter_fragments(&mut list, addon_id, chapter_input)?;
         }
         Ok(list)
     }
 }
 
-fn require_chapter_capability(addon_id: &str, capability: &str, chapter_input: &str) -> Result<()> {
-    if addon_id == BEELDENGELUID_ID
-        && !chapter_input.trim().is_empty()
-        && capability != CAPABILITY_MEDIA_LIST_LIST_V3
-    {
+fn require_chapter_capability(capability: &str, chapter_input: &str) -> Result<()> {
+    if !chapter_input.trim().is_empty() && capability != CAPABILITY_MEDIA_LIST_LIST_V3 {
         return Err(RepositoryError::unavailable(
-            "validate Beeld & Geluid chapters",
-            "chapters require an installed add-on with media-list.list.v3 support; update the Beeld & Geluid add-on before saving chapters",
+            "validate add-on chapters",
+            "chapters require an installed add-on with media-list.list.v3 support",
         ));
     }
     Ok(())
 }
 
-fn add_chapter_fragments(list: &mut EnumeratedAddonMediaList, input: &str) -> Result<()> {
+fn add_chapter_fragments(
+    list: &mut EnumeratedAddonMediaList,
+    addon_id: &str,
+    input: &str,
+) -> Result<()> {
     if list.items.len() != 1 {
         return Err(RepositoryError::unavailable(
-            "validate Beeld & Geluid chapters",
-            "an episode source must resolve to exactly one full video",
+            "validate add-on chapters",
+            "a chapter source must resolve to exactly one full video",
         ));
     }
     let full = list.items[0].clone();
     let duration = full.duration_seconds;
     let chapters = parse_chapter_input(input, duration).map_err(|error| {
-        RepositoryError::unavailable("validate Beeld & Geluid chapters", error.to_string())
+        RepositoryError::unavailable("validate add-on chapters", error.to_string())
     })?;
     let source_url = full.source_url.as_deref().ok_or_else(|| {
         RepositoryError::unavailable(
-            "create Beeld & Geluid chapter streams",
-            "the episode has no playable source URL",
+            "create add-on chapter streams",
+            "the source item has no playable URL",
         )
     })?;
     for chapter in chapters {
         let rank = i32::try_from(list.items.len()).map_err(|_| {
-            RepositoryError::unavailable(
-                "create Beeld & Geluid chapter streams",
-                "too many chapters",
-            )
+            RepositoryError::unavailable("create add-on chapter streams", "too many chapters")
         })?;
         let start = chapter.start_seconds;
         let end = chapter.end_seconds;
-        let fragment_url = fragment_stream_url(
-            source_url,
-            chapter.start_seconds,
-            chapter.end_seconds,
-        )
-        .map_err(|error| {
-            RepositoryError::unavailable("create Beeld & Geluid chapter streams", error.to_string())
-        })?;
+        let fragment_url =
+            fragment_stream_url(source_url, chapter.start_seconds, chapter.end_seconds).map_err(
+                |error| {
+                    RepositoryError::unavailable("create add-on chapter streams", error.to_string())
+                },
+            )?;
         list.items.push(EnumeratedAddonMediaListItem {
             provider_id: format!("{}:chapter:{}", full.provider_id, chapter.start_seconds),
             rank,
@@ -231,9 +179,10 @@ fn add_chapter_fragments(list: &mut EnumeratedAddonMediaList, input: &str) -> Re
             season: full.season,
             episode: full.episode,
             kind: full.kind,
-            guids: vec![format!(
-                "beeldengeluid-chapter://{}/{}",
-                full.provider_id, chapter.start_seconds
+            guids: vec![fragment_guid(
+                addon_id,
+                &full.provider_id,
+                chapter.start_seconds,
             )],
             source_url: Some(fragment_url),
             availability: full.availability,
@@ -441,7 +390,6 @@ mod tests {
         add_chapter_fragments, decode_media_list_output, decode_media_list_output_for_capability,
         require_chapter_capability,
     };
-    use crate::beeldengeluid::ADDON_ID as BEELDENGELUID_ID;
     use ersatzrs_addon_contract::{CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3};
 
     /// Refuses to enumerate unless the host supplied its managed `FFmpeg`
@@ -722,11 +670,15 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     #[test]
     fn chapter_fragments_keep_the_full_episode_and_calculate_stream_bounds() {
         let output = br#"{"record_type":"list","provider_id":"episode-list","name":"Episode"}
-{"record_type":"item","provider_id":"episode:42","rank":0,"display_title":"Programme - Episode","title":"Episode","kind":"remote_stream","guids":["beeldengeluid://42"],"source_url":"https://schatkamer.beeldengeluid.nl/serie/1/programme/aflevering/42","duration_seconds":600,"additional_image_urls":["https://schatkamer.beeldengeluid.nl/image.jpg"]}
+{"record_type":"item","provider_id":"episode:42","rank":0,"display_title":"Programme - Episode","title":"Episode","kind":"remote_stream","guids":["example://42"],"source_url":"https://media.example.test/episodes/42","duration_seconds":600,"additional_image_urls":["https://media.example.test/image.jpg"]}
 "#;
         let mut list = decode_media_list_output(output).expect("valid v3 output");
-        add_chapter_fragments(&mut list, "0:00 Intro\n1:35 Topic\n4:12 Finish")
-            .expect("valid chapters");
+        add_chapter_fragments(
+            &mut list,
+            "org.example.video",
+            "0:00 Intro\n1:35 Topic\n4:12 Finish",
+        )
+        .expect("valid chapters");
 
         assert_eq!(list.items.len(), 4);
         assert_eq!(list.items[0].provider_id, "episode:42");
@@ -760,10 +712,11 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     #[test]
     fn final_chapter_can_remain_open_when_duration_is_unknown() {
         let output = br#"{"record_type":"list","provider_id":"episode-list","name":"Episode"}
-{"record_type":"item","provider_id":"episode:42","rank":0,"display_title":"Episode","title":"Episode","kind":"remote_stream","guids":[],"source_url":"https://schatkamer.beeldengeluid.nl/serie/1/programme/aflevering/42"}
+{"record_type":"item","provider_id":"episode:42","rank":0,"display_title":"Episode","title":"Episode","kind":"remote_stream","guids":[],"source_url":"https://media.example.test/episodes/42"}
 "#;
         let mut list = decode_media_list_output(output).expect("valid v3 output");
-        add_chapter_fragments(&mut list, "0:00 Intro\n1:00 Remainder").expect("valid chapters");
+        add_chapter_fragments(&mut list, "org.example.video", "0:00 Intro\n1:00 Remainder")
+            .expect("valid chapters");
         assert_eq!(list.items[2].fragment_end_seconds, None);
         assert!(list.items[2]
             .source_url
@@ -782,22 +735,14 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     }
 
     #[test]
-    fn beeldengeluid_chapters_require_media_list_v3_before_invocation() {
-        let error = require_chapter_capability(
-            BEELDENGELUID_ID,
-            CAPABILITY_MEDIA_LIST_LIST_V2,
-            "0:00 Intro",
-        )
-        .expect_err("v2 must not derive chapter fragments");
+    fn chapters_require_media_list_v3_before_invocation() {
+        let error = require_chapter_capability(CAPABILITY_MEDIA_LIST_LIST_V2, "0:00 Intro")
+            .expect_err("v2 must not derive chapter fragments");
         assert!(error.to_string().contains("media-list.list.v3"));
 
-        require_chapter_capability(
-            BEELDENGELUID_ID,
-            CAPABILITY_MEDIA_LIST_LIST_V3,
-            "0:00 Intro",
-        )
-        .expect("v3 supports chapter fragments");
-        require_chapter_capability(BEELDENGELUID_ID, CAPABILITY_MEDIA_LIST_LIST_V2, "   ")
+        require_chapter_capability(CAPABILITY_MEDIA_LIST_LIST_V3, "0:00 Intro")
+            .expect("v3 supports chapter fragments");
+        require_chapter_capability(CAPABILITY_MEDIA_LIST_LIST_V2, "   ")
             .expect("blank chapter input remains compatible with v2");
     }
 

@@ -26,11 +26,13 @@ official add-on change is published. Add-ons update the revision and lockfile
 deliberately; they do not depend on a moving branch or the application
 workspace by path.
 
-`AddonMediaListRecord` owns `media-list.list.v1` and v2 records.
-`PlaylistEntry` owns `remote-stream.list.v1` and v2 records. Their shared wire
+`AddonMediaListRecord` owns `media-list.list.v1` through v3 records.
+`PlaylistEntry` owns `remote-stream.list.v1` through v3 records, while
+`PlaylistEntryMetadata` owns `remote-stream.item.v1` and v2. Their shared wire
 enums are distinct from the host's persisted domain enums. The crate also
 exports `conform_media_list_output` and
-`conform_remote_stream_list_output` for tests that validate captured stdout
+`conform_remote_stream_list_output` and
+`conform_remote_stream_item_output_for_capability` for tests that validate captured stdout
 with the same bounds and record rules as the host contract. A minimal executable
 implementation is available as the `reference_addon` Cargo example.
 

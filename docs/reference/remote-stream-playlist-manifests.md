@@ -121,6 +121,28 @@ For `remote-stream.play.v1`, the host invokes `play`, supplies the item URL in
 `ERSATZRS_REMOTE_STREAM_URL`, supplies the current offset in
 `ERSATZRS_REMOTE_STREAM_SEEK`, and reads media bytes from standard output.
 
+## Retained-item metadata and chapters
+
+An add-on may declare `remote-stream.item.v1` to enrich only the full entries
+that remain after host limits, filtering, and exclusions. The host invokes
+operation `item`, passes newline-separated provider identities in
+`ERSATZRS_REMOTE_STREAM_ITEM_IDS`, and accepts one optional metadata record per
+identity. Enrichment is additive and non-fatal: an unavailable capability or
+invalid response leaves the enumerated entry unchanged.
+
+`remote-stream.item.v2` adds optional `chapter_input`. It is at most 64 KiB of
+provider-neutral timestamp/title lines such as `0:00 Introduction`. The add-on
+owns provider parsing and whole-second rounding. ErsatzRS validates the text
+with the same parser used for operator input and derives v3 child fragments
+without another add-on invocation. Omit the field when no chapters are known.
+
+Provider text is stored separately from the operator value. A non-empty
+operator value always wins during synchronization, and the item editor can
+clear that override to restore the most recently supplied provider chapters.
+The generated fragment provider ID and `addon-chapter://` GUID depend only on
+the add-on ID, parent provider ID, and whole-second start, so refresh identity
+is stable without embedding provider-specific rules in the host.
+
 ## Owned state
 
 The expansion folder contains `.ersatzrs-playlist.json` plus generated `.yml`

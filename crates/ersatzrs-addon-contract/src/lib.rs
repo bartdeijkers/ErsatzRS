@@ -21,6 +21,14 @@ pub const CAPABILITY_REMOTE_STREAM_LIST_V1: &str = "remote-stream.list.v1";
 /// Enumerate Remote Streams with stable identity and availability metadata.
 pub const CAPABILITY_REMOTE_STREAM_LIST_V2: &str = "remote-stream.list.v2";
 pub const CAPABILITY_REMOTE_STREAM_LIST_V3: &str = "remote-stream.list.v3";
+/// Describe already-enumerated Remote Streams the host chose to keep.
+///
+/// Enumeration stays cheap and identity-only; this answers with descriptive
+/// metadata for a bounded set of entries, so the cost of rich metadata scales
+/// with the items actually retained rather than the whole upstream listing.
+pub const CAPABILITY_REMOTE_STREAM_ITEM_V1: &str = "remote-stream.item.v1";
+/// Describe retained Remote Streams, including provider-supplied chapter text.
+pub const CAPABILITY_REMOTE_STREAM_ITEM_V2: &str = "remote-stream.item.v2";
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
 /// Enumerate a provider list whose entries are matched to local media.
@@ -34,6 +42,8 @@ pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 pub const MAX_PROVIDER_ID_BYTES: usize = 384;
 /// Maximum UTF-8 bytes for a provider-neutral availability diagnostic.
 pub const MAX_AVAILABILITY_REASON_BYTES: usize = 2_048;
+/// Maximum UTF-8 size of provider-supplied timestamp/title chapter text.
+pub const MAX_CHAPTER_INPUT_BYTES: usize = 64 * 1_024;
 /// Maximum UTF-8 bytes in one add-on operation diagnostic message.
 pub const MAX_OPERATION_ERROR_MESSAGE_BYTES: usize = 1_024;
 /// Maximum captured output accepted from `media-list.list`.
@@ -337,6 +347,117 @@ pub struct PlaylistEntry {
     pub episode: Option<i32>,
     #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub guids: Vec<String>,
+}
+
+/// Descriptive metadata for one already-enumerated entry, emitted by
+/// `remote-stream.item.v1`.
+///
+/// Enumeration is expected to stay cheap, which for most providers means a
+/// flat listing that carries identity and little else. This record carries the
+/// descriptive fields such a listing cannot supply, for the entries the host
+/// actually kept after applying item limits, filters, and exclusions. Every
+/// field is optional: an omitted field leaves the enumerated value untouched,
+/// so a provider may answer with only what it knows.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaylistEntryMetadata {
+    /// Correlates the response with the requested entry.
+    pub provider_id: String,
+    #[serde(default)]
+    pub plot: Option<String>,
+    #[serde(default)]
+    pub year: Option<i32>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub content_rating: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub genres: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub collection: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub people: Vec<RemoteStreamPerson>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub producers: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub original_broadcasters: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub broadcasters: Vec<String>,
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
+    pub additional_image_urls: Vec<String>,
+    /// Present when enumeration could not determine availability and the
+    /// per-item response can.
+    #[serde(default)]
+    pub availability: Option<AddonMediaListItemAvailability>,
+    #[serde(default)]
+    pub availability_reason: Option<String>,
+    /// Provider-supplied timestamp/title chapter markers. The host validates
+    /// and expands these; the add-on remains responsible for provider parsing.
+    #[serde(default)]
+    pub chapter_input: Option<String>,
+}
+
+impl PlaylistEntryMetadata {
+    /// Validate the bounded fields this record shares with a list entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provider identity or any bounded descriptive
+    /// field is outside its documented limit.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_provider_id(&self.provider_id)?;
+        validate_availability_reason(self.availability_reason.as_deref())?;
+        if self
+            .chapter_input
+            .as_ref()
+            .is_some_and(|value| value.len() > MAX_CHAPTER_INPUT_BYTES)
+        {
+            return invalid(
+                "remote stream item chapter_input",
+                "exceeds the 64 KiB limit",
+            );
+        }
+        Ok(())
+    }
+
+    /// Apply this metadata to its enumerated entry.
+    ///
+    /// An omitted or empty field never clears a value the listing already
+    /// supplied, so enrichment can only add information.
+    pub fn apply_to(self, entry: &mut PlaylistEntry) {
+        fn fill<T>(target: &mut Option<T>, value: Option<T>) {
+            if let Some(value) = value {
+                *target = Some(value);
+            }
+        }
+        fn fill_vec<T>(target: &mut Vec<T>, value: Vec<T>) {
+            if !value.is_empty() {
+                *target = value;
+            }
+        }
+
+        fill(&mut entry.plot, self.plot);
+        fill(&mut entry.year, self.year);
+        fill(&mut entry.release_date, self.release_date);
+        fill(&mut entry.content_rating, self.content_rating);
+        fill(&mut entry.collection, self.collection);
+        fill(&mut entry.thumbnail_url, self.thumbnail_url);
+        fill(&mut entry.availability_reason, self.availability_reason);
+        fill_vec(&mut entry.genres, self.genres);
+        fill_vec(&mut entry.tags, self.tags);
+        fill_vec(&mut entry.people, self.people);
+        fill_vec(&mut entry.producers, self.producers);
+        fill_vec(&mut entry.original_broadcasters, self.original_broadcasters);
+        fill_vec(&mut entry.broadcasters, self.broadcasters);
+        fill_vec(&mut entry.additional_image_urls, self.additional_image_urls);
+        if let Some(availability) = self.availability {
+            entry.availability = availability;
+        }
+    }
 }
 
 impl PlaylistEntry {
@@ -1584,6 +1705,79 @@ pub fn conform_remote_stream_list_output(
     Ok(entries)
 }
 
+/// Parse and validate captured `remote-stream.item.v1` NDJSON output.
+///
+/// The response carries at most one record per requested provider identity and
+/// may omit an entry entirely when the provider knows nothing further about it.
+///
+/// # Errors
+///
+/// Returns an error when the bytes are not valid UTF-8 NDJSON, a record is
+/// invalid, or case-insensitive provider identities are duplicated.
+pub fn conform_remote_stream_item_output(
+    output: &[u8],
+) -> Result<Vec<PlaylistEntryMetadata>, ContractError> {
+    conform_remote_stream_item_output_for_capability(output, false)
+}
+
+/// Parse `remote-stream.item.v1` or v2 output with version-specific fields.
+///
+/// # Errors
+///
+/// Returns an error for malformed output or when v2 chapter text is emitted
+/// against the frozen v1 contract.
+pub fn conform_remote_stream_item_output_for_capability(
+    output: &[u8],
+    supports_chapter_input: bool,
+) -> Result<Vec<PlaylistEntryMetadata>, ContractError> {
+    if output.len() > MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES {
+        return invalid("remote stream item output", "exceeds the 8 MiB limit");
+    }
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "remote stream item output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let mut records = Vec::new();
+    let mut ids = BTreeSet::new();
+    for (index, line) in text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .enumerate()
+    {
+        let mut record = serde_json::from_str::<PlaylistEntryMetadata>(line)
+            .map_err(|error| record_parse_error("remote stream item output", index, &error))?;
+        let untrimmed = std::mem::take(&mut record.provider_id);
+        untrimmed.trim().clone_into(&mut record.provider_id);
+        record.validate()?;
+        if !supports_chapter_input && record.chapter_input.is_some() {
+            return invalid(
+                "remote stream item chapter_input",
+                "requires remote-stream.item.v2",
+            );
+        }
+        if record
+            .year
+            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+        {
+            return invalid("remote stream item year", "must be valid host metadata");
+        }
+        if !ids.insert(record.provider_id.to_ascii_lowercase()) {
+            return invalid(
+                "remote stream item output",
+                "record duplicates an earlier provider id",
+            );
+        }
+        records.push(record);
+        if records.len() > MAX_LIST_ITEMS {
+            return invalid(
+                "remote stream item output",
+                "contains more than 10000 records",
+            );
+        }
+    }
+    Ok(records)
+}
+
 fn record_parse_error(
     field: &'static str,
     index: usize,
@@ -2183,6 +2377,62 @@ mod tests {
             chrono::Utc::now().year() + 6
         );
         assert!(conform_remote_stream_list_output(too_far_in_future.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn remote_stream_item_metadata_only_adds_to_an_enumerated_entry() {
+        let mut entry = PlaylistEntry::new("video:1", "https://example.test/one", "One");
+        entry.plot = Some("listed plot".to_owned());
+        entry.tags = vec!["listed".to_owned()];
+
+        let output = br#"{"provider_id":"video:1","year":2026,"genres":["Documentary"],"tags":[]}
+"#;
+        let records = conform_remote_stream_item_output(output).unwrap();
+        assert_eq!(records.len(), 1);
+        records.into_iter().next().unwrap().apply_to(&mut entry);
+
+        // An omitted field and an empty array both leave enumeration untouched.
+        assert_eq!(entry.plot.as_deref(), Some("listed plot"));
+        assert_eq!(entry.tags, vec!["listed".to_owned()]);
+        // A supplied field fills in.
+        assert_eq!(entry.year, Some(2026));
+        assert_eq!(entry.genres, vec!["Documentary".to_owned()]);
+    }
+
+    #[test]
+    fn remote_stream_item_conformance_rejects_unknown_and_duplicate_records() {
+        let unknown_field = br#"{"provider_id":"video:1","nope":true}
+"#;
+        let error = conform_remote_stream_item_output(unknown_field).unwrap_err();
+        assert!(error.to_string().contains("nope"), "{error}");
+
+        let duplicates = br#"{"provider_id":"Video:1"}
+{"provider_id":"video:1"}
+"#;
+        assert!(conform_remote_stream_item_output(duplicates).is_err());
+
+        let empty_id = br#"{"provider_id":"   "}
+"#;
+        assert!(conform_remote_stream_item_output(empty_id).is_err());
+    }
+
+    #[test]
+    fn provider_chapter_text_is_bounded_and_requires_item_v2() {
+        let output = br#"{"provider_id":"video:1","chapter_input":"0:00 Intro\n0:20 Topic"}
+"#;
+        assert!(conform_remote_stream_item_output(output).is_err());
+        let records = conform_remote_stream_item_output_for_capability(output, true).unwrap();
+        assert_eq!(
+            records[0].chapter_input.as_deref(),
+            Some("0:00 Intro\n0:20 Topic")
+        );
+
+        let oversized = PlaylistEntryMetadata {
+            provider_id: "video:1".to_owned(),
+            chapter_input: Some("x".repeat(MAX_CHAPTER_INPUT_BYTES + 1)),
+            ..PlaylistEntryMetadata::default()
+        };
+        assert!(oversized.validate().is_err());
     }
 
     #[test]

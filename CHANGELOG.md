@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Streaming add-ons can now supply bounded chapter markers through
+  `remote-stream.item.v2`. ErsatzRS keeps provider and operator text separate,
+  gives manual corrections precedence, offers **Restore provider chapters**,
+  and derives stable provider-neutral fragment items from the existing
+  enrichment call instead of invoking the add-on once per chaptered item.
+
 - Add-on media lists can now be presented as a normal television show with
   Show/Season/Episode identities backed by the existing Remote Stream playback
   versions. Every list item has a dedicated metadata and chapter editor;

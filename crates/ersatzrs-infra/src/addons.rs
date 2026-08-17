@@ -18,7 +18,8 @@ use ersatzrs_addon_contract::{
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
     RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_REMOTE_STREAM_ITEM_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
     CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
     CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
     OPERATION_CODE_MISSING_SETTING,
@@ -2031,6 +2032,10 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
                     | CAPABILITY_REMOTE_STREAM_LIST_V2
                     | CAPABILITY_REMOTE_STREAM_LIST_V3,
                 "list",
+            )
+            | (
+                CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
+                "item"
             )
             | (CAPABILITY_REMOTE_STREAM_PLAY_V1, "play")
     );

@@ -1875,6 +1875,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListFolderHelp => "Optioneel; anders afgeleid van de lijstnaam",
         TextKey::ChapterInput => "Hoofdstukken",
         TextKey::ChapterInputHelp => "Optioneel, één per regel: 0:00 Introductie",
+        TextKey::RestoreProviderChapters => "Hoofdstukken van provider herstellen",
         TextKey::ManagedByAddon => "Beheerd door een add-on",
         TextKey::Trash => "Prullenbak",
         TextKey::TrashAlreadyEmpty => "De prullenbak is al leeg.",

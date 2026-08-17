@@ -29,6 +29,14 @@ semantics.
 
 ## Decision
 
+### Amendment: keep source grammar in the add-on (2026-08-17)
+
+The package now owns Schatkamer URL recognition and normalization on both
+platforms. ErsatzRS performs only its generic absolute HTTP(S), userinfo, and
+declared-host validation before forwarding the canonical URL. This supersedes
+the provider-specific host-adapter paragraph below and restores ADR 0068's
+provider-neutral host boundary; the paragraph remains as decision history.
+
 One provider-specific host adapter parses Schatkamer URLs before either add-on
 list contract is invoked. It recognizes UUID list paths, numeric series or
 programme paths, numeric episode paths, and search paths. It upgrades HTTP to
@@ -66,6 +74,15 @@ runtimes remove those parameters before provider metadata and stream requests,
 then apply the start and duration to FFmpeg. The full episode URL remains
 unbounded. A final chapter omits `end` only when the episode duration is
 unknown.
+
+Provider-supplied markers use the provider-neutral
+`remote-stream.item.v2` enrichment contract. The add-on converts its source
+metadata to bounded timestamp/title text and whole seconds; the host neither
+understands nor rounds provider objects. ErsatzRS stores the provider text
+separately, gives a non-empty operator correction precedence, and offers an
+explicit restore action. Expansion consumes the enrichment response and does
+not invoke the add-on a second time. Chapter capability checks, fragment URLs,
+provider IDs, and `addon-chapter://` GUIDs are add-on-neutral.
 
 ## Consequences
 

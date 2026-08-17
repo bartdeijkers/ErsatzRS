@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-17","summary":"Implemented provider-supplied add-on chapters with provider-neutral host expansion and package-owned extraction"}
 {"agent":"Codex","date":"2026-08-17","summary":"Fixed finite add-on HLS replay at the work-ahead seam with continuous per-item production; live Glamourland and Teleac TSDuck captures passed."}
 {"agent":"Codex","date":"2026-08-17","summary":"Implemented add-on-list television projection, NFO-backed per-item editors, item-scoped chapters, Hybrid dispatch parity, and live Teleac TSDuck acceptance"}
 {"agent":"Codex","date":"2026-08-16","summary":"Fixed v3 chapter capability gating and order-independent Remote Stream fragment parent linkage"}

@@ -174,3 +174,8 @@ tables used by browsing and scheduling; the NFO remains authoritative for the
 richer fields. Operational URL, availability, duration, and fragment bounds
 remain owned by provider/YAML state. Chapter text is configured on the
 dedicated page for one full item, not on the list settings page.
+When a storage-backed Remote Stream add-on supplies `chapter_input` through
+`remote-stream.item.v2`, the host retains it separately from the operator
+override. Operator text wins until **Restore provider chapters** clears that
+override. Both sources use the same provider-neutral validation and fragment
+derivation path.

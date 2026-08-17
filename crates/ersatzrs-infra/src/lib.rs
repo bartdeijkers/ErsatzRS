@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod addon_chapters;
 pub mod addon_media_list;
 pub mod addon_media_list_sync;
 pub mod addon_media_nfo;
@@ -7,7 +8,6 @@ pub mod addon_media_storage;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;
-pub mod beeldengeluid;
 pub mod cache_cleanup;
 pub mod channel_playout;
 pub(crate) mod condition;

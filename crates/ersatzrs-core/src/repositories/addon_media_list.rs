@@ -89,6 +89,8 @@ pub struct AddonMediaListItemAdminRow {
     pub duration_seconds: Option<u64>,
     pub parent_provider_id: Option<String>,
     pub chapter_input: String,
+    /// Latest provider value, retained separately from the operator override.
+    pub provider_chapter_input: String,
     pub projected_episode_id: Option<EntityId>,
 }
 

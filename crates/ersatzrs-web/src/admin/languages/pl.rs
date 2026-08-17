@@ -1886,6 +1886,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListFolderHelp => "Opcjonalne; w przeciwnym razie wywodzi się z nazwy listy",
         TextKey::ChapterInput => "Rozdziały",
         TextKey::ChapterInputHelp => "Opcjonalnie, jeden na wiersz: 0:00 Wprowadzenie",
+        TextKey::RestoreProviderChapters => "Przywróć rozdziały dostawcy",
         TextKey::ManagedByAddon => "Zarządzane przez dodatek",
         TextKey::Trash => "Kosz",
         TextKey::TrashAlreadyEmpty => "Kosz jest już pusty.",

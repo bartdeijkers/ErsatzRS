@@ -60,6 +60,7 @@ pub struct AddonMediaListItemRow {
     pub duration_seconds: Option<u64>,
     pub parent_provider_id: Option<String>,
     pub chapter_input: String,
+    pub provider_chapter_input: String,
     pub projected_episode_id: Option<i64>,
 }
 
@@ -150,6 +151,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             duration_seconds: row.duration_seconds,
             parent_provider_id: row.parent_provider_id,
             chapter_input: row.chapter_input,
+            provider_chapter_input: row.provider_chapter_input,
             projected_episode_id: row.projected_episode_id,
         }
     }
@@ -436,6 +438,7 @@ pub async fn list_addon_media_list_items(
                     duration_seconds: row.duration_seconds,
                     parent_provider_id: row.parent_provider_id,
                     chapter_input: row.chapter_input,
+                    provider_chapter_input: row.provider_chapter_input,
                     projected_episode_id: row.projected_episode_id,
                 })
                 .collect()
@@ -662,6 +665,29 @@ pub async fn delete_addon_media_list(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
+/// Record a failed add-on media list operation with its provider diagnostic.
+///
+/// The admin UI surfaces the same message to the operator, and add-on
+/// diagnostics reaching this layer are already bounded and redacted by the
+/// contract boundary, so no URL, secret, or local path is emitted here beyond
+/// what the operator already sees.
+#[cfg(feature = "ssr")]
+fn log_addon_media_list_failure(
+    operation: &'static str,
+    addon_id: Option<&str>,
+    list_id: Option<i64>,
+    error: &ersatzrs_app::ApplicationError,
+) {
+    tracing::warn!(
+        operation,
+        addon_id = addon_id.unwrap_or("n/a"),
+        list_id = list_id.unwrap_or_default(),
+        failure_kind = "addon-media-list",
+        operation_message = %error,
+        "add-on media list operation failed"
+    );
+}
+
 #[cfg(feature = "ssr")]
 pub async fn add_addon_media_list_with_state(
     state: &crate::host::state::AppState,
@@ -671,6 +697,7 @@ pub async fn add_addon_media_list_with_state(
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
 ) -> ersatzrs_app::Result<i64> {
+    let logged_addon_id = addon_id.clone();
     let list_id = state
         .application
         .add_addon_media_list(ersatzrs_app::commands::AddAddonMediaList {
@@ -680,7 +707,10 @@ pub async fn add_addon_media_list_with_state(
             content_kind_override,
             chapter_input,
         })
-        .await?;
+        .await
+        .inspect_err(|error| {
+            log_addon_media_list_failure("add", Some(&logged_addon_id), None, error);
+        })?;
     if let Some(library_id) = state
         .application
         .addon_media_list_library_id(list_id)
@@ -711,6 +741,7 @@ pub async fn match_addon_media_list_with_state(
         .application
         .match_addon_media_list(ersatzrs_app::commands::MatchAddonMediaList { id })
         .await
+        .inspect_err(|error| log_addon_media_list_failure("match", None, Some(id), error))
 }
 
 #[cfg(feature = "ssr")]
@@ -728,7 +759,8 @@ pub async fn update_addon_media_list_with_state(
             content_kind_override: form.content_kind_override,
             chapter_input: form.legacy_chapter_input,
         })
-        .await?;
+        .await
+        .inspect_err(|error| log_addon_media_list_failure("update", None, Some(id), error))?;
     if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {
         let outcome = state
             .application
@@ -755,4 +787,5 @@ pub async fn delete_addon_media_list_with_state(
         .application
         .delete_addon_media_list(ersatzrs_app::commands::DeleteAddonMediaList { id })
         .await
+        .inspect_err(|error| log_addon_media_list_failure("delete", None, Some(id), error))
 }

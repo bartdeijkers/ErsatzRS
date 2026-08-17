@@ -631,7 +631,15 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
     );
     let genres = RwSignal::new(original.genres.join(", "));
     let tags = RwSignal::new(original.tags.join(", "));
-    let chapters = RwSignal::new(detail.item.chapter_input.clone());
+    let provider_chapters = detail.item.provider_chapter_input.clone();
+    let saved_operator_chapters = RwSignal::new(detail.item.chapter_input.clone());
+    let chapters_dirty = RwSignal::new(false);
+    let submitted_chapters = RwSignal::new(detail.item.chapter_input.clone());
+    let chapters = RwSignal::new(if detail.item.chapter_input.trim().is_empty() {
+        provider_chapters.clone()
+    } else {
+        detail.item.chapter_input.clone()
+    });
     let toast = use_toast();
     let save_action = Action::new(move |value: &(AddonMediaListNfoMetadata, String, String)| {
         let (metadata, etag, chapters) = value.clone();
@@ -640,8 +648,26 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
             update_addon_media_list_item_chapters(item_id, chapters).await
         }
     });
+    let restore_action = Action::new(move |(): &()| async move {
+        update_addon_media_list_item_chapters(item_id, String::new()).await
+    });
     Effect::new(move |_| {
         if let Some(result) = save_action.value().get() {
+            match result {
+                Ok(()) => {
+                    saved_operator_chapters.set(submitted_chapters.get_untracked());
+                    chapters_dirty.set(false);
+                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = restore_action.value().get() {
             match result {
                 Ok(()) => toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success),
                 Err(error) => toast.push(
@@ -666,7 +692,13 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
             <div class=style::action_bar>
                 <a class=style::icon_button href=format!("/media/addon-lists/{list_id}")>{tr(TextKey::Back)}</a>
                 <button type="button" class=style::btn_add on:click=move |_| {
-                    save_action.dispatch((build_metadata(), etag.clone(), chapters.get_untracked()));
+                    let chapter_input = if chapters_dirty.get_untracked() {
+                        chapters.get_untracked()
+                    } else {
+                        saved_operator_chapters.get_untracked()
+                    };
+                    submitted_chapters.set(chapter_input.clone());
+                    save_action.dispatch((build_metadata(), etag.clone(), chapter_input));
                 }>{tr(TextKey::Save)}</button>
             </div>
             <section class=style::editor>
@@ -677,7 +709,18 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
                 <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input inputmode="numeric" prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
                 <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
                 <label class=style::field_row><span class=style::field_label>{tr(TextKey::Tags)}</span><input class=style::text_input prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input rows="8" prop:value=move || chapters.get() on:input=move |event| chapters.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input rows="8" prop:value=move || chapters.get() on:input=move |event| {
+                    chapters.set(event_target_value(&event));
+                    chapters_dirty.set(true);
+                }/></label>
+                {(!provider_chapters.is_empty()).then(|| view! {
+                    <button type="button" class=style::btn_cancel on:click=move |_| {
+                        chapters.set(provider_chapters.clone());
+                        saved_operator_chapters.set(String::new());
+                        chapters_dirty.set(false);
+                        restore_action.dispatch(());
+                    }>{tr(TextKey::RestoreProviderChapters)}</button>
+                })}
             </section>
         </div>
     }

@@ -32,7 +32,7 @@ pub enum ChapterInputError {
     OutsideDuration { line: usize, duration_seconds: u64 },
 }
 
-/// Parse YouTube-style chapter input and calculate chapter ends.
+/// Parse provider-neutral timestamp/title chapter input and calculate ends.
 ///
 /// Blank lines are ignored. Two-part timecodes use `M:SS`/`MM:SS`; three-part
 /// timecodes use `H:MM:SS`. The final end is the known video duration, or stays
