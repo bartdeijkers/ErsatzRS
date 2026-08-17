@@ -1196,7 +1196,8 @@ async fn persist_staged_addon(
                SET "RepositoryId" = ?, "TrustTier" = ?, "Version" = ?, "Enabled" = 0,
                    "PackageSha256" = ?, "ContentSha256" = ?, "ManifestJson" = ?,
                    "InstallPath" = ?, "DataNamespace" = ?, "UpdatedAt" = ?, "StateRevision" = ?,
-                   "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
+                   "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
                WHERE "AddonId" = ? AND "RepositoryId" = ? AND "Version" = ?
                  AND "StateRevision" = ?
                  AND EXISTS (
@@ -1295,7 +1296,7 @@ async fn persist_sideloaded_addon(
                    "Enabled" = 0, "PackageSha256" = ?, "ContentSha256" = ?,
                    "ManifestJson" = ?, "InstallPath" = ?, "DataNamespace" = 'sideload',
                    "UpdatedAt" = ?, "StateRevision" = ?, "LastCheckCode" = NULL,
-                   "LastCheckMessage" = NULL, "LastCheckAt" = NULL
+                   "LastCheckMessage" = NULL, "LastCheckStatus" = NULL, "LastCheckAt" = NULL
                WHERE "AddonId" = ? AND "TrustTier" = 'sideloaded' AND "Version" = ?
                  AND "StateRevision" = ?"#,
         )
@@ -1610,7 +1611,8 @@ pub async fn save_addon_setting(
     let changed = sqlx::query(
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "UpdatedAt" = ?, "StateRevision" = ?,
-               "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
+               "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(now)
@@ -1688,11 +1690,13 @@ async fn check_addon_with_revision(
     result.message = redact_and_bound(&result.message, &command.environment, 1_024);
     sqlx::query(
         r#"UPDATE "AddonInstallation"
-           SET "LastCheckCode" = ?, "LastCheckMessage" = ?, "LastCheckAt" = ?
+           SET "LastCheckCode" = ?, "LastCheckMessage" = ?, "LastCheckStatus" = ?,
+               "LastCheckAt" = ?
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(&result.code)
     .bind(&result.message)
+    .bind(result.status.as_str())
     .bind(Utc::now().to_rfc3339())
     .bind(addon_id)
     .bind(&command.state_revision)
@@ -1801,7 +1805,8 @@ pub async fn disable_addon(pool: &DbPool, addon_id: &str) -> Result<(), AddonErr
     let changed = sqlx::query(
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "StateRevision" = ?,
-               "LastCheckCode" = NULL, "LastCheckMessage" = NULL, "LastCheckAt" = NULL
+               "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(next_revision)

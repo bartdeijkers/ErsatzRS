@@ -1510,6 +1510,30 @@ pub enum AddonCheckStatus {
     Unavailable,
 }
 
+impl AddonCheckStatus {
+    /// The persisted spelling, identical to the serialized wire value.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Warning => "warning",
+            Self::Unavailable => "unavailable",
+        }
+    }
+
+    /// Parse a persisted readiness status, returning `None` when the stored
+    /// value predates the column or is not a recognized status.
+    #[must_use]
+    pub fn from_persisted(value: &str) -> Option<Self> {
+        match value {
+            "ready" => Some(Self::Ready),
+            "warning" => Some(Self::Warning),
+            "unavailable" => Some(Self::Unavailable),
+            _ => None,
+        }
+    }
+}
+
 /// Supported release `RID`s shared with the host runtime matrix.
 #[must_use]
 pub fn is_supported_rid(value: &str) -> bool {

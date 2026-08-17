@@ -101,10 +101,10 @@ fn RemoteStreamPlaylistsIsland(library_id: i64) -> impl IntoView {
     });
     let sync_action =
         Action::new(move |(): &()| scan_library(library_id, "Local".to_owned(), false));
-    Effect::new(move |_| {
-        if let Some(Err(error)) = sync_action.value().get() {
-            toast.push(error.to_string(), ToastSeverity::Error);
-        }
+    Effect::new(move |_| match sync_action.value().get() {
+        Some(Ok(_)) => rows.refetch(),
+        Some(Err(error)) => toast.push(error.to_string(), ToastSeverity::Error),
+        None => {}
     });
     let troubleshoot_action = Action::new(move |target: &(usize, String)| {
         let (root_index, relative_path) = target.clone();

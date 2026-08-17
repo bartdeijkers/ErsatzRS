@@ -49,6 +49,14 @@ subdirectory.
 This part requires a development build plus a configured trusted repository.
 The official repository and its production public key are not published yet.
 
+A package may also require external programs that ErsatzRS does not supply. The
+yt-dlp add-on needs both yt-dlp and a JavaScript runtime (deno) on the `PATH` of
+the account that runs ErsatzRS; without the runtime, some providers refuse the
+media request and playback fails with an authorization error. **Check** reports
+a missing requirement, and the add-on cannot be enabled until it is resolved.
+Confirm the programs are visible to the service account rather than only to an
+interactive login shell.
+
 Install, configure, check, and enable the provider under **Settings >
 Add-ons**. Then add its stable reverse-DNS identity alongside the original
 provider URL:

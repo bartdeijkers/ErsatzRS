@@ -3,7 +3,7 @@ use super::super::{
     Row,
 };
 use crate::db::DbRow;
-use ersatzrs_addon_contract::AddonManifest;
+use ersatzrs_addon_contract::{AddonCheckStatus, AddonManifest};
 use semver::Version;
 
 pub(crate) struct AddonPlatformHealthCheck {
@@ -31,7 +31,7 @@ impl HealthCheck for AddonPlatformHealthCheck {
         .await
         .map_err(sqlx_error)?;
         let installations = sqlx::query(
-            r#"SELECT "AddonId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode"
+            r#"SELECT "AddonId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode", "LastCheckStatus"
                FROM "AddonInstallation" ORDER BY "AddonId""#,
         )
         .fetch_all(&self.pool)
@@ -135,6 +135,7 @@ fn repository_findings(row: &DbRow) -> (Option<String>, Option<String>) {
     (failure, warning)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn installation_findings(
     pool: &Pool<Db>,
     row: &DbRow,
@@ -208,15 +209,34 @@ async fn installation_findings(
             None,
         );
     }
-    let no_readiness = row
+    let last_check_code = row
         .try_get::<Option<String>, _>("LastCheckCode")
         .ok()
+        .flatten();
+    let no_readiness = last_check_code.is_none();
+    let readiness_status = row
+        .try_get::<Option<String>, _>("LastCheckStatus")
+        .ok()
         .flatten()
-        .is_none();
+        .and_then(|value| AddonCheckStatus::from_persisted(&value));
     let trust_tier = row
         .try_get::<String, _>("TrustTier")
         .unwrap_or_else(|_| "invalid".to_owned());
-    let warning = if enabled && trust_tier != "verified" {
+    // A readiness result that is not `ready` is reported ahead of the trust and
+    // missing-result warnings: it describes an add-on that was enabled and has
+    // since stopped being usable, which is the more actionable finding.
+    let warning = if enabled
+        && matches!(
+            readiness_status,
+            Some(AddonCheckStatus::Warning | AddonCheckStatus::Unavailable)
+        ) {
+        let status = readiness_status.unwrap_or(AddonCheckStatus::Unavailable);
+        Some(format!(
+            "{id} last reported {} readiness ({})",
+            status.as_str(),
+            last_check_code.as_deref().unwrap_or("no code")
+        ))
+    } else if enabled && trust_tier != "verified" {
         Some(format!("{id} is enabled with {trust_tier} trust"))
     } else if enabled && no_readiness {
         Some(format!("{id} is enabled without a readiness result"))

@@ -21,6 +21,12 @@ release section when tagging a release.
   and derives stable provider-neutral fragment items from the existing
   enrichment call instead of invoking the add-on once per chaptered item.
 
+- Health Checks now report an enabled add-on whose most recent readiness check
+  did not succeed. The reported readiness state is persisted alongside its
+  diagnostic code, so an add-on that stopped being usable after it was enabled —
+  for example because a required external tool was removed — is reported instead
+  of appearing healthy until playback fails.
+
 - Add-on media lists can now be presented as a normal television show with
   Show/Season/Episode identities backed by the existing Remote Stream playback
   versions. Every list item has a dedicated metadata and chapter editor;
@@ -64,6 +70,15 @@ release section when tagging a release.
   no provider call and leaves no half-imported list behind.
 
 ### Changed
+
+- The official yt-dlp add-on now requires an operator-installed JavaScript
+  runtime (deno) alongside yt-dlp, and reports its absence as unavailable rather
+  than failing later during playback. Without one, some providers return a media
+  URL bound to a restricted player client that the managed FFmpeg runtime is
+  refused when it fetches that URL. The add-on also prefers adaptive manifests
+  over progressive renditions for the same reason. Both programs must be on the
+  `PATH` of the account that runs ErsatzRS, which is not necessarily the same
+  environment as an interactive login shell.
 
 - Add-on package manifests, repository-package manifests, and generated
   repository catalogs can now be checked through one shared Rust validation
@@ -110,6 +125,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Synchronizing a Remote Stream playlist now refreshes its panel. **Sync Now**,
+  and removing an entry (which triggers a synchronization), previously left the
+  last-synchronized time and item count stale until the page was reloaded.
+- Failed add-on media list operations are now recorded in the log. Importing,
+  matching, updating, or deleting a list previously surfaced only a generic HTTP
+  failure line, so the bounded provider diagnostic naming the offending record
+  never reached **Support > Logs**.
 - Finite add-on streams now keep one HLS Segmenter producer alive for the
   complete play item. A bounded startup burst fills the normal work-ahead
   buffer before the producer continues at realtime speed, preventing
