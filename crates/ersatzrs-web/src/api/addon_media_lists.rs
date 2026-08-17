@@ -2,7 +2,7 @@ use axum::{
     extract::{Form, State},
     response::Redirect,
 };
-use ersatzrs_domain::AddonMediaListContentKind;
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
 use serde::Deserialize;
 
 use crate::{
@@ -92,7 +92,10 @@ pub async fn save_addon_media_list_form(
         auto_refresh: input.auto_refresh,
         generate_playlist: input.generate_playlist,
         content_kind_override: input.content_kind_override,
-        chapter_input: input.chapter_input,
+        legacy_chapter_input: input.chapter_input,
+        presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
+        requested_presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
+        presentation_error: None,
     };
 
     match update_addon_media_list_with_state(&state, form).await {

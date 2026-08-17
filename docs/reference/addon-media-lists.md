@@ -150,3 +150,27 @@ administration projection, generated playlist, and health check use the same
 validity rule: the target must be an available Local movie, episode, music
 video, or other video; the exact version must own that item and have a media
 file plus a non-attached video stream.
+
+## NFO ownership and television presentation
+
+Managed lists can be presented as their original Remote Streams or as one
+television show. Converting to a television show requires `tvshow.nfo` with a
+non-empty title. Each full provider item becomes a normal Show/Season/Episode
+projection; chapter fragments remain children of that full item. The projected
+episode shares the scanned Remote Stream media version, so schedules and
+playlists retain the add-on playback URL while using television identity.
+
+The list folder contains `.ersatzrs-nfo-state.json`, which records generated
+hashes and ownership separately from the playlist sidecar. Provider output can
+update a generated NFO. Editing through administration or changing a valid NFO
+outside ErsatzRS adopts user ownership, after which refresh preserves it.
+Invalid user XML is never replaced automatically. Admin saves use an ETag and
+fail on a concurrent file edit instead of overwriting it.
+
+Descriptive fields such as titles, plot, numbering, dates, ratings, genres,
+tags, people, studios, artwork, and GUIDs are stored in the NFO. Identity,
+title, plot, date, and episode numbering are projected into the television
+tables used by browsing and scheduling; the NFO remains authoritative for the
+richer fields. Operational URL, availability, duration, and fragment bounds
+remain owned by provider/YAML state. Chapter text is configured on the
+dedicated page for one full item, not on the list settings page.

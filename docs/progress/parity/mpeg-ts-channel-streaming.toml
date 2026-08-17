@@ -1,7 +1,7 @@
 feature    = 'MPEG-TS channel streaming'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (ts branch), `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
 Ported: `/iptv/channel/{number}.ts` resolves the active PlayoutItem through
@@ -51,4 +51,26 @@ continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 903 OK / 0 jitter
 faults. HLS Segmenter also had zero continuity-counter/PTS/DTS/PCR-leap faults;
 its HLS-stitched `pcrverify` jitter remains informational per the manual gate
 because the playlist contains real discontinuity markers.
+
+Live add-on proof: On 2026-08-17, the transport-mode resolver was corrected so
+channels configured for Transport Stream Hybrid and explicit `mode=ts`
+requests select the documented HLS segmenter wrapper instead of legacy concat.
+A 45-second TSDuck capture of the Teleac user-profile channel crossed two
+adjacent Beeld & Geluid Remote Stream items and reported 307,772 packets, 2,241
+PCR samples, and zero continuity-counter, PTS, DTS, PCR-leap, sync, or
+transport errors.
+
+ParityDebt:
+- FFmpeg 9 legacy concat still treats the normal EOF of a bounded chunked
+  Remote Stream input as an I/O error before opening the next concat entry.
+  Hybrid channels no longer reach that branch accidentally, but an explicit
+  `mode=ts-legacy` request for provider media needs a dedicated supervisor or
+  another FFmpeg-9-safe handoff design.
 '''
+
+[[debt]]
+id          = 'ffmpeg9-legacy-concat-remote-stream-eof'
+description = 'An accelerated two-item Beeld & Geluid proof showed that explicit `mode=ts-legacy` exits at the first chunked Remote Stream EOF before opening concat entry two. The configured Teleac channel is Transport Stream Hybrid and now dispatches the stable segmenter wrapper, so normal profile playback is fixed; preserve explicit legacy semantics while replacing its FFmpeg 9 remote-item handoff.'
+discovered  = '2026-08-17'
+evidence    = 'Bounded debug proof reported `Error during demuxing: Input/output error` and `Illegal seek` after file 0, while the corrected 45-second Hybrid capture crossed the same two provider items with 307,772 packets and zero TSDuck faults.'
+resolved    = false

@@ -1,4 +1,6 @@
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
+};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +15,9 @@ pub struct AddonMediaListRow {
     pub match_count: i32,
     pub auto_refresh: bool,
     pub generate_playlist: bool,
+    pub presentation_kind: AddonMediaListPresentationKind,
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    pub presentation_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,7 +28,10 @@ pub struct AddonMediaListForm {
     pub auto_refresh: bool,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
-    pub chapter_input: String,
+    pub presentation_kind: AddonMediaListPresentationKind,
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    pub presentation_error: Option<String>,
+    pub legacy_chapter_input: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +52,226 @@ pub struct AddonMediaListItemRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
+    pub title: String,
+    pub year: Option<i32>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub source_url: Option<String>,
+    pub duration_seconds: Option<u64>,
+    pub parent_provider_id: Option<String>,
+    pub chapter_input: String,
+    pub projected_episode_id: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListNfoPerson {
+    pub name: String,
+    pub role: Option<String>,
+    pub order: Option<i32>,
+    pub thumb: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AddonMediaListNfoMetadata {
+    pub title: String,
+    pub original_title: Option<String>,
+    pub sort_title: Option<String>,
+    pub outline: Option<String>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub year: Option<i32>,
+    pub release_date: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub people: Vec<AddonMediaListNfoPerson>,
+    pub writers: Vec<String>,
+    pub directors: Vec<String>,
+    pub artists: Vec<String>,
+    pub producers: Vec<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
+    pub collection: Option<String>,
+    pub artwork_urls: Vec<String>,
+    pub guids: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListNfoOwnership {
+    #[default]
+    Generated,
+    User,
+    Invalid,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListNfoForm {
+    pub metadata: AddonMediaListNfoMetadata,
+    pub etag: String,
+    pub ownership: AddonMediaListNfoOwnership,
+    pub error: Option<String>,
+    pub path_available: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListItemDetail {
+    pub item: AddonMediaListItemRow,
+    pub nfo: AddonMediaListNfoForm,
+    pub chapters: Vec<AddonMediaListItemRow>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMediaListItemRow {
+    fn from(row: ersatzrs_core::repositories::AddonMediaListItemAdminRow) -> Self {
+        Self {
+            id: row.id,
+            rank: row.rank,
+            display_title: row.display_title,
+            availability: row.availability,
+            availability_reason: row.availability_reason,
+            replacement_media_item_id: row.replacement_media_item_id,
+            replacement_media_version_id: row.replacement_media_version_id,
+            replacement_title: row.replacement_title,
+            replacement_path: row.replacement_path,
+            replacement_valid: row.replacement_valid,
+            title: row.title,
+            year: row.year,
+            season: row.season,
+            episode: row.episode,
+            source_url: row.source_url,
+            duration_seconds: row.duration_seconds,
+            parent_provider_id: row.parent_provider_id,
+            chapter_input: row.chapter_input,
+            projected_episode_id: row.projected_episode_id,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListNfoMetadata> for AddonMediaListNfoMetadata {
+    fn from(metadata: ersatzrs_core::repositories::AddonMediaListNfoMetadata) -> Self {
+        Self {
+            title: metadata.title,
+            original_title: metadata.original_title,
+            sort_title: metadata.sort_title,
+            outline: metadata.outline,
+            plot: metadata.plot,
+            tagline: metadata.tagline,
+            show_title: metadata.show_title,
+            season: metadata.season,
+            episode: metadata.episode,
+            year: metadata.year,
+            release_date: metadata.release_date,
+            content_ratings: metadata.content_ratings,
+            genres: metadata.genres,
+            tags: metadata.tags,
+            studios: metadata.studios,
+            music_labels: metadata.music_labels,
+            languages: metadata.languages,
+            people: metadata
+                .people
+                .into_iter()
+                .map(|person| AddonMediaListNfoPerson {
+                    name: person.name,
+                    role: person.role,
+                    order: person.order,
+                    thumb: person.thumb,
+                })
+                .collect(),
+            writers: metadata.writers,
+            directors: metadata.directors,
+            artists: metadata.artists,
+            producers: metadata.producers,
+            original_broadcasters: metadata.original_broadcasters,
+            broadcasters: metadata.broadcasters,
+            collection: metadata.collection,
+            artwork_urls: metadata.artwork_urls,
+            guids: metadata.guids,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<AddonMediaListNfoMetadata> for ersatzrs_core::repositories::AddonMediaListNfoMetadata {
+    fn from(metadata: AddonMediaListNfoMetadata) -> Self {
+        Self {
+            title: metadata.title,
+            original_title: metadata.original_title,
+            sort_title: metadata.sort_title,
+            outline: metadata.outline,
+            plot: metadata.plot,
+            tagline: metadata.tagline,
+            show_title: metadata.show_title,
+            season: metadata.season,
+            episode: metadata.episode,
+            year: metadata.year,
+            release_date: metadata.release_date,
+            content_ratings: metadata.content_ratings,
+            genres: metadata.genres,
+            tags: metadata.tags,
+            studios: metadata.studios,
+            music_labels: metadata.music_labels,
+            languages: metadata.languages,
+            people: metadata
+                .people
+                .into_iter()
+                .map(
+                    |person| ersatzrs_core::repositories::AddonMediaListNfoPerson {
+                        name: person.name,
+                        role: person.role,
+                        order: person.order,
+                        thumb: person.thumb,
+                    },
+                )
+                .collect(),
+            writers: metadata.writers,
+            directors: metadata.directors,
+            artists: metadata.artists,
+            producers: metadata.producers,
+            original_broadcasters: metadata.original_broadcasters,
+            broadcasters: metadata.broadcasters,
+            collection: metadata.collection,
+            artwork_urls: metadata.artwork_urls,
+            guids: metadata.guids,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListNfoForm> for AddonMediaListNfoForm {
+    fn from(form: ersatzrs_core::repositories::AddonMediaListNfoForm) -> Self {
+        use ersatzrs_core::repositories::AddonMediaListNfoOwnership as CoreOwnership;
+        Self {
+            metadata: form.metadata.into(),
+            etag: form.etag,
+            ownership: match form.ownership {
+                CoreOwnership::Generated => AddonMediaListNfoOwnership::Generated,
+                CoreOwnership::User => AddonMediaListNfoOwnership::User,
+                CoreOwnership::Invalid => AddonMediaListNfoOwnership::Invalid,
+            },
+            error: form.error,
+            path_available: form.path_available,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListItemDetail> for AddonMediaListItemDetail {
+    fn from(detail: ersatzrs_core::repositories::AddonMediaListItemDetail) -> Self {
+        Self {
+            item: detail.item.into(),
+            nfo: detail.nfo.into(),
+            chapters: detail.chapters.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,6 +354,9 @@ pub async fn list_addon_media_lists_with_state(
                 match_count: row.match_count,
                 auto_refresh: row.auto_refresh,
                 generate_playlist: row.generate_playlist,
+                presentation_kind: row.presentation_kind,
+                requested_presentation_kind: row.requested_presentation_kind,
+                presentation_error: row.presentation_error,
             })
             .collect(),
         total,
@@ -164,7 +395,10 @@ pub async fn get_addon_media_list_form(
                 auto_refresh: form.auto_refresh,
                 generate_playlist: form.generate_playlist,
                 content_kind_override: form.content_kind_override,
-                chapter_input: form.chapter_input,
+                presentation_kind: form.presentation_kind,
+                requested_presentation_kind: form.requested_presentation_kind,
+                presentation_error: form.presentation_error,
+                legacy_chapter_input: form.legacy_chapter_input,
             })
         })
 }
@@ -194,6 +428,15 @@ pub async fn list_addon_media_list_items(
                     replacement_title: row.replacement_title,
                     replacement_path: row.replacement_path,
                     replacement_valid: row.replacement_valid,
+                    title: row.title,
+                    year: row.year,
+                    season: row.season,
+                    episode: row.episode,
+                    source_url: row.source_url,
+                    duration_seconds: row.duration_seconds,
+                    parent_provider_id: row.parent_provider_id,
+                    chapter_input: row.chapter_input,
+                    projected_episode_id: row.projected_episode_id,
                 })
                 .collect()
         })
@@ -240,6 +483,127 @@ pub async fn set_addon_media_list_item_replacement(
                 media_item_id,
                 media_version_id,
             },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn get_addon_media_list_item(
+    list_id: i64,
+    item_id: i64,
+) -> Result<Option<AddonMediaListItemDetail>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .get_addon_media_list_item(list_id, item_id)
+        .await
+        .map(|detail| detail.map(Into::into))
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn get_addon_media_list_show_nfo(
+    id: i64,
+) -> Result<AddonMediaListNfoForm, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .get_addon_media_list_show_nfo(id)
+        .await
+        .map(Into::into)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn request_addon_media_list_presentation(
+    id: i64,
+    presentation_kind: AddonMediaListPresentationKind,
+    show_title: Option<String>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .request_addon_media_list_presentation(
+            ersatzrs_app::commands::RequestAddonMediaListPresentation {
+                id,
+                presentation_kind,
+                show_title,
+            },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn save_addon_media_list_show_nfo(
+    id: i64,
+    metadata: AddonMediaListNfoMetadata,
+    etag: String,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .save_addon_media_list_show_nfo(ersatzrs_app::commands::SaveAddonMediaListNfo {
+            id,
+            list_id: None,
+            metadata: metadata.into(),
+            etag,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn save_addon_media_list_item_nfo(
+    list_id: i64,
+    id: i64,
+    metadata: AddonMediaListNfoMetadata,
+    etag: String,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .save_addon_media_list_item_nfo(ersatzrs_app::commands::SaveAddonMediaListNfo {
+            id,
+            list_id: Some(list_id),
+            metadata: metadata.into(),
+            etag,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn reset_addon_media_list_nfo(
+    list_id: i64,
+    item_id: Option<i64>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .reset_addon_media_list_nfo(list_id, item_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn update_addon_media_list_item_chapters(
+    id: i64,
+    chapter_input: String,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .update_addon_media_list_item_chapters(
+            ersatzrs_app::commands::UpdateAddonMediaListItemChapters { id, chapter_input },
         )
         .await
         .map_err(ServerFnError::new)
@@ -362,7 +726,7 @@ pub async fn update_addon_media_list_with_state(
             auto_refresh: form.auto_refresh,
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
-            chapter_input: form.chapter_input,
+            chapter_input: form.legacy_chapter_input,
         })
         .await?;
     if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {

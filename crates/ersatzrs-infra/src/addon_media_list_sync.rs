@@ -6,7 +6,9 @@ use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
 
 use chrono::{Duration, Utc};
-use ersatzrs_core::addon_media_list::{AddonMediaListProvider, EnumeratedAddonMediaListItem};
+use ersatzrs_core::addon_media_list::{
+    AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
+};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
@@ -525,6 +527,17 @@ impl AddonMediaListSynchronizer {
                 &row,
                 "ContentKindOverride",
             )?,
+            presentation_kind: decode_enum_column(
+                "AddonMediaListPresentationKind",
+                &row,
+                "PresentationKind",
+            )?,
+            requested_presentation_kind: decode_enum_column(
+                "AddonMediaListPresentationKind",
+                &row,
+                "RequestedPresentationKind",
+            )?,
+            presentation_error: row.try_get("PresentationError").repository()?,
             chapter_input: row
                 .try_get::<Option<String>, _>("ChapterInput")
                 .repository()?
@@ -869,6 +882,22 @@ impl AddonMediaListSynchronizer {
         provider_media_item_id: Option<EntityId>,
     ) -> Result<Option<PlaylistSelection>> {
         if item.availability != AddonMediaListItemAvailability::Unavailable {
+            let projected_episode_id = sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+                   WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(item.id)
+            .fetch_optional(&self.pool)
+            .await
+            .repository()?;
+            if let Some(episode_id) = projected_episode_id {
+                return Ok(Some(PlaylistSelection {
+                    media_item_id: episode_id,
+                    media_version_id: None,
+                    video_stream_index: None,
+                    collection_type: Some(COLLECTION_TYPE_EPISODE),
+                }));
+            }
             return Ok(provider_media_item_id.map(PlaylistSelection::provider));
         }
 
@@ -948,7 +977,7 @@ where
             }
             None => None,
         };
-        let enumerated = match self
+        let mut enumerated = match self
             .provider
             .enumerate(addon_id, source_url, chapter_input)
             .await
@@ -972,13 +1001,17 @@ where
             id: 0,
             addon_id: addon_id.to_owned(),
             source_url: source_url.to_owned(),
-            provider_id: enumerated.provider_id,
-            name: enumerated.name,
-            description: enumerated.description,
+            provider_id: enumerated.provider_id.clone(),
+            name: enumerated.name.clone(),
+            description: enumerated.description.clone(),
             item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
             auto_refresh: false,
             generate_playlist: false,
             content_kind_override,
+            presentation_kind: ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+            requested_presentation_kind:
+                ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+            presentation_error: None,
             chapter_input: chapter_input.to_owned(),
             playlist_id: None,
             last_update: None,
@@ -986,6 +1019,10 @@ where
             last_error: None,
         };
         let list_id = self.local.save_list(&list).await?;
+        if chapter_input.trim().is_empty() {
+            self.expand_item_chapters(list_id, addon_id, &mut enumerated)
+                .await?;
+        }
         let list = self
             .local
             .save_list_items(list_id, &enumerated.items)
@@ -1004,6 +1041,63 @@ where
         }
         self.local.match_list_items(list.id).await?;
         Ok(list.id)
+    }
+
+    async fn expand_item_chapters(
+        &self,
+        list_id: EntityId,
+        addon_id: &str,
+        enumerated: &mut EnumeratedAddonMediaList,
+    ) -> Result<()> {
+        let requests = sqlx::query(
+            r#"SELECT "ProviderId", "SourceUrl", "ChapterInput"
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+                 AND COALESCE("ChapterInput", '') <> ''
+               ORDER BY "Rank", "Id""#,
+        )
+        .bind(list_id)
+        .fetch_all(&self.local.pool)
+        .await
+        .repository()?;
+        let mut next_rank = enumerated
+            .items
+            .iter()
+            .map(|item| item.rank)
+            .max()
+            .unwrap_or(-1)
+            .saturating_add(1);
+        for request in requests {
+            let provider_id: String = request.try_get("ProviderId").repository()?;
+            let stored_url: Option<String> = request.try_get("SourceUrl").repository()?;
+            let input: String = request.try_get("ChapterInput").repository()?;
+            let source_url = enumerated
+                .items
+                .iter()
+                .find(|item| item.provider_id == provider_id)
+                .and_then(|item| item.source_url.as_deref())
+                .or(stored_url.as_deref())
+                .ok_or_else(|| {
+                    RepositoryError::Conflict(format!(
+                        "item '{provider_id}' has chapters but no source URL"
+                    ))
+                })?
+                .to_owned();
+            let expanded = self
+                .provider
+                .enumerate(addon_id, &source_url, &input)
+                .await?;
+            for mut fragment in expanded
+                .items
+                .into_iter()
+                .filter(|item| item.parent_provider_id.is_some())
+            {
+                fragment.rank = next_rank;
+                next_rank = next_rank.saturating_add(1);
+                enumerated.items.push(fragment);
+            }
+        }
+        Ok(())
     }
 
     /// Refresh auto-refresh lists whose provider update is older than one day.

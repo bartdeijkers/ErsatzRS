@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-17","summary":"Implemented add-on-list television projection, NFO-backed per-item editors, item-scoped chapters, Hybrid dispatch parity, and live Teleac TSDuck acceptance"}
 {"agent":"Codex","date":"2026-08-16","summary":"Fixed v3 chapter capability gating and order-independent Remote Stream fragment parent linkage"}
 {"agent":"Codex","date":"2026-08-16","summary":"Expanded Beeld & Geluid Schatkamer URL sources, pagination, metadata, and structured chapter fragments"}
 {"agent":"Codex","date":"2026-08-16","summary":"Completed AB-06 single Rust validator and AB-07 Rust repository publisher with exact-SHA host CI, signed publication, and live catalog proof"}

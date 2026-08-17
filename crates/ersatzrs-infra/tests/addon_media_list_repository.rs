@@ -2,6 +2,7 @@
 mod common;
 
 use ersatzrs_core::repositories::{AddonMediaListRepository, RepositoryError};
+use ersatzrs_domain::AddonMediaListPresentationKind;
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
 
@@ -56,6 +57,10 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
     assert_eq!(rows[0].match_count, 0);
     assert!(rows[0].auto_refresh);
     assert!(!rows[0].generate_playlist);
+    assert_eq!(
+        rows[0].presentation_kind,
+        AddonMediaListPresentationKind::RemoteStreams
+    );
 
     let form = repositories
         .addon_media_lists
@@ -65,6 +70,10 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
         .unwrap();
     assert_eq!(form.addon_id, "org.example.lists");
     assert_eq!(form.source_url, "https://example.invalid/alice/watchlist");
+    assert_eq!(
+        form.requested_presentation_kind,
+        AddonMediaListPresentationKind::RemoteStreams
+    );
 }
 
 #[tokio::test]

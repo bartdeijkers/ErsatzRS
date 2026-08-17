@@ -2,7 +2,7 @@
 //! `Pages/TraktLists.razor`, `Pages/TraktListEditor.razor`, and
 //! `Shared/AddTraktListDialog.razor`; ADR 0067 owns the deliberate boundary change.
 
-use ersatzrs_domain::AddonMediaListContentKind;
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -11,11 +11,14 @@ use crate::admin::i18n::{
 };
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
-    list_addon_media_lists, match_addon_media_list, search_addon_media_list_replacements,
-    set_addon_media_list_item_replacement, update_addon_media_list, AddonMediaListForm,
-    AddonMediaListItemRow, AddonMediaListProviderRow, AddonMediaListReplacementRow,
-    AddonMediaListRow,
+    get_addon_media_list_item, get_addon_media_list_show_nfo, get_addon_media_lists_page_size,
+    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
+    match_addon_media_list, request_addon_media_list_presentation, save_addon_media_list_item_nfo,
+    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
+    set_addon_media_list_item_replacement, update_addon_media_list,
+    update_addon_media_list_item_chapters, AddonMediaListForm, AddonMediaListItemDetail,
+    AddonMediaListItemRow, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListProviderRow, AddonMediaListReplacementRow, AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -110,7 +113,6 @@ fn AddonMediaListsIsland(
     );
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
-    let add_chapter_input = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
@@ -128,16 +130,15 @@ fn AddonMediaListsIsland(
     });
 
     let add_action = Action::new(
-        |value: &(String, String, String, AddonMediaListContentKind, String)| {
-            let (addon_id, source_url, folder_name, content_kind_override, chapter_input) =
-                value.clone();
+        |value: &(String, String, String, AddonMediaListContentKind)| {
+            let (addon_id, source_url, folder_name, content_kind_override) = value.clone();
             async move {
                 add_addon_media_list(
                     addon_id,
                     source_url,
                     folder_name,
                     content_kind_override,
-                    chapter_input,
+                    String::new(),
                 )
                 .await
             }
@@ -159,7 +160,6 @@ fn AddonMediaListsIsland(
                     );
                     add_source_url.set(String::new());
                     add_folder_name.set(String::new());
-                    add_chapter_input.set(String::new());
                     add_open.set(false);
                     data.refetch();
                 }
@@ -405,10 +405,9 @@ fn AddonMediaListsIsland(
                 addon_id=add_addon_id
                 source_url=add_source_url
                 folder_name=add_folder_name
-                chapter_input=add_chapter_input
                 content_kind=add_content_kind
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, String)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind)| {
                     add_action.dispatch(value);
                 })
             />
@@ -439,10 +438,9 @@ fn AddAddonMediaListDialog(
     addon_id: RwSignal<String>,
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
-    chapter_input: RwSignal<String>,
     content_kind: RwSignal<AddonMediaListContentKind>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String, String, AddonMediaListContentKind, String)>,
+    on_submit: Callback<(String, String, String, AddonMediaListContentKind)>,
 ) -> impl IntoView {
     view! {
         <div
@@ -465,9 +463,8 @@ fn AddAddonMediaListDialog(
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
                         let content_kind = content_kind.get_untracked();
-                        let chapter_input = chapter_input.get_untracked();
                         if !addon_id.trim().is_empty() && !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name, content_kind, chapter_input));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind));
                         }
                     }
                 >
@@ -510,17 +507,6 @@ fn AddAddonMediaListDialog(
                                 prop:value=move || source_url.get()
                                 on:input=move |event| source_url.set(event_target_value(&event))
                             />
-                        </label>
-                        <label class=style::dialog_field>
-                            <span>{tr(TextKey::ChapterInput)}</span>
-                            <textarea
-                                name="chapter_input"
-                                rows="6"
-                                placeholder=tr(TextKey::ChapterInputHelp)
-                                prop:value=move || chapter_input.get()
-                                on:input=move |event| chapter_input.set(event_target_value(&event))
-                            />
-                            <small>{tr(TextKey::ChapterInputHelp)}</small>
                         </label>
                         <label class=style::dialog_field>
                             <span>{tr(TextKey::AddonMediaListFolder)}</span>
@@ -569,7 +555,8 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
         |id| async move {
             let form = get_addon_media_list_form(id).await?;
             let items = list_addon_media_list_items(id).await?;
-            Ok::<_, ServerFnError>((form, items))
+            let show_nfo = get_addon_media_list_show_nfo(id).await?;
+            Ok::<_, ServerFnError>((form, items, show_nfo))
         },
     );
 
@@ -577,13 +564,14 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items)| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo)| {
                     view! {
                         <AddonMediaListEditorIsland
                             id=id
                             initial_error=error.clone()
                             initial_form=initial_form
                             initial_items=initial_items
+                            initial_show_nfo=initial_show_nfo
                         />
                     }
                     .into_any()
@@ -593,12 +581,123 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
     }
 }
 
+#[component]
+pub fn AddonMediaListItemPage() -> impl IntoView {
+    let params = use_params_map();
+    let list_id = params.with(|params| {
+        params
+            .get("id")
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
+    let item_id = params.with(|params| {
+        params
+            .get("item_id")
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
+    let initial = Resource::new_blocking(
+        move || (list_id, item_id),
+        |(list_id, item_id)| get_addon_media_list_item(list_id, item_id),
+    );
+    view! {
+        <Suspense fallback=admin_loading_resource_view>
+            {move || initial.get().map(|result| admin_result_view(result, move |detail| {
+                detail.map_or_else(
+                    || view! { <p class=style::empty>{tr(TextKey::AddonMediaListNotFound)}</p> }.into_any(),
+                    |detail| view! { <AddonMediaListItemIsland list_id=list_id detail=detail/> }.into_any(),
+                )
+            }))}
+        </Suspense>
+    }
+}
+
+#[island]
+fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> impl IntoView {
+    let item_id = detail.item.id;
+    let original = detail.nfo.metadata.clone();
+    let etag = detail.nfo.etag.clone();
+    let title = RwSignal::new(original.title.clone());
+    let plot = RwSignal::new(original.plot.clone().unwrap_or_default());
+    let season = RwSignal::new(
+        original
+            .season
+            .map_or_else(String::new, |value| value.to_string()),
+    );
+    let episode = RwSignal::new(
+        original
+            .episode
+            .map_or_else(String::new, |value| value.to_string()),
+    );
+    let genres = RwSignal::new(original.genres.join(", "));
+    let tags = RwSignal::new(original.tags.join(", "));
+    let chapters = RwSignal::new(detail.item.chapter_input.clone());
+    let toast = use_toast();
+    let save_action = Action::new(move |value: &(AddonMediaListNfoMetadata, String, String)| {
+        let (metadata, etag, chapters) = value.clone();
+        async move {
+            save_addon_media_list_item_nfo(list_id, item_id, metadata, etag).await?;
+            update_addon_media_list_item_chapters(item_id, chapters).await
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = save_action.value().get() {
+            match result {
+                Ok(()) => toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success),
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    let build_metadata = move || {
+        let mut metadata = original.clone();
+        metadata.title = title.get_untracked();
+        metadata.plot = non_empty_value(&plot.get_untracked());
+        metadata.season = season.get_untracked().trim().parse().ok();
+        metadata.episode = episode.get_untracked().trim().parse().ok();
+        metadata.genres = comma_values(&genres.get_untracked());
+        metadata.tags = comma_values(&tags.get_untracked());
+        metadata
+    };
+    view! {
+        <div class=style::page>
+            <div class=style::action_bar>
+                <a class=style::icon_button href=format!("/media/addon-lists/{list_id}")>{tr(TextKey::Back)}</a>
+                <button type="button" class=style::btn_add on:click=move |_| {
+                    save_action.dispatch((build_metadata(), etag.clone(), chapters.get_untracked()));
+                }>{tr(TextKey::Save)}</button>
+            </div>
+            <section class=style::editor>
+                <h1 class=style::page_title>{detail.item.display_title}</h1>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Title)}</span><input class=style::text_input prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Summary)}</span><textarea class=style::text_input rows="8" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Season)}</span><input class=style::text_input inputmode="numeric" prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input inputmode="numeric" prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Tags)}</span><input class=style::text_input prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input rows="8" prop:value=move || chapters.get() on:input=move |event| chapters.set(event_target_value(&event))/></label>
+            </section>
+        </div>
+    }
+}
+
+fn non_empty_value(value: &str) -> Option<String> {
+    (!value.trim().is_empty()).then(|| value.trim().to_owned())
+}
+
+fn comma_values(value: &str) -> Vec<String> {
+    value.split(',').filter_map(non_empty_value).collect()
+}
+
 #[island]
 fn AddonMediaListEditorIsland(
     id: i64,
     initial_error: String,
     initial_form: Option<AddonMediaListForm>,
     initial_items: Vec<AddonMediaListItemRow>,
+    initial_show_nfo: AddonMediaListNfoForm,
 ) -> impl IntoView {
     let has_initial_error = !initial_error.is_empty();
     let form = initial_form.unwrap_or_default();
@@ -611,7 +710,18 @@ fn AddonMediaListEditorIsland(
     let auto_refresh = RwSignal::new(form.auto_refresh);
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let content_kind_override = RwSignal::new(form.content_kind_override);
-    let chapter_input = RwSignal::new(form.chapter_input.clone());
+    let legacy_chapter_input = form.legacy_chapter_input.clone();
+    let presentation_kind = RwSignal::new(form.requested_presentation_kind);
+    let show_metadata = initial_show_nfo.metadata.clone();
+    let show_etag = initial_show_nfo.etag.clone();
+    let show_title = RwSignal::new(show_metadata.title.clone());
+    let show_plot = RwSignal::new(show_metadata.plot.clone().unwrap_or_default());
+    let presentation_error = form
+        .presentation_error
+        .as_deref()
+        .map(addon_media_list_error_message)
+        .unwrap_or_default();
+    let has_presentation_error = !presentation_error.is_empty();
     let display_id = format!("{} / {}", form.addon_id, form.source_url);
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
@@ -620,10 +730,26 @@ fn AddonMediaListEditorIsland(
     let replacement_query = RwSignal::new(String::new());
     let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
 
-    let save_action = Action::new(|form: &AddonMediaListForm| {
-        let form = form.clone();
-        async move { update_addon_media_list(form).await }
-    });
+    let save_action = Action::new(
+        |value: &(
+            AddonMediaListForm,
+            AddonMediaListPresentationKind,
+            AddonMediaListNfoMetadata,
+            String,
+        )| {
+            let (form, presentation_kind, show_metadata, show_etag) = value.clone();
+            async move {
+                let id = form.id;
+                update_addon_media_list(form).await?;
+                if presentation_kind == AddonMediaListPresentationKind::TelevisionShow
+                    && !show_metadata.title.trim().is_empty()
+                {
+                    save_addon_media_list_show_nfo(id, show_metadata, show_etag).await?;
+                }
+                request_addon_media_list_presentation(id, presentation_kind, None).await
+            }
+        },
+    );
     let search_action = Action::new(|query: &String| {
         let query = query.clone();
         async move { search_addon_media_list_replacements(query).await }
@@ -700,15 +826,21 @@ fn AddonMediaListEditorIsland(
                     class=style::btn_add
                     on:click=move |event| {
                         event.prevent_default();
-                        save_action.dispatch(AddonMediaListForm {
+                        let mut next_show_metadata = show_metadata.clone();
+                        next_show_metadata.title = show_title.get_untracked();
+                        next_show_metadata.plot = non_empty_value(&show_plot.get_untracked());
+                        save_action.dispatch((AddonMediaListForm {
                             id: form_id.get_untracked(),
                             addon_id: submit_addon_id.clone(),
                             source_url: submit_source_url.clone(),
                             auto_refresh: auto_refresh.get_untracked(),
                             generate_playlist: generate_playlist.get_untracked(),
                             content_kind_override: content_kind_override.get_untracked(),
-                            chapter_input: chapter_input.get_untracked(),
-                        });
+                            legacy_chapter_input: legacy_chapter_input.clone(),
+                            presentation_kind: form.presentation_kind,
+                            requested_presentation_kind: form.requested_presentation_kind,
+                            presentation_error: form.presentation_error.clone(),
+                        }, presentation_kind.get_untracked(), next_show_metadata, show_etag.clone()));
                     }
                 >
                     <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
@@ -726,6 +858,9 @@ fn AddonMediaListEditorIsland(
                             <h1 class=style::page_title>{tr(TextKey::AddonMediaList)}</h1>
                             <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                                 {tr(TextKey::AddonMediaListSaveFailed)}
+                            </p>
+                            <p class=style::empty style:display=move || if has_presentation_error { "" } else { "none" }>
+                                {presentation_error}
                             </p>
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>
                             <input type="hidden" name="addon_id" value=addon_id/>
@@ -747,18 +882,31 @@ fn AddonMediaListEditorIsland(
                                 </select>
                             </div>
                             <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::ChapterInput)}</div>
-                                <div>
-                                    <textarea
-                                        class=style::text_input
-                                        name="chapter_input"
-                                        rows="8"
-                                        placeholder=tr(TextKey::ChapterInputHelp)
-                                        prop:value=move || chapter_input.get()
-                                        on:input=move |event| chapter_input.set(event_target_value(&event))
-                                    />
-                                    <small>{tr(TextKey::ChapterInputHelp)}</small>
-                                </div>
+                                <div class=style::field_label>{tr(TextKey::CollectionType)}</div>
+                                <select
+                                    prop:value=move || match presentation_kind.get() {
+                                        AddonMediaListPresentationKind::RemoteStreams => "remote_streams",
+                                        AddonMediaListPresentationKind::TelevisionShow => "television_show",
+                                    }
+                                    on:change=move |event| presentation_kind.set(
+                                        if event_target_value(&event) == "television_show" {
+                                            AddonMediaListPresentationKind::TelevisionShow
+                                        } else {
+                                            AddonMediaListPresentationKind::RemoteStreams
+                                        },
+                                    )
+                                >
+                                    <option value="remote_streams">{tr(TextKey::RemoteStreams)}</option>
+                                    <option value="television_show">{tr(TextKey::TelevisionShow)}</option>
+                                </select>
+                            </div>
+                            <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                <div class=style::field_label>{tr(TextKey::Title)}</div>
+                                <input class=style::text_input prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
+                            </div>
+                            <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                <div class=style::field_label>{tr(TextKey::Summary)}</div>
+                                <textarea class=style::text_input rows="6" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Id)}</div>
@@ -838,7 +986,7 @@ fn AddonMediaListEditorIsland(
                                 };
                                 view! {
                                     <tr>
-                                        <td>{title.clone()}</td>
+                                        <td><a href=format!("/media/addon-lists/{id}/items/{item_id}")>{title.clone()}</a></td>
                                         <td title=item.availability_reason.unwrap_or_default()>{status}</td>
                                         <td
                                             data-replacement-state=replacement_state

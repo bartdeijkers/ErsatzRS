@@ -1218,6 +1218,7 @@ dependencies = [
  "minijinja",
  "percent-encoding",
  "process-wrap",
+ "quick-xml",
  "reqwest",
  "semver",
  "serde",

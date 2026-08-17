@@ -27,7 +27,9 @@ mod watermark;
 
 pub use addon_media_list::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    AddonMediaListItemDetail, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoOwnership, AddonMediaListNfoPerson, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

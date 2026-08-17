@@ -3,11 +3,12 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind, ArtworkKind,
-    BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode,
-    ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
-    ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType,
-    ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListPresentationKind, ArtworkKind, BlockStopScheduling, ChannelIdleBehavior,
+    ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode,
+    ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
+    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
+    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
     FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
     FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
     HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
@@ -621,6 +622,11 @@ db_enum!(AddonMediaListContentKind {
     2 => AddonMediaListContentKind::Movie,
     3 => AddonMediaListContentKind::MusicVideo,
     4 => AddonMediaListContentKind::OtherVideo,
+});
+
+db_enum!(AddonMediaListPresentationKind {
+    0 => AddonMediaListPresentationKind::RemoteStreams,
+    1 => AddonMediaListPresentationKind::TelevisionShow,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

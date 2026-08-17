@@ -348,6 +348,21 @@ impl ApplicationServices {
         queries::list_addon_media_list_items(id, self.ports.addon_media_lists()).await
     }
 
+    pub async fn get_addon_media_list_item(
+        &self,
+        list_id: i64,
+        item_id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListItemDetail>> {
+        queries::get_addon_media_list_item(list_id, item_id, self.ports.addon_media_lists()).await
+    }
+
+    pub async fn get_addon_media_list_show_nfo(
+        &self,
+        id: i64,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListNfoForm> {
+        queries::get_addon_media_list_show_nfo(id, self.ports.addon_media_lists()).await
+    }
+
     /// Search available local video versions for a replacement.
     pub async fn search_addon_media_list_replacements(
         &self,
@@ -405,6 +420,44 @@ impl ApplicationServices {
         command: commands::SetAddonMediaListItemReplacement,
     ) -> Result<()> {
         commands::set_addon_media_list_item_replacement(command, self.ports.addon_media_lists())
+            .await
+    }
+
+    pub async fn request_addon_media_list_presentation(
+        &self,
+        command: commands::RequestAddonMediaListPresentation,
+    ) -> Result<()> {
+        commands::request_addon_media_list_presentation(command, self.ports.addon_media_lists())
+            .await
+    }
+
+    pub async fn save_addon_media_list_show_nfo(
+        &self,
+        command: commands::SaveAddonMediaListNfo,
+    ) -> Result<()> {
+        commands::save_addon_media_list_show_nfo(command, self.ports.addon_media_lists()).await
+    }
+
+    pub async fn save_addon_media_list_item_nfo(
+        &self,
+        command: commands::SaveAddonMediaListNfo,
+    ) -> Result<()> {
+        commands::save_addon_media_list_item_nfo(command, self.ports.addon_media_lists()).await
+    }
+
+    pub async fn reset_addon_media_list_nfo(
+        &self,
+        list_id: i64,
+        item_id: Option<i64>,
+    ) -> Result<()> {
+        commands::reset_addon_media_list_nfo(list_id, item_id, self.ports.addon_media_lists()).await
+    }
+
+    pub async fn update_addon_media_list_item_chapters(
+        &self,
+        command: commands::UpdateAddonMediaListItemChapters,
+    ) -> Result<()> {
+        commands::update_addon_media_list_item_chapters(command, self.ports.addon_media_lists())
             .await
     }
 

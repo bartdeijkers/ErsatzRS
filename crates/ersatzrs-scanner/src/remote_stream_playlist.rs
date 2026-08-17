@@ -557,23 +557,41 @@ pub async fn sync_playlist_files(
     let existing = load_sidecar(&sidecar_path)?;
     let manifest_etag = manifest_etag(manifest_bytes, &addon, content_kind_override);
     let now = Utc::now();
-    if let Some(state) = existing.as_ref().filter(|state| {
-        matches!(state.version, 1 | 2)
+    if let Some(state) = existing.as_ref() {
+        let cache_is_fresh = matches!(state.version, 1 | 2)
             && state.last_result.kind == "ok"
             && state.manifest_etag == manifest_etag
             && managed_files_intact(&folder, state)
             && now
                 .signed_duration_since(state.last_sync)
                 .to_std()
-                .is_ok_and(|elapsed| elapsed < manifest.interval)
-    }) {
-        return Ok(PlaylistFileSync {
-            definitions: definitions_from_state(&folder, state),
-            state: state.clone(),
-            changed: false,
-            membership_changed: false,
-            enumerated: false,
-        });
+                .is_ok_and(|elapsed| elapsed < manifest.interval);
+        if cache_is_fresh {
+            for entry in &state.entries {
+                let nfo_file = entry
+                    .nfo_file
+                    .as_deref()
+                    .or_else(|| state.managed_nfo_files.get(&entry.id).map(String::as_str))
+                    .ok_or_else(|| {
+                        PlaylistError::Enumeration(format!(
+                            "managed entry '{}' has no NFO file",
+                            entry.id
+                        ))
+                    })?;
+                ersatzrs_infra::addon_media_nfo::adopt_existing(
+                    &folder.join(nfo_file),
+                    entry.nfo_sha256.as_deref(),
+                )
+                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+            }
+            return Ok(PlaylistFileSync {
+                definitions: definitions_from_state(&folder, state),
+                state: state.clone(),
+                changed: false,
+                membership_changed: false,
+                enumerated: false,
+            });
+        }
     }
 
     let enumeration = match enumerate_playlist(
@@ -597,6 +615,18 @@ pub async fn sync_playlist_files(
     let truncated =
         manifest.manifest.sync.max_items > 0 && eligible.len() > manifest.manifest.sync.max_items;
     let mut selected = select_entries(manifest, eligible);
+    if let Err(error) = append_item_chapter_fragments(
+        pool,
+        manifest_path,
+        &manifest.manifest.addon,
+        runtime,
+        &mut selected,
+    )
+    .await
+    {
+        persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
+        return Err(error);
+    }
     if content_kind_override != AddonMediaListContentKind::Auto {
         for entry in &mut selected {
             entry.content_kind = wire_content_kind(content_kind_override);
@@ -634,7 +664,10 @@ pub async fn sync_playlist_files(
         let nfo_file = managed_nfo_file_name(&file);
         let nfo_path = folder.join(&nfo_file);
         let definition_bytes = generated_definition_bytes(manifest, entry)?;
-        let nfo_bytes = generated_nfo_bytes(manifest, entry)?;
+        let generated_nfo = generated_nfo_bytes(manifest, entry)?;
+        let nfo_bytes =
+            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
+                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
         write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
         managed_files.insert(entry.id.clone(), file.clone());
         managed_nfo_files.insert(entry.id.clone(), nfo_file.clone());
@@ -935,6 +968,60 @@ async fn load_content_kind_override(
     }
 }
 
+async fn append_item_chapter_fragments(
+    pool: &DbPool,
+    manifest_path: &Path,
+    addon_id: &str,
+    runtime: &AddonRuntimeContext,
+    selected: &mut Vec<PlaylistEntry>,
+) -> Result<()> {
+    let requests = sqlx::query_as::<_, (String, String, String)>(
+        r#"SELECT "item"."ProviderId", "item"."SourceUrl", "item"."ChapterInput"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."AddonMediaListId" = "managed"."AddonMediaListId"
+           WHERE "managed"."ManifestPath" = ?
+             AND "item"."ParentProviderId" IS NULL
+             AND "item"."ChapterInput" IS NOT NULL
+             AND TRIM("item"."ChapterInput") <> ''
+           ORDER BY "item"."Rank", "item"."Id""#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .fetch_all(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to load per-item chapter settings: {error}"))
+    })?;
+
+    let selected_parents = selected
+        .iter()
+        .map(|entry| entry.provider_id.as_deref().unwrap_or(&entry.id))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let mut existing_ids = selected
+        .iter()
+        .map(|entry| entry.id.to_ascii_lowercase())
+        .collect::<BTreeSet<_>>();
+
+    for (provider_id, source_url, chapters) in requests {
+        if !selected_parents.contains(&provider_id) {
+            continue;
+        }
+        let enumeration =
+            enumerate_playlist(pool, addon_id, &source_url, Some(&chapters), runtime).await?;
+        for fragment in enumeration
+            .entries
+            .into_iter()
+            .filter(|entry| entry.parent_provider_id.as_deref() == Some(provider_id.as_str()))
+        {
+            if existing_ids.insert(fragment.id.to_ascii_lowercase()) {
+                selected.push(fragment);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn managed_files_intact(folder: &Path, state: &PlaylistSidecarState) -> bool {
     state.entries.iter().all(|entry| {
         let definition_path = folder.join(&entry.file);
@@ -948,11 +1035,7 @@ fn managed_files_intact(folder: &Path, state: &PlaylistSidecarState) -> bool {
         else {
             return false;
         };
-        let Some(nfo_hash) = entry.nfo_sha256.as_deref() else {
-            return false;
-        };
-        file_has_hash(&definition_path, definition_hash)
-            && file_has_hash(&folder.join(nfo_file), nfo_hash)
+        file_has_hash(&definition_path, definition_hash) && folder.join(nfo_file).is_file()
     })
 }
 
@@ -2158,7 +2241,7 @@ create_playlist: true
             write_generated_pair(&definition_path, b"new definition", &nfo_path, b"new NFO")
                 .expect_err("NFO publication must fail");
 
-        assert!(error.to_string().contains("publish managed NFO"));
+        assert!(error.to_string().contains("managed NFO"));
         assert_eq!(
             std::fs::read(&definition_path).expect("restored definition"),
             b"old definition"
@@ -2219,7 +2302,7 @@ create_playlist: true
     }
 
     #[test]
-    fn sidecar_integrity_hashes_reject_a_mixed_generation() {
+    fn sidecar_integrity_keeps_definitions_strict_and_defers_nfo_validation() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let definition = b"definition";
         let nfo = b"nfo";
@@ -2255,6 +2338,15 @@ create_playlist: true
 
         std::fs::write(temp.path().join("entry.nfo"), b"different generation")
             .expect("replace NFO");
+        assert!(managed_files_intact(temp.path(), &state));
+        assert!(ersatzrs_infra::addon_media_nfo::adopt_existing(
+            &temp.path().join("entry.nfo"),
+            state.entries[0].nfo_sha256.as_deref(),
+        )
+        .is_err());
+
+        std::fs::write(temp.path().join("entry.yml"), b"different generation")
+            .expect("replace definition");
         assert!(!managed_files_intact(temp.path(), &state));
     }
 
@@ -2569,7 +2661,7 @@ create_playlist: true
         )
         .await
         .expect_err("second pair publication must fail");
-        assert!(error.to_string().contains("publish managed NFO"));
+        assert!(error.to_string().contains("managed NFO"));
         assert_eq!(
             std::fs::read(&sidecar_path).expect("unchanged state"),
             original_state_bytes

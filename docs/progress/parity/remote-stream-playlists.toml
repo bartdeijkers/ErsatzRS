@@ -2,7 +2,7 @@ feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0065', '0066', '0068', '0070']
+adr        = ['0065', '0066', '0068', '0070', '0071']
 
 summary = '''
 Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
@@ -33,6 +33,10 @@ provider order, imports series introductions and artwork, and deduplicates by
 stable episode ID. ADR 0070 adds atomically validated operator chapters: the
 full episode and structured child fragments remain independently selectable,
 with exact whole-second playback bounds and duplicate-free refresh.
+ADR 0071 adds a reversible television-show presentation over the same scanned
+Remote Stream versions, disk-authoritative show/item NFO editing, dedicated
+per-item administration, and item-scoped chapter refresh. Projected episodes
+remain normal scheduling identities while add-on playback stays operational.
 Beeld & Geluid and yt-dlp media-list items can now carry Remote Stream URLs;
 the host materializes one managed playlist manifest and Local library per
 saved list below the add-on's profile-relative storage root, without requiring
@@ -49,6 +53,15 @@ adr         = '0070'
 evidence    = 'The working tree has a typed normalized Schatkamer source parser with combined Unicode search-filter coverage, strict v3 gates before chapter derivation, unbounded page traversal with fixture-backed ordering and deduplication, structured AddonMediaListChapter reconciliation, localized chapter administration, bounded POSIX and Windows playback, and scanner proof that fragment-before-parent enumeration is linked only after the complete selected batch is materialized; a selected fragment without its full episode is rejected.'
 resolved    = true
 resolution  = 'ADR 0070 owns the source grammar, pagination, structured chapter identity, refresh, and fragment playback contracts.'
+
+[[debt]]
+id          = 'addon-list-television-presentation-and-item-metadata'
+description = 'Present one episodic add-on list as a television hierarchy, move chapters to item scope, and make admin metadata edits durable in NFO files rather than database-only state.'
+discovered  = '2026-08-16'
+adr         = '0071'
+evidence    = 'The working tree stores active/requested presentation state, reconciles Show/Season/Episode rows over the scanned Remote Stream media versions, selects projected episodes in managed playlists, writes ETag-protected managed NFO files, preserves externally adopted NFO ownership, exposes a dedicated item route, and expands chapters only for the configured parent item.'
+resolved    = true
+resolution  = 'ADR 0071 owns the television projection, shared-version playback, NFO authority, safe reversion, and item-scoped administration contracts.'
 
 [[debt]]
 id          = 'remote-stream-playlist-contract-is-undecided'

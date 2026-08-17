@@ -70,6 +70,20 @@ pub enum AddonMediaListContentKind {
     OtherVideo,
 }
 
+/// Host-owned library presentation for an imported add-on list.
+///
+/// This is intentionally separate from [`AddonMediaListContentKind`]: an
+/// episode-shaped NFO may still belong to a Remote Streams library, while a
+/// television-show presentation projects the same provider playback into the
+/// normal Show/Season/Episode hierarchy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPresentationKind {
+    #[default]
+    RemoteStreams,
+    TelevisionShow,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Collection {
     pub id: EntityId,
@@ -205,6 +219,9 @@ pub struct AddonMediaList {
     pub auto_refresh: bool,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
+    pub presentation_kind: AddonMediaListPresentationKind,
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    pub presentation_error: Option<String>,
     pub chapter_input: String,
     pub playlist_id: Option<EntityId>,
     pub last_update: Option<DateTime<Utc>>,
@@ -233,6 +250,7 @@ pub struct AddonMediaListItem {
     pub fragment_start_seconds: Option<u64>,
     pub fragment_end_seconds: Option<u64>,
     pub additional_image_urls: Vec<String>,
+    pub chapter_input: String,
 }
 
 /// One user-authored chapter linked to its full and fragment add-on items.

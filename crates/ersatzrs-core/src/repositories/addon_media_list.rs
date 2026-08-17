@@ -1,8 +1,11 @@
 use async_trait::async_trait;
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability, EntityId};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
+    EntityId,
+};
 use serde::{Deserialize, Serialize};
 
-use super::Result;
+use super::{RepositoryError, Result};
 
 /// Provider-neutral row displayed by the add-on media-list manager.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,6 +34,12 @@ pub struct AddonMediaListAdminRow {
     pub last_match: Option<String>,
     /// Last provider refresh failure, if any.
     pub last_error: Option<String>,
+    /// Active library presentation.
+    pub presentation_kind: AddonMediaListPresentationKind,
+    /// Presentation requested by the administrator; may differ while a scan is pending.
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    /// Last projection failure, if conversion has not completed.
+    pub presentation_error: Option<String>,
 }
 
 /// Editable settings for one persisted add-on media list.
@@ -49,8 +58,14 @@ pub struct AddonMediaListAdminForm {
     /// Optional list-wide content classification; `Auto` keeps each
     /// provider-supplied item classification.
     pub content_kind_override: AddonMediaListContentKind,
-    /// Optional YouTube-style chapter marker input for a single-video source.
-    pub chapter_input: String,
+    /// Active library presentation.
+    pub presentation_kind: AddonMediaListPresentationKind,
+    /// Requested library presentation.
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    /// Projection error retained while active and requested kinds differ.
+    pub presentation_error: Option<String>,
+    /// Legacy list-wide chapter input retained only for ambiguous migrations.
+    pub legacy_chapter_input: String,
 }
 
 /// One persisted provider item and its optional local replacement.
@@ -66,6 +81,87 @@ pub struct AddonMediaListItemAdminRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
+    pub title: String,
+    pub year: Option<i32>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub source_url: Option<String>,
+    pub duration_seconds: Option<u64>,
+    pub parent_provider_id: Option<String>,
+    pub chapter_input: String,
+    pub projected_episode_id: Option<EntityId>,
+}
+
+/// One person row persisted in a Kodi-compatible NFO document.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListNfoPerson {
+    pub name: String,
+    pub role: Option<String>,
+    pub order: Option<i32>,
+    pub thumb: Option<String>,
+}
+
+/// Complete descriptive metadata supported by managed add-on-list NFO files.
+///
+/// Operational identity, source URL, availability, and runtime deliberately
+/// remain outside this structure because YAML/provider state owns them.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListNfoMetadata {
+    pub title: String,
+    pub original_title: Option<String>,
+    pub sort_title: Option<String>,
+    pub outline: Option<String>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub year: Option<i32>,
+    pub release_date: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub people: Vec<AddonMediaListNfoPerson>,
+    pub writers: Vec<String>,
+    pub directors: Vec<String>,
+    pub artists: Vec<String>,
+    pub producers: Vec<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
+    pub collection: Option<String>,
+    pub artwork_urls: Vec<String>,
+    pub guids: Vec<String>,
+}
+
+/// Managed NFO ownership shown in administration and health output.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListNfoOwnership {
+    #[default]
+    Generated,
+    User,
+    Invalid,
+}
+
+/// One NFO-backed metadata form with optimistic-concurrency state.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListNfoForm {
+    pub metadata: AddonMediaListNfoMetadata,
+    pub etag: String,
+    pub ownership: AddonMediaListNfoOwnership,
+    pub error: Option<String>,
+    pub path_available: bool,
+}
+
+/// Complete administration detail for one provider or chapter-fragment item.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListItemDetail {
+    pub item: AddonMediaListItemAdminRow,
+    pub nfo: AddonMediaListNfoForm,
+    pub chapters: Vec<AddonMediaListItemAdminRow>,
 }
 
 /// One eligible, already-scanned local video version.
@@ -94,6 +190,26 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>>;
     /// List provider items and replacement state in provider order.
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>>;
+    /// Load one item, its NFO metadata, and derived chapter children.
+    async fn get_item_detail(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+    ) -> Result<Option<AddonMediaListItemDetail>> {
+        let _ = (list_id, item_id);
+        Err(RepositoryError::unavailable(
+            "add-on item detail",
+            "not implemented",
+        ))
+    }
+    /// Load list-level television-show NFO metadata.
+    async fn get_show_nfo(&self, id: EntityId) -> Result<AddonMediaListNfoForm> {
+        let _ = id;
+        Err(RepositoryError::unavailable(
+            "add-on show NFO",
+            "not implemented",
+        ))
+    }
     /// Search eligible local video versions for the replacement picker.
     async fn search_replacement_candidates(
         &self,
@@ -128,6 +244,62 @@ pub trait AddonMediaListRepository: Send + Sync {
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
     ) -> Result<()>;
+    /// Request a library-presentation conversion.
+    async fn request_presentation(
+        &self,
+        id: EntityId,
+        presentation_kind: AddonMediaListPresentationKind,
+        show_title: Option<&str>,
+    ) -> Result<()> {
+        let _ = (id, presentation_kind, show_title);
+        Err(RepositoryError::unavailable(
+            "add-on list presentation",
+            "not implemented",
+        ))
+    }
+    /// Persist list-level descriptive metadata to `tvshow.nfo`.
+    async fn save_show_nfo(
+        &self,
+        id: EntityId,
+        metadata: &AddonMediaListNfoMetadata,
+        expected_etag: &str,
+    ) -> Result<()> {
+        let _ = (id, metadata, expected_etag);
+        Err(RepositoryError::unavailable(
+            "add-on show NFO",
+            "not implemented",
+        ))
+    }
+    /// Persist item descriptive metadata to its same-stem NFO.
+    async fn save_item_nfo(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        metadata: &AddonMediaListNfoMetadata,
+        expected_etag: &str,
+    ) -> Result<()> {
+        let _ = (list_id, item_id, metadata, expected_etag);
+        Err(RepositoryError::unavailable(
+            "add-on item NFO",
+            "not implemented",
+        ))
+    }
+    /// Return one NFO to generated/provider ownership.
+    async fn reset_nfo(&self, list_id: EntityId, item_id: Option<EntityId>) -> Result<()> {
+        let _ = (list_id, item_id);
+        Err(RepositoryError::unavailable(
+            "add-on NFO reset",
+            "not implemented",
+        ))
+    }
+    /// Update chapters for one full source item and refresh only that list.
+    async fn update_item_chapters(&self, item_id: EntityId, chapter_input: &str) -> Result<()> {
+        let _ = (item_id, chapter_input);
+        Err(RepositoryError::unavailable(
+            "add-on item chapters",
+            "not implemented",
+        ))
+    }
     /// Delete one list and its generated playlist.
     async fn delete(&self, id: EntityId) -> Result<()>;
     /// Load the persisted list-page size.

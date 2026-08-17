@@ -4383,6 +4383,27 @@ pub struct SetAddonMediaListItemReplacement {
     pub media_version_id: Option<EntityId>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestAddonMediaListPresentation {
+    pub id: EntityId,
+    pub presentation_kind: ersatzrs_domain::AddonMediaListPresentationKind,
+    pub show_title: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SaveAddonMediaListNfo {
+    pub id: EntityId,
+    pub list_id: Option<EntityId>,
+    pub metadata: ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+    pub etag: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateAddonMediaListItemChapters {
+    pub id: EntityId,
+    pub chapter_input: String,
+}
+
 /// Import or refresh one Add-on media list.
 pub async fn add_addon_media_list(
     command: AddAddonMediaList,
@@ -4492,6 +4513,80 @@ pub async fn set_addon_media_list_item_replacement(
     };
     repository
         .set_replacement(command.item_id, replacement)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn request_addon_media_list_presentation(
+    command: RequestAddonMediaListPresentation,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    repository
+        .request_presentation(
+            command.id,
+            command.presentation_kind,
+            command.show_title.as_deref(),
+        )
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn save_addon_media_list_show_nfo(
+    command: SaveAddonMediaListNfo,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    repository
+        .save_show_nfo(command.id, &command.metadata, &command.etag)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn save_addon_media_list_item_nfo(
+    command: SaveAddonMediaListNfo,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_item_id")?;
+    let list_id = command.list_id.ok_or(ApplicationError::Validation {
+        field: "addon_media_list_id",
+        message: "is required".to_owned(),
+    })?;
+    validate_positive_id(list_id, "addon_media_list_id")?;
+    repository
+        .save_item_nfo(list_id, command.id, &command.metadata, &command.etag)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn reset_addon_media_list_nfo(
+    list_id: EntityId,
+    item_id: Option<EntityId>,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(list_id, "addon_media_list_id")?;
+    if let Some(item_id) = item_id {
+        validate_positive_id(item_id, "addon_media_list_item_id")?;
+    }
+    repository
+        .reset_nfo(list_id, item_id)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn update_addon_media_list_item_chapters(
+    command: UpdateAddonMediaListItemChapters,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_item_id")?;
+    ersatzrs_core::media_chapters::parse_chapter_input(&command.chapter_input, None).map_err(
+        |error| ApplicationError::Validation {
+            field: "chapter_input",
+            message: error.to_string(),
+        },
+    )?;
+    repository
+        .update_item_chapters(command.id, command.chapter_input.trim())
         .await
         .map_err(Into::into)
 }

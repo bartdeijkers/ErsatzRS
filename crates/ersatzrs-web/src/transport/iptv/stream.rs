@@ -770,14 +770,13 @@ fn resolve_transport_stream_mode(
 ) -> TransportStreamMode {
     match requested_mode.unwrap_or_default().trim() {
         "" | "mixed" => match channel_streaming_mode {
-            StreamingMode::TransportStream | StreamingMode::TransportStreamHybrid => {
-                TransportStreamMode::Legacy
-            }
+            StreamingMode::TransportStream => TransportStreamMode::Legacy,
+            StreamingMode::TransportStreamHybrid => TransportStreamMode::HybridWrapper,
             StreamingMode::HttpLiveStreamingDirect | StreamingMode::HttpLiveStreamingSegmenter => {
                 TransportStreamMode::RedirectToHls
             }
         },
-        "ts" | "mpegts" | "mpeg-ts" | "ts-legacy" => TransportStreamMode::Legacy,
+        "mpegts" | "mpeg-ts" | "ts-legacy" => TransportStreamMode::Legacy,
         _ => TransportStreamMode::HybridWrapper,
     }
 }
@@ -3932,11 +3931,11 @@ mod tests {
         );
         assert_eq!(
             resolve_transport_stream_mode(None, StreamingMode::TransportStreamHybrid),
-            TransportStreamMode::Legacy
+            TransportStreamMode::HybridWrapper
         );
         assert_eq!(
             resolve_transport_stream_mode(Some("mixed"), StreamingMode::TransportStreamHybrid),
-            TransportStreamMode::Legacy
+            TransportStreamMode::HybridWrapper
         );
         assert_eq!(
             resolve_transport_stream_mode(None, StreamingMode::HttpLiveStreamingSegmenter),
@@ -3952,7 +3951,7 @@ mod tests {
         );
         assert_eq!(
             resolve_transport_stream_mode(Some("ts"), StreamingMode::TransportStream),
-            TransportStreamMode::Legacy
+            TransportStreamMode::HybridWrapper
         );
         assert_eq!(
             resolve_transport_stream_mode(Some("hybrid"), StreamingMode::TransportStream),

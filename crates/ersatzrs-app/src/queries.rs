@@ -1851,6 +1851,38 @@ pub async fn list_addon_media_list_items(
     repository.list_items(id).await.map_err(Into::into)
 }
 
+/// Load one provider item and its disk-authoritative NFO metadata.
+pub async fn get_addon_media_list_item(
+    list_id: EntityId,
+    item_id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Option<ersatzrs_core::repositories::AddonMediaListItemDetail>> {
+    if list_id <= 0 || item_id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_item_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository
+        .get_item_detail(list_id, item_id)
+        .await
+        .map_err(Into::into)
+}
+
+/// Load television-show metadata for one projected add-on media list.
+pub async fn get_addon_media_list_show_nfo(
+    id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListNfoForm> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository.get_show_nfo(id).await.map_err(Into::into)
+}
+
 /// Search eligible local video versions for an add-on item replacement.
 pub async fn search_addon_media_list_replacements(
     query: &str,

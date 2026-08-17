@@ -31,6 +31,7 @@ md-5 = "0.11"
 minijinja = "2"
 process-wrap = { version = "9.1", features = ["tokio1"] }
 percent-encoding = "2"
+quick-xml = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

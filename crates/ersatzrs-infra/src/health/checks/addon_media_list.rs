@@ -21,7 +21,8 @@ impl HealthCheck for AddonMediaListHealthCheck {
 
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
-            r#"SELECT "list"."Name", "list"."LastError", "addon"."Enabled",
+            r#"SELECT "list"."Name", "list"."LastError", "list"."PresentationError",
+                      "addon"."Enabled",
                       "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
                FROM "AddonMediaList" AS "list"
                JOIN "AddonInstallation" AS "addon"
@@ -75,9 +76,11 @@ impl HealthCheck for AddonMediaListHealthCheck {
             })
             .take(5)
             .collect::<Vec<_>>();
+        let presentation_failures = presentation_failures(&rows);
         let failures = storage_failures
             .into_iter()
             .chain(failures)
+            .chain(presentation_failures)
             .take(5)
             .collect::<Vec<_>>();
         if !failures.is_empty() {
@@ -107,22 +110,47 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .with_link("/media/addon-lists"));
         }
 
-        let missing_replacements = count_missing_replacements(&self.pool).await?;
-        let stale_replacements = count_stale_replacements(&self.pool).await?;
-        if stale_replacements > 0 || missing_replacements > 0 {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Warning,
-                format!(
-                    "{missing_replacements} unavailable item(s) have no replacement; {stale_replacements} replacement mapping(s) are stale"
-                ),
-                "One or more add-on list gaps need operator attention",
-            )
-            .with_link("/media/addon-lists"));
+        if let Some(result) = replacement_failure(&self.pool, self.title()).await? {
+            return Ok(result);
         }
 
         Ok(HealthCheckResult::pass(self.title()).with_link("/media/addon-lists"))
     }
+}
+
+async fn replacement_failure(
+    pool: &Pool<Db>,
+    title: &'static str,
+) -> Result<Option<HealthCheckResult>> {
+    let missing = count_missing_replacements(pool).await?;
+    let stale = count_stale_replacements(pool).await?;
+    Ok((stale > 0 || missing > 0).then(|| {
+        HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            format!(
+                "{missing} unavailable item(s) have no replacement; {stale} replacement mapping(s) are stale"
+            ),
+            "One or more add-on list gaps need operator attention",
+        )
+        .with_link("/media/addon-lists")
+    }))
+}
+
+fn presentation_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| {
+            let error = row
+                .try_get::<Option<String>, _>("PresentationError")
+                .ok()
+                .flatten()?;
+            let name = row
+                .try_get::<String, _>("Name")
+                .unwrap_or_else(|_| "List".to_owned());
+            Some(format!("{name}: television projection failed: {error}"))
+        })
+        .take(5)
+        .collect()
 }
 
 async fn count_missing_replacements(pool: &Pool<Db>) -> Result<i64> {
@@ -183,7 +211,8 @@ mod tests {
                 "Id" INTEGER PRIMARY KEY,
                 "AddonId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL,
-                "LastError" TEXT NULL
+                "LastError" TEXT NULL,
+                "PresentationError" TEXT NULL
             );
             CREATE TABLE "AddonMediaSource" (
                 "AddonId" TEXT PRIMARY KEY,

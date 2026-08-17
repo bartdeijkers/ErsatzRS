@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- Add-on media lists can now be presented as a normal television show with
+  Show/Season/Episode identities backed by the existing Remote Stream playback
+  versions. Every list item has a dedicated metadata and chapter editor;
+  descriptive edits are written to optimistic-concurrency-protected Kodi NFO
+  files and then projected into the database. The list-wide chapters control
+  has been removed, externally edited NFO files are preserved as user-owned,
+  and failed television projections are reported by health diagnostics.
+
 - The official Beeld & Geluid integration now recognizes personal lists,
   series and programme pages, individual episodes, and filtered Schatkamer
   searches through one normalized source grammar. It traverses every result
@@ -96,6 +104,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Channels configured for Transport Stream Hybrid, and explicit `mode=ts`
+  requests, now dispatch the modern HLS segmenter wrapper promised by the
+  streaming parity contract instead of silently falling through to the legacy
+  concat branch. This prevents the wrong pipeline from terminating at Remote
+  Stream programme boundaries.
 - Beeld & Geluid chapter input now requires the matching v3 list capability,
   preventing older add-on packages from exposing chapter titles that play the
   complete episode. Remote Stream playlist scans validate that every selected
