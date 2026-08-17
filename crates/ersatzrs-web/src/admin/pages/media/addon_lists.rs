@@ -772,6 +772,15 @@ fn AddonMediaListEditorIsland(
     let replacement_target = RwSignal::new(None::<i64>);
     let replacement_query = RwSignal::new(String::new());
     let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
+    let replacement_item_title = Memo::new(move |_| {
+        replacement_target.get().and_then(|target| {
+            items
+                .get()
+                .into_iter()
+                .find(|item| item.id == target)
+                .map(|item| item.display_title)
+        })
+    });
 
     let save_action = Action::new(
         |value: &(
@@ -1037,14 +1046,31 @@ fn AddonMediaListEditorIsland(
                                         >{replacement}</td>
                                         <td>
                                             <div class=style::row_actions>
-                                                <button type="button" class=style::icon_button on:click=move |_| {
-                                                    replacement_target.set(Some(item_id));
-                                                    replacement_query.set(title.clone());
-                                                    search_action.dispatch(title.clone());
-                                                }>{tr(TextKey::Replace)}</button>
-                                                <button type="button" class=style::icon_button disabled=!has_replacement on:click=move |_| {
-                                                    replacement_action.dispatch((item_id, None));
-                                                }>{tr(TextKey::Clear)}</button>
+                                                <button
+                                                    type="button"
+                                                    class=style::icon_button
+                                                    title=tr(TextKey::Replace)
+                                                    aria-label=tr(TextKey::Replace)
+                                                    on:click=move |_| {
+                                                        replacement_target.set(Some(item_id));
+                                                        replacement_query.set(title.clone());
+                                                        search_action.dispatch(title.clone());
+                                                    }
+                                                >
+                                                    <span style=icon_style(IconName::FindReplace, "1.25rem") aria-hidden="true"></span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class=style::icon_button
+                                                    title=tr(TextKey::Clear)
+                                                    aria-label=tr(TextKey::Clear)
+                                                    disabled=!has_replacement
+                                                    on:click=move |_| {
+                                                        replacement_action.dispatch((item_id, None));
+                                                    }
+                                                >
+                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -1053,32 +1079,115 @@ fn AddonMediaListEditorIsland(
                         </tbody>
                     </table>
                 </div>
-                <div class=style::editor style:display=move || if replacement_target.get().is_some() { "" } else { "none" }>
-                    <div class=style::field_row>
-                        <input class=style::text_input type="search" prop:value=move || replacement_query.get() on:input=move |event| replacement_query.set(event_target_value(&event))/>
-                        <button type="button" class=style::btn_add on:click=move |_| {
-                            search_action.dispatch(replacement_query.get_untracked());
-                        }>{tr(TextKey::Search)}</button>
-                    </div>
-                    <div class=style::table_wrap>
-                        <table>
-                            <tbody>
-                                {move || replacement_results.get().into_iter().map(|candidate| {
-                                    let target = replacement_target.get_untracked();
-                                    view! {
-                                        <tr>
-                                            <td>{candidate.title}</td>
-                                            <td>{candidate.path}</td>
-                                            <td><button type="button" class=style::btn_add on:click=move |_| {
-                                                if let Some(item_id) = target {
-                                                    replacement_action.dispatch((item_id, Some((candidate.media_item_id, candidate.media_version_id))));
-                                                }
-                                            }>{tr(TextKey::Replace)}</button></td>
-                                        </tr>
+                <div
+                    class=style::backdrop
+                    style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
+                />
+                <div
+                    class=style::overlay
+                    style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
+                    on:click=move |_| replacement_target.set(None)
+                >
+                    <div class=style::picker_panel on:click=|event| event.stop_propagation()>
+                        // Naming the target item here is what makes the dialog
+                        // usable: the list below it can hold many similarly
+                        // titled episodes.
+                        <h2 class=style::dialog_title>
+                            {move || replacement_item_title
+                                .get()
+                                .unwrap_or_else(|| tr(TextKey::LocalReplacement).to_string())}
+                        </h2>
+                        <div class=style::picker_body>
+                            <div class=style::picker_search>
+                                <input
+                                    class=format!("{} {}", style::text_input, style::picker_search_input)
+                                    type="search"
+                                    aria-label=tr(TextKey::Search)
+                                    prop:value=move || replacement_query.get()
+                                    on:input=move |event| replacement_query.set(event_target_value(&event))
+                                />
+                                <button
+                                    type="button"
+                                    class=style::btn_add
+                                    disabled=move || search_action.pending().get()
+                                    on:click=move |_| {
+                                        search_action.dispatch(replacement_query.get_untracked());
                                     }
-                                }).collect_view()}
-                            </tbody>
-                        </table>
+                                >
+                                    <span style=icon_style(IconName::Search, "1.125rem") aria-hidden="true"></span>
+                                    <span>{tr(TextKey::Search)}</span>
+                                </button>
+                            </div>
+                            <div class=style::picker_results>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th class=style::picker_name>{tr(TextKey::Name)}</th>
+                                            <th class=style::picker_path>{tr(TextKey::Location)}</th>
+                                            <th class=style::picker_action/>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {move || {
+                                            let candidates = replacement_results.get();
+                                            if candidates.is_empty() {
+                                                let message = if search_action.pending().get() {
+                                                    tr(TextKey::Loading)
+                                                } else {
+                                                    tr(TextKey::NoItemsToDisplay)
+                                                };
+                                                return view! {
+                                                    <tr>
+                                                        <td class=style::empty_cell colspan="3">{message}</td>
+                                                    </tr>
+                                                }
+                                                .into_any();
+                                            }
+                                            candidates
+                                                .into_iter()
+                                                .map(|candidate| {
+                                                    let target = replacement_target.get_untracked();
+                                                    view! {
+                                                        <tr>
+                                                            <td class=style::picker_name>{candidate.title}</td>
+                                                            <td class=style::picker_path>{candidate.path}</td>
+                                                            <td class=style::picker_action>
+                                                                <div class=style::row_actions>
+                                                                    <button
+                                                                        type="button"
+                                                                        class=style::btn_add
+                                                                        on:click=move |_| {
+                                                                            if let Some(item_id) = target {
+                                                                                replacement_action.dispatch((
+                                                                                    item_id,
+                                                                                    Some((candidate.media_item_id, candidate.media_version_id)),
+                                                                                ));
+                                                                            }
+                                                                        }
+                                                                    >
+                                                                        {tr(TextKey::Replace)}
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                })
+                                                .collect_view()
+                                                .into_any()
+                                        }}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class=style::dialog_footer>
+                            <button
+                                type="button"
+                                class=style::btn_cancel
+                                on:click=move |_| replacement_target.set(None)
+                            >
+                                {tr(TextKey::Cancel)}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>

@@ -727,6 +727,15 @@ struct ProjectedEpisodeInput {
     state: i32,
 }
 
+/// Season title in the spelling scanned television sources already use.
+fn season_title(season_number: i32) -> String {
+    if season_number == 0 {
+        "Specials".to_owned()
+    } else {
+        format!("Season {season_number}")
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 async fn reconcile_tv_projection(
     pool: &Pool<crate::db::Db>,
@@ -770,7 +779,7 @@ async fn reconcile_tv_projection(
         .fetch_optional(pool)
         .await
         .repository()?;
-        let mut tx = pool.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(pool).await.repository()?;
         if let Some(show_id) = show_id {
             let episode_ids = sqlx::query_scalar::<_, EntityId>(
                 r#"SELECT "projection"."EpisodeId"
@@ -902,7 +911,7 @@ async fn reconcile_tv_projection(
     .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
     let now = chrono::Utc::now();
     let now_text = crate::repositories::common::encode_datetime(now);
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     let show_id = if let Some(show_id) = sqlx::query_scalar::<_, EntityId>(
         r#"SELECT "ShowId" FROM "AddonMediaListTelevisionShow"
            WHERE "AddonMediaListId" = ?"#,
@@ -997,6 +1006,28 @@ async fn reconcile_tv_projection(
             .repository()?;
             season_id
         };
+        // Every other season source carries metadata, and consumers join it to
+        // resolve the season title and artwork, so a projected season without
+        // one is invisible to them — including the show detail page. This also
+        // repairs seasons projected before the metadata row was written.
+        sqlx::query(
+            r#"INSERT INTO "SeasonMetadata"
+                   ("SeasonId", "MetadataKind", "Title", "SortTitle",
+                    "DateAdded", "DateUpdated")
+               SELECT ?, 0, ?, ?, ?, ?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM "SeasonMetadata" WHERE "SeasonId" = ?
+               )"#,
+        )
+        .bind(season_id)
+        .bind(season_title(season_number))
+        .bind(format!("{season_number:02}"))
+        .bind(&now_text)
+        .bind(&now_text)
+        .bind(season_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
         let episode_id = if let Some(episode_id) = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
                WHERE "AddonMediaListItemId" = ?"#,
@@ -1131,7 +1162,7 @@ fn replacement_candidate_query(search: bool) -> &'static str {
                   END AS "CollectionType",
                   (SELECT MIN("stream"."Index") FROM "MediaStream" AS "stream"
                    WHERE "stream"."MediaVersionId" = "version"."Id"
-                     AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                     AND "stream"."MediaStreamKind" = 1 AND "stream"."AttachedPic" = 0)
                     AS "VideoStreamIndex"
            FROM "MediaItem" AS "item"
            JOIN "LibraryPath" AS "path" ON "path"."Id" = "item"."LibraryPathId"
@@ -1147,7 +1178,7 @@ fn replacement_candidate_query(search: bool) -> &'static str {
              AND EXISTS (
                 SELECT 1 FROM "MediaStream" AS "stream"
                 WHERE "stream"."MediaVersionId" = "version"."Id"
-                  AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                  AND "stream"."MediaStreamKind" = 1 AND "stream"."AttachedPic" = 0)
              AND LOWER(COALESCE(
                     (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = "item"."Id" ORDER BY "Id" LIMIT 1),
                     (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = "item"."Id" ORDER BY "Id" LIMIT 1),
@@ -1173,7 +1204,7 @@ fn replacement_candidate_query(search: bool) -> &'static str {
                   END AS "CollectionType",
                   (SELECT MIN("stream"."Index") FROM "MediaStream" AS "stream"
                    WHERE "stream"."MediaVersionId" = "version"."Id"
-                     AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                     AND "stream"."MediaStreamKind" = 1 AND "stream"."AttachedPic" = 0)
                     AS "VideoStreamIndex"
            FROM "MediaItem" AS "item"
            JOIN "LibraryPath" AS "path" ON "path"."Id" = "item"."LibraryPathId"
@@ -1189,7 +1220,7 @@ fn replacement_candidate_query(search: bool) -> &'static str {
              AND EXISTS (
                 SELECT 1 FROM "MediaStream" AS "stream"
                 WHERE "stream"."MediaVersionId" = "version"."Id"
-                  AND "stream"."MediaStreamKind" = 0 AND "stream"."AttachedPic" = 0)
+                  AND "stream"."MediaStreamKind" = 1 AND "stream"."AttachedPic" = 0)
            LIMIT 1"#
     }
 }

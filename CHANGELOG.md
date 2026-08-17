@@ -125,6 +125,26 @@ release section when tagging a release.
 
 ### Fixed
 
+- Choosing a Local replacement for an add-on list item now finds candidates.
+  The search required a video stream recorded with a kind the scanner never
+  writes, so it matched nothing in any library and the feature could not be
+  used at all.
+- Presenting an add-on list as a television show no longer fails with a
+  database lock. The projection read before it wrote inside a deferred
+  transaction, which SQLite refuses to upgrade — immediately, and regardless of
+  the configured busy timeout — whenever another connection has written in the
+  meantime. Renaming a projected show failed for the same reason.
+- Seasons projected from an add-on list are now listed on the show page.
+  They were created without the metadata row every other season source writes,
+  and the page requires it, so a projected show appeared to have no seasons or
+  episodes at all. Existing projections repair themselves on the next
+  synchronization.
+- The Local replacement picker is no longer laid out as a bare inline block.
+  It is now a dialog that names the item being replaced, sizes itself to the
+  viewport instead of a fixed form width, keeps its search box and buttons
+  reachable while only the result list scrolls, and reports an empty result
+  instead of showing nothing. Its row actions match the icon buttons used
+  elsewhere in the table.
 - Synchronizing a Remote Stream playlist now refreshes its panel. **Sync Now**,
   and removing an entry (which triggers a synchronization), previously left the
   last-synchronized time and item count stale until the page was reloaded.

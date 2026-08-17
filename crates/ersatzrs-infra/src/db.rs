@@ -584,6 +584,40 @@ pub fn last_insert_id(result: DbQueryResult) -> i64 {
     }
 }
 
+/// Begin a transaction that is going to write.
+///
+/// `SQLite` starts an ordinary transaction in deferred mode, which takes a read
+/// snapshot on its first statement and only tries to acquire the write lock
+/// later. If any other connection commits in between, that upgrade fails
+/// immediately with `SQLITE_BUSY` and `busy_timeout` does not apply, because
+/// waiting could never resolve it — the transaction has to be abandoned and
+/// retried. A transaction that reads before it writes is therefore unreliable
+/// under concurrency, which is exactly the shape of most write paths here.
+///
+/// Starting the transaction as `BEGIN IMMEDIATE` takes the write lock up
+/// front, where `busy_timeout` does apply, so concurrent writers queue instead
+/// of failing. Use this for any transaction that writes; keep the plain
+/// `begin()` for read-only transactions so they stay concurrent.
+///
+/// # Errors
+///
+/// Returns an error when the transaction cannot be started.
+pub async fn begin_write(pool: &DbPool) -> Result<sqlx::Transaction<'static, Db>, sqlx::Error> {
+    #[cfg(feature = "mysql")]
+    {
+        // `Any` may be backed by MySQL, where this SQLite-only spelling is a
+        // syntax error, so only SQLite gets the stronger statement.
+        if pool.connect_options().database_url.scheme() == "sqlite" {
+            return pool.begin_with("BEGIN IMMEDIATE").await;
+        }
+        pool.begin().await
+    }
+    #[cfg(not(feature = "mysql"))]
+    {
+        pool.begin_with("BEGIN IMMEDIATE").await
+    }
+}
+
 #[allow(clippy::unused_async)]
 pub(crate) async fn inserted_id(
     transaction: &mut sqlx::Transaction<'_, Db>,
