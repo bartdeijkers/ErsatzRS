@@ -13,6 +13,15 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Updated `h2` to 0.4.16 for
+  [RUSTSEC-2026-0258](https://rustsec.org/advisories/RUSTSEC-2026-0258): the
+  version reached through `hyper`/`axum` accepted and queued empty HTTP/2 DATA
+  frames without limit, so a client that did not drain its streams could drive
+  unbounded memory use, or a panic on length overflow, against the admin UI and
+  the IPTV/HLS endpoints. Low severity.
+
 ### Added
 
 - Streaming add-ons can now supply bounded chapter markers through
