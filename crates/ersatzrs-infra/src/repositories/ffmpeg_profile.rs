@@ -133,7 +133,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     /// portable across both backends (`ON CONFLICT ... excluded` is not valid
     /// on `MySQL`).
     async fn upsert(&self, profile: &FFmpegProfile) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
 
         let updated = bind_profile_columns(
             sqlx::query(

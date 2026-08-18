@@ -80,7 +80,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn upsert(&self, schedule: &ProgramSchedule) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "ProgramSchedule"
                SET "Name" = ?,
@@ -151,7 +151,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn upsert_item(&self, item: &ProgramScheduleItem) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         upsert_program_schedule_item(&mut tx, item).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -184,7 +184,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn upsert_alternate(&self, alternate: &ProgramScheduleAlternate) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         upsert_program_schedule_alternate(&mut tx, alternate).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -351,7 +351,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn delete_admin(&self, id: EntityId) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let item_ids: Vec<EntityId> = sqlx::query_scalar(
             r#"SELECT "Id" FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
         )
@@ -416,7 +416,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         media_item_id: EntityId,
         pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
     ) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let next_index = sqlx::query_scalar::<_, i64>(
             r#"SELECT COALESCE(MAX("Index"), -1) + 1
                FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
@@ -456,7 +456,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
 }
 
 async fn copy_schedule_admin(pool: &Pool<Db>, id: EntityId, name: &str) -> Result<EntityId> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     let result = sqlx::query(
         r#"INSERT INTO "ProgramSchedule" (
                "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
@@ -1078,7 +1078,7 @@ async fn replace_schedule_items_admin(
     schedule_id: EntityId,
     items: &[ScheduleItemAdmin],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     let old_item_ids: Vec<EntityId> = sqlx::query_scalar(
         r#"SELECT "Id" FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
     )

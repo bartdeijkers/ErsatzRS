@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use syn::{parse::Parser, visit::Visit};
+use syn::{parse::Parser, spanned::Spanned, visit::Visit};
 
 const DEFAULT_BASELINE: &str = ".architecture-lint-baseline.toml";
 const APP_MANIFEST: &str = "crates/ersatzrs-app/Cargo.toml";
@@ -39,6 +39,23 @@ const FORBIDDEN_APP_DEPENDENCIES: &[&str] = &[
     "ersatzrs-web",
 ];
 const FORBIDDEN_CORE_DEPENDENCIES: &[&str] = &["diesel", "reqwest", "sea-orm", "sqlx"];
+/// The module that defines `begin_write`; its own non-SQLite fallback is the
+/// one legitimate deferred `begin()` in the workspace.
+const WRITE_TRANSACTION_HELPER_SOURCE: &str = "crates/ersatzrs-infra/src/db.rs";
+/// Comment marker that documents a deliberately deferred, read-only transaction.
+const READ_ONLY_TRANSACTION_MARKER: &str = "read-only transaction";
+/// How far above a `begin()` the read-only marker comment may sit.
+const READ_ONLY_MARKER_LOOKBEHIND: usize = 8;
+/// How far a transaction body is followed while looking for its commit.
+const TRANSACTION_BODY_LIMIT: usize = 400;
+/// SQL that proves a transaction body writes, so it must not be deferred.
+const WRITE_SQL_MARKERS: &[&str] = &[
+    "INSERT INTO",
+    "INSERT OR",
+    "REPLACE INTO",
+    "DELETE FROM",
+    "UPDATE \"",
+];
 
 pub fn run(args: Vec<String>) -> ExitCode {
     let opts = match Opts::parse(args) {
@@ -69,6 +86,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     check_core_crate(workspace)?;
     check_addon_contract_distribution(workspace)?;
     check_scan_orchestration_boundary(workspace)?;
+    check_write_transaction_begins(workspace)?;
     check_provider_availability_vocabulary_boundary(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
@@ -424,6 +442,208 @@ fn scan_orchestration_boundary_problems(
         ));
     }
     problems
+}
+
+/// Reject transactions that write but start in `SQLite`'s deferred mode.
+///
+/// A deferred transaction takes a read snapshot on its first statement and only
+/// tries to take the write lock when it first writes. If another connection
+/// commits in between, that upgrade fails immediately with `SQLITE_BUSY` and
+/// `busy_timeout` does not apply, because waiting could never resolve it. Almost
+/// every write path here reads before it writes, so the default `begin()` is a
+/// latent 500 under concurrency; `ersatzrs_infra::db::begin_write` issues
+/// `BEGIN IMMEDIATE` instead. Genuinely read-only transactions must stay
+/// deferred so `WAL` can still run them concurrently, and say so in a comment.
+fn check_write_transaction_begins(workspace: &Path) -> Result<()> {
+    let root = workspace.join(CRATES_ROOT);
+    if !root.is_dir() {
+        anyhow::bail!("crates root does not exist: {}", root.display());
+    }
+
+    let mut files = Vec::new();
+    for entry in walkdir::WalkDir::new(&root) {
+        let entry = entry.context("walk crate source tree")?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().is_none_or(|extension| extension != "rs") {
+            continue;
+        }
+        // Only crate `src/` trees are production code; `tests/` is test code.
+        if !path
+            .components()
+            .any(|component| component.as_os_str() == "src")
+        {
+            continue;
+        }
+        files.push(path.to_path_buf());
+    }
+    files.sort();
+
+    let mut problems = Vec::new();
+    for path in files {
+        let source =
+            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        if !source.contains(".begin()") {
+            continue;
+        }
+        let display_path = path
+            .strip_prefix(".")
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if display_path == WRITE_TRANSACTION_HELPER_SOURCE {
+            // `begin_write` itself falls back to a plain `begin()` on backends
+            // where `BEGIN IMMEDIATE` is not valid syntax.
+            continue;
+        }
+        problems.extend(
+            write_transaction_problems(&display_path, &source)
+                .with_context(|| format!("parse {}", path.display()))?,
+        );
+    }
+
+    if !problems.is_empty() {
+        for problem in &problems {
+            eprintln!("{problem}");
+        }
+        anyhow::bail!(
+            "{} deferred write transaction(s); a transaction that writes must start with \
+             `begin_write` (BEGIN IMMEDIATE), because `SQLite` fails a deferred \
+             read-then-write transaction immediately and `busy_timeout` cannot help",
+            problems.len()
+        );
+    }
+    Ok(())
+}
+
+fn write_transaction_problems(display_path: &str, source: &str) -> Result<Vec<String>> {
+    let syntax = syn::parse_file(source)?;
+    let mut visitor = DeferredBeginVisitor::default();
+    visitor.visit_file(&syntax);
+
+    let lines: Vec<&str> = source.lines().collect();
+    let mut problems = Vec::new();
+    for line_number in visitor.sites {
+        let Some(index) = line_number.checked_sub(1) else {
+            continue;
+        };
+        if !has_read_only_marker(&lines, index) {
+            problems.push(format!(
+                "{display_path}:{line_number} starts a transaction with `begin()`, which \
+                 SQLite defers; use `begin_write` if it writes, or document a genuinely \
+                 read-only transaction with a `{READ_ONLY_TRANSACTION_MARKER}` comment"
+            ));
+            continue;
+        }
+        if let Some(marker) = transaction_body_write_marker(&lines, index) {
+            problems.push(format!(
+                "{display_path}:{line_number} is documented as a \
+                 `{READ_ONLY_TRANSACTION_MARKER}` but its body runs `{marker}`; use \
+                 `begin_write` instead"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+/// Look for the read-only justification in the comment block above the site.
+fn has_read_only_marker(lines: &[&str], index: usize) -> bool {
+    let start = index.saturating_sub(READ_ONLY_MARKER_LOOKBEHIND);
+    for line in lines[start..index].iter().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !trimmed.starts_with("//") {
+            // A statement, not a comment: the comment block has ended.
+            return false;
+        }
+        if trimmed
+            .to_ascii_lowercase()
+            .contains(READ_ONLY_TRANSACTION_MARKER)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Follow the transaction from its `begin()` to its commit, looking for writes.
+fn transaction_body_write_marker(lines: &[&str], index: usize) -> Option<&'static str> {
+    let binding = transaction_binding(lines[index]);
+    let end = lines.len().min(index + TRANSACTION_BODY_LIMIT);
+    for line in &lines[index..end] {
+        if let Some(marker) = WRITE_SQL_MARKERS
+            .iter()
+            .find(|marker| line.contains(**marker))
+        {
+            return Some(marker);
+        }
+        if let Some(binding) = binding.as_deref() {
+            if line.contains(&format!("{binding}.commit()"))
+                || line.contains(&format!("{binding}.rollback()"))
+            {
+                break;
+            }
+        }
+        if line.starts_with('}') {
+            break;
+        }
+    }
+    None
+}
+
+/// Recover the transaction variable name from a `let mut tx = …begin()` line.
+fn transaction_binding(line: &str) -> Option<String> {
+    let rest = line.trim_start().strip_prefix("let mut ")?;
+    let name: String = rest
+        .chars()
+        .take_while(|character| character.is_alphanumeric() || *character == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Collect the source lines of `…begin().await` calls in production code.
+#[derive(Default)]
+struct DeferredBeginVisitor {
+    sites: Vec<usize>,
+}
+
+impl<'ast> Visit<'ast> for DeferredBeginVisitor {
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_fn(self, item);
+        }
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_mod(self, item);
+        }
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_impl(self, item);
+        }
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_impl_item_fn(self, item);
+        }
+    }
+
+    fn visit_expr_await(&mut self, expression: &'ast syn::ExprAwait) {
+        if let syn::Expr::MethodCall(call) = expression.base.as_ref() {
+            if call.method == "begin" && call.args.is_empty() {
+                self.sites.push(call.span().start().line);
+            }
+        }
+        syn::visit::visit_expr_await(self, expression);
+    }
 }
 
 fn is_public_item(item: &syn::Item) -> bool {
@@ -1235,6 +1455,112 @@ mod tests {
             b"PLEX_CLIENT_IDENTIFIER_KEY",
             b"CLIENT_ID"
         ));
+    }
+
+    #[test]
+    fn writing_transactions_must_not_start_deferred() {
+        let source = r###"
+            async fn save(pool: &DbPool) -> Result<()> {
+                let mut tx = pool.begin().await?;
+                sqlx::query(r##"INSERT INTO "Block" ("Name") VALUES (?)"##)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await
+            }
+        "###;
+        let problems =
+            write_transaction_problems("crates/demo/src/lib.rs", source).expect("fixture parses");
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("crates/demo/src/lib.rs:3"));
+        assert!(problems[0].contains("begin_write"));
+    }
+
+    #[test]
+    fn begin_write_transactions_are_accepted() {
+        let source = r###"
+            async fn save(pool: &DbPool) -> Result<()> {
+                let mut tx = crate::db::begin_write(pool).await?;
+                sqlx::query(r##"INSERT INTO "Block" ("Name") VALUES (?)"##)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await
+            }
+        "###;
+        assert!(write_transaction_problems("crates/demo/src/lib.rs", source)
+            .expect("fixture parses")
+            .is_empty());
+    }
+
+    #[test]
+    fn documented_read_only_transactions_stay_deferred() {
+        let source = r###"
+            async fn load(pool: &DbPool) -> Result<Vec<i64>> {
+                // Read-only transaction: a consistent snapshot, nothing is written,
+                // so keep the deferred begin and let WAL run readers concurrently.
+                let mut tx = pool.begin().await?;
+                let ids = sqlx::query_scalar(r##"SELECT "Id" FROM "Block""##)
+                    .fetch_all(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok(ids)
+            }
+        "###;
+        assert!(write_transaction_problems("crates/demo/src/lib.rs", source)
+            .expect("fixture parses")
+            .is_empty());
+    }
+
+    #[test]
+    fn read_only_annotation_cannot_cover_a_writing_transaction() {
+        let source = r###"
+            async fn save(pool: &DbPool) -> Result<()> {
+                // Read-only transaction: this claim is wrong.
+                let mut tx = pool.begin().await?;
+                sqlx::query(r##"DELETE FROM "Block" WHERE "Id" = ?"##)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await
+            }
+        "###;
+        let problems =
+            write_transaction_problems("crates/demo/src/lib.rs", source).expect("fixture parses");
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("DELETE FROM"));
+    }
+
+    #[test]
+    fn test_only_transactions_are_not_linted() {
+        let source = r###"
+            #[cfg(all(test, feature = "ssr"))]
+            async fn seed(pool: &DbPool) -> Result<()> {
+                let mut tx = pool.begin().await?;
+                sqlx::query(r##"INSERT INTO "Block" ("Name") VALUES (?)"##)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await
+            }
+        "###;
+        assert!(write_transaction_problems("crates/demo/src/lib.rs", source)
+            .expect("fixture parses")
+            .is_empty());
+    }
+
+    #[test]
+    fn a_read_only_marker_only_counts_in_the_adjacent_comment_block() {
+        let source = r###"
+            async fn save(pool: &DbPool) -> Result<()> {
+                // Read-only transaction: this comment belongs to the statement below.
+                let existing = count(pool).await?;
+                let mut tx = pool.begin().await?;
+                sqlx::query(r##"INSERT INTO "Block" ("Name") VALUES (?)"##)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await
+            }
+        "###;
+        let problems =
+            write_transaction_problems("crates/demo/src/lib.rs", source).expect("fixture parses");
+        assert_eq!(problems.len(), 1);
     }
 
     #[test]

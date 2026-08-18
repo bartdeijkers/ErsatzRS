@@ -59,7 +59,7 @@ impl DecoRepository for SqliteDecoRepository {
     }
 
     async fn upsert(&self, deco: &Deco) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(upsert_sql!(
             r#"INSERT INTO "Deco" (
                 "Id", "DecoGroupId", "Name", "BreakContentMode", "DefaultFillerMode",
@@ -291,7 +291,7 @@ impl DecoRepository for SqliteDecoRepository {
     }
 
     async fn save_admin(&self, deco: &DecoAdminRecord) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "Deco" SET
                    "Name" = ?, "WatermarkMode" = ?, "UseWatermarkDuringFiller" = ?,
@@ -576,7 +576,7 @@ impl DecoRepository for SqliteDecoRepository {
         name: &str,
         items: &[DecoTemplateItemAdmin],
     ) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "DecoTemplate"
                SET "Name" = ?, "DateUpdated" = CURRENT_TIMESTAMP WHERE "Id" = ?"#,

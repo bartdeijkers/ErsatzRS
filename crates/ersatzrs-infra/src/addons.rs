@@ -1179,7 +1179,7 @@ async fn persist_staged_addon(
         .map_err(|_| AddonError::Validation("manifest could not be persisted".to_owned()))?;
     let install_path = staged.destination.to_string_lossy().into_owned();
     let state_revision = Uuid::new_v4().to_string();
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installed = list_installed_addons_in_transaction(&mut transaction).await?;
     let enabled_dependents = dependent_addon_ids_from_installations(&installed, &addon.id, true);
@@ -1277,7 +1277,7 @@ async fn persist_sideloaded_addon(
         .map_err(|_| AddonError::Validation("manifest could not be persisted".to_owned()))?;
     let install_path = staged.destination.to_string_lossy().into_owned();
     let state_revision = Uuid::new_v4().to_string();
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installed = list_installed_addons_in_transaction(&mut transaction).await?;
     let enabled_dependents =
@@ -1559,7 +1559,7 @@ pub async fn save_addon_setting(
         validate_storage_path_override(&installation.manifest, setting)?;
     }
 
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installed = list_installed_addons_in_transaction(&mut transaction).await?;
     let enabled_dependents = dependent_addon_ids_from_installations(&installed, addon_id, true);
@@ -1742,7 +1742,7 @@ pub async fn enable_addon(
         &settings,
     )
     .await?;
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installation = load_installed_addon_in_transaction(&mut transaction, addon_id)
         .await?
@@ -1788,7 +1788,7 @@ pub async fn enable_addon(
 ///
 /// Returns an error when persistence fails.
 pub async fn disable_addon(pool: &DbPool, addon_id: &str) -> Result<(), AddonError> {
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let installation = load_installed_addon_in_transaction(&mut transaction, addon_id)
         .await?
@@ -1837,7 +1837,7 @@ pub async fn uninstall_addon(pool: &DbPool, addon_id: &str, force: bool) -> Resu
         .ok_or_else(|| AddonError::NotFound("add-on is not installed".to_owned()))?;
     let install_path = validated_install_path_for_removal(&installation.install_path).await?;
     let cache_path = addon_cache_folder(&installation.data_namespace, addon_id);
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     lock_addon_lifecycle(&mut transaction).await?;
     let current = load_installed_addon_in_transaction(&mut transaction, addon_id)
         .await?

@@ -81,7 +81,7 @@ impl LibraryRepository for SqliteLibraryRepository {
     }
 
     async fn upsert(&self, library: &Library) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(upsert_sql!(
             r#"INSERT INTO "Library" (
                 "Id", "Name", "MediaKind", "MediaSourceId"

@@ -50,7 +50,7 @@ impl TemplateRepository for SqliteTemplateRepository {
     }
 
     async fn upsert(&self, template: &Template) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(upsert_sql!(
             r#"INSERT INTO "Template" (
                 "Id", "TemplateGroupId", "Name", "DateUpdated"
@@ -193,7 +193,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         new_group_id: EntityId,
         name: &str,
     ) -> Result<EntityId> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Template" ("TemplateGroupId", "Name", "DateUpdated")
                SELECT ?, ?, CURRENT_TIMESTAMP
@@ -323,7 +323,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         name: &str,
         items: &[TemplateItemAdmin],
     ) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "Template" SET "Name" = ?, "DateUpdated" = CURRENT_TIMESTAMP
                WHERE "Id" = ?"#,

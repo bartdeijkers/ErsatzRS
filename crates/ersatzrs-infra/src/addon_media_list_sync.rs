@@ -295,7 +295,7 @@ impl AddonMediaListSynchronizer {
             .repository()?;
             Ok(id)
         } else {
-            let mut transaction = self.pool.begin().await.repository()?;
+            let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
             let result = sqlx::query(
                 r#"INSERT INTO "AddonMediaList" (
                     "AddonId", "SourceUrl", "ProviderId", "Name", "Description",
@@ -336,7 +336,7 @@ impl AddonMediaListSynchronizer {
             .map(|item| (item.provider_id.as_str(), item.id))
             .collect::<HashMap<_, _>>();
 
-        let mut tx = self.pool.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         sqlx::query(r#"DELETE FROM "AddonMediaListChapter" WHERE "AddonMediaListId" = ?"#)
             .bind(list_id)
             .execute(&mut *tx)
@@ -790,7 +790,7 @@ impl AddonMediaListSynchronizer {
 
         let group_id = system_playlist_group_id(&self.pool).await?;
         let name = list.name.clone();
-        let mut transaction = self.pool.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId")
                VALUES (1, ?, ?)"#,

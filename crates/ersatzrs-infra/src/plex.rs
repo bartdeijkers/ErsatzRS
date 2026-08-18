@@ -1440,7 +1440,7 @@ async fn upsert_plex_movie(
     library_key: &str,
     item: &PlexMediaItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1469,7 +1469,7 @@ async fn upsert_plex_other_video(
     library_key: &str,
     item: &PlexMediaItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1506,7 +1506,7 @@ async fn upsert_plex_show(
     library_key: &str,
     item: &PlexShowItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1523,7 +1523,7 @@ async fn upsert_plex_season(
     show_id: i64,
     item: &PlexSeasonItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1541,7 +1541,7 @@ async fn upsert_plex_episode(
     item: &PlexMediaItem,
     config: &PlexConnectionConfig,
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
@@ -1882,7 +1882,7 @@ pub async fn sync_plex_libraries(
         })
         .collect();
 
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     for incoming_library in incoming {
         let position = existing
             .iter()
@@ -2480,7 +2480,7 @@ async fn upsert_plex_collection(
     media_source_id: i64,
     item: &PlexCollectionItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
@@ -2545,7 +2545,7 @@ async fn replace_plex_collection_items(
     collection_id: i64,
     items: &[PlexCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
         .bind(collection_id)
         .execute(&mut *tx)

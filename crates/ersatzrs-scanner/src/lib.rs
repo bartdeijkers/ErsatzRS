@@ -1126,7 +1126,7 @@ async fn upsert_artist_for_folder(
         .and_then(|n| n.formed)
         .map(|dt| dt.naive_utc().format("%Y-%m-%d").to_string());
     let metadata_kind = i32::from(parsed_nfo.is_some());
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
 
     let existing: Option<(i64, Option<i64>)> = sqlx::query(
         r#"SELECT "a"."Id" AS "ArtistId", "am"."Id" AS "ArtistMetadataId"
@@ -1373,7 +1373,7 @@ async fn upsert_local_music_video(
     let content_ratings = preferred_facet_values(&sidecar_ratings, &embedded.content_ratings, &[]);
     let content_rating = (!content_ratings.is_empty()).then(|| content_ratings.join("/"));
 
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
     let now = encode_datetime(Utc::now());
@@ -1836,7 +1836,7 @@ async fn upsert_local_remote_stream(
 ) -> Result<i64> {
     let definition = remote_stream_definition_with_nfo(path, definition);
     let definition = &definition;
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
@@ -2297,7 +2297,7 @@ async fn link_materialized_remote_stream_fragments(
             ))
         })
         .collect::<BTreeMap<_, _>>();
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     for (item_id, definition) in materialized {
         let Some(parent_provider_id) = definition.parent_provider_id.as_deref() else {
             continue;
@@ -2347,7 +2347,7 @@ async fn synchronize_managed_playlist(
     ordered_items: &[i64],
     membership_changed: bool,
 ) -> Result<Vec<i64>> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let existing: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
             .bind(managed_source)
@@ -2510,7 +2510,7 @@ async fn upsert_local_file(
     path: &Path,
     probed: FfprobeMediaVersion,
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
@@ -2603,7 +2603,7 @@ pub(crate) async fn upsert_local_extra_video(
     sub_kind: &str,
     parent_media_item_id: Option<i64>,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
@@ -4066,7 +4066,7 @@ async fn flag_missing_local_files(pool: &DbPool, library_path_id: i64) -> Result
 /// deleting the empty artist's `MediaItem` root cascades through `Artist`,
 /// `ArtistMetadata`, and its artwork.
 async fn delete_empty_artists(pool: &DbPool, library_path_id: i64) -> Result<Vec<i64>> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let rows = sqlx::query(
         r#"SELECT "a"."Id" AS "Id"
            FROM "Artist" AS "a"

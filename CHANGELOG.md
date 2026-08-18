@@ -134,6 +134,15 @@ release section when tagging a release.
   transaction, which SQLite refuses to upgrade — immediately, and regardless of
   the configured busy timeout — whenever another connection has written in the
   meantime. Renaming a projected show failed for the same reason.
+- Every other write path is now protected against the same failure. All 98
+  writing transactions across the repositories, the scanners, and the Plex,
+  Jellyfin, and Emby persistence layers now take the write lock up front, so
+  concurrent writers queue for the configured busy timeout instead of failing
+  outright. This removes a class of intermittent `database is locked` errors
+  that could surface anywhere in the admin UI while a library scan or another
+  editor was writing. Genuinely read-only transactions deliberately keep the
+  concurrent deferred begin, and a new `cargo xtask architecture-lint` rule
+  rejects a newly added transaction that writes without it.
 - Seasons projected from an add-on list are now listed on the show page.
   They were created without the metadata row every other season source writes,
   and the page requires it, so a projected show appeared to have no seasons or

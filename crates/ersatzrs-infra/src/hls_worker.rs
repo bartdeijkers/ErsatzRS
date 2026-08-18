@@ -3196,7 +3196,7 @@ async fn time_shift_on_demand_playout(
         .unwrap_or(now);
     let offset = now - checkpoint;
 
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::db::begin_write(pool).await?;
     shift_playout_items(&mut tx, playout_id, offset).await?;
     shift_playout_history(&mut tx, playout_id, offset).await?;
     shift_playout_program_schedule_anchors(&mut tx, playout_id, offset).await?;

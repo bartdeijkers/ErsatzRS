@@ -122,7 +122,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn upsert(&self, collection: &Collection) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         // ErsatzTV Collection has no collection_type column; UseCustomPlaybackOrder is always false
         sqlx::query(upsert_sql!(
             r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
@@ -236,7 +236,7 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn save_admin(&self, id: EntityId, name: &str) -> Result<EntityId> {
         if id == 0 {
-            let mut tx = self.0.begin().await.repository()?;
+            let mut tx = crate::db::begin_write(&self.0).await.repository()?;
             let result = sqlx::query(
                 r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder")
                    VALUES (?, 0)"#,
@@ -271,7 +271,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         name: &str,
         media_item_id: EntityId,
     ) -> Result<EntityId> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let media_item_exists: Option<EntityId> =
             sqlx::query_scalar(r#"SELECT "Id" FROM "MediaItem" WHERE "Id" = ?"#)
                 .bind(media_item_id)
@@ -447,7 +447,7 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn save_smart_admin(&self, id: EntityId, name: &str, query: &str) -> Result<EntityId> {
         if id == 0 {
-            let mut tx = self.0.begin().await.repository()?;
+            let mut tx = crate::db::begin_write(&self.0).await.repository()?;
             let result =
                 sqlx::query(r#"INSERT INTO "SmartCollection" ("Name", "Query") VALUES (?, ?)"#)
                     .bind(name)
@@ -639,7 +639,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         items: &[MultiCollectionItem],
         replace_items: bool,
     ) -> Result<EntityId> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let id = if id == 0 {
             let result = sqlx::query(r#"INSERT INTO "MultiCollection" ("Name") VALUES (?)"#)
                 .bind(name)
@@ -894,7 +894,7 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn save_rerun_admin(&self, form: &RerunCollectionAdmin) -> Result<EntityId> {
         if form.id == 0 {
-            let mut tx = self.0.begin().await.repository()?;
+            let mut tx = crate::db::begin_write(&self.0).await.repository()?;
             let result = sqlx::query(
                 r#"INSERT INTO "RerunCollection" (
                        "Name", "CollectionType", "CollectionId", "MediaItemId",
@@ -1026,7 +1026,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn create_playlist_group_admin(&self, name: &str) -> Result<PlaylistGroupAdminRow> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let result =
             sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 0)"#)
                 .bind(name)
@@ -1062,7 +1062,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         group_id: EntityId,
         name: &str,
     ) -> Result<PlaylistAdminRow> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("Name", "PlaylistGroupId", "IsSystem")
                VALUES (?, ?, 0)"#,
@@ -1256,7 +1256,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn save_playlist_admin(&self, form: &PlaylistEditorAdmin) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(r#"UPDATE "Playlist" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(form.name.trim())
             .bind(form.id)
@@ -1383,7 +1383,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         media_item_ids: &[EntityId],
         playback: &PlaybackOverrides,
     ) -> Result<u64> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let mut added = 0;
         for media_item_id in media_item_ids {
             let sqlite_sql = r#"INSERT INTO "CollectionItem" (
@@ -1450,7 +1450,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         playlist_id: EntityId,
         items: &[PlaylistItemInsert],
     ) -> Result<u64> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let max_index: Option<i64> =
             sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
                 .bind(playlist_id)
@@ -1643,7 +1643,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         collection_id: EntityId,
         row_ids: &[EntityId],
     ) -> Result<u64> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let mut removed = 0;
         for row_id in row_ids {
             removed += sqlx::query(
@@ -1665,7 +1665,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         collection_id: EntityId,
         ordered_row_ids: &[EntityId],
     ) -> Result<u64> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let mut updated = 0;
         for (index, row_id) in ordered_row_ids.iter().enumerate() {
             updated += sqlx::query(

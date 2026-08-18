@@ -24,7 +24,7 @@ impl AdminSettingsRepository for SqliteAdminSettingsRepository {
     async fn apply_mutations(&self, mutations: Vec<SettingsMutation>) -> Result<()> {
         use crate::repositories::SqlxResultExt as _;
 
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         for mutation in mutations {
             match mutation {
                 SettingsMutation::Set { key, value } => {

@@ -2,10 +2,35 @@
 
 ## Implementation status
 
-Not started as a sweep. The mechanism is proven and the pattern is already
-applied to the two transactions in `reconcile_tv_projection`
-(`crates/ersatzrs-infra/src/repositories/addon_media_list.rs`), which fixed a
-reproducible failure on 2026-08-17.
+**Complete (2026-08-18).** Every production transaction that writes now starts
+with `crate::db::begin_write`, the one genuinely read-only transaction keeps its
+deferred begin with a comment saying why, `cargo xtask architecture-lint`
+guards the default, and both the deferred-upgrade failure and the television
+projection have regression tests.
+
+What the triage found, against the estimates below:
+
+- **100 production `.begin()` sites**, not 126. The remaining 33 of the 133
+  matches are test code: 7 in `crates/*/tests/`, and 26 in inline
+  `#[cfg(test)]` / `#[cfg(all(test, …))]` modules. Notably *all 11*
+  `ersatzrs-web` sites are test-only `…_with_pool` duplicates of server
+  functions whose production path goes through `ersatzrs-app` and the infra
+  repositories, so the web crate had nothing to convert.
+- **98 sites converted.** 100 minus the `begin_write` helper's own non-SQLite
+  fallback in `db.rs`, minus the one read-only transaction.
+- **1 read-only transaction**, not 2:
+  `ersatzrs-scanner/src/local_television.rs::reconcile_merged_local_shows`,
+  which takes a consistent snapshot of the owned episodes via
+  `load_owned_episodes` and commits without writing. It keeps `begin()` and
+  carries a comment explaining that `begin_write` would serialise readers.
+  `scanner/library_folder.rs` turned out to be a test, and
+  `media_server/jellyfin_emby.rs` writes.
+- **0 pool-inside-transaction sites.** Step 2 below was checked and is a no-op:
+  no production transaction body queries the pool (`&self.0`, `&pool`,
+  `&self.pool`) rather than the transaction, so no site had its failure mode
+  changed from fail-fast to a potential stall. No transaction body awaits
+  non-database work (HTTP, filesystem, subprocess) either, so no converted
+  transaction holds the write lock across slow work.
 
 ## Context
 
@@ -91,6 +116,15 @@ for two reasons below.
    `pool.begin()` whose body writes, pointing at `begin_write`. Without this
    the pattern returns with the next feature.
 
+The implemented rule is deliberately stricter than "prove the body writes",
+because proving it needs transitive analysis through helpers that take the
+transaction, and a lint that guesses wrong in that direction fails silently.
+Instead every production `.begin().await` must be either `begin_write` or
+annotated with a `read-only transaction` comment; an annotated site whose body
+still contains write SQL is reported as a wrong annotation. The only exemption
+is `crates/ersatzrs-infra/src/db.rs`, where `begin_write` falls back to a plain
+`begin()` on backends that reject `BEGIN IMMEDIATE`.
+
 ## Regression coverage
 
 There is currently **no test** exercising `reconcile_tv_projection`, which is
@@ -106,11 +140,28 @@ how a fully broken projection reached a running system.
 
 ## Verification
 
-- The reproduction test fails against `begin()` and passes against
-  `begin_write`.
-- No read-only transaction is converted (reviewed per site, not by count).
-- `cargo xtask architecture-lint` rejects a newly added writing `pool.begin()`.
-- Focused tests per crate, then both clippy passes and `./run.sh test-closeout`.
+Done:
+
+- `crates/ersatzrs-infra/tests/write_transaction.rs` reproduces the failure on
+  a file-backed database with the production pool settings: a deferred
+  transaction that reads, sees a concurrent commit, and then writes fails
+  immediately with `database is locked` (asserted to fail fast, not to wait out
+  `busy_timeout`), while `begin_write` completes and a concurrent writer queues
+  behind it rather than failing.
+- `crates/ersatzrs-infra/tests/addon_media_list_tv_projection.rs` covers
+  show/season/episode creation including the `SeasonMetadata` row whose absence
+  made projected seasons invisible, projection idempotency, and reverting to
+  Remote Streams.
+- No read-only transaction was converted; each of the 100 sites was classified,
+  and the 21 without literal write SQL in the body were read individually.
+- `cargo xtask architecture-lint` rejects a newly added writing `pool.begin()`
+  — verified both by unit tests and by reintroducing one in
+  `repositories/block.rs` and watching the lint fail.
+- `cargo fmt`, both clippy passes, `./run.sh test-closeout` (1573 passed), and
+  `cargo xtask smoke` all pass.
+
+Remaining (manual, not automatable here):
+
 - Exercise the admin UI under concurrent activity — a library scan running
   while editing lists and playouts — and confirm no `database is locked`
   surfaces.

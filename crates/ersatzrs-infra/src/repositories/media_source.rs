@@ -453,7 +453,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 ));
             }
         }
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let id = if library.id == 0 {
             let source = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
                 .execute(&mut *tx)
@@ -622,7 +622,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         server_name: &str,
         operating_system: &str,
     ) -> Result<EntityId> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let id = if connection.source_id == 0 {
             let inserted = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
                 .execute(&mut *tx)
@@ -796,7 +796,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 r#"UPDATE "PlexLibrary" SET "ShouldSyncItems" = ? WHERE "Id" = ?"#
             }
         };
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         for preference in preferences {
             sqlx::query(sql)
                 .bind(preference.should_sync)
@@ -872,7 +872,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                    ("PlexPath", "LocalPath", "PlexMediaSourceId") VALUES (?, ?, ?)"#,
             ),
         };
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(delete_sql)
             .bind(source_id)
             .execute(&mut *tx)
@@ -891,7 +891,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn delete_all_plex_sources_admin(&self) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" LIKE 'plex.%auth_token%'"#)
             .execute(&mut *tx)
             .await
@@ -914,7 +914,7 @@ async fn upsert_source<T>(
 where
     T: ProviderUpsert + Sync,
 {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     // "MediaSource" only has "Id"
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(base.id)

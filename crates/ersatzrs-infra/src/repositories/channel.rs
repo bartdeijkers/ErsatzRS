@@ -98,7 +98,7 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     async fn upsert(&self, channel: &Channel) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(CHANNEL_UPSERT_SQL.as_str())
             .bind(channel.id)
             .bind(channel.unique_id.to_string())
@@ -206,7 +206,7 @@ impl ChannelRepository for SqliteChannelRepository {
             return Ok(ChannelSaveResult::validation(validation_errors));
         }
 
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let now = encode_datetime(Utc::now());
         let normalized = normalize_editor_form(form, &mut tx).await?;
         let group = normalized.group.trim();
@@ -953,7 +953,7 @@ async fn save_number_updates(
         return Ok(ChannelNumberSaveResult::success(Vec::new()));
     }
 
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
 
     for update in &changed {
         sqlx::query(r#"UPDATE "Channel" SET "Number" = ? WHERE "Id" = ?"#)

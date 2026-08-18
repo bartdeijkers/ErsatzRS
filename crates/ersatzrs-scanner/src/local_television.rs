@@ -1040,7 +1040,7 @@ async fn reconcile_one_merged_show(
         ScannerError::Reconciliation("canonical folder has no identity".to_owned())
     })?;
 
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let mut stats = ReconciliationStats::default();
     let mut target_shows = BTreeMap::from([(canonical_group, merged_show_id)]);
     for (group, descriptor) in identity_groups.iter().enumerate() {
@@ -1259,6 +1259,10 @@ async fn reconcile_merged_local_shows(
         .iter()
         .map(|(_, descriptor)| (descriptor.identity.normalized_folder.clone(), descriptor))
         .collect::<HashMap<_, _>>();
+    // Read-only transaction: this only takes a consistent snapshot of the owned
+    // episodes before reconciling them one show at a time. Keep the deferred
+    // `begin()` here — `begin_write` would take the write lock and serialise
+    // readers that WAL otherwise runs concurrently. See `ersatzrs_infra::db::begin_write`.
     let mut tx = pool.begin().await?;
     let owned = load_owned_episodes(&mut tx, library_path.id).await?;
     tx.commit().await?;
@@ -1329,7 +1333,7 @@ async fn reconcile_merged_local_shows(
 }
 
 async fn cleanup_empty_local_television(pool: &DbPool, library_path_id: i64) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let empty_seasons: Vec<i64> = sqlx::query_scalar(
         r#"SELECT season."Id"
            FROM "Season" season
@@ -1619,7 +1623,7 @@ async fn upsert_show(
         (!values.is_empty()).then(|| values.join("/"))
     });
 
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let existing_show_id = resolve_show_id(&mut tx, library_path.id, &descriptor.identity).await?;
     let existing = if let Some(show_id) = existing_show_id {
         sqlx::query(
@@ -1863,7 +1867,7 @@ async fn upsert_season(
     show_folder: &Path,
     season: &SeasonWork,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let now = encode_datetime(Utc::now());
     let title = if season.season_number == 0 {
         "Specials".to_owned()
@@ -2117,7 +2121,7 @@ async fn sync_local_episode_once(
     video_path: &Path,
     scan: &LocalEpisodeScan,
 ) -> Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let now = encode_datetime(Utc::now());
 
     let existing = sqlx::query(

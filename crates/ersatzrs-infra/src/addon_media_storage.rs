@@ -228,7 +228,7 @@ pub async fn ensure_list_library(
     )
     .await?;
 
-    let mut transaction = pool.begin().await.repository()?;
+    let mut transaction = crate::db::begin_write(pool).await.repository()?;
     let library_id = if library_id == 0 {
         let inserted = sqlx::query(
             r#"INSERT INTO "Library" ("MediaSourceId", "MediaKind", "Name") VALUES (?, ?, ?)"#,
@@ -613,7 +613,7 @@ async fn reconcile_enabled_source(
     let Some(root) = prepare_storage_root(&addon.manifest, &settings).await? else {
         return Ok(());
     };
-    let mut transaction = pool.begin().await.map_err(database_error)?;
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
     ensure_media_source_in_transaction(&mut transaction, &addon.addon_id, storage, &root).await?;
     transaction.commit().await.map_err(database_error)
 }

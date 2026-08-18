@@ -155,7 +155,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         program_schedule_anchors: &[PlayoutProgramScheduleAnchor],
         fill_group_indices: &[PlayoutScheduleItemFillGroupIndex],
     ) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
 
         update_playout_checkpoint(&mut tx, playout).await?;
         replace_anchor_state(&mut tx, playout.id, playout.anchor.as_ref()).await?;
@@ -170,7 +170,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     }
 
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(upsert_sql!(
             r#"INSERT INTO "PlayoutItem" (
                 "Id", "PlayoutId", "MediaItemId", "Start", "Finish", "GuideStart", "GuideFinish",
@@ -240,7 +240,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         playout: &Playout,
         max_playout_offset: chrono::Duration,
     ) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
 
         // ── items ─────────────────────────────────────────────────────────────
         if result.clear_items {
@@ -1116,7 +1116,7 @@ async fn save_alternate_schedules_admin(
     id: EntityId,
     items: &[PlayoutAlternateScheduleItemAdmin],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"DELETE FROM "ProgramScheduleAlternate" WHERE "PlayoutId" = ?"#)
         .bind(id)
         .execute(&mut *tx)
@@ -1238,7 +1238,7 @@ async fn save_templates_admin(
     id: EntityId,
     items: &[PlayoutTemplateItemAdmin],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"DELETE FROM "PlayoutTemplate" WHERE "PlayoutId" = ?"#)
         .bind(id)
         .execute(&mut *tx)
@@ -1455,7 +1455,7 @@ fn decode_int_json_admin(value: Option<String>) -> Result<Vec<i32>> {
 }
 
 async fn erase_items_and_history_admin(pool: &crate::db::DbPool, id: EntityId) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     checked_update(
         sqlx::query(
             r#"UPDATE "Playout"

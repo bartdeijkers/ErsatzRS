@@ -8,7 +8,7 @@ pub(super) async fn upsert_emby_movie(
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -36,7 +36,7 @@ pub(super) async fn upsert_emby_show(
     library_item_id: &str,
     item: &EmbyShowItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -54,7 +54,7 @@ pub(super) async fn upsert_emby_season(
     show_id: i64,
     item: &EmbySeasonItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -73,7 +73,7 @@ pub(super) async fn upsert_emby_episode(
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
@@ -98,7 +98,7 @@ pub(super) async fn upsert_emby_collection(
     media_source_id: i64,
     item: &EmbyCollectionItem,
 ) -> Result<i64> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
         .execute(&mut *tx)
@@ -164,7 +164,7 @@ pub(super) async fn replace_collection_items(
     collection_id: i64,
     items: &[EmbyCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
         .bind(collection_id)
         .execute(&mut *tx)
@@ -251,7 +251,7 @@ pub async fn sync_emby_libraries(
         })
         .collect();
 
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     for incoming_library in incoming {
         let position = existing.iter().position(|(_, item_id, _, _)| {
             item_id.as_deref() == Some(incoming_library.item_id.as_str())
@@ -371,7 +371,7 @@ pub async fn replace_emby_path_infos(
     library_id: i64,
     path_infos: &[EmbyPathInfo],
 ) -> Result<()> {
-    let mut tx = pool.begin().await.repository()?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     sqlx::query(r#"DELETE FROM "EmbyPathInfo" WHERE "EmbyLibraryId" = ?"#)
         .bind(library_id)
         .execute(&mut *tx)

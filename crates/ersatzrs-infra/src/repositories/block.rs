@@ -56,7 +56,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn upsert(&self, block: &Block) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"UPDATE "Block"
                SET "BlockGroupId" = ?,
@@ -125,7 +125,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn upsert_item(&self, item: &BlockItem) -> Result<()> {
-        let mut tx = self.0.begin().await.repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         upsert_block_item(&mut tx, item).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -278,7 +278,7 @@ impl BlockRepository for SqliteBlockRepository {
         new_group_id: EntityId,
         name: &str,
     ) -> Result<EntityId> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Block"
                ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
@@ -304,7 +304,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn delete_admin(&self, id: EntityId) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let item_ids = load_ids_in_tx(
             &mut transaction,
             r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ?"#,
@@ -361,7 +361,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn save_admin(&self, block: &BlockAdminRow, items: &[BlockItemAdmin]) -> Result<()> {
-        let mut transaction = self.0.begin().await.repository()?;
+        let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
         let old_item_ids = load_ids_in_tx(
             &mut transaction,
             r#"SELECT "Id" FROM "BlockItem" WHERE "BlockId" = ?"#,
