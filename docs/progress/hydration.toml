@@ -213,6 +213,12 @@ routes = ['/media/addon-lists/:id']
 notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent.'
 
 [[page]]
+name   = 'AddonMediaListItemPage'
+status = 'TODO'
+routes = ['/media/addon-lists/:id/items/:item_id']
+notes  = 'Landed 2026-08-17 with the television projection (d8b57747) without a hydration entry, which is what `tests/e2e/admin-route-contract.spec.ts` caught. `cargo xtask hydration-lint` is clean and the page follows the documented mitigation for its prop-bearing island inside `Suspense` — `Resource::new_blocking`, so the item detail resolves before the island is emitted — but no browser proof exists yet. Needs a Chromium and Firefox run over the per-item NFO metadata editor: title/plot edits persisting through the optimistic-concurrency etag, a stale-etag conflict, and chapter edits.'
+
+[[page]]
 name   = 'FillerPresetsPage'
 status = '✅'
 routes = ['/media/filler/presets', '/media/filler/presets/add', '/media/filler/presets/:id/edit']

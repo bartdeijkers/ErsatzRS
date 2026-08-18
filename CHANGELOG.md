@@ -143,6 +143,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- The per-item add-on media list metadata editor is now covered by the admin
+  route contract. Its route shipped with the television projection without a
+  hydration entry, so the page had no recorded browser evidence and the route
+  contract check failed; the entry is recorded as outstanding rather than
+  claimed, and browser proof for the editor is still to come.
 - Choosing a Local replacement for an add-on list item now finds candidates.
   The search required a video stream recorded with a kind the scanner never
   writes, so it matched nothing in any library and the feature could not be
