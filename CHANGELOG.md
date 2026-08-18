@@ -71,6 +71,15 @@ release section when tagging a release.
 
 ### Changed
 
+- `plans/` now holds only work that still needs doing. Sixteen fully
+  implemented plans were pruned once their substance lived in
+  `docs/progress/`, and the two remaining blockers of the add-on NFO closeout
+  plan are recorded as open parity debts instead of only in a plan header. A
+  milestone that is still open must name a live plan; a completed milestone may
+  omit the pointer, and `cargo xtask progress check` enforces both halves.
+  Contributor-facing TSDuck install steps moved from the pruned MPEG-TS plan to
+  [the troubleshooting how-to](docs/how-to/troubleshoot-startup-and-playback.md).
+
 - The official yt-dlp add-on now requires an operator-installed JavaScript
   runtime (deno) alongside yt-dlp, and reports its absence as unavailable rather
   than failing later during playback. Without one, some providers return a media

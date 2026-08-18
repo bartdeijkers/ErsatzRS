@@ -110,46 +110,19 @@ changelog, and git history for evidence. The authoritative live state is always
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,
   provider-owned multilingual assets/tests, and POSIX/Windows add-on parity.
-- Add-on boundary hygiene (six review slices plus one separately scoped
-  publisher migration for the ErsatzRS ↔ `bartdeijkers/ErsatzRS-addons`
-  division; tracked as
-  `docs/progress/parity/addon-host-boundary.toml` and milestones `ab-01`–
-  `ab-07`). The division itself is sound — add-ons never touch persistence,
-  storage layout, matching, playlists, or scanning — but the contract is prose
-  plus host-side validators with no shared executable artifact, which is what
-  produced these six:
-  - `addon-availability-vocabulary-ownership.md` — remove yt-dlp's availability
-    tokens from `ersatzrs-core`/`ersatzrs-scanner` and normalize in the package.
-  - `addon-structured-operation-diagnostics.md` — give `list`/`play` the stable
-    `{code, message}` result `addon.check.v1` already has, so host localization
-    stops string-matching an add-on's English prose across repositories.
-  - `addon-contract-crate-owns-ndjson.md` — move the list record types into
-    `ersatzrs-addon-contract`, keep it independently packageable without
-    registry publication, and prove its public surface through the runnable
-    reference add-on and conformance checks.
-  - `addon-source-url-validation-and-network-permission.md` — validate the one
-    operator URL the host hands to a child process, and give `network_hosts`
-    runtime meaning for it.
-  - `addon-list-record-strictness-parity.md` — one documented strictness rule
-    for both list contracts instead of opposite failure modes.
-  - `addon-manifest-validator-single-implementation.md` — stop maintaining the
-    manifest contract twice, in Rust and in the add-ons repository's Python
-    builder.
-  - `addon-repository-publisher-rust-migration.md` — after validator
-    consolidation, replace the remaining Python publication builder with a
-    repository-owned Rust CLI while keeping signing and deployment separate.
-- `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — current Phase 8 plan
-  for the accepted SDR/HDR10 output contract, Dolby Vision input
-  characterization, Vulkan/libplacebo runtime fallback, measured AMF/VAAPI/
-  libplacebo improvements, safe long-filtergraph transport, source orientation,
-  animated WebP, and the deferred evidence gate for first-class Vulkan encoding.
+  Its two remaining blockers — live MySQL runtime migration proof and packaged
+  Windows add-on execution — are also recorded as open debts in
+  `docs/progress/parity/addon-platform.toml`.
+- `addon-list-replacement-ux.md` — reshape the Local replacement flow for an
+  unavailable add-on list item, written after walking the flow end to end
+  against a real unavailable episode.
 - `phase-8-hardware-residue.md` — hand-off plan for the five Phase 8 parity
   debts that an NVIDIA-only machine cannot close: HDR10 characterization and
   functional graph probes on QSV/VAAPI/AMF/VideoToolbox/RKMPP, the three
   unmeasured `p8b-02` benchmark candidates, the remaining Profile 5 production
   acceptance, and the evidence-gated `p8c-04` Vulkan-encoding decision.
-  Explicitly deferred after Phase 8 and independent of Phases 9 and 10; includes
-  the measured proof that each item is hardware-blocked.
+  Explicitly deferred after Phase 8 and independent of Phases 9 and 10;
+  includes the measured proof that each item is hardware-blocked.
 - `windows-beta-release-hardening.md` — pre-publication Windows candidate
   archive, beta workflow hardening, release-policy decisions, extractor
   hardening, and redacted live acceptance gates required before the next
@@ -162,34 +135,60 @@ changelog, and git history for evidence. The authoritative live state is always
   Box" music-video request queue behind a stable authenticated add-on API. The
   prerequisite `ersatzrs-app` extraction is retained as completed context;
   fine-grained future state is tracked in `docs/progress/milestones.toml`.
-- `docker-prebuilt-binary-images.md` - release Docker plan to assemble GHCR
+- `docker-prebuilt-binary-images.md` — release Docker plan to assemble GHCR
   images from already-built Linux release binaries instead of compiling Rust
   inside the Docker build.
-- `docker-persistent-build-cache.md` - release Docker plan to add persistent
+- `docker-persistent-build-cache.md` — release Docker plan to add persistent
   BuildKit cache export/import for repeated beta and release attempts.
-- `docker-sequential-platform-publishing.md` - release Docker plan to build and
-  push one platform image at a time, then combine the final multi-arch manifest.
-- `module-split-survey.md` — standing refactoring backlog: large files to split,
-  with ready-to-run prompts. The infra health pilot is implemented; lift the
-  remaining media-browser, YAML scheduling, scripted scheduling, and provider
-  dedup items one at a time and keep each refactor behavior-preserving.
-- `web-server-wasm-crate-split.md` - structural refactor plan to separate the
+- `docker-sequential-platform-publishing.md` — release Docker plan to build and
+  push one platform image at a time, then combine the final multi-arch
+  manifest.
+- `web-server-wasm-crate-split.md` — structural refactor plan to separate the
   native SSR server binary from the WASM hydration library so native release
   builds never compile the web `cdylib`.
-- `ci-self-hosted-target-dir.md` - CI running-time plan to give the default
-  self-hosted `ci.yml` jobs a persistent, checkout-external `CARGO_TARGET_DIR`
-  instead of restoring `target/` through the remote `Swatinem/rust-cache`
-  round-trip every run, plus a `test_hosted` matrix cache-key fix and small
-  tool-install/npm caching wins.
-- `epg-timeline-scroll-container.md` - admin UI plan behind the channel watch
-  route's programme guide never being a real scroll container, and the browser
-  assertion that silently passed because of it.
-- `ux-complaint-inventory.md` — evidence base, not an implementation plan: all
-  400 `ErsatzTV/legacy` issues classified by close reason, with the
-  `NOT_PLANNED` pile clustered by theme, used to decide where ErsatzRS should
-  deliberately diverge from inherited ErsatzTV UX instead of porting it
-  faithfully. Cite it when a slice argues for a divergence; the divergence
-  itself still belongs in an ADR or `docs/progress/parity/`.
+
+### Reference material kept alongside the plans
+
+These are not implementation plans and are not expected to be completed or
+pruned:
+
+- `ux-complaint-inventory.md` — evidence base: all 400 `ErsatzTV/legacy` issues
+  classified by close reason, with the `NOT_PLANNED` pile clustered by theme,
+  used to decide where ErsatzRS should deliberately diverge from inherited
+  ErsatzTV UX instead of porting it faithfully. Cite it when a slice argues for
+  a divergence; the divergence itself still belongs in an ADR or
+  `docs/progress/parity/`.
+- `clippy-exemption-ledger.html` — generated snapshot of the workspace's
+  `#[allow(clippy::…)]` sites, rebuilt by `cargo xtask clippy-ledger`.
+- `references/` — captured upstream material referenced by the plans above.
+
+### Pruned on 2026-08-18
+
+Sixteen fully implemented plans were removed once their substance lived in
+`docs/progress/`. Their evidence is in the parity files, milestones, ADRs, the
+changelog, and git history:
+
+- The seven add-on boundary slices (`ab-01`–`ab-07`), whose debts and evidence
+  are entries in `docs/progress/parity/addon-host-boundary.toml`.
+- `addon-sideload-install.md` and `addon-provider-supplied-chapters.md`
+  (`addon-platform.toml`, `remote-stream-playlists.toml`).
+- `ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — the completed Phase 8
+  program, milestones `p8a-01`–`p8c-03`; its deferred `p8c-04` decision and
+  hardware-blocked residue moved to `phase-8-hardware-residue.md`.
+- `mpeg-troubleshooting-tsduck.md` — ADR 0013 plus `support-pages.toml`; its
+  TSDuck install steps moved to
+  `docs/how-to/troubleshoot-startup-and-playback.md`.
+- `fix-playwright-e2e-app-boundary-regressions.md` and
+  `epg-timeline-scroll-container.md` — each defect is a resolved debt with its
+  CI run recorded in the relevant parity file.
+- `ci-self-hosted-target-dir.md` — implemented in `.github/workflows/ci.yml`.
+- `sqlite-write-transaction-triage.md` — `initial-schema-database-backends.toml`.
+- `module-split-survey.md` — `p7c-04`; its locked selection rule is the
+  `module-split-selection-rule` entry in `application-use-case-layer.toml`.
+
+A milestone that is still open must name a live plan under `plans/`; a
+`Complete` milestone may omit the pointer, which is what makes this pruning
+legal. `cargo xtask progress check` enforces both halves.
 
 ## Deferred Contract Work
 

@@ -365,8 +365,9 @@ For each debt closed or narrowed:
 
 ## Reference
 
-- `plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` — the completed
-  Phase 8 plan; workstream numbering and acceptance boundaries.
+- `docs/progress/milestones.toml` — the completed Phase 8 milestones
+  `p8a-01` through `p8c-03`, their acceptance boundaries, and evidence. Query
+  with `cargo xtask progress milestones --id <id> --full`.
 - `docs/adr/0064-hdr-and-dolby-vision-input-output-contract.md` — the output
   contract.
 - `docs/adr/0014-runtime-learned-hardware-capability-fallback.md` — why probes

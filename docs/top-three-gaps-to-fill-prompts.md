@@ -19,7 +19,7 @@ own ADR gate, so neither displaces runnable Phase 8 work here.
 
 Implement runnable Phase 8A milestone **p8a-01** and ADR 0064's input/output
 contract. Follow AGENTS.md and
-[`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md`](../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md).
+`cargo xtask progress milestones --id p8a-01 --full` for its acceptance.
 The outcome is a truthful persisted profile choice between BT.709 SDR and
 BT.2020/PQ HDR10, not a profile-name or bit-depth inference.
 

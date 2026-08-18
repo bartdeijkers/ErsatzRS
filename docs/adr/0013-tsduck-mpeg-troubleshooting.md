@@ -88,7 +88,7 @@ The deployment remains simple for users who do not need deep TS diagnostics.
 Packaging TSDuck into release images can be evaluated later, after reviewing
 license, size, and multi-architecture build cost. TSDuck must be installed
 separately by contributors who need it; install steps live in
-[`plans/mpeg-troubleshooting-tsduck.md`](../../plans/mpeg-troubleshooting-tsduck.md).
+[Troubleshoot startup and playback](../how-to/troubleshoot-startup-and-playback.md).
 The maintainer's dev box (WSL Ubuntu 24.04) runs TSDuck 3.44-4676.
 
 The TSDuck runner adds process-management and parser code, but keeps the
@@ -110,7 +110,7 @@ reimplementing it in Rust for v1.
 
 ## References
 
-- [MPEG-TS troubleshooting with TSDuck](../../plans/mpeg-troubleshooting-tsduck.md)
+- [Troubleshoot startup and playback](../how-to/troubleshoot-startup-and-playback.md)
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 - [Support parity matrix](../reference/parity-matrix.md)

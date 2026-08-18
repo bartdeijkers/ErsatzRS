@@ -206,6 +206,6 @@ ErsatzTV architecture-table port in step 2.
 - [ADR 0008: FFmpeg 8.1 runtime and multi-arch images](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 - [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
 - [ADR 0064: HDR and Dolby Vision input and output contract](0064-hdr-and-dolby-vision-input-output-contract.md)
-- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](../../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
+- [FFmpeg 9 performance and support progress](../progress/parity/ffmpeg-9-performance-and-support.toml)
 - ErsatzTV hardware capability checker under `$ERSATZTV_SRC/ErsatzTV.FFmpeg/`
   at the pinned parity baseline commit

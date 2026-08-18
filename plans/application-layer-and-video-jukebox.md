@@ -48,9 +48,11 @@ Axum handlers, SQL, or scheduler internals.
 - Scheduler consumer: `crates/ersatzrs-scheduler`
 - HTTP, Leptos, IPTV, HLS, and add-on transport adapters:
   `crates/ersatzrs-web`
-- Existing structural split plans:
-  [`module-split-survey.md`](module-split-survey.md) and
-  [`web-server-wasm-crate-split.md`](web-server-wasm-crate-split.md)
+- Existing structural split plan:
+  [`web-server-wasm-crate-split.md`](web-server-wasm-crate-split.md). The
+  module-split selection rule closed with `p7c-04` and now lives as the
+  `module-split-selection-rule` entry in
+  `docs/progress/parity/application-use-case-layer.toml`.
 - Intentional deviations: the future video-jukebox add-on API is an ErsatzRS
   extension and requires an ADR before its public contract is implemented.
 
@@ -249,7 +251,6 @@ must not depend on concrete application services or storage.
 
 ### P7C-04 — Module splits after extraction
 
-- Refresh file-size/count evidence in `module-split-survey.md`.
 - Split the reduced media-browser transport module after use cases and queries
   leave it.
 - Continue YAML instruction dispatch, scripted registrars, and provider dedup

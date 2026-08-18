@@ -186,7 +186,12 @@ struct Milestone {
     title: String,
     status: String,
     feature: String,
-    plan: String,
+    /// Live plan document under `plans/`. A milestone that is still open must
+    /// name one; a completed milestone may drop it, because `plans/` holds only
+    /// work that still needs doing and the completion evidence lives here, in
+    /// the parity files, the ADRs, the changelog, and git history.
+    #[serde(default)]
+    plan: Option<String>,
     #[serde(default)]
     depends_on: Vec<String>,
     acceptance: String,
@@ -524,7 +529,7 @@ fn sync() -> Result<Connection> {
                 milestone.title,
                 milestone.status,
                 milestone.feature,
-                milestone.plan,
+                milestone.plan.as_deref().unwrap_or("-"),
                 milestone.acceptance,
                 milestone.evidence,
             ],
@@ -1201,12 +1206,10 @@ fn cmd_check() -> Result<()> {
                         milestone.id, milestone.feature
                     ));
                 }
-                let plan = Path::new(&milestone.plan);
-                if !milestone.plan.starts_with("plans/") || !plan.is_file() {
-                    errors.push(format!(
-                        "milestone `{}`: plan `{}` must be an existing file under plans/",
-                        milestone.id, milestone.plan
-                    ));
+                if let Some(error) =
+                    milestone_plan_error(milestone, |plan| Path::new(plan).is_file())
+                {
+                    errors.push(error);
                 }
                 if milestone.acceptance.trim().is_empty() {
                     errors.push(format!(
@@ -1413,6 +1416,26 @@ fn milestone_ids_are_unique(milestones: &[Milestone]) -> bool {
     ids.len() == milestones.len()
 }
 
+/// Validate a milestone's pointer at its plan document.
+///
+/// `plans/` carries only work that still needs doing: once a plan is fully
+/// implemented its substance moves into `docs/progress/` and the document is
+/// pruned. A milestone that is still open must therefore name a live plan, and
+/// a `Complete` milestone is allowed to have none.
+fn milestone_plan_error(milestone: &Milestone, exists: impl Fn(&str) -> bool) -> Option<String> {
+    match milestone.plan.as_deref() {
+        Some(plan) if !plan.starts_with("plans/") || !exists(plan) => Some(format!(
+            "milestone `{}`: plan `{}` must be an existing file under plans/",
+            milestone.id, plan
+        )),
+        None if milestone.status != "Complete" => Some(format!(
+            "milestone `{}`: status `{}` requires a plan under plans/; only a Complete milestone may omit one",
+            milestone.id, milestone.status
+        )),
+        _ => None,
+    }
+}
+
 fn test_route_contract_errors(test_contract: &str, hydration: &[HydrationPage]) -> Vec<String> {
     let test_routes = markdown_route_rows(test_contract);
     let hydration_routes: std::collections::BTreeSet<&str> = hydration
@@ -1525,8 +1548,8 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::{
-        milestone_dependency_cycle, milestone_ids_are_unique, test_route_contract_errors,
-        HydrationPage, Milestone,
+        milestone_dependency_cycle, milestone_ids_are_unique, milestone_plan_error,
+        test_route_contract_errors, HydrationPage, Milestone,
     };
 
     fn milestone(id: &str, depends_on: &[&str]) -> Milestone {
@@ -1536,11 +1559,43 @@ mod tests {
             title: id.to_owned(),
             status: "Not started".to_owned(),
             feature: "feature".to_owned(),
-            plan: "plans/plan.md".to_owned(),
+            plan: Some("plans/plan.md".to_owned()),
             depends_on: depends_on.iter().map(ToString::to_string).collect(),
             acceptance: "accepted".to_owned(),
             evidence: String::new(),
         }
+    }
+
+    #[test]
+    fn an_open_milestone_must_name_a_live_plan() {
+        let mut open = milestone("p1-01", &[]);
+        open.plan = None;
+        let error = milestone_plan_error(&open, |_| true).expect("an open milestone needs a plan");
+        assert!(error.contains("only a Complete milestone may omit one"));
+
+        open.plan = Some("plans/gone.md".to_owned());
+        let error =
+            milestone_plan_error(&open, |_| false).expect("a named plan must actually exist");
+        assert!(error.contains("must be an existing file under plans/"));
+
+        open.plan = Some("docs/elsewhere.md".to_owned());
+        assert!(milestone_plan_error(&open, |_| true).is_some());
+
+        open.plan = Some("plans/live.md".to_owned());
+        assert!(milestone_plan_error(&open, |_| true).is_none());
+    }
+
+    #[test]
+    fn a_complete_milestone_may_have_had_its_plan_pruned() {
+        let mut done = milestone("p1-02", &[]);
+        done.status = "Complete".to_owned();
+        done.plan = None;
+        assert!(milestone_plan_error(&done, |_| false).is_none());
+
+        // A completed milestone that still points somewhere must point at a
+        // plan that is really there, so a rename cannot leave a dead pointer.
+        done.plan = Some("plans/gone.md".to_owned());
+        assert!(milestone_plan_error(&done, |_| false).is_some());
     }
 
     fn hydration(route: &str) -> HydrationPage {

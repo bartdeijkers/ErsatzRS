@@ -117,3 +117,19 @@ discovered  = '2026-08-11'
 evidence    = 'Focused host, server-function, hydration, and browser checks cover the route and its repository/configuration actions.'
 resolved    = true
 resolution  = 'The add-on settings route is included in whole-app hydration and focused browser coverage.'
+
+[[debt]]
+id          = 'mysql-runtime-migration-proof-is-missing'
+description = 'The add-on media storage and NFO sidecar migrations are exercised on SQLite and compile-checked under the `mysql` feature, but the add-on schema has not been run against a live MySQL/MariaDB server. Until it is, the MySQL backend claim for the add-on platform rests on compilation rather than on a migrated, read/write-proven database.'
+discovered  = '2026-08-15'
+evidence    = 'Tracked by the add-on NFO sidecar and local replacement closeout plan, which lists this as one of two remaining blockers. Needs a live MySQL run of the add-on migrations plus read/write coverage of the managed list, storage, and projection tables.'
+adr         = '0066'
+resolved    = false
+
+[[debt]]
+id          = 'packaged-windows-addon-execution-is-unproven'
+description = 'The official storage-backed add-ons ship POSIX and PowerShell variants that are required to implement equivalent v2 semantics, but the packaged Windows path has not been executed end to end on Windows or pwsh. Windows operators therefore have no runtime proof that the packaged add-on runs, only that its manifest and archive are valid.'
+discovered  = '2026-08-15'
+evidence    = 'Tracked by the add-on NFO sidecar and local replacement closeout plan, which lists this as the second remaining blocker. Needs the PowerShell implementation executed with fixtures on Windows or pwsh, with CRLF-normalized packaged batch files and all six RIDs intact.'
+adr         = '0066'
+resolved    = false

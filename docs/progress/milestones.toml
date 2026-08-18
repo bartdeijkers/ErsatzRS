@@ -440,7 +440,6 @@ phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Implement the SDR and HDR10 output contract'
 status     = 'Complete'
 feature    = 'hdr-dolby-vision-metadata'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
 acceptance = '''
 FFmpeg profiles persist and locally edit a validated SdrBt709 or
@@ -507,7 +506,6 @@ phase      = 'Phase 8A — HDR and Dolby Vision output contract'
 title      = 'Characterize and support Dolby Vision inputs'
 status     = 'Complete'
 feature    = 'hdr-dolby-vision-metadata'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01']
 acceptance = '''
 Known profile 5, 7, and 8.1 fixtures establish copy and transcode behavior for
@@ -549,7 +547,6 @@ phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Harden Vulkan and libplacebo runtime selection'
 status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
 acceptance = '''
 The NVENC HDR Vulkan/libplacebo/CUDA graph is selected only after an
@@ -607,7 +604,6 @@ phase      = 'Phase 8B — FFmpeg runtime and hardware HDR hardening'
 title      = 'Benchmark and select hardware HDR graph improvements'
 status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01', 'p8b-01']
 acceptance = '''
 Reproducible 1080p/4K HDR fixtures compare current and candidate NVENC
@@ -644,7 +640,6 @@ phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Move long complex filters to safe file transport'
 status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
 acceptance = '''
 Long complex filters use ADR 0003's private, cancellation-safe
@@ -682,7 +677,6 @@ phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Persist and apply source orientation exactly once'
 status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = ['p8a-01', 'p8b-01']
 acceptance = '''
 Scanner metadata preserves display-matrix/orientation state and the pipeline
@@ -719,7 +713,6 @@ phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Support animated WebP graphics inputs'
 status     = 'Complete'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
 depends_on = []
 acceptance = '''
 Animated WebP watermarks and graphics preserve decoded frame timing, looping,
@@ -761,7 +754,7 @@ phase      = 'Phase 8C — FFmpeg command and media-input support'
 title      = 'Decide whether Vulkan encoding becomes first class'
 status     = 'Deferred'
 feature    = 'ffmpeg-9-performance-and-support'
-plan       = 'plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md'
+plan       = 'plans/phase-8-hardware-residue.md'
 depends_on = ['p8b-01', 'p8b-02']
 acceptance = '''
 Multi-vendor h264_vulkan/hevc_vulkan evidence covers quality, latency, device
@@ -1121,7 +1114,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Return provider availability vocabulary to the add-on'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-availability-vocabulary-ownership.md'
 depends_on = []
 acceptance = '''
 The yt-dlp package emits only `available`, `unavailable`, or `unknown` on both
@@ -1149,7 +1141,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Give list and play a structured diagnostic channel'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-structured-operation-diagnostics.md'
 depends_on = []
 acceptance = '''
 `list` and `play` failures carry a stable validated code alongside a bounded
@@ -1184,7 +1175,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Make the contract crate own the NDJSON payloads'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-contract-crate-owns-ndjson.md'
 depends_on = ['ab-01']
 acceptance = '''
 Both list record types and their wire enums live in `ersatzrs-addon-contract`
@@ -1224,7 +1214,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Validate the operator source URL and enforce network_hosts'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-source-url-validation-and-network-permission.md'
 depends_on = []
 acceptance = '''
 One shared validator rejects unsupported schemes and userinfo at add-on list
@@ -1258,7 +1247,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Give both list contracts the same strictness'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-list-record-strictness-parity.md'
 depends_on = ['ab-03']
 acceptance = '''
 Both record types reject unknown fields and agree on null-array handling; the
@@ -1298,7 +1286,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Reduce the manifest contract to one implementation'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-manifest-validator-single-implementation.md'
 depends_on = ['ab-03']
 acceptance = '''
 A callable host tool validates `addon.toml` and `repository.toml` through
@@ -1338,7 +1325,6 @@ phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Migrate the official repository publisher to Rust'
 status     = 'Complete'
 feature    = 'addon-host-boundary'
-plan       = 'plans/addon-repository-publisher-rust-migration.md'
 depends_on = ['ab-06']
 acceptance = '''
 The official add-ons repository builds packages, icons, and its unsigned

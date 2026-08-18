@@ -247,7 +247,7 @@ exists. Those costs are preferable to silent wrong-color playback.
 - [ADR 0014: Runtime-learned hardware-capability fallback](0014-runtime-learned-hardware-capability-fallback.md)
 - [ADR 0017: Default FFmpeg profiles for multi-resolution streaming](0017-default-ffmpeg-profile-1080p60.md)
 - [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
-- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](../../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
+- [HDR and Dolby Vision metadata progress](../progress/parity/hdr-dolby-vision-metadata.toml)
 - [HDR and Dolby Vision progress](../progress/parity/hdr-dolby-vision-metadata.toml)
 - [FFmpeg 9 performance and support progress](../progress/parity/ffmpeg-9-performance-and-support.toml)
 - [FFmpeg 9 bitstream-filter documentation](https://ffmpeg.org/ffmpeg-bitstream-filters.html)

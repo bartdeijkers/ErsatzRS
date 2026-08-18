@@ -165,7 +165,7 @@ session log. Phase 9 closes only after:
 
 - [FFmpeg codec documentation: libzvbi teletext](https://ffmpeg.org/ffmpeg-codecs.html#libzvbi_002dteletext)
 - [FFmpeg supported subtitle formats](https://ffmpeg.org/general.html#Subtitle-Formats)
-- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
+- [FFmpeg 9 performance and support progress](../docs/progress/parity/ffmpeg-9-performance-and-support.toml)
 - [ADR 0003: Invoke FFmpeg through the CLI](../docs/adr/0003-ffmpeg-cli-spawn.md)
 - [ADR 0052: Global subtitle language preferences](../docs/adr/0052-global-subtitle-language-preferences.md)
 - [ADR 0056: Exact media-version and stream selections](../docs/adr/0056-exact-media-version-and-stream-selection.md)

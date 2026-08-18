@@ -30,9 +30,9 @@ Phase 9 entry. Vulkan already exists as an internal NVENC HDR processing bridge;
 persisted hardware-acceleration kind. First-class Vulkan H.264/HEVC encoding is
 deferred until the existing graph is proven, multi-vendor benchmarks exist, and
 a later ADR accepts the schema/UI/release-matrix consequences. Work sequencing
-and acceptance live in
-`plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md` and milestones
-`p8b-01` through `p8c-04`.
+and acceptance live in milestones `p8b-01` through `p8c-04`; the deferred
+`p8c-04` decision and the remaining hardware-blocked proof are owned by
+`plans/phase-8-hardware-residue.md`.
 '''
 
 [[debt]]

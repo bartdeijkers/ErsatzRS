@@ -313,5 +313,5 @@ user's access whether it was signed, unsigned, or sideloaded.
 - [Add-on repository reference](../reference/addon-repositories.md)
 - [Add-on trust boundary](../explanation/addon-trust-boundary.md)
 - [Remote Stream playlist manifest reference](../reference/remote-stream-playlist-manifests.md)
-- [Sideload and repository-package scope](../../plans/addon-sideload-install.md)
+- [Add-on platform progress](../progress/parity/addon-platform.toml)
 - [Teletext support plan](../../plans/teletext-support.md)

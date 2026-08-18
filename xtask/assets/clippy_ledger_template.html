@@ -720,7 +720,7 @@
         </div>
         <div class="note-card">
           <p>The workspace runs <span class="mono">clippy::pedantic = "warn"</span> across all six crates, so a chunk of these allows are deliberate, reasonable accommodations for pedantic-tier lints &mdash; not bugs. The count that matters isn't 317, it's <em>where it clusters</em>.</p>
-          <p>File size alone isn't grounds for a split &mdash; see <span class="mono">plans/module-split-survey.md</span>, which restricts splitting to enumerable growth axes with a completeness gate. Several of the largest files here (<span class="mono">hls_worker.rs</span>, <span class="mono">commands.rs</span>) are cohesive state machines that survived that review; their exemption count is evidence of pressure, not an automatic verdict.</p>
+          <p>File size alone isn't grounds for a split &mdash; see the <span class="mono">module-split-selection-rule</span> entry in <span class="mono">docs/progress/parity/application-use-case-layer.toml</span>, which restricts splitting to enumerable growth axes with a completeness gate. Several of the largest files here (<span class="mono">hls_worker.rs</span>, <span class="mono">commands.rs</span>) are cohesive state machines that survived that review; their exemption count is evidence of pressure, not an automatic verdict.</p>
         </div>
       </div>
     </div>

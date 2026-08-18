@@ -58,3 +58,15 @@ description = 'Web and scheduler maintain separate lock/queue registries for rel
 discovered  = '2026-07-21'
 evidence    = '`ApplicationServices::operations()` owns the one process-wide entity locker, playout activity registry, library/show scan operation registry, and keyed external-collection coordination used by application admission, native workers, scheduler execution, and web polling. Milestones p7b-02 and p7b-03 removed transport-owned sender, lock, progress, admission, and worker-lifecycle state; architecture lint prevents those split registries from returning.'
 resolved    = true
+
+[[debt]]
+id          = 'module-split-selection-rule'
+description = 'Large modules were being nominated for splitting on file size alone, which produces arbitrary boundaries and no way to prove the split is complete. Milestone `p7c-04` needed a selection rule, not a file-size threshold.'
+discovered  = '2026-07-26'
+evidence    = 'Resolved by milestone `p7c-04`, closed 2026-07-26. The infra health pilot applied the rule; the surveyed media-browser, YAML scheduling, scripted scheduling, and provider-dedup candidates were assessed against it and left intact as cohesive state machines that do not meet it.'
+resolved    = true
+resolution  = '''Locked decision: split a module only when an enumerable growth axis can sit behind thin dispatch and an exhaustive completeness gate. File size is evidence of pressure, never a selection rule by itself, and a large but cohesive state machine stays intact.
+
+All five conditions must hold: variation follows an enumerable dimension; that dimension grows as parity expands; each variant carries a similar responsibility; a thin dispatcher or registry is natural; and compiler exhaustiveness or a registry test can prove completeness.
+
+The reference pattern is admin localization: `admin/i18n.rs` owns `UiLanguage`, `TextKey`, registry metadata, and dispatch; `admin/languages/*.rs` owns per-language values; and `all_languages_translate_each_key` proves every language covers every key. A structural split must never move orchestration or SQL back into `ersatzrs-web`.'''

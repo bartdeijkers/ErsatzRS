@@ -37,6 +37,41 @@ When the admin UI opens, use these pages in order:
 Copy only redacted diagnostics. Do not publish provider tokens, database URLs
 with passwords, private media paths, or playlist URLs containing access tokens.
 
+## Install TSDuck for MPEG-TS diagnostics
+
+The **Troubleshooting** page's MPEG-TS result and the manual playback gate in
+`scripts/e2e/tsduck-playback-gate.sh` both need [TSDuck](https://tsduck.io/).
+It is a developer- and operator-side tool only and is not bundled with ErsatzRS
+(see [ADR 0013](../adr/0013-tsduck-mpeg-troubleshooting.md)). The diagnostic
+service detects `tsp --version` at runtime; a missing TSDuck reports
+`NotAvailable` and never fails startup or `/healthz`.
+
+TSDuck is not in the Ubuntu apt repositories, so install the upstream `.deb`
+directly. For other platforms, download the matching artifact from the
+[releases page](https://github.com/tsduck/tsduck/releases/latest).
+
+On WSL or Ubuntu 24.04 (amd64):
+
+```bash
+# Resolve the latest ubuntu24 amd64 deb URL from the GitHub releases API
+URL=$(curl -sL https://api.github.com/repos/tsduck/tsduck/releases/latest \
+  | grep -oE '"browser_download_url": *"[^"]+\.deb"' \
+  | sed 's/.*"\(http[^"]*\)"/\1/' \
+  | grep -E 'tsduck_.*ubuntu24_amd64\.deb')
+
+curl -fL -o /tmp/tsduck_amd64.deb "$URL"
+
+# Use apt-get install (not dpkg -i) so runtime deps resolve: libcurl, libsrt, ...
+sudo apt-get install -y /tmp/tsduck_amd64.deb
+```
+
+Verify the install:
+
+```bash
+tsp --version        # e.g. "version 3.44-4676"
+tsanalyze --version
+```
+
 ## Resolve common startup failures
 
 ### Port 8409 is already in use

@@ -1,3 +1,4 @@
+{"agent":"Claude","date":"2026-08-18","summary":"Pruned 16 completed plans into docs/progress/, recorded the add-on NFO closeout blockers as open parity debts, and made a milestone plan pointer optional once the milestone is Complete"}
 {"agent":"Claude","date":"2026-08-18","summary":"Swept all 98 writing SQLite transactions onto begin_write (BEGIN IMMEDIATE), kept the one read-only transaction deferred, added an architecture-lint guard, and covered the deferred-upgrade failure and the TV projection with regression tests"}
 {"agent":"Codex","date":"2026-08-17","summary":"Implemented provider-supplied add-on chapters with provider-neutral host expansion and package-owned extraction"}
 {"agent":"Codex","date":"2026-08-17","summary":"Fixed finite add-on HLS replay at the work-ahead seam with continuous per-item production; live Glamourland and Teleac TSDuck captures passed."}

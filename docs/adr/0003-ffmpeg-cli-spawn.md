@@ -77,5 +77,4 @@ own cleanup rather than leaving it to best-effort startup maintenance.
 
 - [../../PORTING.md](../../PORTING.md)
 - [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
-- [FFmpeg 9 HDR, Dolby Vision, and pipeline hardening plan](../../plans/ffmpeg-9-hdr-dolby-vision-and-pipeline-hardening.md)
 - [FFmpeg 9 performance and support progress](../progress/parity/ffmpeg-9-performance-and-support.toml)
