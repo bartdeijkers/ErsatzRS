@@ -362,6 +362,13 @@ impl LanguageStrings for GermanStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ApplyToAllItemsPrompt => "Jeder Eintrag erhält die ausgewählte Medienart und überschreibt damit Werte, die das Add-on ermittelt oder Sie selbst gesetzt haben.",
+        TextKey::TelevisionEpisode => "Fernsehepisode",
+        TextKey::CollectionTypeAuto => "Anhand der Einträge bestimmen",
+        TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
+        TextKey::UnknownItems => "Unbekannte Einträge",
+        TextKey::PlayableItems => "Abspielbare Einträge",
+        TextKey::ApplyToAllItems => "Auf alle Einträge anwenden",
         TextKey::ChangeAddon => "Add-on ändern",
         TextKey::ChangeAddonHelp => "Wählen Sie ein anderes Add-on, um die Liste darüber erneut zu importieren.",
         TextKey::ChangeAddonPrompt => "Die Liste wird über das ausgewählte Add-on erneut importiert. Elementmetadaten, Ersetzungen und Kapitelkorrekturen werden erneut vom neuen Anbieter abgeleitet.",

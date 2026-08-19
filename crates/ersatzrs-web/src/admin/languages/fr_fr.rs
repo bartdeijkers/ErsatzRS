@@ -356,6 +356,13 @@ impl LanguageStrings for FrenchStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Extension",
+        TextKey::ApplyToAllItemsPrompt => "Chaque élément est reclassé avec le type de média sélectionné, remplaçant les valeurs déduites par l'extension ou saisies manuellement.",
+        TextKey::TelevisionEpisode => "Épisode de télévision",
+        TextKey::CollectionTypeAuto => "Déterminer d'après les éléments",
+        TextKey::NonPlayableItems => "Éléments non lisibles",
+        TextKey::UnknownItems => "Éléments inconnus",
+        TextKey::PlayableItems => "Éléments lisibles",
+        TextKey::ApplyToAllItems => "Appliquer à tous les éléments",
         TextKey::ChangeAddon => "Changer d'extension",
         TextKey::ChangeAddonHelp => "Sélectionnez une autre extension pour réimporter la liste avec celle-ci.",
         TextKey::ChangeAddonPrompt => "La liste est réimportée via l'extension sélectionnée. Les métadonnées des éléments, les remplacements et les corrections de chapitres sont de nouveau dérivés du nouveau fournisseur.",

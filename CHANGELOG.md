@@ -24,6 +24,24 @@ release section when tagging a release.
 
 ### Added
 
+- Each add-on list entry now owns its media kind. The classification the add-ons
+  already derived from provider metadata was stored but never read, so it was
+  invisible and the list-wide value decided each entry's NFO root — a mixed list
+  wrote every entry under one wrong root. The list-wide control remains as an
+  explicit **Apply to all items** bulk default that confirms before overwriting.
+
+- The add-on list collection type now offers every library kind: Auto, TV Shows,
+  Movies, Music, Other Videos, Songs, Images, and Remote Streams. Only Auto, TV
+  Shows and Remote Streams have a projection so far; choosing one of the others
+  is refused at the moment of choice rather than stored as a presentation
+  nothing implements.
+
+- The add-on list editor groups entries by availability into counted
+  **non-playable**, **unknown** and **playable** sections, each paged on its own
+  (10/25/50/100/all) and each offering local replacement. Non-playable is
+  expanded by default; unknown is kept separate because "could not determine"
+  is not the same as "cannot play".
+
 - Add-on packages can declare `default_source_hosts` (manifest schema v4): the
   hosts they offer to process, as a statement separate from the hosts they are
   permitted to contact. ErsatzRS uses it to select an add-on for an
@@ -98,6 +116,9 @@ release section when tagging a release.
 
 ### Changed
 
+- The add-on list editor leads with the source URL and the add-on, followed by
+  the fields the resolved add-on populates.
+
 - Adding an add-on list now starts with the URL. The add-on selection moved
   below it and became optional: leave it on *Determine from the URL* and
   ErsatzRS fills it in from the URL host, visibly and overridably. The plain
@@ -167,6 +188,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- `./run.sh test-closeout` ran only the `--all-features` configuration, which
+  enables `mysql` and compiles away every `#![cfg(not(feature = "mysql"))]`
+  integration test. That pass was not a stricter superset but a smaller set:
+  322 tests never ran, and two had been failing on a fixture that seeded a
+  `MediaStreamKind` of `0` where the enum is 1-based, leaving the generated
+  playlist empty. The closeout now runs both configurations.
 - The per-item add-on media list metadata editor is now covered by the admin
   route contract. Its route shipped with the television projection without a
   hydration entry, so the page had no recorded browser evidence and the route

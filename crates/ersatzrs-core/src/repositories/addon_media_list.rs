@@ -92,6 +92,22 @@ pub struct AddonMediaListItemAdminRow {
     /// Latest provider value, retained separately from the operator override.
     pub provider_chapter_input: String,
     pub projected_episode_id: Option<EntityId>,
+    /// Descriptive classification of this entry.
+    ///
+    /// The list-wide value is only the default applied to new entries; this is
+    /// the effective kind for the item.
+    pub content_kind: AddonMediaListContentKind,
+}
+
+/// How many entries of one list fall into each availability group.
+///
+/// The editor renders one section per group and needs the totals before it
+/// loads any page of rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListItemCounts {
+    pub available: u64,
+    pub unavailable: u64,
+    pub unknown: u64,
 }
 
 /// One person row persisted in a Kodi-compatible NFO document.
@@ -237,6 +253,31 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
+    /// Return one page of entries in one availability group.
+    ///
+    /// `page_size` of `None` returns every row in the group, which the editor
+    /// offers explicitly; callers that page must pass a bounded size.
+    async fn list_items_page(
+        &self,
+        id: EntityId,
+        availability: AddonMediaListItemAvailability,
+        page: u32,
+        page_size: Option<u32>,
+    ) -> Result<Vec<AddonMediaListItemAdminRow>>;
+    /// Count the entries of one list per availability group.
+    async fn item_counts(&self, id: EntityId) -> Result<AddonMediaListItemCounts>;
+    /// Set the descriptive classification of one entry.
+    async fn update_item_content_kind(
+        &self,
+        item_id: EntityId,
+        content_kind: AddonMediaListContentKind,
+    ) -> Result<()>;
+    /// Apply one classification to every entry of a list as a bulk default.
+    async fn apply_list_content_kind(
+        &self,
+        id: EntityId,
+        content_kind: AddonMediaListContentKind,
+    ) -> Result<u64>;
     /// Move one list to a different add-on and re-import it through that
     /// add-on.
     ///

@@ -1097,6 +1097,13 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Complemento",
+        TextKey::ApplyToAllItemsPrompt => "Cada item é reclassificado com o tipo de mídia selecionado, substituindo valores derivados pelo complemento ou definidos por você.",
+        TextKey::TelevisionEpisode => "Episódio de televisão",
+        TextKey::CollectionTypeAuto => "Determinar pelos itens",
+        TextKey::NonPlayableItems => "Itens não reproduzíveis",
+        TextKey::UnknownItems => "Itens desconhecidos",
+        TextKey::PlayableItems => "Itens reproduzíveis",
+        TextKey::ApplyToAllItems => "Aplicar a todos os itens",
         TextKey::ChangeAddon => "Alterar complemento",
         TextKey::ChangeAddonHelp => "Selecione outro complemento para reimportar a lista por ele.",
         TextKey::ChangeAddonPrompt => "A lista é reimportada pelo complemento selecionado. Metadados de itens, substituições e correções de capítulos são derivados novamente do novo provedor.",

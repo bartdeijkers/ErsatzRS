@@ -13,6 +13,13 @@ Previously saved lists remain visible with that failure in administration.
 The host forwards the URL parser's canonical serialization, so the add-on
 receives the same authority and host that passed validation.
 
+Every item record may carry a `content_kind`, and that value is the entry's
+effective classification: ErsatzRS stores it, shows it per entry in the list
+editor, and uses it to choose that entry's NFO root. The list-wide value is only
+the default new entries inherit and an explicit bulk action. The host's `song`
+and `image` classifications have no wire equivalent; a package is asked to
+classify freely (`auto`) rather than being sent a value this contract rejects.
+
 The add-on is optional in the administration dialog: when the selection is left
 empty, ErsatzRS resolves it from the URL host against installed packages'
 schema-v4 [`default_source_hosts`](addon-packages.md#permission-declarations)

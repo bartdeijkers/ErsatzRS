@@ -436,6 +436,49 @@ impl ApplicationServices {
         commands::update_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
+    /// Load one page of provider items in one availability group.
+    pub async fn list_addon_media_list_items_page(
+        &self,
+        id: ersatzrs_domain::EntityId,
+        availability: ersatzrs_domain::AddonMediaListItemAvailability,
+        page: u32,
+        page_size: Option<u32>,
+    ) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListItemAdminRow>> {
+        queries::list_addon_media_list_items_page(
+            id,
+            availability,
+            page,
+            page_size,
+            self.ports.addon_media_lists(),
+        )
+        .await
+    }
+
+    /// Count the provider items of one list per availability group.
+    pub async fn addon_media_list_item_counts(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListItemCounts> {
+        queries::addon_media_list_item_counts(id, self.ports.addon_media_lists()).await
+    }
+
+    /// Set the descriptive classification of one entry.
+    pub async fn set_addon_media_list_item_content_kind(
+        &self,
+        command: commands::SetAddonMediaListItemContentKind,
+    ) -> Result<()> {
+        commands::set_addon_media_list_item_content_kind(command, self.ports.addon_media_lists())
+            .await
+    }
+
+    /// Apply one classification to every entry of a list.
+    pub async fn apply_addon_media_list_content_kind(
+        &self,
+        command: commands::ApplyAddonMediaListContentKind,
+    ) -> Result<u64> {
+        commands::apply_addon_media_list_content_kind(command, self.ports.addon_media_lists()).await
+    }
+
     /// Move one Add-on media list to a different add-on and re-import it.
     pub async fn change_addon_media_list_addon(
         &self,

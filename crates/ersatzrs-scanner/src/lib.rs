@@ -2005,6 +2005,8 @@ async fn upsert_local_remote_stream(
         ersatzrs_domain::AddonMediaListContentKind::Movie => 2,
         ersatzrs_domain::AddonMediaListContentKind::MusicVideo => 3,
         ersatzrs_domain::AddonMediaListContentKind::OtherVideo => 4,
+        ersatzrs_domain::AddonMediaListContentKind::Song => 5,
+        ersatzrs_domain::AddonMediaListContentKind::Image => 6,
     })
     .bind(definition.provider_id.as_deref())
     .bind(item_id)

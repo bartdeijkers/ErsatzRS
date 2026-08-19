@@ -366,6 +366,13 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Complemento",
+        TextKey::ApplyToAllItemsPrompt => "Cada elemento se reclasifica con el tipo de medio seleccionado y reemplaza los valores derivados por el complemento o definidos por ti.",
+        TextKey::TelevisionEpisode => "Episodio de televisión",
+        TextKey::CollectionTypeAuto => "Determinar a partir de los elementos",
+        TextKey::NonPlayableItems => "Elementos no reproducibles",
+        TextKey::UnknownItems => "Elementos desconocidos",
+        TextKey::PlayableItems => "Elementos reproducibles",
+        TextKey::ApplyToAllItems => "Aplicar a todos los elementos",
         TextKey::ChangeAddon => "Cambiar complemento",
         TextKey::ChangeAddonHelp => "Elige otro complemento para volver a importar la lista con él.",
         TextKey::ChangeAddonPrompt => "La lista se vuelve a importar mediante el complemento seleccionado. Los metadatos de los elementos, los reemplazos y las correcciones de capítulos se derivan otra vez del nuevo proveedor.",

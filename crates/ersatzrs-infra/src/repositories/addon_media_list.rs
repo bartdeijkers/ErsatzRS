@@ -1,10 +1,14 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-    AddonMediaListItemDetail, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
+    AddonMediaListItemCounts, AddonMediaListItemDetail, AddonMediaListNfoForm,
+    AddonMediaListNfoMetadata, AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    RepositoryError, Result,
 };
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind, EntityId};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
+    EntityId,
+};
 use sqlx::{Pool, Row};
 use std::path::{Path, PathBuf};
 
@@ -152,75 +156,93 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>> {
+        self.query_items(id, None, 0, None).await
+    }
+
+    async fn list_items_page(
+        &self,
+        id: EntityId,
+        availability: AddonMediaListItemAvailability,
+        page: u32,
+        page_size: Option<u32>,
+    ) -> Result<Vec<AddonMediaListItemAdminRow>> {
+        self.query_items(id, Some(availability), page, page_size)
+            .await
+    }
+
+    async fn item_counts(&self, id: EntityId) -> Result<AddonMediaListItemCounts> {
         let rows = sqlx::query(
-            r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle",
-                      "item"."Title", "item"."Year", "item"."Season", "item"."Episode",
-                      "item"."SourceUrl", "item"."DurationSeconds", "item"."ParentProviderId",
-                      "item"."ChapterInput", "item"."ProviderChapterInput",
-                      "projection"."EpisodeId" AS "ProjectedEpisodeId",
-                      "item"."Availability", "item"."AvailabilityReason",
-                      "replacement"."MediaItemId" AS "ReplacementMediaItemId",
-                      "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
-               FROM "AddonMediaListItem" AS "item"
-               LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
-                 ON "replacement"."AddonMediaListItemId" = "item"."Id"
-               LEFT JOIN "AddonMediaListItemEpisode" AS "projection"
-                 ON "projection"."AddonMediaListItemId" = "item"."Id"
-               WHERE "item"."AddonMediaListId" = ?
-               ORDER BY "item"."Rank", "item"."Id""#,
+            r#"SELECT "Availability", COUNT(*) AS "Total"
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ?
+               GROUP BY "Availability""#,
         )
         .bind(id)
         .fetch_all(&self.0)
         .await
         .repository()?;
-        let mut result = Vec::with_capacity(rows.len());
+        let mut counts = AddonMediaListItemCounts::default();
         for row in rows {
-            let replacement_media_item_id = row
-                .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
+            let total = u64::try_from(row.try_get::<i64, _>("Total").repository()?).unwrap_or(0);
+            match crate::repositories::common::decode_enum_column(
+                "AddonMediaListItemAvailability",
+                &row,
+                "Availability",
+            )? {
+                AddonMediaListItemAvailability::Available => counts.available = total,
+                AddonMediaListItemAvailability::Unavailable => counts.unavailable = total,
+                AddonMediaListItemAvailability::Unknown => counts.unknown = total,
+            }
+        }
+        Ok(counts)
+    }
+
+    async fn update_item_content_kind(
+        &self,
+        item_id: EntityId,
+        content_kind: AddonMediaListContentKind,
+    ) -> Result<()> {
+        let updated =
+            sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ? WHERE "Id" = ?"#)
+                .bind(crate::repositories::common::encode_enum(content_kind))
+                .bind(item_id)
+                .execute(&self.0)
+                .await
                 .repository()?;
-            let replacement_media_version_id = row
-                .try_get::<Option<EntityId>, _>("ReplacementMediaVersionId")
-                .repository()?;
-            let candidate = match replacement_media_item_id.zip(replacement_media_version_id) {
-                Some((media_item_id, media_version_id)) => {
-                    load_replacement_candidate(&self.0, media_item_id, media_version_id).await?
-                }
-                None => None,
-            };
-            result.push(AddonMediaListItemAdminRow {
-                id: row.try_get("Id").repository()?,
-                rank: row.try_get("Rank").repository()?,
-                display_title: row.try_get("DisplayTitle").repository()?,
-                availability: crate::repositories::common::decode_enum_column(
-                    "AddonMediaListItemAvailability",
-                    &row,
-                    "Availability",
-                )?,
-                availability_reason: row.try_get("AvailabilityReason").repository()?,
-                replacement_media_item_id,
-                replacement_media_version_id,
-                replacement_title: candidate.as_ref().map(|item| item.title.clone()),
-                replacement_path: candidate.as_ref().map(|item| item.path.clone()),
-                replacement_valid: candidate.is_some(),
-                title: row.try_get("Title").repository()?,
-                year: row.try_get("Year").repository()?,
-                season: row.try_get("Season").repository()?,
-                episode: row.try_get("Episode").repository()?,
-                source_url: row.try_get("SourceUrl").repository()?,
-                duration_seconds: decode_optional_u64(&row, "DurationSeconds")?,
-                parent_provider_id: row.try_get("ParentProviderId").repository()?,
-                chapter_input: row
-                    .try_get::<Option<String>, _>("ChapterInput")
-                    .repository()?
-                    .unwrap_or_default(),
-                provider_chapter_input: row
-                    .try_get::<Option<String>, _>("ProviderChapterInput")
-                    .repository()?
-                    .unwrap_or_default(),
-                projected_episode_id: row.try_get("ProjectedEpisodeId").repository()?,
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list item",
+                id: item_id,
             });
         }
-        Ok(result)
+        Ok(())
+    }
+
+    async fn apply_list_content_kind(
+        &self,
+        id: EntityId,
+        content_kind: AddonMediaListContentKind,
+    ) -> Result<u64> {
+        let encoded = crate::repositories::common::encode_enum(content_kind);
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        // The list value is the bulk default, so it is stored as well: entries
+        // enumerated later inherit the same classification.
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "ContentKindOverride" = ? WHERE "Id" = ?"#)
+            .bind(encoded)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ? WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(encoded)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()?;
+        Ok(updated.rows_affected())
     }
 
     async fn get_item_detail(
@@ -430,6 +452,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
+        // A presentation without a projection would be stored and then quietly
+        // do nothing, leaving the list claiming a library kind it never entered.
+        if !presentation_kind.is_projected() {
+            return Err(RepositoryError::Conflict(format!(
+                "presentation {presentation_kind:?} has no projection yet"
+            )));
+        }
         if presentation_kind == AddonMediaListPresentationKind::TelevisionShow {
             let path = show_nfo_path_for(&self.0, id).await?.ok_or_else(|| {
                 RepositoryError::Conflict("managed list storage is unavailable".to_owned())
@@ -527,7 +556,27 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         {
             "episodedetails"
         } else {
-            nfo_root_for_content_kind(presentation.content_kind_override)
+            // The entry classifies itself. The list-wide value is only the
+            // default new entries inherit, so a mixed list would otherwise
+            // write every item under one wrong NFO root.
+            let item_kind = sqlx::query_scalar::<_, i32>(
+                r#"SELECT "ContentKind" FROM "AddonMediaListItem"
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+            )
+            .bind(item_id)
+            .bind(list_id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .and_then(
+                <AddonMediaListContentKind as crate::repositories::common::DbEnum>::from_db_int,
+            )
+            .unwrap_or(presentation.content_kind_override);
+            let item_kind = match item_kind {
+                AddonMediaListContentKind::Auto => presentation.content_kind_override,
+                kind => kind,
+            };
+            nfo_root_for_content_kind(item_kind)
         };
         crate::addon_media_nfo::save_user(&path, root, metadata, expected_etag)
             .map_err(map_nfo_error)?;
@@ -672,9 +721,12 @@ const fn nfo_root_for_content_kind(kind: AddonMediaListContentKind) -> &'static 
     match kind {
         AddonMediaListContentKind::TelevisionEpisode => "episodedetails",
         AddonMediaListContentKind::MusicVideo => "musicvideo",
+        AddonMediaListContentKind::Song => "song",
+        // Kodi has no still-image NFO root, so an image keeps the generic one.
         AddonMediaListContentKind::Auto
         | AddonMediaListContentKind::Movie
-        | AddonMediaListContentKind::OtherVideo => "movie",
+        | AddonMediaListContentKind::OtherVideo
+        | AddonMediaListContentKind::Image => "movie",
     }
 }
 
@@ -740,6 +792,106 @@ fn season_title(season_number: i32) -> String {
         "Specials".to_owned()
     } else {
         format!("Season {season_number}")
+    }
+}
+
+impl SqliteAddonMediaListRepository {
+    /// Load list entries, optionally restricted to one availability group.
+    ///
+    /// One query shape serves the unfiltered internal callers and the paged
+    /// editor sections so their row decoding cannot drift apart.
+    async fn query_items(
+        &self,
+        id: EntityId,
+        availability: Option<AddonMediaListItemAvailability>,
+        page: u32,
+        page_size: Option<u32>,
+    ) -> Result<Vec<AddonMediaListItemAdminRow>> {
+        // One static statement serves every combination: a NULL availability
+        // matches every group, and an absent page size becomes an unbounded
+        // limit both backends accept.
+        let rows = sqlx::query(
+            r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle",
+                      "item"."Title", "item"."Year", "item"."Season", "item"."Episode",
+                      "item"."SourceUrl", "item"."DurationSeconds", "item"."ParentProviderId",
+                      "item"."ChapterInput", "item"."ProviderChapterInput",
+                      "item"."ContentKind",
+                      "projection"."EpisodeId" AS "ProjectedEpisodeId",
+                      "item"."Availability", "item"."AvailabilityReason",
+                      "replacement"."MediaItemId" AS "ReplacementMediaItemId",
+                      "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
+               FROM "AddonMediaListItem" AS "item"
+               LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
+                 ON "replacement"."AddonMediaListItemId" = "item"."Id"
+               LEFT JOIN "AddonMediaListItemEpisode" AS "projection"
+                 ON "projection"."AddonMediaListItemId" = "item"."Id"
+               WHERE "item"."AddonMediaListId" = ?
+                 AND (? IS NULL OR "item"."Availability" = ?)
+               ORDER BY "item"."Rank", "item"."Id"
+               LIMIT ? OFFSET ?"#,
+        )
+        .bind(id)
+        .bind(availability.map(crate::repositories::common::encode_enum))
+        .bind(availability.map(crate::repositories::common::encode_enum))
+        .bind(page_size.map_or(i64::MAX, |size| i64::from(size.max(1))))
+        .bind(page_size.map_or(0, |size| i64::from(page) * i64::from(size.max(1))))
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            let replacement_media_item_id = row
+                .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
+                .repository()?;
+            let replacement_media_version_id = row
+                .try_get::<Option<EntityId>, _>("ReplacementMediaVersionId")
+                .repository()?;
+            let candidate = match replacement_media_item_id.zip(replacement_media_version_id) {
+                Some((media_item_id, media_version_id)) => {
+                    load_replacement_candidate(&self.0, media_item_id, media_version_id).await?
+                }
+                None => None,
+            };
+            result.push(AddonMediaListItemAdminRow {
+                id: row.try_get("Id").repository()?,
+                rank: row.try_get("Rank").repository()?,
+                display_title: row.try_get("DisplayTitle").repository()?,
+                availability: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListItemAvailability",
+                    &row,
+                    "Availability",
+                )?,
+                availability_reason: row.try_get("AvailabilityReason").repository()?,
+                replacement_media_item_id,
+                replacement_media_version_id,
+                replacement_title: candidate.as_ref().map(|item| item.title.clone()),
+                replacement_path: candidate.as_ref().map(|item| item.path.clone()),
+                replacement_valid: candidate.is_some(),
+                title: row.try_get("Title").repository()?,
+                year: row.try_get("Year").repository()?,
+                season: row.try_get("Season").repository()?,
+                episode: row.try_get("Episode").repository()?,
+                source_url: row.try_get("SourceUrl").repository()?,
+                duration_seconds: decode_optional_u64(&row, "DurationSeconds")?,
+                parent_provider_id: row.try_get("ParentProviderId").repository()?,
+                chapter_input: row
+                    .try_get::<Option<String>, _>("ChapterInput")
+                    .repository()?
+                    .unwrap_or_default(),
+                provider_chapter_input: row
+                    .try_get::<Option<String>, _>("ProviderChapterInput")
+                    .repository()?
+                    .unwrap_or_default(),
+                projected_episode_id: row.try_get("ProjectedEpisodeId").repository()?,
+                content_kind: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListContentKind",
+                    &row,
+                    "ContentKind",
+                )?,
+            });
+        }
+        Ok(result)
     }
 }
 

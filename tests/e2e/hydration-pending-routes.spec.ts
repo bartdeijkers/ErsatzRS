@@ -719,8 +719,22 @@ SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
 `)).toBe('0');
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    let itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
-    await expect(itemRow.getByText(/^unavailable$/i)).toBeVisible();
+    // ADR 0073: entries are grouped by availability. The unavailable entry
+    // belongs to the non-playable section, which is the one section expanded by
+    // default precisely because it needs attention.
+    const nonPlayable = page.locator('[data-testid="non-playable-items"]');
+    const unknownSection = page.locator('[data-testid="unknown-items"]');
+    const playable = page.locator('[data-testid="playable-items"]');
+    await expect(nonPlayable.getByRole('heading', { name: /^Non-playable items \(1\)$/ })).toBeVisible();
+    await expect(unknownSection.getByRole('heading', { name: /^Unknown items \(0\)$/ })).toBeVisible();
+    await expect(playable.getByRole('heading', { name: /^Playable items \(\d+\)$/ })).toBeVisible();
+    await expect(nonPlayable.locator('table')).toBeVisible();
+    await expect(playable.locator('table')).toBeHidden();
+
+    let itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow).toBeVisible();
+    // The entry owns its classification, so the row carries its own selector.
+    await expect(itemRow.locator('select')).toBeVisible();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const replacementPicker = page
       .locator('div[class*="picker-panel"]')
@@ -737,12 +751,12 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId}
   AND "MediaItemId" = ${seed.replacementMediaItemId}
   AND "MediaVersionId" = ${seed.replacementMediaVersionId};
 `)).toBe('1');
-    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
     await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
 
     sqlite(`DELETE FROM "MediaStream" WHERE "Id" = ${seed.replacementMediaStreamId};`);
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
     await expect(itemRow.locator('[data-replacement-state="invalid"]')).toHaveText(
       'Invalid replacement',
     );
@@ -762,7 +776,7 @@ INSERT INTO "MediaStream" (
 );
 `);
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const recoveredCandidateRow = page
       .locator('div[class*="picker-panel"]')
@@ -797,8 +811,13 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 `)).toBe('1');
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
-    await expect(itemRow.getByText(/^available$/i)).toBeVisible();
+    // Recovering to Available moves the entry out of the non-playable section
+    // and into the playable one, which is collapsed until asked for.
+    await expect(nonPlayable.getByRole('heading', { name: /^Non-playable items \(0\)$/ })).toBeVisible();
+    await expect(nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle })).toHaveCount(0);
+    await playable.getByRole('button', { name: /^Playable items/ }).click();
+    itemRow = playable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    await expect(itemRow).toBeVisible();
     await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
     expect(runtimeErrors).toEqual([]);
   });

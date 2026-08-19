@@ -360,6 +360,13 @@ impl LanguageStrings for EnglishStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ApplyToAllItemsPrompt => "Every entry is reclassified with the selected media kind, replacing values the add-on derived or you set by hand.",
+        TextKey::TelevisionEpisode => "Television Episode",
+        TextKey::CollectionTypeAuto => "Determine from the items",
+        TextKey::NonPlayableItems => "Non-playable items",
+        TextKey::UnknownItems => "Unknown items",
+        TextKey::PlayableItems => "Playable items",
+        TextKey::ApplyToAllItems => "Apply to all items",
         TextKey::ChangeAddon => "Change add-on",
         TextKey::ChangeAddonHelp => "Select a different add-on to re-import the list through it.",
         TextKey::ChangeAddonPrompt => "The list is re-imported through the selected add-on. Item metadata, replacements, and chapter corrections are derived again from the new provider.",

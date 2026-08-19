@@ -3220,6 +3220,8 @@ const fn remote_stream_content_kind_token(kind: AddonMediaListContentKind) -> Op
         AddonMediaListContentKind::Movie => Some("movie"),
         AddonMediaListContentKind::MusicVideo => Some("music_video"),
         AddonMediaListContentKind::OtherVideo => Some("other_video"),
+        AddonMediaListContentKind::Song => Some("song"),
+        AddonMediaListContentKind::Image => Some("image"),
     }
 }
 

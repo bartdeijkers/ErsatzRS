@@ -1083,6 +1083,13 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Dodatek",
+        TextKey::ApplyToAllItemsPrompt => "Każda pozycja otrzyma wybrany rodzaj multimediów, zastępując wartości ustalone przez dodatek lub wprowadzone ręcznie.",
+        TextKey::TelevisionEpisode => "Odcinek telewizyjny",
+        TextKey::CollectionTypeAuto => "Ustal na podstawie pozycji",
+        TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
+        TextKey::UnknownItems => "Pozycje nieznane",
+        TextKey::PlayableItems => "Pozycje odtwarzalne",
+        TextKey::ApplyToAllItems => "Zastosuj do wszystkich pozycji",
         TextKey::ChangeAddon => "Zmień dodatek",
         TextKey::ChangeAddonHelp => "Wybierz inny dodatek, aby ponownie zaimportować listę przy jego użyciu.",
         TextKey::ChangeAddonPrompt => "Lista zostanie ponownie zaimportowana przy użyciu wybranego dodatku. Metadane pozycji, zamienniki i poprawki rozdziałów zostaną ponownie ustalone przez nowego dostawcę.",

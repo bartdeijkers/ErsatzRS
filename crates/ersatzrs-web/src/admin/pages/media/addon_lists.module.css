@@ -299,6 +299,39 @@ tbody tr:hover {
     line-height: 1.35;
 }
 
+.item-section {
+    margin-top: 1.5rem;
+}
+
+.item-section:first-of-type {
+    margin-top: 0;
+}
+
+.section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.35rem 0;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.section-toggle h2 {
+    margin: 0;
+}
+
+.row-note {
+    display: block;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
 .dialog-body {
     display: grid;
     gap: 1.5rem;

@@ -875,11 +875,16 @@ fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
 
 const fn wire_content_kind(kind: AddonMediaListContentKind) -> WireContentKind {
     match kind {
-        AddonMediaListContentKind::Auto => WireContentKind::Auto,
         AddonMediaListContentKind::TelevisionEpisode => WireContentKind::TelevisionEpisode,
         AddonMediaListContentKind::Movie => WireContentKind::Movie,
         AddonMediaListContentKind::MusicVideo => WireContentKind::MusicVideo,
         AddonMediaListContentKind::OtherVideo => WireContentKind::OtherVideo,
+        // The frozen wire contract has no song or image classification, so the
+        // host keeps those as its own and asks the add-on to classify freely
+        // rather than sending a value the contract would reject.
+        AddonMediaListContentKind::Auto
+        | AddonMediaListContentKind::Song
+        | AddonMediaListContentKind::Image => WireContentKind::Auto,
     }
 }
 
@@ -1609,6 +1614,8 @@ fn manifest_etag(
         AddonMediaListContentKind::Movie => 2,
         AddonMediaListContentKind::MusicVideo => 3,
         AddonMediaListContentKind::OtherVideo => 4,
+        AddonMediaListContentKind::Song => 5,
+        AddonMediaListContentKind::Image => 6,
     }]);
     bytes_to_hex(&hasher.finalize())
 }

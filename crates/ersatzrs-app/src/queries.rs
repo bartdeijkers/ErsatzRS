@@ -1851,6 +1851,40 @@ pub async fn list_addon_media_list_items(
     repository.list_items(id).await.map_err(Into::into)
 }
 
+/// Load one page of provider items in one availability group.
+pub async fn list_addon_media_list_items_page(
+    id: EntityId,
+    availability: ersatzrs_domain::AddonMediaListItemAvailability,
+    page: u32,
+    page_size: Option<u32>,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListItemAdminRow>> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository
+        .list_items_page(id, availability, page, page_size)
+        .await
+        .map_err(Into::into)
+}
+
+/// Count the provider items of one list per availability group.
+pub async fn addon_media_list_item_counts(
+    id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListItemCounts> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository.item_counts(id).await.map_err(Into::into)
+}
+
 /// Load one provider item and its disk-authoritative NFO metadata.
 pub async fn get_addon_media_list_item(
     list_id: EntityId,

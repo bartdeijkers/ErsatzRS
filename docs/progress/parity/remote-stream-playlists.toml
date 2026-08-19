@@ -104,24 +104,36 @@ evidence    = 'The working tree has corrected metadata binds, four-kind NFO roun
 
 [[debt]]
 id          = 'addon-list-media-kind-is-list-wide'
-description = 'The descriptive media kind of an add-on list is one list-wide override, so a mixed list cannot classify its entries. It must move to each item, default to Auto, and be derived from the typed record the add-on already enumerates, with the list-wide value retained only as an explicit bulk default.'
+description = 'The per-item media kind is stored and supplied by the add-ons but never surfaced: administration exposes only the list-wide override, and that override wins where the item value should. The item must own its classification, with the list-wide value retained only as an explicit bulk default.'
 discovered  = '2026-08-19'
-evidence    = '`AddonMediaList.ContentKindOverride` is the only stored classification; `AddonMediaListItem` has no content-kind column, and the add dialog plus list editor expose the override at list scope. `media-list.list.v3` already emits typed movie/show/season/episode/remote-stream records that a per-item default could be derived from.'
+evidence    = '`AddonMediaListItem.ContentKind` exists since migration 202608151200 and `save_list_items` already persists the value each add-on enumerates, but `list_items` never read it, the add dialog and list editor only exposed `AddonMediaList.ContentKindOverride`, and `save_item_nfo` chose the NFO root from the list-wide value, so a mixed list wrote every entry under one root. The item value is now read, wins for its own NFO root, and is editable per row; the list-wide control became an explicit Apply to all items bulk default. `AddonMediaListContentKind` gained Song and Image, which the frozen add-on wire contract cannot express and therefore sends as Auto.'
+resolved    = true
+adr         = '0073'
+resolution  = 'Each entry owns its classification in storage, in the NFO root it writes, and in administration; the list-wide value is only a bulk default.'
+
+[[debt]]
+id          = 'addon-list-classification-not-filled-by-every-add-on-path'
+description = 'The official add-ons must classify each entry wherever their metadata allows it, so an operator rarely has to set a media kind by hand. The Windows Beeld & Geluid runtime still emits a fixed `auto` classification on two of its record paths where the POSIX runtime derives one.'
+discovered  = '2026-08-19'
+evidence    = 'The POSIX `beeldengeluid.sh` derives television_episode/movie/music_video/other_video from Schatkamer genre and series metadata, and the yt-dlp add-on derives the same set through `--parse-metadata`/`--replace-in-metadata`. `libexec/beeldengeluid-list.ps1` hardcodes `content_kind = auto` on its list and search record paths, so the same source classifies differently per platform. The packages live in the separate add-on repository.'
 resolved    = false
 
 [[debt]]
 id          = 'addon-list-presentation-covers-two-of-seven-library-kinds'
 description = 'An imported add-on list can only be presented as Remote Streams or a Television Show. The operator-facing collection type must offer Auto plus every LibraryMediaKind — TV Shows, Movies, Music Videos, Other Videos, Songs, Images, Remote Streams — with a real projection behind each.'
 discovered  = '2026-08-19'
-evidence    = '`AddonMediaListPresentationKind` has exactly `RemoteStreams` and `TelevisionShow`, and `AddonMediaListTelevisionShow`/`AddonMediaListItemEpisode` are the only projection link tables. ADR 0071 owns the one implemented projection shape that the remaining five must follow. Planned in plans/addon-list-editor-item-classification.md.'
+evidence    = 'The collection type now offers Auto plus every `LibraryMediaKind`, and `AddonMediaListPresentationKind::is_projected` names the boundary: `request_presentation` refuses Movies, MusicVideos, OtherVideos, Songs, and Images with a conflict instead of storing a presentation nothing implements, covered by `unprojected_presentations_are_refused_rather_than_stored`. `AddonMediaListTelevisionShow`/`AddonMediaListItemEpisode` remain the only projection link tables, so the five refused kinds still need the ADR 0071 projection shape. Planned in plans/addon-list-editor-item-classification.md.'
+adr         = '0073'
 resolved    = false
 
 [[debt]]
 id          = 'addon-list-items-are-one-flat-table'
 description = 'The list editor shows every item in one Local Replacement table, so an operator cannot see what is unplayable without reading the whole list. Items must split into counted non-playable, unknown, and playable sections, each independently paged and each offering local replacement.'
 discovered  = '2026-08-19'
-evidence    = '`list_addon_media_list_items` returns every row for a list with no availability filter, page, or page size, and the editor renders one unpaged table headed Local Replacement. `AddonMediaListItemAvailability` already distinguishes Available, Unavailable, and Unknown. Planned in plans/addon-list-editor-item-classification.md.'
-resolved    = false
+evidence    = 'The editor renders three collapsible sections — non-playable (Unavailable, expanded), unknown (Unknown, collapsed), and playable (Available, collapsed) — each headed by its count and paged independently through `list_items_page` with a 10/25/50/100/all size control, over one shared row renderer that offers local replacement and the per-item media kind everywhere. `item_counts` supplies the totals without loading rows.'
+resolved    = true
+adr         = '0073'
+resolution  = 'Items are grouped by availability with per-section counts and server-side paging instead of one flat unpaged table.'
 
 [[debt]]
 id          = 'addon-provider-supplied-chapters'

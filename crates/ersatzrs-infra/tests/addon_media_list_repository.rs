@@ -230,3 +230,230 @@ async fn seed_local_movie(pool: &sqlx::SqlitePool, id: i64, title: &str, stream_
     .await
     .unwrap();
 }
+
+/// The editor renders one section per availability group, so each group must be
+/// countable and pageable on its own. A regression here shows up as a section
+/// listing another group's entries, or as a count that disagrees with its rows.
+#[tokio::test]
+async fn item_sections_count_and_page_each_availability_group_separately() {
+    use ersatzrs_domain::AddonMediaListItemAvailability;
+
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+            "AutoRefresh", "GeneratePlaylist", "ItemCount"
+           ) VALUES (
+            1, 'org.example.lists', 'alice/mixed',
+            'https://example.invalid/alice/mixed', 'Mixed', 0, 0, 6
+           )"#,
+    )
+    .await
+    .unwrap();
+    // Three unavailable, two available, one unknown, deliberately interleaved so
+    // a filter that ignored availability would still return the first rows.
+    for (id, rank, availability) in [
+        (10, 1, 1),
+        (11, 2, 0),
+        (12, 3, 1),
+        (13, 4, 2),
+        (14, 5, 0),
+        (15, 6, 1),
+    ] {
+        pool.execute(
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                    "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+                    "Rank", "Title", "MediaItemId", "Availability"
+                   ) VALUES (?, 1, ?, ?, 0, ?, 'Item', NULL, ?)"#,
+            )
+            .bind(id)
+            .bind(format!("item:{id}"))
+            .bind(format!("Item {id}"))
+            .bind(rank)
+            .bind(availability),
+        )
+        .await
+        .unwrap();
+    }
+
+    let counts = repositories.addon_media_lists.item_counts(1).await.unwrap();
+    assert_eq!(counts.unavailable, 3);
+    assert_eq!(counts.available, 2);
+    assert_eq!(counts.unknown, 1);
+
+    let first = repositories
+        .addon_media_lists
+        .list_items_page(1, AddonMediaListItemAvailability::Unavailable, 0, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(
+        first.iter().map(|item| item.id).collect::<Vec<_>>(),
+        [10, 12]
+    );
+    let second = repositories
+        .addon_media_lists
+        .list_items_page(1, AddonMediaListItemAvailability::Unavailable, 1, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(second.iter().map(|item| item.id).collect::<Vec<_>>(), [15]);
+
+    // A missing page size means "every row in this group", which the editor
+    // offers explicitly and must not silently truncate.
+    let all = repositories
+        .addon_media_lists
+        .list_items_page(1, AddonMediaListItemAvailability::Unavailable, 0, None)
+        .await
+        .unwrap();
+    assert_eq!(all.len(), 3);
+
+    let unknown = repositories
+        .addon_media_lists
+        .list_items_page(1, AddonMediaListItemAvailability::Unknown, 0, Some(10))
+        .await
+        .unwrap();
+    assert_eq!(unknown.iter().map(|item| item.id).collect::<Vec<_>>(), [13]);
+}
+
+/// The entry owns its classification; the list value is only a bulk default.
+/// Before this, `list_items` never read the column at all, so an add-on that
+/// classified every entry correctly still showed up as unclassified.
+#[tokio::test]
+async fn item_content_kind_is_readable_settable_and_bulk_appliable() {
+    use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
+
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+            "AutoRefresh", "GeneratePlaylist", "ItemCount", "ContentKindOverride"
+           ) VALUES (
+            1, 'org.example.lists', 'alice/kinds',
+            'https://example.invalid/alice/kinds', 'Kinds', 0, 0, 2, 0
+           )"#,
+    )
+    .await
+    .unwrap();
+    // The add-on classified one entry and left the other unclassified.
+    pool.execute(
+        r#"INSERT INTO "AddonMediaListItem" (
+            "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+            "Rank", "Title", "MediaItemId", "Availability", "ContentKind"
+           ) VALUES
+            (10, 1, 'item:10', 'Episode', 0, 1, 'Episode', NULL, 0, 1),
+            (11, 1, 'item:11', 'Unknown kind', 0, 2, 'Unknown', NULL, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|item| item.content_kind)
+            .collect::<Vec<_>>(),
+        [
+            AddonMediaListContentKind::TelevisionEpisode,
+            AddonMediaListContentKind::Auto
+        ]
+    );
+
+    repositories
+        .addon_media_lists
+        .update_item_content_kind(11, AddonMediaListContentKind::Song)
+        .await
+        .unwrap();
+    let rows = repositories
+        .addon_media_lists
+        .list_items_page(1, AddonMediaListItemAvailability::Available, 0, None)
+        .await
+        .unwrap();
+    assert_eq!(rows[1].content_kind, AddonMediaListContentKind::Song);
+
+    // The bulk default overwrites every entry and is stored on the list too, so
+    // entries enumerated later inherit it.
+    let updated = repositories
+        .addon_media_lists
+        .apply_list_content_kind(1, AddonMediaListContentKind::Movie)
+        .await
+        .unwrap();
+    assert_eq!(updated, 2);
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    assert!(rows
+        .iter()
+        .all(|item| item.content_kind == AddonMediaListContentKind::Movie));
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .get_admin_form(1)
+            .await
+            .unwrap()
+            .unwrap()
+            .content_kind_override,
+        AddonMediaListContentKind::Movie
+    );
+
+    // A missing entry is reported rather than silently ignored.
+    assert!(matches!(
+        repositories
+            .addon_media_lists
+            .update_item_content_kind(999, AddonMediaListContentKind::Movie)
+            .await,
+        Err(RepositoryError::NotFound { .. })
+    ));
+}
+
+/// The collection type offers every library kind, but only three have a
+/// projection. Storing one of the others would leave the list claiming a
+/// presentation nothing implements, so the request is refused at the boundary.
+#[tokio::test]
+async fn unprojected_presentations_are_refused_rather_than_stored() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+            "AutoRefresh", "GeneratePlaylist", "ItemCount"
+           ) VALUES (
+            1, 'org.example.lists', 'alice/films',
+            'https://example.invalid/alice/films', 'Films', 0, 0, 0
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    for kind in [
+        AddonMediaListPresentationKind::Movies,
+        AddonMediaListPresentationKind::MusicVideos,
+        AddonMediaListPresentationKind::OtherVideos,
+        AddonMediaListPresentationKind::Songs,
+        AddonMediaListPresentationKind::Images,
+    ] {
+        assert!(
+            matches!(
+                repositories
+                    .addon_media_lists
+                    .request_presentation(1, kind, None)
+                    .await,
+                Err(RepositoryError::Conflict(_))
+            ),
+            "{kind:?} has no projection and must be refused"
+        );
+    }
+
+    // The stored presentation is untouched by a refused request.
+    let form = repositories
+        .addon_media_lists
+        .get_admin_form(1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        form.requested_presentation_kind,
+        AddonMediaListPresentationKind::RemoteStreams
+    );
+}

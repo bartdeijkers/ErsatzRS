@@ -62,6 +62,15 @@ pub struct AddonMediaListItemRow {
     pub chapter_input: String,
     pub provider_chapter_input: String,
     pub projected_episode_id: Option<i64>,
+    pub content_kind: AddonMediaListContentKind,
+}
+
+/// Per-availability entry totals for one list.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListItemCountsRow {
+    pub available: u64,
+    pub unavailable: u64,
+    pub unknown: u64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -153,6 +162,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             chapter_input: row.chapter_input,
             provider_chapter_input: row.provider_chapter_input,
             projected_episode_id: row.projected_episode_id,
+            content_kind: row.content_kind,
         }
     }
 }
@@ -475,9 +485,94 @@ pub async fn list_addon_media_list_items(
                     chapter_input: row.chapter_input,
                     provider_chapter_input: row.provider_chapter_input,
                     projected_episode_id: row.projected_episode_id,
+                    content_kind: row.content_kind,
                 })
                 .collect()
         })
+}
+
+/// Load one page of entries in one availability group.
+///
+/// A `page_size` of zero means "every entry in this group", which the editor
+/// offers explicitly.
+#[server]
+pub async fn list_addon_media_list_items_page(
+    id: i64,
+    availability: AddonMediaListItemAvailability,
+    page: u32,
+    page_size: u32,
+) -> Result<Vec<AddonMediaListItemRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .list_addon_media_list_items_page(
+            id,
+            availability,
+            page,
+            (page_size > 0).then_some(page_size),
+        )
+        .await
+        .map_err(ServerFnError::new)
+        .map(|rows| rows.into_iter().map(Into::into).collect())
+}
+
+/// Count the entries of one list per availability group.
+#[server]
+pub async fn get_addon_media_list_item_counts(
+    id: i64,
+) -> Result<AddonMediaListItemCountsRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_item_counts(id)
+        .await
+        .map_err(ServerFnError::new)
+        .map(|counts| AddonMediaListItemCountsRow {
+            available: counts.available,
+            unavailable: counts.unavailable,
+            unknown: counts.unknown,
+        })
+}
+
+/// Set the descriptive classification of one entry.
+#[server]
+pub async fn set_addon_media_list_item_content_kind(
+    item_id: i64,
+    content_kind: AddonMediaListContentKind,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .set_addon_media_list_item_content_kind(
+            ersatzrs_app::commands::SetAddonMediaListItemContentKind {
+                item_id,
+                content_kind,
+            },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Apply one classification to every entry of a list as a bulk default.
+#[server]
+pub async fn apply_addon_media_list_content_kind(
+    id: i64,
+    content_kind: AddonMediaListContentKind,
+) -> Result<u64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .apply_addon_media_list_content_kind(
+            ersatzrs_app::commands::ApplyAddonMediaListContentKind { id, content_kind },
+        )
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]

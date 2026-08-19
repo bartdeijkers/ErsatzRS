@@ -1,7 +1,10 @@
 # Add-on list editor: per-item classification and library projections
 
-Second slice after the source-resolver work (ADR 0072). Status: planned,
-not started.
+Second slice after the source-resolver work (ADR 0072).
+
+Status: the editor rework and per-item classification are implemented; the five
+missing library projections are not. Sections below marked **done** are in the
+working tree.
 
 ## Context
 
@@ -51,14 +54,37 @@ offering 10 / 25 / 50 / 100 / all:
 All three behave identically: per-item media kind, and local-replacement
 search / set / clear (today only the flat table offers this).
 
+## Add-on side (sibling repository)
+
+Both official packages already classify each entry: `beeldengeluid.sh` derives
+television_episode / movie / music_video / other_video from Schatkamer genre and
+series metadata, and the yt-dlp package derives the same set through
+`--parse-metadata` / `--replace-in-metadata`. Two gaps remain, tracked as
+`addon-list-classification-not-filled-by-every-add-on-path`:
+
+- `libexec/beeldengeluid-list.ps1` hardcodes `content_kind = auto` on its list
+  and search record paths where the POSIX runtime derives a value, so the same
+  source classifies differently per platform.
+- Neither package can express `song` or `image`; the wire contract has no such
+  record classification. Leave it that way unless a provider needs it — a wire
+  enum change is refused by every older host.
+
 ## Work
 
-### 1. Domain and schema
+### 1. Domain and schema — done
 
-- `AddonMediaListContentKind` gains a per-item home: new
-  `AddonMediaListItem.ContentKind` column (SQLite + MySQL migration, default
-  `Auto`), backfilled from the enumerated record type where the provider was
-  unambiguous.
+- **Correction found while implementing:** `AddonMediaListItem.ContentKind`
+  already exists (migration `202608151200`) and `save_list_items` already
+  persists whatever each add-on enumerated. No migration is needed. The gap is
+  that `list_items` never read the column, the administration surface exposes
+  only the list-wide `ContentKindOverride`, and `save_item_nfo` picked the NFO
+  root from that list-wide value — so a mixed list wrote every entry under one
+  root. The item value now wins for its own NFO root; the editor surface is the
+  remaining work.
+- `AddonMediaListContentKind` gains `Song` and `Image` so an item can be
+  classified for the Songs and Images projections. The frozen add-on wire
+  contract has neither, so those two map to `Auto` when a classification is sent
+  back to a package.
 - `AddonMediaListPresentationKind` grows from `{RemoteStreams, TelevisionShow}`
   to `Auto` plus one variant per `LibraryMediaKind`. Keep the existing two
   discriminants stable so stored rows survive; append the new ones.
@@ -85,7 +111,7 @@ Sequence them one kind per commit behind a shared projection trait rather than
 one large change; Movies first (closest to the Episode shape), Images last
 (no duration, no playback version).
 
-### 3. Editor rebuild
+### 3. Editor rebuild — done
 
 - Reorder the form; move `Media kind` to items; add the bulk-default control.
 - Replace the single table with three collapsible sections sharing one item-table

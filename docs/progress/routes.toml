@@ -117,7 +117,7 @@ routed  = true
 
 [[route]]
 nav     = '/media/addon-lists'
-backing = 'provider-neutral list + `:id` editor; URL-first add dialog whose optional add-on selection is resolved from the URL host, add/search/match/delete plus change-add-on actions with HTML POST fallbacks and persisted rows-per-page'
+backing = 'provider-neutral list + `:id` editor; URL-first add dialog whose optional add-on selection is resolved from the URL host, add/search/match/delete plus change-add-on actions with HTML POST fallbacks and persisted rows-per-page; the editor leads with URL and add-on, classifies each entry, and groups entries into counted non-playable/unknown/playable sections paged on their own'
 routed  = true
 
 [[route]]

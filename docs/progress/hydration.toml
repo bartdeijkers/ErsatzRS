@@ -210,7 +210,7 @@ notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real
 name   = 'AddonMediaListEditorPage'
 status = '✅'
 routes = ['/media/addon-lists/:id']
-notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent. 2026-08-19 (ADR 0072): the editor gained a change-add-on selector with a confirmation modal; a browser proof of the confirmed re-import is still outstanding.'
+notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent. 2026-08-19 (ADR 0072): the editor gained a change-add-on selector with a confirmation modal; a browser proof of the confirmed re-import is still outstanding. 2026-08-19 (ADR 0073): `tests/e2e/hydration-pending-routes.spec.ts` now proves the three counted availability sections, the collapsed playable section, the per-entry media-kind selector, and that a recovered entry moves out of non-playable into playable.'
 
 [[page]]
 name   = 'AddonMediaListItemPage'

@@ -2,7 +2,9 @@
 //! `Pages/TraktLists.razor`, `Pages/TraktListEditor.razor`, and
 //! `Shared/AddTraktListDialog.razor`; ADR 0067 owns the deliberate boundary change.
 
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
+};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -10,16 +12,19 @@ use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::addon_media_lists::{
-    add_addon_media_list, change_addon_media_list_addon, delete_addon_media_list,
-    get_addon_media_list_form, get_addon_media_list_item, get_addon_media_list_show_nfo,
-    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
-    list_addon_media_lists, match_addon_media_list, request_addon_media_list_presentation,
-    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
-    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
+    add_addon_media_list, apply_addon_media_list_content_kind, change_addon_media_list_addon,
+    delete_addon_media_list, get_addon_media_list_form, get_addon_media_list_item,
+    get_addon_media_list_item_counts, get_addon_media_list_show_nfo,
+    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_items_page,
+    list_addon_media_list_providers, list_addon_media_lists, match_addon_media_list,
+    request_addon_media_list_presentation, resolve_addon_media_list_provider,
+    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
+    search_addon_media_list_replacements, set_addon_media_list_item_content_kind,
     set_addon_media_list_item_replacement, update_addon_media_list,
-    update_addon_media_list_item_chapters, AddonMediaListForm, AddonMediaListItemDetail,
-    AddonMediaListItemRow, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListProviderRow, AddonMediaListReplacementRow, AddonMediaListRow,
+    update_addon_media_list_item_chapters, AddonMediaListForm, AddonMediaListItemCountsRow,
+    AddonMediaListItemDetail, AddonMediaListItemRow, AddonMediaListNfoForm,
+    AddonMediaListNfoMetadata, AddonMediaListProviderRow, AddonMediaListReplacementRow,
+    AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -46,6 +51,8 @@ fn content_kind_from_value(value: &str) -> AddonMediaListContentKind {
         "movie" => AddonMediaListContentKind::Movie,
         "music_video" => AddonMediaListContentKind::MusicVideo,
         "other_video" => AddonMediaListContentKind::OtherVideo,
+        "song" => AddonMediaListContentKind::Song,
+        "image" => AddonMediaListContentKind::Image,
         _ => AddonMediaListContentKind::Auto,
     }
 }
@@ -57,7 +64,214 @@ const fn content_kind_value(value: AddonMediaListContentKind) -> &'static str {
         AddonMediaListContentKind::Movie => "movie",
         AddonMediaListContentKind::MusicVideo => "music_video",
         AddonMediaListContentKind::OtherVideo => "other_video",
+        AddonMediaListContentKind::Song => "song",
+        AddonMediaListContentKind::Image => "image",
     }
+}
+
+fn presentation_kind_from_value(value: &str) -> AddonMediaListPresentationKind {
+    match value {
+        "remote_streams" => AddonMediaListPresentationKind::RemoteStreams,
+        "television_show" => AddonMediaListPresentationKind::TelevisionShow,
+        "movies" => AddonMediaListPresentationKind::Movies,
+        "music_videos" => AddonMediaListPresentationKind::MusicVideos,
+        "other_videos" => AddonMediaListPresentationKind::OtherVideos,
+        "songs" => AddonMediaListPresentationKind::Songs,
+        "images" => AddonMediaListPresentationKind::Images,
+        _ => AddonMediaListPresentationKind::Auto,
+    }
+}
+
+const fn presentation_kind_value(value: AddonMediaListPresentationKind) -> &'static str {
+    match value {
+        AddonMediaListPresentationKind::Auto => "auto",
+        AddonMediaListPresentationKind::RemoteStreams => "remote_streams",
+        AddonMediaListPresentationKind::TelevisionShow => "television_show",
+        AddonMediaListPresentationKind::Movies => "movies",
+        AddonMediaListPresentationKind::MusicVideos => "music_videos",
+        AddonMediaListPresentationKind::OtherVideos => "other_videos",
+        AddonMediaListPresentationKind::Songs => "songs",
+        AddonMediaListPresentationKind::Images => "images",
+    }
+}
+
+/// Paging and collapse state for one availability section of the item list.
+///
+/// Every field is a signal so one `Copy` value can be handed to the row
+/// renderer without threading four arguments through it.
+#[derive(Clone, Copy)]
+struct ItemSectionState {
+    page: RwSignal<u32>,
+    /// Rows per page; zero means every row in the group.
+    page_size: RwSignal<u32>,
+    open: RwSignal<bool>,
+    /// Rows currently rendered, seeded server-side so the section is not empty
+    /// before hydration.
+    rows: RwSignal<Vec<AddonMediaListItemRow>>,
+}
+
+impl ItemSectionState {
+    fn new(open: bool, rows: Vec<AddonMediaListItemRow>) -> Self {
+        Self {
+            page: RwSignal::new(0),
+            page_size: RwSignal::new(DEFAULT_ITEM_PAGE_SIZE),
+            open: RwSignal::new(open),
+            rows: RwSignal::new(rows),
+        }
+    }
+}
+
+/// Rows-per-page choices offered per section; zero renders as "all".
+const ITEM_PAGE_SIZES: [u32; 5] = [10, 25, 50, 100, 0];
+const DEFAULT_ITEM_PAGE_SIZE: u32 = 25;
+
+/// Load one section's rows, refetching whenever its page or size changes.
+///
+/// The rows land in `state.rows` through an effect rather than being read from
+/// the resource in the view: a local resource has no server-side value, and
+/// reading one directly while the island renders disposes its reactive owner.
+fn item_section_resource(
+    id: i64,
+    availability: AddonMediaListItemAvailability,
+    state: ItemSectionState,
+    toast: crate::admin::ui::primitives::toast::ToastStore,
+) -> LocalResource<Vec<AddonMediaListItemRow>> {
+    let resource = LocalResource::new(move || {
+        let page = state.page.get();
+        let page_size = state.page_size.get();
+        async move {
+            load_or_notify(
+                list_addon_media_list_items_page(id, availability, page, page_size).await,
+                toast,
+            )
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = resource.get() {
+            state.rows.set(rows);
+        }
+    });
+    resource
+}
+
+/// Stable test hook naming the availability group a section renders.
+const fn availability_test_id(availability: AddonMediaListItemAvailability) -> &'static str {
+    match availability {
+        AddonMediaListItemAvailability::Unavailable => "non-playable-items",
+        AddonMediaListItemAvailability::Unknown => "unknown-items",
+        AddonMediaListItemAvailability::Available => "playable-items",
+    }
+}
+
+/// Setting or clearing the local replacement of one entry.
+type ReplacementAction = Action<(i64, Option<(i64, i64)>), Result<(), ServerFnError>>;
+/// Setting the descriptive classification of one entry.
+type ContentKindAction = Action<(i64, AddonMediaListContentKind), Result<(), ServerFnError>>;
+/// Searching local media that could replace one entry.
+type ReplacementSearchAction =
+    Action<String, Result<Vec<AddonMediaListReplacementRow>, ServerFnError>>;
+
+/// One item row, identical in all three sections.
+///
+/// Local replacement is offered everywhere: a playable entry can still be worth
+/// replacing with a local copy.
+#[allow(clippy::too_many_arguments)]
+fn item_row_view(
+    list_id: i64,
+    item: AddonMediaListItemRow,
+    replacement_target: RwSignal<Option<i64>>,
+    replacement_query: RwSignal<String>,
+    search_action: ReplacementSearchAction,
+    replacement_action: ReplacementAction,
+    content_kind_action: ContentKindAction,
+) -> AnyView {
+    let item_id = item.id;
+    let title = item.display_title.clone();
+    let search_title = title.clone();
+    let has_replacement = item.replacement_media_version_id.is_some();
+    let replacement_state = if !has_replacement {
+        "none"
+    } else if item.replacement_valid {
+        "valid"
+    } else {
+        "invalid"
+    };
+    let replacement = if replacement_state == "invalid" {
+        tr(TextKey::InvalidReplacement).to_string()
+    } else {
+        item.replacement_title
+            .clone()
+            .unwrap_or_else(|| tr(TextKey::NoReplacement).to_string())
+    };
+    let content_kind = item.content_kind;
+    let availability_reason = item.availability_reason.unwrap_or_default();
+    let has_reason = !availability_reason.is_empty();
+    view! {
+        <tr>
+            <td>
+                <a href=format!("/media/addon-lists/{list_id}/items/{item_id}")>{title}</a>
+                <small
+                    class=style::row_note
+                    style:display=if has_reason { "" } else { "none" }
+                >{availability_reason}</small>
+            </td>
+            <td>
+                <select
+                    class=style::text_input
+                    aria-label=tr(TextKey::MediaKind)
+                    prop:value=content_kind_value(content_kind)
+                    on:change=move |event| {
+                        content_kind_action.dispatch((
+                            item_id,
+                            content_kind_from_value(&event_target_value(&event)),
+                        ));
+                    }
+                >
+                    <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                    <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
+                    <option value="movie">{tr(TextKey::Movie)}</option>
+                    <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                    <option value="other_video">{tr(TextKey::OtherVideo)}</option>
+                    <option value="song">{tr(TextKey::Song)}</option>
+                    <option value="image">{tr(TextKey::Image)}</option>
+                </select>
+            </td>
+            <td
+                data-replacement-state=replacement_state
+                title=item.replacement_path.unwrap_or_default()
+            >{replacement}</td>
+            <td>
+                <div class=style::row_actions>
+                    <button
+                        type="button"
+                        class=style::icon_button
+                        title=tr(TextKey::Replace)
+                        aria-label=tr(TextKey::Replace)
+                        on:click=move |_| {
+                            replacement_target.set(Some(item_id));
+                            replacement_query.set(search_title.clone());
+                            search_action.dispatch(search_title.clone());
+                        }
+                    >
+                        <span style=icon_style(IconName::FindReplace, "1.25rem") aria-hidden="true"></span>
+                    </button>
+                    <button
+                        type="button"
+                        class=style::icon_button
+                        title=tr(TextKey::Clear)
+                        aria-label=tr(TextKey::Clear)
+                        disabled=!has_replacement
+                        on:click=move |_| {
+                            replacement_action.dispatch((item_id, None));
+                        }
+                    >
+                        <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    }
+    .into_any()
 }
 
 #[component]
@@ -576,7 +790,7 @@ fn AddAddonMediaListDialog(
                                 }
                             >
                                 <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
-                                <option value="television_episode">{tr(TextKey::TelevisionShow)}</option>
+                                <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
                                 <option value="movie">{tr(TextKey::Movie)}</option>
                                 <option value="music_video">{tr(TextKey::MusicVideo)}</option>
                                 <option value="other_video">{tr(TextKey::OtherVideo)}</option>
@@ -628,7 +842,8 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             let items = list_addon_media_list_items(id).await?;
             let show_nfo = get_addon_media_list_show_nfo(id).await?;
             let providers = list_addon_media_list_providers().await?;
-            Ok::<_, ServerFnError>((form, items, show_nfo, providers))
+            let counts = get_addon_media_list_item_counts(id).await?;
+            Ok::<_, ServerFnError>((form, items, show_nfo, providers, counts))
         },
     );
 
@@ -636,7 +851,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo, providers)| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo, providers, initial_counts)| {
                     view! {
                         <AddonMediaListEditorIsland
                             id=id
@@ -645,6 +860,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                             initial_items=initial_items
                             initial_show_nfo=initial_show_nfo
                             providers=providers
+                            initial_counts=initial_counts
                         />
                     }
                     .into_any()
@@ -815,6 +1031,7 @@ fn AddonMediaListEditorIsland(
     initial_items: Vec<AddonMediaListItemRow>,
     initial_show_nfo: AddonMediaListNfoForm,
     providers: Vec<AddonMediaListProviderRow>,
+    initial_counts: AddonMediaListItemCountsRow,
 ) -> impl IntoView {
     let has_initial_error = !initial_error.is_empty();
     let form = initial_form.unwrap_or_default();
@@ -845,23 +1062,20 @@ fn AddonMediaListEditorIsland(
     // operator confirms before item identity is re-derived.
     let selected_addon_id = RwSignal::new(form.addon_id.clone());
     let change_addon_open = RwSignal::new(false);
+    let apply_content_kind_open = RwSignal::new(false);
     let change_addon_action =
         Action::new(move |addon_id: &String| change_addon_media_list_addon(id, addon_id.clone()));
+    // The list value is a bulk default rather than the per-item truth, so it is
+    // only pushed onto entries when the operator asks for it.
+    let apply_content_kind_action = Action::new(|value: &(i64, AddonMediaListContentKind)| {
+        let (id, content_kind) = *value;
+        async move { apply_addon_media_list_content_kind(id, content_kind).await }
+    });
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
-    let items = RwSignal::new(initial_items);
     let replacement_target = RwSignal::new(None::<i64>);
     let replacement_query = RwSignal::new(String::new());
     let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
-    let replacement_item_title = Memo::new(move |_| {
-        replacement_target.get().and_then(|target| {
-            items
-                .get()
-                .into_iter()
-                .find(|item| item.id == target)
-                .map(|item| item.display_title)
-        })
-    });
 
     let save_action = Action::new(
         |value: &(
@@ -895,9 +1109,87 @@ fn AddonMediaListEditorIsland(
             set_addon_media_list_item_replacement(item_id, media_item_id, media_version_id).await
         }
     });
-    let refresh_items_action = Action::new(move |(): &()| list_addon_media_list_items(id));
 
     let toast = use_toast();
+    // One section per availability group. Each keeps its own page and page size
+    // so paging the non-playable entries never moves the playable ones.
+    let counts = RwSignal::new(initial_counts);
+    let section_rows = |availability: AddonMediaListItemAvailability| {
+        initial_items
+            .iter()
+            .filter(|item| item.availability == availability)
+            .take(DEFAULT_ITEM_PAGE_SIZE as usize)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let unavailable = ItemSectionState::new(
+        true,
+        section_rows(AddonMediaListItemAvailability::Unavailable),
+    );
+    let unknown =
+        ItemSectionState::new(false, section_rows(AddonMediaListItemAvailability::Unknown));
+    let available = ItemSectionState::new(
+        false,
+        section_rows(AddonMediaListItemAvailability::Available),
+    );
+    let unavailable_rows = item_section_resource(
+        id,
+        AddonMediaListItemAvailability::Unavailable,
+        unavailable,
+        toast,
+    );
+    let unknown_rows =
+        item_section_resource(id, AddonMediaListItemAvailability::Unknown, unknown, toast);
+    let available_rows = item_section_resource(
+        id,
+        AddonMediaListItemAvailability::Available,
+        available,
+        toast,
+    );
+    // The picker names its target, which can sit in any of the three sections.
+    let replacement_item_title = Memo::new(move |_| {
+        let target = replacement_target.get()?;
+        [unavailable, unknown, available]
+            .into_iter()
+            .find_map(|section| {
+                section
+                    .rows
+                    .get()
+                    .into_iter()
+                    .find(|item| item.id == target)
+                    .map(|item| item.display_title)
+            })
+    });
+    let counts_action = Action::new(|id: &i64| get_addon_media_list_item_counts(*id));
+    let item_content_kind_action = Action::new(|value: &(i64, AddonMediaListContentKind)| {
+        let (item_id, content_kind) = *value;
+        async move { set_addon_media_list_item_content_kind(item_id, content_kind).await }
+    });
+    let reload_sections = move || {
+        unavailable_rows.refetch();
+        unknown_rows.refetch();
+        available_rows.refetch();
+        counts_action.dispatch(id);
+    };
+    Effect::new(move |_| {
+        if let Some(Ok(next)) = counts_action.value().get() {
+            counts.set(next);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = apply_content_kind_action.value().get() {
+            match result {
+                Ok(_) => {
+                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                    reload_sections();
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
     Effect::new(move |_| {
         if let Some(result) = save_action.value().get() {
             match result {
@@ -924,7 +1216,7 @@ fn AddonMediaListEditorIsland(
                         tr(TextKey::AddonMediaListSaved).to_string(),
                         ToastSeverity::Success,
                     );
-                    refresh_items_action.dispatch(());
+                    reload_sections();
                 }
                 Err(error) => toast.push(
                     save_failed(addon_media_list_error_message(error)),
@@ -948,7 +1240,7 @@ fn AddonMediaListEditorIsland(
             match result {
                 Ok(()) => {
                     replacement_target.set(None);
-                    refresh_items_action.dispatch(());
+                    reload_sections();
                 }
                 Err(error) => toast.push(
                     save_failed(addon_media_list_error_message(error)),
@@ -957,383 +1249,506 @@ fn AddonMediaListEditorIsland(
             }
         }
     });
-    Effect::new(move |_| {
-        if let Some(result) = refresh_items_action.value().get() {
-            match result {
-                Ok(rows) => items.set(rows),
-                Err(error) => {
-                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
-                }
-            }
-        }
-    });
 
     view! {
-        <div class=style::page>
-            <div class=style::action_bar>
-                <button
-                    form="addon_media_lists-list-editor-form"
-                    type="submit"
-                    class=style::btn_add
-                    on:click=move |event| {
-                        event.prevent_default();
-                        let mut next_show_metadata = show_metadata.clone();
-                        next_show_metadata.title = show_title.get_untracked();
-                        next_show_metadata.plot = non_empty_value(&show_plot.get_untracked());
-                        save_action.dispatch((AddonMediaListForm {
-                            id: form_id.get_untracked(),
-                            addon_id: submit_addon_id.clone(),
-                            source_url: submit_source_url.clone(),
-                            auto_refresh: auto_refresh.get_untracked(),
-                            generate_playlist: generate_playlist.get_untracked(),
-                            content_kind_override: content_kind_override.get_untracked(),
-                            legacy_chapter_input: legacy_chapter_input.clone(),
-                            presentation_kind: form.presentation_kind,
-                            requested_presentation_kind: form.requested_presentation_kind,
-                            presentation_error: form.presentation_error.clone(),
-                        }, presentation_kind.get_untracked(), next_show_metadata, show_etag.clone()));
-                    }
-                >
-                    <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::SaveAddonMediaList)}</span>
-                </button>
-            </div>
+            <div class=style::page>
+                <div class=style::action_bar>
+                    <button
+                        form="addon_media_lists-list-editor-form"
+                        type="submit"
+                        class=style::btn_add
+                        on:click=move |event| {
+                            event.prevent_default();
+                            let mut next_show_metadata = show_metadata.clone();
+                            next_show_metadata.title = show_title.get_untracked();
+                            next_show_metadata.plot = non_empty_value(&show_plot.get_untracked());
+                            save_action.dispatch((AddonMediaListForm {
+                                id: form_id.get_untracked(),
+                                addon_id: submit_addon_id.clone(),
+                                source_url: submit_source_url.clone(),
+                                auto_refresh: auto_refresh.get_untracked(),
+                                generate_playlist: generate_playlist.get_untracked(),
+                                content_kind_override: content_kind_override.get_untracked(),
+                                legacy_chapter_input: legacy_chapter_input.clone(),
+                                presentation_kind: form.presentation_kind,
+                                requested_presentation_kind: form.requested_presentation_kind,
+                                presentation_error: form.presentation_error.clone(),
+                            }, presentation_kind.get_untracked(), next_show_metadata, show_etag.clone()));
+                        }
+                    >
+                        <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
+                        <span>{tr(TextKey::SaveAddonMediaList)}</span>
+                    </button>
+                </div>
 
-            <form
-                id="addon_media_lists-list-editor-form"
-                method="post"
-                action="/api/addon-lists/save"
-                class=style::editor
-                style:display=move || if form_found { "" } else { "none" }
-            >
-                            <h1 class=style::page_title>{tr(TextKey::AddonMediaList)}</h1>
-                            <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                                {tr(TextKey::AddonMediaListSaveFailed)}
-                            </p>
-                            <p class=style::empty style:display=move || if has_presentation_error { "" } else { "none" }>
-                                {presentation_error}
-                            </p>
-                            <input type="hidden" name="id" value=move || form_id.get().to_string()/>
-                            <input type="hidden" name="addon_id" value=addon_id/>
-                            <input type="hidden" name="source_url" value=source_url/>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::MediaKind)}</div>
-                                <select
-                                    name="content_kind_override"
-                                    prop:value=move || content_kind_value(content_kind_override.get())
-                                    on:change=move |event| {
-                                        content_kind_override.set(content_kind_from_value(&event_target_value(&event)));
-                                    }
-                                >
-                                    <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
-                                    <option value="television_episode">{tr(TextKey::TelevisionShow)}</option>
-                                    <option value="movie">{tr(TextKey::Movie)}</option>
-                                    <option value="music_video">{tr(TextKey::MusicVideo)}</option>
-                                    <option value="other_video">{tr(TextKey::OtherVideo)}</option>
-                                </select>
-                            </div>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::CollectionType)}</div>
-                                <select
-                                    prop:value=move || match presentation_kind.get() {
-                                        AddonMediaListPresentationKind::RemoteStreams => "remote_streams",
-                                        AddonMediaListPresentationKind::TelevisionShow => "television_show",
-                                    }
-                                    on:change=move |event| presentation_kind.set(
-                                        if event_target_value(&event) == "television_show" {
-                                            AddonMediaListPresentationKind::TelevisionShow
-                                        } else {
-                                            AddonMediaListPresentationKind::RemoteStreams
-                                        },
-                                    )
-                                >
-                                    <option value="remote_streams">{tr(TextKey::RemoteStreams)}</option>
-                                    <option value="television_show">{tr(TextKey::TelevisionShow)}</option>
-                                </select>
-                            </div>
-                            <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
-                                <div class=style::field_label>{tr(TextKey::Title)}</div>
-                                <input class=style::text_input prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
-                            </div>
-                            <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
-                                <div class=style::field_label>{tr(TextKey::Summary)}</div>
-                                <textarea class=style::text_input rows="6" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
-                            </div>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</div>
-                                <input
-                                    class=style::text_input
-                                    type="text"
-                                    value=display_id
-                                    disabled
-                                />
-                            </div>
-                            <div class=style::field_row data-testid="addon-media-list-addon">
-                                <div class=style::field_label>{tr(TextKey::Addon)}</div>
-                                <div class=style::addon_row>
-                                    <select
+                <form
+                    id="addon_media_lists-list-editor-form"
+                    method="post"
+                    action="/api/addon-lists/save"
+                    class=style::editor
+                    style:display=move || if form_found { "" } else { "none" }
+                >
+                                <h1 class=style::page_title>{tr(TextKey::AddonMediaList)}</h1>
+                                <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
+                                    {tr(TextKey::AddonMediaListSaveFailed)}
+                                </p>
+                                <p class=style::empty style:display=move || if has_presentation_error { "" } else { "none" }>
+                                    {presentation_error}
+                                </p>
+                                <input type="hidden" name="id" value=move || form_id.get().to_string()/>
+                                <input type="hidden" name="addon_id" value=addon_id/>
+                                <input type="hidden" name="source_url" value=source_url/>
+                                <div class=style::field_row>
+                                    <div class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</div>
+                                    <input
                                         class=style::text_input
-                                        aria-label=tr(TextKey::Addon)
-                                        prop:value=move || selected_addon_id.get()
+                                        type="text"
+                                        value=display_id
+                                        disabled
+                                    />
+                                </div>
+                                <div class=style::field_row data-testid="addon-media-list-addon">
+                                    <div class=style::field_label>{tr(TextKey::Addon)}</div>
+                                    <div class=style::addon_row>
+                                        <select
+                                            class=style::text_input
+                                            aria-label=tr(TextKey::Addon)
+                                            prop:value=move || selected_addon_id.get()
+                                            on:change=move |event| {
+                                                selected_addon_id.set(event_target_value(&event));
+                                            }
+                                        >
+                                            {providers.into_iter().map(|provider| view! {
+                                                <option value=provider.addon_id>{provider.name}</option>
+                                            }).collect_view()}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            class=style::btn_cancel
+                                            disabled=move || {
+                                                selected_addon_id.get() == form_addon_id
+                                                    || change_addon_action.pending().get()
+                                            }
+                                            on:click=move |_| change_addon_open.set(true)
+                                        >{tr(TextKey::ChangeAddon)}</button>
+                                        <small>{tr(TextKey::ChangeAddonHelp)}</small>
+                                    </div>
+                                </div>
+                                <div class=style::field_row>
+                                    <div class=style::field_label>{tr(TextKey::CollectionType)}</div>
+                                    <select
+                                        prop:value=move || presentation_kind_value(presentation_kind.get())
+                                        on:change=move |event| presentation_kind.set(
+                                            presentation_kind_from_value(&event_target_value(&event)),
+                                        )
+                                    >
+                                        <option value="auto">{tr(TextKey::CollectionTypeAuto)}</option>
+                                        <option value="television_show">{tr(TextKey::TvShows)}</option>
+                                        <option value="movies">{tr(TextKey::Movies)}</option>
+                                        <option value="music_videos">{tr(TextKey::Music)}</option>
+                                        <option value="other_videos">{tr(TextKey::OtherVideos)}</option>
+                                        <option value="songs">{tr(TextKey::Songs)}</option>
+                                        <option value="images">{tr(TextKey::Images)}</option>
+                                        <option value="remote_streams">{tr(TextKey::RemoteStreams)}</option>
+                                    </select>
+                                </div>
+                                <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                    <div class=style::field_label>{tr(TextKey::Title)}</div>
+                                    <input class=style::text_input prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
+                                </div>
+                                <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                    <div class=style::field_label>{tr(TextKey::Summary)}</div>
+                                    <textarea class=style::text_input rows="6" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
+                                </div>
+                                <div class=style::field_row>
+                                    <div class=style::field_label>{tr(TextKey::MediaKind)}</div>
+                                    <div class=style::addon_row>
+                                    <select
+                                        name="content_kind_override"
+                                        prop:value=move || content_kind_value(content_kind_override.get())
                                         on:change=move |event| {
-                                            selected_addon_id.set(event_target_value(&event));
+                                            content_kind_override.set(content_kind_from_value(&event_target_value(&event)));
                                         }
                                     >
-                                        {providers.into_iter().map(|provider| view! {
-                                            <option value=provider.addon_id>{provider.name}</option>
-                                        }).collect_view()}
+                                        <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                                        <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
+                                        <option value="movie">{tr(TextKey::Movie)}</option>
+                                        <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                                        <option value="other_video">{tr(TextKey::OtherVideo)}</option>
+                                        <option value="song">{tr(TextKey::Song)}</option>
+                                        <option value="image">{tr(TextKey::Image)}</option>
                                     </select>
-                                    <button
-                                        type="button"
-                                        class=style::btn_cancel
-                                        disabled=move || {
-                                            selected_addon_id.get() == form_addon_id
-                                                || change_addon_action.pending().get()
-                                        }
-                                        on:click=move |_| change_addon_open.set(true)
-                                    >{tr(TextKey::ChangeAddon)}</button>
-                                    <small>{tr(TextKey::ChangeAddonHelp)}</small>
+                                        <button
+                                            type="button"
+                                            class=style::btn_cancel
+                                            disabled=move || apply_content_kind_action.pending().get()
+                                            on:click=move |_| apply_content_kind_open.set(true)
+                                        >{tr(TextKey::ApplyToAllItems)}</button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::AutomaticRefresh)}</div>
-                                <label class=style::checkbox_row>
-                                    <input
-                                        type="checkbox"
-                                        name="auto_refresh"
-                                        value="true"
-                                        checked=checked_auto_refresh
-                                        prop:checked=move || auto_refresh.get()
-                                        on:change=move |event| {
-                                            auto_refresh.set(event_target_checked(&event));
-                                        }
-                                    />
-                                    <small>{tr(TextKey::UpdateAddonMediaListDaily)}</small>
-                                </label>
-                            </div>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::GeneratePlaylist)}</div>
-                                <label class=style::checkbox_row>
-                                    <input
-                                        type="checkbox"
-                                        name="generate_playlist"
-                                        value="true"
-                                        checked=checked_generate_playlist
-                                        prop:checked=move || generate_playlist.get()
-                                        on:change=move |event| {
-                                            generate_playlist.set(event_target_checked(&event));
-                                        }
-                                    />
-                                    <small>{tr(TextKey::GeneratePlaylistFromSortedAddonMediaListItems)}</small>
-                                </label>
-                            </div>
-            </form>
-            <section class=style::content style:display=move || if form_found { "" } else { "none" }>
-                <h2>{tr(TextKey::LocalReplacement)}</h2>
-                <div class=style::table_wrap>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>{tr(TextKey::Name)}</th>
-                                <th>{tr(TextKey::Status)}</th>
-                                <th>{tr(TextKey::LocalReplacement)}</th>
-                                <th/>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {move || items.get().into_iter().map(|item| {
-                                let item_id = item.id;
-                                let title = item.display_title.clone();
-                                let status = match item.availability {
-                                    ersatzrs_domain::AddonMediaListItemAvailability::Available => tr(TextKey::Available).to_string(),
-                                    ersatzrs_domain::AddonMediaListItemAvailability::Unavailable => tr(TextKey::Unavailable).to_string(),
-                                    ersatzrs_domain::AddonMediaListItemAvailability::Unknown => tr(TextKey::UnknownAvailability).to_string(),
-                                };
-                                let has_replacement = item.replacement_media_version_id.is_some();
-                                let replacement_state = if !has_replacement {
-                                    "none"
-                                } else if item.replacement_valid {
-                                    "valid"
-                                } else {
-                                    "invalid"
-                                };
-                                let replacement = if replacement_state == "invalid" {
-                                    tr(TextKey::InvalidReplacement).to_string()
-                                } else {
-                                    item.replacement_title.clone().unwrap_or_else(|| tr(TextKey::NoReplacement).to_string())
-                                };
-                                view! {
-                                    <tr>
-                                        <td><a href=format!("/media/addon-lists/{id}/items/{item_id}")>{title.clone()}</a></td>
-                                        <td title=item.availability_reason.unwrap_or_default()>{status}</td>
-                                        <td
-                                            data-replacement-state=replacement_state
-                                            title=item.replacement_path.unwrap_or_default()
-                                        >{replacement}</td>
-                                        <td>
-                                            <div class=style::row_actions>
-                                                <button
-                                                    type="button"
-                                                    class=style::icon_button
-                                                    title=tr(TextKey::Replace)
-                                                    aria-label=tr(TextKey::Replace)
-                                                    on:click=move |_| {
-                                                        replacement_target.set(Some(item_id));
-                                                        replacement_query.set(title.clone());
-                                                        search_action.dispatch(title.clone());
-                                                    }
-                                                >
-                                                    <span style=icon_style(IconName::FindReplace, "1.25rem") aria-hidden="true"></span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    class=style::icon_button
-                                                    title=tr(TextKey::Clear)
-                                                    aria-label=tr(TextKey::Clear)
-                                                    disabled=!has_replacement
-                                                    on:click=move |_| {
-                                                        replacement_action.dispatch((item_id, None));
-                                                    }
-                                                >
-                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            }).collect_view()}
-                        </tbody>
-                    </table>
-                </div>
-                <Modal
-                    open=change_addon_open
-                    title=tr(TextKey::ChangeAddon).to_owned()
-                    on_close=Callback::new(move |confirmed: bool| {
-                        if confirmed {
-                            change_addon_action.dispatch(selected_addon_id.get_untracked());
-                        }
-                    })
-                >
-                    <p>{tr(TextKey::ChangeAddonPrompt)}</p>
-                </Modal>
-                <div
-                    class=style::backdrop
-                    style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
-                />
-                <div
-                    class=style::overlay
-                    style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
-                    on:click=move |_| replacement_target.set(None)
-                >
-                    <div class=style::picker_panel on:click=|event| event.stop_propagation()>
-                        // Naming the target item here is what makes the dialog
-                        // usable: the list below it can hold many similarly
-                        // titled episodes.
-                        <h2 class=style::dialog_title>
-                            {move || replacement_item_title
-                                .get()
-                                .unwrap_or_else(|| tr(TextKey::LocalReplacement).to_string())}
-                        </h2>
-                        <div class=style::picker_body>
-                            <div class=style::picker_search>
-                                <input
-                                    class=format!("{} {}", style::text_input, style::picker_search_input)
-                                    type="search"
-                                    aria-label=tr(TextKey::Search)
-                                    prop:value=move || replacement_query.get()
-                                    on:input=move |event| replacement_query.set(event_target_value(&event))
-                                />
+                                <div class=style::field_row>
+                                    <div class=style::field_label>{tr(TextKey::AutomaticRefresh)}</div>
+                                    <label class=style::checkbox_row>
+                                        <input
+                                            type="checkbox"
+                                            name="auto_refresh"
+                                            value="true"
+                                            checked=checked_auto_refresh
+                                            prop:checked=move || auto_refresh.get()
+                                            on:change=move |event| {
+                                                auto_refresh.set(event_target_checked(&event));
+                                            }
+                                        />
+                                        <small>{tr(TextKey::UpdateAddonMediaListDaily)}</small>
+                                    </label>
+                                </div>
+                                <div class=style::field_row>
+                                    <div class=style::field_label>{tr(TextKey::GeneratePlaylist)}</div>
+                                    <label class=style::checkbox_row>
+                                        <input
+                                            type="checkbox"
+                                            name="generate_playlist"
+                                            value="true"
+                                            checked=checked_generate_playlist
+                                            prop:checked=move || generate_playlist.get()
+                                            on:change=move |event| {
+                                                generate_playlist.set(event_target_checked(&event));
+                                            }
+                                        />
+                                        <small>{tr(TextKey::GeneratePlaylistFromSortedAddonMediaListItems)}</small>
+                                    </label>
+                                </div>
+                </form>
+                <section class=style::content style:display=move || if form_found { "" } else { "none" }>
+    {[
+                        (AddonMediaListItemAvailability::Unavailable, TextKey::NonPlayableItems, unavailable),
+                        (AddonMediaListItemAvailability::Unknown, TextKey::UnknownItems, unknown),
+                        (AddonMediaListItemAvailability::Available, TextKey::PlayableItems, available),
+                    ].into_iter().map(|(availability, label, state)| {
+                        let total = move || match availability {
+                            AddonMediaListItemAvailability::Unavailable => counts.get().unavailable,
+                            AddonMediaListItemAvailability::Unknown => counts.get().unknown,
+                            AddonMediaListItemAvailability::Available => counts.get().available,
+                        };
+                        view! {
+                            <section class=style::item_section data-testid=availability_test_id(availability)>
                                 <button
                                     type="button"
-                                    class=style::btn_add
-                                    disabled=move || search_action.pending().get()
-                                    on:click=move |_| {
-                                        search_action.dispatch(replacement_query.get_untracked());
-                                    }
+                                    class=style::section_toggle
+                                    aria-expanded=move || if state.open.get() { "true" } else { "false" }
+                                    on:click=move |_| state.open.update(|open| *open = !*open)
                                 >
-                                    <span style=icon_style(IconName::Search, "1.125rem") aria-hidden="true"></span>
-                                    <span>{tr(TextKey::Search)}</span>
+                                    <span
+                                        style=move || icon_style(
+                                            if state.open.get() { IconName::ChevronDown } else { IconName::ChevronRight },
+                                            "1.25rem",
+                                        )
+                                        aria-hidden="true"
+                                    ></span>
+                                    <h2>{move || format!("{} ({})", tr(label), total())}</h2>
                                 </button>
-                            </div>
-                            <div class=style::picker_results>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th class=style::picker_name>{tr(TextKey::Name)}</th>
-                                            <th class=style::picker_path>{tr(TextKey::Location)}</th>
-                                            <th class=style::picker_action/>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {move || {
-                                            let candidates = replacement_results.get();
-                                            if candidates.is_empty() {
-                                                let message = if search_action.pending().get() {
-                                                    tr(TextKey::Loading)
-                                                } else {
-                                                    tr(TextKey::NoItemsToDisplay)
-                                                };
-                                                return view! {
-                                                    <tr>
-                                                        <td class=style::empty_cell colspan="3">{message}</td>
-                                                    </tr>
-                                                }
-                                                .into_any();
+                                <div style:display=move || if state.open.get() { "" } else { "none" }>
+                                    <div
+                                        class=style::table_wrap
+                                        style:display=move || if total() == 0 { "none" } else { "" }
+                                    >
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>{tr(TextKey::Name)}</th>
+                                                    <th>{tr(TextKey::MediaKind)}</th>
+                                                    <th>{tr(TextKey::LocalReplacement)}</th>
+                                                    <th/>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {move || state.rows.get().into_iter().map(|item| {
+                                                    item_row_view(
+                                                        id,
+                                                        item,
+                                                        replacement_target,
+                                                        replacement_query,
+                                                        search_action,
+                                                        replacement_action,
+                                                        item_content_kind_action,
+                                                    )
+                                                }).collect_view()}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p
+                                        class=style::empty
+                                        style:display=move || if total() == 0 { "" } else { "none" }
+                                    >{tr(TextKey::NoItemsToDisplay)}</p>
+                                    <div
+                                        class=style::pager
+                                        style:display=move || if total() == 0 { "none" } else { "" }
+                                    >
+                                        <span class=style::pager_status>{tr(TextKey::RowsPerPage)}</span>
+                                        <select
+                                            class=style::page_size
+                                            aria-label=tr(TextKey::RowsPerPage)
+                                            prop:value=move || state.page_size.get().to_string()
+                                            on:change=move |event| {
+                                                state.page.set(0);
+                                                state.page_size.set(
+                                                    event_target_value(&event).parse().unwrap_or(DEFAULT_ITEM_PAGE_SIZE),
+                                                );
                                             }
-                                            candidates
-                                                .into_iter()
-                                                .map(|candidate| {
-                                                    let target = replacement_target.get_untracked();
-                                                    view! {
+                                        >
+                                            {ITEM_PAGE_SIZES.into_iter().map(|size| view! {
+                                                <option value=size.to_string()>
+                                                    {if size == 0 { tr(TextKey::All).to_string() } else { size.to_string() }}
+                                                </option>
+                                            }).collect_view()}
+                                        </select>
+                                        <div class=style::pager_buttons>
+                                            <button
+                                                type="button"
+                                                class=style::icon_button
+                                                aria-label=tr(TextKey::PreviousPage)
+                                                disabled=move || state.page.get() == 0
+                                                on:click=move |_| state.page.update(|page| *page = page.saturating_sub(1))
+                                            >
+                                                <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class=style::icon_button
+                                                aria-label=tr(TextKey::NextPage)
+                                                disabled=move || {
+                                                    let size = state.page_size.get();
+                                                    size == 0
+                                                        || u64::from(state.page.get() + 1) * u64::from(size) >= total()
+                                                }
+                                                on:click=move |_| state.page.update(|page| *page += 1)
+                                            >
+                                                <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        }
+                    }).collect_view()}
+                    <Modal
+                        open=apply_content_kind_open
+                        title=tr(TextKey::ApplyToAllItems).to_owned()
+                        on_close=Callback::new(move |confirmed: bool| {
+                            if confirmed {
+                                apply_content_kind_action
+                                    .dispatch((id, content_kind_override.get_untracked()));
+                            }
+                        })
+                    >
+                        <p>{tr(TextKey::ApplyToAllItemsPrompt)}</p>
+                    </Modal>
+                    <Modal
+                        open=change_addon_open
+                        title=tr(TextKey::ChangeAddon).to_owned()
+                        on_close=Callback::new(move |confirmed: bool| {
+                            if confirmed {
+                                change_addon_action.dispatch(selected_addon_id.get_untracked());
+                            }
+                        })
+                    >
+                        <p>{tr(TextKey::ChangeAddonPrompt)}</p>
+                    </Modal>
+                    <div
+                        class=style::backdrop
+                        style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
+                    />
+                    <div
+                        class=style::overlay
+                        style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
+                        on:click=move |_| replacement_target.set(None)
+                    >
+                        <div class=style::picker_panel on:click=|event| event.stop_propagation()>
+                            // Naming the target item here is what makes the dialog
+                            // usable: the list below it can hold many similarly
+                            // titled episodes.
+                            <h2 class=style::dialog_title>
+                                {move || replacement_item_title
+                                    .get()
+                                    .unwrap_or_else(|| tr(TextKey::LocalReplacement).to_string())}
+                            </h2>
+                            <div class=style::picker_body>
+                                <div class=style::picker_search>
+                                    <input
+                                        class=format!("{} {}", style::text_input, style::picker_search_input)
+                                        type="search"
+                                        aria-label=tr(TextKey::Search)
+                                        prop:value=move || replacement_query.get()
+                                        on:input=move |event| replacement_query.set(event_target_value(&event))
+                                    />
+                                    <button
+                                        type="button"
+                                        class=style::btn_add
+                                        disabled=move || search_action.pending().get()
+                                        on:click=move |_| {
+                                            search_action.dispatch(replacement_query.get_untracked());
+                                        }
+                                    >
+                                        <span style=icon_style(IconName::Search, "1.125rem") aria-hidden="true"></span>
+                                        <span>{tr(TextKey::Search)}</span>
+                                    </button>
+                                </div>
+                                <div class=style::picker_results>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th class=style::picker_name>{tr(TextKey::Name)}</th>
+                                                <th class=style::picker_path>{tr(TextKey::Location)}</th>
+                                                <th class=style::picker_action/>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {move || {
+                                                let candidates = replacement_results.get();
+                                                if candidates.is_empty() {
+                                                    let message = if search_action.pending().get() {
+                                                        tr(TextKey::Loading)
+                                                    } else {
+                                                        tr(TextKey::NoItemsToDisplay)
+                                                    };
+                                                    return view! {
                                                         <tr>
-                                                            <td class=style::picker_name>{candidate.title}</td>
-                                                            <td class=style::picker_path>{candidate.path}</td>
-                                                            <td class=style::picker_action>
-                                                                <div class=style::row_actions>
-                                                                    <button
-                                                                        type="button"
-                                                                        class=style::btn_add
-                                                                        on:click=move |_| {
-                                                                            if let Some(item_id) = target {
-                                                                                replacement_action.dispatch((
-                                                                                    item_id,
-                                                                                    Some((candidate.media_item_id, candidate.media_version_id)),
-                                                                                ));
-                                                                            }
-                                                                        }
-                                                                    >
-                                                                        {tr(TextKey::Replace)}
-                                                                    </button>
-                                                                </div>
-                                                            </td>
+                                                            <td class=style::empty_cell colspan="3">{message}</td>
                                                         </tr>
                                                     }
-                                                })
-                                                .collect_view()
-                                                .into_any()
-                                        }}
-                                    </tbody>
-                                </table>
+                                                    .into_any();
+                                                }
+                                                candidates
+                                                    .into_iter()
+                                                    .map(|candidate| {
+                                                        let target = replacement_target.get_untracked();
+                                                        view! {
+                                                            <tr>
+                                                                <td class=style::picker_name>{candidate.title}</td>
+                                                                <td class=style::picker_path>{candidate.path}</td>
+                                                                <td class=style::picker_action>
+                                                                    <div class=style::row_actions>
+                                                                        <button
+                                                                            type="button"
+                                                                            class=style::btn_add
+                                                                            on:click=move |_| {
+                                                                                if let Some(item_id) = target {
+                                                                                    replacement_action.dispatch((
+                                                                                        item_id,
+                                                                                        Some((candidate.media_item_id, candidate.media_version_id)),
+                                                                                    ));
+                                                                                }
+                                                                            }
+                                                                        >
+                                                                            {tr(TextKey::Replace)}
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                                    .into_any()
+                                            }}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class=style::dialog_footer>
+                                <button
+                                    type="button"
+                                    class=style::btn_cancel
+                                    on:click=move |_| replacement_target.set(None)
+                                >
+                                    {tr(TextKey::Cancel)}
+                                </button>
                             </div>
                         </div>
-                        <div class=style::dialog_footer>
-                            <button
-                                type="button"
-                                class=style::btn_cancel
-                                on:click=move |_| replacement_target.set(None)
-                            >
-                                {tr(TextKey::Cancel)}
-                            </button>
-                        </div>
                     </div>
-                </div>
-            </section>
-            <p
-                class=style::empty
-                style:display=move || if form_found { "none" } else { "" }
-            >
-                {tr(TextKey::AddonMediaListNotFound)}
-            </p>
-        </div>
+                </section>
+                <p
+                    class=style::empty
+                    style:display=move || if form_found { "none" } else { "" }
+                >
+                    {tr(TextKey::AddonMediaListNotFound)}
+                </p>
+            </div>
+        }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A value string that does not survive the round trip silently resets the
+    /// operator's choice: the select renders nothing selected, and the next
+    /// save stores `Auto`. Both enums grew, so every variant is checked.
+    #[test]
+    fn content_kind_values_round_trip_for_every_variant() {
+        for kind in [
+            AddonMediaListContentKind::Auto,
+            AddonMediaListContentKind::TelevisionEpisode,
+            AddonMediaListContentKind::Movie,
+            AddonMediaListContentKind::MusicVideo,
+            AddonMediaListContentKind::OtherVideo,
+            AddonMediaListContentKind::Song,
+            AddonMediaListContentKind::Image,
+        ] {
+            assert_eq!(
+                content_kind_from_value(content_kind_value(kind)),
+                kind,
+                "{kind:?} does not survive the select round trip"
+            );
+        }
+        assert_eq!(
+            content_kind_from_value("not-a-kind"),
+            AddonMediaListContentKind::Auto
+        );
+    }
+
+    #[test]
+    fn presentation_kind_values_round_trip_for_every_variant() {
+        for kind in [
+            AddonMediaListPresentationKind::Auto,
+            AddonMediaListPresentationKind::RemoteStreams,
+            AddonMediaListPresentationKind::TelevisionShow,
+            AddonMediaListPresentationKind::Movies,
+            AddonMediaListPresentationKind::MusicVideos,
+            AddonMediaListPresentationKind::OtherVideos,
+            AddonMediaListPresentationKind::Songs,
+            AddonMediaListPresentationKind::Images,
+        ] {
+            assert_eq!(
+                presentation_kind_from_value(presentation_kind_value(kind)),
+                kind,
+                "{kind:?} does not survive the select round trip"
+            );
+        }
+        assert_eq!(
+            presentation_kind_from_value("not-a-kind"),
+            AddonMediaListPresentationKind::Auto
+        );
+    }
+
+    /// The three sections are told apart only by this hook, in the browser
+    /// specs and in the DOM. Two groups sharing one id would make a spec assert
+    /// against the wrong section without failing.
+    #[test]
+    fn every_availability_group_has_its_own_test_hook() {
+        let ids = [
+            availability_test_id(AddonMediaListItemAvailability::Unavailable),
+            availability_test_id(AddonMediaListItemAvailability::Unknown),
+            availability_test_id(AddonMediaListItemAvailability::Available),
+        ];
+        let unique = ids.iter().collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(unique.len(), ids.len());
+    }
+
+    /// Zero is the "all rows" sentinel the repository turns into an unbounded
+    /// limit; losing it from the offered sizes would quietly cap long lists.
+    #[test]
+    fn item_page_sizes_offer_an_unbounded_choice_and_the_default() {
+        assert!(ITEM_PAGE_SIZES.contains(&0));
+        assert!(ITEM_PAGE_SIZES.contains(&DEFAULT_ITEM_PAGE_SIZE));
     }
 }

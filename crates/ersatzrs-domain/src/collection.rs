@@ -68,20 +68,68 @@ pub enum AddonMediaListContentKind {
     MusicVideo,
     /// Includes commercials, archive fragments, and uncategorized videos.
     OtherVideo,
+    /// One music track whose playable source is audio or a performance video.
+    Song,
+    /// One still image; it has no duration of its own.
+    Image,
 }
 
 /// Host-owned library presentation for an imported add-on list.
 ///
-/// This is intentionally separate from [`AddonMediaListContentKind`]: an
-/// episode-shaped NFO may still belong to a Remote Streams library, while a
-/// television-show presentation projects the same provider playback into the
-/// normal Show/Season/Episode hierarchy.
+/// This is intentionally separate from [`AddonMediaListContentKind`]: that type
+/// classifies one entry, while this one selects the library hierarchy the whole
+/// list is projected into. An episode-shaped NFO may still belong to a Remote
+/// Streams library, while a television-show presentation projects the same
+/// provider playback into the normal Show/Season/Episode hierarchy.
+///
+/// The variants mirror [`crate::LibraryMediaKind`] so an imported list can live
+/// in the same library kinds a scanned local library can.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListPresentationKind {
+    /// Derive the presentation from the classification of the items themselves.
     #[default]
+    Auto,
+    /// Retain provider Remote Streams without a second media identity.
     RemoteStreams,
+    /// One managed Show with Seasons and Episodes.
     TelevisionShow,
+    Movies,
+    MusicVideos,
+    OtherVideos,
+    Songs,
+    Images,
+}
+
+impl AddonMediaListPresentationKind {
+    /// The presentation implied by one item classification, if unambiguous.
+    ///
+    /// `Auto` items carry no signal, so a list of only `Auto` items has no
+    /// implied presentation and retains its provider Remote Streams.
+    #[must_use]
+    pub const fn from_content_kind(kind: AddonMediaListContentKind) -> Option<Self> {
+        match kind {
+            AddonMediaListContentKind::Auto => None,
+            AddonMediaListContentKind::TelevisionEpisode => Some(Self::TelevisionShow),
+            AddonMediaListContentKind::Movie => Some(Self::Movies),
+            AddonMediaListContentKind::MusicVideo => Some(Self::MusicVideos),
+            AddonMediaListContentKind::OtherVideo => Some(Self::OtherVideos),
+            AddonMediaListContentKind::Song => Some(Self::Songs),
+            AddonMediaListContentKind::Image => Some(Self::Images),
+        }
+    }
+
+    /// Whether a projection exists for this presentation.
+    ///
+    /// The remaining kinds are accepted by the contract but not yet projected;
+    /// requesting one is refused rather than silently stored.
+    #[must_use]
+    pub const fn is_projected(self) -> bool {
+        matches!(
+            self,
+            Self::Auto | Self::RemoteStreams | Self::TelevisionShow
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

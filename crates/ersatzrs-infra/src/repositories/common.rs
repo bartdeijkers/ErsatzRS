@@ -622,11 +622,21 @@ db_enum!(AddonMediaListContentKind {
     2 => AddonMediaListContentKind::Movie,
     3 => AddonMediaListContentKind::MusicVideo,
     4 => AddonMediaListContentKind::OtherVideo,
+    5 => AddonMediaListContentKind::Song,
+    6 => AddonMediaListContentKind::Image,
 });
 
+// 0 and 1 are frozen: rows written before the presentation set grew to the
+// full library-kind range still decode to the same two projections.
 db_enum!(AddonMediaListPresentationKind {
     0 => AddonMediaListPresentationKind::RemoteStreams,
     1 => AddonMediaListPresentationKind::TelevisionShow,
+    2 => AddonMediaListPresentationKind::Auto,
+    3 => AddonMediaListPresentationKind::Movies,
+    4 => AddonMediaListPresentationKind::MusicVideos,
+    5 => AddonMediaListPresentationKind::OtherVideos,
+    6 => AddonMediaListPresentationKind::Songs,
+    7 => AddonMediaListPresentationKind::Images,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

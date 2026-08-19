@@ -364,6 +364,13 @@ impl LanguageStrings for ItalianStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Componente aggiuntivo",
+        TextKey::ApplyToAllItemsPrompt => "Ogni elemento viene riclassificato con il tipo di contenuto selezionato, sostituendo i valori dedotti dal componente aggiuntivo o impostati manualmente.",
+        TextKey::TelevisionEpisode => "Episodio televisivo",
+        TextKey::CollectionTypeAuto => "Determina dagli elementi",
+        TextKey::NonPlayableItems => "Elementi non riproducibili",
+        TextKey::UnknownItems => "Elementi sconosciuti",
+        TextKey::PlayableItems => "Elementi riproducibili",
+        TextKey::ApplyToAllItems => "Applica a tutti gli elementi",
         TextKey::ChangeAddon => "Cambia componente aggiuntivo",
         TextKey::ChangeAddonHelp => "Seleziona un altro componente aggiuntivo per reimportare l'elenco tramite esso.",
         TextKey::ChangeAddonPrompt => "L'elenco viene reimportato tramite il componente aggiuntivo selezionato. Metadati degli elementi, sostituzioni e correzioni dei capitoli vengono ricavati di nuovo dal nuovo fornitore.",

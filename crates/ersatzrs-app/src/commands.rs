@@ -4368,6 +4368,20 @@ pub struct UpdateAddonMediaList {
     pub chapter_input: String,
 }
 
+/// Set the descriptive classification of one Add-on media list entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetAddonMediaListItemContentKind {
+    pub item_id: EntityId,
+    pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
+}
+
+/// Apply one classification to every entry of an Add-on media list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApplyAddonMediaListContentKind {
+    pub id: EntityId,
+    pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
+}
+
 /// Move one Add-on media list to a different add-on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChangeAddonMediaListAddon {
@@ -4487,6 +4501,43 @@ pub async fn update_addon_media_list(
             command.content_kind_override,
             command.chapter_input.trim(),
         )
+        .await
+        .map_err(Into::into)
+}
+
+/// Set the descriptive classification of one entry.
+///
+/// # Errors
+///
+/// Returns a validation error for a non-positive identity, or a repository
+/// error when the entry does not exist.
+pub async fn set_addon_media_list_item_content_kind(
+    command: SetAddonMediaListItemContentKind,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    repository
+        .update_item_content_kind(command.item_id, command.content_kind)
+        .await
+        .map_err(Into::into)
+}
+
+/// Apply one classification to every entry of a list as a bulk default.
+///
+/// The list-wide value is stored as well, so entries enumerated later inherit
+/// the same classification.
+///
+/// # Errors
+///
+/// Returns a validation error for a non-positive identity, or a repository
+/// error when persistence fails.
+pub async fn apply_addon_media_list_content_kind(
+    command: ApplyAddonMediaListContentKind,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<u64> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    repository
+        .apply_list_content_kind(command.id, command.content_kind)
         .await
         .map_err(Into::into)
 }
@@ -5968,6 +6019,7 @@ mod tests {
     struct RecordingAddonMediaListRepository {
         added_source_urls: Mutex<Vec<String>>,
         changed_addons: Mutex<Vec<(EntityId, String)>>,
+        item_content_kinds: Mutex<Vec<(EntityId, ersatzrs_domain::AddonMediaListContentKind)>>,
     }
 
     #[async_trait]
@@ -6034,6 +6086,45 @@ mod tests {
 
         async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
             Ok(())
+        }
+
+        async fn list_items_page(
+            &self,
+            _id: EntityId,
+            _availability: ersatzrs_domain::AddonMediaListItemAvailability,
+            _page: u32,
+            _page_size: Option<u32>,
+        ) -> ersatzrs_core::repositories::Result<Vec<AddonMediaListItemAdminRow>> {
+            Ok(Vec::new())
+        }
+
+        async fn item_counts(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<
+            ersatzrs_core::repositories::AddonMediaListItemCounts,
+        > {
+            Ok(ersatzrs_core::repositories::AddonMediaListItemCounts::default())
+        }
+
+        async fn update_item_content_kind(
+            &self,
+            item_id: EntityId,
+            content_kind: ersatzrs_domain::AddonMediaListContentKind,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            self.item_content_kinds
+                .lock()
+                .expect("item content kinds")
+                .push((item_id, content_kind));
+            Ok(())
+        }
+
+        async fn apply_list_content_kind(
+            &self,
+            _id: EntityId,
+            _content_kind: ersatzrs_domain::AddonMediaListContentKind,
+        ) -> ersatzrs_core::repositories::Result<u64> {
+            Ok(0)
         }
 
         async fn change_addon(

@@ -1074,6 +1074,13 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ApplyToAllItemsPrompt => "Elk item krijgt de gekozen mediasoort, waarmee waarden die de add-on heeft afgeleid of die je zelf hebt ingesteld worden overschreven.",
+        TextKey::TelevisionEpisode => "Televisieaflevering",
+        TextKey::CollectionTypeAuto => "Bepalen uit de items",
+        TextKey::NonPlayableItems => "Niet-afspeelbare items",
+        TextKey::UnknownItems => "Onbekende items",
+        TextKey::PlayableItems => "Afspeelbare items",
+        TextKey::ApplyToAllItems => "Op alle items toepassen",
         TextKey::ChangeAddon => "Add-on wijzigen",
         TextKey::ChangeAddonHelp => "Kies een andere add-on om de lijst daarmee opnieuw te importeren.",
         TextKey::ChangeAddonPrompt => "De lijst wordt opnieuw geïmporteerd via de gekozen add-on. Itemmetadata, vervangingen en hoofdstukcorrecties worden opnieuw afgeleid van de nieuwe provider.",
