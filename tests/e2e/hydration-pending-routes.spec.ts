@@ -720,7 +720,7 @@ SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
     await expect(itemRow.getByText(/^unavailable$/i)).toBeVisible();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const replacementPicker = page
-      .locator('div[class*="editor"]')
+      .locator('div[class*="picker-panel"]')
       .filter({ has: page.locator('input[type="search"]') })
       .last();
     const candidateRow = replacementPicker
@@ -762,7 +762,7 @@ INSERT INTO "MediaStream" (
     itemRow = page.locator('tr').filter({ hasText: seed.replacementTitle }).first();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const recoveredCandidateRow = page
-      .locator('div[class*="editor"]')
+      .locator('div[class*="picker-panel"]')
       .filter({ has: page.locator('input[type="search"]') })
       .last()
       .locator('tr')
