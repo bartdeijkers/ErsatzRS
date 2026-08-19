@@ -116,6 +116,16 @@ changelog, and git history for evidence. The authoritative live state is always
 - `addon-list-replacement-ux.md` — reshape the Local replacement flow for an
   unavailable add-on list item, written after walking the flow end to end
   against a real unavailable episode.
+- `addon-list-artwork-and-metadata-projection.md` — two follow-up slices found by
+  inspecting a real imported list: nothing ever fetches the add-on's artwork to
+  disk although the whole surrounding chain exists, and every projection writes
+  one metadata row while the genres, tags, studios, actors, and artwork captured
+  in the NFO reach no table at all.
+- `channel-packages.md` — first draft for Phase 11: a `.zip` uploaded under
+  `/channels` carrying channel identity, artwork, graphics elements, and a feed
+  URL whose items are routed to the add-on that handles their host and imported
+  without an operator filling in a form. Draft only; the product and feed-format
+  ADR is the blocking first milestone.
 - `addon-list-editor-item-classification.md` — move the add-on list media kind
   to each item, grow the list presentation to the full `LibraryMediaKind` set
   (seven projections, of which two exist today), and split the flat replacement
