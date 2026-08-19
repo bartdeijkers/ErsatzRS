@@ -904,3 +904,44 @@ async fn seed_addon(pool: &sqlx::SqlitePool) {
     .await
     .unwrap();
 }
+
+/// An operator who pastes a URL should not have to restate what the list
+/// obviously is: the add-ons classify every entry, so the import adopts the
+/// presentation they imply. A projection the import cannot complete is recorded
+/// rather than failing the import, because the entries are already playable as
+/// Remote Streams either way.
+#[tokio::test]
+async fn import_adopts_the_presentation_the_entries_imply() {
+    let pool = common::test_db().await;
+    seed_system_playlist_group(&pool).await;
+    seed_addon(&pool).await;
+    common::seed_media_graph(&pool).await;
+
+    let remote = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider);
+    let list_id = remote
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/list",
+            None,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
+        .await
+        .unwrap();
+
+    // The fake provider classifies nothing, so nothing is implied and the list
+    // stays on Remote Streams without a spurious error.
+    let (requested, error): (i32, Option<String>) = sqlx::query_as(
+        r#"SELECT "RequestedPresentationKind", "PresentationError"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        requested, 0,
+        "an unclassified list must not be re-presented"
+    );
+    assert!(error.is_none(), "{error:?}");
+}

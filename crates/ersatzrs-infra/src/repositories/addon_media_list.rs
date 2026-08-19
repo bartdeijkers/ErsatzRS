@@ -375,7 +375,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         chapter_input: &str,
     ) -> Result<EntityId> {
         let provider = InstalledAddonMediaListProvider::new(self.0.clone());
-        AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
+        let id = AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
             .add_or_refresh(
                 addon_id,
                 source_url,
@@ -383,7 +383,9 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 content_kind_override,
                 chapter_input,
             )
-            .await
+            .await?;
+        adopt_derived_presentation(&self.0, id).await?;
+        Ok(id)
     }
 
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>> {
@@ -1078,6 +1080,40 @@ impl SqliteAddonMediaListRepository {
         }
         Ok(result)
     }
+}
+
+/// Give a freshly imported list the presentation its entries imply.
+///
+/// The add-ons classify each entry, so an operator who pasted a URL should not
+/// have to restate what the list obviously is. A projection that needs
+/// something the import cannot supply — a television list has no show title yet
+/// — is recorded as the presentation error rather than failing the import: the
+/// entries are already stored and playable as Remote Streams either way.
+async fn adopt_derived_presentation(pool: &Pool<crate::db::Db>, id: EntityId) -> Result<()> {
+    let derived = resolve_auto_presentation(pool, id).await?;
+    if derived == AddonMediaListPresentationKind::RemoteStreams {
+        return Ok(());
+    }
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "RequestedPresentationKind" = ? WHERE "Id" = ?"#)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListPresentationKind::Auto,
+        ))
+        .bind(id)
+        .execute(pool)
+        .await
+        .repository()?;
+    if let Err(error) = reconcile_projection(pool, id, AddonMediaListPresentationKind::Auto).await {
+        let _ =
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PresentationError" = ? WHERE "Id" = ?"#)
+                .bind(error.to_string())
+                .bind(id)
+                .execute(pool)
+                .await;
+        return Ok(());
+    }
+    AddonMediaListSynchronizer::new(pool.clone())
+        .match_list_items(id)
+        .await
 }
 
 /// Apply the requested presentation, reverting whatever the list had before.

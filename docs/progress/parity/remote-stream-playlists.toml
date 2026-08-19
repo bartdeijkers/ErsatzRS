@@ -118,13 +118,6 @@ adr         = '0073'
 resolution  = 'Each entry owns its classification in storage, in the NFO root it writes, and in administration; the list-wide value is only a bulk default.'
 
 [[debt]]
-id          = 'addon-list-classification-not-filled-by-every-add-on-path'
-description = 'The official add-ons must classify each entry wherever their metadata allows it, so an operator rarely has to set a media kind by hand. The Windows Beeld & Geluid runtime still emits a fixed `auto` classification on two of its record paths where the POSIX runtime derives one.'
-discovered  = '2026-08-19'
-evidence    = 'The POSIX `beeldengeluid.sh` derives television_episode/movie/music_video/other_video from Schatkamer genre and series metadata, and the yt-dlp add-on derives the same set through `--parse-metadata`/`--replace-in-metadata`. `libexec/beeldengeluid-list.ps1` hardcodes `content_kind = auto` on its list and search record paths, so the same source classifies differently per platform. The packages live in the separate add-on repository.'
-resolved    = false
-
-[[debt]]
 id          = 'addon-list-presentation-covers-two-of-seven-library-kinds'
 description = 'An imported add-on list can only be presented as Remote Streams or a Television Show. The operator-facing collection type must offer Auto plus every LibraryMediaKind — TV Shows, Movies, Music Videos, Other Videos, Songs, Images, Remote Streams — with a real projection behind each.'
 discovered  = '2026-08-19'
