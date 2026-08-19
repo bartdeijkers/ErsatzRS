@@ -7,9 +7,9 @@ Accepted (2026-08-19)
 ## Implementation
 
 Partial — the per-item classification, the presentation set, the grouped editor,
-and the Movies projection are implemented (working tree, 2026-08-19). Four of
-the seven presentations have no projection behind them yet and are refused on
-request; they are tracked as open parity debt.
+and the Movies and Other Videos projections are implemented (working tree,
+2026-08-19). Three of the seven presentations have no projection behind them yet
+and are refused on request; they are tracked as open parity debt.
 
 ## Context
 
@@ -55,17 +55,21 @@ Images, and Remote Streams. Discriminants `0` and `1` are frozen so rows written
 before the set grew still decode to the same two projections. `Auto` derives the
 presentation from the entries themselves.
 
-Auto, Remote Streams, Television Show, and Movies have a projection.
+Auto, Remote Streams, Television Show, Movies, and Other Videos have a
+projection.
 `is_projected` names that boundary in one place, and requesting a kind without
 one is refused rather than silently stored, so a list cannot claim a
-presentation it does not have. The remaining four follow the shape ADR 0071
+presentation it does not have. The remaining three follow the shape ADR 0071
 established, one media kind at a time.
 
-Movies is that shape without the Show and Season levels: each entry becomes a
-`Movie` whose metadata comes from the entry's own NFO, over the same scanned
-Remote Stream `MediaVersion`. Reverting detaches the version rather than
-deleting it, and is refused while a projected movie is referenced from a
-collection, another playlist, or a playout.
+Movies and Other Videos are that shape without the Show and Season levels: each
+entry becomes one media item whose metadata comes from its own NFO, over the same
+scanned Remote Stream `MediaVersion`. One `FlatProjection` description drives
+both, so the remaining parentless kinds add a table pair rather than a copy.
+Reverting detaches the version rather than deleting it, and is refused while a
+projected item is referenced from a collection, another playlist, or a playout.
+Applying one projection reverts the others first, so two hierarchies can never
+live over the same provider items.
 
 `Auto` resolves from the entry classifications: a list auto-projects only when
 every entry agrees and none is still unclassified, and never into a kind whose
@@ -96,7 +100,7 @@ loading any rows, and paging is server-side with an explicit "all" choice.
   instead of leaving a list in a presentation nothing implements.
 - Long lists no longer render every entry at once, and the operator sees what is
   unplayable without reading the whole list.
-- Four projections remain outstanding; until each lands, its collection type is
+- Three projections remain outstanding; until each lands, its collection type is
   offered but refused.
 
 ## Alternatives Considered

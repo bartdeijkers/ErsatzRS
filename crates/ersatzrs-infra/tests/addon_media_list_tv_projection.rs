@@ -480,3 +480,76 @@ async fn movie_projection_revert_is_refused_while_a_projected_movie_is_reference
         3
     );
 }
+
+/// Other Videos is the same parentless shape as Movies, and switching between
+/// two projections must leave exactly one live hierarchy over the same items.
+#[tokio::test]
+async fn switching_between_flat_projections_leaves_only_the_requested_one() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::OtherVideos, None)
+        .await
+        .expect("project the list as other videos");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "OtherVideo""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "OtherVideoMetadata""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "OtherVideoId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+
+    // Switching to Movies must detach the Other Video projection rather than
+    // leaving two hierarchies over the same provider items.
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("switch the list to movies");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "OtherVideo""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListItemOtherVideo""#
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "MovieId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+    // Switching back from television must be equally clean.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Show""#).await,
+        0
+    );
+    // The provider items survive every switch.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "RemoteStream""#).await,
+        3
+    );
+}

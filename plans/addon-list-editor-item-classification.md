@@ -2,9 +2,11 @@
 
 Second slice after the source-resolver work (ADR 0072).
 
-Status: the editor rework, the per-item classification, and the Movies
-projection are implemented; four library projections remain (Music Videos,
-Other Videos, Songs, Images). Sections below marked **done** are in the
+Status: the editor rework, the per-item classification, and the Movies and
+Other Videos projections are implemented; three library projections remain
+(Music Videos, Songs, Images). Music Videos needs an Artist parent because
+`MusicVideo.ArtistId` is NOT NULL; Songs and Images are parentless and reuse the
+shared `FlatProjection` description. Sections below marked **done** are in the
 working tree.
 
 ## Context

@@ -428,7 +428,6 @@ async fn unprojected_presentations_are_refused_rather_than_stored() {
 
     for kind in [
         AddonMediaListPresentationKind::MusicVideos,
-        AddonMediaListPresentationKind::OtherVideos,
         AddonMediaListPresentationKind::Songs,
         AddonMediaListPresentationKind::Images,
     ] {
