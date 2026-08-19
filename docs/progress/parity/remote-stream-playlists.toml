@@ -42,7 +42,10 @@ the host materializes one managed playlist manifest and Local library per
 saved list below the add-on's profile-relative storage root, without requiring
 Python or permanently downloading the media. Provider classification keywords,
 localized package text, icons, and fixtures remain in the separate add-on
-repository.
+repository. The scanner materializes the first declared item image beside its
+generated definition as a bounded, manifest-host-validated JPEG, PNG, or WebP
+file. Its sidecar hash preserves operator replacements, skips unchanged artwork
+on refresh, and lets one failed image leave the rest of the list intact.
 '''
 
 [[debt]]

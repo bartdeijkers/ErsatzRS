@@ -14,9 +14,11 @@ ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
+futures-util = "0.3"
 md-5 = "0.11"
 quick-xml = { workspace = true }
 regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

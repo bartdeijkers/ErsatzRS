@@ -31,14 +31,20 @@ use ersatzrs_infra::addons::{
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
+use futures_util::StreamExt as _;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use regex::Regex;
+use reqwest::{header::CONTENT_TYPE, redirect::Policy, Client};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const ENUMERATION_TIMEOUT: Duration = Duration::from_mins(2);
+/// Artwork is fetched unattended from add-on output, so keep one bad endpoint
+/// from monopolising a scan or exhausting the process heap.
+const ARTWORK_FETCH_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
 
 /// Suffixes that distinguish playlist manifests from ordinary definitions.
 pub const MANIFEST_SUFFIXES: &[&str] = &[".playlist.yml", ".playlist.yaml"];
@@ -166,6 +172,17 @@ pub struct PlaylistSidecarEntry {
     pub definition_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nfo_sha256: Option<String>,
+    /// Host-owned artwork state. Its hash distinguishes a generated file from
+    /// an operator replacement during later refreshes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artwork: Option<ManagedPlaylistArtwork>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ManagedPlaylistArtwork {
+    pub url: String,
+    pub file: String,
+    pub sha256: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -535,7 +552,7 @@ pub async fn sync_playlist_files(
     let manifest_etag = manifest_etag(manifest_bytes, &addon, content_kind_override);
     let now = Utc::now();
     if let Some(state) = existing.as_ref() {
-        let cache_is_fresh = matches!(state.version, 1 | 2)
+        let cache_is_fresh = matches!(state.version, 1..=3)
             && state.last_result.kind == "ok"
             && state.manifest_etag == manifest_etag
             && managed_files_intact(&folder, state)
@@ -642,6 +659,7 @@ pub async fn sync_playlist_files(
     let mut managed_nfo_files = BTreeMap::new();
     let mut entries = Vec::new();
     let mut definitions = Vec::new();
+    let artwork_client = artwork_client()?;
     for entry in &selected {
         let file = managed_file_name(&entry.id);
         let path = folder.join(&file);
@@ -653,6 +671,25 @@ pub async fn sync_playlist_files(
             ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
                 .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
         write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
+        let previous_artwork = existing.as_ref().and_then(|state| {
+            state
+                .entries
+                .iter()
+                .find(|previous| previous.id == entry.id)
+                .and_then(|previous| previous.artwork.as_ref())
+        });
+        let artwork = sync_managed_artwork(
+            &artwork_client,
+            &folder,
+            &file,
+            entry
+                .thumbnail_url
+                .as_deref()
+                .or_else(|| entry.additional_image_urls.first().map(String::as_str)),
+            &addon.manifest.permissions.network_hosts,
+            previous_artwork,
+        )
+        .await;
         managed_files.insert(entry.id.clone(), file.clone());
         managed_nfo_files.insert(entry.id.clone(), nfo_file.clone());
         entries.push(PlaylistSidecarEntry {
@@ -665,6 +702,7 @@ pub async fn sync_playlist_files(
             availability: domain_availability(entry.availability),
             definition_sha256: Some(hex_hash(&definition_bytes)),
             nfo_sha256: Some(hex_hash(&nfo_bytes)),
+            artwork,
         });
         definitions.push(ManagedPlaylistDefinition {
             id: entry.id.clone(),
@@ -727,7 +765,7 @@ pub async fn sync_playlist_files(
             .as_ref()
             .is_none_or(|state| state.manifest_etag != manifest_etag);
     let state = PlaylistSidecarState {
-        version: 2,
+        version: 3,
         manifest_etag,
         playlist_etag,
         last_sync: now,
@@ -762,7 +800,7 @@ fn persist_failed_sync(
         PlaylistError::Enumeration(format!("unable to create the managed folder: {error}"))
     })?;
     let mut state = existing.cloned().unwrap_or_else(|| PlaylistSidecarState {
-        version: 2,
+        version: 3,
         manifest_etag: manifest_etag.clone(),
         playlist_etag: String::new(),
         last_sync: now,
@@ -919,7 +957,7 @@ fn load_sidecar(path: &Path) -> Result<Option<PlaylistSidecarState>> {
     let state: PlaylistSidecarState = serde_json::from_str(&value).map_err(|error| {
         PlaylistError::Enumeration(format!("managed playlist state is invalid: {error}"))
     })?;
-    if !matches!(state.version, 1 | 2) {
+    if !matches!(state.version, 1..=3) {
         return Err(PlaylistError::Enumeration(format!(
             "managed playlist state version {} is unsupported",
             state.version
@@ -1200,7 +1238,12 @@ fn managed_files_intact(folder: &Path, state: &PlaylistSidecarState) -> bool {
         else {
             return false;
         };
-        file_has_hash(&definition_path, definition_hash) && folder.join(nfo_file).is_file()
+        file_has_hash(&definition_path, definition_hash)
+            && folder.join(nfo_file).is_file()
+            && entry
+                .artwork
+                .as_ref()
+                .is_none_or(|artwork| file_has_hash(&folder.join(&artwork.file), &artwork.sha256))
     })
 }
 
@@ -1559,6 +1602,198 @@ fn managed_nfo_file_name(definition_file: &str) -> String {
         .to_owned()
 }
 
+fn artwork_client() -> Result<Client> {
+    Client::builder()
+        .timeout(ARTWORK_FETCH_TIMEOUT)
+        // A redirect is a second, unvalidated fetch. Add-ons must explicitly
+        // declare every host they use, so reject it rather than following it.
+        .redirect(Policy::none())
+        .build()
+        .map_err(|error| PlaylistError::Enumeration(format!("create artwork client: {error}")))
+}
+
+/// Materialize the first provider image beside one generated definition.
+///
+/// Remote Stream scanning deliberately recognizes the definition stem plus a
+/// standard image extension (`entry.jpg`, `entry.png`, or `entry.webp`). This
+/// is the Remote Stream equivalent of Kodi's thumbnail convention; it does not
+/// claim separate poster/fanart semantics for a list item that only supplied a
+/// single primary image.
+async fn sync_managed_artwork(
+    client: &Client,
+    folder: &Path,
+    definition_file: &str,
+    source_url: Option<&str>,
+    network_hosts: &[String],
+    previous: Option<&ManagedPlaylistArtwork>,
+) -> Option<ManagedPlaylistArtwork> {
+    let Some(source_url) = source_url else {
+        remove_generated_artwork(folder, previous);
+        return None;
+    };
+    let source_url = match validate_operator_source_url(source_url, network_hosts) {
+        Ok(url) => url,
+        Err(error) => {
+            tracing::warn!(
+                definition_file,
+                failure_kind = "invalid_url",
+                operation_message = %error,
+                "add-on artwork was skipped"
+            );
+            return previous.cloned();
+        }
+    };
+    if previous.is_some_and(|artwork| {
+        artwork.url == source_url && file_has_hash(&folder.join(&artwork.file), &artwork.sha256)
+    }) {
+        return previous.cloned();
+    }
+
+    // Any untracked file is an operator replacement under ADR 0068. Do not
+    // replace or delete it merely because the provider has a newer URL.
+    if let Some(path) = existing_operator_artwork(folder, definition_file, previous) {
+        tracing::debug!(
+            definition_file,
+            artwork_file = %path.display(),
+            "preserving operator-managed add-on artwork"
+        );
+        return None;
+    }
+
+    let (bytes, extension) = match download_artwork(client, &source_url).await {
+        Ok(result) => result,
+        Err(error) => {
+            tracing::warn!(
+                definition_file,
+                failure_kind = "fetch",
+                operation_message = %error,
+                "add-on artwork was skipped"
+            );
+            return previous.cloned();
+        }
+    };
+    let file = Path::new(definition_file)
+        .with_extension(extension)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)?;
+    let path = folder.join(&file);
+    // `definition_file` is a host-generated basename, but keep the write guard
+    // adjacent to the fetch so this untrusted URL can never influence a path.
+    if path.parent() != Some(folder) {
+        tracing::warn!(
+            definition_file,
+            "add-on artwork path escaped managed folder"
+        );
+        return previous.cloned();
+    }
+    if let Err(error) = write_bytes_atomically(&path, &bytes) {
+        tracing::warn!(
+            definition_file,
+            failure_kind = "write",
+            operation_message = %error,
+            "add-on artwork was skipped"
+        );
+        return previous.cloned();
+    }
+    let artwork = ManagedPlaylistArtwork {
+        url: source_url,
+        file,
+        sha256: hex_hash(&bytes),
+    };
+    if previous.is_some_and(|previous| previous.file != artwork.file) {
+        remove_generated_artwork(folder, previous);
+    }
+    Some(artwork)
+}
+
+fn existing_operator_artwork(
+    folder: &Path,
+    definition_file: &str,
+    previous: Option<&ManagedPlaylistArtwork>,
+) -> Option<PathBuf> {
+    let stem = Path::new(definition_file).file_stem()?.to_str()?;
+    ["jpg", "jpeg", "png", "webp"]
+        .into_iter()
+        .map(|extension| folder.join(format!("{stem}.{extension}")))
+        .find(|path| {
+            path.is_file()
+                && !previous.is_some_and(|artwork| {
+                    path.file_name()
+                        .is_some_and(|name| name == std::ffi::OsStr::new(&artwork.file))
+                        && file_has_hash(path, &artwork.sha256)
+                })
+        })
+}
+
+fn remove_generated_artwork(folder: &Path, previous: Option<&ManagedPlaylistArtwork>) {
+    let Some(previous) = previous else {
+        return;
+    };
+    let path = folder.join(&previous.file);
+    if path.parent() == Some(folder) && file_has_hash(&path, &previous.sha256) {
+        if let Err(error) = std::fs::remove_file(&path) {
+            tracing::warn!(
+                artwork_file = %path.display(),
+                operation_message = %error,
+                "unable to remove stale generated add-on artwork"
+            );
+        }
+    }
+}
+
+async fn download_artwork(
+    client: &Client,
+    url: &str,
+) -> std::result::Result<(Vec<u8>, &'static str), String> {
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| format!("request failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("server returned HTTP {}", response.status()));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_ARTWORK_BYTES as u64)
+    {
+        return Err(format!("content length exceeds {MAX_ARTWORK_BYTES} bytes"));
+    }
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+        })
+        .ok_or_else(|| "response has no valid image content type".to_owned())?;
+    let extension = match content_type.as_str() {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => return Err("response content type is not JPEG, PNG, or WebP".to_owned()),
+    };
+    let mut stream = response.bytes_stream();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("read failed: {error}"))?;
+        if bytes.len().saturating_add(chunk.len()) > MAX_ARTWORK_BYTES {
+            return Err(format!("response exceeds {MAX_ARTWORK_BYTES} bytes"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    if bytes.is_empty() {
+        return Err("response body is empty".to_owned());
+    }
+    Ok((bytes, extension))
+}
+
 fn move_to_managed_trash(folder: &Path, path: &Path, now: DateTime<Utc>) -> Result<()> {
     let trash = folder.join(".ersatzrs-trash");
     std::fs::create_dir_all(&trash).map_err(|error| {
@@ -1771,6 +2006,112 @@ filter:
 exclude: [skip]
 create_playlist: true
 "#
+    }
+
+    #[tokio::test]
+    async fn managed_artwork_is_bounded_idempotent_and_preserves_operator_files() {
+        use httpmock::{Method::GET, MockServer};
+
+        let server = MockServer::start_async().await;
+        let image = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/image");
+                then.status(200)
+                    .header("content-type", "image/png")
+                    .body("fixture png bytes");
+            })
+            .await;
+        let directory = tempfile::tempdir().expect("managed artwork directory");
+        let client = artwork_client().expect("artwork client");
+        let url = format!("{}/image", server.base_url());
+
+        let generated = sync_managed_artwork(
+            &client,
+            directory.path(),
+            "episode.yml",
+            Some(&url),
+            &[],
+            None,
+        )
+        .await
+        .expect("downloaded artwork");
+        assert_eq!(generated.file, "episode.png");
+        assert!(directory.path().join(&generated.file).is_file());
+
+        let refreshed = sync_managed_artwork(
+            &client,
+            directory.path(),
+            "episode.yml",
+            Some(&url),
+            &[],
+            Some(&generated),
+        )
+        .await
+        .expect("existing generated artwork");
+        assert_eq!(refreshed, generated);
+        image.assert_calls_async(1).await;
+
+        let operator_path = directory.path().join("operator.jpg");
+        std::fs::write(&operator_path, "operator replacement").expect("operator artwork");
+        assert!(sync_managed_artwork(
+            &client,
+            directory.path(),
+            "operator.yml",
+            Some(&url),
+            &[],
+            None,
+        )
+        .await
+        .is_none());
+        assert_eq!(
+            std::fs::read_to_string(operator_path).expect("preserved operator artwork"),
+            "operator replacement"
+        );
+        image.assert_calls_async(1).await;
+    }
+
+    #[tokio::test]
+    async fn managed_artwork_rejects_unbounded_and_non_image_responses() {
+        use httpmock::{Method::GET, MockServer};
+
+        let server = MockServer::start_async().await;
+        let non_image = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/text");
+                then.status(200)
+                    .header("content-type", "text/plain")
+                    .body("not artwork");
+            })
+            .await;
+        let oversized = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/large");
+                then.status(200)
+                    .header("content-type", "image/jpeg")
+                    .header("content-length", (MAX_ARTWORK_BYTES + 1).to_string())
+                    .body("small body");
+            })
+            .await;
+        let directory = tempfile::tempdir().expect("managed artwork directory");
+        let client = artwork_client().expect("artwork client");
+
+        for path in ["text", "large"] {
+            let url = format!("{}/{}", server.base_url(), path);
+            assert!(sync_managed_artwork(
+                &client,
+                directory.path(),
+                "episode.yml",
+                Some(&url),
+                &[],
+                None,
+            )
+            .await
+            .is_none());
+        }
+        assert!(!directory.path().join("episode.jpg").exists());
+        assert!(!directory.path().join("episode.png").exists());
+        non_image.assert_calls_async(1).await;
+        oversized.assert_calls_async(1).await;
     }
 
     #[cfg(unix)]
@@ -2511,6 +2852,7 @@ create_playlist: true
                 availability: AddonMediaListItemAvailability::Available,
                 definition_sha256: Some(hex_hash(definition)),
                 nfo_sha256: Some(hex_hash(nfo)),
+                artwork: None,
             }],
             overrides: PlaylistOverrides::default(),
         };
@@ -2600,7 +2942,7 @@ create_playlist: true
         assert_eq!(nfo.producers, ["Example Producer"]);
         assert_eq!(nfo.original_broadcasters, ["Original Network"]);
         assert_eq!(nfo.broadcasters, ["Current Network"]);
-        assert_eq!(first.state.version, 2);
+        assert_eq!(first.state.version, 3);
         let resolved = ersatzrs_infra::remote_stream::resolve_remote_stream_with_addons(
             &pool, &parsed, &runtime,
         )
@@ -2718,7 +3060,7 @@ create_playlist: true
         .await
         .expect("upgrade v1 state");
         assert!(upgraded.enumerated);
-        assert_eq!(upgraded.state.version, 2);
+        assert_eq!(upgraded.state.version, 3);
         assert!(upgraded
             .state
             .entries

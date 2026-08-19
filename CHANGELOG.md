@@ -24,6 +24,12 @@ release section when tagging a release.
 
 ### Added
 
+- Managed add-on-list Remote Stream entries now fetch their first provider
+  image beside the generated definition. The bounded, manifest-host-validated
+  download accepts only JPEG, PNG, or WebP; it keeps operator-replaced files,
+  skips unchanged generated artwork on refresh, and records per-item failures
+  without aborting the rest of a list.
+
 - Each add-on list entry now owns its media kind. The classification the add-ons
   already derived from provider metadata was stored but never read, so it was
   invisible and the list-wide value decided each entry's NFO root — a mixed list
