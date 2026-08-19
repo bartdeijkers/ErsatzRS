@@ -14,6 +14,10 @@ use std::path::{Path, PathBuf};
 
 use crate::addon_media_list::InstalledAddonMediaListProvider;
 use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer};
+use crate::metadata::{
+    artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
+    replace_strings, ArtworkRef, PersonRef,
+};
 use crate::repositories::common::{decode_bool_column, decode_optional_datetime};
 use crate::repositories::SqlxResultExt as _;
 
@@ -806,7 +810,154 @@ async fn item_nfo_path_for(
 struct ProjectedEpisodeInput {
     item_id: EntityId,
     metadata: AddonMediaListNfoMetadata,
+    nfo_path: PathBuf,
     state: i32,
+}
+
+/// Related metadata tables supported by one projected metadata record.
+///
+/// The shared tables use sparse foreign keys. Keep the real column and the two
+/// non-uniform credit capabilities here rather than assuming each kind has the
+/// same schema: `Director` does not support songs or images, `Writer` also does
+/// not support music videos, and `MusicVideoArtist` is music-video-only.
+#[derive(Clone, Copy)]
+struct ProjectedMetadataRelations {
+    fk_column: &'static str,
+    directors: bool,
+    writers: bool,
+    music_video_artists: bool,
+}
+
+impl ProjectedMetadataRelations {
+    const EPISODE: Self = Self {
+        fk_column: "EpisodeMetadataId",
+        directors: true,
+        writers: true,
+        music_video_artists: false,
+    };
+    const MOVIE: Self = Self {
+        fk_column: "MovieMetadataId",
+        directors: true,
+        writers: true,
+        music_video_artists: false,
+    };
+    const MUSIC_VIDEO: Self = Self {
+        fk_column: "MusicVideoMetadataId",
+        directors: true,
+        writers: false,
+        music_video_artists: true,
+    };
+    const OTHER_VIDEO: Self = Self {
+        fk_column: "OtherVideoMetadataId",
+        directors: true,
+        writers: true,
+        music_video_artists: false,
+    };
+    const SONG: Self = Self {
+        fk_column: "SongMetadataId",
+        directors: false,
+        writers: false,
+        music_video_artists: false,
+    };
+    const IMAGE: Self = Self {
+        fk_column: "ImageMetadataId",
+        directors: false,
+        writers: false,
+        music_video_artists: false,
+    };
+}
+
+/// Replace every related row represented by a managed add-on-list NFO.
+///
+/// Projected metadata rows are recreated on refresh, but these shared tables
+/// deserve the same explicit replacement semantics: it keeps retries safe and
+/// means a future metadata upsert cannot leave duplicate facets behind. Remote
+/// Stream metadata remains separately scanner-owned; this writes the distinct
+/// metadata row of the requested library presentation.
+async fn replace_projected_metadata_relations(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    relations: ProjectedMetadataRelations,
+    metadata_id: EntityId,
+    metadata: &AddonMediaListNfoMetadata,
+    nfo_path: &Path,
+) -> Result<()> {
+    let fk_column = relations.fk_column;
+    replace_strings(tx, "Genre", fk_column, metadata_id, &metadata.genres).await?;
+    replace_strings(tx, "Tag", fk_column, metadata_id, &metadata.tags).await?;
+    replace_strings(tx, "Studio", fk_column, metadata_id, &metadata.studios).await?;
+    replace_strings(
+        tx,
+        "MusicLabel",
+        fk_column,
+        metadata_id,
+        &metadata.music_labels,
+    )
+    .await?;
+    replace_metadata_languages(tx, fk_column, metadata_id, &metadata.languages).await?;
+
+    let actors = metadata
+        .people
+        .iter()
+        .filter(|person| !person.name.trim().is_empty())
+        .map(|person| PersonRef::with_role(person.name.clone(), person.role.clone(), person.order))
+        .collect::<Vec<_>>();
+    replace_people(tx, "Actor", fk_column, metadata_id, &actors).await?;
+
+    if relations.directors {
+        let directors = metadata
+            .directors
+            .iter()
+            .cloned()
+            .map(PersonRef::new)
+            .collect::<Vec<_>>();
+        replace_people(tx, "Director", fk_column, metadata_id, &directors).await?;
+    }
+    if relations.writers {
+        let writers = metadata
+            .writers
+            .iter()
+            .cloned()
+            .map(PersonRef::new)
+            .collect::<Vec<_>>();
+        replace_people(tx, "Writer", fk_column, metadata_id, &writers).await?;
+    }
+    if relations.music_video_artists {
+        replace_strings(
+            tx,
+            "MusicVideoArtist",
+            fk_column,
+            metadata_id,
+            &metadata.artists,
+        )
+        .await?;
+    }
+    replace_guids(tx, fk_column, metadata_id, &metadata.guids).await?;
+
+    // Slice 1 materializes the first provider image at this scanner-known
+    // basename. Until it is available, keep the NFO URL so a later scan has a
+    // source rather than silently dropping provider artwork.
+    let artwork_path = ["jpg", "jpeg", "png", "webp"]
+        .iter()
+        .map(|extension| nfo_path.with_extension(extension))
+        .find(|path| path.is_file())
+        .map(|path| path.display().to_string())
+        .or_else(|| metadata.artwork_urls.first().cloned());
+    let artwork = artwork_path
+        .map(|path| ArtworkRef {
+            kind: artwork_kind::THUMBNAIL,
+            path,
+            date_added: chrono::Utc::now(),
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    replace_artwork(
+        tx,
+        fk_column,
+        metadata_id,
+        &[artwork_kind::THUMBNAIL],
+        &artwork,
+    )
+    .await
 }
 
 /// Season title in the spelling scanned television sources already use.
@@ -1121,6 +1272,7 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
         projected.push(ProjectedEpisodeInput {
             item_id,
             metadata,
+            nfo_path: path,
             state: i32::from(availability == 1) * 2,
         });
     }
@@ -1264,7 +1416,7 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
             .execute(&mut *tx)
             .await
             .repository()?;
-        sqlx::query(
+        let result = sqlx::query(
             r#"INSERT INTO "MusicVideoMetadata" (
                   "MusicVideoId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
                   "Plot", "Year", "ReleaseDate", "DateAdded", "DateUpdated"
@@ -1282,6 +1434,15 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
         .execute(&mut *tx)
         .await
         .repository()?;
+        let metadata_id = crate::db::inserted_id(&mut tx, result).await.repository()?;
+        replace_projected_metadata_relations(
+            &mut tx,
+            ProjectedMetadataRelations::MUSIC_VIDEO,
+            metadata_id,
+            &input.metadata,
+            &input.nfo_path,
+        )
+        .await?;
     }
 
     sqlx::query(
@@ -1376,6 +1537,8 @@ struct FlatProjection {
     metadata_owner_column: &'static str,
     /// Metadata table written from each entry's NFO.
     metadata_table: &'static str,
+    /// Shared related-row capabilities for this metadata record.
+    metadata_relations: ProjectedMetadataRelations,
     /// NFO document root this kind is stored under.
     nfo_root: &'static str,
     /// Whether the metadata table has the video description and rating columns.
@@ -1393,6 +1556,7 @@ impl FlatProjection {
         media_table: "Movie",
         metadata_owner_column: "MovieId",
         metadata_table: "MovieMetadata",
+        metadata_relations: ProjectedMetadataRelations::MOVIE,
         nfo_root: "movie",
         descriptive_metadata: true,
         presentation: AddonMediaListPresentationKind::Movies,
@@ -1403,6 +1567,7 @@ impl FlatProjection {
         media_table: "OtherVideo",
         metadata_owner_column: "OtherVideoId",
         metadata_table: "OtherVideoMetadata",
+        metadata_relations: ProjectedMetadataRelations::OTHER_VIDEO,
         nfo_root: "movie",
         descriptive_metadata: true,
         presentation: AddonMediaListPresentationKind::OtherVideos,
@@ -1414,6 +1579,7 @@ impl FlatProjection {
         media_table: "Song",
         metadata_owner_column: "SongId",
         metadata_table: "SongMetadata",
+        metadata_relations: ProjectedMetadataRelations::SONG,
         // Kodi defines no song NFO document; `musicvideo` is the nearest root it
         // does define, and the only music-shaped one `serialize` accepts.
         nfo_root: "musicvideo",
@@ -1427,6 +1593,7 @@ impl FlatProjection {
         media_table: "Image",
         metadata_owner_column: "ImageId",
         metadata_table: "ImageMetadata",
+        metadata_relations: ProjectedMetadataRelations::IMAGE,
         // Kodi defines no still-image NFO document either; the generic root is
         // the only one `serialize` accepts for a non-music item.
         nfo_root: "movie",
@@ -1560,6 +1727,7 @@ async fn apply_flat_projection(
         media_table,
         metadata_owner_column,
         metadata_table,
+        metadata_relations,
         nfo_root,
         descriptive_metadata,
         presentation,
@@ -1597,6 +1765,7 @@ async fn apply_flat_projection(
         projected.push(ProjectedEpisodeInput {
             item_id,
             metadata,
+            nfo_path: path,
             state: i32::from(availability == 1) * 2,
         });
     }
@@ -1680,8 +1849,8 @@ async fn apply_flat_projection(
         .repository()?;
         // Only the video kinds carry a rating and the long-form description
         // columns; a song or an image metadata table simply has no such columns.
-        if descriptive_metadata {
-            sqlx::query(sqlx::AssertSqlSafe(format!(
+        let metadata_id = if descriptive_metadata {
+            let result = sqlx::query(sqlx::AssertSqlSafe(format!(
                 r#"INSERT INTO "{metadata_table}" (
                       "{metadata_owner_column}", "MetadataKind", "Title", "OriginalTitle",
                       "SortTitle", "Outline", "Plot", "Tagline", "Year", "ReleaseDate",
@@ -1703,8 +1872,9 @@ async fn apply_flat_projection(
             .execute(&mut *tx)
             .await
             .repository()?;
+            crate::db::inserted_id(&mut tx, result).await.repository()?
         } else {
-            sqlx::query(sqlx::AssertSqlSafe(format!(
+            let result = sqlx::query(sqlx::AssertSqlSafe(format!(
                 r#"INSERT INTO "{metadata_table}" (
                       "{metadata_owner_column}", "MetadataKind", "Title", "OriginalTitle",
                       "SortTitle", "Year", "ReleaseDate", "DateAdded", "DateUpdated"
@@ -1721,7 +1891,16 @@ async fn apply_flat_projection(
             .execute(&mut *tx)
             .await
             .repository()?;
-        }
+            crate::db::inserted_id(&mut tx, result).await.repository()?
+        };
+        replace_projected_metadata_relations(
+            &mut tx,
+            metadata_relations,
+            metadata_id,
+            &input.metadata,
+            &input.nfo_path,
+        )
+        .await?;
     }
 
     sqlx::query(
@@ -1896,6 +2075,7 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
         episodes.push(ProjectedEpisodeInput {
             item_id,
             metadata,
+            nfo_path: path,
             state: i32::from(availability == 1) * 2,
         });
     }
@@ -2094,7 +2274,7 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
             .execute(&mut *tx)
             .await
             .repository()?;
-        sqlx::query(
+        let result = sqlx::query(
             r#"INSERT INTO "EpisodeMetadata" (
                   "EpisodeId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
                   "Outline", "Plot", "Tagline", "Year", "ReleaseDate", "EpisodeNumber",
@@ -2116,6 +2296,15 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
         .execute(&mut *tx)
         .await
         .repository()?;
+        let metadata_id = crate::db::inserted_id(&mut tx, result).await.repository()?;
+        replace_projected_metadata_relations(
+            &mut tx,
+            ProjectedMetadataRelations::EPISODE,
+            metadata_id,
+            &input.metadata,
+            &input.nfo_path,
+        )
+        .await?;
     }
     let empty_seasons = sqlx::query_scalar::<_, EntityId>(
         r#"SELECT "season"."Id" FROM "Season" AS "season"

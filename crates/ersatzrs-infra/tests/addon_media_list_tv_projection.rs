@@ -8,9 +8,11 @@
 
 mod common;
 
-use std::path::Path;
+use std::{fs, path::Path};
 
-use ersatzrs_core::repositories::AddonMediaListRepository;
+use ersatzrs_core::repositories::{
+    AddonMediaListNfoMetadata, AddonMediaListNfoPerson, AddonMediaListRepository,
+};
 use ersatzrs_domain::AddonMediaListPresentationKind;
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
@@ -90,7 +92,40 @@ async fn seed_list_item(
     title: &str,
 ) {
     let stream_path = root.join(format!("S{season:02}E{episode:02}.strm"));
+    let nfo_path = stream_path.with_extension("nfo");
     let media_item_id = 100 + item_id;
+
+    let nfo = AddonMediaListNfoMetadata {
+        title: title.to_owned(),
+        season: Some(season),
+        episode: Some(episode),
+        year: Some(2026),
+        genres: vec!["Education".to_owned()],
+        tags: vec!["Archive".to_owned(), "Teleac".to_owned()],
+        studios: vec!["Fixture Studio".to_owned()],
+        music_labels: vec!["Fixture Label".to_owned()],
+        languages: vec!["nl".to_owned()],
+        people: vec![AddonMediaListNfoPerson {
+            name: "Fixture Presenter".to_owned(),
+            role: Some("Host".to_owned()),
+            order: Some(0),
+            thumb: None,
+        }],
+        directors: vec!["Fixture Director".to_owned()],
+        writers: vec!["Fixture Writer".to_owned()],
+        artists: vec!["Fixture Artist".to_owned()],
+        artwork_urls: vec![format!("https://example.invalid/artwork/{item_id}.jpg")],
+        guids: vec![format!("fixture://episode-{item_id}")],
+        ..AddonMediaListNfoMetadata::default()
+    };
+    fs::write(
+        &nfo_path,
+        ersatzrs_infra::addon_media_nfo::serialize("episodedetails", &nfo)
+            .expect("serialize managed item NFO"),
+    )
+    .expect("write managed item NFO");
+    fs::write(stream_path.with_extension("jpg"), b"fixture thumbnail")
+        .expect("write materialized artwork");
 
     sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
         .bind(media_item_id)
@@ -156,6 +191,47 @@ where
         .fetch_one(pool)
         .await
         .expect("query scalar")
+}
+
+/// Every projection has a distinct metadata table, but all of them must carry
+/// the common NFO facets and the materialized thumbnail for the same list item.
+async fn assert_projected_item_facets(
+    pool: &SqlitePool,
+    metadata_table: &str,
+    link_table: &str,
+    owner_column: &str,
+) {
+    let metadata_id: i64 = scalar(
+        pool,
+        &format!(
+            r#"SELECT "metadata"."Id"
+               FROM "{metadata_table}" AS "metadata"
+               JOIN "{link_table}" AS "link" ON "link"."{owner_column}" = "metadata"."{owner_column}"
+               WHERE "link"."AddonMediaListItemId" = 10"#
+        ),
+    )
+    .await;
+    let fk_column = format!("{}MetadataId", owner_column.trim_end_matches("Id"));
+    for table in ["Genre", "Tag", "Studio", "Actor"] {
+        assert_eq!(
+            scalar::<i64>(
+                pool,
+                &format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "{fk_column}" = {metadata_id}"#),
+            )
+            .await,
+            if table == "Tag" { 2 } else { 1 },
+            "{table} was not projected for {metadata_table}"
+        );
+    }
+    let artwork_path: String = scalar(
+        pool,
+        &format!(r#"SELECT "Path" FROM "Artwork" WHERE "{fk_column}" = {metadata_id} LIMIT 1"#),
+    )
+    .await;
+    assert!(
+        Path::new(&artwork_path).is_file(),
+        "{metadata_table} artwork is not local"
+    );
 }
 
 #[tokio::test]
@@ -274,6 +350,101 @@ async fn television_projection_is_idempotent() {
     assert_eq!(
         scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "EpisodeMetadata""#).await,
         3
+    );
+}
+
+/// The projection consumes the NFO rather than merely preserving it on disk:
+/// faceted search and artwork consumers read these database rows. Repeating the
+/// request proves the related-row replacement cannot accumulate duplicates.
+#[tokio::test]
+async fn television_projection_projects_nfo_facets_and_materialized_artwork() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    for _ in 0..2 {
+        repositories
+            .addon_media_lists
+            .request_presentation(
+                LIST_ID,
+                AddonMediaListPresentationKind::TelevisionShow,
+                Some("Fixture Show"),
+            )
+            .await
+            .expect("project managed NFO metadata");
+    }
+
+    let metadata_id: i64 = scalar(
+        &pool,
+        r#"SELECT "metadata"."Id"
+           FROM "EpisodeMetadata" AS "metadata"
+           JOIN "AddonMediaListItemEpisode" AS "link" ON "link"."EpisodeId" = "metadata"."EpisodeId"
+           WHERE "link"."AddonMediaListItemId" = 10"#,
+    )
+    .await;
+    for (table, expected) in [
+        ("Genre", "Education"),
+        ("Tag", "Archive"),
+        ("Studio", "Fixture Studio"),
+    ] {
+        assert_eq!(
+            scalar::<String>(
+                &pool,
+                &format!(
+                    r#"SELECT "Name" FROM "{table}" WHERE "EpisodeMetadataId" = {metadata_id} ORDER BY "Id" LIMIT 1"#
+                ),
+            )
+            .await,
+            expected,
+            "{table} was not projected from the NFO"
+        );
+        assert_eq!(
+            scalar::<i64>(
+                &pool,
+                &format!(
+                    r#"SELECT COUNT(*) FROM "{table}" WHERE "EpisodeMetadataId" = {metadata_id}"#
+                ),
+            )
+            .await,
+            if table == "Tag" { 2 } else { 1 },
+            "{table} rows accumulated on refresh"
+        );
+    }
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            &format!(r#"SELECT "Name" FROM "Actor" WHERE "EpisodeMetadataId" = {metadata_id}"#),
+        )
+        .await,
+        "Fixture Presenter"
+    );
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            &format!(r#"SELECT "Role" FROM "Actor" WHERE "EpisodeMetadataId" = {metadata_id}"#),
+        )
+        .await,
+        "Host"
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            &format!(r#"SELECT COUNT(*) FROM "Actor" WHERE "EpisodeMetadataId" = {metadata_id}"#),
+        )
+        .await,
+        1
+    );
+
+    let artwork_path: String = scalar(
+        &pool,
+        &format!(
+            r#"SELECT "Path" FROM "Artwork" WHERE "EpisodeMetadataId" = {metadata_id} LIMIT 1"#
+        ),
+    )
+    .await;
+    assert!(
+        Path::new(&artwork_path).is_file(),
+        "projected artwork is not a materialized file: {artwork_path}"
     );
 }
 
@@ -618,28 +789,32 @@ async fn song_projection_writes_the_narrow_metadata_column_set() {
 /// written against and quietly fail for the others.
 #[tokio::test]
 async fn every_flat_projection_projects_and_reverts() {
-    for (presentation, media_table, link_table, version_column) in [
+    for (presentation, media_table, metadata_table, link_table, version_column) in [
         (
             AddonMediaListPresentationKind::Movies,
             "Movie",
+            "MovieMetadata",
             "AddonMediaListItemMovie",
             "MovieId",
         ),
         (
             AddonMediaListPresentationKind::OtherVideos,
             "OtherVideo",
+            "OtherVideoMetadata",
             "AddonMediaListItemOtherVideo",
             "OtherVideoId",
         ),
         (
             AddonMediaListPresentationKind::Songs,
             "Song",
+            "SongMetadata",
             "AddonMediaListItemSong",
             "SongId",
         ),
         (
             AddonMediaListPresentationKind::Images,
             "Image",
+            "ImageMetadata",
             "AddonMediaListItemImage",
             "ImageId",
         ),
@@ -674,6 +849,7 @@ async fn every_flat_projection_projects_and_reverts() {
             3,
             "{presentation:?} did not attach the shared remote stream version"
         );
+        assert_projected_item_facets(&pool, metadata_table, link_table, version_column).await;
 
         repositories
             .addon_media_lists
@@ -750,6 +926,13 @@ async fn music_video_projection_creates_one_managed_artist_for_the_list() {
         scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MusicVideoMetadata""#).await,
         3
     );
+    assert_projected_item_facets(
+        &pool,
+        "MusicVideoMetadata",
+        "AddonMediaListItemMusicVideo",
+        "MusicVideoId",
+    )
+    .await;
     assert_eq!(
         scalar::<i64>(
             &pool,

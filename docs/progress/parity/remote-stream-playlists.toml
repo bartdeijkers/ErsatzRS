@@ -45,7 +45,10 @@ localized package text, icons, and fixtures remain in the separate add-on
 repository. The scanner materializes the first declared item image beside its
 generated definition as a bounded, manifest-host-validated JPEG, PNG, or WebP
 file. Its sidecar hash preserves operator replacements, skips unchanged artwork
-on refresh, and lets one failed image leave the rest of the list intact.
+on refresh, and lets one failed image leave the rest of the list intact. Every
+library projection now replaces the NFO's supported facet, credit, identifier,
+and thumbnail rows on its distinct metadata record; Remote Stream metadata
+continues to be scanner-owned.
 '''
 
 [[debt]]

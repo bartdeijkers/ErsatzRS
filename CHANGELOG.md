@@ -30,6 +30,11 @@ release section when tagging a release.
   skips unchanged generated artwork on refresh, and records per-item failures
   without aborting the rest of a list.
 
+- Add-on-list library projections now carry their NFO genres, tags, studios,
+  cast, credits, identifiers, and artwork into the projected metadata rows for
+  TV, Movie, Music Video, Other Video, Song, and Image presentations. Refreshes
+  replace those facets instead of accumulating duplicate rows.
+
 - Each add-on list entry now owns its media kind. The classification the add-ons
   already derived from provider metadata was stored but never read, so it was
   invisible and the list-wide value decided each entry's NFO root — a mixed list
