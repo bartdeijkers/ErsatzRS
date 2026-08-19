@@ -39,7 +39,7 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh dev`   | Build the scanner companion, then run the Leptos hot loop.  |
 | `./run.sh check` | Fast inner-loop `cargo check` (no codegen/link); scope with `-p <crate>`. |
 | `./run.sh test`  | Focused/local nextest run; requires explicit crate/filter arguments. |
-| `./run.sh test-closeout` | Workspace nextest run followed by Cargo doctests. |
+| `./run.sh test-closeout` | Two workspace nextest passes (without and with `--all-features`) then Cargo doctests. |
 | `./run.sh build` | Build the scanner companion, then build and run the web host. |
 | `./run.sh serve` | Build the scanner companion, then rebuild and serve once.   |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
@@ -195,12 +195,24 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
   test-closeout`, `cargo leptos build`, `cargo xtask parity-check`) **once at
   closeout**, not per edit.
 
-Nextest does not run doctests. `./run.sh test-closeout` therefore runs `cargo
-nextest run --workspace --all-features` for unit/integration/binary tests and
-then uses Cargo only for workspace doctests. Direct agent `cargo test` commands
-are blocked by the checked-in Codex/Claude hooks; use the wrappers so focused
-testing cannot drift back to Cargo. CI intentionally remains on its existing
+Nextest does not run doctests. `./run.sh test-closeout` therefore runs nextest
+for unit/integration/binary tests and then uses Cargo only for workspace
+doctests. Direct agent `cargo test` commands are blocked by the checked-in
+Codex/Claude hooks; use the wrappers so focused testing cannot drift back to
+Cargo. CI intentionally remains on its existing
 `cargo test --workspace --all-features --lib --bins --tests` selection.
+
+**Two nextest passes, for the same reason clippy needs two.** `--all-features`
+enables `mysql`, and every integration test file that opens with
+`#![cfg(not(feature = "mysql"))]` then compiles to nothing. Running only that
+configuration is not a stricter superset — it is a different, smaller set, so
+the closeout runs the plain workspace pass first and the `--all-features` pass
+after it.
+
+This is not theoretical. Until 2026-08-19 the closeout ran only the
+`--all-features` pass, hiding 322 tests, two of which had been failing on a
+seeded `MediaStreamKind` of `0` where the enum is 1-based. A green closeout said
+nothing about them.
 
 ### Optional: sccache (recommended if your target-dir sits on a slow disk)
 

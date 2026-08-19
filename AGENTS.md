@@ -95,7 +95,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
-# Test closeout (nextest for unit/integration tests, then Cargo doctests)
+# Test closeout. Two nextest passes for the same reason clippy needs two:
+# `--all-features` enables `mysql`, which compiles every
+# `#![cfg(not(feature = "mysql"))]` integration test away, so that pass alone
+# is a smaller set rather than a superset. Then Cargo for doctests.
 ./run.sh test-closeout
 
 # Inner-loop verification

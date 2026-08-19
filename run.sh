@@ -142,6 +142,11 @@ case "$cmd" in
       echo "cargo-nextest is required; see BUILD.md installation instructions" >&2
       exit 1
     fi
+    # Two passes, mirroring the clippy gate. `--all-features` enables `mysql`,
+    # which compiles every `#![cfg(not(feature = "mysql"))]` integration test
+    # away: running only that configuration silently skipped 322 tests, and two
+    # of them had been red for months.
+    cargo nextest run --workspace
     cargo nextest run --workspace --all-features
     exec cargo test --workspace --all-features --doc
     ;;

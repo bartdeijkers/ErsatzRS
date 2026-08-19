@@ -812,11 +812,14 @@ async fn seed_local_movie_version(pool: &sqlx::SqlitePool) {
     )
     .await
     .unwrap();
+    // `MediaStreamKind` is 1-based, so the video stream is 1. Seeding 0 makes
+    // the replacement resolver find no video stream and select nothing, which
+    // looks exactly like a broken generated playlist.
     pool.execute(
         r#"INSERT INTO "MediaStream" (
                "Index", "MediaStreamKind", "Channels", "Default", "Forced",
                "MediaVersionId", "BitsPerRawSample", "AttachedPic"
-           ) VALUES (3, 0, 0, 1, 0, 10, 0, 0)"#,
+           ) VALUES (3, 1, 0, 1, 0, 10, 0, 0)"#,
     )
     .await
     .unwrap();
