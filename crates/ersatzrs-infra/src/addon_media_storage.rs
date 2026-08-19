@@ -86,8 +86,13 @@ pub async fn prepare_storage_root(
     tokio::fs::create_dir_all(&path)
         .await
         .map_err(|error| AddonError::Package(format!("create media storage: {error}")))?;
-    let canonical = tokio::fs::canonicalize(&path)
+    // `dunce`, not `std`: the resolved root is persisted as a media source path,
+    // and `std::fs::canonicalize` would store a `\\?\`-prefixed verbatim path on
+    // Windows that no user-entered path ever matches.
+    let resolved = path.clone();
+    let canonical = tokio::task::spawn_blocking(move || dunce::canonicalize(&resolved))
         .await
+        .map_err(|_| AddonError::Package("resolve media storage: task failed".to_owned()))?
         .map_err(|error| AddonError::Package(format!("resolve media storage: {error}")))?;
     Ok(Some(canonical))
 }

@@ -209,6 +209,17 @@ release section when tagging a release.
 
 ### Fixed
 
+- Installing an add-on failed on Windows with "installed package path escaped
+  its root". The package content hash walked the staged package from its plain
+  `C:\...` path but re-resolved every file with `std::fs::canonicalize`, which
+  returns a `\\?\`-prefixed verbatim path on Windows, so each file looked like
+  an escape from its own package root and no add-on could be installed. The
+  add-on package paths now resolve through `dunce`, which keeps the ordinary
+  path form Windows and `cmd.exe` batch entrypoints accept, and the hasher
+  canonicalizes its root the same way it canonicalizes the files under it. The
+  same defect made every install fail on macOS, where `/var` resolves to
+  `/private/var`. The add-on media storage root also no longer persists a
+  verbatim path.
 - `./run.sh test-closeout` ran only the `--all-features` configuration, which
   enables `mysql` and compiles away every `#![cfg(not(feature = "mysql"))]`
   integration test. That pass was not a stricter superset but a smaller set:

@@ -2072,7 +2072,7 @@ async fn resolve_addon_command(
         AddonError::Validation("installed add-on has no entrypoint for this platform".to_owned())
     })?;
     let install_root = verify_installed_addon_contents(&installation).await?;
-    let executable = tokio::fs::canonicalize(installation.install_path.join(&entrypoint.path))
+    let executable = canonicalize_addon_path(&installation.install_path.join(&entrypoint.path))
         .await
         .map_err(package_io_error)?;
     if !executable.starts_with(&install_root) || !executable.is_file() {
@@ -2419,10 +2419,10 @@ async fn validated_install_path_for_removal(stored_path: &Path) -> Result<PathBu
         ));
     }
 
-    let canonical_root = tokio::fs::canonicalize(&configured_root)
+    let canonical_root = canonicalize_addon_path(&configured_root)
         .await
         .map_err(package_io_error)?;
-    match tokio::fs::canonicalize(stored_path).await {
+    match canonicalize_addon_path(stored_path).await {
         Ok(canonical_path)
             if canonical_path != canonical_root && canonical_path.starts_with(&canonical_root) =>
         {
@@ -2452,7 +2452,7 @@ pub(crate) async fn verify_addon_content_path(
     stored_path: &Path,
     expected_sha256: &str,
 ) -> Result<PathBuf, AddonError> {
-    let install_root = tokio::fs::canonicalize(stored_path)
+    let install_root = canonicalize_addon_path(stored_path)
         .await
         .map_err(package_io_error)?;
     let actual = hash_addon_tree(install_root.clone()).await?;
@@ -2471,10 +2471,27 @@ pub(crate) async fn verify_addon_content_path(
 ///
 /// Returns an error for unsupported entries, limits, or I/O.
 pub async fn calculate_addon_content_sha256(root: &Path) -> Result<String, AddonError> {
-    let root = tokio::fs::canonicalize(root)
+    let root = canonicalize_addon_path(root)
         .await
         .map_err(package_io_error)?;
     hash_addon_tree(root).await
+}
+
+/// Canonicalize a path the way add-on package containment checks compare them.
+///
+/// `std::fs::canonicalize` returns `\\?\`-prefixed verbatim paths on Windows.
+/// Those never compare equal to the plain `C:\...` paths the package folders are
+/// built from, and `cmd.exe` cannot resolve them for batch entrypoints, so the
+/// whole add-on install path has to stay on `dunce`, which keeps the ordinary
+/// form whenever Windows accepts it.
+async fn canonicalize_addon_path(path: &Path) -> std::io::Result<PathBuf> {
+    let path = path.to_path_buf();
+    match tokio::task::spawn_blocking(move || dunce::canonicalize(&path)).await {
+        Ok(result) => result,
+        Err(_) => Err(std::io::Error::other(
+            "package path canonicalization task failed",
+        )),
+    }
 }
 
 async fn hash_addon_tree(root: PathBuf) -> Result<String, AddonError> {
@@ -2484,6 +2501,12 @@ async fn hash_addon_tree(root: PathBuf) -> Result<String, AddonError> {
 }
 
 fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
+    // The walk starts at `root` but re-canonicalizes every file it reads, so the
+    // root itself must already be canonical or every file looks like an escape:
+    // `\\?\C:\...` vs `C:\...` on Windows, `/private/var` vs `/var` on macOS.
+    // Packages are staged and installed under plain, uncanonicalized paths.
+    let root = dunce::canonicalize(root).map_err(package_io_error)?;
+    let root = root.as_path();
     let mut directories = vec![root.to_path_buf()];
     let mut files = Vec::new();
     let mut entry_count = 0_usize;
@@ -2548,7 +2571,7 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
                 .to_le_bytes(),
         );
         digest.update(&encoded_path);
-        let canonical_file = std::fs::canonicalize(&path).map_err(package_io_error)?;
+        let canonical_file = dunce::canonicalize(&path).map_err(package_io_error)?;
         if !canonical_file.starts_with(root) || !canonical_file.is_file() {
             return Err(AddonError::Package(
                 "installed package path escaped its root".to_owned(),
@@ -3974,6 +3997,42 @@ mod tests {
         let second_hash = hash_addon_tree_sync(second.path()).expect("hash second tree");
 
         assert_ne!(first_hash, second_hash);
+    }
+
+    #[test]
+    fn installed_content_hash_accepts_a_non_canonical_root() {
+        // Packages are staged and installed under plain, uncanonicalized paths;
+        // hashing must not mistake the root's own spelling for a path escape.
+        let temp = tempfile::tempdir().expect("temp directory");
+        let content = temp.path().join("content");
+        std::fs::create_dir(&content).expect("create content directory");
+        std::fs::create_dir(temp.path().join("sibling")).expect("create sibling directory");
+        std::fs::write(content.join("addon.toml"), b"fixture").expect("write fixture");
+
+        let canonical = hash_addon_tree_sync(&content).expect("hash canonical root");
+        let indirect =
+            hash_addon_tree_sync(&temp.path().join("sibling").join("..").join("content"))
+                .expect("hash non-canonical root");
+
+        assert_eq!(canonical, indirect);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installed_content_hash_accepts_a_symlinked_root() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().expect("temp directory");
+        let content = temp.path().join("content");
+        std::fs::create_dir(&content).expect("create content directory");
+        std::fs::write(content.join("addon.toml"), b"fixture").expect("write fixture");
+        let alias = temp.path().join("alias");
+        symlink(&content, &alias).expect("create fixture symlink");
+
+        let canonical = hash_addon_tree_sync(&content).expect("hash canonical root");
+        let through_link = hash_addon_tree_sync(&alias).expect("hash symlinked root");
+
+        assert_eq!(canonical, through_link);
     }
 
     #[cfg(unix)]

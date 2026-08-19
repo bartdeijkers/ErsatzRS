@@ -21,6 +21,7 @@ async-trait = "0.1"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 directories = "6"
+dunce = "1"
 ed25519-dalek = "2"
 ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.2.0" }
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
