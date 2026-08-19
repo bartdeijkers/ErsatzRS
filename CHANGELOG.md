@@ -31,10 +31,17 @@ release section when tagging a release.
   explicit **Apply to all items** bulk default that confirms before overwriting.
 
 - The add-on list collection type now offers every library kind: Auto, TV Shows,
-  Movies, Music, Other Videos, Songs, Images, and Remote Streams. Only Auto, TV
-  Shows and Remote Streams have a projection so far; choosing one of the others
-  is refused at the moment of choice rather than stored as a presentation
-  nothing implements.
+  Movies, Music, Other Videos, Songs, Images, and Remote Streams. Auto, TV Shows,
+  Movies and Remote Streams have a projection; choosing one of the remaining
+  four is refused at the moment of choice rather than stored as a presentation
+  nothing implements. **Auto** derives the presentation from the entries and only
+  enters a projection every entry agrees on.
+
+- An add-on list can be projected as **Movies**: each entry becomes a normal
+  Movie over the same Remote Stream version, with its metadata from its own NFO.
+  Reverting detaches the projection instead of deleting the provider items, and
+  is refused while a projected movie is still referenced by a collection,
+  another playlist, or a playout.
 
 - The add-on list editor groups entries by availability into counted
   **non-playable**, **unknown** and **playable** sections, each paged on its own

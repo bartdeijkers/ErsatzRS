@@ -316,3 +316,167 @@ async fn reverting_to_remote_streams_removes_the_projection() {
         3
     );
 }
+
+/// The Movie projection is the television one without the Show and Season
+/// levels: each entry becomes a `Movie` over the same Remote Stream version.
+#[tokio::test]
+async fn movie_projection_creates_movies_over_the_shared_remote_stream_version() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("project the list as movies");
+
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemMovie""#).await,
+        3
+    );
+    // No parent container is invented for a movie list.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Show""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Season""#).await,
+        0
+    );
+
+    // Every projected movie carries metadata; without it the movie is invisible
+    // to every consumer that joins metadata to resolve a title.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MovieMetadata""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            r#"SELECT "meta"."Title"
+               FROM "MovieMetadata" AS "meta"
+               JOIN "AddonMediaListItemMovie" AS "link" ON "link"."MovieId" = "meta"."MovieId"
+               WHERE "link"."AddonMediaListItemId" = 10"#
+        )
+        .await,
+        "Pilot"
+    );
+
+    // The provider version is shared, not copied: the same MediaVersion now
+    // resolves through the movie identity.
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "MovieId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+
+    // Unavailable provider items keep their unavailable media-item state.
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaItem" AS "item"
+               JOIN "AddonMediaListItemMovie" AS "link" ON "link"."MovieId" = "item"."Id"
+               WHERE "item"."State" = 2"#
+        )
+        .await,
+        3
+    );
+}
+
+#[tokio::test]
+async fn movie_projection_is_idempotent_and_reverts_without_deleting_the_source() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    for _ in 0..2 {
+        repositories
+            .addon_media_lists
+            .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+            .await
+            .expect("project the list as movies");
+    }
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+        .await
+        .expect("revert to remote streams");
+
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemMovie""#).await,
+        0
+    );
+    // Reverting detaches the projection; the provider items stay playable.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "RemoteStream""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "RemoteStreamId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+}
+
+/// A projected movie referenced from outside the list must block the revert,
+/// or a schedule silently loses its target.
+#[tokio::test]
+async fn movie_projection_revert_is_refused_while_a_projected_movie_is_referenced() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("project the list as movies");
+
+    let movie_id: i64 = scalar(
+        &pool,
+        r#"SELECT "MovieId" FROM "AddonMediaListItemMovie" WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .await;
+    pool.execute(
+        r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+           VALUES (1, 'Operator picks', 0)"#,
+    )
+    .await
+    .expect("seed collection");
+    sqlx::query(r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (1, ?)"#)
+        .bind(movie_id)
+        .execute(&pool)
+        .await
+        .expect("reference the projected movie");
+
+    let error = repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+        .await
+        .expect_err("a referenced projection must not be reverted");
+    assert!(error.to_string().contains("referenced"), "{error}");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+}

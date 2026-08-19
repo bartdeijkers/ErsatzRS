@@ -2,8 +2,9 @@
 
 Second slice after the source-resolver work (ADR 0072).
 
-Status: the editor rework and per-item classification are implemented; the five
-missing library projections are not. Sections below marked **done** are in the
+Status: the editor rework, the per-item classification, and the Movies
+projection are implemented; four library projections remain (Music Videos,
+Other Videos, Songs, Images). Sections below marked **done** are in the
 working tree.
 
 ## Context
@@ -107,9 +108,10 @@ must follow that same shape — Movies, Music Videos, Other Videos, Songs, Image
 - NFO ownership for the kinds ErsatzTV writes sidecars for,
 - reconciliation, revert guards, and health reporting per kind.
 
-Sequence them one kind per commit behind a shared projection trait rather than
-one large change; Movies first (closest to the Episode shape), Images last
-(no duration, no playback version).
+Sequence them one kind per commit; Movies landed first (closest to the Episode
+shape) and `reconcile_projection` now dispatches per presentation with a revert
+per projection, so each remaining kind adds one apply/revert pair and one link
+table. Images last: no duration and no playback version.
 
 ### 3. Editor rebuild — done
 

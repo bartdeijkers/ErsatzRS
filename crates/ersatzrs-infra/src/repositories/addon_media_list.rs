@@ -487,7 +487,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .await
         .repository()?;
 
-        let result = reconcile_tv_projection(&self.0, id, presentation_kind).await;
+        let result = reconcile_projection(&self.0, id, presentation_kind).await;
         if let Err(error) = &result {
             let _ = sqlx::query(
                 r#"UPDATE "AddonMediaList" SET "PresentationError" = ? WHERE "Id" = ?"#,
@@ -522,7 +522,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id,
             })?;
         if form.requested_presentation_kind == AddonMediaListPresentationKind::TelevisionShow {
-            reconcile_tv_projection(&self.0, id, form.requested_presentation_kind).await?;
+            reconcile_projection(&self.0, id, form.requested_presentation_kind).await?;
             AddonMediaListSynchronizer::new(self.0.clone())
                 .match_list_items(id)
                 .await?;
@@ -583,7 +583,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         if presentation.requested_presentation_kind
             == AddonMediaListPresentationKind::TelevisionShow
         {
-            reconcile_tv_projection(&self.0, list_id, presentation.requested_presentation_kind)
+            reconcile_projection(&self.0, list_id, presentation.requested_presentation_kind)
                 .await?;
             AddonMediaListSynchronizer::new(self.0.clone())
                 .match_list_items(list_id)
@@ -654,7 +654,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        reconcile_tv_projection(&self.0, id, AddonMediaListPresentationKind::RemoteStreams).await?;
+        reconcile_projection(&self.0, id, AddonMediaListPresentationKind::RemoteStreams).await?;
         AddonMediaListSynchronizer::new(self.0.clone())
             .delete_list(id)
             .await
@@ -895,13 +895,319 @@ impl SqliteAddonMediaListRepository {
     }
 }
 
-#[allow(clippy::too_many_lines)]
-async fn reconcile_tv_projection(
+/// Apply the requested presentation, reverting whatever the list had before.
+///
+/// `Auto` is resolved from the entries themselves; every other kind is applied
+/// as asked. Projections other than the effective one are always reverted
+/// first, so switching between them cannot leave two live hierarchies over the
+/// same provider items.
+async fn reconcile_projection(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
     requested: AddonMediaListPresentationKind,
 ) -> Result<()> {
-    if requested == AddonMediaListPresentationKind::RemoteStreams {
+    let effective = if requested == AddonMediaListPresentationKind::Auto {
+        resolve_auto_presentation(pool, list_id).await?
+    } else {
+        requested
+    };
+    match effective {
+        AddonMediaListPresentationKind::RemoteStreams | AddonMediaListPresentationKind::Auto => {
+            revert_projections(pool, list_id).await
+        }
+        AddonMediaListPresentationKind::TelevisionShow => {
+            revert_movie_projection(pool, list_id).await?;
+            apply_tv_projection(pool, list_id).await
+        }
+        AddonMediaListPresentationKind::Movies => {
+            revert_tv_projection(pool, list_id).await?;
+            apply_movie_projection(pool, list_id).await
+        }
+        other => Err(RepositoryError::Conflict(format!(
+            "presentation {other:?} has no projection yet"
+        ))),
+    }
+}
+
+/// Derive the presentation from how the entries classify themselves.
+///
+/// A list only auto-projects when every entry agrees and none is still
+/// unclassified; anything else stays plain Remote Streams, because guessing a
+/// hierarchy for a mixed list would be worse than leaving it alone.
+async fn resolve_auto_presentation(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+) -> Result<AddonMediaListPresentationKind> {
+    let kinds = sqlx::query_scalar::<_, i32>(
+        r#"SELECT DISTINCT "ContentKind" FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL"#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let [only] = kinds.as_slice() else {
+        return Ok(AddonMediaListPresentationKind::RemoteStreams);
+    };
+    let Some(kind) =
+        <AddonMediaListContentKind as crate::repositories::common::DbEnum>::from_db_int(*only)
+    else {
+        return Ok(AddonMediaListPresentationKind::RemoteStreams);
+    };
+    let derived = AddonMediaListPresentationKind::from_content_kind(kind)
+        .unwrap_or(AddonMediaListPresentationKind::RemoteStreams);
+    // A kind whose projection does not exist yet must not be entered silently.
+    Ok(if derived.is_projected() {
+        derived
+    } else {
+        AddonMediaListPresentationKind::RemoteStreams
+    })
+}
+
+/// Revert one list to plain Remote Streams, detaching every projection.
+///
+/// Reverting is refused while a projected media item is referenced from
+/// outside the list, so a schedule or collection cannot lose its target.
+async fn revert_projections(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    revert_movie_projection(pool, list_id).await?;
+    revert_tv_projection(pool, list_id).await
+}
+
+/// Detach the Movie projection and delete the projected media items.
+///
+/// Mirrors the television revert: a projected movie still referenced from a
+/// collection, another playlist, or a playout blocks the change instead of
+/// silently removing a schedule's target.
+async fn revert_movie_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    let references: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItemMovie" AS "projection"
+           WHERE "projection"."AddonMediaListItemId" IN (
+               SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
+           ) AND (
+               EXISTS (SELECT 1 FROM "CollectionItem" WHERE "MediaItemId" = "projection"."MovieId")
+               OR EXISTS (
+                   SELECT 1 FROM "PlaylistItem"
+                   WHERE "MediaItemId" = "projection"."MovieId"
+                     AND "PlaylistId" <> COALESCE(
+                         (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?), -1
+                     )
+               )
+               OR EXISTS (SELECT 1 FROM "PlayoutItem" WHERE "MediaItemId" = "projection"."MovieId")
+           )"#,
+    )
+    .bind(list_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if references > 0 {
+        return Err(RepositoryError::Conflict(
+            "projected movies are still referenced by a collection, playlist, or playout"
+                .to_owned(),
+        ));
+    }
+
+    let movie_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "projection"."MovieId"
+           FROM "AddonMediaListItemMovie" AS "projection"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."Id" = "projection"."AddonMediaListItemId"
+           WHERE "item"."AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    if movie_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    for movie_id in movie_ids {
+        // The Remote Stream version is shared, not owned, so it is detached
+        // rather than deleted: the provider item remains playable.
+        sqlx::query(r#"UPDATE "MediaVersion" SET "MovieId" = NULL WHERE "MovieId" = ?"#)
+            .bind(movie_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(movie_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+    }
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "PresentationKind" = 0, "PresentationError" = NULL WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    tx.commit().await.repository()?;
+    Ok(())
+}
+
+/// Project every entry of one list as a Movie over its Remote Stream version.
+///
+/// A movie list has no parent container, so this is the television projection
+/// without the Show and Season levels: each entry's NFO owns its metadata and
+/// the scanned Remote Stream `MediaVersion` is attached to the projected movie.
+#[allow(clippy::too_many_lines)]
+async fn apply_movie_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "Title", "Year", "Availability"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+           ORDER BY "Rank", "Id""#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+
+    let mut movies = Vec::with_capacity(rows.len());
+    for row in rows {
+        let item_id: EntityId = row.try_get("Id").repository()?;
+        let path = item_nfo_path_for(pool, list_id, item_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::Conflict(format!(
+                    "item {item_id} must be scanned before movie conversion"
+                ))
+            })?;
+        let form = crate::addon_media_nfo::read_form(Some(&path)).map_err(map_nfo_error)?;
+        let mut metadata = form.metadata;
+        if metadata.title.trim().is_empty() {
+            metadata.title = row.try_get("Title").repository()?;
+        }
+        metadata.year = metadata.year.or(row.try_get("Year").repository()?);
+        crate::addon_media_nfo::save_user(&path, "movie", &metadata, &form.etag)
+            .map_err(map_nfo_error)?;
+        let availability: i32 = row.try_get("Availability").repository()?;
+        movies.push(ProjectedEpisodeInput {
+            item_id,
+            metadata,
+            state: i32::from(availability == 1) * 2,
+        });
+    }
+
+    let library_path_id = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "path"."Id"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "LibraryPath" AS "path" ON "path"."LibraryId" = "managed"."LibraryId"
+           WHERE "managed"."AddonMediaListId" = ? ORDER BY "path"."Id" LIMIT 1"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
+    let now_text = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+
+    for input in movies {
+        let movie_id = if let Some(movie_id) = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "MovieId" FROM "AddonMediaListItemMovie"
+               WHERE "AddonMediaListItemId" = ?"#,
+        )
+        .bind(input.item_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        {
+            movie_id
+        } else {
+            let result =
+                sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, ?)"#)
+                    .bind(library_path_id)
+                    .bind(input.state)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            let movie_id = crate::db::inserted_id(&mut tx, result).await.repository()?;
+            sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (?)"#)
+                .bind(movie_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItemMovie" ("AddonMediaListItemId", "MovieId")
+                   VALUES (?, ?)"#,
+            )
+            .bind(input.item_id)
+            .bind(movie_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            movie_id
+        };
+        sqlx::query(r#"UPDATE "MediaItem" SET "State" = ? WHERE "Id" = ?"#)
+            .bind(input.state)
+            .bind(movie_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"UPDATE "MediaVersion" SET "MovieId" = ?
+               WHERE "RemoteStreamId" = (
+                   SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "Id" = ?
+               )"#,
+        )
+        .bind(movie_id)
+        .bind(input.item_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        sqlx::query(r#"DELETE FROM "MovieMetadata" WHERE "MovieId" = ?"#)
+            .bind(movie_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                  "MovieId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
+                  "Outline", "Plot", "Tagline", "Year", "ReleaseDate",
+                  "ContentRating", "DateAdded", "DateUpdated"
+               ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(movie_id)
+        .bind(&input.metadata.title)
+        .bind(&input.metadata.original_title)
+        .bind(&input.metadata.sort_title)
+        .bind(&input.metadata.outline)
+        .bind(&input.metadata.plot)
+        .bind(&input.metadata.tagline)
+        .bind(input.metadata.year)
+        .bind(&input.metadata.release_date)
+        .bind(input.metadata.content_ratings.first())
+        .bind(&now_text)
+        .bind(&now_text)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+    }
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPresentationKind::Movies,
+    ))
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    tx.commit().await.repository()?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn revert_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    {
         let references: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*)
                FROM "AddonMediaListItemEpisode" AS "projection"
@@ -995,9 +1301,12 @@ async fn reconcile_tv_projection(
         .await
         .repository()?;
         tx.commit().await.repository()?;
-        return Ok(());
+        Ok(())
     }
+}
 
+#[allow(clippy::too_many_lines)]
+async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
     let show_path = show_nfo_path_for(pool, list_id).await?.ok_or_else(|| {
         RepositoryError::Conflict("managed list storage is unavailable".to_owned())
     })?;

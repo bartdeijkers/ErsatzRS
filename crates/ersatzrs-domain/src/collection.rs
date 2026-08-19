@@ -127,7 +127,7 @@ impl AddonMediaListPresentationKind {
     pub const fn is_projected(self) -> bool {
         matches!(
             self,
-            Self::Auto | Self::RemoteStreams | Self::TelevisionShow
+            Self::Auto | Self::RemoteStreams | Self::TelevisionShow | Self::Movies
         )
     }
 }
