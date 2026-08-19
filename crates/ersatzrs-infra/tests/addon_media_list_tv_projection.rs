@@ -553,3 +553,142 @@ async fn switching_between_flat_projections_leaves_only_the_requested_one() {
         3
     );
 }
+
+/// A song metadata table has no rating or description columns, so the shared
+/// projection must write the narrower column set. Naming a column that does not
+/// exist would fail only for this kind, which is exactly what a shared
+/// implementation risks.
+#[tokio::test]
+async fn song_projection_writes_the_narrow_metadata_column_set() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Songs, None)
+        .await
+        .expect("project the list as songs");
+
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Song""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "SongMetadata""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            r#"SELECT "meta"."Title"
+               FROM "SongMetadata" AS "meta"
+               JOIN "AddonMediaListItemSong" AS "link" ON "link"."SongId" = "meta"."SongId"
+               WHERE "link"."AddonMediaListItemId" = 10"#
+        )
+        .await,
+        "Pilot"
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "SongId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+        .await
+        .expect("revert to remote streams");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Song""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "RemoteStream""#).await,
+        3
+    );
+}
+
+/// Every parentless kind must round-trip through project and revert. This runs
+/// them all so one shared implementation cannot work for the kind it was
+/// written against and quietly fail for the others.
+#[tokio::test]
+async fn every_flat_projection_projects_and_reverts() {
+    for (presentation, media_table, link_table, version_column) in [
+        (
+            AddonMediaListPresentationKind::Movies,
+            "Movie",
+            "AddonMediaListItemMovie",
+            "MovieId",
+        ),
+        (
+            AddonMediaListPresentationKind::OtherVideos,
+            "OtherVideo",
+            "AddonMediaListItemOtherVideo",
+            "OtherVideoId",
+        ),
+        (
+            AddonMediaListPresentationKind::Songs,
+            "Song",
+            "AddonMediaListItemSong",
+            "SongId",
+        ),
+        (
+            AddonMediaListPresentationKind::Images,
+            "Image",
+            "AddonMediaListItemImage",
+            "ImageId",
+        ),
+    ] {
+        let pool = common::test_db().await;
+        let _directory = seed_managed_list(&pool).await;
+        let repositories = make_repositories(pool.clone());
+
+        repositories
+            .addon_media_lists
+            .request_presentation(LIST_ID, presentation, None)
+            .await
+            .unwrap_or_else(|error| panic!("{presentation:?} projection failed: {error}"));
+        assert_eq!(
+            scalar::<i64>(&pool, &format!(r#"SELECT COUNT(*) FROM "{media_table}""#)).await,
+            3,
+            "{presentation:?} did not create its media items"
+        );
+        assert_eq!(
+            scalar::<i64>(&pool, &format!(r#"SELECT COUNT(*) FROM "{link_table}""#)).await,
+            3,
+            "{presentation:?} did not link its media items"
+        );
+        assert_eq!(
+            scalar::<i64>(
+                &pool,
+                &format!(
+                    r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "{version_column}" IS NOT NULL"#
+                )
+            )
+            .await,
+            3,
+            "{presentation:?} did not attach the shared remote stream version"
+        );
+
+        repositories
+            .addon_media_lists
+            .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+            .await
+            .unwrap_or_else(|error| panic!("{presentation:?} revert failed: {error}"));
+        assert_eq!(
+            scalar::<i64>(&pool, &format!(r#"SELECT COUNT(*) FROM "{media_table}""#)).await,
+            0,
+            "{presentation:?} left media items behind"
+        );
+        assert_eq!(
+            scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "RemoteStream""#).await,
+            3,
+            "{presentation:?} revert damaged the provider items"
+        );
+    }
+}

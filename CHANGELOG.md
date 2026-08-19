@@ -32,12 +32,12 @@ release section when tagging a release.
 
 - The add-on list collection type now offers every library kind: Auto, TV Shows,
   Movies, Music, Other Videos, Songs, Images, and Remote Streams. Auto, TV Shows,
-  Movies, Other Videos and Remote Streams have a projection; choosing one of the
-  remaining three is refused at the moment of choice rather than stored as a presentation
+  every kind except Music Videos has a projection; choosing that one is refused at the moment of choice rather than stored as a presentation
   nothing implements. **Auto** derives the presentation from the entries and only
   enters a projection every entry agrees on.
 
-- An add-on list can be projected as **Movies** or **Other Videos**: each entry
+- An add-on list can be projected as **Movies**, **Other Videos**, **Songs** or
+  **Images**: each entry
   becomes a normal media item over the same Remote Stream version, with its
   metadata from its own NFO. Switching between presentations detaches the
   previous one, reverting detaches the projection instead of deleting the

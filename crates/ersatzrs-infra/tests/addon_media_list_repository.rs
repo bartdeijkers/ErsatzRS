@@ -426,11 +426,7 @@ async fn unprojected_presentations_are_refused_rather_than_stored() {
     .await
     .unwrap();
 
-    for kind in [
-        AddonMediaListPresentationKind::MusicVideos,
-        AddonMediaListPresentationKind::Songs,
-        AddonMediaListPresentationKind::Images,
-    ] {
+    for kind in [AddonMediaListPresentationKind::MusicVideos] {
         assert!(
             matches!(
                 repositories

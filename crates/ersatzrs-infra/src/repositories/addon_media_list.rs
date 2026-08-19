@@ -720,9 +720,10 @@ fn map_nfo_error(error: crate::addon_media_nfo::AddonMediaNfoError) -> Repositor
 const fn nfo_root_for_content_kind(kind: AddonMediaListContentKind) -> &'static str {
     match kind {
         AddonMediaListContentKind::TelevisionEpisode => "episodedetails",
-        AddonMediaListContentKind::MusicVideo => "musicvideo",
-        AddonMediaListContentKind::Song => "song",
-        // Kodi has no still-image NFO root, so an image keeps the generic one.
+        // Kodi defines no song or still-image NFO document, so those reuse the
+        // nearest root it does define. Writing an invented root would produce a
+        // sidecar no Kodi-compatible reader accepts, and `serialize` refuses it.
+        AddonMediaListContentKind::MusicVideo | AddonMediaListContentKind::Song => "musicvideo",
         AddonMediaListContentKind::Auto
         | AddonMediaListContentKind::Movie
         | AddonMediaListContentKind::OtherVideo
@@ -925,9 +926,17 @@ async fn reconcile_projection(
         AddonMediaListPresentationKind::OtherVideos => {
             apply_flat(pool, list_id, FlatProjection::OTHER_VIDEOS).await
         }
-        other => Err(RepositoryError::Conflict(format!(
-            "presentation {other:?} has no projection yet"
-        ))),
+        AddonMediaListPresentationKind::Songs => {
+            apply_flat(pool, list_id, FlatProjection::SONGS).await
+        }
+        AddonMediaListPresentationKind::Images => {
+            apply_flat(pool, list_id, FlatProjection::IMAGES).await
+        }
+        // Named rather than wildcarded: when the Artist parent lands, this arm
+        // must fail to compile instead of silently swallowing a new kind.
+        other @ AddonMediaListPresentationKind::MusicVideos => Err(RepositoryError::Conflict(
+            format!("presentation {other:?} has no projection yet"),
+        )),
     }
 }
 
@@ -1008,6 +1017,11 @@ struct FlatProjection {
     metadata_table: &'static str,
     /// NFO document root this kind is stored under.
     nfo_root: &'static str,
+    /// Whether the metadata table has the video description and rating columns.
+    ///
+    /// `SongMetadata` and `ImageMetadata` do not, so writing them would name a
+    /// column that does not exist.
+    descriptive_metadata: bool,
     presentation: AddonMediaListPresentationKind,
 }
 
@@ -1019,6 +1033,7 @@ impl FlatProjection {
         metadata_owner_column: "MovieId",
         metadata_table: "MovieMetadata",
         nfo_root: "movie",
+        descriptive_metadata: true,
         presentation: AddonMediaListPresentationKind::Movies,
     };
     const OTHER_VIDEOS: Self = Self {
@@ -1028,11 +1043,38 @@ impl FlatProjection {
         metadata_owner_column: "OtherVideoId",
         metadata_table: "OtherVideoMetadata",
         nfo_root: "movie",
+        descriptive_metadata: true,
         presentation: AddonMediaListPresentationKind::OtherVideos,
     };
 
+    const SONGS: Self = Self {
+        link_table: "AddonMediaListItemSong",
+        link_column: "SongId",
+        media_table: "Song",
+        metadata_owner_column: "SongId",
+        metadata_table: "SongMetadata",
+        // Kodi defines no song NFO document; `musicvideo` is the nearest root it
+        // does define, and the only music-shaped one `serialize` accepts.
+        nfo_root: "musicvideo",
+        descriptive_metadata: false,
+        presentation: AddonMediaListPresentationKind::Songs,
+    };
+
+    const IMAGES: Self = Self {
+        link_table: "AddonMediaListItemImage",
+        link_column: "ImageId",
+        media_table: "Image",
+        metadata_owner_column: "ImageId",
+        metadata_table: "ImageMetadata",
+        // Kodi defines no still-image NFO document either; the generic root is
+        // the only one `serialize` accepts for a non-music item.
+        nfo_root: "movie",
+        descriptive_metadata: false,
+        presentation: AddonMediaListPresentationKind::Images,
+    };
+
     /// Every flat projection, so a revert can detach whichever one is live.
-    const ALL: [Self; 2] = [Self::MOVIES, Self::OTHER_VIDEOS];
+    const ALL: [Self; 4] = [Self::MOVIES, Self::OTHER_VIDEOS, Self::SONGS, Self::IMAGES];
 }
 
 /// Detach every flat projection a list may have, in turn.
@@ -1158,6 +1200,7 @@ async fn apply_flat_projection(
         metadata_owner_column,
         metadata_table,
         nfo_root,
+        descriptive_metadata,
         presentation,
     } = projection;
     let rows = sqlx::query(
@@ -1274,28 +1317,50 @@ async fn apply_flat_projection(
         .execute(&mut *tx)
         .await
         .repository()?;
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            r#"INSERT INTO "{metadata_table}" (
-                  "{metadata_owner_column}", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
-                  "Outline", "Plot", "Tagline", "Year", "ReleaseDate",
-                  "ContentRating", "DateAdded", "DateUpdated"
-               ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
-        )))
-        .bind(media_id)
-        .bind(&input.metadata.title)
-        .bind(&input.metadata.original_title)
-        .bind(&input.metadata.sort_title)
-        .bind(&input.metadata.outline)
-        .bind(&input.metadata.plot)
-        .bind(&input.metadata.tagline)
-        .bind(input.metadata.year)
-        .bind(&input.metadata.release_date)
-        .bind(input.metadata.content_ratings.first())
-        .bind(&now_text)
-        .bind(&now_text)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
+        // Only the video kinds carry a rating and the long-form description
+        // columns; a song or an image metadata table simply has no such columns.
+        if descriptive_metadata {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                r#"INSERT INTO "{metadata_table}" (
+                      "{metadata_owner_column}", "MetadataKind", "Title", "OriginalTitle",
+                      "SortTitle", "Outline", "Plot", "Tagline", "Year", "ReleaseDate",
+                      "ContentRating", "DateAdded", "DateUpdated"
+                   ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+            )))
+            .bind(media_id)
+            .bind(&input.metadata.title)
+            .bind(&input.metadata.original_title)
+            .bind(&input.metadata.sort_title)
+            .bind(&input.metadata.outline)
+            .bind(&input.metadata.plot)
+            .bind(&input.metadata.tagline)
+            .bind(input.metadata.year)
+            .bind(&input.metadata.release_date)
+            .bind(input.metadata.content_ratings.first())
+            .bind(&now_text)
+            .bind(&now_text)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        } else {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                r#"INSERT INTO "{metadata_table}" (
+                      "{metadata_owner_column}", "MetadataKind", "Title", "OriginalTitle",
+                      "SortTitle", "Year", "ReleaseDate", "DateAdded", "DateUpdated"
+                   ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)"#
+            )))
+            .bind(media_id)
+            .bind(&input.metadata.title)
+            .bind(&input.metadata.original_title)
+            .bind(&input.metadata.sort_title)
+            .bind(input.metadata.year)
+            .bind(&input.metadata.release_date)
+            .bind(&now_text)
+            .bind(&now_text)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
     }
 
     sqlx::query(
@@ -1826,4 +1891,36 @@ fn decode_replacement_candidate(
         collection_type: row.try_get("CollectionType").repository()?,
         video_stream_index: row.try_get("VideoStreamIndex").repository()?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::nfo_root_for_content_kind;
+    use ersatzrs_domain::AddonMediaListContentKind;
+
+    /// Every classification must map to a root the NFO serializer accepts.
+    /// `Song` once mapped to an invented `song` root, so saving the NFO of any
+    /// song-classified entry failed with "unsupported NFO root".
+    #[test]
+    fn every_content_kind_maps_to_a_serializable_nfo_root() {
+        for kind in [
+            AddonMediaListContentKind::Auto,
+            AddonMediaListContentKind::TelevisionEpisode,
+            AddonMediaListContentKind::Movie,
+            AddonMediaListContentKind::MusicVideo,
+            AddonMediaListContentKind::OtherVideo,
+            AddonMediaListContentKind::Song,
+            AddonMediaListContentKind::Image,
+        ] {
+            let root = nfo_root_for_content_kind(kind);
+            crate::addon_media_nfo::serialize(
+                root,
+                &ersatzrs_core::repositories::AddonMediaListNfoMetadata {
+                    title: "Fixture".to_owned(),
+                    ..Default::default()
+                },
+            )
+            .unwrap_or_else(|error| panic!("{kind:?} maps to unusable root {root}: {error}"));
+        }
+    }
 }

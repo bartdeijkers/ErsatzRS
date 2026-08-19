@@ -132,6 +132,8 @@ impl AddonMediaListPresentationKind {
                 | Self::TelevisionShow
                 | Self::Movies
                 | Self::OtherVideos
+                | Self::Songs
+                | Self::Images
         )
     }
 }

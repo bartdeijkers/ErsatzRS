@@ -7,9 +7,9 @@ Accepted (2026-08-19)
 ## Implementation
 
 Partial — the per-item classification, the presentation set, the grouped editor,
-and the Movies and Other Videos projections are implemented (working tree,
-2026-08-19). Three of the seven presentations have no projection behind them yet
-and are refused on request; they are tracked as open parity debt.
+and every parentless projection are implemented (working tree, 2026-08-19).
+Music Videos is the one presentation still refused on request, because it needs
+an Artist parent; it is tracked as open parity debt.
 
 ## Context
 
@@ -55,17 +55,21 @@ Images, and Remote Streams. Discriminants `0` and `1` are frozen so rows written
 before the set grew still decode to the same two projections. `Auto` derives the
 presentation from the entries themselves.
 
-Auto, Remote Streams, Television Show, Movies, and Other Videos have a
-projection.
+Every presentation except Music Videos has a projection.
 `is_projected` names that boundary in one place, and requesting a kind without
 one is refused rather than silently stored, so a list cannot claim a
-presentation it does not have. The remaining three follow the shape ADR 0071
-established, one media kind at a time.
+presentation it does not have. Music Videos is the one kind left: `MusicVideo`
+requires an `ArtistId`, so it needs a parent the way an episode needs a Show.
 
-Movies and Other Videos are that shape without the Show and Season levels: each
-entry becomes one media item whose metadata comes from its own NFO, over the same
-scanned Remote Stream `MediaVersion`. One `FlatProjection` description drives
-both, so the remaining parentless kinds add a table pair rather than a copy.
+Movies, Other Videos, Songs, and Images are that shape without the Show and
+Season levels: each entry becomes one media item whose metadata comes from its
+own NFO, over the same scanned Remote Stream `MediaVersion`. One
+`FlatProjection` description drives all four, including which of them have the
+rating and description metadata columns — a song and an image table do not.
+
+Kodi defines no song or still-image NFO document, so those kinds reuse the
+nearest root it does define rather than an invented one the serializer refuses
+and no Kodi-compatible reader would accept.
 Reverting detaches the version rather than deleting it, and is refused while a
 projected item is referenced from a collection, another playlist, or a playout.
 Applying one projection reverts the others first, so two hierarchies can never
@@ -100,7 +104,7 @@ loading any rows, and paging is server-side with an explicit "all" choice.
   instead of leaving a list in a presentation nothing implements.
 - Long lists no longer render every entry at once, and the operator sees what is
   unplayable without reading the whole list.
-- Three projections remain outstanding; until each lands, its collection type is
+- Music Videos remains outstanding; until it lands, its collection type is
   offered but refused.
 
 ## Alternatives Considered
