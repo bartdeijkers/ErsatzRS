@@ -148,6 +148,12 @@ release section when tagging a release.
   hydration entry, so the page had no recorded browser evidence and the route
   contract check failed; the entry is recorded as outstanding rather than
   claimed, and browser proof for the editor is still to come.
+- MySQL databases can be migrated past the add-on television projection again.
+  Its `AddonMediaListItemEpisode` foreign key was named with 68 characters,
+  four over MySQL's 64-character identifier limit, so the migration aborted and
+  every MySQL install stopped at that point. The name now carries the same
+  EF-style truncation the rest of the MySQL schema uses; the SQLite spelling is
+  unchanged.
 - Choosing a Local replacement for an add-on list item now finds candidates.
   The search required a video stream recorded with a kind the scanner never
   writes, so it matched nothing in any library and the feature could not be

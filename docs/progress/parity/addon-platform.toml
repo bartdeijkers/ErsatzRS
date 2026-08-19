@@ -120,9 +120,9 @@ resolution  = 'The add-on settings route is included in whole-app hydration and 
 
 [[debt]]
 id          = 'mysql-runtime-migration-proof-is-missing'
-description = 'The add-on media storage and NFO sidecar migrations are exercised on SQLite and compile-checked under the `mysql` feature, but the add-on schema has not been run against a live MySQL/MariaDB server. Until it is, the MySQL backend claim for the add-on platform rests on compilation rather than on a migrated, read/write-proven database.'
+description = 'The add-on schema applies to a live MySQL server in CI, but no test exercises the add-on tables themselves there. Managed list, storage, NFO sidecar, and television projection reads and writes are proven only on SQLite, so a backend-specific defect in those paths would not be caught.'
 discovered  = '2026-08-15'
-evidence    = 'Tracked by the add-on NFO sidecar and local replacement closeout plan, which lists this as one of two remaining blockers. Needs a live MySQL run of the add-on migrations plus read/write coverage of the managed list, storage, and projection tables.'
+evidence    = 'Corrected 2026-08-19: an earlier version of this entry claimed the add-on migrations had never run against a live server. They have — the `MySQL health contract` CI job runs them against a MySQL 8.4 container, and on 2026-08-18 it caught a real defect, an over-length `AddonMediaListItemEpisode` foreign-key name that MySQL rejects, which had made every MySQL database unmigratable past `202608162100`. What that job does not cover is add-on table behavior: `crates/ersatzrs-infra/tests/mysql_backend.rs` exercises representative queries, hardware graph state, and two health checks, none of them add-on paths.'
 adr         = '0066'
 resolved    = false
 

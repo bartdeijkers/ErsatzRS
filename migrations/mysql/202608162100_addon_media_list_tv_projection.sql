@@ -20,11 +20,14 @@ CREATE TABLE `AddonMediaListTelevisionShow` (
 CREATE UNIQUE INDEX `IX_AddonMediaListTelevisionShow_ShowId`
     ON `AddonMediaListTelevisionShow` (`ShowId`);
 
+-- MySQL caps identifier names at 64 characters, so this table's foreign key
+-- carries the EF-style truncation (63 characters plus `~`) that the rest of the
+-- MySQL schema already uses; SQLite keeps the untruncated spelling.
 CREATE TABLE `AddonMediaListItemEpisode` (
     `AddonMediaListItemId` INT NOT NULL,
     `EpisodeId` INT NOT NULL,
     CONSTRAINT `PK_AddonMediaListItemEpisode` PRIMARY KEY (`AddonMediaListItemId`),
-    CONSTRAINT `FK_AddonMediaListItemEpisode_AddonMediaListItem_AddonMediaListItemId`
+    CONSTRAINT `FK_AddonMediaListItemEpisode_AddonMediaListItem_AddonMediaListI~`
         FOREIGN KEY (`AddonMediaListItemId`) REFERENCES `AddonMediaListItem` (`Id`) ON DELETE CASCADE,
     CONSTRAINT `FK_AddonMediaListItemEpisode_Episode_EpisodeId`
         FOREIGN KEY (`EpisodeId`) REFERENCES `Episode` (`Id`) ON DELETE CASCADE

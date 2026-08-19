@@ -504,7 +504,7 @@ INSERT INTO "MediaStream" (
   "Id", "Index", "Codec", "MediaStreamKind", "Channels", "Default", "Forced",
   "MediaVersionId", "AttachedPic"
 ) VALUES (
-  ${seed.replacementMediaStreamId}, 2, 'h264', 0, 0, 1, 0,
+  ${seed.replacementMediaStreamId}, 2, 'h264', 1, 0, 1, 0,
   ${seed.replacementMediaVersionId}, 0
 );
 `);
@@ -754,7 +754,7 @@ INSERT INTO "MediaStream" (
   "Id", "Index", "Codec", "MediaStreamKind", "Channels", "Default", "Forced",
   "MediaVersionId", "AttachedPic"
 ) VALUES (
-  ${seed.replacementMediaStreamId}, 2, 'h264', 0, 0, 1, 0,
+  ${seed.replacementMediaStreamId}, 2, 'h264', 1, 0, 1, 0,
   ${seed.replacementMediaVersionId}, 0
 );
 `);
