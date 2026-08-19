@@ -6,10 +6,8 @@ Accepted (2026-08-19)
 
 ## Implementation
 
-Partial — the per-item classification, the presentation set, the grouped editor,
-and every parentless projection are implemented (working tree, 2026-08-19).
-Music Videos is the one presentation still refused on request, because it needs
-an Artist parent; it is tracked as open parity debt.
+Implemented (working tree, 2026-08-19). Every presentation the collection type
+offers is projected.
 
 ## Context
 
@@ -55,11 +53,14 @@ Images, and Remote Streams. Discriminants `0` and `1` are frozen so rows written
 before the set grew still decode to the same two projections. `Auto` derives the
 presentation from the entries themselves.
 
-Every presentation except Music Videos has a projection.
-`is_projected` names that boundary in one place, and requesting a kind without
-one is refused rather than silently stored, so a list cannot claim a
-presentation it does not have. Music Videos is the one kind left: `MusicVideo`
-requires an `ArtistId`, so it needs a parent the way an episode needs a Show.
+Every presentation has a projection. `is_projected` remains the one place a kind
+must be listed before it can be requested, so a presentation added later is
+refused rather than stored as one nothing implements.
+
+Music Videos is the second kind with a parent: `MusicVideo.ArtistId` is NOT
+NULL, so one managed Artist sits above the list, named by `artist.nfo` the way a
+show is named by `tvshow.nfo`. Switching away removes that artist too, rather
+than leaving one behind with no music videos under it.
 
 Movies, Other Videos, Songs, and Images are that shape without the Show and
 Season levels: each entry becomes one media item whose metadata comes from its
@@ -104,8 +105,7 @@ loading any rows, and paging is server-side with an explicit "all" choice.
   instead of leaving a list in a presentation nothing implements.
 - Long lists no longer render every entry at once, and the operator sees what is
   unplayable without reading the whole list.
-- Music Videos remains outstanding; until it lands, its collection type is
-  offered but refused.
+- Every collection type the operator can choose now does what it says.
 
 ## Alternatives Considered
 

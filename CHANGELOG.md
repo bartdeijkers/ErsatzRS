@@ -30,15 +30,17 @@ release section when tagging a release.
   wrote every entry under one wrong root. The list-wide control remains as an
   explicit **Apply to all items** bulk default that confirms before overwriting.
 
-- The add-on list collection type now offers every library kind: Auto, TV Shows,
-  Movies, Music, Other Videos, Songs, Images, and Remote Streams. Auto, TV Shows,
-  every kind except Music Videos has a projection; choosing that one is refused at the moment of choice rather than stored as a presentation
-  nothing implements. **Auto** derives the presentation from the entries and only
-  enters a projection every entry agrees on.
+- The add-on list collection type now offers every library kind — Auto, TV Shows,
+  Movies, Music, Other Videos, Songs, Images, and Remote Streams — and every one
+  of them is projected. **Auto** derives the presentation from the entries and
+  only enters a projection every entry agrees on; a mixed list stays on Remote
+  Streams rather than being guessed into a hierarchy.
 
-- An add-on list can be projected as **Movies**, **Other Videos**, **Songs** or
-  **Images**: each entry
-  becomes a normal media item over the same Remote Stream version, with its
+- An add-on list can be projected as **Movies**, **Other Videos**, **Songs**,
+  **Images**, or **Music Videos**. Music Videos gets one managed artist above the
+  list, named by `artist.nfo`, because a music video cannot exist without an
+  artist; switching away removes that artist too. For the parentless kinds each
+  entry becomes a normal media item over the same Remote Stream version, with its
   metadata from its own NFO. Switching between presentations detaches the
   previous one, reverting detaches the projection instead of deleting the
   provider items, and a revert is refused while a projected item is still

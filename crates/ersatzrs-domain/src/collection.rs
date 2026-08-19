@@ -121,8 +121,9 @@ impl AddonMediaListPresentationKind {
 
     /// Whether a projection exists for this presentation.
     ///
-    /// The remaining kinds are accepted by the contract but not yet projected;
-    /// requesting one is refused rather than silently stored.
+    /// Every presentation is projected today. The check is retained because it
+    /// is the one place a newly added kind must be listed before it can be
+    /// requested, rather than being stored as a presentation nothing implements.
     #[must_use]
     pub const fn is_projected(self) -> bool {
         matches!(
@@ -131,6 +132,7 @@ impl AddonMediaListPresentationKind {
                 | Self::RemoteStreams
                 | Self::TelevisionShow
                 | Self::Movies
+                | Self::MusicVideos
                 | Self::OtherVideos
                 | Self::Songs
                 | Self::Images
@@ -325,4 +327,30 @@ pub struct AddonMediaListItemGuid {
     pub id: EntityId,
     pub addon_media_list_item_id: EntityId,
     pub guid: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AddonMediaListPresentationKind;
+
+    /// `is_projected` is the one gate a presentation must pass before it can be
+    /// requested. A variant added without listing it here would be refused at
+    /// runtime with no explanation; a variant added *and* listed here without a
+    /// projection would be stored as a presentation nothing implements. This
+    /// test fails on the first, and the exhaustive dispatcher on the second.
+    #[test]
+    fn every_presentation_declares_whether_it_is_projected() {
+        for kind in [
+            AddonMediaListPresentationKind::Auto,
+            AddonMediaListPresentationKind::RemoteStreams,
+            AddonMediaListPresentationKind::TelevisionShow,
+            AddonMediaListPresentationKind::Movies,
+            AddonMediaListPresentationKind::MusicVideos,
+            AddonMediaListPresentationKind::OtherVideos,
+            AddonMediaListPresentationKind::Songs,
+            AddonMediaListPresentationKind::Images,
+        ] {
+            assert!(kind.is_projected(), "{kind:?} has no projection");
+        }
+    }
 }

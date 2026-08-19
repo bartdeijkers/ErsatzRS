@@ -692,3 +692,126 @@ async fn every_flat_projection_projects_and_reverts() {
         );
     }
 }
+
+/// Music Videos is the only projected kind with a parent, because
+/// `MusicVideo.ArtistId` is NOT NULL. The managed Artist is named by
+/// `artist.nfo` the way a show is named by `tvshow.nfo`.
+#[tokio::test]
+async fn music_video_projection_creates_one_managed_artist_for_the_list() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    // Without a name there is nothing to call the artist, so the request fails
+    // rather than projecting an unnamed parent.
+    let error = repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::MusicVideos, None)
+        .await
+        .expect_err("an unnamed artist must be refused");
+    assert!(error.to_string().contains("title"), "{error}");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Artist""#).await,
+        0
+    );
+
+    repositories
+        .addon_media_lists
+        .request_presentation(
+            LIST_ID,
+            AddonMediaListPresentationKind::MusicVideos,
+            Some("Fixture Artist"),
+        )
+        .await
+        .expect("project the list as music videos");
+
+    // Exactly one artist for the whole list, and every entry hangs off it.
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Artist""#).await,
+        1
+    );
+    assert_eq!(
+        scalar::<String>(&pool, r#"SELECT "Title" FROM "ArtistMetadata""#).await,
+        "Fixture Artist"
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MusicVideo""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(DISTINCT "ArtistId") FROM "MusicVideo""#
+        )
+        .await,
+        1
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MusicVideoMetadata""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion" WHERE "MusicVideoId" IS NOT NULL"#
+        )
+        .await,
+        3
+    );
+
+    // Reverting removes the artist too, and leaves the provider items alone.
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+        .await
+        .expect("revert to remote streams");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Artist""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MusicVideo""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "RemoteStream""#).await,
+        3
+    );
+}
+
+/// Switching from the artist-parented kind to a parentless one must remove the
+/// artist as well, or the library keeps an artist with no music videos.
+#[tokio::test]
+async fn switching_away_from_music_videos_removes_the_managed_artist() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    repositories
+        .addon_media_lists
+        .request_presentation(
+            LIST_ID,
+            AddonMediaListPresentationKind::MusicVideos,
+            Some("Fixture Artist"),
+        )
+        .await
+        .expect("project the list as music videos");
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("switch the list to movies");
+
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Artist""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "MusicVideo""#).await,
+        0
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+}

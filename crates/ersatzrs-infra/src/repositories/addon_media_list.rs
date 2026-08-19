@@ -276,7 +276,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn get_show_nfo(&self, id: EntityId) -> Result<AddonMediaListNfoForm> {
-        let path = show_nfo_path_for(&self.0, id).await?;
+        let path = self.parent_nfo_path(id).await?;
         crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)
     }
 
@@ -459,20 +459,24 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "presentation {presentation_kind:?} has no projection yet"
             )));
         }
-        if presentation_kind == AddonMediaListPresentationKind::TelevisionShow {
-            let path = show_nfo_path_for(&self.0, id).await?.ok_or_else(|| {
-                RepositoryError::Conflict("managed list storage is unavailable".to_owned())
-            })?;
+        // A presentation with a parent needs that parent named before anything
+        // is projected, and the name is durable in its NFO rather than the row.
+        if let Some((file_name, root)) = parent_nfo_for(presentation_kind) {
+            let path = parent_nfo_path_for(&self.0, id, file_name)
+                .await?
+                .ok_or_else(|| {
+                    RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+                })?;
             let mut nfo = crate::addon_media_nfo::read_form(Some(&path)).map_err(map_nfo_error)?;
             if nfo.metadata.title.trim().is_empty() {
                 show_title
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .ok_or_else(|| {
-                        RepositoryError::Conflict("a television show title is required".to_owned())
+                        RepositoryError::Conflict(format!("{file_name} must contain a title"))
                     })?
                     .clone_into(&mut nfo.metadata.title);
-                crate::addon_media_nfo::save_user(&path, "tvshow", &nfo.metadata, &nfo.etag)
+                crate::addon_media_nfo::save_user(&path, root, &nfo.metadata, &nfo.etag)
                     .map_err(map_nfo_error)?;
             }
         }
@@ -509,7 +513,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         metadata: &AddonMediaListNfoMetadata,
         expected_etag: &str,
     ) -> Result<()> {
-        let path = show_nfo_path_for(&self.0, id).await?.ok_or_else(|| {
+        let path = self.parent_nfo_path(id).await?.ok_or_else(|| {
             RepositoryError::Conflict("managed list storage is unavailable".to_owned())
         })?;
         crate::addon_media_nfo::save_user(&path, "tvshow", metadata, expected_etag)
@@ -596,7 +600,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let path = if let Some(item_id) = item_id {
             item_nfo_path_for(&self.0, list_id, item_id).await?
         } else {
-            show_nfo_path_for(&self.0, list_id).await?
+            self.parent_nfo_path(list_id).await?
         }
         .ok_or_else(|| RepositoryError::Conflict("managed NFO path is unavailable".to_owned()))?;
         crate::addon_media_nfo::reset(&path).map_err(map_nfo_error)
@@ -731,9 +735,14 @@ const fn nfo_root_for_content_kind(kind: AddonMediaListContentKind) -> &'static 
     }
 }
 
-async fn show_nfo_path_for(
+/// Path of the list-level NFO document for a presentation with a parent.
+///
+/// Kodi names the parent document after the parent kind, so a television list
+/// owns `tvshow.nfo` and a music-video list owns `artist.nfo`.
+async fn parent_nfo_path_for(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
+    file_name: &str,
 ) -> Result<Option<PathBuf>> {
     let path = sqlx::query_scalar::<_, Option<String>>(
         r#"SELECT "file"."Path"
@@ -754,8 +763,21 @@ async fn show_nfo_path_for(
     Ok(path.and_then(|path| {
         Path::new(&path)
             .parent()
-            .map(|parent| parent.join("tvshow.nfo"))
+            .map(|parent| parent.join(file_name))
     }))
+}
+
+/// The list-level NFO document and root a presentation writes, if it has one.
+const fn parent_nfo_for(
+    presentation: AddonMediaListPresentationKind,
+) -> Option<(&'static str, &'static str)> {
+    match presentation {
+        AddonMediaListPresentationKind::TelevisionShow => Some(("tvshow.nfo", "tvshow")),
+        // Kodi has no artist NFO root in this serializer, so the managed artist
+        // document reuses the show root; only its file name differs.
+        AddonMediaListPresentationKind::MusicVideos => Some(("artist.nfo", "tvshow")),
+        _ => None,
+    }
 }
 
 async fn item_nfo_path_for(
@@ -797,6 +819,17 @@ fn season_title(season_number: i32) -> String {
 }
 
 impl SqliteAddonMediaListRepository {
+    /// Path of the list-level NFO for whichever parent the list requested.
+    async fn parent_nfo_path(&self, id: EntityId) -> Result<Option<PathBuf>> {
+        let requested = self
+            .get_admin_form(id)
+            .await?
+            .map(|form| form.requested_presentation_kind)
+            .unwrap_or_default();
+        let (file_name, _) = parent_nfo_for(requested).unwrap_or(("tvshow.nfo", "tvshow"));
+        parent_nfo_path_for(&self.0, id, file_name).await
+    }
+
     /// Load list entries, optionally restricted to one availability group.
     ///
     /// One query shape serves the unfiltered internal callers and the paged
@@ -917,6 +950,7 @@ async fn reconcile_projection(
             revert_projections(pool, list_id).await
         }
         AddonMediaListPresentationKind::TelevisionShow => {
+            revert_music_video_projection(pool, list_id).await?;
             revert_flat_projections(pool, list_id).await?;
             apply_tv_projection(pool, list_id).await
         }
@@ -932,12 +966,337 @@ async fn reconcile_projection(
         AddonMediaListPresentationKind::Images => {
             apply_flat(pool, list_id, FlatProjection::IMAGES).await
         }
-        // Named rather than wildcarded: when the Artist parent lands, this arm
-        // must fail to compile instead of silently swallowing a new kind.
-        other @ AddonMediaListPresentationKind::MusicVideos => Err(RepositoryError::Conflict(
-            format!("presentation {other:?} has no projection yet"),
-        )),
+        AddonMediaListPresentationKind::MusicVideos => {
+            revert_tv_projection(pool, list_id).await?;
+            revert_flat_projections(pool, list_id).await?;
+            apply_music_video_projection(pool, list_id).await
+        }
     }
+}
+
+/// Detach the Music Video projection, its managed Artist, and their media items.
+async fn revert_music_video_projection(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+) -> Result<()> {
+    let references: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItemMusicVideo" AS "projection"
+           WHERE "projection"."AddonMediaListItemId" IN (
+               SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
+           ) AND (
+               EXISTS (
+                   SELECT 1 FROM "CollectionItem"
+                   WHERE "MediaItemId" = "projection"."MusicVideoId"
+               )
+               OR EXISTS (
+                   SELECT 1 FROM "PlaylistItem"
+                   WHERE "MediaItemId" = "projection"."MusicVideoId"
+                     AND "PlaylistId" <> COALESCE(
+                         (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?), -1
+                     )
+               )
+               OR EXISTS (
+                   SELECT 1 FROM "PlayoutItem"
+                   WHERE "MediaItemId" = "projection"."MusicVideoId"
+               )
+           )"#,
+    )
+    .bind(list_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if references > 0 {
+        return Err(RepositoryError::Conflict(
+            "projected music videos are still referenced by a collection, playlist, or playout"
+                .to_owned(),
+        ));
+    }
+
+    let music_video_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "projection"."MusicVideoId"
+           FROM "AddonMediaListItemMusicVideo" AS "projection"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."Id" = "projection"."AddonMediaListItemId"
+           WHERE "item"."AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let artist_id = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "ArtistId" FROM "AddonMediaListArtist" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    if music_video_ids.is_empty() && artist_id.is_none() {
+        return Ok(());
+    }
+
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    for music_video_id in music_video_ids {
+        // The Remote Stream version is shared, not owned.
+        sqlx::query(r#"UPDATE "MediaVersion" SET "MusicVideoId" = NULL WHERE "MusicVideoId" = ?"#)
+            .bind(music_video_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(music_video_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+    }
+    if let Some(artist_id) = artist_id {
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(artist_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+    }
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "PresentationKind" = 0, "PresentationError" = NULL WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    tx.commit().await.repository()?;
+    Ok(())
+}
+
+/// Project one list as an Artist with Music Videos over its Remote Streams.
+///
+/// `MusicVideo.ArtistId` is NOT NULL, so this is the only remaining kind with a
+/// parent: one managed Artist named by `artist.nfo`, the way a television list
+/// is named by `tvshow.nfo`.
+#[allow(clippy::too_many_lines)]
+async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    let artist_path = parent_nfo_path_for(pool, list_id, "artist.nfo")
+        .await?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+        })?;
+    let artist_form =
+        crate::addon_media_nfo::read_form(Some(&artist_path)).map_err(map_nfo_error)?;
+    if artist_form.metadata.title.trim().is_empty() {
+        return Err(RepositoryError::Conflict(
+            "artist.nfo must contain an artist name".to_owned(),
+        ));
+    }
+
+    let rows = sqlx::query(
+        r#"SELECT "Id", "Title", "Year", "Availability"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+           ORDER BY "Rank", "Id""#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let mut projected = Vec::with_capacity(rows.len());
+    for row in rows {
+        let item_id: EntityId = row.try_get("Id").repository()?;
+        let path = item_nfo_path_for(pool, list_id, item_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::Conflict(format!(
+                    "item {item_id} must be scanned before music video conversion"
+                ))
+            })?;
+        let form = crate::addon_media_nfo::read_form(Some(&path)).map_err(map_nfo_error)?;
+        let mut metadata = form.metadata;
+        if metadata.title.trim().is_empty() {
+            metadata.title = row.try_get("Title").repository()?;
+        }
+        metadata.year = metadata.year.or(row.try_get("Year").repository()?);
+        crate::addon_media_nfo::save_user(&path, "musicvideo", &metadata, &form.etag)
+            .map_err(map_nfo_error)?;
+        let availability: i32 = row.try_get("Availability").repository()?;
+        projected.push(ProjectedEpisodeInput {
+            item_id,
+            metadata,
+            state: i32::from(availability == 1) * 2,
+        });
+    }
+
+    let library_path_id = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "path"."Id"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "LibraryPath" AS "path" ON "path"."LibraryId" = "managed"."LibraryId"
+           WHERE "managed"."AddonMediaListId" = ? ORDER BY "path"."Id" LIMIT 1"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or_else(|| RepositoryError::Conflict("managed library path is unavailable".to_owned()))?;
+    let now_text = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+
+    let artist_id = if let Some(artist_id) = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "ArtistId" FROM "AddonMediaListArtist" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .repository()?
+    {
+        artist_id
+    } else {
+        let result =
+            sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
+                .bind(library_path_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        let artist_id = crate::db::inserted_id(&mut tx, result).await.repository()?;
+        sqlx::query(r#"INSERT INTO "Artist" ("Id") VALUES (?)"#)
+            .bind(artist_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtist" ("AddonMediaListId", "ArtistId")
+               VALUES (?, ?)"#,
+        )
+        .bind(list_id)
+        .bind(artist_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        artist_id
+    };
+    // Consumers join artist metadata to resolve the name and artwork, so an
+    // artist without one is invisible to them.
+    sqlx::query(r#"DELETE FROM "ArtistMetadata" WHERE "ArtistId" = ?"#)
+        .bind(artist_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+    sqlx::query(
+        r#"INSERT INTO "ArtistMetadata" (
+              "ArtistId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
+              "Biography", "Year", "ReleaseDate", "DateAdded", "DateUpdated"
+           ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(artist_id)
+    .bind(&artist_form.metadata.title)
+    .bind(&artist_form.metadata.original_title)
+    .bind(&artist_form.metadata.sort_title)
+    .bind(&artist_form.metadata.plot)
+    .bind(artist_form.metadata.year)
+    .bind(&artist_form.metadata.release_date)
+    .bind(&now_text)
+    .bind(&now_text)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+
+    for input in projected {
+        let music_video_id = if let Some(music_video_id) = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "MusicVideoId" FROM "AddonMediaListItemMusicVideo"
+               WHERE "AddonMediaListItemId" = ?"#,
+        )
+        .bind(input.item_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        {
+            sqlx::query(r#"UPDATE "MusicVideo" SET "ArtistId" = ? WHERE "Id" = ?"#)
+                .bind(artist_id)
+                .bind(music_video_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            music_video_id
+        } else {
+            let result =
+                sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, ?)"#)
+                    .bind(library_path_id)
+                    .bind(input.state)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            let music_video_id = crate::db::inserted_id(&mut tx, result).await.repository()?;
+            sqlx::query(r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (?, ?)"#)
+                .bind(music_video_id)
+                .bind(artist_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItemMusicVideo"
+                       ("AddonMediaListItemId", "MusicVideoId")
+                   VALUES (?, ?)"#,
+            )
+            .bind(input.item_id)
+            .bind(music_video_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            music_video_id
+        };
+        sqlx::query(r#"UPDATE "MediaItem" SET "State" = ? WHERE "Id" = ?"#)
+            .bind(input.state)
+            .bind(music_video_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"UPDATE "MediaVersion" SET "MusicVideoId" = ?
+               WHERE "RemoteStreamId" = (
+                   SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "Id" = ?
+               )"#,
+        )
+        .bind(music_video_id)
+        .bind(input.item_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        sqlx::query(r#"DELETE FROM "MusicVideoMetadata" WHERE "MusicVideoId" = ?"#)
+            .bind(music_video_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"INSERT INTO "MusicVideoMetadata" (
+                  "MusicVideoId", "MetadataKind", "Title", "OriginalTitle", "SortTitle",
+                  "Plot", "Year", "ReleaseDate", "DateAdded", "DateUpdated"
+               ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(music_video_id)
+        .bind(&input.metadata.title)
+        .bind(&input.metadata.original_title)
+        .bind(&input.metadata.sort_title)
+        .bind(&input.metadata.plot)
+        .bind(input.metadata.year)
+        .bind(&input.metadata.release_date)
+        .bind(&now_text)
+        .bind(&now_text)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+    }
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPresentationKind::MusicVideos,
+    ))
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    tx.commit().await.repository()?;
+    Ok(())
 }
 
 /// Apply one flat projection after detaching whatever the list had before.
@@ -947,6 +1306,7 @@ async fn apply_flat(
     projection: FlatProjection,
 ) -> Result<()> {
     revert_tv_projection(pool, list_id).await?;
+    revert_music_video_projection(pool, list_id).await?;
     for other in FlatProjection::ALL {
         if other.link_table != projection.link_table {
             revert_flat_projection(pool, list_id, other).await?;
@@ -995,6 +1355,7 @@ async fn resolve_auto_presentation(
 /// Reverting is refused while a projected media item is referenced from
 /// outside the list, so a schedule or collection cannot lose its target.
 async fn revert_projections(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
+    revert_music_video_projection(pool, list_id).await?;
     revert_flat_projections(pool, list_id).await?;
     revert_tv_projection(pool, list_id).await
 }
@@ -1478,9 +1839,11 @@ async fn revert_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> 
 
 #[allow(clippy::too_many_lines)]
 async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> Result<()> {
-    let show_path = show_nfo_path_for(pool, list_id).await?.ok_or_else(|| {
-        RepositoryError::Conflict("managed list storage is unavailable".to_owned())
-    })?;
+    let show_path = parent_nfo_path_for(pool, list_id, "tvshow.nfo")
+        .await?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+        })?;
     let show_form = crate::addon_media_nfo::read_form(Some(&show_path)).map_err(map_nfo_error)?;
     if show_form.metadata.title.trim().is_empty() {
         return Err(RepositoryError::Conflict(

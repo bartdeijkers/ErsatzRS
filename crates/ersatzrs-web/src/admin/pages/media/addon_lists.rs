@@ -69,6 +69,18 @@ const fn content_kind_value(value: AddonMediaListContentKind) -> &'static str {
     }
 }
 
+/// Whether a presentation projects entries under one named parent.
+///
+/// A television list is named by its show and a music-video list by its artist,
+/// so both need the list-level title and summary; the parentless kinds do not.
+const fn presentation_has_parent(value: AddonMediaListPresentationKind) -> bool {
+    matches!(
+        value,
+        AddonMediaListPresentationKind::TelevisionShow
+            | AddonMediaListPresentationKind::MusicVideos
+    )
+}
+
 fn presentation_kind_from_value(value: &str) -> AddonMediaListPresentationKind {
     match value {
         "remote_streams" => AddonMediaListPresentationKind::RemoteStreams,
@@ -1352,11 +1364,11 @@ fn AddonMediaListEditorIsland(
                                         <option value="remote_streams">{tr(TextKey::RemoteStreams)}</option>
                                     </select>
                                 </div>
-                                <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                <div class=style::field_row style:display=move || if presentation_has_parent(presentation_kind.get()) { "" } else { "none" }>
                                     <div class=style::field_label>{tr(TextKey::Title)}</div>
                                     <input class=style::text_input prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
                                 </div>
-                                <div class=style::field_row style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "" } else { "none" }>
+                                <div class=style::field_row style:display=move || if presentation_has_parent(presentation_kind.get()) { "" } else { "none" }>
                                     <div class=style::field_label>{tr(TextKey::Summary)}</div>
                                     <textarea class=style::text_input rows="6" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
                                 </div>

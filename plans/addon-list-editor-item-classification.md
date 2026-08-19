@@ -2,10 +2,8 @@
 
 Second slice after the source-resolver work (ADR 0072).
 
-Status: the editor rework, the per-item classification, and every parentless
-projection (Movies, Other Videos, Songs, Images) are implemented. Music Videos
-is the only one left: `MusicVideo.ArtistId` is NOT NULL, so it needs an Artist
-parent the way an episode needs a Show. Sections below marked **done** are in the
+Status: complete. The editor rework, the per-item classification, and all seven
+projections are implemented and gated. Sections below marked **done** are in the
 working tree.
 
 ## Context
