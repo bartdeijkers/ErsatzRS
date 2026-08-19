@@ -117,7 +117,7 @@ routed  = true
 
 [[route]]
 nav     = '/media/addon-lists'
-backing = 'provider-neutral list + `:id` editor; add/search/match/delete actions with HTML POST fallbacks and persisted rows-per-page'
+backing = 'provider-neutral list + `:id` editor; URL-first add dialog whose optional add-on selection is resolved from the URL host, add/search/match/delete plus change-add-on actions with HTML POST fallbacks and persisted rows-per-page'
 routed  = true
 
 [[route]]
@@ -197,7 +197,7 @@ routed  = true
 
 [[route]]
 nav     = '/settings/addons'
-backing = 'localized Installed/Browse/Updates/Sources manager with tiered trust, package and repository uploads, lifecycle actions, health, optional icons, and links to canonical add-on details'
+backing = 'localized Installed/Browse/Updates/Sources manager with tiered trust, package and repository uploads, the default remote stream processor, lifecycle actions, health, optional icons, and links to canonical add-on details'
 routed  = true
 
 [[route]]

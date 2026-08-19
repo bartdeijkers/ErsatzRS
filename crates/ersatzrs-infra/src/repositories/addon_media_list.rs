@@ -370,6 +370,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
     }
 
+    async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
+        let provider = InstalledAddonMediaListProvider::new(self.0.clone());
+        AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
+            .change_addon(id, addon_id)
+            .await
+    }
+
     async fn update_settings(
         &self,
         id: EntityId,

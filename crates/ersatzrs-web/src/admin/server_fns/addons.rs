@@ -53,6 +53,8 @@ pub struct InstalledAddonRow {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonOverview {
     pub unverified_sources_enabled: bool,
+    /// Add-on used for source URLs no installed package claims, if configured.
+    pub default_remote_stream_addon: Option<String>,
     pub repositories_are_deployment_managed: bool,
     pub repositories: Vec<AddonRepositoryRow>,
     pub available: Vec<AvailableAddonRow>,
@@ -90,12 +92,18 @@ pub async fn load_addon_overview() -> Result<AddonOverview, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    state
+    let mut overview = state
         .application
         .addon_overview()
         .await
         .map(AddonOverview::from)
-        .map_err(ServerFnError::new)
+        .map_err(ServerFnError::new)?;
+    overview.default_remote_stream_addon = state
+        .application
+        .default_remote_stream_addon()
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(overview)
 }
 
 #[server]
@@ -128,6 +136,19 @@ pub async fn set_unverified_addon_sources(enabled: bool) -> Result<(), ServerFnE
     expect_context::<AppState>()
         .application
         .set_unverified_addon_sources(enabled)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Persist or clear the add-on used for unclaimed remote source URLs.
+#[server]
+pub async fn set_default_remote_stream_addon(addon_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let addon_id = addon_id.trim().to_owned();
+    expect_context::<AppState>()
+        .application
+        .set_default_remote_stream_addon((!addon_id.is_empty()).then_some(addon_id))
         .await
         .map_err(ServerFnError::new)
 }
@@ -251,6 +272,9 @@ impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
     fn from(value: ersatzrs_app::AddonOverviewRead) -> Self {
         Self {
             unverified_sources_enabled: value.unverified_sources_enabled,
+            // Loaded alongside the overview rather than through the read model,
+            // which the add-on lifecycle owns.
+            default_remote_stream_addon: None,
             repositories_are_deployment_managed: value.repositories_are_deployment_managed,
             repositories: value
                 .repositories

@@ -15,9 +15,10 @@ use crate::admin::server_fns::addons::load_addon_detail;
 use crate::admin::server_fns::addons::{
     check_addon_package, disable_addon_package, enable_addon_package, install_addon_package,
     load_addon_overview, refresh_addon_repository, remove_addon_repository,
-    save_addon_configuration, save_addon_repository, set_unverified_addon_sources,
-    uninstall_addon_package, AddonDetail, AddonOverview, AddonRepositoryEditor, AddonSettingEditor,
-    AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
+    save_addon_configuration, save_addon_repository, set_default_remote_stream_addon,
+    set_unverified_addon_sources, uninstall_addon_package, AddonDetail, AddonOverview,
+    AddonRepositoryEditor, AddonSettingEditor, AddonSettingRow, AvailableAddonRow,
+    InstalledAddonRow,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
@@ -117,6 +118,8 @@ fn AddonsSettingsIsland(
     let remove_action = Action::new(move |id: &String| remove_addon_repository(id.clone()));
     let unknown_sources_action =
         Action::new(move |enabled: &bool| set_unverified_addon_sources(*enabled));
+    let default_remote_stream_action =
+        Action::new(move |addon_id: &String| set_default_remote_stream_addon(addon_id.clone()));
     let refresh_all_action = Action::new(move |ids: &Vec<String>| {
         let ids = ids.clone();
         async move {
@@ -145,6 +148,9 @@ fn AddonsSettingsIsland(
     Effect::new(move |_| action_result(refresh_action.value().get(), overview, toast));
     Effect::new(move |_| action_result(remove_action.value().get(), overview, toast));
     Effect::new(move |_| action_result(unknown_sources_action.value().get(), overview, toast));
+    Effect::new(move |_| {
+        action_result(default_remote_stream_action.value().get(), overview, toast);
+    });
     Effect::new(move |_| action_result(refresh_all_action.value().get(), overview, toast));
 
     let view_name = initial_view.clone();
@@ -224,6 +230,7 @@ fn AddonsSettingsIsland(
                 remove_confirm_open,
                 unknown_sources_confirm_open,
                 unknown_sources_action,
+                default_remote_stream_action,
                 addon_file,
                 repository_file,
                 upload_addon,
@@ -274,6 +281,7 @@ fn manager_body(
     remove_confirm_open: RwSignal<bool>,
     unknown_sources_confirm_open: RwSignal<bool>,
     unknown_sources_action: Action<bool, Result<(), ServerFnError>>,
+    default_remote_stream_action: Action<String, Result<(), ServerFnError>>,
     addon_file: NodeRef<html::Input>,
     repository_file: NodeRef<html::Input>,
     upload_addon: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
@@ -347,6 +355,20 @@ fn manager_body(
         .collect::<Vec<_>>();
     let managed = data.repositories_are_deployment_managed;
     let unknown_enabled = data.unverified_sources_enabled;
+    // Only an enabled package that can actually play a remote stream may be the
+    // fallback, mirroring the check the save path enforces server-side.
+    let remote_stream_addons = data
+        .installed
+        .iter()
+        .filter(|item| {
+            item.enabled
+                && item
+                    .manifest
+                    .has_capability(ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1)
+        })
+        .map(|item| (item.addon_id.clone(), localized(&item.manifest.name)))
+        .collect::<Vec<_>>();
+    let default_remote_stream_addon = data.default_remote_stream_addon.clone().unwrap_or_default();
 
     view! {
         <section class=style::stats aria-label=tr(TextKey::Status)>
@@ -406,6 +428,26 @@ fn manager_body(
                         }
                     }
                 >{if unknown_enabled { tr(TextKey::Disable) } else { tr(TextKey::Enable) }}</button>
+            </article>
+
+            <article class=style::security_card data-testid="default-remote-stream-addon">
+                <div>
+                    <h2>{tr(TextKey::DefaultRemoteStreamAddon)}</h2>
+                    <p>{tr(TextKey::DefaultRemoteStreamAddonHelp)}</p>
+                </div>
+                <select
+                    class=style::select
+                    aria-label=tr(TextKey::DefaultRemoteStreamAddon)
+                    on:change=move |event| {
+                        default_remote_stream_action.dispatch(event_target_value(&event));
+                    }
+                >
+                    <option value="" selected=default_remote_stream_addon.is_empty()>{tr(TextKey::NoneOption)}</option>
+                    {remote_stream_addons.into_iter().map(|(addon_id, name)| {
+                        let selected = addon_id == default_remote_stream_addon;
+                        view! { <option value=addon_id selected=selected>{name}</option> }
+                    }).collect_view()}
+                </select>
             </article>
 
             <div class=style::source_actions>

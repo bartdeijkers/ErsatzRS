@@ -73,6 +73,14 @@ fn normalize_language_input(value: &str) -> String {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum TextKey {
     Addon,
+    ChangeAddon,
+    ChangeAddonHelp,
+    ChangeAddonPrompt,
+    AddonAutoDetect,
+    AddonAutoDetected,
+    AddonMediaListNoAddonForUrl,
+    DefaultRemoteStreamAddon,
+    DefaultRemoteStreamAddonHelp,
     Addons,
     AddonOverview,
     AddonUpdates,
@@ -1385,6 +1393,14 @@ pub enum TextKey {
 
 pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Addon,
+    TextKey::ChangeAddon,
+    TextKey::ChangeAddonHelp,
+    TextKey::ChangeAddonPrompt,
+    TextKey::AddonAutoDetect,
+    TextKey::AddonAutoDetected,
+    TextKey::AddonMediaListNoAddonForUrl,
+    TextKey::DefaultRemoteStreamAddon,
+    TextKey::DefaultRemoteStreamAddonHelp,
     TextKey::Addons,
     TextKey::AddonOverview,
     TextKey::AddonUpdates,

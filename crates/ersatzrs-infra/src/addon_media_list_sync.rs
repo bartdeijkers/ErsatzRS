@@ -1018,9 +1018,23 @@ where
             last_match: None,
             last_error: None,
         };
-        let list_id = self.local.save_list(&list).await?;
-        if chapter_input.trim().is_empty() {
-            self.expand_item_chapters(list_id, addon_id, &mut enumerated)
+        self.persist_enumerated(&list, &mut enumerated, requested_folder.as_deref())
+            .await
+    }
+
+    /// Persist one enumerated snapshot, then project and match it.
+    ///
+    /// Shared by import and by an add-on change so both paths agree on chapter
+    /// expansion, managed-library projection, and matching.
+    async fn persist_enumerated(
+        &self,
+        list: &AddonMediaList,
+        enumerated: &mut EnumeratedAddonMediaList,
+        requested_folder: Option<&str>,
+    ) -> Result<EntityId> {
+        let list_id = self.local.save_list(list).await?;
+        if list.chapter_input.trim().is_empty() {
+            self.expand_item_chapters(list_id, &list.addon_id, enumerated)
                 .await?;
         }
         let list = self
@@ -1035,12 +1049,112 @@ where
                 &list.name,
                 &list.source_url,
                 &list.chapter_input,
-                requested_folder.as_deref(),
+                requested_folder,
             )
             .await?;
         }
         self.local.match_list_items(list.id).await?;
         Ok(list.id)
+    }
+
+    /// Move one saved list to a different add-on and re-import it.
+    ///
+    /// List identity is `(AddonId, ProviderId)`, so the row is re-pointed at the
+    /// new identity before the snapshot is stored; otherwise the refresh would
+    /// insert a second list and orphan the original. Items are keyed per
+    /// provider, so operator item metadata is re-derived rather than migrated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the list is unknown, the new add-on cannot
+    /// enumerate the source, or another list already owns the resulting
+    /// identity.
+    pub async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
+        let row = sqlx::query(
+            r#"SELECT "AddonId", "SourceUrl", "ContentKindOverride", "ChapterInput"
+               FROM "AddonMediaList" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.local.pool)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id,
+        })?;
+        let current_addon_id: String = row.try_get("AddonId").repository()?;
+        let addon_id = addon_id.trim();
+        if current_addon_id == addon_id {
+            return Ok(());
+        }
+        let source_url: String = row.try_get("SourceUrl").repository()?;
+        let chapter_input = row
+            .try_get::<Option<String>, _>("ChapterInput")
+            .repository()?
+            .unwrap_or_default();
+        let content_kind_override = crate::repositories::common::decode_enum_column(
+            "AddonMediaListContentKind",
+            &row,
+            "ContentKindOverride",
+        )?;
+
+        // Enumerating first means a failing add-on leaves the existing list
+        // untouched instead of half-moved.
+        let mut enumerated = self
+            .provider
+            .enumerate(addon_id, &source_url, &chapter_input)
+            .await?;
+        let conflicting: Option<EntityId> = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "AddonMediaList"
+               WHERE "AddonId" = ? AND "ProviderId" = ? AND "Id" <> ?"#,
+        )
+        .bind(addon_id)
+        .bind(&enumerated.provider_id)
+        .bind(id)
+        .fetch_optional(&self.local.pool)
+        .await
+        .repository()?;
+        if let Some(conflicting) = conflicting {
+            return Err(RepositoryError::unavailable(
+                "change add-on media list add-on",
+                format!("list {conflicting} already uses this add-on for the same source"),
+            ));
+        }
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "AddonId" = ?, "ProviderId" = ?, "LastError" = NULL
+               WHERE "Id" = ?"#,
+        )
+        .bind(addon_id)
+        .bind(&enumerated.provider_id)
+        .bind(id)
+        .execute(&self.local.pool)
+        .await
+        .repository()?;
+
+        let list = AddonMediaList {
+            id,
+            addon_id: addon_id.to_owned(),
+            source_url,
+            provider_id: enumerated.provider_id.clone(),
+            name: enumerated.name.clone(),
+            description: enumerated.description.clone(),
+            item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
+            auto_refresh: false,
+            generate_playlist: false,
+            content_kind_override,
+            presentation_kind: ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+            requested_presentation_kind:
+                ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+            presentation_error: None,
+            chapter_input,
+            playlist_id: None,
+            last_update: None,
+            last_match: None,
+            last_error: None,
+        };
+        self.persist_enumerated(&list, &mut enumerated, None)
+            .await?;
+        Ok(())
     }
 
     async fn expand_item_chapters(

@@ -13,6 +13,15 @@ Previously saved lists remain visible with that failure in administration.
 The host forwards the URL parser's canonical serialization, so the add-on
 receives the same authority and host that passed validation.
 
+The add-on is optional in the administration dialog: when the selection is left
+empty, ErsatzRS resolves it from the URL host against installed packages'
+schema-v4 [`default_source_hosts`](addon-packages.md#permission-declarations)
+declarations, then against the configured default remote stream processor. The
+resolved add-on is stored with the list and can be changed afterwards from the
+list editor, which re-imports the list through the newly selected package. When
+nothing resolves, or when two packages claim the host equally, the operator must
+choose.
+
 Output is UTF-8 newline-delimited JSON. Blank lines are ignored. The first
 non-blank line must be one list record; every remaining line must be one item
 record. Unknown fields are rejected, and the bounded contract error names the

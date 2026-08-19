@@ -11,12 +11,15 @@ into synchronized Remote Stream media.
 ## Import a link
 
 1. Open **Media Sources > Add-on Lists**.
-2. Select **Beeld & Geluid** and paste one of these Schatkamer links:
-   a personal `/lijst/<uuid>` link, a `/serie/` or `/programma/` link, one
+2. Paste one of these Schatkamer links into **Add-on list URL**: a personal
+   `/lijst/<uuid>` link, a `/serie/` or `/programma/` link, one
    `/aflevering/<id>` link, or a `/zoeken` link with filters.
-3. Leave **Media kind** on automatic detection unless every result needs the
+3. Leave **Add-on** on *Determine from the URL*. ErsatzRS selects **Beeld &
+   Geluid** because the package declares `schatkamer.beeldengeluid.nl` as a host
+   it handles. Override the selection only when you want a different package.
+4. Leave **Media kind** on automatic detection unless every result needs the
    same override.
-4. Optionally choose a storage-folder name, then select **Add**.
+5. Optionally choose a storage-folder name, then select **Add**.
 
 ErsatzRS normalizes the URL, preserves search sorting and filters, traverses
 every result page, and queues the managed Remote Streams library scan. A failed

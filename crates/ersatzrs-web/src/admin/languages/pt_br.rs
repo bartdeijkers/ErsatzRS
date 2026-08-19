@@ -1097,6 +1097,14 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Complemento",
+        TextKey::ChangeAddon => "Alterar complemento",
+        TextKey::ChangeAddonHelp => "Selecione outro complemento para reimportar a lista por ele.",
+        TextKey::ChangeAddonPrompt => "A lista é reimportada pelo complemento selecionado. Metadados de itens, substituições e correções de capítulos são derivados novamente do novo provedor.",
+        TextKey::AddonAutoDetect => "Determinar pela URL",
+        TextKey::AddonAutoDetected => "Selecionado automaticamente a partir da URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Nenhum complemento instalado processa esta URL. Escolha um ou defina um processador padrão de transmissões remotas.",
+        TextKey::DefaultRemoteStreamAddon => "Processador padrão de transmissões remotas",
+        TextKey::DefaultRemoteStreamAddonHelp => "Usado para fontes HTTP e HTTPS que nenhum complemento instalado reivindica. O complemento ainda precisa ter permissão para contatar o host.",
         TextKey::Addons => "Complementos",
         TextKey::AddonOverview => "Visão geral",
         TextKey::AddonUpdates => "Atualizações",

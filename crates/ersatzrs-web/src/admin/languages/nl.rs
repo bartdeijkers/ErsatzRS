@@ -1074,6 +1074,14 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ChangeAddon => "Add-on wijzigen",
+        TextKey::ChangeAddonHelp => "Kies een andere add-on om de lijst daarmee opnieuw te importeren.",
+        TextKey::ChangeAddonPrompt => "De lijst wordt opnieuw geïmporteerd via de gekozen add-on. Itemmetadata, vervangingen en hoofdstukcorrecties worden opnieuw afgeleid van de nieuwe provider.",
+        TextKey::AddonAutoDetect => "Bepalen uit de URL",
+        TextKey::AddonAutoDetected => "Automatisch gekozen op basis van de URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Geen enkele geïnstalleerde add-on verwerkt deze URL. Kies er een of stel een standaard remote stream-verwerker in.",
+        TextKey::DefaultRemoteStreamAddon => "Standaard remote stream-verwerker",
+        TextKey::DefaultRemoteStreamAddonHelp => "Wordt gebruikt voor HTTP- en HTTPS-bronnen die geen enkele geïnstalleerde add-on claimt. De add-on moet de host nog steeds mogen benaderen.",
         TextKey::Addons => "Add-ons",
         TextKey::AddonOverview => "Overzicht",
         TextKey::AddonUpdates => "Updates",

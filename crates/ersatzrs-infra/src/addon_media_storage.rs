@@ -689,6 +689,7 @@ mod tests {
                 suggested_reference: None,
             }],
             media_list_storage: Some(storage.clone()),
+            default_source_hosts: Vec::new(),
             panels: Vec::new(),
         };
         (manifest, storage)

@@ -25,7 +25,7 @@ pub use ports::{
     RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
     RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
     ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
-    WindowsStartupStatus,
+    SourceAddonRouting, WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -125,6 +125,36 @@ impl ApplicationServices {
         enabled: bool,
     ) -> std::result::Result<(), AddonRuntimeError> {
         self.ports.addons().set_unverified_sources(enabled).await
+    }
+
+    /// Select the add-on that should process one operator-supplied source URL.
+    pub async fn resolve_source_addon(
+        &self,
+        url: String,
+        required_capabilities: Vec<String>,
+    ) -> std::result::Result<SourceAddonRouting, AddonRuntimeError> {
+        self.ports
+            .addons()
+            .resolve_source_addon(url, required_capabilities)
+            .await
+    }
+
+    /// The add-on used for source URLs no installed package claims.
+    pub async fn default_remote_stream_addon(
+        &self,
+    ) -> std::result::Result<Option<String>, AddonRuntimeError> {
+        self.ports.addons().default_remote_stream_addon().await
+    }
+
+    /// Persist or clear the default remote-stream add-on.
+    pub async fn set_default_remote_stream_addon(
+        &self,
+        addon_id: Option<String>,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports
+            .addons()
+            .set_default_remote_stream_addon(addon_id)
+            .await
     }
 
     pub async fn install_addon_from_package(
@@ -404,6 +434,14 @@ impl ApplicationServices {
         command: commands::UpdateAddonMediaList,
     ) -> Result<()> {
         commands::update_addon_media_list(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Move one Add-on media list to a different add-on and re-import it.
+    pub async fn change_addon_media_list_addon(
+        &self,
+        command: commands::ChangeAddonMediaListAddon,
+    ) -> Result<()> {
+        commands::change_addon_media_list_addon(command, self.ports.addon_media_lists()).await
     }
 
     /// Delete one Add-on media list.

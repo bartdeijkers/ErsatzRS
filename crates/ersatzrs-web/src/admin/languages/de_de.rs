@@ -362,6 +362,14 @@ impl LanguageStrings for GermanStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ChangeAddon => "Add-on ändern",
+        TextKey::ChangeAddonHelp => "Wählen Sie ein anderes Add-on, um die Liste darüber erneut zu importieren.",
+        TextKey::ChangeAddonPrompt => "Die Liste wird über das ausgewählte Add-on erneut importiert. Elementmetadaten, Ersetzungen und Kapitelkorrekturen werden erneut vom neuen Anbieter abgeleitet.",
+        TextKey::AddonAutoDetect => "Anhand der URL bestimmen",
+        TextKey::AddonAutoDetected => "Automatisch anhand der URL ausgewählt.",
+        TextKey::AddonMediaListNoAddonForUrl => "Kein installiertes Add-on verarbeitet diese URL. Wählen Sie eines aus oder legen Sie einen Standard-Verarbeiter für Remote-Streams fest.",
+        TextKey::DefaultRemoteStreamAddon => "Standard-Verarbeiter für Remote-Streams",
+        TextKey::DefaultRemoteStreamAddonHelp => "Wird für HTTP- und HTTPS-Quellen verwendet, die kein installiertes Add-on beansprucht. Das Add-on muss den Host weiterhin kontaktieren dürfen.",
         TextKey::Addons => "Add-ons",
         TextKey::AddonOverview => "Übersicht",
         TextKey::AddonUpdates => "Updates",

@@ -656,11 +656,14 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
       .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
       .last();
     await expect(addDialog).toBeVisible();
+    // ADR 0072: the URL comes first and the add-on selection below it starts
+    // empty, so an unclaimed host still needs an explicit choice.
+    await expect(addDialog.locator('select[name="addon_id"]')).toHaveValue('');
+    await addDialog.locator('input[name="source_url"]').fill(seed.importSourceUrl);
     await addDialog.locator('select[name="addon_id"]').selectOption(seed.addonId);
     await addDialog
       .locator('select[name="content_kind_override"]')
       .selectOption('movie');
-    await addDialog.locator('input[name="source_url"]').fill(seed.importSourceUrl);
     await addDialog.locator('input[name="folder_name"]').fill(`E2E Import ${testInfo.project.name}`);
     await addDialog.getByRole('button', { name: /^add$/i }).click();
     await expect.poll(() => sqlite(`

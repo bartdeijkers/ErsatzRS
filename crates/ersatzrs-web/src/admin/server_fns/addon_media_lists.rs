@@ -321,6 +321,41 @@ pub async fn list_addon_media_list_providers(
     Ok(providers)
 }
 
+/// The add-on that would process one operator source URL, if exactly one does.
+///
+/// The dialog calls this while the operator edits the URL so the resolved
+/// choice is visible before saving, and remains overridable.
+#[server]
+pub async fn resolve_addon_media_list_provider(
+    source_url: String,
+) -> Result<Option<AddonMediaListProviderRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let source_url = source_url.trim().to_owned();
+    if source_url.is_empty() {
+        return Ok(None);
+    }
+    let state = expect_context::<AppState>();
+    let routing = state
+        .application
+        .resolve_source_addon(
+            source_url,
+            MEDIA_LIST_CAPABILITIES
+                .iter()
+                .map(|capability| (*capability).to_owned())
+                .collect(),
+        )
+        .await
+        .map_err(ServerFnError::new)?;
+    let Some(addon_id) = routing.addon_id().map(str::to_owned) else {
+        return Ok(None);
+    };
+    Ok(list_addon_media_list_providers()
+        .await?
+        .into_iter()
+        .find(|provider| provider.addon_id == addon_id))
+}
+
 #[server]
 pub async fn list_addon_media_lists(
     page: u32,
@@ -655,6 +690,26 @@ pub async fn update_addon_media_list(form: AddonMediaListForm) -> Result<(), Ser
         .map_err(ServerFnError::new)
 }
 
+/// Move one saved list to a different add-on and re-import it through it.
+#[server]
+pub async fn change_addon_media_list_addon(id: i64, addon_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let logged_addon_id = addon_id.clone();
+    state
+        .application
+        .change_addon_media_list_addon(ersatzrs_app::commands::ChangeAddonMediaListAddon {
+            id,
+            addon_id,
+        })
+        .await
+        .inspect_err(|error| {
+            log_addon_media_list_failure("change-addon", Some(&logged_addon_id), Some(id), error);
+        })
+        .map_err(ServerFnError::new)
+}
+
 #[server]
 pub async fn delete_addon_media_list(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
@@ -688,6 +743,59 @@ fn log_addon_media_list_failure(
     );
 }
 
+/// Every contract version that can enumerate an add-on media list.
+#[cfg(feature = "ssr")]
+const MEDIA_LIST_CAPABILITIES: [&str; 3] = [
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1,
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2,
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3,
+];
+
+/// Select the add-on for one operator source URL when none was chosen.
+///
+/// Both the interactive dialog and the plain HTML form reach this seam, so the
+/// stored add-on is identical whichever path the operator used.
+#[cfg(feature = "ssr")]
+async fn resolve_media_list_addon(
+    state: &crate::host::state::AppState,
+    source_url: &str,
+) -> ersatzrs_app::Result<String> {
+    use ersatzrs_app::SourceAddonRouting;
+
+    let routing = state
+        .application
+        .resolve_source_addon(
+            source_url.to_owned(),
+            MEDIA_LIST_CAPABILITIES
+                .iter()
+                .map(|capability| (*capability).to_owned())
+                .collect(),
+        )
+        .await
+        .map_err(|error| ersatzrs_app::ApplicationError::Validation {
+            field: "addon_id",
+            message: error.to_string(),
+        })?;
+    match routing {
+        SourceAddonRouting::Declared(addon_id) | SourceAddonRouting::Default(addon_id) => {
+            Ok(addon_id)
+        }
+        SourceAddonRouting::None => Err(ersatzrs_app::ApplicationError::Validation {
+            field: "addon_id",
+            message: "No installed add-on handles this URL".to_owned(),
+        }),
+        SourceAddonRouting::Ambiguous(addon_ids) => {
+            Err(ersatzrs_app::ApplicationError::Validation {
+                field: "addon_id",
+                message: format!(
+                    "Several add-ons handle this URL; choose one: {}",
+                    addon_ids.join(", ")
+                ),
+            })
+        }
+    }
+}
+
 #[cfg(feature = "ssr")]
 pub async fn add_addon_media_list_with_state(
     state: &crate::host::state::AppState,
@@ -697,6 +805,13 @@ pub async fn add_addon_media_list_with_state(
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
 ) -> ersatzrs_app::Result<i64> {
+    // An omitted choice is resolved from the URL rather than rejected, so the
+    // operator only has to name an add-on when nothing claims the host.
+    let addon_id = if addon_id.trim().is_empty() {
+        resolve_media_list_addon(state, source_url.trim()).await?
+    } else {
+        addon_id
+    };
     let logged_addon_id = addon_id.clone();
     let list_id = state
         .application

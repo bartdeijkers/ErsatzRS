@@ -356,6 +356,14 @@ impl LanguageStrings for FrenchStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Extension",
+        TextKey::ChangeAddon => "Changer d'extension",
+        TextKey::ChangeAddonHelp => "Sélectionnez une autre extension pour réimporter la liste avec celle-ci.",
+        TextKey::ChangeAddonPrompt => "La liste est réimportée via l'extension sélectionnée. Les métadonnées des éléments, les remplacements et les corrections de chapitres sont de nouveau dérivés du nouveau fournisseur.",
+        TextKey::AddonAutoDetect => "Déterminer d'après l'URL",
+        TextKey::AddonAutoDetected => "Sélectionnée automatiquement d'après l'URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Aucune extension installée ne traite cette URL. Choisissez-en une ou définissez un processeur de flux distant par défaut.",
+        TextKey::DefaultRemoteStreamAddon => "Processeur de flux distant par défaut",
+        TextKey::DefaultRemoteStreamAddonHelp => "Utilisé pour les sources HTTP et HTTPS qu'aucune extension installée ne revendique. L'extension doit toujours être autorisée à contacter l'hôte.",
         TextKey::Addons => "Extensions",
         TextKey::AddonOverview => "Vue d’ensemble",
         TextKey::AddonUpdates => "Mises à jour",

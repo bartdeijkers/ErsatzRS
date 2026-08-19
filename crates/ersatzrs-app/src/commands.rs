@@ -4368,6 +4368,15 @@ pub struct UpdateAddonMediaList {
     pub chapter_input: String,
 }
 
+/// Move one Add-on media list to a different add-on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChangeAddonMediaListAddon {
+    /// Persisted Add-on media list identity.
+    pub id: EntityId,
+    /// Add-on that should process the list from now on.
+    pub addon_id: String,
+}
+
 /// Delete one Add-on media list and any generated playlist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeleteAddonMediaList {
@@ -4478,6 +4487,26 @@ pub async fn update_addon_media_list(
             command.content_kind_override,
             command.chapter_input.trim(),
         )
+        .await
+        .map_err(Into::into)
+}
+
+/// Move one Add-on media list to a different add-on and re-import it.
+///
+/// # Errors
+///
+/// Returns a validation error for an empty add-on, or a repository error when
+/// the new add-on cannot enumerate the source.
+pub async fn change_addon_media_list_addon(
+    command: ChangeAddonMediaListAddon,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.addon_id.trim().is_empty() {
+        return validation_error("addon_id", "An add-on is required");
+    }
+    repository
+        .change_addon(command.id, command.addon_id.trim())
         .await
         .map_err(Into::into)
 }
@@ -5902,16 +5931,17 @@ mod tests {
 
     use super::{
         add_addon_media_list, add_default_collection_item, add_media_item_to_collection,
-        create_playlist_group, delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune,
-        normalize_channel_form, normalize_channel_number_updates, normalize_legacy_nvenc_preset,
-        normalize_schedule_item, normalized_hdr_metadata, parse_hdr_content_light,
-        parse_hdr_mastering_display, request_library_scan, request_playout_build,
-        request_scheduled_library_scan, request_show_scan, save_collection, save_ffmpeg_profile,
-        save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
-        save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
-        validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
-        validate_schedule_items, validate_template_group_name, validate_template_name,
-        validate_watermark, AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm,
+        change_addon_media_list_addon, create_playlist_group, delete_playlist,
+        finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
+        normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
+        normalized_hdr_metadata, parse_hdr_content_light, parse_hdr_mastering_display,
+        request_library_scan, request_playout_build, request_scheduled_library_scan,
+        request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
+        save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
+        save_rerun_collection, save_smart_collection, set_windows_startup, validate_channel_form,
+        validate_channel_number_updates, validate_output_dynamic_range, validate_schedule_items,
+        validate_template_group_name, validate_template_name, validate_watermark,
+        AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm, ChangeAddonMediaListAddon,
         ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
         RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
         RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
@@ -5937,6 +5967,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingAddonMediaListRepository {
         added_source_urls: Mutex<Vec<String>>,
+        changed_addons: Mutex<Vec<(EntityId, String)>>,
     }
 
     #[async_trait]
@@ -6002,6 +6033,18 @@ mod tests {
         }
 
         async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn change_addon(
+            &self,
+            id: EntityId,
+            addon_id: &str,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            self.changed_addons
+                .lock()
+                .expect("changed add-ons")
+                .push((id, addon_id.to_owned()));
             Ok(())
         }
 
@@ -7060,6 +7103,41 @@ mod tests {
                 .expect("added source URLs")
                 .is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn changing_the_add_on_of_a_list_validates_before_touching_the_repository() {
+        let repository = RecordingAddonMediaListRepository::default();
+        for (id, addon_id) in [(0, "org.ersatzrs.addon.fixture"), (1, "  ")] {
+            change_addon_media_list_addon(
+                ChangeAddonMediaListAddon {
+                    id,
+                    addon_id: addon_id.to_owned(),
+                },
+                &repository,
+            )
+            .await
+            .expect_err("invalid change request");
+        }
+        assert!(repository
+            .changed_addons
+            .lock()
+            .expect("changed add-ons")
+            .is_empty());
+
+        change_addon_media_list_addon(
+            ChangeAddonMediaListAddon {
+                id: 7,
+                addon_id: "  org.ersatzrs.addon.fixture  ".to_owned(),
+            },
+            &repository,
+        )
+        .await
+        .expect("add-on change");
+        assert_eq!(
+            *repository.changed_addons.lock().expect("changed add-ons"),
+            [(7, "org.ersatzrs.addon.fixture".to_owned())]
+        );
     }
 
     // ── ADR 0064: HDR10 output validation ───────────────────────────────

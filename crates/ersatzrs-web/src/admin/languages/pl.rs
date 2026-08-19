@@ -1083,6 +1083,14 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Dodatek",
+        TextKey::ChangeAddon => "Zmień dodatek",
+        TextKey::ChangeAddonHelp => "Wybierz inny dodatek, aby ponownie zaimportować listę przy jego użyciu.",
+        TextKey::ChangeAddonPrompt => "Lista zostanie ponownie zaimportowana przy użyciu wybranego dodatku. Metadane pozycji, zamienniki i poprawki rozdziałów zostaną ponownie ustalone przez nowego dostawcę.",
+        TextKey::AddonAutoDetect => "Ustal na podstawie adresu URL",
+        TextKey::AddonAutoDetected => "Wybrany automatycznie na podstawie adresu URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Żaden zainstalowany dodatek nie obsługuje tego adresu URL. Wybierz dodatek lub ustaw domyślny procesor strumieni zdalnych.",
+        TextKey::DefaultRemoteStreamAddon => "Domyślny procesor strumieni zdalnych",
+        TextKey::DefaultRemoteStreamAddonHelp => "Używany dla źródeł HTTP i HTTPS, do których nie zgłasza się żaden zainstalowany dodatek. Dodatek nadal musi mieć prawo łączenia się z tym hostem.",
         TextKey::Addons => "Dodatki",
         TextKey::AddonOverview => "Przegląd",
         TextKey::AddonUpdates => "Aktualizacje",

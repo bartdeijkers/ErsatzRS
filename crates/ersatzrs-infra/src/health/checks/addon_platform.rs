@@ -52,11 +52,24 @@ impl HealthCheck for AddonPlatformHealthCheck {
         }
 
         let host_version = Version::parse(env!("CARGO_PKG_VERSION")).ok();
+        let mut usable_default_addons = Vec::new();
         for row in installations {
+            if default_addon_is_usable(&row) {
+                if let Ok(addon_id) = row.try_get::<String, _>("AddonId") {
+                    usable_default_addons.push(addon_id);
+                }
+            }
             let (failure, warning) =
                 installation_findings(&self.pool, &row, host_version.as_ref()).await;
             failures.extend(failure);
             warnings.extend(warning);
+        }
+        // A configured default that cannot run is silent otherwise: nothing
+        // fails until an operator adds a source URL no add-on claims.
+        if let Some(finding) =
+            default_remote_stream_addon_finding(&self.pool, &usable_default_addons).await
+        {
+            warnings.push(finding);
         }
 
         if !failures.is_empty() {
@@ -79,6 +92,40 @@ impl HealthCheck for AddonPlatformHealthCheck {
         }
         Ok(HealthCheckResult::pass(self.title()).with_link("/settings/addons"))
     }
+}
+
+/// Whether one installation could serve as the default remote-stream add-on.
+fn default_addon_is_usable(row: &DbRow) -> bool {
+    let enabled = row
+        .try_get::<i64, _>("Enabled")
+        .is_ok_and(|value| value != 0);
+    if !enabled {
+        return false;
+    }
+    row.try_get::<String, _>("ManifestJson")
+        .ok()
+        .and_then(|json| serde_json::from_str::<AddonManifest>(&json).ok())
+        .is_some_and(|manifest| {
+            manifest.has_capability(ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1)
+        })
+}
+
+/// Report a configured default remote-stream add-on that cannot be used.
+async fn default_remote_stream_addon_finding(pool: &Pool<Db>, usable: &[String]) -> Option<String> {
+    let configured =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(crate::addons::DEFAULT_REMOTE_STREAM_ADDON_KEY)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()?;
+    let configured = configured.trim();
+    if configured.is_empty() || usable.iter().any(|addon_id| addon_id == configured) {
+        return None;
+    }
+    Some(format!(
+        "default remote stream processor '{configured}' is not installed, not enabled, or cannot play remote streams"
+    ))
 }
 
 fn repository_has_state(row: &DbRow) -> bool {

@@ -530,6 +530,33 @@ impl AddonRuntimeError {
     }
 }
 
+/// Which add-on the host selected for one operator source URL.
+///
+/// `Ambiguous` is deliberately distinct from `None`: several packages claim the
+/// host equally well, so the operator must choose rather than the host guessing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SourceAddonRouting {
+    /// A package declares this host as one it handles.
+    Declared(String),
+    /// No package claims the host; the configured default accepted it.
+    Default(String),
+    /// Nothing claims the host and no default applies.
+    None,
+    /// Several packages claim the host equally well.
+    Ambiguous(Vec<String>),
+}
+
+impl SourceAddonRouting {
+    /// The selected add-on, if exactly one applies.
+    #[must_use]
+    pub fn addon_id(&self) -> Option<&str> {
+        match self {
+            Self::Declared(addon_id) | Self::Default(addon_id) => Some(addon_id.as_str()),
+            Self::None | Self::Ambiguous(_) => None,
+        }
+    }
+}
+
 /// Signed catalog, package, configuration, and process lifecycle operations.
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
@@ -550,6 +577,17 @@ pub trait AddonRuntime: Send + Sync {
         addon_id: String,
     ) -> Result<(), AddonRuntimeError>;
     async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError>;
+    /// Select the add-on that should process one operator-supplied source URL.
+    async fn resolve_source_addon(
+        &self,
+        url: String,
+        required_capabilities: Vec<String>,
+    ) -> Result<SourceAddonRouting, AddonRuntimeError>;
+    async fn default_remote_stream_addon(&self) -> Result<Option<String>, AddonRuntimeError>;
+    async fn set_default_remote_stream_addon(
+        &self,
+        addon_id: Option<String>,
+    ) -> Result<(), AddonRuntimeError>;
     async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
     async fn install_repository_from_package(
         &self,

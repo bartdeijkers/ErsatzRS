@@ -237,6 +237,12 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
+    /// Move one list to a different add-on and re-import it through that
+    /// add-on.
+    ///
+    /// Item identity is provider-scoped, so items enumerated by the new add-on
+    /// replace the previous ones rather than being migrated.
+    async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()>;
     /// Update refresh and generated-playlist settings.
     async fn update_settings(
         &self,

@@ -56,6 +56,8 @@ pub const OFFICIAL_REPOSITORY_INDEX_URL: &str =
     "https://bartdeijkers.github.io/ErsatzRS-addons/index-v1.json";
 /// Persisted opt-in required for unsigned repositories and local packages.
 pub const ALLOW_UNVERIFIED_SOURCES_KEY: &str = "addons.allow_unverified_sources";
+/// Configuration key holding the add-on used when no package claims a host.
+pub const DEFAULT_REMOTE_STREAM_ADDON_KEY: &str = "addons.default_remote_stream_addon";
 
 const MAX_REPOSITORY_FILE_BYTES: usize = 256 * 1024;
 const MAX_REPOSITORY_PACKAGE_BYTES: usize = 256 * 1024;
@@ -420,6 +422,78 @@ pub async fn set_unverified_sources_enabled(
         sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
             .bind(ALLOW_UNVERIFIED_SOURCES_KEY)
             .bind(value)
+            .execute(pool)
+            .await
+            .map_err(database_error)?;
+    }
+    Ok(())
+}
+
+/// The add-on used for operator source URLs no package claims, if configured.
+///
+/// # Errors
+///
+/// Returns an error when the persisted configuration cannot be read.
+pub async fn default_remote_stream_addon(pool: &DbPool) -> Result<Option<String>, AddonError> {
+    let value =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(DEFAULT_REMOTE_STREAM_ADDON_KEY)
+            .fetch_optional(pool)
+            .await
+            .map_err(database_error)?;
+    Ok(value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty()))
+}
+
+/// Persist or clear the default remote-stream add-on.
+///
+/// An empty selection clears the key rather than storing a blank value, so a
+/// cleared default is indistinguishable from one that was never set.
+///
+/// # Errors
+///
+/// Returns an error when the add-on is unusable or cannot be persisted.
+pub async fn set_default_remote_stream_addon(
+    pool: &DbPool,
+    addon_id: Option<&str>,
+) -> Result<(), AddonError> {
+    let addon_id = addon_id.map(str::trim).filter(|value| !value.is_empty());
+    let Some(addon_id) = addon_id else {
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(DEFAULT_REMOTE_STREAM_ADDON_KEY)
+            .execute(pool)
+            .await
+            .map_err(database_error)?;
+        return Ok(());
+    };
+    validate_addon_id(addon_id).map_err(|error| AddonError::Validation(error.to_string()))?;
+    let installed = load_installed_addon(pool, addon_id)
+        .await?
+        .ok_or_else(|| AddonError::NotFound(format!("add-on '{addon_id}' is not installed")))?;
+    if !installed.enabled {
+        return Err(AddonError::Validation(format!(
+            "add-on '{addon_id}' is not enabled"
+        )));
+    }
+    if !installed
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+    {
+        return Err(AddonError::Validation(format!(
+            "add-on '{addon_id}' does not implement {CAPABILITY_REMOTE_STREAM_PLAY_V1}"
+        )));
+    }
+    let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
+        .bind(addon_id)
+        .bind(DEFAULT_REMOTE_STREAM_ADDON_KEY)
+        .execute(pool)
+        .await
+        .map_err(database_error)?;
+    if updated.rows_affected() == 0 {
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(DEFAULT_REMOTE_STREAM_ADDON_KEY)
+            .bind(addon_id)
             .execute(pool)
             .await
             .map_err(database_error)?;
@@ -3675,6 +3749,7 @@ mod tests {
             permissions: AddonPermissions::default(),
             settings: Vec::new(),
             media_list_storage: None,
+            default_source_hosts: Vec::new(),
             panels: Vec::new(),
         }
     }

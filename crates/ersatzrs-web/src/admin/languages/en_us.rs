@@ -360,6 +360,14 @@ impl LanguageStrings for EnglishStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Add-on",
+        TextKey::ChangeAddon => "Change add-on",
+        TextKey::ChangeAddonHelp => "Select a different add-on to re-import the list through it.",
+        TextKey::ChangeAddonPrompt => "The list is re-imported through the selected add-on. Item metadata, replacements, and chapter corrections are derived again from the new provider.",
+        TextKey::AddonAutoDetect => "Determine from the URL",
+        TextKey::AddonAutoDetected => "Selected automatically from the URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "No installed add-on handles this URL. Choose one, or set a default remote stream processor.",
+        TextKey::DefaultRemoteStreamAddon => "Default remote stream processor",
+        TextKey::DefaultRemoteStreamAddonHelp => "Used for HTTP and HTTPS sources that no installed add-on claims. The add-on must still be permitted to contact the host.",
         TextKey::Addons => "Add-ons",
         TextKey::AddonOverview => "Overview",
         TextKey::AddonUpdates => "Updates",

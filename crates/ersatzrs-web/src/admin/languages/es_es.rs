@@ -366,6 +366,14 @@ impl LanguageStrings for SpanishStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Complemento",
+        TextKey::ChangeAddon => "Cambiar complemento",
+        TextKey::ChangeAddonHelp => "Elige otro complemento para volver a importar la lista con él.",
+        TextKey::ChangeAddonPrompt => "La lista se vuelve a importar mediante el complemento seleccionado. Los metadatos de los elementos, los reemplazos y las correcciones de capítulos se derivan otra vez del nuevo proveedor.",
+        TextKey::AddonAutoDetect => "Determinar a partir de la URL",
+        TextKey::AddonAutoDetected => "Seleccionado automáticamente a partir de la URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Ningún complemento instalado procesa esta URL. Elige uno o define un procesador predeterminado de transmisiones remotas.",
+        TextKey::DefaultRemoteStreamAddon => "Procesador predeterminado de transmisiones remotas",
+        TextKey::DefaultRemoteStreamAddonHelp => "Se usa para orígenes HTTP y HTTPS que ningún complemento instalado reclama. El complemento aún debe tener permiso para contactar al host.",
         TextKey::Addons => "Complementos",
         TextKey::AddonOverview => "Resumen",
         TextKey::AddonUpdates => "Actualizaciones",

@@ -78,7 +78,7 @@ notes  = 'Focused Chromium and Firefox proof on 2026-08-10 covers hand-authored 
 name   = 'AddonsSettingsPage'
 status = '✅'
 routes = ['/settings/addons']
-notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup.'
+notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup. 2026-08-19: the Sources view gained the default remote stream processor selector (ADR 0072); its selection persists through `ConfigElement` and needs a browser proof alongside the unknown-sources toggle.'
 
 [[page]]
 name   = 'AddonDetailPage'
@@ -204,13 +204,13 @@ notes  = 'List island; hydrated copy/delete smoke clean.'
 name   = 'AddonMediaListsPage'
 status = '✅'
 routes = ['/media/addon-lists']
-notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real v2 add-on import with content override plus Search/Match/Delete actions in Chromium and Firefox without hydration errors.'
+notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real v2 add-on import with content override plus Search/Match/Delete actions in Chromium and Firefox without hydration errors. 2026-08-19 (ADR 0072): the add dialog now leads with the URL and resolves the optional add-on selection from its host; the spec drives the reordered fields and asserts the select fills itself.'
 
 [[page]]
 name   = 'AddonMediaListEditorPage'
 status = '✅'
 routes = ['/media/addon-lists/:id']
-notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent.'
+notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent. 2026-08-19 (ADR 0072): the editor gained a change-add-on selector with a confirmation modal; a browser proof of the confirmed re-import is still outstanding.'
 
 [[page]]
 name   = 'AddonMediaListItemPage'

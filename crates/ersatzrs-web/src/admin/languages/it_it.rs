@@ -364,6 +364,14 @@ impl LanguageStrings for ItalianStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Componente aggiuntivo",
+        TextKey::ChangeAddon => "Cambia componente aggiuntivo",
+        TextKey::ChangeAddonHelp => "Seleziona un altro componente aggiuntivo per reimportare l'elenco tramite esso.",
+        TextKey::ChangeAddonPrompt => "L'elenco viene reimportato tramite il componente aggiuntivo selezionato. Metadati degli elementi, sostituzioni e correzioni dei capitoli vengono ricavati di nuovo dal nuovo fornitore.",
+        TextKey::AddonAutoDetect => "Determina dall'URL",
+        TextKey::AddonAutoDetected => "Selezionato automaticamente in base all'URL.",
+        TextKey::AddonMediaListNoAddonForUrl => "Nessun componente aggiuntivo installato gestisce questo URL. Scegline uno o imposta un elaboratore predefinito per i flussi remoti.",
+        TextKey::DefaultRemoteStreamAddon => "Elaboratore predefinito per i flussi remoti",
+        TextKey::DefaultRemoteStreamAddonHelp => "Usato per le origini HTTP e HTTPS che nessun componente aggiuntivo installato rivendica. Il componente deve comunque essere autorizzato a contattare l'host.",
         TextKey::Addons => "Componenti aggiuntivi",
         TextKey::AddonOverview => "Panoramica",
         TextKey::AddonUpdates => "Aggiornamenti",

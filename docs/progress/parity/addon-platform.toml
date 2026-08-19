@@ -2,7 +2,7 @@ feature    = 'Repository-backed add-on platform with tiered trust'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066', '0067']
+adr        = ['0051', '0066', '0067', '0072']
 
 summary = '''
 The host implementation is substantial: strict package and catalog schemas,
@@ -31,6 +31,16 @@ Installed, Browse, Updates, and Sources views plus canonical
 `/settings/addons/{addon_id}` detail pages for metadata, permissions,
 configuration, readiness, source offers, and lifecycle actions.
 
+Schema-v4 add-ons can declare `default_source_hosts`: the hosts a package
+offers to process, as a statement separate from `permissions.network_hosts`
+(which records what it may contact and may legally be `*`). ErsatzRS routes an
+operator-supplied source URL to the most specific claim, refuses to guess
+between equal claims, and otherwise falls back to an administrator-configured
+default remote stream processor for HTTP(S) hosts that package is permitted to
+contact. Resolution runs when a list is written, is visible and overridable in
+the dialog, and can be changed afterwards; the Remote Stream playback path is
+deliberately untouched. See ADR 0072.
+
 Schema-v3 add-ons can declare host-owned media-list storage. Enabling such an
 add-on resolves its configured absolute path or a profile-relative default,
 creates an idempotent managed Local Media Source, and projects every saved
@@ -38,6 +48,22 @@ add-on list as a separately scanned library whose name and folder derive from
 the list. The source, libraries, manifest files, bootstrap reconciliation, and
 health checks remain host-owned; disabling does not delete user-visible files.
 '''
+
+[[debt]]
+id          = 'channel-package-feed-import'
+description = 'Accept an uploaded channel package (.zip with artwork, graphics elements, channel name, and a feed URL) under /channels, route its feed items through the ADR 0072 source resolver, import them into libraries without operator input, and fill metadata gaps through the existing `remote-stream.item.v2` enrichment contract.'
+discovered  = '2026-08-19'
+evidence    = 'ADR 0072 records the resolver as the enabling step and the channel package as deliberate future work. `ersatzrs_infra::addon_source_routing::resolve_source_addon` is provider-neutral and already callable from an importer; no feed format, upload surface, or /channels UI exists yet.'
+adr         = '0072'
+resolved    = false
+
+[[debt]]
+id          = 'default-source-hosts-not-declared-by-official-packages'
+description = 'Declare `default_source_hosts` in the official Beeld & Geluid package (schema v4) so Schatkamer URLs resolve without relying on the administrator-configured default remote stream processor.'
+discovered  = '2026-08-19'
+evidence    = 'The host accepts and ranks the field, and the fallback path resolves schatkamer.beeldengeluid.nl through the configured default today. The package lives in the separate add-on repository and must be published after a host that supports manifest schema v4, because older hosts reject a v4 manifest.'
+adr         = '0072'
+resolved    = false
 
 [[debt]]
 id          = 'official-addon-repository-is-not-published'

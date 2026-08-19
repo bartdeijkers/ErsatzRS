@@ -24,6 +24,24 @@ release section when tagging a release.
 
 ### Added
 
+- Add-on packages can declare `default_source_hosts` (manifest schema v4): the
+  hosts they offer to process, as a statement separate from the hosts they are
+  permitted to contact. ErsatzRS uses it to select an add-on for an
+  operator-supplied source URL automatically, preferring the most specific claim
+  and asking the operator when two packages claim a host equally well.
+
+- **Settings > Add-ons > Sources** gained a **Default remote stream processor**.
+  It supplies the add-on for HTTP and HTTPS source URLs that no installed
+  package claims, and Health Checks now report a configured default that is
+  missing, disabled, or unable to play remote streams. Remote Stream definitions
+  without `addon:` are still played directly by FFmpeg; the default does not
+  change playback.
+
+- The add-on of a saved add-on list can now be changed from the list editor.
+  ErsatzRS enumerates through the newly selected package first, refuses a move
+  that would collide with an existing list, and confirms with the operator that
+  item metadata, replacements, and chapter corrections are derived again.
+
 - Streaming add-ons can now supply bounded chapter markers through
   `remote-stream.item.v2`. ErsatzRS keeps provider and operator text separate,
   gives manual corrections precedence, offers **Restore provider chapters**,
@@ -79,6 +97,12 @@ release section when tagging a release.
   no provider call and leaves no half-imported list behind.
 
 ### Changed
+
+- Adding an add-on list now starts with the URL. The add-on selection moved
+  below it and became optional: leave it on *Determine from the URL* and
+  ErsatzRS fills it in from the URL host, visibly and overridably. The plain
+  HTML form path resolves the same way and reports an unroutable URL with its
+  own message instead of a generic failure.
 
 - `plans/` now holds only work that still needs doing. Sixteen fully
   implemented plans were pruned once their substance lived in

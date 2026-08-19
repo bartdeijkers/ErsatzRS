@@ -103,6 +103,27 @@ adr         = '0068'
 evidence    = 'The working tree has corrected metadata binds, four-kind NFO round trips, complete managed-pair failure and healing coverage, Remote Stream search/XMLTV classification, one shared Local replacement resolver, bounded provider values, omission tombstones, and Chromium/Firefox proof for import/edit overrides plus the replacement lifecycle. plans/addon-nfo-sidecars-and-local-replacements-closeout.md retains only the live MySQL migration and packaged Windows execution gaps.'
 
 [[debt]]
+id          = 'addon-list-media-kind-is-list-wide'
+description = 'The descriptive media kind of an add-on list is one list-wide override, so a mixed list cannot classify its entries. It must move to each item, default to Auto, and be derived from the typed record the add-on already enumerates, with the list-wide value retained only as an explicit bulk default.'
+discovered  = '2026-08-19'
+evidence    = '`AddonMediaList.ContentKindOverride` is the only stored classification; `AddonMediaListItem` has no content-kind column, and the add dialog plus list editor expose the override at list scope. `media-list.list.v3` already emits typed movie/show/season/episode/remote-stream records that a per-item default could be derived from.'
+resolved    = false
+
+[[debt]]
+id          = 'addon-list-presentation-covers-two-of-seven-library-kinds'
+description = 'An imported add-on list can only be presented as Remote Streams or a Television Show. The operator-facing collection type must offer Auto plus every LibraryMediaKind — TV Shows, Movies, Music Videos, Other Videos, Songs, Images, Remote Streams — with a real projection behind each.'
+discovered  = '2026-08-19'
+evidence    = '`AddonMediaListPresentationKind` has exactly `RemoteStreams` and `TelevisionShow`, and `AddonMediaListTelevisionShow`/`AddonMediaListItemEpisode` are the only projection link tables. ADR 0071 owns the one implemented projection shape that the remaining five must follow. Planned in plans/addon-list-editor-item-classification.md.'
+resolved    = false
+
+[[debt]]
+id          = 'addon-list-items-are-one-flat-table'
+description = 'The list editor shows every item in one Local Replacement table, so an operator cannot see what is unplayable without reading the whole list. Items must split into counted non-playable, unknown, and playable sections, each independently paged and each offering local replacement.'
+discovered  = '2026-08-19'
+evidence    = '`list_addon_media_list_items` returns every row for a list with no availability filter, page, or page size, and the editor renders one unpaged table headed Local Replacement. `AddonMediaListItemAvailability` already distinguishes Available, Unavailable, and Unknown. Planned in plans/addon-list-editor-item-classification.md.'
+resolved    = false
+
+[[debt]]
 id          = 'addon-provider-supplied-chapters'
 description = 'Chapter markers must be retyped by an administrator even when the provider already publishes them. The host derives fragments from operator-authored ChapterInput text only; no list record field carries provider chapter markers, and the fragment fields are frozen to the v3 list contracts that the yt-dlp package does not declare.'
 discovered  = '2026-08-17'

@@ -103,6 +103,11 @@ Duplicate programmes keep their first position. Programmes that Schatkamer
 marks unavailable are skipped with a bounded diagnostic. Private lists that
 require a signed-in browser session are not supported.
 
+A Remote Stream definition without `addon:` is always played directly by
+FFmpeg. The default remote stream processor under **Settings > Add-ons >
+Sources** does not change that; it only supplies the add-on when you add an
+add-on list or a Remote Stream playlist whose URL no installed package claims.
+
 Do not place executable commands or secrets in Remote Stream YAML. The legacy
 `script:` field and the old extractor setting are rejected. Add-on secret
 settings store only an environment-variable name or secret-file path; the

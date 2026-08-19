@@ -5,6 +5,7 @@ pub mod addon_media_list;
 pub mod addon_media_list_sync;
 pub mod addon_media_nfo;
 pub mod addon_media_storage;
+pub mod addon_source_routing;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;

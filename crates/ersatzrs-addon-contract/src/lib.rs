@@ -11,7 +11,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 /// Current package-manifest schema. Schema v1 remains readable.
-pub const ADDON_MANIFEST_VERSION: u32 = 3;
+pub const ADDON_MANIFEST_VERSION: u32 = 4;
 /// Current repository-index schema. Schema v1 remains readable.
 pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 /// Health capability implemented by every executable add-on.
@@ -670,6 +670,14 @@ pub struct AddonManifest {
     /// Optional host-managed storage for file-backed media-list libraries.
     #[serde(default)]
     pub media_list_storage: Option<AddonMediaListStorage>,
+    /// Hosts this package claims as their default operator-source handler.
+    ///
+    /// This is a narrower statement than `permissions.network_hosts`: that field
+    /// records which hosts the package is permitted to contact, while this one
+    /// records which hosts it offers to process on the operator's behalf. Every
+    /// entry must also be permitted, and no entry may claim every host.
+    #[serde(default)]
+    pub default_source_hosts: Vec<String>,
     /// Host-rendered declarative panels.
     #[serde(default)]
     pub panels: Vec<AddonPanel>,
@@ -767,6 +775,8 @@ impl AddonManifest {
             }
         }
 
+        self.validate_default_source_hosts()?;
+
         let mut panel_ids = BTreeSet::new();
         if !self.panels.is_empty() && !self.has_capability(CAPABILITY_DECLARATIVE_PANEL_V1) {
             return invalid("panels", "declarative panels require declarative-panel.v1");
@@ -786,6 +796,48 @@ impl AddonManifest {
         self.entrypoints
             .get(rid)
             .or_else(|| self.entrypoints.get("any"))
+    }
+
+    /// Validate the default-handler host claims against schema and permissions.
+    fn validate_default_source_hosts(&self) -> Result<(), ContractError> {
+        if !self.default_source_hosts.is_empty() {
+            if self.manifest_version < 4 {
+                return invalid("default_source_hosts", "requires manifest schema version 4");
+            }
+            if self.default_source_hosts.len() > 100 {
+                return invalid("default_source_hosts", "too many declared hosts");
+            }
+            let mut claimed = BTreeSet::new();
+            for host in &self.default_source_hosts {
+                if !is_valid_host_pattern(host) {
+                    return invalid("default_source_hosts", "contains an invalid host pattern");
+                }
+                if claims_every_host(host) {
+                    return invalid(
+                        "default_source_hosts",
+                        "must not claim every host or a whole top-level domain",
+                    );
+                }
+                if !claimed.insert(host.to_ascii_lowercase()) {
+                    return invalid("default_source_hosts", "duplicate host");
+                }
+                // An empty declaration permits every host, mirroring
+                // `validate_operator_source_url`, so nothing needs covering.
+                if !self.permissions.network_hosts.is_empty()
+                    && !self
+                        .permissions
+                        .network_hosts
+                        .iter()
+                        .any(|permitted| host_pattern_covers(permitted, host))
+                {
+                    return invalid(
+                        "default_source_hosts",
+                        format!("host '{host}' is not declared in permissions.network_hosts"),
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Whether the package declares a capability.
@@ -974,14 +1026,11 @@ impl AddonPermissions {
         if self.network_hosts.len() > 100 || self.external_commands.len() > 100 {
             return invalid("permissions", "too many declared permissions");
         }
-        if self.network_hosts.iter().any(|host| {
-            host.is_empty()
-                || host.len() > 255
-                || host.contains("//")
-                || host.contains('/')
-                || host.contains(char::is_whitespace)
-                || host.chars().any(char::is_control)
-        }) {
+        if !self
+            .network_hosts
+            .iter()
+            .all(|host| is_valid_host_pattern(host))
+        {
             return invalid(
                 "permissions.network_hosts",
                 "contains an invalid host pattern",
@@ -1595,7 +1644,8 @@ pub fn validate_operator_source_url(
     Ok(parsed.to_string())
 }
 
-fn network_host_pattern_matches(pattern: &str, host: &str) -> bool {
+#[must_use]
+pub fn network_host_pattern_matches(pattern: &str, host: &str) -> bool {
     if pattern == "*" {
         return true;
     }
@@ -1610,6 +1660,122 @@ fn network_host_pattern_matches(pattern: &str, host: &str) -> bool {
             .and_then(|prefix| prefix.strip_suffix('.'))
             .is_some_and(|subdomain| !subdomain.is_empty()),
         None => host == pattern,
+    }
+}
+
+/// Reject host declarations that are empty, oversized, or not a bare host.
+#[must_use]
+fn is_valid_host_pattern(host: &str) -> bool {
+    !(host.is_empty()
+        || host.len() > 255
+        || host.contains("//")
+        || host.contains('/')
+        || host.contains(char::is_whitespace)
+        || host.chars().any(char::is_control))
+}
+
+/// Report whether a pattern claims every host or a whole top-level domain.
+///
+/// `permissions.network_hosts` may legitimately be permissive, but a package
+/// that claimed `*` or `*.com` as its default handler would win auto-selection
+/// for unrelated providers.
+#[must_use]
+fn claims_every_host(pattern: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    match pattern
+        .strip_prefix("*.")
+        .or_else(|| pattern.strip_prefix('.'))
+    {
+        // A single-label suffix is a whole top-level domain.
+        Some(suffix) => !suffix.contains('.'),
+        None => false,
+    }
+}
+
+/// Report whether `outer` permits everything `inner` claims.
+#[must_use]
+fn host_pattern_covers(outer: &str, inner: &str) -> bool {
+    let outer = outer.to_ascii_lowercase();
+    let inner = inner.to_ascii_lowercase();
+    if outer == "*" || outer == inner {
+        return true;
+    }
+    let Some(outer_suffix) = outer.strip_prefix("*.").or_else(|| outer.strip_prefix('.')) else {
+        return false;
+    };
+    let inner_host = inner
+        .strip_prefix("*.")
+        .or_else(|| inner.strip_prefix('.'))
+        .unwrap_or(inner.as_str());
+    network_host_pattern_matches(&format!("*.{outer_suffix}"), inner_host)
+}
+
+/// The outcome of matching one operator source URL against declared handlers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SourceAddonMatch {
+    /// No installed candidate claims the host.
+    None,
+    /// Exactly one candidate claims the host most specifically.
+    Declared(String),
+    /// Several candidates claim the host equally well; the host must not guess.
+    Ambiguous(Vec<String>),
+}
+
+/// Select the add-on that declares itself the default handler for `host`.
+///
+/// Candidates are `(addon_id, default_source_hosts)` pairs. An exact host
+/// declaration outranks a wildcard, and a longer wildcard suffix outranks a
+/// shorter one. A genuine tie returns [`SourceAddonMatch::Ambiguous`] so the
+/// caller can ask the operator instead of picking arbitrarily.
+#[must_use]
+pub fn match_declared_source_host(
+    host: &str,
+    candidates: &[(&str, &[String])],
+) -> SourceAddonMatch {
+    let mut best_score = 0usize;
+    let mut winners: Vec<String> = Vec::new();
+    for (addon_id, hosts) in candidates {
+        let Some(score) = hosts
+            .iter()
+            .filter_map(|pattern| declared_host_score(pattern, host))
+            .max()
+        else {
+            continue;
+        };
+        if score > best_score {
+            best_score = score;
+            winners.clear();
+            winners.push((*addon_id).to_owned());
+        } else if score == best_score {
+            winners.push((*addon_id).to_owned());
+        }
+    }
+    match winners.len() {
+        0 => SourceAddonMatch::None,
+        1 => SourceAddonMatch::Declared(winners.remove(0)),
+        _ => {
+            winners.sort_unstable();
+            SourceAddonMatch::Ambiguous(winners)
+        }
+    }
+}
+
+/// Score how specifically one declaration claims a host; `None` means no match.
+///
+/// An exact declaration always outranks any wildcard, and among wildcards a
+/// longer suffix wins.
+fn declared_host_score(pattern: &str, host: &str) -> Option<usize> {
+    if !network_host_pattern_matches(pattern, host) {
+        return None;
+    }
+    match pattern
+        .strip_prefix("*.")
+        .or_else(|| pattern.strip_prefix('.'))
+    {
+        Some(suffix) => Some(suffix.len() + 1),
+        None => Some(usize::MAX),
     }
 }
 
@@ -2024,6 +2190,7 @@ mod tests {
             permissions: AddonPermissions::default(),
             settings: Vec::new(),
             media_list_storage: None,
+            default_source_hosts: Vec::new(),
             panels: Vec::new(),
         }
     }
@@ -2046,6 +2213,87 @@ mod tests {
 
         manifest.manifest_version = 2;
         manifest.validate().expect("schema v2 icon");
+    }
+
+    #[test]
+    fn schema_v4_default_source_hosts_must_be_permitted_and_bounded() {
+        let mut manifest = valid_manifest();
+        manifest.default_source_hosts = vec!["schatkamer.example.test".to_owned()];
+        manifest.permissions.network_hosts = vec!["schatkamer.example.test".to_owned()];
+
+        // The field is frozen out of every earlier schema version.
+        for version in 1..4 {
+            manifest.manifest_version = version;
+            assert!(manifest.validate().is_err(), "schema v{version}");
+        }
+
+        manifest.manifest_version = 4;
+        manifest.validate().expect("permitted default host");
+
+        // A claimed host the package may not even contact would be selected and
+        // then refused by `validate_operator_source_url`.
+        manifest.permissions.network_hosts = vec!["other.example.test".to_owned()];
+        assert!(manifest.validate().is_err());
+
+        // A permitted wildcard covers the subdomains it permits.
+        manifest.permissions.network_hosts = vec!["*.example.test".to_owned()];
+        manifest.validate().expect("wildcard covers subdomain");
+
+        // No package may claim every host or a whole top-level domain.
+        for claim in ["*", "*.test", ".test"] {
+            manifest.default_source_hosts = vec![claim.to_owned()];
+            manifest.permissions.network_hosts = vec!["*".to_owned()];
+            assert!(manifest.validate().is_err(), "claim {claim}");
+        }
+
+        // An unrestricted permission declaration still permits a narrow claim.
+        manifest.default_source_hosts = vec!["schatkamer.example.test".to_owned()];
+        manifest.permissions.network_hosts = Vec::new();
+        manifest.validate().expect("unrestricted permissions");
+
+        manifest.default_source_hosts = vec![
+            "schatkamer.example.test".to_owned(),
+            "SCHATKAMER.example.test".to_owned(),
+        ];
+        assert!(manifest.validate().is_err(), "duplicate claim");
+    }
+
+    #[test]
+    fn declared_source_hosts_rank_exact_matches_above_wildcards() {
+        let exact = vec!["media.example.test".to_owned()];
+        let narrow = vec!["*.media.example.test".to_owned()];
+        let broad = vec!["*.example.test".to_owned()];
+
+        assert_eq!(
+            match_declared_source_host(
+                "media.example.test",
+                &[("broad", broad.as_slice()), ("exact", exact.as_slice())],
+            ),
+            SourceAddonMatch::Declared("exact".to_owned()),
+        );
+        assert_eq!(
+            match_declared_source_host(
+                "clips.media.example.test",
+                &[("broad", broad.as_slice()), ("narrow", narrow.as_slice())],
+            ),
+            SourceAddonMatch::Declared("narrow".to_owned()),
+        );
+        assert_eq!(
+            match_declared_source_host("unrelated.invalid", &[("broad", broad.as_slice())]),
+            SourceAddonMatch::None,
+        );
+    }
+
+    #[test]
+    fn equally_specific_claims_are_ambiguous_rather_than_arbitrary() {
+        let hosts = vec!["media.example.test".to_owned()];
+        assert_eq!(
+            match_declared_source_host(
+                "media.example.test",
+                &[("second", hosts.as_slice()), ("first", hosts.as_slice())],
+            ),
+            SourceAddonMatch::Ambiguous(vec!["first".to_owned(), "second".to_owned()]),
+        );
     }
 
     #[test]

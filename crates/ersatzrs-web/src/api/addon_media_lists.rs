@@ -15,6 +15,9 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct AddonMediaListAddForm {
+    // Optional: the host resolves the add-on from the URL when the operator
+    // leaves the selection empty, so the field may be absent entirely.
+    #[serde(default)]
     addon_id: String,
     source_url: String,
     #[serde(default)]
@@ -45,6 +48,17 @@ pub struct AddonMediaListSaveForm {
     chapter_input: String,
 }
 
+/// Whether the failure was "no add-on could be resolved for this URL".
+fn is_unresolved_addon(error: &ersatzrs_app::ApplicationError) -> bool {
+    matches!(
+        error,
+        ersatzrs_app::ApplicationError::Validation {
+            field: "addon_id",
+            ..
+        }
+    )
+}
+
 pub async fn add_addon_media_list_form(
     State(state): State<AppState>,
     Form(input): Form<AddonMediaListAddForm>,
@@ -62,7 +76,13 @@ pub async fn add_addon_media_list_form(
         Ok(_) => Redirect::to("/media/addon-lists"),
         Err(error) => {
             tracing::error!(%error, "failed to add add-on media list from HTML form");
-            Redirect::to("/media/addon-lists?error=add")
+            // An unroutable URL is an ordinary operator mistake, so it gets its
+            // own banner instead of the generic add failure.
+            if is_unresolved_addon(&error) {
+                Redirect::to("/media/addon-lists?error=add-unresolved")
+            } else {
+                Redirect::to("/media/addon-lists?error=add")
+            }
         }
     }
 }

@@ -73,7 +73,7 @@ every invocation and by health checks.
 
 | Field | Contract |
 |---|---|
-| `manifest_version` | Integer `1`, `2`, or `3`; version 2 adds the optional `icon` object and version 3 adds safe suggested secret-reference locations and managed media-list storage. |
+| `manifest_version` | Integer `1` through `4`; version 2 adds the optional `icon` object, version 3 adds safe suggested secret-reference locations and managed media-list storage, and version 4 adds `default_source_hosts`. |
 | `id` | Lowercase reverse-DNS identity with at least three components. |
 | `version` | SemVer. |
 | `name`, `summary` | Locale maps with a non-empty `en-US` value. |
@@ -87,6 +87,7 @@ every invocation and by health checks.
 | `permissions` | Declared network hosts, media-read access, managed FFmpeg access, and external commands. |
 | `settings` | Host-rendered definitions with unique uppercase snake-case keys. |
 | `media_list_storage` | Optional schema-v3 link between a path setting, a safe profile-relative default folder, and an add-on-owned local media source. |
+| `default_source_hosts` | Optional schema-v4 list of hosts the package offers to process. Every entry must be covered by `permissions.network_hosts`, and no entry may claim every host or a whole top-level domain. |
 | `panels` | Optional host-rendered declarative blocks. |
 
 Required dependencies must be installed and enabled at a compatible version.
@@ -132,6 +133,22 @@ username or password.
 The host passes the parser's canonical URL serialization to the add-on rather
 than the original input, preventing the host and add-on from interpreting
 different authorities around parser-sensitive characters.
+
+`network_hosts` states what a package is *permitted to contact*. It is not a
+claim to handle a source: the Beeld & Geluid package permits its media CDN as
+well as its site, and a package may legally permit `*`. Schema-v4
+`default_source_hosts` is the separate, narrower statement that the package
+offers to process sources on those hosts, and it is what ErsatzRS uses to select
+an add-on for an operator-supplied URL automatically. Host-pattern syntax and
+matching are identical to `network_hosts`.
+
+Selection prefers the most specific claim: an exact host outranks a wildcard,
+and a longer wildcard suffix outranks a shorter one. When two installed packages
+claim a host equally well, ErsatzRS selects neither and asks the operator. When
+nothing claims the host, the administrator-configured default remote stream
+processor (Settings > Add-ons > Sources) applies to HTTP and HTTPS URLs whose
+host that package is permitted to contact. See
+[ADR 0072](../adr/0072-declared-source-hosts-and-default-remote-stream-addon.md).
 
 This check validates a host-controlled input before invocation; it does not
 confine the child process or prevent it from contacting other destinations.

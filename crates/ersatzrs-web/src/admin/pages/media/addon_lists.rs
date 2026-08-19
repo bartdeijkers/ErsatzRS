@@ -10,10 +10,11 @@ use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::addon_media_lists::{
-    add_addon_media_list, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_list_item, get_addon_media_list_show_nfo, get_addon_media_lists_page_size,
-    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
-    match_addon_media_list, request_addon_media_list_presentation, save_addon_media_list_item_nfo,
+    add_addon_media_list, change_addon_media_list_addon, delete_addon_media_list,
+    get_addon_media_list_form, get_addon_media_list_item, get_addon_media_list_show_nfo,
+    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
+    list_addon_media_lists, match_addon_media_list, request_addon_media_list_presentation,
+    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
     save_addon_media_list_show_nfo, search_addon_media_list_replacements,
     set_addon_media_list_item_replacement, update_addon_media_list,
     update_addon_media_list_item_chapters, AddonMediaListForm, AddonMediaListItemDetail,
@@ -21,7 +22,7 @@ use crate::admin::server_fns::addon_media_lists::{
     AddonMediaListProviderRow, AddonMediaListReplacementRow, AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
-    dialog::DeleteDialog,
+    dialog::{DeleteDialog, Modal},
     icon::{icon_style, IconName},
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
@@ -105,17 +106,22 @@ fn AddonMediaListsIsland(
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
     let current_data = RwSignal::new((initial_rows, initial_total));
-    let add_addon_id = RwSignal::new(
-        providers
-            .first()
-            .map(|provider| provider.addon_id.clone())
-            .unwrap_or_default(),
-    );
+    // The add-on is resolved from the URL, so the dialog opens with no
+    // provider preselected instead of whichever one happens to sort first.
+    let add_addon_id = RwSignal::new(String::new());
+    let add_addon_chosen = RwSignal::new(false);
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
+    // The plain HTML form path distinguishes an unroutable URL from a generic
+    // add failure so the operator learns what to do about it.
+    let initial_error_message = if initial_error == "add-unresolved" {
+        tr(TextKey::AddonMediaListNoAddonForUrl)
+    } else {
+        tr(TextKey::AddonMediaListActionFailed)
+    };
     let toast = use_toast();
 
     let data: LocalResource<(Vec<AddonMediaListRow>, u64)> = LocalResource::new(move || {
@@ -160,6 +166,8 @@ fn AddonMediaListsIsland(
                     );
                     add_source_url.set(String::new());
                     add_folder_name.set(String::new());
+                    add_addon_id.set(String::new());
+                    add_addon_chosen.set(false);
                     add_open.set(false);
                     data.refetch();
                 }
@@ -229,7 +237,7 @@ fn AddonMediaListsIsland(
                 <h1 class=style::page_title>{tr(TextKey::AddonMediaLists)}</h1>
                 <div class=style::divider/>
                 <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                    {tr(TextKey::AddonMediaListActionFailed)}
+                    {initial_error_message}
                 </p>
 
                 {move || {
@@ -403,6 +411,7 @@ fn AddonMediaListsIsland(
             <AddAddonMediaListDialog
                 open=add_open
                 addon_id=add_addon_id
+                addon_chosen=add_addon_chosen
                 source_url=add_source_url
                 folder_name=add_folder_name
                 content_kind=add_content_kind
@@ -436,12 +445,39 @@ fn AddonMediaListsIsland(
 fn AddAddonMediaListDialog(
     open: RwSignal<bool>,
     addon_id: RwSignal<String>,
+    addon_chosen: RwSignal<bool>,
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
     content_kind: RwSignal<AddonMediaListContentKind>,
     providers: Vec<AddonMediaListProviderRow>,
     on_submit: Callback<(String, String, String, AddonMediaListContentKind)>,
 ) -> impl IntoView {
+    // Resolving on change rather than on every keystroke keeps one request per
+    // pasted or completed URL instead of one per character.
+    let resolve_action = Action::new(|url: &String| {
+        let url = url.clone();
+        async move { resolve_addon_media_list_provider(url).await }
+    });
+    let resolved_name = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        let Some(result) = resolve_action.value().get() else {
+            return;
+        };
+        // An operator choice always outranks the resolved one.
+        if addon_chosen.get_untracked() {
+            return;
+        }
+        // A failed lookup and "nothing claims it" mean the same thing here:
+        // the operator picks.
+        if let Ok(Some(provider)) = result {
+            resolved_name.set(provider.name);
+            addon_id.set(provider.addon_id);
+        } else {
+            resolved_name.set(String::new());
+            addon_id.set(String::new());
+        }
+    });
+
     view! {
         <div
             class=style::backdrop
@@ -463,7 +499,10 @@ fn AddAddonMediaListDialog(
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
                         let content_kind = content_kind.get_untracked();
-                        if !addon_id.trim().is_empty() && !source_url.trim().is_empty() {
+                        // The add-on may be empty: the server resolves it
+                        // from the URL, so the same rule applies to the plain
+                        // HTML form post.
+                        if !source_url.trim().is_empty() {
                             on_submit.run((addon_id, source_url, folder_name, content_kind));
                         }
                     }
@@ -471,16 +510,61 @@ fn AddAddonMediaListDialog(
                     <div class=style::dialog_body>
                         <p>{tr(TextKey::EnterAddonMediaListUrl)}</p>
                         <label class=style::dialog_field>
+                            <span>{tr(TextKey::AddonMediaListUrl)}</span>
+                            <input
+                                type="text"
+                                name="source_url"
+                                placeholder="https://example.invalid/lists/list-name"
+                                prop:value=move || source_url.get()
+                                on:input=move |event| source_url.set(event_target_value(&event))
+                                on:change=move |event| {
+                                    let value = event_target_value(&event);
+                                    source_url.set(value.clone());
+                                    if !value.trim().is_empty() {
+                                        resolve_action.dispatch(value);
+                                    }
+                                }
+                            />
+                        </label>
+                        <label class=style::dialog_field>
                             <span>{tr(TextKey::Addon)}</span>
                             <select
                                 name="addon_id"
                                 prop:value=move || addon_id.get()
-                                on:change=move |event| addon_id.set(event_target_value(&event))
+                                on:change=move |event| {
+                                    let value = event_target_value(&event);
+                                    // Returning to the empty option hands
+                                    // resolution back to the URL, so ask again
+                                    // rather than leaving the field blank.
+                                    let chosen = !value.trim().is_empty();
+                                    addon_chosen.set(chosen);
+                                    addon_id.set(value);
+                                    if !chosen {
+                                        let url = source_url.get_untracked();
+                                        if !url.trim().is_empty() {
+                                            resolve_action.dispatch(url);
+                                        }
+                                    }
+                                }
                             >
+                                <option value="">{tr(TextKey::AddonAutoDetect)}</option>
                                 {providers.into_iter().map(|provider| view! {
                                     <option value=provider.addon_id>{provider.name}</option>
                                 }).collect_view()}
                             </select>
+                            <p
+                                class=style::dialog_hint
+                                data-testid="addon-auto-detected"
+                                style:display=move || {
+                                    if resolved_name.with(String::is_empty) || addon_chosen.get() {
+                                        "none"
+                                    } else {
+                                        ""
+                                    }
+                                }
+                            >
+                                {tr(TextKey::AddonAutoDetected)}
+                            </p>
                         </label>
                         <label class=style::dialog_field>
                             <span>{tr(TextKey::MediaKind)}</span>
@@ -497,16 +581,6 @@ fn AddAddonMediaListDialog(
                                 <option value="music_video">{tr(TextKey::MusicVideo)}</option>
                                 <option value="other_video">{tr(TextKey::OtherVideo)}</option>
                             </select>
-                        </label>
-                        <label class=style::dialog_field>
-                            <span>{tr(TextKey::AddonMediaListUrl)}</span>
-                            <input
-                                type="text"
-                                name="source_url"
-                                placeholder="https://example.invalid/lists/list-name"
-                                prop:value=move || source_url.get()
-                                on:input=move |event| source_url.set(event_target_value(&event))
-                            />
                         </label>
                         <label class=style::dialog_field>
                             <span>{tr(TextKey::AddonMediaListFolder)}</span>
@@ -526,10 +600,7 @@ fn AddAddonMediaListDialog(
                         <button
                             type="submit"
                             class=style::btn_add
-                            disabled=move || {
-                                addon_id.with(|value| value.trim().is_empty())
-                                    || source_url.with(|value| value.trim().is_empty())
-                            }
+                            disabled=move || source_url.with(|value| value.trim().is_empty())
                         >
                             {tr(TextKey::Add)}
                         </button>
@@ -556,7 +627,8 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             let form = get_addon_media_list_form(id).await?;
             let items = list_addon_media_list_items(id).await?;
             let show_nfo = get_addon_media_list_show_nfo(id).await?;
-            Ok::<_, ServerFnError>((form, items, show_nfo))
+            let providers = list_addon_media_list_providers().await?;
+            Ok::<_, ServerFnError>((form, items, show_nfo, providers))
         },
     );
 
@@ -564,7 +636,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let error = error.clone();
-                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo)| {
+                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo, providers)| {
                     view! {
                         <AddonMediaListEditorIsland
                             id=id
@@ -572,6 +644,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                             initial_form=initial_form
                             initial_items=initial_items
                             initial_show_nfo=initial_show_nfo
+                            providers=providers
                         />
                     }
                     .into_any()
@@ -741,6 +814,7 @@ fn AddonMediaListEditorIsland(
     initial_form: Option<AddonMediaListForm>,
     initial_items: Vec<AddonMediaListItemRow>,
     initial_show_nfo: AddonMediaListNfoForm,
+    providers: Vec<AddonMediaListProviderRow>,
 ) -> impl IntoView {
     let has_initial_error = !initial_error.is_empty();
     let form = initial_form.unwrap_or_default();
@@ -765,7 +839,14 @@ fn AddonMediaListEditorIsland(
         .map(addon_media_list_error_message)
         .unwrap_or_default();
     let has_presentation_error = !presentation_error.is_empty();
-    let display_id = format!("{} / {}", form.addon_id, form.source_url);
+    let display_id = form.source_url.clone();
+    let form_addon_id = form.addon_id.clone();
+    // Changing the add-on re-imports the list through the new provider, so the
+    // operator confirms before item identity is re-derived.
+    let selected_addon_id = RwSignal::new(form.addon_id.clone());
+    let change_addon_open = RwSignal::new(false);
+    let change_addon_action =
+        Action::new(move |addon_id: &String| change_addon_media_list_addon(id, addon_id.clone()));
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
     let items = RwSignal::new(initial_items);
@@ -826,6 +907,24 @@ fn AddonMediaListEditorIsland(
                         ToastSeverity::Success,
                     );
                     set_browser_location("/media/addon-lists");
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = change_addon_action.value().get() {
+            change_addon_open.set(false);
+            match result {
+                Ok(()) => {
+                    toast.push(
+                        tr(TextKey::AddonMediaListSaved).to_string(),
+                        ToastSeverity::Success,
+                    );
+                    refresh_items_action.dispatch(());
                 }
                 Err(error) => toast.push(
                     save_failed(addon_media_list_error_message(error)),
@@ -961,13 +1060,40 @@ fn AddonMediaListEditorIsland(
                                 <textarea class=style::text_input rows="6" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::Id)}</div>
+                                <div class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</div>
                                 <input
                                     class=style::text_input
                                     type="text"
                                     value=display_id
                                     disabled
                                 />
+                            </div>
+                            <div class=style::field_row data-testid="addon-media-list-addon">
+                                <div class=style::field_label>{tr(TextKey::Addon)}</div>
+                                <div class=style::addon_row>
+                                    <select
+                                        class=style::text_input
+                                        aria-label=tr(TextKey::Addon)
+                                        prop:value=move || selected_addon_id.get()
+                                        on:change=move |event| {
+                                            selected_addon_id.set(event_target_value(&event));
+                                        }
+                                    >
+                                        {providers.into_iter().map(|provider| view! {
+                                            <option value=provider.addon_id>{provider.name}</option>
+                                        }).collect_view()}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        class=style::btn_cancel
+                                        disabled=move || {
+                                            selected_addon_id.get() == form_addon_id
+                                                || change_addon_action.pending().get()
+                                        }
+                                        on:click=move |_| change_addon_open.set(true)
+                                    >{tr(TextKey::ChangeAddon)}</button>
+                                    <small>{tr(TextKey::ChangeAddonHelp)}</small>
+                                </div>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::AutomaticRefresh)}</div>
@@ -1079,6 +1205,17 @@ fn AddonMediaListEditorIsland(
                         </tbody>
                     </table>
                 </div>
+                <Modal
+                    open=change_addon_open
+                    title=tr(TextKey::ChangeAddon).to_owned()
+                    on_close=Callback::new(move |confirmed: bool| {
+                        if confirmed {
+                            change_addon_action.dispatch(selected_addon_id.get_untracked());
+                        }
+                    })
+                >
+                    <p>{tr(TextKey::ChangeAddonPrompt)}</p>
+                </Modal>
                 <div
                     class=style::backdrop
                     style:display=move || if replacement_target.get().is_some() { "" } else { "none" }

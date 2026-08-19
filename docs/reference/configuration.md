@@ -209,7 +209,7 @@ Use the admin UI for settings that can be loaded after database startup:
 | **Settings** -> **Playout** | playout build horizon and scheduling behavior |
 | **Settings** -> **UI** | language, theme, and per-user Windows login startup |
 | **Settings** -> **XMLTV** | guide days, time zone, and block behavior |
-| **Settings** -> **Add-ons** | trusted repositories, install/update state, readiness, and manifest-declared settings |
+| **Settings** -> **Add-ons** | trusted repositories, install/update state, readiness, manifest-declared settings, and the default remote stream processor |
 
 These values live in the database and move with a database backup.
 

@@ -116,6 +116,11 @@ changelog, and git history for evidence. The authoritative live state is always
 - `addon-list-replacement-ux.md` — reshape the Local replacement flow for an
   unavailable add-on list item, written after walking the flow end to end
   against a real unavailable episode.
+- `addon-list-editor-item-classification.md` — move the add-on list media kind
+  to each item, grow the list presentation to the full `LibraryMediaKind` set
+  (seven projections, of which two exist today), and split the flat replacement
+  table into counted, paged non-playable / unknown / playable sections. Follows
+  the ADR 0072 resolver slice.
 - `phase-8-hardware-residue.md` — hand-off plan for the five Phase 8 parity
   debts that an NVIDIA-only machine cannot close: HDR10 characterization and
   functional graph probes on QSV/VAAPI/AMF/VideoToolbox/RKMPP, the three

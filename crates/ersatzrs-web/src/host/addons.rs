@@ -2,15 +2,17 @@ use async_trait::async_trait;
 use ersatzrs_app::{
     AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
     AddonRuntimeError, AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead,
+    SourceAddonRouting,
 };
+use ersatzrs_infra::addon_source_routing::{resolve_source_addon, ResolvedSourceAddon};
 use ersatzrs_infra::addons::{
     check_addon, disable_addon, enable_addon, install_addon, install_addon_from_package,
     install_repository_from_package, list_available_addons, list_installed_addons,
     list_trusted_repositories, load_addon_settings, load_installed_addon, refresh_repository,
     remove_trusted_repository, repositories_are_deployment_managed, save_addon_setting,
-    save_trusted_repository, set_unverified_sources_enabled, uninstall_addon,
-    unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind, AddonSettingValue,
-    TrustedAddonRepository,
+    save_trusted_repository, set_default_remote_stream_addon, set_unverified_sources_enabled,
+    uninstall_addon, unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind,
+    AddonSettingValue, TrustedAddonRepository,
 };
 use ersatzrs_infra::db::DbPool;
 
@@ -199,6 +201,41 @@ impl AddonRuntime for NativeAddonRuntime {
 
     async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError> {
         set_unverified_sources_enabled(&self.pool, enabled)
+            .await
+            .map_err(runtime_error)
+    }
+
+    async fn resolve_source_addon(
+        &self,
+        url: String,
+        required_capabilities: Vec<String>,
+    ) -> Result<SourceAddonRouting, AddonRuntimeError> {
+        let required_capabilities = required_capabilities
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let resolved = resolve_source_addon(&self.pool, &url, &required_capabilities)
+            .await
+            .map_err(runtime_error)?;
+        Ok(match resolved {
+            ResolvedSourceAddon::Declared(addon_id) => SourceAddonRouting::Declared(addon_id),
+            ResolvedSourceAddon::Default(addon_id) => SourceAddonRouting::Default(addon_id),
+            ResolvedSourceAddon::None => SourceAddonRouting::None,
+            ResolvedSourceAddon::Ambiguous(addon_ids) => SourceAddonRouting::Ambiguous(addon_ids),
+        })
+    }
+
+    async fn default_remote_stream_addon(&self) -> Result<Option<String>, AddonRuntimeError> {
+        ersatzrs_infra::addons::default_remote_stream_addon(&self.pool)
+            .await
+            .map_err(runtime_error)
+    }
+
+    async fn set_default_remote_stream_addon(
+        &self,
+        addon_id: Option<String>,
+    ) -> Result<(), AddonRuntimeError> {
+        set_default_remote_stream_addon(&self.pool, addon_id.as_deref())
             .await
             .map_err(runtime_error)
     }
