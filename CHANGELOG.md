@@ -219,7 +219,12 @@ release section when tagging a release.
   canonicalizes its root the same way it canonicalizes the files under it. The
   same defect made every install fail on macOS, where `/var` resolves to
   `/private/var`. The add-on media storage root also no longer persists a
-  verbatim path.
+  verbatim path. `dunce` keeps the compatible form only where Windows accepts
+  it and falls back to the verbatim form per path, so every containment check
+  now compares raw canonical paths, which cannot disagree on form, and only the
+  paths handed to a child process stay on `dunce`. A rejected path is logged
+  with the path and root that failed the check, because one message covered
+  three different rejections and none of them said which path was at fault.
 - `./run.sh test-closeout` ran only the `--all-features` configuration, which
   enables `mysql` and compiles away every `#![cfg(not(feature = "mysql"))]`
   integration test. That pass was not a stricter superset but a smaller set:

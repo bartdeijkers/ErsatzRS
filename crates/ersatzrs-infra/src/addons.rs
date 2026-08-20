@@ -2072,10 +2072,25 @@ async fn resolve_addon_command(
         AddonError::Validation("installed add-on has no entrypoint for this platform".to_owned())
     })?;
     let install_root = verify_installed_addon_contents(&installation).await?;
-    let executable = canonicalize_addon_path(&installation.install_path.join(&entrypoint.path))
+    let entrypoint_path = installation.install_path.join(&entrypoint.path);
+    // The command keeps the `dunce` form, which `cmd.exe` can resolve for batch
+    // entrypoints; only the containment check compares raw canonical forms.
+    let executable = canonicalize_addon_path(&entrypoint_path)
         .await
         .map_err(package_io_error)?;
-    if !executable.starts_with(&install_root) || !executable.is_file() {
+    let contained_executable = containment_path_async(&entrypoint_path)
+        .await
+        .map_err(package_io_error)?;
+    let contained_root = containment_path_async(&install_root)
+        .await
+        .map_err(package_io_error)?;
+    if !contained_executable.starts_with(&contained_root) || !contained_executable.is_file() {
+        tracing::warn!(
+            addon_id,
+            entrypoint = %contained_executable.display(),
+            root = %contained_root.display(),
+            "add-on entrypoint resolved outside its package root"
+        );
         return Err(AddonError::Validation(
             "installed entrypoint escapes or is missing from package".to_owned(),
         ));
@@ -2419,10 +2434,10 @@ async fn validated_install_path_for_removal(stored_path: &Path) -> Result<PathBu
         ));
     }
 
-    let canonical_root = canonicalize_addon_path(&configured_root)
+    let canonical_root = containment_path_async(&configured_root)
         .await
         .map_err(package_io_error)?;
-    match canonicalize_addon_path(stored_path).await {
+    match containment_path_async(stored_path).await {
         Ok(canonical_path)
             if canonical_path != canonical_root && canonical_path.starts_with(&canonical_root) =>
         {
@@ -2494,6 +2509,29 @@ async fn canonicalize_addon_path(path: &Path) -> std::io::Result<PathBuf> {
     }
 }
 
+/// Canonicalize a path purely to compare it against a package root.
+///
+/// `dunce` gives back the compatible form *when Windows accepts it* and the
+/// verbatim `\\?\` form otherwise — for a path over `MAX_PATH`, a reserved DOS
+/// name such as `con.txt`, or a UNC share. That fallback is per path, so a short
+/// package root and a deeply nested file inside it can come back in different
+/// forms and `starts_with` reports the file as escaping its own package. Prefix
+/// checks therefore run on the raw canonical form, which is uniform on both
+/// sides, and only the paths handed to a child process stay on `dunce`.
+fn containment_path(path: &Path) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path)
+}
+
+async fn containment_path_async(path: &Path) -> std::io::Result<PathBuf> {
+    let path = path.to_path_buf();
+    match tokio::task::spawn_blocking(move || containment_path(&path)).await {
+        Ok(result) => result,
+        Err(_) => Err(std::io::Error::other(
+            "package path canonicalization task failed",
+        )),
+    }
+}
+
 async fn hash_addon_tree(root: PathBuf) -> Result<String, AddonError> {
     tokio::task::spawn_blocking(move || hash_addon_tree_sync(&root))
         .await
@@ -2507,6 +2545,10 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
     // Packages are staged and installed under plain, uncanonicalized paths.
     let root = dunce::canonicalize(root).map_err(package_io_error)?;
     let root = root.as_path();
+    // Prefix checks compare raw canonical forms so a long or reserved file name
+    // inside a short package root cannot look like an escape; see
+    // `containment_path`.
+    let containment_root = containment_path(root).map_err(package_io_error)?;
     let mut directories = vec![root.to_path_buf()];
     let mut files = Vec::new();
     let mut entry_count = 0_usize;
@@ -2551,11 +2593,20 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
     let mut buffer = vec![0_u8; 64 * 1024];
     for path in files {
         let relative = path.strip_prefix(root).map_err(|_| {
+            tracing::warn!(
+                path = %path.display(),
+                root = %root.display(),
+                "package file is not below the package root"
+            );
             AddonError::Package("installed package path escaped its root".to_owned())
         })?;
         let mut encoded_path = Vec::new();
         for (index, component) in relative.components().enumerate() {
             let std::path::Component::Normal(component) = component else {
+                tracing::warn!(
+                    path = %path.display(),
+                    "package file path contains a component that is not a plain name"
+                );
                 return Err(AddonError::Package(
                     "installed package path escaped its root".to_owned(),
                 ));
@@ -2571,8 +2622,13 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
                 .to_le_bytes(),
         );
         digest.update(&encoded_path);
-        let canonical_file = dunce::canonicalize(&path).map_err(package_io_error)?;
-        if !canonical_file.starts_with(root) || !canonical_file.is_file() {
+        let canonical_file = containment_path(&path).map_err(package_io_error)?;
+        if !canonical_file.starts_with(&containment_root) || !canonical_file.is_file() {
+            tracing::warn!(
+                path = %canonical_file.display(),
+                root = %containment_root.display(),
+                "package file resolved outside the package root"
+            );
             return Err(AddonError::Package(
                 "installed package path escaped its root".to_owned(),
             ));
@@ -4015,6 +4071,29 @@ mod tests {
                 .expect("hash non-canonical root");
 
         assert_eq!(canonical, indirect);
+    }
+
+    #[test]
+    fn installed_content_hash_accepts_a_deeply_nested_file() {
+        // A file past MAX_PATH resolves to the verbatim `\\?\` form on Windows
+        // while its shorter package root does not, and a containment check that
+        // mixes the two forms reports the package as escaping itself. Windows
+        // may refuse to create such a tree at all, which is a different failure
+        // and not this test's subject, so the test skips rather than fails when
+        // the filesystem will not hold the fixture.
+        let temp = tempfile::tempdir().expect("temp directory");
+        let content = temp.path().join("content");
+        let mut nested = content.clone();
+        for _ in 0..8 {
+            nested = nested.join("a-directory-name-long-enough-to-pass-max-path");
+        }
+        if std::fs::create_dir_all(&nested).is_err()
+            || std::fs::write(nested.join("addon.toml"), b"fixture").is_err()
+        {
+            return;
+        }
+
+        hash_addon_tree_sync(&content).expect("hash deeply nested tree");
     }
 
     #[cfg(unix)]
