@@ -3,8 +3,18 @@
 Use **Settings > Add-ons** to install, inspect, configure, update, disable, and
 remove out-of-process add-ons. The manager separates **Installed**, **Browse**,
 **Updates**, and **Sources** so package lifecycle and repository trust remain
-visible. Each card opens a dedicated detail route at
+visible. Each tab carries its own count; **Installed add-ons** carries two,
+written as enabled over installed. Each card opens a dedicated detail route at
 `/settings/addons/<add-on-id>`.
+
+**Sources** holds three sections: **Unknown sources** (the risk opt-in),
+**Add-on repositories** (the trusted sources, listed with the number of add-ons
+they offer and when their catalogue was last refreshed), and **Install from
+file** (local add-on and repository packages). Actions that cannot run say why
+when hovered: an official repository cannot be removed, a deployment-managed
+list cannot be edited, and an unverified source cannot refresh until unknown
+sources are enabled. The **Default remote stream processor** sits on
+**Installed add-ons**, with the add-ons it chooses between.
 
 The [platform reference](../reference/addons.md) lists the supported
 capabilities. Do not put executable commands in media YAML.
@@ -25,9 +35,15 @@ The task is complete when the detail page shows a successful readiness result
 and **Enabled** state. **Check** validates readiness but never enables a package.
 
 Updates stay manual. Open **Updates**, select an add-on, review the offered
-source and permissions, and select **Update**. ErsatzRS refuses downgrades,
-stages and validates the package, and leaves the updated add-on disabled. Run
-**Check** and **Enable** again.
+source and permissions, and select **Update**. ErsatzRS refuses downgrades, and
+stages and validates the package.
+
+An add-on that was enabled is checked and enabled again as part of the update,
+so a working add-on keeps working. It stays disabled in two cases: the readiness
+check fails, which the detail page then explains, or the new version declares a
+permission the previous one did not — a new network host, a new external
+command, media read access, or managed FFmpeg access. Review the permissions on
+the detail page and select **Check** and **Enable** to accept them.
 
 ## Install a local package
 
@@ -54,7 +70,10 @@ reference](../reference/addon-packages.md).
 After enabling unknown sources, use either workflow:
 
 - Select **Add repository** and enter its reverse-DNS ID, display name,
-  credential-free HTTPS index URL, and optional raw Ed25519 public key.
+  credential-free HTTPS index URL, and optional raw Ed25519 public key. Save
+  stays disabled until the name, URL, and ID are filled in. Editing an existing
+  repository shows its ID read-only; that ID is the source's identity, so
+  pointing at another one means adding a repository, not editing this one.
 - Choose a repository ZIP and select **Install**. Its root must contain the
   strict `repository.toml` described by the [repository
   reference](../reference/addon-repositories.md).

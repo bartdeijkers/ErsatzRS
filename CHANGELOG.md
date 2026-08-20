@@ -137,6 +137,39 @@ release section when tagging a release.
 
 ### Changed
 
+- **Settings > Add-ons > Sources** was rebuilt. Four blocks of equal weight —
+  a risk toggle, a routing preference, an unlabelled upload row, and the
+  repository list — became three labelled sections: **Unknown sources**,
+  **Add-on repositories**, and **Install from file**. The repository list is now
+  a table in the same house style as the media-source pages, and it finally
+  shows what an operator opens this page for: how many add-ons each source
+  offers and when its catalogue was last refreshed (both were already loaded and
+  discarded). Actions that cannot run explain themselves on hover instead of
+  being silently greyed out, the add/edit form moved into a dialog that names
+  which flow you are in and keeps an existing repository's ID read-only, the
+  delete confirmation names the repository instead of its ID, the file pickers
+  show the chosen file in the UI language rather than the browser's own chrome,
+  and the unknown-sources button is red only for the click that accepts risk.
+  The **Default remote stream processor** moved to the **Installed add-ons**
+  tab, with the add-ons it chooses between.
+
+- Updating an add-on no longer takes it out of service. A package update landed
+  disabled with its readiness result cleared, so a working add-on stopped
+  serving until an operator noticed and ran **Check** and **Enable** by hand.
+  The update now runs that readiness check itself and returns the add-on to
+  service when it passes. It stays disabled, as before, when the check fails —
+  and when the new version declares a network host, external command, media read
+  access, or managed FFmpeg access the previous version did not, because
+  granting a package new privileges stays the operator's decision. First
+  installs still start disabled. See
+  [ADR 0074](docs/adr/0074-keep-updated-add-ons-in-service.md).
+
+- The Settings > Add-ons page dropped its four-card summary band. It spent the
+  top of the viewport restating what the tab strip already names, so the counts
+  moved into the tab titles: `Installed add-ons (2/3)` reads as enabled over
+  installed, and `Updates` and `Sources` carry their own totals.
+
+
 - The add-on list editor leads with the source URL and the add-on, followed by
   the fields the resolved add-on populates.
 

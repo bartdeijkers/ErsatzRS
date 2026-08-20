@@ -161,6 +161,10 @@ RID/host compatibility, package integrity, and `addon.check.v1`. Disable
 prevents new invocations; an owning playback session retains responsibility for
 cancelling its already running producer. Updates stage and validate a newer
 version before switching new invocations and require a fresh enable check.
+[ADR 0074](0074-keep-updated-add-ons-in-service.md) refines who performs
+that check after an update: the host runs it itself and returns the add-on
+to service, unless the new version declares permissions the previous one
+did not.
 
 Catalog refresh is automatic and conditional. **Installation and updates stay
 manual**, deliberately diverging from Kodi, which updates add-ons automatically

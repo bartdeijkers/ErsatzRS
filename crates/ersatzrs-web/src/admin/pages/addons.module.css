@@ -6,9 +6,7 @@
 }
 
 .page-header,
-.detail-hero,
-.repository,
-.security-card {
+.detail-hero {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -19,8 +17,6 @@
 .detail h1,
 .detail h2,
 .card h2,
-.repository h3,
-.security-card h2,
 .section-heading {
     margin: 0;
 }
@@ -52,29 +48,10 @@
     border-radius: var(--radius);
 }
 
-.page-header p,
-.security-card p {
+.page-header p {
     margin: 0.35rem 0 0;
     color: var(--color-muted);
 }
-
-.stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.75rem;
-}
-
-.stats > div {
-    display: grid;
-    gap: 0.2rem;
-    padding: 1rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-}
-
-.stats strong { font-size: 1.5rem; color: var(--color-primary); }
-.stats span { color: var(--color-muted); font-size: 0.82rem; }
 
 .tabs,
 .detail-tabs {
@@ -101,8 +78,6 @@
 }
 
 .filters,
-.source-actions,
-.actions,
 .hero-actions,
 .badges {
     display: flex;
@@ -190,7 +165,7 @@
 .btn-primary,
 .btn-secondary,
 .btn-danger,
-.file-action {
+.file-button {
     display: inline-flex;
     align-items: center;
     min-height: 2.25rem;
@@ -207,18 +182,19 @@
 .btn-danger { background: transparent; border-color: var(--color-error); color: var(--color-error); }
 .btn-primary:disabled, .btn-secondary:disabled, .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.sources,
-.repository-list,
-.repository-editor,
 .detail-section,
 .settings-grid {
     display: grid;
     gap: 0.8rem;
 }
 
-.security-card,
-.repository,
-.repository-editor,
+/* Sections need more air between them than rows need inside them, or the
+   three parts of this view read as one long list again. */
+.sources {
+    display: grid;
+    gap: 2rem;
+}
+
 .detail-section,
 .permissions {
     padding: 1rem;
@@ -227,12 +203,82 @@
     border-radius: var(--radius);
 }
 
-.repository-editor { max-width: 42rem; }
+.repository-editor { display: grid; gap: 0.8rem; }
 .repository-editor label, .setting label { display: grid; gap: 0.3rem; }
+.repository-editor input, .repository-editor textarea {
+    padding: 0.55rem 0.7rem;
+    color: var(--color-on-surface);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
 .repository-editor textarea { min-height: 6rem; resize: vertical; }
-.file-action { position: relative; border-color: var(--color-border); color: var(--color-on-surface); }
-.file-action input { max-width: 14rem; margin-left: 0.5rem; }
-.file-action[aria-disabled="true"] { opacity: 0.5; }
+.repository-editor input[readonly] { color: var(--color-muted); }
+
+/* Sources view: three labelled sections in the Settings house style. */
+.section { display: grid; gap: 0.6rem; }
+
+.section-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.section-header h2 { margin: 0; font-size: 1.05rem; }
+
+.section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.section-divider { height: 1px; background: var(--color-border); opacity: 0.75; }
+.section-help { max-width: 62rem; margin: 0; color: var(--color-muted); }
+
+.repo-table { width: 100%; border-collapse: collapse; }
+
+.repo-table th {
+    padding: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.repo-table td {
+    padding: 0.65rem 0.5rem;
+    font-size: 0.85rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-table-line);
+}
+
+.repo-name { display: grid; gap: 0.2rem; min-width: 0; }
+.repo-name span { font-size: 0.78rem; }
+.repo-status { display: grid; gap: 0.3rem; justify-items: start; }
+.repo-actions-cell { text-align: right; }
+.repo-actions-cell > div { justify-content: flex-end; }
+
+.file-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.file-row-label { min-width: 11rem; color: var(--color-gray-300); font-size: 0.85rem; }
+.file-name { color: var(--color-muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.file-button { border-color: var(--color-border); color: var(--color-on-surface); }
+.file-button[aria-disabled="true"] { opacity: 0.5; }
+
+/* Kept in the layout (not `display: none`) so it stays keyboard reachable;
+   the label around it is the visible control. */
+.file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
 
 .detail { max-width: 70rem; margin: 0 auto; }
 .back { color: var(--color-primary); text-decoration: none; }
@@ -260,14 +306,13 @@
 .empty, .not-found { padding: 2.5rem; text-align: center; color: var(--color-muted); }
 
 @media (max-width: 760px) {
-    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .page-header, .detail-hero, .repository, .security-card { flex-direction: column; }
+    .page-header, .detail-hero { flex-direction: column; }
+    .file-row-label { min-width: 0; }
     .hero-actions { justify-content: flex-start; }
     .setting { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 440px) {
-    .stats { grid-template-columns: 1fr; }
     .grid { grid-template-columns: 1fr; }
     .card { grid-template-columns: 3.25rem minmax(0, 1fr); }
     .icon, .icon-placeholder { width: 3.25rem; height: 3.25rem; }

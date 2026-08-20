@@ -35,7 +35,10 @@ fn icon_btn_class(variant: ButtonVariant) -> &'static str {
 #[component]
 pub fn Button(
     #[prop(default = ButtonVariant::Primary)] variant: ButtonVariant,
-    #[prop(default = false)] disabled: bool,
+    /// Reactive so a caller can disable the button from live form state; a
+    /// plain `bool` still works and stays constant.
+    #[prop(into, default = Signal::from(false))]
+    disabled: Signal<bool>,
     #[prop(default = None)] on_click: Option<Callback<()>>,
     children: Children,
 ) -> impl IntoView {
@@ -44,7 +47,7 @@ pub fn Button(
         <button
             type="button"
             class=cls
-            disabled=disabled
+            disabled=move || disabled.get()
             on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
         >
             {children()}

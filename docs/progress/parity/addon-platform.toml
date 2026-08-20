@@ -2,7 +2,7 @@ feature    = 'Repository-backed add-on platform with tiered trust'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066', '0067', '0072']
+adr        = ['0051', '0066', '0067', '0072', '0074']
 
 summary = '''
 The host implementation is substantial: strict package and catalog schemas,
@@ -26,7 +26,11 @@ ADR 0066's Kodi-shaped distribution model is implemented with verified,
 unverified, and sideloaded trust tiers, a single off-by-default unknown-sources
 gate, bounded repository and add-on ZIP installation, official-source
 fail-closed behavior, persistent tier-aware health reporting, schema-v2
-optional icons, and manual source-owned updates. The localized manager provides
+optional icons, and manual source-owned updates. Per ADR 0074 an update no
+longer takes a working add-on out of service: the host runs the post-update
+readiness check itself and re-enables the add-on when it passes, and holds it
+disabled for review only when the new version declares a permission the
+previous one did not. The localized manager provides
 Installed, Browse, Updates, and Sources views plus canonical
 `/settings/addons/{addon_id}` detail pages for metadata, permissions,
 configuration, readiness, source offers, and lifecycle actions.

@@ -193,10 +193,16 @@ impl AddonRuntime for NativeAddonRuntime {
         repository_id: String,
         addon_id: String,
     ) -> Result<(), AddonRuntimeError> {
-        install_addon(&self.pool, &self.client, &repository_id, &addon_id)
-            .await
-            .map(|_| ())
-            .map_err(runtime_error)
+        install_addon(
+            &self.pool,
+            &self.client,
+            &repository_id,
+            &addon_id,
+            &runtime_context(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(runtime_error)
     }
 
     async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError> {
@@ -241,7 +247,7 @@ impl AddonRuntime for NativeAddonRuntime {
     }
 
     async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError> {
-        install_addon_from_package(&self.pool, archive)
+        install_addon_from_package(&self.pool, archive, &runtime_context())
             .await
             .map(|_| ())
             .map_err(runtime_error)

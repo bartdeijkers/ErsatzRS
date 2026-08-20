@@ -19,19 +19,23 @@ stylance::import_crate_style!(style, "src/admin/ui/primitives/dialog.module.css"
 pub fn Modal(
     /// Signal controlling visibility.
     open: RwSignal<bool>,
-    /// Dialog title shown in the header.
-    title: String,
+    /// Dialog title shown in the header. Reactive, so one dialog can serve an
+    /// add and an edit flow without a second copy of its body in the DOM.
+    #[prop(into)]
+    title: Signal<String>,
     /// Called when the user confirms or cancels. Receives `true` for confirm.
     on_close: Callback<bool>,
     /// Content inside the dialog body.
     children: ChildrenFn,
     #[prop(default = None)] confirm_label: Option<&'static str>,
     #[prop(default = None)] cancel_label: Option<&'static str>,
+    /// Blocks confirmation while the dialog's own content is incomplete.
+    #[prop(into, default = Signal::from(false))]
+    confirm_disabled: Signal<bool>,
     #[prop(default = false)] destructive: bool,
     #[prop(default = false)] wide: bool,
 ) -> impl IntoView {
     let panel_ref = NodeRef::<html::Div>::new();
-    let dialog_label = title.clone();
     let confirm_variant = if destructive {
         ButtonVariant::Danger
     } else {
@@ -88,7 +92,7 @@ pub fn Modal(
             class=style::overlay
             role="dialog"
             aria-modal="true"
-            aria-label=dialog_label
+            aria-label=move || title.get()
             style:display=move || if open.get() { "" } else { "none" }
             on:click=move |_| do_cancel()
             on:keydown=move |event| {
@@ -105,7 +109,7 @@ pub fn Modal(
                 class=if wide { format!("{} {}", style::panel, style::panel_wide) } else { style::panel.to_owned() }
                 on:click=|e| e.stop_propagation()
             >
-                <h2 class=style::title>{title}</h2>
+                <h2 class=style::title>{move || title.get()}</h2>
                 <div class=style::body>{children()}</div>
                 <div class=style::footer>
                     <Button variant=ButtonVariant::Text
@@ -113,6 +117,7 @@ pub fn Modal(
                         {cancel_label.unwrap_or_else(|| tr(TextKey::Cancel))}
                     </Button>
                     <Button variant=confirm_variant
+                            disabled=confirm_disabled
                             on_click=Some(Callback::new(move |()| do_confirm()))>
                         {confirm_label.unwrap_or_else(|| tr(TextKey::Confirm))}
                     </Button>

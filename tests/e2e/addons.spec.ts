@@ -136,12 +136,26 @@ test('manages trusted repositories through the hydrated settings page', async ({
   await editor
     .locator('#addon-repository-key')
     .fill('11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=');
-  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  // The editor is a dialog now, so Save lives in the dialog footer beside
+  // Cancel rather than inside the field group.
+  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 
   const row = page.getByTestId('addon-repository-row').filter({ hasText: 'Example add-ons' });
   await expect(row).toBeVisible();
+  await expect(row).toContainText('Never');
+
+  // Editing an existing repository keeps its identity: the id is shown but not
+  // editable, and the dialog says which flow the operator is in.
+  await row.getByRole('button', { name: 'Edit' }).click();
+  const editDialog = page.getByRole('dialog');
+  await expect(editDialog.getByRole('heading', { name: 'Edit repository' })).toBeVisible();
+  await expect(editor.locator('#addon-repository-id')).toHaveAttribute('readonly', '');
+  await editDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
   await row.getByRole('button', { name: 'Delete' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  const deleteDialog = page.getByRole('dialog');
+  await expect(deleteDialog).toContainText('Example add-ons');
+  await deleteDialog.getByRole('button', { name: 'Confirm' }).click();
   await expect(row).toHaveCount(0);
 });
 

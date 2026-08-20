@@ -842,6 +842,7 @@ pub async fn install_addon(
     client: &reqwest::Client,
     repository_id: &str,
     addon_id: &str,
+    runtime: &AddonRuntimeContext,
 ) -> Result<InstalledAddon, AddonError> {
     let repository = effective_repository(pool, repository_id).await?;
     let catalog_cache = load_catalog_cache(pool, repository_id).await?;
@@ -906,14 +907,17 @@ pub async fn install_addon(
         installed.as_ref(),
         addon,
         package,
+        runtime,
     )
     .await
 }
 
 /// Install or update an add-on from locally supplied package bytes.
 ///
-/// The package receives the permanent `sideloaded` trust tier and starts
-/// disabled. A sideload can only update another sideload of the same identity.
+/// The package receives the permanent `sideloaded` trust tier. A first install
+/// starts disabled; an update of an enabled sideload is re-enabled again when
+/// its readiness check passes and it asks for no new permissions. A sideload can
+/// only update another sideload of the same identity.
 ///
 /// # Errors
 ///
@@ -923,6 +927,7 @@ pub async fn install_addon(
 pub async fn install_addon_from_package(
     pool: &DbPool,
     archive: Vec<u8>,
+    runtime: &AddonRuntimeContext,
 ) -> Result<InstalledAddon, AddonError> {
     if !unverified_sources_enabled(pool).await? {
         return Err(AddonError::Trust(
@@ -956,6 +961,14 @@ pub async fn install_addon_from_package(
         }
     }
     persist_sideloaded_addon(pool, previous.as_ref(), &staged).await?;
+    restore_enabled_after_update(
+        pool,
+        &staged.manifest.id,
+        previous.as_ref(),
+        &staged.manifest,
+        runtime,
+    )
+    .await;
     load_installed_addon(pool, &staged.manifest.id)
         .await?
         .ok_or_else(|| AddonError::Database("sideloaded package was not persisted".to_owned()))
@@ -1056,6 +1069,7 @@ async fn install_catalog_package(
     previous_installation: Option<&InstalledAddon>,
     addon: &CatalogAddon,
     package: &CatalogPackage,
+    runtime: &AddonRuntimeContext,
 ) -> Result<InstalledAddon, AddonError> {
     let rid = current_rid()?;
     let (archive, package_sha256) = download_catalog_package(client, package).await?;
@@ -1070,6 +1084,14 @@ async fn install_catalog_package(
         &staged,
     )
     .await?;
+    restore_enabled_after_update(
+        pool,
+        &addon.id,
+        previous_installation,
+        &staged.manifest,
+        runtime,
+    )
+    .await;
     load_installed_addon(pool, &addon.id)
         .await?
         .ok_or_else(|| AddonError::Database("installed package was not persisted".to_owned()))
@@ -1787,6 +1809,95 @@ async fn check_addon_with_revision(
         }
     })?;
     Ok((result, command.state_revision))
+}
+
+/// Put an add-on that was running before an update back into service.
+///
+/// A package update always lands disabled with its readiness result cleared,
+/// because the code behind the add-on has been replaced. Leaving it there is
+/// what an operator experiences as "updating breaks my add-on": a working
+/// installation silently stops after a routine update. So the update finishes
+/// the lifecycle itself and runs the same validation `enable_addon` runs — the
+/// fresh readiness check ADR 0066 asks for — instead of waiting for a click.
+///
+/// The one thing it will not decide on the operator's behalf is a privilege
+/// change. Permissions are shown at install time and accepted by enabling, so a
+/// version that wants to reach new hosts, read media it could not read before,
+/// or run new external commands stays disabled until someone reviews it.
+///
+/// A first install is untouched: it has nothing to restore and must be
+/// configured before it can pass a check.
+async fn restore_enabled_after_update(
+    pool: &DbPool,
+    addon_id: &str,
+    previous_installation: Option<&InstalledAddon>,
+    manifest: &AddonManifest,
+    runtime: &AddonRuntimeContext,
+) {
+    let Some(previous) = previous_installation.filter(|previous| previous.enabled) else {
+        return;
+    };
+    if let Some(added) = added_permissions(&previous.manifest, manifest) {
+        tracing::info!(
+            addon_id,
+            added_permissions = %added,
+            "updated add-on stays disabled until its new permissions are reviewed"
+        );
+        return;
+    }
+    match enable_addon(pool, addon_id, runtime).await {
+        Ok(result) => tracing::info!(
+            addon_id,
+            code = %result.code,
+            "re-enabled add-on after update"
+        ),
+        Err(error) => tracing::warn!(
+            addon_id,
+            %error,
+            "updated add-on stays disabled because it is not ready"
+        ),
+    }
+}
+
+/// Describe the privileges the new version asks for on top of the old one.
+///
+/// Returns `None` when the update stays within what the running version already
+/// declared. Dropped permissions are not a review reason.
+fn added_permissions(previous: &AddonManifest, next: &AddonManifest) -> Option<String> {
+    let previous_hosts = previous
+        .permissions
+        .network_hosts
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let previous_commands = previous
+        .permissions
+        .external_commands
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let mut added = Vec::new();
+    added.extend(
+        next.permissions
+            .network_hosts
+            .iter()
+            .filter(|host| !previous_hosts.contains(host.as_str()))
+            .map(|host| format!("network host {host}")),
+    );
+    added.extend(
+        next.permissions
+            .external_commands
+            .iter()
+            .filter(|command| !previous_commands.contains(command.as_str()))
+            .map(|command| format!("external command {command}")),
+    );
+    if next.permissions.media_read && !previous.permissions.media_read {
+        added.push("media read access".to_owned());
+    }
+    if next.permissions.managed_ffmpeg && !previous.permissions.managed_ffmpeg {
+        added.push("managed FFmpeg access".to_owned());
+    }
+    (!added.is_empty()).then(|| added.join(", "))
 }
 
 /// Enable only after required configuration and `addon.check.v1` succeed.
@@ -3850,6 +3961,34 @@ mod tests {
         .expect("insert fixture installation");
     }
 
+    /// Insert an installation backed by a real package directory, so the
+    /// readiness path can verify its content hash and run its entrypoint.
+    async fn insert_package_installation(
+        pool: &DbPool,
+        manifest: &AddonManifest,
+        package: &Path,
+        enabled: bool,
+    ) {
+        let manifest_json = serde_json::to_string(manifest).expect("serialize fixture manifest");
+        let content_sha256 = hash_addon_tree_sync(package).expect("hash fixture package");
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "StateRevision"
+               ) VALUES (?, ?, ?, 'package', ?, ?, ?, 'now', 'now', ?)"#,
+        )
+        .bind(&manifest.id)
+        .bind(manifest.version.to_string())
+        .bind(i64::from(enabled))
+        .bind(content_sha256)
+        .bind(manifest_json)
+        .bind(package.to_string_lossy().into_owned())
+        .bind(Uuid::new_v4().to_string())
+        .execute(pool)
+        .await
+        .expect("insert fixture installation");
+    }
+
     #[test]
     fn detached_signature_covers_exact_catalog_bytes() {
         let signing_key = SigningKey::from_bytes(&[7; 32]);
@@ -4329,9 +4468,13 @@ mod tests {
             .await
             .expect("initialize database");
 
-        let addon_error = install_addon_from_package(&pool, b"not a zip".to_vec())
-            .await
-            .expect_err("sideload must be gated");
+        let addon_error = install_addon_from_package(
+            &pool,
+            b"not a zip".to_vec(),
+            &AddonRuntimeContext::default(),
+        )
+        .await
+        .expect_err("sideload must be gated");
         assert!(addon_error.to_string().contains("unverified sources"));
 
         let repository_error = install_repository_from_package(&pool, b"not a zip".to_vec())
@@ -4397,6 +4540,99 @@ mod tests {
             .await
             .expect_err("keyless official repository must fail");
         assert!(error.to_string().contains("official repository"));
+    }
+
+    #[test]
+    fn only_new_privileges_hold_an_updated_add_on_disabled() {
+        let previous = {
+            let mut manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+            manifest.permissions.network_hosts = vec!["api.example.test".to_owned()];
+            manifest.permissions.external_commands = vec!["yt-dlp".to_owned()];
+            manifest.permissions.media_read = true;
+            manifest
+        };
+
+        assert_eq!(added_permissions(&previous, &previous.clone()), None);
+
+        let mut narrowed = previous.clone();
+        narrowed.permissions.network_hosts.clear();
+        narrowed.permissions.media_read = false;
+        assert_eq!(added_permissions(&previous, &narrowed), None);
+
+        let mut new_host = previous.clone();
+        new_host
+            .permissions
+            .network_hosts
+            .push("cdn.example.test".to_owned());
+        assert_eq!(
+            added_permissions(&previous, &new_host).as_deref(),
+            Some("network host cdn.example.test")
+        );
+
+        let mut new_command = previous.clone();
+        new_command
+            .permissions
+            .external_commands
+            .push("ffmpeg".to_owned());
+        new_command.permissions.managed_ffmpeg = true;
+        assert_eq!(
+            added_permissions(&previous, &new_command).as_deref(),
+            Some("external command ffmpeg, managed FFmpeg access")
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_updated_add_on_returns_to_service_unless_it_wants_more() {
+        // The update itself has already landed disabled by the time this runs,
+        // so both cases start from the same freshly updated row and differ only
+        // in what the new version declares.
+        for (added_host, expected_enabled) in [(None, true), (Some("cdn.example.test"), false)] {
+            let temp = tempfile::tempdir().expect("temp directory");
+            let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+            let pool = crate::db::init(&database_url)
+                .await
+                .expect("initialize database");
+            let package = temp.path().join("package");
+            std::fs::create_dir(&package).expect("create package directory");
+            std::fs::write(
+                package.join("addon.sh"),
+                b"printf '{\"status\":\"ready\",\"code\":\"ready\",\"message\":\"ok\"}'\n",
+            )
+            .expect("write fixture entrypoint");
+
+            let previous = fixture_manifest("org.ersatzrs.addon.fixture");
+            let mut updated = previous.clone();
+            updated.version = Version::new(1, 1, 0);
+            if let Some(host) = added_host {
+                updated.permissions.network_hosts.push(host.to_owned());
+            }
+            insert_package_installation(&pool, &updated, &package, false).await;
+            let mut previous_installation = load_installed_addon(&pool, &previous.id)
+                .await
+                .expect("load fixture installation")
+                .expect("fixture installation");
+            previous_installation.manifest = previous.clone();
+            previous_installation.enabled = true;
+
+            restore_enabled_after_update(
+                &pool,
+                &previous.id,
+                Some(&previous_installation),
+                &updated,
+                &AddonRuntimeContext::default(),
+            )
+            .await;
+
+            let installation = load_installed_addon(&pool, &previous.id)
+                .await
+                .expect("reload installation")
+                .expect("installation");
+            assert_eq!(
+                installation.enabled, expected_enabled,
+                "added host {added_host:?} decided enablement wrongly"
+            );
+        }
     }
 
     #[tokio::test]

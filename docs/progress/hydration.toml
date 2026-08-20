@@ -78,7 +78,7 @@ notes  = 'Focused Chromium and Firefox proof on 2026-08-10 covers hand-authored 
 name   = 'AddonsSettingsPage'
 status = '✅'
 routes = ['/settings/addons']
-notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup. 2026-08-19: the Sources view gained the default remote stream processor selector (ADR 0072); its selection persists through `ConfigElement` and needs a browser proof alongside the unknown-sources toggle.'
+notes  = 'Focused Chromium and Firefox proof covers hydration, trusted repository add/remove, manifest-rendered settings including secret references, and host-rendered declarative panels without executable markup. 2026-08-19: the default remote stream processor selector (ADR 0072) now sits on the Installed view, where the add-ons it chooses between are managed; its selection persists through `ConfigElement` and needs a browser proof alongside the unknown-sources toggle. 2026-08-19: the Sources view was rebuilt as three labelled sections with the repository list as a table; `tests/e2e/addons.spec.ts` proves the dialog-based add, the read-only id on edit, the named delete confirmation, and the Never-refreshed state in Chromium.'
 
 [[page]]
 name   = 'AddonDetailPage'
