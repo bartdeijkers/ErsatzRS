@@ -61,6 +61,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Make the Windows `test-closeout` wrapper run both the default and
+  all-features nextest matrices, matching Linux and preserving the
+  SQLite-only integration coverage hidden when MySQL is enabled.
+
 - Make the structural web-bundle verifier use native drive-letter paths when
   Git Bash launches the Windows server and force its temporary host to
   loopback, so the hydration gate can open its temporary SQLite database
