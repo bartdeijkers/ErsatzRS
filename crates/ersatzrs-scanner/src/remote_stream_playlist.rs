@@ -189,6 +189,8 @@ pub struct ManagedPlaylistArtwork {
     pub operator_owned: bool,
 }
 
+// Serde's `skip_serializing_if` callback contract passes a shared reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 const fn is_false(value: &bool) -> bool {
     !*value
 }
@@ -2500,7 +2502,7 @@ create_playlist: true
                 when.method(GET).path("/image");
                 then.status(200)
                     .header("content-type", "image/png")
-                    .body(b"\x89PNG\r\n\x1a\nfixture png bytes".to_vec());
+                    .body(b"\x89PNG\r\n\x1a\nfixture png bytes");
             })
             .await;
         let directory = tempfile::tempdir().expect("managed artwork directory");
