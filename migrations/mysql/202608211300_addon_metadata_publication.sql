@@ -18,7 +18,7 @@ CREATE TABLE `AddonMediaListArtworkUpload` (
     CONSTRAINT `PK_AddonMediaListArtworkUpload` PRIMARY KEY (`Id`),
     CONSTRAINT `FK_AddonMediaListArtworkUpload_AddonMediaList_AddonMediaListId`
         FOREIGN KEY (`AddonMediaListId`) REFERENCES `AddonMediaList` (`Id`) ON DELETE CASCADE,
-    CONSTRAINT `FK_AddonMediaListArtworkUpload_AddonMediaListItem_AddonMediaListItemId`
+    CONSTRAINT `FK_AddonMediaListArtworkUpload_AddonMediaListItem_AddonMediaLis~`
         FOREIGN KEY (`AddonMediaListItemId`) REFERENCES `AddonMediaListItem` (`Id`) ON DELETE CASCADE
 );
 
@@ -38,9 +38,9 @@ CREATE TABLE `AddonMediaListArtworkMaterialization` (
     `Sha256` TEXT NOT NULL,
     `PublishedRevision` INT NOT NULL,
     CONSTRAINT `PK_AddonMediaListArtworkMaterialization` PRIMARY KEY (`Id`),
-    CONSTRAINT `FK_AddonMediaListArtworkMaterialization_AddonMediaList_AddonMediaListId`
+    CONSTRAINT `FK_AddonMediaListArtworkMaterialization_AddonMediaList_AddonMed~`
         FOREIGN KEY (`AddonMediaListId`) REFERENCES `AddonMediaList` (`Id`) ON DELETE CASCADE,
-    CONSTRAINT `FK_AddonMediaListArtworkMaterialization_AddonMediaListItem_AddonMediaListItemId`
+    CONSTRAINT `FK_AddonMediaListArtworkMaterialization_AddonMediaListItem_Addo~`
         FOREIGN KEY (`AddonMediaListItemId`) REFERENCES `AddonMediaListItem` (`Id`) ON DELETE CASCADE
 );
 

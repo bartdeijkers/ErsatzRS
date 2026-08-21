@@ -119,9 +119,13 @@ async fn television_repository_applies_remote_path_replacements_to_local_path() 
         episodes[0].file_path.as_deref(),
         Some("/plex/tv/Example Show/S01E01.mkv")
     );
+    let local_path = episodes[0]
+        .local_path
+        .as_deref()
+        .expect("replaced local path");
     assert_eq!(
-        episodes[0].local_path.as_deref(),
-        Some("/mnt/tv/Example Show/S01E01.mkv")
+        local_path.replace('\\', "/"),
+        "/mnt/tv/Example Show/S01E01.mkv"
     );
 }
 

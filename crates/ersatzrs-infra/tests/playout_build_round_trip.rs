@@ -13,7 +13,7 @@ mod common;
 
 use std::collections::BTreeSet;
 
-use chrono::{Duration, Utc};
+use chrono::{Duration, Timelike, Utc};
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{GraphicsRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::{
@@ -449,7 +449,9 @@ playout:
     let definition = YamlPlayoutEngine::definition_from_str(definition_str)
         .expect("parse inline YAML definition");
 
-    let now = Utc::now();
+    let now = Utc::now()
+        .with_nanosecond(0)
+        .expect("whole-second test timestamp");
     let item_a = SchedulingMediaItem {
         id: 1,
         duration: Duration::minutes(90),

@@ -159,7 +159,12 @@ async fn selects_forced_subtitle_by_expanded_language_code() {
         StreamingMode::TransportStream,
     )
     .expect("subtitle input");
-    assert_eq!(input.path, "/media/movie.nl.forced.srt");
+    assert_eq!(
+        input.path,
+        Path::new("/media")
+            .join("movie.nl.forced.srt")
+            .to_string_lossy()
+    );
 }
 
 #[tokio::test]
