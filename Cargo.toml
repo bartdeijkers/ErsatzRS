@@ -5,6 +5,7 @@ members = [
     "crates/ersatzrs-domain",
     "crates/ersatzrs-core",
     "crates/ersatzrs-hwprobe",
+    "crates/ersatzrs-platform",
     "crates/ersatzrs-ffmpeg",
     "crates/ersatzrs-infra",
     "crates/ersatzrs-app",

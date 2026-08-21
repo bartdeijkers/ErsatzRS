@@ -1251,6 +1251,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ersatzrs-platform"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.19",
+ "winreg 0.56.0",
+]
+
+[[package]]
 name = "ersatzrs-scanner"
 version = "0.1.0"
 dependencies = [
@@ -1312,6 +1320,7 @@ dependencies = [
  "ersatzrs-domain",
  "ersatzrs-ffmpeg",
  "ersatzrs-infra",
+ "ersatzrs-platform",
  "ersatzrs-scanner",
  "ersatzrs-scheduler",
  "futures-util",
@@ -1347,7 +1356,6 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
  "web-sys",
- "winreg 0.56.0",
 ]
 
 [[package]]

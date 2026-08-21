@@ -45,6 +45,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Windows release packaging now tests startup registration through a small
+  platform adapter instead of compiling the complete web test harness in a
+  second Cargo profile. The release still performs the isolated real-HKCU
+  registry round trip on its Windows runner and exact source revision, and the
+  packaging gate verifies the ZIP contains a non-empty `ErsatzRS.exe` startup
+  launcher at the package root.
+
 - Scheduled an additive FFmpeg `drawtext` overlay leg after add-on metadata
   closeout and before Phase 9 teletext. ADR 0077 keeps `drawvg` as the default
   static/vector-rich backend while defining reloadable text files for live

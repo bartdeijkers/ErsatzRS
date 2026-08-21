@@ -6,8 +6,9 @@ Accepted (2026-08-02)
 
 ## Implementation
 
-Implemented (2026-08-02). Windows release users can opt in from **Settings** ->
-**UI**. ErsatzRS registers the packaged tray launcher for the current user in
+Implemented (2026-08-02; adapter extraction 2026-08-21). Windows release users
+can opt in from **Settings** -> **UI**. ErsatzRS registers the packaged tray
+launcher for the current user in
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; the live registry value,
 not a database flag, determines the displayed state. Linux archives document a
 dedicated `ersatzrs` account and a systemd unit enabled with `systemctl`.
@@ -40,10 +41,13 @@ an equivalent value is enabled; a stale or different value is shown as needing
 repair. Registry failures or a missing packaged launcher are visible as an
 unavailable state rather than being reported as success.
 
-The setting is exposed through the application settings-runtime port so the
-web layer does not own registry operations. Non-Windows implementations return
-an explicit unsupported status and the server-rendered UI omits the control.
-No startup value is stored in the database.
+The setting is exposed through the application settings-runtime port. A small
+`ersatzrs-platform` adapter owns launcher resolution and registry operations;
+the web composition root only maps its result into the application port. This
+keeps the real Windows registry test independent of the web host's large
+dependency graph. Non-Windows implementations return an explicit unsupported
+status and the server-rendered UI omits the control. No startup value is stored
+in the database.
 
 On Linux, automatic startup remains an operator-owned systemd concern. The
 portable archive documentation provides a unit running `ersatzrs-web` as a
@@ -79,4 +83,5 @@ unchanged.
 ## References
 
 - `crates/ersatzrs-web/src/host/settings.rs`
+- `crates/ersatzrs-platform/src/windows_startup.rs`
 - `crates/ersatzrs-launcher/src/main.rs`

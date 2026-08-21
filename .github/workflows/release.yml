@@ -55,7 +55,7 @@ jobs:
           ERSATZRS_SKIP_STYLANCE: "1"
         run: |
           $ErrorActionPreference = 'Stop'
-          cargo test -p ersatzrs-web --lib --target x86_64-pc-windows-msvc windows_startup
+          cargo test -p ersatzrs-platform --target x86_64-pc-windows-msvc windows_startup
       - name: Stage archive
         shell: pwsh
         run: |
@@ -94,7 +94,21 @@ jobs:
           if (Get-ChildItem -Path $stage -Recurse -File -Include 'ffmpeg*', 'ffprobe*' | Select-Object -First 1) {
             throw 'release archives must not bundle ffmpeg or ffprobe'
           }
+          $launcher = Get-Item "$stage/ErsatzRS.exe" -ErrorAction Stop
+          if ($launcher.Length -eq 0) {
+            throw 'Windows release archive must contain a non-empty ErsatzRS.exe startup launcher'
+          }
           Compress-Archive -Path $stage -DestinationPath $archive
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive))
+          try {
+            $launcherEntry = $zip.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq "$stage/ErsatzRS.exe" } | Select-Object -First 1
+            if ($null -eq $launcherEntry -or $launcherEntry.Length -eq 0) {
+              throw 'Windows zip must contain the non-empty ErsatzRS.exe startup launcher at its package root'
+            }
+          } finally {
+            $zip.Dispose()
+          }
           "ARCHIVE_PATH=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Create prerelease and upload archive
         shell: pwsh
@@ -294,7 +308,7 @@ jobs:
           ERSATZRS_SKIP_STYLANCE: "1"
         run: |
           $ErrorActionPreference = 'Stop'
-          cargo test -p ersatzrs-web --lib --target x86_64-pc-windows-msvc windows_startup
+          cargo test -p ersatzrs-platform --target x86_64-pc-windows-msvc windows_startup
       # Boot the assembled bundle (this RID's freshly built SSR binary + the
       # web-assets artifact) and fail the release if any `/pkg` hydration asset
       # 404s. This is the structural catch for the recurring "wasm checksum
@@ -363,8 +377,16 @@ jobs:
             echo "release archives must not bundle ffmpeg or ffprobe" >&2
             exit 1
           fi
+          if [ "$RID" = "win-x64" ] && [ ! -s "$stage/ErsatzRS.exe" ]; then
+            echo "Windows release archive must contain a non-empty ErsatzRS.exe startup launcher" >&2
+            exit 1
+          fi
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
+            if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then
+              echo "Windows zip must contain ErsatzRS.exe at its package root" >&2
+              exit 1
+            fi
             echo "ARCHIVE_PATH=${stage}.zip" >> "$GITHUB_ENV"
           else
             tar -czf "${stage}.tar.gz" "$stage"

@@ -41,6 +41,7 @@ ersatzrs-app = { path = "../ersatzrs-app", version = "0.1.0" }
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
+ersatzrs-platform = { path = "../ersatzrs-platform", version = "0.1.0" }
 ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "0.1.0" }
 ersatzrs-scheduler = { path = "../ersatzrs-scheduler", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "signal", "sync", "time"] }
@@ -69,10 +70,6 @@ web-sys = { version = "0.3", features = ["Blob", "Clipboard", "Document", "DomRe
 gloo-net = { version = "0.7", features = ["http"] }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
-
-[target.'cfg(all(not(target_arch = "wasm32"), windows))'.dependencies]
-# Safe per-user HKCU Run-key access for the opt-in Windows tray autostart setting.
-winreg = "0.56"
 
 [package.metadata.stylance]
 output_file = "public/bundle.css"
