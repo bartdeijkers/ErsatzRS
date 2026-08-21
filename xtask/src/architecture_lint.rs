@@ -34,6 +34,7 @@ const FORBIDDEN_APP_DEPENDENCIES: &[&str] = &[
     "ersatzrs-hwprobe",
     "ersatzrs-infra",
     "ersatzrs-launcher",
+    "ersatzrs-platform",
     "ersatzrs-scanner",
     "ersatzrs-scheduler",
     "ersatzrs-web",

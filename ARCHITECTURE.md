@@ -11,6 +11,7 @@ crates/
   ersatzrs-domain/    entities, enums, value objects
   ersatzrs-core/      business logic, scheduling traits, repository traits
   ersatzrs-hwprobe/   native OS/GPU capability probes behind a safe API
+  ersatzrs-platform/  dependency-light operating-system integrations
   ersatzrs-ffmpeg/    FFmpeg argument and filter-graph builders
   ersatzrs-infra/     sqlx repositories, migrations, provider clients
   ersatzrs-app/       use-case handlers
@@ -34,12 +35,13 @@ Direct workspace dependencies are:
 | `ersatzrs-domain` | none |
 | `ersatzrs-core` | `ersatzrs-domain` |
 | `ersatzrs-hwprobe` | none |
+| `ersatzrs-platform` | none |
 | `ersatzrs-ffmpeg` | `ersatzrs-domain`, `ersatzrs-hwprobe` |
 | `ersatzrs-infra` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg` |
 | `ersatzrs-app` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain` |
 | `ersatzrs-scanner` | `ersatzrs-addon-contract`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
 | `ersatzrs-scheduler` | `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-ffmpeg`, `ersatzrs-infra` |
-| `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-scanner`, `ersatzrs-scheduler` |
+| `ersatzrs-web` | `ersatzrs-addon-contract`, `ersatzrs-app`, `ersatzrs-core`, `ersatzrs-domain`, `ersatzrs-ffmpeg`, `ersatzrs-infra`, `ersatzrs-platform`, `ersatzrs-scanner`, `ersatzrs-scheduler` |
 | `ersatzrs-healthcheck`, `ersatzrs-launcher` | none |
 | `xtask` | `ersatzrs-addon-contract` |
 
@@ -54,6 +56,9 @@ Rules:
   platform-guarded native FFI for hardware capability enumeration. It exposes
   safe value objects to `ersatzrs-ffmpeg`; command generation must not contain
   native FFI directly.
+- `ersatzrs-platform` owns dependency-light safe operating-system adapters that
+  need focused native tests. Its Windows startup adapter uses the safe `winreg`
+  API and returns an explicit unsupported result on every non-Windows target.
 - `ersatzrs-infra` implements repository and provider traits from `ersatzrs-core`.
 - `ersatzrs-app` coordinates use cases and depends on traits, not concrete storage.
 - `ersatzrs-app` must not depend on adapter/runtime crates; the native

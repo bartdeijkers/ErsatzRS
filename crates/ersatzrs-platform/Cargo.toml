@@ -1,0 +1,16 @@
+[package]
+name = "ersatzrs-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Safe per-user HKCU Run-key access for platform-owned Windows startup.
+winreg = "0.56"
+
+[lints]
+workspace = true
