@@ -433,6 +433,7 @@ async fn add_refresh_match_and_generate_playlist() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn refresh_merges_untouched_fields_records_override_conflicts_and_holds_new_items() {
     let pool = common::test_db().await;
     seed_addon(&pool).await;

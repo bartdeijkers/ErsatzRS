@@ -1587,9 +1587,9 @@ mod metadata_conflict_tests {
     use super::*;
 
     fn conflicts(
-        value: Option<String>,
+        value: Option<&str>,
     ) -> std::collections::BTreeMap<String, AddonMediaListMetadataConflict> {
-        serde_json::from_str(value.as_deref().expect("conflict json")).expect("valid conflicts")
+        serde_json::from_str(value.expect("conflict json")).expect("valid conflicts")
     }
 
     #[test]
@@ -1602,7 +1602,7 @@ mod metadata_conflict_tests {
         )
         .expect("refresh conflicts");
 
-        let conflicts = conflicts(value);
+        let conflicts = conflicts(value.as_deref());
         let title = conflicts.get("title").expect("title conflict");
         assert_eq!(title.provider_before, serde_json::json!("Provider one"));
         assert_eq!(title.provider_after, serde_json::json!("Provider two"));

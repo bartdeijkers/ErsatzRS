@@ -13,6 +13,10 @@ pub const UPLOAD_URL_PREFIX: &str = "ersatzrs-upload://";
 
 /// Build the no-redirect, short-timeout client used by unattended artwork
 /// publication.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client cannot be constructed.
 pub fn client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(10))
@@ -22,6 +26,11 @@ pub fn client() -> Result<Client, String> {
 }
 
 /// Download one already-authorized URL with strict response and byte bounds.
+///
+/// # Errors
+///
+/// Returns an error when the request fails, the response is unsuccessful or
+/// too large, or the payload is not a supported image matching its MIME type.
 pub async fn download(client: &Client, url: &str) -> Result<(Vec<u8>, &'static str), String> {
     let response = client
         .get(url)
@@ -64,6 +73,11 @@ pub async fn download(client: &Client, url: &str) -> Result<(Vec<u8>, &'static s
 }
 
 /// Atomically replace one materialized image in its existing directory.
+///
+/// # Errors
+///
+/// Returns an error when the staging file cannot be created, written, flushed,
+/// or persisted at `path`.
 pub fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if std::fs::read(path).is_ok_and(|current| current == bytes) {
         return Ok(());
@@ -89,6 +103,11 @@ pub fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// The declared MIME type and the file signature must agree. This keeps an
 /// uploaded HTML or executable payload from being written under an image
 /// extension during publication.
+///
+/// # Errors
+///
+/// Returns an error when the payload is empty or oversized, has an unsupported
+/// signature, or does not match the declared MIME type.
 pub fn validate_image(
     content_type: &str,
     bytes: &[u8],

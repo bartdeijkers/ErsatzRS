@@ -1250,6 +1250,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn uploaded_parent_artwork_is_role_correct_and_preserves_operator_replacements() {
     let pool = common::test_db().await;
     let directory = seed_managed_list(&pool).await;

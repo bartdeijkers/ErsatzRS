@@ -2664,21 +2664,7 @@ async fn materialize_parent_artwork(
             "the parent NFO has no containing folder",
         )
     })?;
-    let mut selected = metadata.artwork.clone();
-    if !selected
-        .iter()
-        .any(|candidate| candidate.role == AddonMediaListArtworkRole::Thumb)
-    {
-        if let Some(url) = metadata.artwork_urls.first() {
-            selected.push(AddonMediaListArtwork {
-                url: url.clone(),
-                role: AddonMediaListArtworkRole::Thumb,
-                width: None,
-                height: None,
-                language: None,
-            });
-        }
-    }
+    let selected = selected_parent_artwork(metadata);
     let client = crate::addon_artwork::client()
         .map_err(|error| RepositoryError::unavailable("publish add-on artwork", error))?;
     let revision: i32 =
@@ -2702,36 +2688,8 @@ async fn materialize_parent_artwork(
             continue;
         };
         let source = candidate.url.trim();
-        let (bytes, extension) = if let Some(upload_id) = crate::addon_artwork::upload_id(source) {
-            let row = sqlx::query_as::<_, (Vec<u8>, String)>(
-                r#"SELECT "Bytes", "ContentType" FROM "AddonMediaListArtworkUpload"
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?
-                     AND "ScopeItemId" = 0 AND "Role" = ?"#,
-            )
-            .bind(upload_id)
-            .bind(list_id)
-            .bind(artwork_role_value(role))
-            .fetch_optional(pool)
-            .await
-            .repository()?
-            .ok_or_else(|| {
-                RepositoryError::Conflict(
-                    "selected artwork upload does not belong to this list and role".to_owned(),
-                )
-            })?;
-            let (_, extension) = crate::addon_artwork::validate_image(&row.1, &row.0)
-                .map_err(RepositoryError::Conflict)?;
-            (row.0, extension)
-        } else {
-            if !is_safe_remote_artwork_url(source) {
-                return Err(RepositoryError::Conflict(
-                    "selected artwork must use a bounded HTTPS URL".to_owned(),
-                ));
-            }
-            crate::addon_artwork::download(&client, source)
-                .await
-                .map_err(|error| RepositoryError::unavailable("download add-on artwork", error))?
-        };
+        let (bytes, extension) =
+            load_parent_artwork_bytes(pool, &client, list_id, role, source).await?;
         let existing = load_parent_materialization(pool, list_id, role).await?;
         if let Some(existing) = &existing {
             let path = folder.join(&existing.file_name);
@@ -2793,6 +2751,63 @@ async fn materialize_parent_artwork(
     metadata.artwork = published;
     metadata.artwork_urls.clear();
     Ok(())
+}
+
+fn selected_parent_artwork(metadata: &AddonMediaListNfoMetadata) -> Vec<AddonMediaListArtwork> {
+    let mut selected = metadata.artwork.clone();
+    if !selected
+        .iter()
+        .any(|candidate| candidate.role == AddonMediaListArtworkRole::Thumb)
+    {
+        if let Some(url) = metadata.artwork_urls.first() {
+            selected.push(AddonMediaListArtwork {
+                url: url.clone(),
+                role: AddonMediaListArtworkRole::Thumb,
+                width: None,
+                height: None,
+                language: None,
+            });
+        }
+    }
+    selected
+}
+
+async fn load_parent_artwork_bytes(
+    pool: &Pool<crate::db::Db>,
+    client: &reqwest::Client,
+    list_id: EntityId,
+    role: AddonMediaListArtworkRole,
+    source: &str,
+) -> Result<(Vec<u8>, &'static str)> {
+    if let Some(upload_id) = crate::addon_artwork::upload_id(source) {
+        let row = sqlx::query_as::<_, (Vec<u8>, String)>(
+            r#"SELECT "Bytes", "ContentType" FROM "AddonMediaListArtworkUpload"
+               WHERE "Id" = ? AND "AddonMediaListId" = ?
+                 AND "ScopeItemId" = 0 AND "Role" = ?"#,
+        )
+        .bind(upload_id)
+        .bind(list_id)
+        .bind(artwork_role_value(role))
+        .fetch_optional(pool)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "selected artwork upload does not belong to this list and role".to_owned(),
+            )
+        })?;
+        let (_, extension) = crate::addon_artwork::validate_image(&row.1, &row.0)
+            .map_err(RepositoryError::Conflict)?;
+        return Ok((row.0, extension));
+    }
+    if !is_safe_remote_artwork_url(source) {
+        return Err(RepositoryError::Conflict(
+            "selected artwork must use a bounded HTTPS URL".to_owned(),
+        ));
+    }
+    crate::addon_artwork::download(client, source)
+        .await
+        .map_err(|error| RepositoryError::unavailable("download add-on artwork", error))
 }
 
 async fn load_parent_materialization(
