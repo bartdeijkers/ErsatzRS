@@ -32,6 +32,22 @@ BASE_URL="http://127.0.0.1:${PORT}"
 log() { printf '\033[1;34m[verify-web-bundle]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[verify-web-bundle]\033[0m %s\n' "$*" >&2; }
 
+WINDOWS_POSIX=0
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) WINDOWS_POSIX=1 ;;
+esac
+
+# Git Bash tools need POSIX paths, while a native Windows server process needs
+# drive-letter paths in its environment. Keep both forms so mktemp/cleanup
+# remain shell-native and SQLite/site/runtime paths remain process-native.
+native_env_path() {
+  if [[ "$WINDOWS_POSIX" -eq 1 ]]; then
+    cygpath -m "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
 # --- Locate the server binary.
 SERVER_BIN="${ERSATZRS_WEB_BIN:-}"
 if [[ -z "$SERVER_BIN" ]]; then
@@ -72,30 +88,45 @@ if [[ -z "$FF_BIN" ]]; then
   done
 fi
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-verify-bundle.XXXXXX")"
+TMP_ROOT_ENV="$(native_env_path "$TMP_ROOT")"
+SITE_ROOT_ENV="$(native_env_path "$SITE_ROOT")"
 LOG_PATH="$TMP_ROOT/server.log"
 SERVER_PID=""
 cleanup() {
-  [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null || true
-  rm -rf "$TMP_ROOT"
+  if [[ -n "$SERVER_PID" ]]; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  for _ in $(seq 1 20); do
+    if rm -rf "$TMP_ROOT" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  err "failed to remove temporary bundle-verification directory: $TMP_ROOT"
+  return 1
 }
 trap cleanup EXIT INT TERM
 
 # Build the full server env in one array (never empty, so `"${SRV_ENV[@]}"` is
 # safe under `set -u` on older bash / Git Bash).
 declare -a SRV_ENV=(
-  "HOME=$TMP_ROOT"
-  "DATABASE_URL=sqlite:$TMP_ROOT/verify.db"
-  "LEPTOS_SITE_ROOT=$SITE_ROOT"
+  "HOME=$TMP_ROOT_ENV"
+  "DATABASE_URL=sqlite:$TMP_ROOT_ENV/verify.db"
+  "LEPTOS_SITE_ROOT=$SITE_ROOT_ENV"
   "LEPTOS_OUTPUT_NAME=ersatzrs-web"
+  "LEPTOS_SITE_ADDR=127.0.0.1:$PORT"
   "RUST_LOG=warn"
 )
 if [[ -n "$FF_BIN" ]]; then
-  FF_DIR="$(cd "$(dirname "$FF_BIN")/.." && pwd)"
   SRV_ENV+=(
-    "ErsatzRS_FFMPEG__PATH=$FF_BIN"
-    "ErsatzRS_FFPROBE__PATH=$(dirname "$FF_BIN")/ffprobe"
-    "LD_LIBRARY_PATH=$FF_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    "ErsatzRS_FFMPEG__PATH=$(native_env_path "$FF_BIN")"
+    "ErsatzRS_FFPROBE__PATH=$(native_env_path "$(dirname "$FF_BIN")/ffprobe")"
   )
+  if [[ "$WINDOWS_POSIX" -eq 0 ]]; then
+    FF_DIR="$(cd "$(dirname "$FF_BIN")/.." && pwd)"
+    SRV_ENV+=("LD_LIBRARY_PATH=$FF_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}")
+  fi
   log "ffmpeg override: $FF_BIN"
 fi
 

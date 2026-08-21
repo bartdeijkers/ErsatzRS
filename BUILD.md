@@ -455,7 +455,11 @@ several releases. Two distinct failure modes:
 binary against a site-assets directory and fails if any `/pkg` asset the shell
 HTML references does not resolve (HTTP 200). The release workflow runs it against
 the real release artifacts (linux-x64) before publishing, so a checksum mismatch
-fails the release instead of shipping. Run it locally against any bundle:
+fails the release instead of shipping. The gate binds only to loopback. Under
+Git Bash/MSYS it keeps POSIX paths for shell cleanup but converts every path
+passed to the native Windows server into drive-letter form, so its temporary
+SQLite database and assembled site are usable without a Firewall prompt. Run it
+locally against any bundle:
 
 ```bash
 ERSATZRS_WEB_BIN=target/release/ersatzrs-web \
