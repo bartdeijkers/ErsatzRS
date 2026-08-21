@@ -100,6 +100,9 @@ else
 fi
 
 SERVER_BIN="$TARGET_DIR_ABS/debug/ersatzrs-web"
+if [[ "$WINDOWS_POSIX" -eq 1 && -x "${SERVER_BIN}.exe" ]]; then
+  SERVER_BIN="${SERVER_BIN}.exe"
+fi
 if [[ ! -x "$SERVER_BIN" ]]; then
   err "server binary not found at $SERVER_BIN"
   exit 1
