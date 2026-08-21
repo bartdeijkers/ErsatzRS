@@ -20,6 +20,19 @@ SERVER_LOG="$RESULT_DIR/ersatzrs-web.log"
 log() { printf '\033[1;34m[playwright-e2e]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[playwright-e2e]\033[0m %s\n' "$*" >&2; }
 
+WINDOWS_POSIX=0
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) WINDOWS_POSIX=1 ;;
+esac
+
+native_env_path() {
+  if [[ "$WINDOWS_POSIX" -eq 1 ]]; then
+    cygpath -m "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
 LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-9.0}"
 if [[ -x "$LOCAL_FFMPEG_DIR/bin/ffmpeg" ]]; then
   export LD_LIBRARY_PATH="$LOCAL_FFMPEG_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -127,6 +140,9 @@ done
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-playwright-e2e.XXXXXX")"
 mkdir -p "$TMP_ROOT/home"
 DB_PATH="$TMP_ROOT/ErsatzRS.db"
+TMP_HOME_ENV="$(native_env_path "$TMP_ROOT/home")"
+DB_PATH_ENV="$(native_env_path "$DB_PATH")"
+SITE_ROOT_ENV="$(native_env_path "$SITE_ROOT")"
 TMP_LOG="$TMP_ROOT/ersatzrs-web.log"
 SERVER_PID=""
 
@@ -149,9 +165,9 @@ trap cleanup EXIT INT TERM
 log "starting ersatzrs-web on $BASE_URL"
 log "database: $DB_PATH"
 log "site root: $SITE_ROOT"
-HOME="$TMP_ROOT/home" \
-DATABASE_URL="sqlite:$DB_PATH" \
-LEPTOS_SITE_ROOT="$SITE_ROOT" \
+HOME="$TMP_HOME_ENV" \
+DATABASE_URL="sqlite:$DB_PATH_ENV" \
+LEPTOS_SITE_ROOT="$SITE_ROOT_ENV" \
 LEPTOS_OUTPUT_NAME="ersatzrs-web" \
 LEPTOS_SITE_ADDR="127.0.0.1:$PORT" \
 RUST_LOG="${RUST_LOG:-warn,ersatzrs_web=info}" \
@@ -186,7 +202,7 @@ if [[ -z "${ErsatzRS_FFMPEG__PATH:-}" && \
       -z "${ERSATZRS_FFMPEG__PATH:-}" && \
       -z "${FFMPEG_PATH:-}" && \
       -x "$MANAGED_FFMPEG" ]]; then
-  export FFMPEG_PATH="$MANAGED_FFMPEG"
+  export FFMPEG_PATH="$(native_env_path "$MANAGED_FFMPEG")"
   log "using acquired managed FFmpeg for browser fixtures"
 fi
 
@@ -212,8 +228,8 @@ fi
 set +e
 ERSATZRS_BASE_URL="$BASE_URL" \
 E2E_BASE_URL="$BASE_URL" \
-E2E_DB_PATH="$DB_PATH" \
-ERSATZRS_DB_PATH="$DB_PATH" \
+E2E_DB_PATH="$DB_PATH_ENV" \
+ERSATZRS_DB_PATH="$DB_PATH_ENV" \
 PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULT_JSON" \
   npx --yes playwright test "${PLAYWRIGHT_ARGS[@]}" --reporter=line,json
 STATUS=$?

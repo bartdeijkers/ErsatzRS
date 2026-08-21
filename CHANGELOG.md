@@ -65,10 +65,10 @@ release section when tagging a release.
   all-features nextest matrices, matching Linux and preserving the
   SQLite-only integration coverage hidden when MySQL is enabled.
 
-- Make the structural web-bundle verifier use native drive-letter paths when
-  Git Bash launches the Windows server and force its temporary host to
-  loopback, so the hydration gate can open its temporary SQLite database
-  without triggering a Windows Firewall prompt.
+- Make the structural web-bundle and Playwright verifiers use native
+  drive-letter paths when Git Bash launches Windows processes, and force their
+  temporary hosts to loopback, so the hydration gates can open their temporary
+  SQLite databases without triggering a Windows Firewall prompt.
 
 - Generate a managed list-level `tvshow.nfo` or `artist.nfo` from the
   add-on's title and description before applying an automatic library

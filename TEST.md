@@ -254,6 +254,12 @@ shared application state in its isolated test database. Set
 `ERSATZRS_E2E_WORKERS=<n>` or pass an explicit `--workers` argument only for
 spec subsets that are known to be independent.
 
+On Windows, run the same wrapper from Git Bash. It keeps shell-owned paths in
+POSIX form while translating the temporary database, home, site, and fixture
+paths passed to native Windows processes into drive-letter form. Its web host
+always binds to loopback, so the E2E run does not require a Windows Firewall
+approval.
+
 For focused local probes against an already-running server, use
 `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test tests/e2e/<spec>.ts`.
 When no spec exists yet, use Playwright MCP or another attached browser tool
