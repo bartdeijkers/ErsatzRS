@@ -31,20 +31,17 @@ use ersatzrs_infra::addons::{
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
-use futures_util::StreamExt as _;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use regex::Regex;
-use reqwest::{header::CONTENT_TYPE, redirect::Policy, Client};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const ENUMERATION_TIMEOUT: Duration = Duration::from_mins(2);
-/// Artwork is fetched unattended from add-on output, so keep one bad endpoint
-/// from monopolising a scan or exhausting the process heap.
-const ARTWORK_FETCH_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
+#[cfg(test)]
+const MAX_ARTWORK_BYTES: usize = ersatzrs_infra::addon_artwork::MAX_ARTWORK_BYTES;
 
 /// Suffixes that distinguish playlist manifests from ordinary definitions.
 pub const MANIFEST_SUFFIXES: &[&str] = &[".playlist.yml", ".playlist.yaml"];
@@ -176,6 +173,11 @@ pub struct PlaylistSidecarEntry {
     /// an operator replacement during later refreshes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artwork: Option<ManagedPlaylistArtwork>,
+    /// Role-aware files selected by the shared metadata editor. The legacy
+    /// `artwork` field remains readable for v3 sidecars and represents the
+    /// thumbnail role.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub artwork_roles: BTreeMap<String, ManagedPlaylistArtwork>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -183,6 +185,12 @@ pub struct ManagedPlaylistArtwork {
     pub url: String,
     pub file: String,
     pub sha256: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub operator_owned: bool,
+}
+
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -645,7 +653,7 @@ pub async fn sync_playlist_files(
         &mut selected,
     )
     .await;
-    apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
+    let reviewed_metadata = apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
     if let Err(error) =
         append_item_chapter_fragments(pool, manifest_path, &manifest.manifest.addon, &mut selected)
             .await
@@ -674,30 +682,84 @@ pub async fn sync_playlist_files(
         let nfo_file = managed_nfo_file_name(&file);
         let nfo_path = folder.join(&nfo_file);
         let definition_bytes = generated_definition_bytes(manifest, entry)?;
-        let generated_nfo = generated_nfo_bytes(manifest, entry)?;
-        let nfo_bytes =
-            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
-                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
-        write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
-        let previous_artwork = existing.as_ref().and_then(|state| {
+        let previous_entry = existing.as_ref().and_then(|state| {
             state
                 .entries
                 .iter()
                 .find(|previous| previous.id == entry.id)
-                .and_then(|previous| previous.artwork.as_ref())
         });
-        let artwork = sync_managed_artwork(
-            &artwork_client,
-            &folder,
-            &file,
-            entry
-                .thumbnail_url
-                .as_deref()
-                .or_else(|| entry.additional_image_urls.first().map(String::as_str)),
-            &addon.manifest.permissions.network_hosts,
-            previous_artwork,
-        )
-        .await;
+        let provider_id = entry.provider_id.as_deref().unwrap_or(&entry.id);
+        let metadata = reviewed_metadata.get(provider_id);
+        let mut artwork_roles = BTreeMap::new();
+        if let Some(metadata) = metadata {
+            for (role, key) in [
+                (
+                    ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster,
+                    "poster",
+                ),
+                (
+                    ersatzrs_core::repositories::AddonMediaListArtworkRole::Fanart,
+                    "fanart",
+                ),
+                (
+                    ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb,
+                    "thumb",
+                ),
+            ] {
+                let source = metadata
+                    .artwork
+                    .iter()
+                    .find(|candidate| candidate.role == role)
+                    .map(|candidate| candidate.url.as_str());
+                let previous = previous_entry.and_then(|previous| {
+                    previous.artwork_roles.get(key).or_else(|| {
+                        (key == "thumb")
+                            .then_some(previous.artwork.as_ref())
+                            .flatten()
+                    })
+                });
+                if let Some(materialized) = sync_managed_artwork_role(
+                    pool,
+                    manifest_path,
+                    provider_id,
+                    role,
+                    &artwork_client,
+                    &folder,
+                    &file,
+                    source,
+                    &addon.manifest.permissions.network_hosts,
+                    previous,
+                )
+                .await?
+                {
+                    artwork_roles.insert(key.to_owned(), materialized);
+                }
+            }
+        }
+        let artwork = if metadata.is_some() {
+            artwork_roles.get("thumb").cloned()
+        } else {
+            sync_managed_artwork(
+                &artwork_client,
+                &folder,
+                &file,
+                entry
+                    .thumbnail_url
+                    .as_deref()
+                    .or_else(|| entry.additional_image_urls.first().map(String::as_str)),
+                &addon.manifest.permissions.network_hosts,
+                previous_entry.and_then(|previous| previous.artwork.as_ref()),
+            )
+            .await
+        };
+        let generated_nfo = metadata.map_or_else(
+            || generated_nfo_bytes(manifest, entry),
+            |metadata| generated_reviewed_nfo_bytes(entry, metadata, &artwork_roles),
+        )?;
+        let nfo_bytes =
+            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
+                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
         managed_files.insert(entry.id.clone(), file.clone());
         managed_nfo_files.insert(entry.id.clone(), nfo_file.clone());
         entries.push(PlaylistSidecarEntry {
@@ -711,6 +773,7 @@ pub async fn sync_playlist_files(
             definition_sha256: Some(hex_hash(&definition_bytes)),
             nfo_sha256: Some(hex_hash(&nfo_bytes)),
             artwork,
+            artwork_roles,
         });
         definitions.push(ManagedPlaylistDefinition {
             id: entry.id.clone(),
@@ -1107,7 +1170,7 @@ async fn apply_reviewed_metadata(
     pool: &DbPool,
     manifest_path: &Path,
     selected: &mut [PlaylistEntry],
-) -> Result<()> {
+) -> Result<BTreeMap<String, ersatzrs_core::repositories::AddonMediaListNfoMetadata>> {
     let rows = sqlx::query_as::<_, (String, String, String)>(
         r#"SELECT "item"."ProviderId", "item"."ProviderMetadataJson",
                   "item"."MetadataOverrideJson"
@@ -1151,7 +1214,7 @@ async fn apply_reviewed_metadata(
         };
         apply_metadata_to_entry(entry, metadata);
     }
-    Ok(())
+    Ok(by_provider)
 }
 
 fn apply_metadata_to_entry(
@@ -1644,6 +1707,41 @@ fn generated_nfo_bytes(
     Ok(bytes)
 }
 
+fn generated_reviewed_nfo_bytes(
+    entry: &PlaylistEntry,
+    metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+    artwork_roles: &BTreeMap<String, ManagedPlaylistArtwork>,
+) -> Result<Vec<u8>> {
+    use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+
+    let root = match entry.content_kind {
+        WireContentKind::TelevisionEpisode => "episodedetails",
+        WireContentKind::MusicVideo => "musicvideo",
+        WireContentKind::Auto
+        | WireContentKind::Movie
+        | WireContentKind::OtherVideo
+        | WireContentKind::Song
+        | WireContentKind::Image => "movie",
+    };
+    let mut published = metadata.clone();
+    published.artwork.retain_mut(|candidate| {
+        let key = match candidate.role {
+            AddonMediaListArtworkRole::Poster => "poster",
+            AddonMediaListArtworkRole::Fanart => "fanart",
+            AddonMediaListArtworkRole::Thumb => "thumb",
+            AddonMediaListArtworkRole::Other => return false,
+        };
+        let Some(materialized) = artwork_roles.get(key) else {
+            return false;
+        };
+        candidate.url.clone_from(&materialized.file);
+        true
+    });
+    published.artwork_urls.clear();
+    ersatzrs_infra::addon_media_nfo::serialize(root, &published)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
+}
+
 fn write_generated_pair(
     definition_path: &Path,
     definition_bytes: &[u8],
@@ -1771,13 +1869,270 @@ fn managed_nfo_file_name(definition_file: &str) -> String {
 }
 
 fn artwork_client() -> Result<Client> {
-    Client::builder()
-        .timeout(ARTWORK_FETCH_TIMEOUT)
-        // A redirect is a second, unvalidated fetch. Add-ons must explicitly
-        // declare every host they use, so reject it rather than following it.
-        .redirect(Policy::none())
-        .build()
-        .map_err(|error| PlaylistError::Enumeration(format!("create artwork client: {error}")))
+    ersatzrs_infra::addon_artwork::client().map_err(PlaylistError::Enumeration)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn sync_managed_artwork_role(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    client: &Client,
+    folder: &Path,
+    definition_file: &str,
+    source: Option<&str>,
+    network_hosts: &[String],
+    previous: Option<&ManagedPlaylistArtwork>,
+) -> Result<Option<ManagedPlaylistArtwork>> {
+    let Some(source) = source.map(str::trim).filter(|source| !source.is_empty()) else {
+        remove_generated_artwork(folder, previous);
+        clear_artwork_materialization(pool, manifest_path, provider_id, role).await?;
+        return Ok(None);
+    };
+    let (canonical_source, bytes, extension) =
+        if let Some(upload_id) = ersatzrs_infra::addon_artwork::upload_id(source) {
+            let role_value = artwork_role_value(role);
+            let row = sqlx::query_as::<_, (Vec<u8>, String)>(
+                r#"SELECT "upload"."Bytes", "upload"."ContentType"
+                   FROM "AddonMediaListArtworkUpload" AS "upload"
+                   JOIN "AddonMediaListLibrary" AS "managed"
+                     ON "managed"."AddonMediaListId" = "upload"."AddonMediaListId"
+                   JOIN "AddonMediaListItem" AS "item"
+                     ON "item"."Id" = "upload"."AddonMediaListItemId"
+                   WHERE "upload"."Id" = ? AND "managed"."ManifestPath" = ?
+                     AND "item"."ProviderId" = ? AND "upload"."Role" = ?"#,
+            )
+            .bind(upload_id)
+            .bind(manifest_path.to_string_lossy().as_ref())
+            .bind(provider_id)
+            .bind(role_value)
+            .fetch_optional(pool)
+            .await
+            .map_err(|error| {
+                PlaylistError::Enumeration(format!("unable to load uploaded artwork: {error}"))
+            })?
+            .ok_or_else(|| {
+                PlaylistError::Enumeration(
+                    "selected artwork upload does not belong to this item and role".to_owned(),
+                )
+            })?;
+            let (_, extension) = ersatzrs_infra::addon_artwork::validate_image(&row.1, &row.0)
+                .map_err(|error| {
+                    PlaylistError::Enumeration(format!("uploaded artwork is invalid: {error}"))
+                })?;
+            (source.to_owned(), row.0, extension)
+        } else {
+            let canonical = validate_operator_source_url(source, network_hosts)
+                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+            let (bytes, extension) = download_artwork(client, &canonical)
+                .await
+                .map_err(PlaylistError::Enumeration)?;
+            (canonical, bytes, extension)
+        };
+    if previous.is_some_and(|artwork| {
+        artwork.url == canonical_source
+            && file_has_hash(&folder.join(&artwork.file), &artwork.sha256)
+    }) {
+        return Ok(previous.cloned());
+    }
+    let file = artwork_file_name(definition_file, role, extension).ok_or_else(|| {
+        PlaylistError::Enumeration("unable to derive a safe artwork filename".to_owned())
+    })?;
+    if let Some(operator) =
+        existing_operator_role_artwork(folder, definition_file, role, previous, &canonical_source)
+    {
+        if previous.is_some_and(|previous| previous.file != operator.file) {
+            remove_generated_artwork(folder, previous);
+        }
+        record_artwork_materialization(
+            pool,
+            manifest_path,
+            provider_id,
+            role,
+            &canonical_source,
+            &operator,
+        )
+        .await?;
+        return Ok(Some(operator));
+    }
+    let path = folder.join(&file);
+    if path.parent() != Some(folder) {
+        return Err(PlaylistError::Enumeration(
+            "managed artwork path escaped its library folder".to_owned(),
+        ));
+    }
+    write_bytes_atomically(&path, &bytes)?;
+    let artwork = ManagedPlaylistArtwork {
+        url: canonical_source.clone(),
+        file,
+        sha256: hex_hash(&bytes),
+        operator_owned: false,
+    };
+    if previous.is_some_and(|previous| previous.file != artwork.file) {
+        remove_generated_artwork(folder, previous);
+    }
+    record_artwork_materialization(
+        pool,
+        manifest_path,
+        provider_id,
+        role,
+        &canonical_source,
+        &artwork,
+    )
+    .await?;
+    Ok(Some(artwork))
+}
+
+fn artwork_file_name(
+    definition_file: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    extension: &str,
+) -> Option<String> {
+    use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+
+    let stem = Path::new(definition_file).file_stem()?.to_str()?;
+    Some(match role {
+        AddonMediaListArtworkRole::Thumb => format!("{stem}.{extension}"),
+        AddonMediaListArtworkRole::Poster => format!("{stem}-poster.{extension}"),
+        AddonMediaListArtworkRole::Fanart => format!("{stem}-fanart.{extension}"),
+        AddonMediaListArtworkRole::Other => return None,
+    })
+}
+
+fn existing_operator_role_artwork(
+    folder: &Path,
+    definition_file: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    previous: Option<&ManagedPlaylistArtwork>,
+    source: &str,
+) -> Option<ManagedPlaylistArtwork> {
+    ["jpg", "jpeg", "png", "webp"]
+        .into_iter()
+        .find_map(|extension| {
+            let file = artwork_file_name(definition_file, role, extension)?;
+            let path = folder.join(&file);
+            if !path.is_file()
+                || previous.is_some_and(|artwork| {
+                    !artwork.operator_owned
+                        && artwork.file == file
+                        && file_has_hash(&path, &artwork.sha256)
+                })
+            {
+                return None;
+            }
+            let bytes = std::fs::read(path).ok()?;
+            Some(ManagedPlaylistArtwork {
+                url: source.to_owned(),
+                file,
+                sha256: hex_hash(&bytes),
+                operator_owned: true,
+            })
+        })
+}
+
+const fn artwork_role_value(role: ersatzrs_core::repositories::AddonMediaListArtworkRole) -> i32 {
+    use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+    match role {
+        AddonMediaListArtworkRole::Poster => 1,
+        AddonMediaListArtworkRole::Fanart => 2,
+        AddonMediaListArtworkRole::Thumb => 3,
+        AddonMediaListArtworkRole::Other => 0,
+    }
+}
+
+async fn record_artwork_materialization(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    source: &str,
+    artwork: &ManagedPlaylistArtwork,
+) -> Result<()> {
+    let owner = sqlx::query_as::<_, (i64, i64, i32)>(
+        r#"SELECT "list"."Id", "item"."Id", "list"."PublishedRevision"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "managed"."AddonMediaListId"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."AddonMediaListId" = "list"."Id"
+           WHERE "managed"."ManifestPath" = ? AND "item"."ProviderId" = ?"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .bind(provider_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to resolve artwork owner: {error}"))
+    })?;
+    let Some((list_id, item_id, revision)) = owner else {
+        return Ok(());
+    };
+    let role_value = artwork_role_value(role);
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaListArtworkMaterialization"
+           SET "Source" = ?, "FileName" = ?, "Sha256" = ?, "PublishedRevision" = ?
+           WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?"#,
+    )
+    .bind(source)
+    .bind(&artwork.file)
+    .bind(&artwork.sha256)
+    .bind(revision.saturating_add(1))
+    .bind(list_id)
+    .bind(item_id)
+    .bind(role_value)
+    .execute(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to update artwork publication: {error}"))
+    })?;
+    if updated.rows_affected() == 0 {
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
+                   "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
+                   "Source", "FileName", "Sha256", "PublishedRevision"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(list_id)
+        .bind(item_id)
+        .bind(item_id)
+        .bind(role_value)
+        .bind(source)
+        .bind(&artwork.file)
+        .bind(&artwork.sha256)
+        .bind(revision.saturating_add(1))
+        .execute(pool)
+        .await
+        .map_err(|error| {
+            PlaylistError::Enumeration(format!("unable to record artwork publication: {error}"))
+        })?;
+    }
+    Ok(())
+}
+
+async fn clear_artwork_materialization(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+) -> Result<()> {
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListArtworkMaterialization"
+           WHERE "Role" = ? AND "AddonMediaListItemId" IN (
+               SELECT "item"."Id" FROM "AddonMediaListItem" AS "item"
+               JOIN "AddonMediaListLibrary" AS "managed"
+                 ON "managed"."AddonMediaListId" = "item"."AddonMediaListId"
+               WHERE "managed"."ManifestPath" = ? AND "item"."ProviderId" = ?
+           )"#,
+    )
+    .bind(artwork_role_value(role))
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .bind(provider_id)
+    .execute(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to clear artwork publication: {error}"))
+    })?;
+    Ok(())
 }
 
 /// Materialize the first provider image beside one generated definition.
@@ -1868,6 +2223,7 @@ async fn sync_managed_artwork(
         url: source_url,
         file,
         sha256: hex_hash(&bytes),
+        operator_owned: false,
     };
     if previous.is_some_and(|previous| previous.file != artwork.file) {
         remove_generated_artwork(folder, previous);
@@ -1899,7 +2255,10 @@ fn remove_generated_artwork(folder: &Path, previous: Option<&ManagedPlaylistArtw
         return;
     };
     let path = folder.join(&previous.file);
-    if path.parent() == Some(folder) && file_has_hash(&path, &previous.sha256) {
+    if !previous.operator_owned
+        && path.parent() == Some(folder)
+        && file_has_hash(&path, &previous.sha256)
+    {
         if let Err(error) = std::fs::remove_file(&path) {
             tracing::warn!(
                 artwork_file = %path.display(),
@@ -1914,52 +2273,7 @@ async fn download_artwork(
     client: &Client,
     url: &str,
 ) -> std::result::Result<(Vec<u8>, &'static str), String> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|error| format!("request failed: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("server returned HTTP {}", response.status()));
-    }
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_ARTWORK_BYTES as u64)
-    {
-        return Err(format!("content length exceeds {MAX_ARTWORK_BYTES} bytes"));
-    }
-    let content_type = response
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .map(|value| {
-            value
-                .split(';')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-        })
-        .ok_or_else(|| "response has no valid image content type".to_owned())?;
-    let extension = match content_type.as_str() {
-        "image/jpeg" => "jpg",
-        "image/png" => "png",
-        "image/webp" => "webp",
-        _ => return Err("response content type is not JPEG, PNG, or WebP".to_owned()),
-    };
-    let mut stream = response.bytes_stream();
-    let mut bytes = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| format!("read failed: {error}"))?;
-        if bytes.len().saturating_add(chunk.len()) > MAX_ARTWORK_BYTES {
-            return Err(format!("response exceeds {MAX_ARTWORK_BYTES} bytes"));
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    if bytes.is_empty() {
-        return Err("response body is empty".to_owned());
-    }
-    Ok((bytes, extension))
+    ersatzrs_infra::addon_artwork::download(client, url).await
 }
 
 fn move_to_managed_trash(folder: &Path, path: &Path, now: DateTime<Utc>) -> Result<()> {
@@ -2186,7 +2500,7 @@ create_playlist: true
                 when.method(GET).path("/image");
                 then.status(200)
                     .header("content-type", "image/png")
-                    .body("fixture png bytes");
+                    .body(b"\x89PNG\r\n\x1a\nfixture png bytes".to_vec());
             })
             .await;
         let directory = tempfile::tempdir().expect("managed artwork directory");
@@ -2280,6 +2594,45 @@ create_playlist: true
         assert!(!directory.path().join("episode.png").exists());
         non_image.assert_calls_async(1).await;
         oversized.assert_calls_async(1).await;
+    }
+
+    #[test]
+    fn reviewed_item_artwork_uses_role_specific_kodi_files_and_detects_operator_edits() {
+        use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+
+        assert_eq!(
+            artwork_file_name("episode.yml", AddonMediaListArtworkRole::Poster, "jpg").as_deref(),
+            Some("episode-poster.jpg")
+        );
+        assert_eq!(
+            artwork_file_name("episode.yml", AddonMediaListArtworkRole::Fanart, "webp").as_deref(),
+            Some("episode-fanart.webp")
+        );
+        assert_eq!(
+            artwork_file_name("episode.yml", AddonMediaListArtworkRole::Thumb, "png").as_deref(),
+            Some("episode.png")
+        );
+
+        let directory = tempfile::tempdir().expect("role artwork directory");
+        let path = directory.path().join("episode-poster.jpg");
+        std::fs::write(&path, b"operator poster").expect("operator poster");
+        let previous = ManagedPlaylistArtwork {
+            url: "https://example.test/old.jpg".to_owned(),
+            file: "episode-poster.jpg".to_owned(),
+            sha256: hex_hash(b"old generated poster"),
+            operator_owned: false,
+        };
+        let detected = existing_operator_role_artwork(
+            directory.path(),
+            "episode.yml",
+            AddonMediaListArtworkRole::Poster,
+            Some(&previous),
+            "https://example.test/new.jpg",
+        )
+        .expect("operator replacement");
+        assert!(detected.operator_owned);
+        assert_eq!(detected.file, "episode-poster.jpg");
+        assert_eq!(detected.sha256, hex_hash(b"operator poster"));
     }
 
     #[cfg(unix)]
@@ -3021,6 +3374,7 @@ create_playlist: true
                 definition_sha256: Some(hex_hash(definition)),
                 nfo_sha256: Some(hex_hash(nfo)),
                 artwork: None,
+                artwork_roles: BTreeMap::new(),
             }],
             overrides: PlaylistOverrides::default(),
         };

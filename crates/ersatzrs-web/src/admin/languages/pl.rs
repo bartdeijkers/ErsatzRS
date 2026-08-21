@@ -1086,6 +1086,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Film główny",
         TextKey::MovieExtra => "Materiał dodatkowy",
         TextKey::NeedReview => "Wymaga sprawdzenia",
+        TextKey::MetadataConflicts => "Konflikty metadanych",
+        TextKey::MetadataConflictsHelp => {
+            "Dostawca zmienił pola zastąpione przez operatora. Sprawdź wartości przed publikacją."
+        }
+        TextKey::PreviousProviderValue => "Poprzednia wartość dostawcy",
+        TextKey::NewProviderValue => "Nowa wartość dostawcy",
+        TextKey::OperatorValue => "Wartość operatora",
         TextKey::Discovered => "Wykryto",
         TextKey::EditMetadata => "Edytuj metadane",
         TextKey::OneTagPerLine => "Jeden tag w wierszu",

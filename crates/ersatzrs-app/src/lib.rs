@@ -433,7 +433,12 @@ impl ApplicationServices {
         &self,
         command: commands::PublishAddonMediaList,
     ) -> Result<()> {
-        commands::publish_addon_media_list(command, self.ports.addon_media_lists()).await
+        commands::publish_addon_media_list(
+            command,
+            self.ports.addon_media_lists(),
+            self.ports.scan_runtime(),
+        )
+        .await
     }
 
     /// Include or exclude one provider item from publication.

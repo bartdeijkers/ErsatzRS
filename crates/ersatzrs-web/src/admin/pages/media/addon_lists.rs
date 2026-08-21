@@ -2,6 +2,8 @@
 //! `Pages/TraktLists.razor`, `Pages/TraktListEditor.razor`, and
 //! `Shared/AddTraktListDialog.razor`; ADR 0067 owns the deliberate boundary change.
 
+use std::collections::BTreeMap;
+
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
     AddonMediaListPresentationKind, AddonMediaListReviewState,
@@ -23,9 +25,10 @@ use crate::admin::server_fns::addon_media_lists::{
     set_addon_media_list_item_content_kind, set_addon_media_list_item_included,
     set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
     update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListForm, AddonMediaListItemDetail, AddonMediaListItemRow, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListNfoPerson, AddonMediaListProviderRow,
-    AddonMediaListReplacementRow, AddonMediaListRow,
+    AddonMediaListForm, AddonMediaListItemDetail, AddonMediaListItemRow,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListReplacementRow,
+    AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -45,6 +48,159 @@ fn set_browser_location(path: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn set_browser_location(_path: &str) {}
+
+#[cfg(target_arch = "wasm32")]
+async fn upload_metadata_artwork(
+    input: web_sys::HtmlInputElement,
+    list_id: i64,
+    item_id: Option<i64>,
+    role: AddonMediaListArtworkRole,
+    etag: &str,
+) -> Result<(String, String), String> {
+    use gloo_net::http::Request;
+    use web_sys::FormData;
+
+    let file = input
+        .files()
+        .and_then(|files| files.get(0))
+        .ok_or_else(|| "no file was selected".to_owned())?;
+    let form_data = FormData::new().map_err(|error| format!("{error:?}"))?;
+    form_data
+        .append_with_str("list_id", &list_id.to_string())
+        .map_err(|error| format!("{error:?}"))?;
+    if let Some(item_id) = item_id {
+        form_data
+            .append_with_str("item_id", &item_id.to_string())
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    form_data
+        .append_with_str(
+            "role",
+            match role {
+                AddonMediaListArtworkRole::Poster => "poster",
+                AddonMediaListArtworkRole::Fanart => "fanart",
+                AddonMediaListArtworkRole::Thumb => "thumb",
+                AddonMediaListArtworkRole::Other => "other",
+            },
+        )
+        .map_err(|error| format!("{error:?}"))?;
+    form_data
+        .append_with_str("etag", etag)
+        .map_err(|error| format!("{error:?}"))?;
+    let blob: &web_sys::Blob = file.as_ref();
+    form_data
+        .append_with_blob_and_filename("file", blob, &file.name())
+        .map_err(|error| format!("{error:?}"))?;
+    let response = Request::post("/api/addon-media-lists/artwork")
+        .body(form_data)
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    let value: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
+    let url = value["url"]
+        .as_str()
+        .ok_or_else(|| "upload response has no artwork URL".to_owned())?
+        .to_owned();
+    let etag = value["etag"]
+        .as_str()
+        .ok_or_else(|| "upload response has no metadata ETag".to_owned())?
+        .to_owned();
+    Ok((url, etag))
+}
+
+#[component]
+fn ArtworkRoleInput(
+    list_id: i64,
+    item_id: Option<i64>,
+    role: AddonMediaListArtworkRole,
+    label: TextKey,
+    url: RwSignal<String>,
+    etag: RwSignal<String>,
+    candidates: Vec<String>,
+) -> impl IntoView {
+    let uploading = RwSignal::new(false);
+    let toast = use_toast();
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = (etag, toast);
+    let role_name = match role {
+        AddonMediaListArtworkRole::Poster => "poster",
+        AddonMediaListArtworkRole::Fanart => "fanart",
+        AddonMediaListArtworkRole::Thumb => "thumb",
+        AddonMediaListArtworkRole::Other => "other",
+    };
+    let list_name = format!(
+        "addon-artwork-{}-{}-{}",
+        list_id,
+        item_id.unwrap_or(0),
+        role_name,
+    );
+    view! {
+        <div class=style::artwork_role_field>
+            <span>{tr(label)}</span>
+            <input
+                class=style::boxed_input
+                type="text"
+                inputmode="url"
+                aria-label=tr(label)
+                data-artwork-role=role_name
+                list=list_name.clone()
+                prop:value=move || url.get()
+                on:input=move |event| url.set(event_target_value(&event))
+            />
+            <datalist id=list_name>
+                {candidates.into_iter().map(|candidate| view! { <option value=candidate/> }).collect_view()}
+            </datalist>
+            <span class=style::artwork_upload_control>
+                <span style=icon_style(IconName::Upload, "0.95rem") aria-hidden="true"></span>
+                <span>{tr(TextKey::UploadImage)}</span>
+                <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    aria-label=format!("{}: {}", tr(TextKey::UploadImage), tr(label))
+                    data-artwork-role=role_name
+                    disabled=move || uploading.get()
+                    on:change=move |event| {
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            use leptos::task::spawn_local;
+                            use wasm_bindgen::JsCast as _;
+                            let Some(target) = event.target() else { return; };
+                            let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else { return; };
+                            uploading.set(true);
+                            spawn_local(async move {
+                                match upload_metadata_artwork(
+                                    input,
+                                    list_id,
+                                    item_id,
+                                    role,
+                                    &etag.get_untracked(),
+                                )
+                                .await
+                                {
+                                    Ok((uploaded_url, uploaded_etag)) => {
+                                        url.set(uploaded_url);
+                                        etag.set(uploaded_etag);
+                                        toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                                    }
+                                    Err(error) => toast.push(
+                                        format!("{}: {error}", tr(TextKey::UploadFailed)),
+                                        ToastSeverity::Error,
+                                    ),
+                                }
+                                uploading.set(false);
+                            });
+                        }
+                        let _ = event;
+                    }
+                />
+            </span>
+        </div>
+    }
+}
 
 fn content_kind_from_value(value: &str) -> AddonMediaListContentKind {
     match value {
@@ -385,6 +541,60 @@ fn item_row_view(
     .into_any()
 }
 
+fn metadata_value_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "—".to_owned(),
+        serde_json::Value::String(value) if value.is_empty() => "—".to_owned(),
+        serde_json::Value::String(value) => value.clone(),
+        value => serde_json::to_string(value).unwrap_or_else(|_| "—".to_owned()),
+    }
+}
+
+#[component]
+fn MetadataConflictSummary(
+    conflicts: BTreeMap<String, AddonMediaListMetadataConflict>,
+) -> impl IntoView {
+    let has_conflicts = !conflicts.is_empty();
+
+    view! {
+        <section
+            class=style::metadata_conflicts
+            style:display=if has_conflicts { "grid" } else { "none" }
+            aria-label=tr(TextKey::MetadataConflicts)
+        >
+            <header>
+                <span style=icon_style(IconName::Warning, "1.1rem") aria-hidden="true"></span>
+                <div>
+                    <h3>{tr(TextKey::MetadataConflicts)}</h3>
+                    <p>{tr(TextKey::MetadataConflictsHelp)}</p>
+                </div>
+            </header>
+            <div class=style::metadata_conflict_table>
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">{tr(TextKey::Name)}</th>
+                            <th scope="col">{tr(TextKey::PreviousProviderValue)}</th>
+                            <th scope="col">{tr(TextKey::NewProviderValue)}</th>
+                            <th scope="col">{tr(TextKey::OperatorValue)}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {conflicts.into_iter().map(|(field, conflict)| view! {
+                            <tr>
+                                <th scope="row">{field}</th>
+                                <td>{metadata_value_text(&conflict.provider_before)}</td>
+                                <td>{metadata_value_text(&conflict.provider_after)}</td>
+                                <td>{metadata_value_text(&conflict.operator_value)}</td>
+                            </tr>
+                        }).collect_view()}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+}
+
 #[component]
 fn InlineItemMetadataForm(
     list_id: i64,
@@ -393,7 +603,8 @@ fn InlineItemMetadataForm(
 ) -> impl IntoView {
     let item_id = detail.item.id;
     let original = detail.nfo.metadata.clone();
-    let etag = detail.nfo.etag.clone();
+    let metadata_conflicts = detail.nfo.conflicts.clone();
+    let etag = RwSignal::new(detail.nfo.etag.clone());
     let title = RwSignal::new(original.title.clone());
     let original_title = RwSignal::new(original.original_title.clone().unwrap_or_default());
     let plot = RwSignal::new(original.plot.clone().unwrap_or_default());
@@ -436,16 +647,17 @@ fn InlineItemMetadataForm(
     let legacy_artwork = original.artwork_urls.first().cloned().unwrap_or_default();
     let artwork_open = RwSignal::new(false);
     let preview_artwork = Memo::new(move |_| {
-        [thumbnail_url.get(), poster_url.get(), fanart_url.get()]
+        let value = [thumbnail_url.get(), poster_url.get(), fanart_url.get()]
             .into_iter()
             .find(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| legacy_artwork.clone())
+            .unwrap_or_else(|| legacy_artwork.clone());
+        artwork_preview_url(&value)
     });
     let toast = use_toast();
     let save_action = Action::new(move |metadata: &AddonMediaListNfoMetadata| {
         let metadata = metadata.clone();
-        let etag = etag.clone();
-        async move { save_addon_media_list_item_nfo(list_id, item_id, metadata, etag).await }
+        let expected_etag = etag.get_untracked();
+        async move { save_addon_media_list_item_nfo(list_id, item_id, metadata, expected_etag).await }
     });
     Effect::new(move |_| {
         if let Some(result) = save_action.value().get() {
@@ -468,6 +680,7 @@ fn InlineItemMetadataForm(
     );
     view! {
         <section class=style::inline_editor>
+            <MetadataConflictSummary conflicts=metadata_conflicts/>
             <div class=style::inline_edit_grid>
                 <label class=style::metadata_field>
                     <span>{tr(TextKey::Title)}</span>
@@ -547,9 +760,9 @@ fn InlineItemMetadataForm(
                     </button>
                 </div>
                 <div class=style::artwork_fields style:display=move || if artwork_open.get() { "grid" } else { "none" }>
-                    <label><span>{tr(TextKey::Poster)}</span><input class=style::boxed_input type="url" prop:value=move || poster_url.get() on:input=move |event| poster_url.set(event_target_value(&event))/></label>
-                    <label><span>{tr(TextKey::FanArt)}</span><input class=style::boxed_input type="url" prop:value=move || fanart_url.get() on:input=move |event| fanart_url.set(event_target_value(&event))/></label>
-                    <label><span>{tr(TextKey::Thumbnail)}</span><input class=style::boxed_input type="url" prop:value=move || thumbnail_url.get() on:input=move |event| thumbnail_url.set(event_target_value(&event))/></label>
+                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Poster label=TextKey::Poster url=poster_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Poster)/>
+                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Fanart label=TextKey::FanArt url=fanart_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Fanart)/>
+                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Thumb label=TextKey::Thumbnail url=thumbnail_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Thumb)/>
                 </div>
             </aside>
             <footer class=style::inline_actions>
@@ -1652,6 +1865,24 @@ fn artwork_value(artwork: &[AddonMediaListArtwork], role: AddonMediaListArtworkR
         .unwrap_or_default()
 }
 
+fn artwork_candidates(
+    artwork: &[AddonMediaListArtwork],
+    role: AddonMediaListArtworkRole,
+) -> Vec<String> {
+    artwork
+        .iter()
+        .filter(|candidate| candidate.role == role)
+        .map(|candidate| candidate.url.clone())
+        .collect()
+}
+
+fn artwork_preview_url(value: &str) -> String {
+    value.strip_prefix("ersatzrs-upload://").map_or_else(
+        || value.to_owned(),
+        |id| format!("/api/addon-media-lists/artwork/{id}"),
+    )
+}
+
 fn artwork_values(
     original: &[AddonMediaListArtwork],
     values: [(&str, AddonMediaListArtworkRole); 3],
@@ -1682,6 +1913,7 @@ fn item_needs_review(
     presentation: AddonMediaListPresentationKind,
 ) -> bool {
     item.availability != AddonMediaListItemAvailability::Available
+        || item.metadata_conflict_count > 0
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
         || (presentation == AddonMediaListPresentationKind::TelevisionShow
@@ -1741,7 +1973,9 @@ fn AddonMediaListEditorIsland(
     let general_metadata_open = RwSignal::new(false);
     let is_draft = form.review_state != AddonMediaListReviewState::Published;
     let show_metadata = initial_show_nfo.metadata.clone();
-    let show_etag = initial_show_nfo.etag.clone();
+    let show_metadata_conflicts = initial_show_nfo.conflicts.clone();
+    let show_metadata_conflict_count = show_metadata_conflicts.len();
+    let show_etag = RwSignal::new(initial_show_nfo.etag.clone());
     let show_title = RwSignal::new(show_metadata.title.clone());
     let show_original_title =
         RwSignal::new(show_metadata.original_title.clone().unwrap_or_default());
@@ -1772,6 +2006,12 @@ fn AddonMediaListEditorIsland(
         &show_metadata.artwork,
         AddonMediaListArtworkRole::Thumb,
     ));
+    let show_poster_candidates =
+        artwork_candidates(&show_metadata.artwork, AddonMediaListArtworkRole::Poster);
+    let show_fanart_candidates =
+        artwork_candidates(&show_metadata.artwork, AddonMediaListArtworkRole::Fanart);
+    let show_thumbnail_candidates =
+        artwork_candidates(&show_metadata.artwork, AddonMediaListArtworkRole::Thumb);
     let presentation_error = form
         .presentation_error
         .as_deref()
@@ -2100,7 +2340,7 @@ fn AddonMediaListEditorIsland(
                             review_state: form.review_state,
                             review_error: form.review_error.clone(),
                             published_revision: form.published_revision,
-                        }, presentation_kind.get_untracked(), next_show_metadata, show_etag.clone()));
+                        }, presentation_kind.get_untracked(), next_show_metadata, show_etag.get_untracked()));
                     }
                 >
                     <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
@@ -2125,6 +2365,13 @@ fn AddonMediaListEditorIsland(
                                     <h1>{move || show_title.get()}</h1>
                                     <p class=style::metadata_type>{move || tr(presentation_text_key(presentation_kind.get()))}</p>
                                     <p class=style::metadata_description>{move || show_plot.get()}</p>
+                                    <p
+                                        class=style::metadata_hero_conflict
+                                        style:display=if show_metadata_conflict_count == 0 { "none" } else { "inline-flex" }
+                                    >
+                                        <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                                        <span>{format!("{} {}", show_metadata_conflict_count, tr(TextKey::MetadataConflicts))}</span>
+                                    </p>
                                 </div>
                                 <button
                                     type="button"
@@ -2253,72 +2500,74 @@ fn AddonMediaListEditorIsland(
                             </div>
                             <div
                                 class=style::general_metadata_panel
+                                data-testid="addon-general-metadata"
                                 style:display=move || if general_metadata_open.get() { "grid" } else { "none" }
                             >
+                            <MetadataConflictSummary conflicts=show_metadata_conflicts.clone()/>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Title)}</div>
-                                <input class=style::text_input prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Title) prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::OriginalTitle)}</div>
-                                <input class=style::text_input prop:value=move || show_original_title.get() on:input=move |event| show_original_title.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::OriginalTitle) prop:value=move || show_original_title.get() on:input=move |event| show_original_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::SortTitle)}</div>
-                                <input class=style::text_input prop:value=move || show_sort_title.get() on:input=move |event| show_sort_title.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::SortTitle) prop:value=move || show_sort_title.get() on:input=move |event| show_sort_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Year)}</div>
-                                <input class=style::text_input inputmode="numeric" prop:value=move || show_year.get() on:input=move |event| show_year.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Year) inputmode="numeric" prop:value=move || show_year.get() on:input=move |event| show_year.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Summary)}</div>
-                                <textarea class=style::boxed_textarea rows="4" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
+                                <textarea class=style::boxed_textarea aria-label=tr(TextKey::Summary) rows="4" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Genres)}</div>
-                                <input class=style::text_input prop:value=move || show_genres.get() on:input=move |event| show_genres.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Genres) prop:value=move || show_genres.get() on:input=move |event| show_genres.set(event_target_value(&event))/>
                             </div>
                             <div class=format!("{} {}", style::field_row, style::general_tag_row)>
                                 <div class=style::field_label>{tr(TextKey::Tags)}</div>
                                 <div class=style::tag_field>
-                                    <textarea class=style::tag_input rows="4" spellcheck="false" prop:value=move || show_tags.get() on:input=move |event| show_tags.set(event_target_value(&event))/>
+                                    <textarea class=style::tag_input aria-label=tr(TextKey::Tags) rows="4" spellcheck="false" prop:value=move || show_tags.get() on:input=move |event| show_tags.set(event_target_value(&event))/>
                                     <small>{move || format!("{} · {}", line_values(&show_tags.get()).len(), tr(TextKey::OneTagPerLine))}</small>
                                 </div>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Studios)}</div>
-                                <input class=style::text_input prop:value=move || show_studios.get() on:input=move |event| show_studios.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Studios) prop:value=move || show_studios.get() on:input=move |event| show_studios.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Directors)}</div>
-                                <input class=style::text_input prop:value=move || show_directors.get() on:input=move |event| show_directors.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Directors) prop:value=move || show_directors.get() on:input=move |event| show_directors.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Writers)}</div>
-                                <input class=style::text_input prop:value=move || show_writers.get() on:input=move |event| show_writers.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Writers) prop:value=move || show_writers.get() on:input=move |event| show_writers.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Artists)}</div>
-                                <input class=style::text_input prop:value=move || show_artists.get() on:input=move |event| show_artists.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Artists) prop:value=move || show_artists.get() on:input=move |event| show_artists.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Languages)}</div>
-                                <input class=style::text_input prop:value=move || show_languages.get() on:input=move |event| show_languages.set(event_target_value(&event))/>
+                                <input class=style::text_input aria-label=tr(TextKey::Languages) prop:value=move || show_languages.get() on:input=move |event| show_languages.set(event_target_value(&event))/>
                             </div>
                             <div class=format!("{} {}", style::field_row, style::general_tag_row)>
                                 <div class=style::field_label>{tr(TextKey::CastAndCredits)}</div>
                                 <div>
-                                    <textarea class=style::boxed_textarea rows="3" spellcheck="false" prop:value=move || show_people.get() on:input=move |event| show_people.set(event_target_value(&event))/>
+                                    <textarea class=style::boxed_textarea aria-label=tr(TextKey::CastAndCredits) rows="3" spellcheck="false" prop:value=move || show_people.get() on:input=move |event| show_people.set(event_target_value(&event))/>
                                     <small class=style::field_hint>{tr(TextKey::OneCreditPerLine)}</small>
                                 </div>
                             </div>
                             <div class=format!("{} {}", style::field_row, style::general_artwork_row)>
                                 <div class=style::field_label>{tr(TextKey::Artwork)}</div>
                                 <div class=style::general_artwork_fields>
-                                    <label><span>{tr(TextKey::Poster)}</span><input class=style::boxed_input type="url" prop:value=move || show_poster.get() on:input=move |event| show_poster.set(event_target_value(&event))/></label>
-                                    <label><span>{tr(TextKey::FanArt)}</span><input class=style::boxed_input type="url" prop:value=move || show_fanart.get() on:input=move |event| show_fanart.set(event_target_value(&event))/></label>
-                                    <label><span>{tr(TextKey::Thumbnail)}</span><input class=style::boxed_input type="url" prop:value=move || show_thumbnail.get() on:input=move |event| show_thumbnail.set(event_target_value(&event))/></label>
+                                    <ArtworkRoleInput list_id=id item_id=None role=AddonMediaListArtworkRole::Poster label=TextKey::Poster url=show_poster etag=show_etag candidates=show_poster_candidates.clone()/>
+                                    <ArtworkRoleInput list_id=id item_id=None role=AddonMediaListArtworkRole::Fanart label=TextKey::FanArt url=show_fanart etag=show_etag candidates=show_fanart_candidates.clone()/>
+                                    <ArtworkRoleInput list_id=id item_id=None role=AddonMediaListArtworkRole::Thumb label=TextKey::Thumbnail url=show_thumbnail etag=show_etag candidates=show_thumbnail_candidates.clone()/>
                                 </div>
                             </div>
                             </div>

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod addon_artwork;
 pub mod addon_chapters;
 pub mod addon_media_list;
 pub mod addon_media_list_sync;

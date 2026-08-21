@@ -365,6 +365,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Hauptfilm",
         TextKey::MovieExtra => "Filmextra",
         TextKey::NeedReview => "Überprüfung nötig",
+        TextKey::MetadataConflicts => "Metadatenkonflikte",
+        TextKey::MetadataConflictsHelp => {
+            "Der Anbieter hat von Ihnen überschriebene Felder geändert. Prüfen Sie die Werte vor der Veröffentlichung."
+        }
+        TextKey::PreviousProviderValue => "Vorheriger Anbieterwert",
+        TextKey::NewProviderValue => "Neuer Anbieterwert",
+        TextKey::OperatorValue => "Betreiberwert",
         TextKey::Discovered => "Erkannt",
         TextKey::EditMetadata => "Metadaten bearbeiten",
         TextKey::OneTagPerLine => "Ein Tag pro Zeile",

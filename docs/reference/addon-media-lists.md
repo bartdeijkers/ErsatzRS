@@ -148,6 +148,25 @@ the list to review, and publication errors remain visible on the list and in
 Health Checks. Excluded items retain their provider identity and metadata so
 they can be reviewed and re-included later.
 
+Provider values and operator overrides are compared per editable field. A
+refresh updates an untouched field, preserves an operator-owned value, and
+records a reviewable conflict when both sides changed. Large repeated fields,
+including tags, remain structured arrays even though the editor presents them
+as compact line-separated text.
+
+Publish stages the complete managed folder and database projection as one
+journaled revision. An exact backup remains available until NFO, artwork,
+playlist, projection, and revision advancement all succeed. Any failure restores
+the previous files and database state; startup recovery completes the same
+rollback for an interrupted publication. Revision guards reject stale or
+concurrent publishers.
+
+Artwork candidates may be bounded HTTPS URLs or bounded JPEG, PNG, and WebP
+uploads. ErsatzRS validates and materializes poster, fanart, thumb, and other
+roles as local managed files before publication, so an NFO never depends on a
+remote URL remaining available. A file replaced by an operator stays
+operator-owned and is not overwritten by provider refresh.
+
 The persisted `AddonMediaListChapter` row links the list, full source item, and
 fragment item and stores chapter index, title, start, and optional end. A
 refresh reconciles fragment items by provider ID, rebuilds these links, and

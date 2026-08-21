@@ -63,6 +63,12 @@ pub enum AddonMediaListReviewState {
     Ready,
     /// The current included snapshot is available to scanners and playout.
     Published,
+    /// One reviewed revision is staged for file generation and projection.
+    ///
+    /// This persisted state makes an interrupted cross-file/database
+    /// publication visible to recovery and health checks instead of exposing
+    /// it as a completed revision.
+    Publishing,
 }
 
 /// Descriptive content classification for an add-on supplied stream.

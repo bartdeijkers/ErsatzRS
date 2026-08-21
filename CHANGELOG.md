@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.24-beta] - 2026-08-22
+
 ### Added
 
 - Add-on list imports now open as a reviewable two-step Import/Publish draft
@@ -2188,7 +2190,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta.1...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...HEAD
+[1.0.24-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.23-beta...v1.0.24-beta
 [1.0.21-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...v1.0.21-beta.1
 [1.0.21-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...v1.0.21-beta
 [1.0.17-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.9...v1.0.17-beta

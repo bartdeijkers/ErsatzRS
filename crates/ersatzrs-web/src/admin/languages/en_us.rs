@@ -363,6 +363,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Main feature",
         TextKey::MovieExtra => "Movie extra",
         TextKey::NeedReview => "Need review",
+        TextKey::MetadataConflicts => "Metadata conflicts",
+        TextKey::MetadataConflictsHelp => {
+            "The provider changed fields that you overrode. Review the values before publishing."
+        }
+        TextKey::PreviousProviderValue => "Previous provider value",
+        TextKey::NewProviderValue => "New provider value",
+        TextKey::OperatorValue => "Operator value",
         TextKey::Discovered => "Discovered",
         TextKey::EditMetadata => "Edit metadata",
         TextKey::OneTagPerLine => "One tag per line",

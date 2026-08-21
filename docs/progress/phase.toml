@@ -1,27 +1,23 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Add-on metadata management'
-current_focus = 'AMM-B — Draft ingest and safe publication'
+current_phase = 'FFmpeg drawtext overlay leg'
+current_focus = 'DTX-A — FFmpeg drawtext overlay leg'
 
 summary = '''
-Phases 0–8 are complete. The AMM-A contract and parent-NFO repair, durable draft
-schema, shared localized editor, and v4 mappings for the official Beeld &
-Geluid and yt-dlp add-ons are implemented. AMM-B now closes cross-file/database
-publication rollback before artwork upload, refresh-conflict, and platform
-closeout work. The additive FFmpeg drawtext overlay leg follows AMM so live,
-file-backed text is available before Phase 9 teletext resumes at P9A-01; the
-leg also establishes reusable dynamic overlays for Phase 10's video jukebox.
+Phases 0–8 and the add-on metadata management program are complete. Add-on
+imports now use one provider-neutral review draft, localized editor, atomic
+publication boundary, per-field refresh ownership, artwork materialization,
+projection, and health model across Beeld & Geluid and yt-dlp. The additive
+FFmpeg drawtext overlay leg is current so live, file-backed text is available
+before Phase 9 teletext resumes at P9A-01; the leg also establishes reusable
+dynamic overlays for Phase 10's video jukebox.
 '''
 
 next_steps = '''
-Complete amm-b-02 with injected NFO/artwork/database failure tests that prove
-one reviewed revision cannot publish partially. Then implement bounded artwork
-upload/materialization in amm-c-02 and finish refresh conflicts, health, native
-Linux, Firefox, and full closeout gates in AMM-E. Next accept ADR 0077 and
-complete dtx-a-01 and dtx-a-02 for the FFmpeg filter leg, dynamic text-file
-controller, localized backend choice, and cross-platform proof. Restore Phase
-9A as the current focus after the drawtext program closes.
+Accept ADR 0077 and complete dtx-a-01 and dtx-a-02 for the FFmpeg filter leg,
+dynamic text-file controller, localized backend choice, and cross-platform
+proof. Restore Phase 9A as the current focus after the drawtext program closes.
 '''
 
 [[blocking_decision]]

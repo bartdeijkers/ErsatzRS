@@ -11,9 +11,10 @@ mod common;
 use std::{fs, path::Path};
 
 use ersatzrs_core::repositories::{
-    AddonMediaListNfoMetadata, AddonMediaListNfoPerson, AddonMediaListRepository,
+    AddonMediaListArtworkRole, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
+    AddonMediaListRepository,
 };
-use ersatzrs_domain::AddonMediaListPresentationKind;
+use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
 use tempfile::TempDir;
@@ -224,6 +225,97 @@ where
         .fetch_one(pool)
         .await
         .expect("query scalar")
+}
+
+async fn prepare_published_revision(
+    pool: &SqlitePool,
+    repositories: &Repositories,
+    directory: &TempDir,
+) -> (i32, Vec<u8>, i64) {
+    sqlx::query(
+        r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem")
+           SELECT 'System', 1 WHERE NOT EXISTS (
+               SELECT 1 FROM "PlaylistGroup" WHERE "IsSystem" = 1
+           )"#,
+    )
+    .execute(pool)
+    .await
+    .expect("seed system playlist group");
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "GeneratePlaylist" = 1 WHERE "Id" = 1"#)
+        .execute(pool)
+        .await
+        .expect("enable managed playlist");
+    request_and_publish(repositories, AddonMediaListPresentationKind::TelevisionShow)
+        .await
+        .expect("publish baseline revision");
+    let revision = scalar(pool, r#"SELECT "PublishedRevision" FROM "AddonMediaList""#).await;
+    let nfo = fs::read(directory.path().join("tvshow.nfo")).expect("baseline tvshow NFO");
+    let playlist_items = scalar(
+        pool,
+        r#"SELECT COUNT(*) FROM "PlaylistItem"
+           WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)"#,
+    )
+    .await;
+    (revision, nfo, playlist_items)
+}
+
+async fn recover_failed_publication(
+    repositories: &Repositories,
+    error: &ersatzrs_core::repositories::RepositoryError,
+) {
+    repositories
+        .addon_media_lists
+        .restore_staged_publication(LIST_ID, &error.to_string())
+        .await
+        .expect("restore publication snapshot");
+    repositories
+        .addon_media_lists
+        .reconcile_restored_publication(LIST_ID)
+        .await
+        .expect("reconcile restored projection");
+}
+
+async fn assert_publication_was_restored(
+    pool: &SqlitePool,
+    directory: &TempDir,
+    revision: i32,
+    nfo: &[u8],
+    playlist_items: i64,
+) {
+    assert_eq!(
+        scalar::<i32>(pool, r#"SELECT "PublishedRevision" FROM "AddonMediaList""#).await,
+        revision
+    );
+    assert_eq!(
+        scalar::<i64>(pool, r#"SELECT "ReviewState" FROM "AddonMediaList""#).await,
+        1,
+        "the editable draft must remain ready after rollback"
+    );
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "PublicationJournalJson" IS NOT NULL"#,
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        fs::read(directory.path().join("tvshow.nfo")).expect("restored tvshow NFO"),
+        nfo
+    );
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT COUNT(*) FROM "PlaylistItem"
+               WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)"#,
+        )
+        .await,
+        playlist_items
+    );
+    assert_eq!(
+        scalar::<String>(pool, r#"SELECT "Title" FROM "ShowMetadata" LIMIT 1"#).await,
+        "Fixture Show"
+    );
 }
 
 /// Every projection has a distinct metadata table, but all of them must carry
@@ -993,5 +1085,302 @@ async fn switching_away_from_music_videos_removes_the_managed_artist() {
     assert_eq!(
         scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
         3
+    );
+}
+
+#[tokio::test]
+async fn nfo_write_failure_restores_files_projection_and_playlist_as_one_revision() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (revision, nfo, playlist_items) =
+        prepare_published_revision(&pool, &repositories, &directory).await;
+
+    save_collection_title(&repositories, "Unpublished title").await;
+    repositories
+        .addon_media_lists
+        .stage_publication(LIST_ID)
+        .await
+        .expect("stage draft");
+    let nfo_path = directory.path().join("tvshow.nfo");
+    fs::remove_file(&nfo_path).expect("replace staged NFO with failure fixture");
+    fs::create_dir(&nfo_path).expect("create unwritable NFO target shape");
+
+    let error = repositories
+        .addon_media_lists
+        .commit_staged_publication(LIST_ID)
+        .await
+        .expect_err("NFO write must fail");
+    recover_failed_publication(&repositories, &error).await;
+    assert_publication_was_restored(&pool, &directory, revision, &nfo, playlist_items).await;
+}
+
+#[tokio::test]
+async fn artwork_failure_restores_files_projection_and_playlist_as_one_revision() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (revision, nfo, playlist_items) =
+        prepare_published_revision(&pool, &repositories, &directory).await;
+
+    let form = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("collection metadata");
+    repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Fanart,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nvalid fixture",
+            &form.etag,
+        )
+        .await
+        .expect("upload selected fanart");
+    repositories
+        .addon_media_lists
+        .stage_publication(LIST_ID)
+        .await
+        .expect("stage draft");
+    sqlx::query(r#"UPDATE "AddonMediaListArtworkUpload" SET "Bytes" = x'00'"#)
+        .execute(&pool)
+        .await
+        .expect("inject corrupt artwork payload");
+
+    let error = repositories
+        .addon_media_lists
+        .commit_staged_publication(LIST_ID)
+        .await
+        .expect_err("invalid staged artwork must fail");
+    recover_failed_publication(&repositories, &error).await;
+    assert_publication_was_restored(&pool, &directory, revision, &nfo, playlist_items).await;
+}
+
+#[tokio::test]
+async fn database_commit_failure_restores_files_projection_and_playlist_as_one_revision() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (revision, nfo, playlist_items) =
+        prepare_published_revision(&pool, &repositories, &directory).await;
+
+    save_collection_title(&repositories, "Unpublished title").await;
+    repositories
+        .addon_media_lists
+        .stage_publication(LIST_ID)
+        .await
+        .expect("stage draft");
+    sqlx::query(
+        r#"CREATE TRIGGER "FailAddonPublicationCommit"
+           BEFORE UPDATE OF "ReviewState" ON "AddonMediaList"
+           WHEN NEW."ReviewState" = 2
+           BEGIN SELECT RAISE(ABORT, 'injected publication commit failure'); END"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("install commit failure trigger");
+
+    let error = repositories
+        .addon_media_lists
+        .commit_staged_publication(LIST_ID)
+        .await
+        .expect_err("database commit must fail");
+    sqlx::query(r#"DROP TRIGGER "FailAddonPublicationCommit""#)
+        .execute(&pool)
+        .await
+        .expect("remove commit failure trigger");
+    recover_failed_publication(&repositories, &error).await;
+    assert_publication_was_restored(&pool, &directory, revision, &nfo, playlist_items).await;
+}
+
+#[tokio::test]
+async fn staged_publication_rejects_concurrent_draft_mutations() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (revision, nfo, playlist_items) =
+        prepare_published_revision(&pool, &repositories, &directory).await;
+
+    save_collection_title(&repositories, "Unpublished title").await;
+    repositories
+        .addon_media_lists
+        .stage_publication(LIST_ID)
+        .await
+        .expect("stage draft");
+
+    let form = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("load staged metadata");
+    let mut changed = form.metadata;
+    changed.title = "Racing edit".to_owned();
+    let metadata_error = repositories
+        .addon_media_lists
+        .save_show_nfo(LIST_ID, &changed, &form.etag)
+        .await
+        .expect_err("metadata mutation must be locked during publication");
+    assert!(metadata_error.to_string().contains("being published"));
+
+    let settings_error = repositories
+        .addon_media_lists
+        .update_settings(
+            LIST_ID,
+            true,
+            false,
+            AddonMediaListContentKind::TelevisionEpisode,
+            "",
+        )
+        .await
+        .expect_err("settings mutation must be locked during publication");
+    assert!(settings_error.to_string().contains("being published"));
+
+    let second_stage_error = repositories
+        .addon_media_lists
+        .stage_publication(LIST_ID)
+        .await
+        .expect_err("a second publication must not replace the active journal");
+    assert!(second_stage_error.to_string().contains("being published"));
+
+    recover_failed_publication(&repositories, &metadata_error).await;
+    assert_publication_was_restored(&pool, &directory, revision, &nfo, playlist_items).await;
+}
+
+#[tokio::test]
+async fn uploaded_parent_artwork_is_role_correct_and_preserves_operator_replacements() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let initial = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("collection metadata");
+    let poster = repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Poster,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nposter one",
+            &initial.etag,
+        )
+        .await
+        .expect("upload poster");
+    let stale_error = repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Thumb,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nstale",
+            &initial.etag,
+        )
+        .await
+        .expect_err("stale artwork metadata ETag");
+    assert!(stale_error.to_string().contains("changed"), "{stale_error}");
+    let fanart = repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Fanart,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nfanart one",
+            &poster.etag,
+        )
+        .await
+        .expect("upload fanart");
+    let thumb = repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Thumb,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nthumb one",
+            &fanart.etag,
+        )
+        .await
+        .expect("upload thumbnail");
+    assert!(thumb
+        .metadata
+        .artwork
+        .iter()
+        .all(|candidate| candidate.url.starts_with("ersatzrs-upload://")));
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("publish role artwork");
+    for file_name in ["poster.png", "fanart.png", "thumb.png"] {
+        assert!(directory.path().join(file_name).is_file(), "{file_name}");
+    }
+    let nfo = ersatzrs_infra::addon_media_nfo::read_form(Some(
+        directory.path().join("tvshow.nfo").as_path(),
+    ))
+    .expect("published collection NFO");
+    for (role, file_name) in [
+        (AddonMediaListArtworkRole::Poster, "poster.png"),
+        (AddonMediaListArtworkRole::Fanart, "fanart.png"),
+        (AddonMediaListArtworkRole::Thumb, "thumb.png"),
+    ] {
+        assert!(nfo
+            .metadata
+            .artwork
+            .iter()
+            .any(|candidate| candidate.role == role && candidate.url == file_name));
+    }
+    let projected: Vec<(i32, String)> = sqlx::query_as(
+        r#"SELECT "artwork"."ArtworkKind", "artwork"."Path"
+           FROM "Artwork" AS "artwork"
+           JOIN "ShowMetadata" AS "metadata" ON "metadata"."Id" = "artwork"."ShowMetadataId"
+           ORDER BY "artwork"."ArtworkKind""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("projected role artwork");
+    assert_eq!(projected.len(), 3);
+    assert_eq!(
+        projected.iter().map(|value| value.0).collect::<Vec<_>>(),
+        [0, 1, 3]
+    );
+    assert!(projected.iter().all(|(_, path)| Path::new(path).is_file()));
+
+    let operator_poster = b"\x89PNG\r\n\x1a\noperator replacement";
+    fs::write(directory.path().join("poster.png"), operator_poster)
+        .expect("replace generated poster");
+    let draft = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("draft metadata after publication");
+    repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Poster,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nposter two",
+            &draft.etag,
+        )
+        .await
+        .expect("select replacement poster");
+    repositories
+        .addon_media_lists
+        .publish(LIST_ID)
+        .await
+        .expect("republish with operator replacement");
+    assert_eq!(
+        fs::read(directory.path().join("poster.png")).expect("preserved poster"),
+        operator_poster
     );
 }

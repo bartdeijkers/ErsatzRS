@@ -4,6 +4,7 @@ use ersatzrs_domain::{
     AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use super::{RepositoryError, Result};
 
@@ -120,6 +121,8 @@ pub struct AddonMediaListItemAdminRow {
     pub included: bool,
     /// Whether this entry belongs to the currently published revision.
     pub published: bool,
+    /// Number of operator-owned fields whose provider value changed on refresh.
+    pub metadata_conflict_count: u32,
 }
 
 /// How many entries of one list fall into each availability group.
@@ -159,6 +162,14 @@ pub struct AddonMediaListArtwork {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub language: Option<String>,
+}
+
+/// One provider refresh that changed a field beneath an operator override.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListMetadataConflict {
+    pub provider_before: serde_json::Value,
+    pub provider_after: serde_json::Value,
+    pub operator_value: serde_json::Value,
 }
 
 /// Complete descriptive metadata supported by managed add-on-list NFO files.
@@ -218,6 +229,15 @@ pub struct AddonMediaListNfoForm {
     pub ownership: AddonMediaListNfoOwnership,
     pub error: Option<String>,
     pub path_available: bool,
+    /// Field-keyed refresh conflicts retained until the operator saves or restores metadata.
+    pub conflicts: BTreeMap<String, AddonMediaListMetadataConflict>,
+}
+
+/// Staged publication returned to the application coordinator.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublication {
+    pub list_id: EntityId,
+    pub library_id: EntityId,
 }
 
 /// Complete administration detail for one provider or chapter-fragment item.
@@ -299,11 +319,67 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
-    /// Atomically publish the current included draft snapshot.
-    async fn publish(&self, id: EntityId) -> Result<()> {
+    /// Stage the included draft for managed file generation.
+    async fn stage_publication(&self, id: EntityId) -> Result<AddonMediaListPublication> {
         let _ = id;
         Err(RepositoryError::unavailable(
-            "publish add-on media list",
+            "stage add-on media-list publication",
+            "not implemented",
+        ))
+    }
+    /// Commit one staged revision after its managed library has been scanned.
+    async fn commit_staged_publication(&self, id: EntityId) -> Result<()> {
+        let _ = id;
+        Err(RepositoryError::unavailable(
+            "commit add-on media-list publication",
+            "not implemented",
+        ))
+    }
+    /// Restore the last published item snapshot after staging or commit failed.
+    async fn restore_staged_publication(&self, id: EntityId, message: &str) -> Result<()> {
+        let _ = (id, message);
+        Err(RepositoryError::unavailable(
+            "restore add-on media-list publication",
+            "not implemented",
+        ))
+    }
+    /// Rebuild the prior database projection after its managed files were restored.
+    async fn reconcile_restored_publication(&self, id: EntityId) -> Result<()> {
+        let _ = id;
+        Err(RepositoryError::unavailable(
+            "reconcile restored add-on media-list publication",
+            "not implemented",
+        ))
+    }
+    /// Publish directly when managed files already exist (mainly repository tests).
+    ///
+    /// The native application service uses the staged methods and runs the
+    /// scanner between them, which is required for a first import.
+    async fn publish(&self, id: EntityId) -> Result<()> {
+        self.stage_publication(id).await?;
+        match self.commit_staged_publication(id).await {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let message = error.to_string();
+                self.restore_staged_publication(id, &message).await?;
+                self.reconcile_restored_publication(id).await?;
+                Err(error)
+            }
+        }
+    }
+    /// Store one bounded operator image and select it for a list or item role.
+    async fn upload_artwork(
+        &self,
+        list_id: EntityId,
+        item_id: Option<EntityId>,
+        role: AddonMediaListArtworkRole,
+        content_type: &str,
+        bytes: &[u8],
+        expected_etag: &str,
+    ) -> Result<AddonMediaListNfoForm> {
+        let _ = (list_id, item_id, role, content_type, bytes, expected_etag);
+        Err(RepositoryError::unavailable(
+            "upload add-on metadata artwork",
             "not implemented",
         ))
     }

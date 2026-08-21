@@ -84,6 +84,16 @@ pub fn build_app(app_state: AppState) -> Router {
             )),
         )
         .route(
+            "/api/addon-media-lists/artwork",
+            post(api::addon_media_lists::upload_artwork).layer(DefaultBodyLimit::max(
+                api::addon_media_lists::MAX_ARTWORK_REQUEST_BYTES,
+            )),
+        )
+        .route(
+            "/api/addon-media-lists/artwork/{upload_id}",
+            get(api::addon_media_lists::uploaded_artwork),
+        )
+        .route(
             "/api/addons/repository-package",
             post(api::addons::upload_repository_package)
                 .layer(DefaultBodyLimit::max(256 * 1024 + 64 * 1024)),

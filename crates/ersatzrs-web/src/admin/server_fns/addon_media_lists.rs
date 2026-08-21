@@ -4,6 +4,7 @@ use ersatzrs_domain::{
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListRow {
@@ -77,6 +78,7 @@ pub struct AddonMediaListItemRow {
     pub people: Vec<String>,
     pub included: bool,
     pub published: bool,
+    pub metadata_conflict_count: u32,
 }
 
 /// Per-availability entry totals for one list.
@@ -163,6 +165,14 @@ pub struct AddonMediaListNfoForm {
     pub ownership: AddonMediaListNfoOwnership,
     pub error: Option<String>,
     pub path_available: bool,
+    pub conflicts: BTreeMap<String, AddonMediaListMetadataConflict>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListMetadataConflict {
+    pub provider_before: serde_json::Value,
+    pub provider_after: serde_json::Value,
+    pub operator_value: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -203,6 +213,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             people: row.people,
             included: row.included,
             published: row.published,
+            metadata_conflict_count: row.metadata_conflict_count,
         }
     }
 }
@@ -361,6 +372,20 @@ impl From<ersatzrs_core::repositories::AddonMediaListNfoForm> for AddonMediaList
             },
             error: form.error,
             path_available: form.path_available,
+            conflicts: form
+                .conflicts
+                .into_iter()
+                .map(|(field, conflict)| {
+                    (
+                        field,
+                        AddonMediaListMetadataConflict {
+                            provider_before: conflict.provider_before,
+                            provider_after: conflict.provider_after,
+                            operator_value: conflict.operator_value,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -590,6 +615,7 @@ pub async fn list_addon_media_list_items(
                     people: row.people,
                     included: row.included,
                     published: row.published,
+                    metadata_conflict_count: row.metadata_conflict_count,
                 })
                 .collect()
         })

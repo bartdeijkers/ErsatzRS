@@ -643,6 +643,7 @@ db_enum!(AddonMediaListReviewState {
     0 => AddonMediaListReviewState::Draft,
     1 => AddonMediaListReviewState::Ready,
     2 => AddonMediaListReviewState::Published,
+    3 => AddonMediaListReviewState::Publishing,
 });
 
 db_enum!(AddonMediaListItemRole {

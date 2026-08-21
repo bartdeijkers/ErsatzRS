@@ -1077,6 +1077,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Hoofdfilm",
         TextKey::MovieExtra => "Filmextra",
         TextKey::NeedReview => "Te beoordelen",
+        TextKey::MetadataConflicts => "Metadataconflicten",
+        TextKey::MetadataConflictsHelp => {
+            "De aanbieder heeft velden gewijzigd die je had overschreven. Controleer de waarden voordat je publiceert."
+        }
+        TextKey::PreviousProviderValue => "Vorige aanbiederwaarde",
+        TextKey::NewProviderValue => "Nieuwe aanbiederwaarde",
+        TextKey::OperatorValue => "Beheerderswaarde",
         TextKey::Discovered => "Gevonden",
         TextKey::EditMetadata => "Metadata bewerken",
         TextKey::OneTagPerLine => "Eén tag per regel",

@@ -1,18 +1,18 @@
 feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0068', '0073', '0075']
 
 summary = '''
 ADR 0075 replaces immediate managed-library publication with a provider-neutral
-metadata draft. Generated parent NFOs, the v4 shared contract, provider and
-override snapshots, durable inclusion, explicit publication, the shared
-localized list/item editor, pagination, and both official provider mappings are
-implemented. yt-dlp remains the updateable extraction engine; its add-on mapper
-only translates full yt-dlp JSON. Remaining work hardens cross-file/database
-publication rollback, artwork upload/materialization, refresh-conflict display,
-and native Linux/Firefox/full closeout proof.
+metadata draft. Generated parent NFOs, the v4 shared contract, per-field
+provider and override snapshots, durable inclusion, atomic publication, the
+shared localized list/item editor, pagination, artwork materialization, health,
+and both official provider mappings are implemented. yt-dlp remains the
+updateable extraction engine; its add-on mapper only translates full yt-dlp
+JSON. Native Linux, WSL, Windows, Chromium, Firefox, migration, and full
+workspace closeout proof complete the contract.
 '''
 
 [[debt]]
@@ -36,13 +36,13 @@ id          = 'metadata-refresh-ownership-is-record-wide'
 description = 'Track provider values and operator overrides per field so untouched metadata refreshes while conflicts remain reviewable.'
 discovered  = '2026-08-21'
 adr         = '0075'
-evidence    = 'Milestones amm-b-01 and amm-e-01 own provenance, effective-value merging, and conflict state.'
-resolved    = false
+evidence    = 'Resolved by per-field provider snapshots and operator override patches. Refresh updates untouched values, preserves overrides, records provider/operator conflicts, and holds newly discovered items for review; focused synchronization and browser regressions cover the behavior.'
+resolved    = true
 
 [[debt]]
 id          = 'addon-metadata-platform-proof-is-incomplete'
 description = 'Prove equivalent metadata output and review publication on native Linux, WSL, and Windows.'
 discovered  = '2026-08-21'
 adr         = '0075'
-evidence    = 'Milestone amm-e-02 requires packaged POSIX and PowerShell runtime evidence in addition to the host closeout gates.'
-resolved    = false
+evidence    = 'Resolved by live Beeld & Geluid and yt-dlp runs on native Linux, native Windows, and WSL, including a spaced Unicode WSL path, plus Chromium and Firefox publication flows and the full release-candidate gate.'
+resolved    = true

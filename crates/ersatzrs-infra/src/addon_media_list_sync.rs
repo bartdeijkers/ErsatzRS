@@ -9,7 +9,7 @@ use chrono::{Duration, Utc};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
-use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
 };
@@ -144,13 +144,13 @@ impl AddonMediaListSynchronizer {
         chapter_input: &str,
     ) -> Result<()> {
         let _list = self.load_list(list_id).await?;
-        sqlx::query(
+        let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
                    "ChapterInput" = ?,
                    "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
                    "ReviewError" = NULL
-               WHERE "Id" = ?"#,
+               WHERE "Id" = ? AND "ReviewState" <> 3"#,
         )
         .bind(auto_refresh)
         .bind(generate_playlist)
@@ -160,6 +160,9 @@ impl AddonMediaListSynchronizer {
         .execute(&self.pool)
         .await
         .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(publication_in_progress());
+        }
 
         Ok(())
     }
@@ -170,6 +173,7 @@ impl AddonMediaListSynchronizer {
     ///
     /// Returns an error when persistence fails.
     pub async fn delete_list(&self, list_id: EntityId) -> Result<()> {
+        ensure_not_publishing(&self.pool, list_id).await?;
         delete_list_library(&self.pool, list_id).await?;
         let maybe_playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
             r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
@@ -250,7 +254,8 @@ impl AddonMediaListSynchronizer {
     ) -> Result<EntityId> {
         let provider_metadata = encode_metadata(metadata)?;
         let maybe_existing = sqlx::query(
-            r#"SELECT "Id"
+            r#"SELECT "Id", "ProviderMetadataJson", "MetadataOverrideJson",
+                      "MetadataConflictJson"
                FROM "AddonMediaList"
                WHERE "AddonId" = ? AND "ProviderId" = ?
                ORDER BY "Id"
@@ -264,14 +269,25 @@ impl AddonMediaListSynchronizer {
 
         if let Some(row) = maybe_existing {
             let id = row.try_get("Id").repository()?;
-            sqlx::query(
+            let previous_provider: String = row.try_get("ProviderMetadataJson").repository()?;
+            let overrides: String = row.try_get("MetadataOverrideJson").repository()?;
+            let existing_conflicts: Option<String> =
+                row.try_get("MetadataConflictJson").repository()?;
+            let conflicts = refresh_conflict_json(
+                &previous_provider,
+                &provider_metadata,
+                &overrides,
+                existing_conflicts.as_deref(),
+            )?;
+            let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "SourceUrl" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?,
                        "ContentKindOverride" = ?, "ChapterInput" = ?,
-                       "ProviderMetadataJson" = ?, "LastError" = NULL,
+                       "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
+                       "LastError" = NULL,
                        "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
                        "ReviewError" = NULL
-                   WHERE "Id" = ?"#,
+                   WHERE "Id" = ? AND "ReviewState" <> 3"#,
             )
             .bind(&list.source_url)
             .bind(&list.name)
@@ -280,10 +296,14 @@ impl AddonMediaListSynchronizer {
             .bind(encode_enum(list.content_kind_override))
             .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
             .bind(&provider_metadata)
+            .bind(conflicts)
             .bind(id)
             .execute(&self.pool)
             .await
             .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(publication_in_progress());
+            }
             Ok(id)
         } else {
             let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
@@ -380,6 +400,20 @@ impl AddonMediaListSynchronizer {
             let item_id =
                 if let Some(existing_id) = existing_ids.get(item.provider_id.as_str()).copied() {
                     let image_urls = encode_image_urls(&item.additional_image_urls)?;
+                    let provider_metadata = encode_metadata(&item.metadata)?;
+                    let existing_item = existing
+                        .iter()
+                        .find(|existing| existing.id == existing_id)
+                        .ok_or_else(|| RepositoryError::Decode {
+                            kind: "add-on media-list refresh identity",
+                            value: existing_id.to_string(),
+                        })?;
+                    let conflicts = refresh_conflict_json(
+                        &existing_item.provider_metadata_json,
+                        &provider_metadata,
+                        &existing_item.metadata_override_json,
+                        existing_item.metadata_conflict_json.as_deref(),
+                    )?;
                     sqlx::query(
                         r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
@@ -389,7 +423,7 @@ impl AddonMediaListSynchronizer {
                            "ContentKind" = ?, "DurationSeconds" = ?,
                            "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
                            "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
-                           "ProviderMetadataJson" = ?,
+                           "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
                            "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                     )
@@ -416,7 +450,8 @@ impl AddonMediaListSynchronizer {
                         "fragment end",
                     )?)
                     .bind(image_urls)
-                    .bind(encode_metadata(&item.metadata)?)
+                    .bind(provider_metadata)
+                    .bind(conflicts)
                     .bind(existing_id)
                     .execute(&mut *tx)
                     .await
@@ -552,7 +587,8 @@ impl AddonMediaListSynchronizer {
 
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
-            r#"SELECT "Id", "ProviderId", "ParentProviderId"
+            r#"SELECT "Id", "ProviderId", "ParentProviderId", "ProviderMetadataJson",
+                      "MetadataOverrideJson", "MetadataConflictJson"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -568,6 +604,9 @@ impl AddonMediaListSynchronizer {
                     id: row.try_get("Id").repository()?,
                     provider_id: row.try_get("ProviderId").repository()?,
                     parent_provider_id: row.try_get("ParentProviderId").repository()?,
+                    provider_metadata_json: row.try_get("ProviderMetadataJson").repository()?,
+                    metadata_override_json: row.try_get("MetadataOverrideJson").repository()?,
+                    metadata_conflict_json: row.try_get("MetadataConflictJson").repository()?,
                 })
             })
             .collect()
@@ -981,7 +1020,7 @@ where
             Err(error) => {
                 sqlx::query(
                     r#"UPDATE "AddonMediaList" SET "LastError" = ?
-                       WHERE "AddonId" = ? AND "SourceUrl" = ?"#,
+                       WHERE "AddonId" = ? AND "SourceUrl" = ? AND "ReviewState" <> 3"#,
                 )
                 .bind(error.to_string())
                 .bind(addon_id)
@@ -1073,6 +1112,7 @@ where
     /// enumerate the source, or another list already owns the resulting
     /// identity.
     pub async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
+        ensure_not_publishing(&self.local.pool, id).await?;
         let row = sqlx::query(
             r#"SELECT "AddonId", "SourceUrl", "ContentKindOverride", "ChapterInput"
                FROM "AddonMediaList" WHERE "Id" = ?"#,
@@ -1123,9 +1163,9 @@ where
                 format!("list {conflicting} already uses this add-on for the same source"),
             ));
         }
-        sqlx::query(
+        let updated = sqlx::query(
             r#"UPDATE "AddonMediaList" SET "AddonId" = ?, "ProviderId" = ?, "LastError" = NULL
-               WHERE "Id" = ?"#,
+               WHERE "Id" = ? AND "ReviewState" <> 3"#,
         )
         .bind(addon_id)
         .bind(&enumerated.provider_id)
@@ -1133,6 +1173,9 @@ where
         .execute(&self.local.pool)
         .await
         .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(publication_in_progress());
+        }
 
         let list = AddonMediaList {
             id,
@@ -1352,6 +1395,108 @@ struct ExistingItem {
     id: EntityId,
     provider_id: String,
     parent_provider_id: Option<String>,
+    provider_metadata_json: String,
+    metadata_override_json: String,
+    metadata_conflict_json: Option<String>,
+}
+
+async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) -> Result<()> {
+    let review_state = sqlx::query_scalar::<_, i32>(
+        r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id: list_id,
+    })?;
+    if review_state == 3 {
+        return Err(publication_in_progress());
+    }
+    Ok(())
+}
+
+fn publication_in_progress() -> RepositoryError {
+    RepositoryError::Conflict(
+        "the add-on media list is being published; wait for publication to finish".to_owned(),
+    )
+}
+
+fn refresh_conflict_json(
+    previous_provider_json: &str,
+    next_provider_json: &str,
+    override_json: &str,
+    existing_conflict_json: Option<&str>,
+) -> Result<Option<String>> {
+    let previous_provider: serde_json::Value = serde_json::from_str(previous_provider_json)
+        .map_err(|error| RepositoryError::Decode {
+            kind: "stored add-on provider metadata",
+            value: error.to_string(),
+        })?;
+    let next_provider: serde_json::Value =
+        serde_json::from_str(next_provider_json).map_err(|error| RepositoryError::Decode {
+            kind: "refreshed add-on provider metadata",
+            value: error.to_string(),
+        })?;
+    let overrides: serde_json::Value =
+        serde_json::from_str(override_json).map_err(|error| RepositoryError::Decode {
+            kind: "stored add-on metadata override",
+            value: error.to_string(),
+        })?;
+    let mut conflicts = existing_conflict_json
+        .filter(|value| !value.trim().is_empty())
+        .map(
+            serde_json::from_str::<
+                std::collections::BTreeMap<String, AddonMediaListMetadataConflict>,
+            >,
+        )
+        .transpose()
+        .map_err(|error| RepositoryError::Decode {
+            kind: "stored add-on metadata conflicts",
+            value: error.to_string(),
+        })?
+        .unwrap_or_default();
+    let Some(override_fields) = overrides.as_object() else {
+        return Ok(None);
+    };
+    for (field, operator_value) in override_fields {
+        let before = previous_provider
+            .get(field)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let after = next_provider
+            .get(field)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        if after == *operator_value {
+            conflicts.remove(field);
+        } else if before != after {
+            conflicts.insert(
+                field.clone(),
+                AddonMediaListMetadataConflict {
+                    provider_before: before,
+                    provider_after: after,
+                    operator_value: operator_value.clone(),
+                },
+            );
+        } else if let Some(conflict) = conflicts.get_mut(field) {
+            conflict.provider_after = after;
+            conflict.operator_value.clone_from(operator_value);
+        }
+    }
+    conflicts.retain(|field, _| override_fields.contains_key(field));
+    if conflicts.is_empty() {
+        Ok(None)
+    } else {
+        serde_json::to_string(&conflicts)
+            .map(Some)
+            .map_err(|error| RepositoryError::Decode {
+                kind: "add-on metadata conflicts",
+                value: error.to_string(),
+            })
+    }
 }
 
 fn encode_image_urls(urls: &[String]) -> Result<Option<String>> {
@@ -1434,5 +1579,70 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
         AddonMediaListItemKind::Season => COLLECTION_TYPE_SEASON,
         AddonMediaListItemKind::Episode => COLLECTION_TYPE_EPISODE,
         AddonMediaListItemKind::RemoteStream => COLLECTION_TYPE_REMOTE_STREAM,
+    }
+}
+
+#[cfg(test)]
+mod metadata_conflict_tests {
+    use super::*;
+
+    fn conflicts(
+        value: Option<String>,
+    ) -> std::collections::BTreeMap<String, AddonMediaListMetadataConflict> {
+        serde_json::from_str(value.as_deref().expect("conflict json")).expect("valid conflicts")
+    }
+
+    #[test]
+    fn provider_change_beneath_override_creates_field_conflict() {
+        let value = refresh_conflict_json(
+            r#"{"title":"Provider one","plot":"Stable"}"#,
+            r#"{"title":"Provider two","plot":"Stable"}"#,
+            r#"{"title":"Operator title"}"#,
+            None,
+        )
+        .expect("refresh conflicts");
+
+        let conflicts = conflicts(value);
+        let title = conflicts.get("title").expect("title conflict");
+        assert_eq!(title.provider_before, serde_json::json!("Provider one"));
+        assert_eq!(title.provider_after, serde_json::json!("Provider two"));
+        assert_eq!(title.operator_value, serde_json::json!("Operator title"));
+    }
+
+    #[test]
+    fn conflict_persists_until_provider_matches_operator_or_override_is_removed() {
+        let first = refresh_conflict_json(
+            r#"{"title":"Provider one"}"#,
+            r#"{"title":"Provider two"}"#,
+            r#"{"title":"Operator title"}"#,
+            None,
+        )
+        .expect("first refresh");
+        let retained = refresh_conflict_json(
+            r#"{"title":"Provider two"}"#,
+            r#"{"title":"Provider two"}"#,
+            r#"{"title":"Operator title"}"#,
+            first.as_deref(),
+        )
+        .expect("unchanged refresh");
+        assert!(retained.is_some());
+
+        let resolved = refresh_conflict_json(
+            r#"{"title":"Provider two"}"#,
+            r#"{"title":"Operator title"}"#,
+            r#"{"title":"Operator title"}"#,
+            retained.as_deref(),
+        )
+        .expect("resolved refresh");
+        assert!(resolved.is_none());
+
+        let removed = refresh_conflict_json(
+            r#"{"title":"Provider two"}"#,
+            r#"{"title":"Provider three"}"#,
+            "{}",
+            retained.as_deref(),
+        )
+        .expect("override removed");
+        assert!(removed.is_none());
     }
 }

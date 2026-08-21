@@ -140,6 +140,123 @@ impl AddonMediaListProvider for EmptyRemoteStreamListProvider {
 }
 
 #[derive(Clone)]
+struct InitialRefreshMetadataProvider;
+
+#[derive(Clone)]
+struct ChangedRefreshMetadataProvider;
+
+fn refresh_metadata_snapshot(changed: bool) -> EnumeratedAddonMediaList {
+    let mut items = vec![EnumeratedAddonMediaListItem {
+        provider_id: "episode:one".to_owned(),
+        rank: 0,
+        display_title: "Episode one".to_owned(),
+        title: "Episode one".to_owned(),
+        year: Some(2025),
+        season: Some(1),
+        episode: Some(1),
+        kind: AddonMediaListItemKind::Episode,
+        guids: vec!["fixture://episode-one".to_owned()],
+        source_url: Some("https://example.invalid/watch/one".to_owned()),
+        availability: AddonMediaListItemAvailability::Available,
+        availability_reason: None,
+        content_kind: AddonMediaListContentKind::TelevisionEpisode,
+        collection_role: AddonMediaListItemRole::Auto,
+        duration_seconds: Some(1_200),
+        parent_provider_id: None,
+        fragment_start_seconds: None,
+        fragment_end_seconds: None,
+        additional_image_urls: Vec::new(),
+        metadata: AddonMediaListNfoMetadata {
+            title: "Episode one".to_owned(),
+            plot: Some(if changed {
+                "Refreshed episode plot".to_owned()
+            } else {
+                "Initial episode plot".to_owned()
+            }),
+            season: Some(1),
+            episode: Some(1),
+            ..AddonMediaListNfoMetadata::default()
+        },
+    }];
+    if changed {
+        items.push(EnumeratedAddonMediaListItem {
+            provider_id: "episode:two".to_owned(),
+            rank: 1,
+            display_title: "Episode two".to_owned(),
+            title: "Episode two".to_owned(),
+            year: Some(2026),
+            season: Some(1),
+            episode: Some(2),
+            kind: AddonMediaListItemKind::Episode,
+            guids: vec!["fixture://episode-two".to_owned()],
+            source_url: Some("https://example.invalid/watch/two".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            availability_reason: None,
+            content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            collection_role: AddonMediaListItemRole::Auto,
+            duration_seconds: Some(1_300),
+            parent_provider_id: None,
+            fragment_start_seconds: None,
+            fragment_end_seconds: None,
+            additional_image_urls: Vec::new(),
+            metadata: AddonMediaListNfoMetadata {
+                title: "Episode two".to_owned(),
+                season: Some(1),
+                episode: Some(2),
+                ..AddonMediaListNfoMetadata::default()
+            },
+        });
+    }
+    EnumeratedAddonMediaList {
+        provider_id: "refresh/series".to_owned(),
+        name: if changed {
+            "Provider title two".to_owned()
+        } else {
+            "Provider title one".to_owned()
+        },
+        description: Some("Refresh metadata proof".to_owned()),
+        metadata: AddonMediaListNfoMetadata {
+            title: if changed {
+                "Provider title two".to_owned()
+            } else {
+                "Provider title one".to_owned()
+            },
+            plot: Some(if changed {
+                "Refreshed collection plot".to_owned()
+            } else {
+                "Initial collection plot".to_owned()
+            }),
+            ..AddonMediaListNfoMetadata::default()
+        },
+        items,
+    }
+}
+
+#[async_trait]
+impl AddonMediaListProvider for InitialRefreshMetadataProvider {
+    async fn enumerate(
+        &self,
+        _addon_id: &str,
+        _source_url: &str,
+        _chapter_input: &str,
+    ) -> Result<EnumeratedAddonMediaList> {
+        Ok(refresh_metadata_snapshot(false))
+    }
+}
+
+#[async_trait]
+impl AddonMediaListProvider for ChangedRefreshMetadataProvider {
+    async fn enumerate(
+        &self,
+        _addon_id: &str,
+        _source_url: &str,
+        _chapter_input: &str,
+    ) -> Result<EnumeratedAddonMediaList> {
+        Ok(refresh_metadata_snapshot(true))
+    }
+}
+
+#[derive(Clone)]
 struct FailingListProvider;
 
 #[async_trait]
@@ -313,6 +430,121 @@ async fn add_refresh_match_and_generate_playlist() {
     .await
     .unwrap();
     assert_eq!(stale_playlist_items, 0);
+}
+
+#[tokio::test]
+async fn refresh_merges_untouched_fields_records_override_conflicts_and_holds_new_items() {
+    let pool = common::test_db().await;
+    seed_addon(&pool).await;
+    let source_url = "https://example.invalid/refresh-series";
+    let list_id =
+        AddonMediaListRemoteSynchronizer::new(pool.clone(), InitialRefreshMetadataProvider)
+            .add_or_refresh(
+                "org.example.lists",
+                source_url,
+                None,
+                AddonMediaListContentKind::TelevisionEpisode,
+                "",
+            )
+            .await
+            .expect("persist initial provider snapshot");
+
+    let repository = SqliteAddonMediaListRepository(pool.clone());
+    let form = repository
+        .get_show_nfo(list_id)
+        .await
+        .expect("load initial collection metadata");
+    let mut operator_metadata = form.metadata;
+    operator_metadata.title = "Operator title".to_owned();
+    repository
+        .save_show_nfo(list_id, &operator_metadata, &form.etag)
+        .await
+        .expect("save operator title override");
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList" SET "ReviewState" = 2, "PublishedRevision" = 1
+           WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&pool)
+    .await
+    .expect("mark initial snapshot published");
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "Published" = 1
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&pool)
+    .await
+    .expect("mark initial item published");
+
+    AddonMediaListRemoteSynchronizer::new(pool.clone(), ChangedRefreshMetadataProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source_url,
+            None,
+            AddonMediaListContentKind::TelevisionEpisode,
+            "",
+        )
+        .await
+        .expect("refresh provider snapshot");
+
+    let refreshed = repository
+        .get_show_nfo(list_id)
+        .await
+        .expect("load merged collection metadata");
+    assert_eq!(refreshed.metadata.title, "Operator title");
+    assert_eq!(
+        refreshed.metadata.plot.as_deref(),
+        Some("Refreshed collection plot"),
+        "an untouched provider field must adopt its new value"
+    );
+    assert_eq!(refreshed.conflicts.len(), 1);
+    let title_conflict = refreshed
+        .conflicts
+        .get("title")
+        .expect("title conflict beneath operator override");
+    assert_eq!(
+        title_conflict.provider_before,
+        serde_json::json!("Provider title one")
+    );
+    assert_eq!(
+        title_conflict.provider_after,
+        serde_json::json!("Provider title two")
+    );
+    assert_eq!(
+        title_conflict.operator_value,
+        serde_json::json!("Operator title")
+    );
+
+    let rows = sqlx::query(
+        r#"SELECT "ProviderId", "Included", "Published"
+           FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ? ORDER BY "Rank""#,
+    )
+    .bind(list_id)
+    .fetch_all(&pool)
+    .await
+    .expect("load refreshed publication snapshot");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].get::<String, _>("ProviderId"), "episode:one");
+    assert!(rows[0].get::<bool, _>("Included"));
+    assert!(rows[0].get::<bool, _>("Published"));
+    assert_eq!(rows[1].get::<String, _>("ProviderId"), "episode:two");
+    assert!(rows[1].get::<bool, _>("Included"));
+    assert!(
+        !rows[1].get::<bool, _>("Published"),
+        "a newly discovered entry must wait for explicit publication"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_one(&pool)
+        .await
+        .expect("review state"),
+        1
+    );
 }
 
 #[tokio::test]
@@ -952,17 +1184,61 @@ async fn seed_local_addon_media_list(pool: &sqlx::SqlitePool, id: i64, generate_
 
 /// These tests exercise the legacy Remote Stream matcher, not the managed
 /// Movie/TV projections. A provider refresh is a draft, so select that
-/// presentation and explicitly publish before asserting library side effects.
+/// presentation and advance the publication snapshot before asserting matcher
+/// side effects. Atomic managed-file publication has dedicated projection tests;
+/// these fixtures intentionally have no storage-backed add-on library.
 async fn publish_as_remote_streams(pool: &sqlx::SqlitePool, list_id: i64) {
-    sqlx::query(r#"UPDATE "AddonMediaList" SET "RequestedPresentationKind" = 0 WHERE "Id" = ?"#)
-        .bind(list_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "RequestedPresentationKind" = 0, "PresentationKind" = 0,
+               "ReviewState" = 2, "ReviewError" = NULL,
+               "PublishedRevision" = "PublishedRevision" + 1
+           WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "Published" = "Included"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
     SqliteAddonMediaListRepository(pool.clone())
-        .publish(list_id)
+        .match_items(list_id)
         .await
         .unwrap();
+    let generate_playlist: bool =
+        sqlx::query_scalar(r#"SELECT "GeneratePlaylist" FROM "AddonMediaList" WHERE "Id" = ?"#)
+            .bind(list_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    if !generate_playlist {
+        let playlist_id: Option<i64> =
+            sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        if let Some(playlist_id) = playlist_id {
+            sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
+                .bind(playlist_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
+                .bind(list_id)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+    }
 }
 
 async fn seed_addon(pool: &sqlx::SqlitePool) {

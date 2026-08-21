@@ -29,7 +29,7 @@ use ersatzrs_domain::{
 use crate::operations::OperationCoordinator;
 use crate::operations::OperationKey;
 use crate::ports::SettingsRuntime;
-use crate::ports::{ChannelRuntime, PlayoutBuildQueue, ScanWorkQueue};
+use crate::ports::{ChannelRuntime, PlayoutBuildQueue, ScanRuntime, ScanWorkQueue};
 use crate::ApplicationError;
 
 /// Persist one settings value.
@@ -4507,9 +4507,44 @@ pub async fn match_addon_media_list(
 pub async fn publish_addon_media_list(
     command: PublishAddonMediaList,
     repository: &dyn AddonMediaListRepository,
+    runtime: &dyn ScanRuntime,
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
-    repository.publish(command.id).await.map_err(Into::into)
+    let publication = repository.stage_publication(command.id).await?;
+    let publish_result = async {
+        runtime
+            .scan_library(MediaSourceKind::Local, publication.library_id, true, &())
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "publish add-on media list",
+                message: error.to_string(),
+            })?;
+        repository
+            .commit_staged_publication(command.id)
+            .await
+            .map_err(ApplicationError::from)
+    }
+    .await;
+    if let Err(error) = publish_result {
+        let original_message = error.to_string();
+        let recovery_result = async {
+            repository
+                .restore_staged_publication(command.id, &original_message)
+                .await?;
+            repository.reconcile_restored_publication(command.id).await
+        }
+        .await;
+        return match recovery_result {
+            Ok(()) => Err(error),
+            Err(recovery_error) => Err(ApplicationError::Unavailable {
+                operation: "recover add-on media list publication",
+                message: format!(
+                    "publication failed ({original_message}); recovery failed ({recovery_error})"
+                ),
+            }),
+        };
+    }
+    Ok(())
 }
 
 /// Include or exclude one item from publication.
@@ -6014,27 +6049,27 @@ fn scheduled_scan_repository_failure(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_core::repositories::{
         AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
-        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
-        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
-        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, MediaItemSuggestionAdmin,
-        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
-        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
-        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
-        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListPublication, AddonMediaListReplacementCandidate, AddonMediaListRepository,
+        AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow,
+        ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
+        CollectionRepository, FfmpegProfileRepository, LibraryRepository, LibraryScanTarget,
+        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
+        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
+        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{
         Collection, CollectionType, EntityId, FFmpegProfile, Library, LibraryMediaKind,
-        MediaSourceKind, Playlist, Resolution, SmartCollection,
+        MediaSourceKind, Playlist, Resolution, ScanProgressSink, SmartCollection,
     };
 
     use super::{
@@ -6043,25 +6078,25 @@ mod tests {
         finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
         normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
         normalized_hdr_metadata, parse_hdr_content_light, parse_hdr_mastering_display,
-        request_library_scan, request_playout_build, request_scheduled_library_scan,
-        request_show_scan, save_collection, save_ffmpeg_profile, save_ffmpeg_settings,
-        save_logging_settings, save_multi_collection, save_playlist, save_playout_settings,
-        save_rerun_collection, save_smart_collection, set_windows_startup, validate_channel_form,
-        validate_channel_number_updates, validate_output_dynamic_range, validate_schedule_items,
-        validate_template_group_name, validate_template_name, validate_watermark,
-        AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm, ChangeAddonMediaListAddon,
-        ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
-        RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
-        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
-        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
-        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
-        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
-        ScanWorkRequest, WatermarkAdminForm,
+        publish_addon_media_list, request_library_scan, request_playout_build,
+        request_scheduled_library_scan, request_show_scan, save_collection, save_ffmpeg_profile,
+        save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
+        save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
+        validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
+        validate_schedule_items, validate_template_group_name, validate_template_name,
+        validate_watermark, AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm,
+        ChangeAddonMediaListAddon, ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist,
+        FfmpegProfileAdminForm, PublishAddonMediaList, RequestLibraryScan, RequestPlayoutBuild,
+        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
+        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
+        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
+        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
+        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
-        PlayoutBuildQueue, PlayoutBuildQueueError, ScanWorkQueue, ScanWorkQueueError,
-        SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
+        PlayoutBuildQueue, PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
+        ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     };
     use ersatzrs_domain::ffmpeg::{ContentLightLevel, OutputDynamicRange};
 
@@ -6077,6 +6112,8 @@ mod tests {
         added_source_urls: Mutex<Vec<String>>,
         changed_addons: Mutex<Vec<(EntityId, String)>>,
         item_content_kinds: Mutex<Vec<(EntityId, ersatzrs_domain::AddonMediaListContentKind)>>,
+        publication_events: Arc<Mutex<Vec<String>>>,
+        fail_publication_commit: bool,
     }
 
     #[async_trait]
@@ -6142,6 +6179,61 @@ mod tests {
         }
 
         async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+
+        async fn stage_publication(
+            &self,
+            id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListPublication> {
+            self.publication_events
+                .lock()
+                .expect("publication events")
+                .push(format!("stage:{id}"));
+            Ok(AddonMediaListPublication {
+                list_id: id,
+                library_id: 41,
+            })
+        }
+
+        async fn commit_staged_publication(
+            &self,
+            id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            self.publication_events
+                .lock()
+                .expect("publication events")
+                .push(format!("commit:{id}"));
+            if self.fail_publication_commit {
+                Err(RepositoryError::unavailable(
+                    "commit test publication",
+                    "injected commit failure",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn restore_staged_publication(
+            &self,
+            id: EntityId,
+            _message: &str,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            self.publication_events
+                .lock()
+                .expect("publication events")
+                .push(format!("restore:{id}"));
+            Ok(())
+        }
+
+        async fn reconcile_restored_publication(
+            &self,
+            id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            self.publication_events
+                .lock()
+                .expect("publication events")
+                .push(format!("reconcile:{id}"));
             Ok(())
         }
 
@@ -6216,6 +6308,50 @@ mod tests {
         }
 
         async fn set_page_size(&self, _page_size: u32) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct RecordingPublicationRuntime {
+        events: Arc<Mutex<Vec<String>>>,
+        fail_scan: bool,
+    }
+
+    #[async_trait]
+    impl ScanRuntime for RecordingPublicationRuntime {
+        async fn scan_library(
+            &self,
+            provider: MediaSourceKind,
+            library_id: EntityId,
+            deep_scan: bool,
+            _progress: &dyn ScanProgressSink,
+        ) -> Result<(), ScanRuntimeError> {
+            self.events
+                .lock()
+                .expect("publication events")
+                .push(format!("scan:{provider:?}:{library_id}:{deep_scan}"));
+            if self.fail_scan {
+                Err(ScanRuntimeError::new("injected scan failure"))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn scan_show(
+            &self,
+            _provider: MediaSourceKind,
+            _library_id: EntityId,
+            _show_id: EntityId,
+            _deep_scan: bool,
+            _progress: &dyn ScanProgressSink,
+        ) -> Result<(), ScanRuntimeError> {
+            Ok(())
+        }
+
+        async fn extract_embedded_show_subtitles(
+            &self,
+            _show_id: EntityId,
+        ) -> Result<(), ScanRuntimeError> {
             Ok(())
         }
     }
@@ -7195,6 +7331,61 @@ mod tests {
             .lock()
             .expect("added source URLs")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_publication_scans_between_stage_and_commit() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let repository = RecordingAddonMediaListRepository {
+            publication_events: Arc::clone(&events),
+            ..Default::default()
+        };
+        let runtime = RecordingPublicationRuntime {
+            events: Arc::clone(&events),
+            fail_scan: false,
+        };
+
+        publish_addon_media_list(PublishAddonMediaList { id: 7 }, &repository, &runtime)
+            .await
+            .expect("publish");
+
+        assert_eq!(
+            *events.lock().expect("publication events"),
+            ["stage:7", "scan:Local:41:true", "commit:7"]
+        );
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_publication_recovers_scan_and_commit_failures() {
+        for fail_scan in [true, false] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let repository = RecordingAddonMediaListRepository {
+                publication_events: Arc::clone(&events),
+                fail_publication_commit: !fail_scan,
+                ..Default::default()
+            };
+            let runtime = RecordingPublicationRuntime {
+                events: Arc::clone(&events),
+                fail_scan,
+            };
+
+            publish_addon_media_list(PublishAddonMediaList { id: 7 }, &repository, &runtime)
+                .await
+                .expect_err("injected publication failure");
+
+            let expected = if fail_scan {
+                vec!["stage:7", "scan:Local:41:true", "restore:7", "reconcile:7"]
+            } else {
+                vec![
+                    "stage:7",
+                    "scan:Local:41:true",
+                    "commit:7",
+                    "restore:7",
+                    "reconcile:7",
+                ]
+            };
+            assert_eq!(*events.lock().expect("publication events"), expected);
+        }
     }
 
     #[tokio::test]

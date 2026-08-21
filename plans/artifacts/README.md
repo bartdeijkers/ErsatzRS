@@ -12,7 +12,8 @@ implementation; the production surface remains the localized Leptos
   steps, prominent review count, and the combined list/item review flow.
 - [Option D metadata editor](addon-metadata-editor-layouts.html) covers the
   collection-aware overview, inline accordion editor, review filtering,
-  pagination, movie primary/extra roles, and dense large-tag editing.
+  pagination, movie primary/extra roles, dense large-tag editing, bounded
+  artwork uploads, and provider-versus-operator refresh conflicts.
 
 ## Browser evidence
 
@@ -22,6 +23,8 @@ Beeld & Geluid series metadata, and the yt-dlp playlist flow. Files containing
 `final` are the final artifact states; the remaining captures document the
 implementation comparison that led to them.
 
-The implementation acceptance evidence is recorded in
-`docs/progress/milestones.toml` under `amm-c-01`; the artifact files do not
-replace the Chromium/browser and hydration regression gates.
+The final desktop/mobile captures are named `addon-list-import-final-*` and
+`addon-metadata-option-d-final-*`. The implementation acceptance evidence is
+recorded in `docs/progress/milestones.toml` under `amm-c-01`, `amm-c-02`, and
+`amm-e-02`; the artifact files do not replace the production Chromium/Firefox
+and hydration regression gates.

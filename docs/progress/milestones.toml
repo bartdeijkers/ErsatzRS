@@ -1489,7 +1489,7 @@ refresh does not mutate the last published playlist before Publish.
 id         = 'amm-b-02'
 phase      = 'AMM-B — Draft ingest and safe publication'
 title      = 'Publish one reviewed revision atomically'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-02', 'amm-b-01']
@@ -1500,11 +1500,12 @@ state but have no published surface, and injected failures cannot expose a
 mixed revision.
 '''
 evidence = '''
-Explicit Publish validation, included-versus-published snapshots, projection,
-playlist reconciliation, revision advancement, persisted failure reporting,
-and best-effort compensation are implemented. Closeout still needs injected
-file/database failure regressions proving that every NFO/artwork and database
-surface rolls back as one revision.
+Completed 2026-08-21. Publication stages the complete managed folder and
+database projection behind one journaled revision, retains an exact backup,
+and restores files, projection, playlist membership, and draft state on NFO,
+artwork, or database failure. Recovery handles an interrupted publication and
+revision guards prevent concurrent or stale publication. Focused regressions
+cover all injected failure points, exclusion/reinclusion, and idempotency.
 '''
 
 [[milestone]]
@@ -1535,7 +1536,7 @@ library tests passed.
 id         = 'amm-c-02'
 phase      = 'AMM-C — Shared metadata and artwork editor'
 title      = 'Review and publish poster, fanart, and thumbnails'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-b-02', 'amm-c-01']
@@ -1544,7 +1545,14 @@ The editor selects provider candidates, assigns poster/fanart/thumb roles, and
 accepts bounded uploads or HTTPS URLs. Publication uses safe local files,
 preserves operator replacements, and projects role-correct artwork.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-21. The shared editor accepts bounded JPEG, PNG, and WebP
+uploads or bounded HTTPS provider/operator candidates and assigns poster,
+fanart, thumb, or other roles. Publish validates and materializes role-correct
+local files without leaving NFOs dependent on remote URLs. Provider refresh
+preserves operator-owned artwork files; focused projection and Chromium/Firefox
+flows cover upload, replacement, rollback, and publication.
+'''
 
 [[milestone]]
 id         = 'amm-d-01'
@@ -1596,7 +1604,7 @@ Rust and Python suites passed.
 id         = 'amm-e-01'
 phase      = 'AMM-E — Refresh, projection, and health'
 title      = 'Merge refreshes per field and expose operational state'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-b-02', 'amm-c-02', 'amm-d-01', 'amm-d-02']
@@ -1606,13 +1614,20 @@ conflicts, and holds new items for review. Every presentation replaces its
 supported metadata relations without duplicates, and health reports pending,
 invalid, stuck, missing-artwork, and publication-failure states.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-21. Refresh merges provider values against per-field operator
+patches, records conflicts, and leaves newly discovered items pending review.
+Idempotent projection regressions cover every collection presentation and its
+metadata relations. Health reports pending/invalid/stuck drafts, missing
+artwork, interrupted journals, and publication failures; recovery and refresh
+integration tests pass.
+'''
 
 [[milestone]]
 id         = 'amm-e-02'
 phase      = 'AMM-E — Refresh, projection, and health'
 title      = 'Close platform, browser, and parity acceptance'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-e-01']
@@ -1623,4 +1638,13 @@ add-ons pass native Linux, WSL with a spaced Unicode mounted path, and native
 Windows runs; both Clippy configurations, test closeout, Leptos build, parity,
 health, migration, and progress gates pass before Phase 9A resumes.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-21. One production Playwright flow passed in Chromium and
+Firefox for review filtering, inline editing, 120 tags, exclusion, artwork
+upload, stale ETag rejection, publication, and reinclusion without hydration or
+console errors. Live Beeld & Geluid and yt-dlp imports passed on native Windows,
+native Linux, and WSL, including a spaced Unicode mounted path; yt-dlp itself
+performed extraction. Both Clippy configurations, test closeout, Leptos,
+hydration, parity, health/smoke, migration, progress, architecture, dependency,
+and release-bundle gates passed on the final combined release candidate.
+'''

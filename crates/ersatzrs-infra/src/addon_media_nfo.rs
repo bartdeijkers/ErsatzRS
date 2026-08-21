@@ -103,6 +103,7 @@ struct RawNfo {
     collection: Option<String>,
     #[serde(rename = "thumb")]
     artwork: Vec<RawArtwork>,
+    fanart: Option<RawFanart>,
     #[serde(rename = "uniqueid")]
     guids: Vec<RawGuid>,
 }
@@ -140,6 +141,13 @@ struct RawArtwork {
     url: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RawFanart {
+    #[serde(rename = "thumb")]
+    thumbs: Vec<RawArtwork>,
+}
+
 /// Read and validate one managed NFO document.
 ///
 /// # Errors
@@ -153,6 +161,7 @@ pub fn read_form(path: Option<&Path>) -> Result<AddonMediaListNfoForm> {
         return Ok(AddonMediaListNfoForm {
             etag: hash(&[]),
             path_available: true,
+            conflicts: BTreeMap::new(),
             ..AddonMediaListNfoForm::default()
         });
     }
@@ -169,6 +178,7 @@ pub fn read_form(path: Option<&Path>) -> Result<AddonMediaListNfoForm> {
         }),
         error: record.and_then(|value| value.error.clone()),
         path_available: true,
+        conflicts: BTreeMap::new(),
     })
 }
 
@@ -414,7 +424,11 @@ pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec
         "ersatzrs:collection",
         metadata.collection.as_deref(),
     )?;
-    for artwork in &metadata.artwork {
+    for artwork in metadata
+        .artwork
+        .iter()
+        .filter(|artwork| artwork.role != AddonMediaListArtworkRole::Fanart)
+    {
         let mut element = BytesStart::new("thumb");
         element.push_attribute((
             "aspect",
@@ -439,6 +453,32 @@ pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec
         xml(&mut writer, Event::Start(element))?;
         xml(&mut writer, Event::Text(BytesText::new(&artwork.url)))?;
         xml(&mut writer, Event::End(BytesEnd::new("thumb")))?;
+    }
+    let fanart = metadata
+        .artwork
+        .iter()
+        .filter(|artwork| artwork.role == AddonMediaListArtworkRole::Fanart)
+        .collect::<Vec<_>>();
+    if !fanart.is_empty() {
+        xml(&mut writer, Event::Start(BytesStart::new("fanart")))?;
+        for artwork in fanart {
+            let mut element = BytesStart::new("thumb");
+            let width = artwork.width.map(|value| value.to_string());
+            let height = artwork.height.map(|value| value.to_string());
+            if let Some(width) = &width {
+                element.push_attribute(("width", width.as_str()));
+            }
+            if let Some(height) = &height {
+                element.push_attribute(("height", height.as_str()));
+            }
+            if let Some(language) = &artwork.language {
+                element.push_attribute(("language", language.as_str()));
+            }
+            xml(&mut writer, Event::Start(element))?;
+            xml(&mut writer, Event::Text(BytesText::new(&artwork.url)))?;
+            xml(&mut writer, Event::End(BytesEnd::new("thumb")))?;
+        }
+        xml(&mut writer, Event::End(BytesEnd::new("fanart")))?;
     }
     for url in metadata.artwork_urls.iter().filter(|url| {
         metadata
@@ -501,6 +541,18 @@ fn parse(bytes: &[u8]) -> Result<AddonMediaListNfoMetadata> {
         } else {
             artwork_urls.push(url);
         }
+    }
+    for candidate in raw.fanart.into_iter().flat_map(|fanart| fanart.thumbs) {
+        let Some(url) = candidate.url.and_then(|url| non_empty_owned(&url)) else {
+            continue;
+        };
+        artwork.push(AddonMediaListArtwork {
+            url,
+            role: AddonMediaListArtworkRole::Fanart,
+            width: candidate.width,
+            height: candidate.height,
+            language: candidate.language,
+        });
     }
     Ok(AddonMediaListNfoMetadata {
         title: raw.title.or(raw.name).unwrap_or_default(),
@@ -720,6 +772,55 @@ mod tests {
         assert!(xml.contains("<name>Fixture artist</name>"));
         assert!(!xml.contains("<title>"));
         assert_eq!(parse(&encoded).expect("parse artist NFO"), metadata);
+    }
+
+    #[test]
+    fn kodi_artwork_roles_round_trip_with_nested_fanart() {
+        let metadata = AddonMediaListNfoMetadata {
+            title: "Episode".to_owned(),
+            artwork: vec![
+                AddonMediaListArtwork {
+                    url: "poster.jpg".to_owned(),
+                    role: AddonMediaListArtworkRole::Poster,
+                    width: Some(1000),
+                    height: Some(1500),
+                    language: None,
+                },
+                AddonMediaListArtwork {
+                    url: "thumb.jpg".to_owned(),
+                    role: AddonMediaListArtworkRole::Thumb,
+                    width: None,
+                    height: None,
+                    language: Some("en".to_owned()),
+                },
+                AddonMediaListArtwork {
+                    url: "fanart.jpg".to_owned(),
+                    role: AddonMediaListArtworkRole::Fanart,
+                    width: Some(1920),
+                    height: Some(1080),
+                    language: None,
+                },
+            ],
+            ..AddonMediaListNfoMetadata::default()
+        };
+
+        let encoded = serialize("episodedetails", &metadata).expect("serialize artwork NFO");
+        let xml = std::str::from_utf8(&encoded).expect("UTF-8 artwork NFO");
+        assert!(
+            xml.contains(r#"<thumb aspect="poster" width="1000" height="1500">poster.jpg</thumb>"#)
+        );
+        assert!(xml.contains(r#"<thumb aspect="thumb" language="en">thumb.jpg</thumb>"#));
+        assert!(xml.contains("<fanart>"), "{xml}");
+        let fanart_block = xml
+            .split_once("<fanart>")
+            .and_then(|(_, remainder)| remainder.split_once("</fanart>"))
+            .map(|(block, _)| block)
+            .expect("serialized fanart container");
+        assert!(
+            fanart_block.contains(">fanart.jpg</thumb>"),
+            "fanart must be nested in Kodi's fanart container: {xml}"
+        );
+        assert_eq!(parse(&encoded).expect("parse artwork NFO"), metadata);
     }
 
     #[test]
