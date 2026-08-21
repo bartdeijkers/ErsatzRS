@@ -1272,6 +1272,23 @@ async fn uploaded_parent_artwork_is_role_correct_and_preserves_operator_replacem
         )
         .await
         .expect("upload poster");
+    let poster_url = &poster
+        .metadata
+        .artwork
+        .iter()
+        .find(|candidate| candidate.role == AddonMediaListArtworkRole::Poster)
+        .expect("selected poster")
+        .url;
+    let poster_upload_id =
+        ersatzrs_infra::addon_artwork::upload_id(poster_url).expect("opaque poster upload id");
+    let poster_upload = repositories
+        .addon_media_lists
+        .get_artwork_upload(poster_upload_id)
+        .await
+        .expect("load poster upload")
+        .expect("stored poster upload");
+    assert_eq!(poster_upload.content_type, "image/png");
+    assert_eq!(poster_upload.bytes, b"\x89PNG\r\n\x1a\nposter one");
     let stale_error = repositories
         .addon_media_lists
         .upload_artwork(

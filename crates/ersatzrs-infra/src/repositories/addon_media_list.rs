@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
-    AddonMediaListArtworkRole, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
-    AddonMediaListItemDetail, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListPublication,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
+    AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListItemAdminRow,
+    AddonMediaListItemCounts, AddonMediaListItemDetail, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
+    AddonMediaListPublication, AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    RepositoryError, Result,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
@@ -965,6 +966,26 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             Some(item_id) => load_item_metadata_form(&self.0, list_id, item_id).await,
             None => load_list_metadata_form(&self.0, list_id).await,
         }
+    }
+
+    async fn get_artwork_upload(
+        &self,
+        upload_id: EntityId,
+    ) -> Result<Option<AddonMediaListArtworkUpload>> {
+        sqlx::query_as::<_, (String, Vec<u8>)>(
+            r#"SELECT "ContentType", "Bytes"
+               FROM "AddonMediaListArtworkUpload" WHERE "Id" = ?"#,
+        )
+        .bind(upload_id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()
+        .map(|row| {
+            row.map(|(content_type, bytes)| AddonMediaListArtworkUpload {
+                content_type,
+                bytes,
+            })
+        })
     }
 
     async fn set_item_included(

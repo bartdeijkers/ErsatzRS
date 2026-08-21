@@ -1917,6 +1917,23 @@ pub async fn get_addon_media_list_show_nfo(
     repository.get_show_nfo(id).await.map_err(Into::into)
 }
 
+/// Load one opaque artwork upload for the metadata-editor preview endpoint.
+pub async fn get_addon_media_list_artwork_upload(
+    upload_id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<Option<ersatzrs_core::repositories::AddonMediaListArtworkUpload>> {
+    if upload_id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_artwork_upload_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository
+        .get_artwork_upload(upload_id)
+        .await
+        .map_err(Into::into)
+}
+
 /// Search eligible local video versions for an add-on item replacement.
 pub async fn search_addon_media_list_replacements(
     query: &str,

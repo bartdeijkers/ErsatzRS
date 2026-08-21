@@ -393,6 +393,15 @@ impl ApplicationServices {
         queries::get_addon_media_list_show_nfo(id, self.ports.addon_media_lists()).await
     }
 
+    /// Load one database-backed artwork upload for an editor preview.
+    pub async fn get_addon_media_list_artwork_upload(
+        &self,
+        upload_id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListArtworkUpload>> {
+        queries::get_addon_media_list_artwork_upload(upload_id, self.ports.addon_media_lists())
+            .await
+    }
+
     /// Search available local video versions for a replacement.
     pub async fn search_addon_media_list_replacements(
         &self,

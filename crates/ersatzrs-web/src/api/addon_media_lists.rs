@@ -11,7 +11,6 @@ use ersatzrs_domain::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::Row as _;
 
 use crate::{
     admin::server_fns::addon_media_lists::{
@@ -235,27 +234,24 @@ pub async fn uploaded_artwork(
     State(state): State<AppState>,
     Path(upload_id): Path<i64>,
 ) -> Response {
-    let row = sqlx::query(
-        r#"SELECT "ContentType", "Bytes" FROM "AddonMediaListArtworkUpload" WHERE "Id" = ?"#,
-    )
-    .bind(upload_id)
-    .fetch_optional(&state.pool)
-    .await;
-    let Ok(Some(row)) = row else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let Ok(content_type) = row.try_get::<String, _>("ContentType") else {
-        return StatusCode::UNPROCESSABLE_ENTITY.into_response();
-    };
-    let Ok(bytes) = row.try_get::<Vec<u8>, _>("Bytes") else {
-        return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+    let upload = match state
+        .application
+        .get_addon_media_list_artwork_upload(upload_id)
+        .await
+    {
+        Ok(Some(upload)) => upload,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::error!(%error, upload_id, "failed to load add-on metadata artwork");
+            return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+        }
     };
     (
         [
-            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_TYPE, upload.content_type),
             (header::CACHE_CONTROL, "private, no-store".to_owned()),
         ],
-        Body::from(bytes),
+        Body::from(upload.bytes),
     )
         .into_response()
 }

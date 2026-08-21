@@ -164,6 +164,13 @@ pub struct AddonMediaListArtwork {
     pub language: Option<String>,
 }
 
+/// Stored operator artwork returned to a transport adapter for previewing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AddonMediaListArtworkUpload {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+}
+
 /// One provider refresh that changed a field beneath an operator override.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListMetadataConflict {
@@ -380,6 +387,17 @@ pub trait AddonMediaListRepository: Send + Sync {
         let _ = (list_id, item_id, role, content_type, bytes, expected_etag);
         Err(RepositoryError::unavailable(
             "upload add-on metadata artwork",
+            "not implemented",
+        ))
+    }
+    /// Load one opaque, database-backed artwork upload for an editor preview.
+    async fn get_artwork_upload(
+        &self,
+        upload_id: EntityId,
+    ) -> Result<Option<AddonMediaListArtworkUpload>> {
+        let _ = upload_id;
+        Err(RepositoryError::unavailable(
+            "load add-on metadata artwork",
             "not implemented",
         ))
     }
