@@ -15,19 +15,9 @@ PATCH_FILE_RE = re.compile(r"^\*\*\* (?:Add|Update) File: (.+)$", re.MULTILINE)
 PATH_KEYS = {"file", "file_path", "path", "target_file"}
 
 
-def git_root() -> Path:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return Path.cwd().resolve()
-
-    return Path(result.stdout.strip()).resolve()
+def repository_root() -> Path:
+    """Resolve the checkout without invoking Git under the sandbox account."""
+    return Path(__file__).resolve().parents[2]
 
 
 def iter_values(value: Any, parent_key: str = ""):
@@ -91,7 +81,7 @@ def main() -> int:
     if not raw.strip():
         return 0
 
-    root = git_root()
+    root = repository_root()
     rust_files = {
         resolved
         for path_text in candidate_paths(raw)

@@ -790,6 +790,54 @@ fn software_pipeline_crop_near_16_9_source_snapshot() {
 }
 
 #[test]
+fn nvenc_remote_stream_without_video_metadata_enforces_profile_frame_snapshot() {
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::ScaleAndPad,
+        hardware_acceleration: HardwareAccelerationKind::Nvenc,
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Ac3,
+        audio_bitrate: 640,
+        audio_buffer_size: 640,
+        audio_channels: 6,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        None,
+        None,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    let request = PipelineRequest::new(InputFile::video("pipe:0"), desired);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments.contains(
+            "scale=1920:1080:flags=fast_bilinear:force_original_aspect_ratio=decrease,setsar=1,pad=1920:1080:-1:-1:color=black"
+        ),
+        "metadata-less remote video must use runtime geometry and the selected profile: {arguments}"
+    );
+    assert!(
+        arguments.contains("-codec:v h264_nvenc"),
+        "the selected NVENC profile must remain active: {arguments}"
+    );
+    assert!(
+        arguments.contains("-codec:a ac3")
+            && arguments.contains("-ac 6")
+            && arguments.contains("-b:a 640k"),
+        "the selected AC-3 6-channel profile must remain active: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn nvenc_pipeline_scale_and_pad_near_16_9_source_snapshot() {
     let mut source = source_1080p(SourceVideoCodec::H264, 1067, 600);
     source.pixel_format = Some(PixelFormat::Yuv420P);

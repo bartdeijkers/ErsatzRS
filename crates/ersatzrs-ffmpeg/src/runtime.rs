@@ -848,6 +848,7 @@ fn stage_runtime_archive(
         find_tool_pair(&staged).ok_or_else(|| FfmpegRuntimeManagerError::MissingTools {
             asset: asset_name.to_owned(),
         })?;
+    #[cfg(unix)]
     prepare_managed_tool_launchers(&staged_ffmpeg, &staged_ffprobe)?;
     Ok(StagedRuntimeInstall {
         temp_dir: temp,
@@ -861,11 +862,6 @@ fn stage_runtime_archive(
 fn prepare_managed_tool_launchers(ffmpeg: &Path, ffprobe: &Path) -> io::Result<()> {
     write_unix_managed_tool_launcher(ffmpeg)?;
     write_unix_managed_tool_launcher(ffprobe)
-}
-
-#[cfg(not(unix))]
-fn prepare_managed_tool_launchers(_ffmpeg: &Path, _ffprobe: &Path) -> io::Result<()> {
-    Ok(())
 }
 
 #[cfg(all(unix, target_os = "macos"))]
@@ -969,6 +965,7 @@ fn extract_archive(
                     }
                     let mut out = File::create(&path)?;
                     io::copy(&mut file, &mut out)?;
+                    #[cfg(unix)]
                     set_zip_permissions(&path, file.unix_mode())?;
                 }
             }
@@ -998,11 +995,6 @@ fn set_zip_permissions(path: &Path, mode: Option<u32>) -> io::Result<()> {
     if let Some(mode) = mode {
         fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
     }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn set_zip_permissions(_path: &Path, _mode: Option<u32>) -> io::Result<()> {
     Ok(())
 }
 
@@ -1563,6 +1555,7 @@ mod tests {
         bytes.into_inner()
     }
 
+    #[cfg(unix)]
     fn package_zip_with_root_lib_dir() -> Vec<u8> {
         let mut bytes = Cursor::new(Vec::new());
         {

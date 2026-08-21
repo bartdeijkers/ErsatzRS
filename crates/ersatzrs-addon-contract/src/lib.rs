@@ -29,6 +29,7 @@ pub const CAPABILITY_REMOTE_STREAM_LIST_V3: &str = "remote-stream.list.v3";
 pub const CAPABILITY_REMOTE_STREAM_ITEM_V1: &str = "remote-stream.item.v1";
 /// Describe retained Remote Streams, including provider-supplied chapter text.
 pub const CAPABILITY_REMOTE_STREAM_ITEM_V2: &str = "remote-stream.item.v2";
+/// Describe retained Remote Streams with the shared rich metadata document.
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
 /// Enumerate a provider list whose entries are matched to local media.
@@ -36,6 +37,8 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V1: &str = "media-list.list.v1";
 /// Enumerate a provider list with explicit per-item availability.
 pub const CAPABILITY_MEDIA_LIST_LIST_V2: &str = "media-list.list.v2";
 pub const CAPABILITY_MEDIA_LIST_LIST_V3: &str = "media-list.list.v3";
+/// Enumerate a provider list with shared list/item metadata documents.
+pub const CAPABILITY_MEDIA_LIST_LIST_V4: &str = "media-list.list.v4";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 /// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
@@ -52,6 +55,10 @@ pub const MAX_MEDIA_LIST_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum number of items accepted from one list invocation.
 pub const MAX_LIST_ITEMS: usize = 10_000;
+/// Maximum number of repeated values accepted in one metadata document.
+pub const MAX_METADATA_VALUES: usize = 1_024;
+/// Maximum UTF-8 bytes accepted across the textual values of one metadata document.
+pub const MAX_METADATA_TEXT_BYTES: usize = 256 * 1_024;
 /// Maximum compressed package size accepted from a repository catalog.
 pub const MAX_ADDON_PACKAGE_BYTES: u64 = 256 * 1024 * 1024;
 /// Prefix used when a structured operation failure crosses a textual host boundary.
@@ -99,9 +106,233 @@ pub enum AddonMediaListContentKind {
     Movie,
     MusicVideo,
     OtherVideo,
+    Song,
+    Image,
 }
 
-/// One bounded `media-list.list.v1` or `media-list.list.v2` NDJSON record.
+/// Semantic role of one provider source inside its collection.
+///
+/// Rank remains the original provider order; it must never be used as an
+/// implicit movie feature/extra classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemRole {
+    #[default]
+    Auto,
+    Primary,
+    Extra,
+}
+
+/// One credited person in the provider-neutral metadata document.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonMetadataPerson {
+    pub name: String,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub order: Option<i32>,
+    #[serde(default)]
+    pub thumb: Option<String>,
+}
+
+/// Semantic role suggested for one provider artwork candidate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonArtworkRole {
+    Poster,
+    Fanart,
+    Thumb,
+    #[default]
+    Other,
+}
+
+/// One provider artwork candidate. ErsatzRS validates and materializes the URL.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonArtworkCandidate {
+    pub url: String,
+    #[serde(default)]
+    pub role: AddonArtworkRole,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+/// Complete provider-neutral descriptive metadata shared by list and item
+/// review. Operational identity, playback URL, availability, and duration stay
+/// on their existing records.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AddonMetadataDocument {
+    pub title: Option<String>,
+    pub original_title: Option<String>,
+    pub sort_title: Option<String>,
+    pub outline: Option<String>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub year: Option<i32>,
+    pub release_date: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub music_labels: Vec<String>,
+    pub languages: Vec<String>,
+    pub people: Vec<AddonMetadataPerson>,
+    pub writers: Vec<String>,
+    pub directors: Vec<String>,
+    pub artists: Vec<String>,
+    pub producers: Vec<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
+    pub collection: Option<String>,
+    pub artwork: Vec<AddonArtworkCandidate>,
+    pub guids: Vec<String>,
+}
+
+impl AddonMetadataDocument {
+    /// Validate aggregate bounds before the document crosses into host storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when repeated values or aggregate text exceed the
+    /// provider-neutral contract limits, or an artwork/person entry is empty.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        self.validate_collection_bounds()?;
+        self.validate_people_and_artwork()?;
+        self.validate_identity()?;
+        self.validate_repeated_text()?;
+
+        let bytes = serde_json::to_vec(self)
+            .map_err(|_| ContractError::Invalid {
+                field: "metadata document",
+                message: "cannot be encoded".to_owned(),
+            })?
+            .len();
+        if bytes > MAX_METADATA_TEXT_BYTES {
+            return invalid("metadata document", "exceeds the 256 KiB limit");
+        }
+        Ok(())
+    }
+
+    fn validate_collection_bounds(&self) -> Result<(), ContractError> {
+        let repeated = [
+            self.content_ratings.len(),
+            self.genres.len(),
+            self.tags.len(),
+            self.studios.len(),
+            self.music_labels.len(),
+            self.languages.len(),
+            self.people.len(),
+            self.writers.len(),
+            self.directors.len(),
+            self.artists.len(),
+            self.producers.len(),
+            self.original_broadcasters.len(),
+            self.broadcasters.len(),
+            self.artwork.len(),
+            self.guids.len(),
+        ];
+        if repeated
+            .into_iter()
+            .any(|count| count > MAX_METADATA_VALUES)
+        {
+            return invalid("metadata document", "contains too many repeated values");
+        }
+        Ok(())
+    }
+
+    fn validate_people_and_artwork(&self) -> Result<(), ContractError> {
+        if self
+            .people
+            .iter()
+            .any(|person| person.name.trim().is_empty())
+        {
+            return invalid("metadata people", "must not contain an empty name");
+        }
+        if self.people.iter().any(|person| {
+            person
+                .thumb
+                .as_deref()
+                .is_some_and(|thumb| !is_https_url(thumb))
+        }) {
+            return invalid("metadata people", "thumb URLs must use bounded HTTPS");
+        }
+        if self.artwork.iter().any(|item| {
+            !is_https_url(&item.url)
+                || item.width.is_some_and(|width| width == 0)
+                || item.height.is_some_and(|height| height == 0)
+        }) {
+            return invalid(
+                "metadata artwork",
+                "URLs must use bounded HTTPS and dimensions must be positive",
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_identity(&self) -> Result<(), ContractError> {
+        if self.season.is_some_and(|season| season < 0)
+            || self.episode.is_some_and(|episode| episode < 1)
+        {
+            return invalid(
+                "metadata numbering",
+                "season must be non-negative and episode must be positive",
+            );
+        }
+        if self
+            .year
+            .is_some_and(|year| !(1..=chrono::Utc::now().year() + 5).contains(&year))
+        {
+            return invalid("metadata year", "must be valid host metadata");
+        }
+        if self
+            .release_date
+            .as_deref()
+            .is_some_and(|value| chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err())
+        {
+            return invalid("metadata release_date", "must use YYYY-MM-DD");
+        }
+        Ok(())
+    }
+
+    fn validate_repeated_text(&self) -> Result<(), ContractError> {
+        let repeated_text = [
+            &self.content_ratings,
+            &self.genres,
+            &self.tags,
+            &self.studios,
+            &self.music_labels,
+            &self.languages,
+            &self.writers,
+            &self.directors,
+            &self.artists,
+            &self.producers,
+            &self.original_broadcasters,
+            &self.broadcasters,
+            &self.guids,
+        ];
+        if repeated_text
+            .into_iter()
+            .any(|values| values.iter().any(|value| value.trim().is_empty()))
+        {
+            return invalid(
+                "metadata document",
+                "repeated text values must not be empty",
+            );
+        }
+        Ok(())
+    }
+}
+
+/// One bounded `media-list.list.v1` through `media-list.list.v4` NDJSON record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AddonMediaListRecord {
@@ -110,6 +341,8 @@ pub enum AddonMediaListRecord {
         name: String,
         #[serde(default)]
         description: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        metadata: Option<AddonMetadataDocument>,
     },
     Item {
         provider_id: String,
@@ -133,6 +366,8 @@ pub enum AddonMediaListRecord {
         availability_reason: Option<String>,
         #[serde(default, skip_serializing_if = "content_kind_is_auto")]
         content_kind: AddonMediaListContentKind,
+        #[serde(default, skip_serializing_if = "item_role_is_auto")]
+        collection_role: AddonMediaListItemRole,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         duration_seconds: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -147,6 +382,8 @@ pub enum AddonMediaListRecord {
             skip_serializing_if = "Vec::is_empty"
         )]
         additional_image_urls: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        metadata: Option<AddonMetadataDocument>,
     },
 }
 
@@ -160,6 +397,11 @@ const fn content_kind_is_auto(value: &AddonMediaListContentKind) -> bool {
     matches!(value, AddonMediaListContentKind::Auto)
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde skip predicate signature
+const fn item_role_is_auto(value: &AddonMediaListItemRole) -> bool {
+    matches!(value, AddonMediaListItemRole::Auto)
+}
+
 impl AddonMediaListRecord {
     /// Construct a list header with the required fields populated.
     #[must_use]
@@ -168,6 +410,7 @@ impl AddonMediaListRecord {
             provider_id: provider_id.into(),
             name: name.into(),
             description: None,
+            metadata: None,
         }
     }
 
@@ -194,11 +437,13 @@ impl AddonMediaListRecord {
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
             content_kind: AddonMediaListContentKind::Auto,
+            collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: None,
             parent_provider_id: None,
             fragment_start_seconds: None,
             fragment_end_seconds: None,
             additional_image_urls: Vec::new(),
+            metadata: None,
         }
     }
 
@@ -210,11 +455,17 @@ impl AddonMediaListRecord {
     pub fn validate(&self) -> Result<(), ContractError> {
         match self {
             Self::List {
-                provider_id, name, ..
+                provider_id,
+                name,
+                metadata,
+                ..
             } => {
                 validate_provider_id(provider_id)?;
                 if name.trim().is_empty() {
                     return invalid("media list name", "must not be empty");
+                }
+                if let Some(metadata) = metadata {
+                    metadata.validate()?;
                 }
             }
             Self::Item {
@@ -229,6 +480,7 @@ impl AddonMediaListRecord {
                 fragment_start_seconds,
                 fragment_end_seconds,
                 additional_image_urls,
+                metadata,
                 ..
             } => {
                 validate_provider_id(provider_id)?;
@@ -261,6 +513,9 @@ impl AddonMediaListRecord {
                         "media list item additional_image_urls",
                         "must not contain empty URLs",
                     );
+                }
+                if let Some(metadata) = metadata {
+                    metadata.validate()?;
                 }
             }
         }
@@ -758,10 +1013,11 @@ impl AddonManifest {
             if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
+                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
             {
                 return invalid(
                     "media_list_storage",
-                    "requires media-list.list.v1 or media-list.list.v2",
+                    "requires a supported media-list.list capability",
                 );
             }
             if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
@@ -2595,6 +2851,80 @@ mod tests {
             serde_json::to_string(&record).unwrap(),
             r#"{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","guids":[]}"#
         );
+    }
+
+    #[test]
+    fn rich_metadata_document_round_trips_every_v4_field() {
+        let metadata = AddonMetadataDocument {
+            title: Some("Episode title".to_owned()),
+            original_title: Some("Original title".to_owned()),
+            sort_title: Some("Title, Episode".to_owned()),
+            outline: Some("Outline".to_owned()),
+            plot: Some("Plot".to_owned()),
+            tagline: Some("Tagline".to_owned()),
+            show_title: Some("Fixture show".to_owned()),
+            season: Some(0),
+            episode: Some(1),
+            year: Some(2026),
+            release_date: Some("2026-08-21".to_owned()),
+            content_ratings: vec!["NL-AL".to_owned()],
+            genres: vec!["Documentary".to_owned()],
+            tags: vec!["archive".to_owned()],
+            studios: vec!["Fixture studio".to_owned()],
+            music_labels: vec!["Fixture label".to_owned()],
+            languages: vec!["nl".to_owned()],
+            people: vec![AddonMetadataPerson {
+                name: "Fixture presenter".to_owned(),
+                role: Some("Presenter".to_owned()),
+                order: Some(0),
+                thumb: Some("https://cdn.example.test/person.jpg".to_owned()),
+            }],
+            writers: vec!["Fixture writer".to_owned()],
+            directors: vec!["Fixture director".to_owned()],
+            artists: vec!["Fixture artist".to_owned()],
+            producers: vec!["Fixture producer".to_owned()],
+            original_broadcasters: vec!["Fixture broadcaster".to_owned()],
+            broadcasters: vec!["Fixture network".to_owned()],
+            collection: Some("Fixture collection".to_owned()),
+            artwork: vec![AddonArtworkCandidate {
+                url: "https://cdn.example.test/poster.jpg".to_owned(),
+                role: AddonArtworkRole::Poster,
+                width: Some(1000),
+                height: Some(1500),
+                language: Some("nl".to_owned()),
+            }],
+            guids: vec!["fixture://episode/1".to_owned()],
+        };
+        metadata.validate().expect("complete bounded document");
+        let record = AddonMediaListRecord::List {
+            provider_id: "fixture/list".to_owned(),
+            name: "Fixture".to_owned(),
+            description: None,
+            metadata: Some(metadata.clone()),
+        };
+        let line = format!("{}\n", serde_json::to_string(&record).unwrap());
+        let parsed = conform_media_list_output(line.as_bytes()).expect("v4 metadata output");
+        assert_eq!(parsed, vec![record]);
+    }
+
+    #[test]
+    fn rich_metadata_rejects_unsafe_artwork_and_invalid_kodi_identity() {
+        let mut metadata = AddonMetadataDocument {
+            artwork: vec![AddonArtworkCandidate {
+                url: "http://cdn.example.test/poster.jpg".to_owned(),
+                ..AddonArtworkCandidate::default()
+            }],
+            ..AddonMetadataDocument::default()
+        };
+        assert!(metadata.validate().is_err());
+
+        metadata.artwork.clear();
+        metadata.episode = Some(0);
+        assert!(metadata.validate().is_err());
+
+        metadata.episode = Some(1);
+        metadata.release_date = Some("21-08-2026".to_owned());
+        assert!(metadata.validate().is_err());
     }
 
     #[test]

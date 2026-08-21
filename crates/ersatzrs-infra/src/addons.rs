@@ -18,11 +18,11 @@ use ersatzrs_addon_contract::{
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
     RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_REMOTE_STREAM_ITEM_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
-    OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4,
+    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
+    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -2233,6 +2233,7 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
                 CAPABILITY_MEDIA_LIST_LIST_V1
                     | CAPABILITY_MEDIA_LIST_LIST_V2
                     | CAPABILITY_MEDIA_LIST_LIST_V3
+                    | CAPABILITY_MEDIA_LIST_LIST_V4
                     | CAPABILITY_REMOTE_STREAM_LIST_V1
                     | CAPABILITY_REMOTE_STREAM_LIST_V2
                     | CAPABILITY_REMOTE_STREAM_LIST_V3,
@@ -3000,8 +3001,7 @@ fn platform_command(
 ) -> Result<(String, Vec<String>), AddonError> {
     let path = executable.to_string_lossy().into_owned();
     match kind {
-        AddonEntrypointKind::Native => Ok((path, Vec::new())),
-        AddonEntrypointKind::WindowsBatch => Ok((path, Vec::new())),
+        AddonEntrypointKind::Native | AddonEntrypointKind::WindowsBatch => Ok((path, Vec::new())),
         AddonEntrypointKind::PosixShell => Err(AddonError::Validation(
             "POSIX shell entrypoint cannot run on this platform".to_owned(),
         )),
@@ -3764,6 +3764,7 @@ fn set_archive_permissions(path: &Path, mode: Option<u32>) -> Result<(), AddonEr
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
 fn set_archive_permissions(_path: &Path, _mode: Option<u32>) -> Result<(), AddonError> {
     Ok(())
 }
@@ -3782,6 +3783,7 @@ fn harden_extracted_directory_permissions(path: &Path) -> Result<(), AddonError>
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
 fn harden_extracted_directory_permissions(_path: &Path) -> Result<(), AddonError> {
     Ok(())
 }
@@ -3963,6 +3965,7 @@ mod tests {
 
     /// Insert an installation backed by a real package directory, so the
     /// readiness path can verify its content hash and run its entrypoint.
+    #[cfg(unix)]
     async fn insert_package_installation(
         pool: &DbPool,
         manifest: &AddonManifest,

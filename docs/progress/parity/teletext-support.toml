@@ -4,11 +4,12 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'Not started'
 adr        = []
 summary    = '''
-Not started and dependency-gated as Phase 9 behind the required Phase 8
-milestones. The phase deliberately distinguishes DVB teletext subtitle pages,
-interactive full-page browsing, and authored output services. Milestone p9a-01
-must accept the standards/product/runtime contract before schema or pipeline
-work decides which of those products ErsatzRS supports.
+Not started and queued as Phase 9. Its required Phase 8 milestones are complete;
+the current program order closes Add-on metadata management and the additive
+FFmpeg drawtext overlay leg first. The phase deliberately distinguishes DVB
+teletext subtitle pages, interactive full-page browsing, and authored output
+services. Milestone p9a-01 must accept the standards/product/runtime contract
+before schema or pipeline work decides which of those products ErsatzRS supports.
 
 Current ErsatzRS scanning and playback have no teletext-specific model or
 selection path, and the FFmpeg runtime contract does not require or functionally

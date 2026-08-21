@@ -19,7 +19,7 @@ use crate::admin::pages::ffmpeg_profiles::{
 };
 use crate::admin::pages::libraries::LibrariesPage;
 use crate::admin::pages::media::addon_lists::{
-    AddonMediaListEditorPage, AddonMediaListItemPage, AddonMediaListsPage,
+    AddAddonMediaListPage, AddonMediaListEditorPage, AddonMediaListItemPage, AddonMediaListsPage,
 };
 use crate::admin::pages::media::artists::{ArtistPage, ArtistsPage};
 use crate::admin::pages::media::collection_detail::CollectionDetailPage;
@@ -556,6 +556,14 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("media"), StaticSegment("addon-lists"))
                 view=AddonMediaListsPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("addon-lists"),
+                    StaticSegment("add"),
+                )
+                view=AddAddonMediaListPage
             />
             <Route
                 path=(

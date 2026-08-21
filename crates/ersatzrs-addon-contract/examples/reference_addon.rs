@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use ersatzrs_addon_contract::{
     AddonCheckResult, AddonCheckStatus, AddonMediaListContentKind, AddonMediaListItemAvailability,
-    AddonMediaListItemKind, AddonMediaListRecord,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListRecord, AddonMetadataDocument,
 };
 use serde::Serialize;
 
@@ -44,11 +44,18 @@ fn run(output: &mut impl io::Write) -> io::Result<()> {
                     availability: AddonMediaListItemAvailability::Available,
                     availability_reason: None,
                     content_kind: AddonMediaListContentKind::Movie,
+                    collection_role: AddonMediaListItemRole::Primary,
                     duration_seconds: Some(7_200),
                     parent_provider_id: None,
                     fragment_start_seconds: None,
                     fragment_end_seconds: None,
                     additional_image_urls: Vec::new(),
+                    metadata: Some(AddonMetadataDocument {
+                        title: Some("Reference movie".to_owned()),
+                        genres: vec!["Documentary".to_owned()],
+                        guids: vec!["tmdb://1".to_owned()],
+                        ..AddonMetadataDocument::default()
+                    }),
                 },
             )
         }

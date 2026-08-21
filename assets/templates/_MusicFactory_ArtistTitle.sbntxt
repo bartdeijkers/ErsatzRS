@@ -1,0 +1,60 @@
+{#-
+ErsatzRS built-in "Music Factory" (TMF) artist/title lower-third preset.
+
+Engine: ersatzrs:minijinja — this template is evaluated by minijinja (ADR 0076),
+not the legacy fixed-token substitution, so every size, margin and position is
+computed here from the output resolution and the card is identical at 720p,
+1080p, 4K, etc. The leading marker on the line above selects that engine.
+
+Context provided by ersatzrs-infra (render_minijinja_template):
+  resolution.width, resolution.height, artist, all_artists, title, album,
+  track, plot, release_date, studios, directors, duration_seconds,
+  stream_seek_seconds.
+
+Layout (bottom-left): two equal-width stacked bars, each 73% of the frame width,
+faded in/out like the default song-title card. The top bar is black with the
+gold artist name; the bottom bar is gold with the black song title (a straight
+colour inversion). Bars are drawn rectangles so both share the same width;
+paired with the recommended "MUSIC FACTORY" image overlay (18% wide, 3% right
+margin) this leaves a ~3% gap between the bars and the logo. Colours are the TMF
+brand gold #EFB832 (ASS &H32B8EF&) with black. The "MUSIC FACTORY" wordmark and
+the TMF channel bug are persistent brand marks delivered as separate always-on
+graphics/watermark overlays rather than baked into this per-song card.
+-#}
+{%- set w = resolution.width -%}
+{%- set h = resolution.height -%}
+{%- set fs = (h / 20) | round | int -%}
+{%- set outline = [ (h / 135) | round | int, 2 ] | max -%}
+{%- set ml = (w * 0.03) | round | int -%}
+{%- set mb = (h * 0.05) | round | int -%}
+{%- set bar_h = fs + 2 * outline -%}
+{%- set bar_w = (w * 0.73) | round | int -%}
+{%- set pad = (h * 0.015) | round | int -%}
+{%- set title_bottom = h - mb -%}
+{%- set title_top = title_bottom - bar_h -%}
+{%- set artist_top = title_top - bar_h -%}
+{%- set title_mid = title_top + bar_h // 2 -%}
+{%- set artist_mid = artist_top + bar_h // 2 -%}
+{%- set text_x = ml + pad -%}
+{%- set artist_text = (all_artists | join(' / ') if all_artists else artist) | upper -%}
+{%- set title_text = title | upper -%}
+[Script Info]
+ScriptType: v4.00+
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+YCbCr Matrix: None
+PlayResX: {{ w }}
+PlayResY: {{ h }}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: TmfBar,OPTIKabel-Heavy,{{ fs }},&H32B8EF&,&H32B8EF&,&H32B8EF&,&H000000&,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: TmfArtist,OPTIKabel-Heavy,{{ fs }},&H32B8EF&,&H32B8EF&,&H000000&,&H000000&,0,0,0,0,100,100,0,0,1,0,0,4,0,0,0,1
+Style: TmfTitle,OPTIKabel-Heavy,{{ fs }},&H000000&,&H000000&,&H000000&,&H000000&,0,0,0,0,100,100,0,0,1,0,0,4,0,0,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:09.00,0:00:16.00,TmfBar,,0,0,0,,{\an7\pos({{ ml }},{{ artist_top }})\1c&H000000&\p1\fad(1200,1200)}m 0 0 l {{ bar_w }} 0 {{ bar_w }} {{ bar_h }} 0 {{ bar_h }}{\p0}
+Dialogue: 0,0:00:09.00,0:00:16.00,TmfBar,,0,0,0,,{\an7\pos({{ ml }},{{ title_top }})\1c&H32B8EF&\p1\fad(1200,1200)}m 0 0 l {{ bar_w }} 0 {{ bar_w }} {{ bar_h }} 0 {{ bar_h }}{\p0}
+Dialogue: 1,0:00:09.00,0:00:16.00,TmfArtist,,0,0,0,,{\an4\pos({{ text_x }},{{ artist_mid }})\fad(1200,1200)}{{ artist_text }}
+Dialogue: 1,0:00:09.00,0:00:16.00,TmfTitle,,0,0,0,,{\an4\pos({{ text_x }},{{ title_mid }})\fad(1200,1200)}{{ title_text }}

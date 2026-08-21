@@ -9,6 +9,10 @@ license.workspace = true
 name = "ersatzrs-web"
 path = "src/main.rs"
 required-features = ["ssr"]
+# The composition-root binary has no tests; behavior is covered by the library
+# and integration targets. Disabling its empty test harness also avoids MSVC
+# linking the same-name rlib twice when server_fn inventory constructors exist.
+test = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -5,11 +5,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
-    conform_media_list_output, validate_operator_source_url,
+    conform_media_list_output, validate_operator_source_url, AddonArtworkRole as WireArtworkRole,
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
-    AddonMediaListRecord, AddonOperationError, CAPABILITY_MEDIA_LIST_LIST_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, MAX_AVAILABILITY_REASON_BYTES,
+    AddonMediaListItemRole as WireItemRole, AddonMediaListRecord, AddonMetadataDocument,
+    AddonOperationError, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, MAX_AVAILABILITY_REASON_BYTES,
     MAX_LIST_ITEMS, MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES,
     OPERATION_CODE_UNSUPPORTED_URL,
 };
@@ -17,6 +18,10 @@ use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
 use ersatzrs_core::media_chapters::parse_chapter_input;
+use ersatzrs_core::repositories::{
+    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson,
+};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 
 use crate::addon_chapters::{fragment_guid, fragment_stream_url};
@@ -68,6 +73,11 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
             })?;
         let capability = if installation
             .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
+        {
+            CAPABILITY_MEDIA_LIST_LIST_V4
+        } else if installation
+            .manifest
             .has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
         {
             CAPABILITY_MEDIA_LIST_LIST_V3
@@ -117,7 +127,11 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
 
         let mut list = decode_media_list_output_for_capability(
             &output,
-            capability == CAPABILITY_MEDIA_LIST_LIST_V3,
+            matches!(
+                capability,
+                CAPABILITY_MEDIA_LIST_LIST_V3 | CAPABILITY_MEDIA_LIST_LIST_V4
+            ),
+            capability == CAPABILITY_MEDIA_LIST_LIST_V4,
         )?;
         if !chapter_input.trim().is_empty() {
             add_chapter_fragments(&mut list, addon_id, chapter_input)?;
@@ -127,7 +141,12 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
 }
 
 fn require_chapter_capability(capability: &str, chapter_input: &str) -> Result<()> {
-    if !chapter_input.trim().is_empty() && capability != CAPABILITY_MEDIA_LIST_LIST_V3 {
+    if !chapter_input.trim().is_empty()
+        && !matches!(
+            capability,
+            CAPABILITY_MEDIA_LIST_LIST_V3 | CAPABILITY_MEDIA_LIST_LIST_V4
+        )
+    {
         return Err(RepositoryError::unavailable(
             "validate add-on chapters",
             "chapters require an installed add-on with media-list.list.v3 support",
@@ -188,11 +207,13 @@ fn add_chapter_fragments(
             availability: full.availability,
             availability_reason: full.availability_reason.clone(),
             content_kind: full.content_kind,
+            collection_role: full.collection_role,
             duration_seconds: end.map(|end| end - start),
             parent_provider_id: Some(full.provider_id.clone()),
             fragment_start_seconds: Some(start),
             fragment_end_seconds: end,
             additional_image_urls: full.additional_image_urls.clone(),
+            metadata: full.metadata.clone(),
         });
     }
     Ok(())
@@ -200,13 +221,14 @@ fn add_chapter_fragments(
 
 #[cfg(test)]
 fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
-    decode_media_list_output_for_capability(output, true)
+    decode_media_list_output_for_capability(output, true, true)
 }
 
 #[allow(clippy::too_many_lines)]
 fn decode_media_list_output_for_capability(
     output: &[u8],
     supports_v3_fields: bool,
+    supports_v4_metadata: bool,
 ) -> Result<EnumeratedAddonMediaList> {
     let mut records = conform_media_list_output(output)
         .map_err(|error| RepositoryError::Decode {
@@ -222,6 +244,7 @@ fn decode_media_list_output_for_capability(
         provider_id,
         name,
         description,
+        metadata,
     } = header
     else {
         return Err(RepositoryError::Decode {
@@ -241,6 +264,19 @@ fn decode_media_list_output_for_capability(
         });
     }
 
+    if metadata.is_some() && !supports_v4_metadata {
+        return Err(RepositoryError::Decode {
+            kind: "media-list add-on output",
+            value: "rich metadata requires media-list.list.v4".to_owned(),
+        });
+    }
+    let list_metadata = metadata_document(
+        metadata,
+        Some(name.as_str()),
+        description.as_deref(),
+        &[],
+        &[],
+    );
     let mut items = Vec::new();
     let mut provider_ids = HashSet::new();
     let mut ranks = HashSet::new();
@@ -265,11 +301,13 @@ fn decode_media_list_output_for_capability(
             availability,
             availability_reason,
             content_kind,
+            collection_role,
             duration_seconds,
             parent_provider_id,
             fragment_start_seconds,
             fragment_end_seconds,
             additional_image_urls,
+            metadata,
         } = record
         else {
             return Err(RepositoryError::Decode {
@@ -313,12 +351,35 @@ fn decode_media_list_output_for_capability(
                     .to_owned(),
             });
         }
+        if metadata.is_some() && !supports_v4_metadata {
+            return Err(RepositoryError::Decode {
+                kind: "media-list add-on output",
+                value: "rich metadata requires media-list.list.v4".to_owned(),
+            });
+        }
+        if !supports_v4_metadata
+            && (matches!(content_kind, WireContentKind::Song | WireContentKind::Image)
+                || collection_role != WireItemRole::Auto)
+        {
+            return Err(RepositoryError::Decode {
+                kind: "media-list add-on output",
+                value: "song/image classification and collection roles require media-list.list.v4"
+                    .to_owned(),
+            });
+        }
         if !provider_ids.insert(provider_id.clone()) || !ranks.insert(rank) {
             return Err(RepositoryError::Decode {
                 kind: "media-list add-on output",
                 value: "item provider_id and rank must be unique".to_owned(),
             });
         }
+        let item_metadata = metadata_document(
+            metadata,
+            Some(title.as_str()),
+            None,
+            &guids,
+            &additional_image_urls,
+        );
         items.push(EnumeratedAddonMediaListItem {
             provider_id,
             rank,
@@ -333,11 +394,13 @@ fn decode_media_list_output_for_capability(
             availability: domain_availability(availability),
             availability_reason,
             content_kind: domain_content_kind(content_kind),
+            collection_role: domain_item_role(collection_role),
             duration_seconds,
             parent_provider_id,
             fragment_start_seconds,
             fragment_end_seconds,
             additional_image_urls,
+            metadata: item_metadata,
         });
     }
     items.sort_by_key(|item| item.rank);
@@ -346,8 +409,89 @@ fn decode_media_list_output_for_capability(
         provider_id,
         name,
         description,
+        metadata: list_metadata,
         items,
     })
+}
+
+fn metadata_document(
+    document: Option<AddonMetadataDocument>,
+    fallback_title: Option<&str>,
+    fallback_plot: Option<&str>,
+    fallback_guids: &[String],
+    fallback_artwork: &[String],
+) -> AddonMediaListNfoMetadata {
+    let document = document.unwrap_or_default();
+    let artwork = document
+        .artwork
+        .into_iter()
+        .map(|candidate| AddonMediaListArtwork {
+            url: candidate.url,
+            role: match candidate.role {
+                WireArtworkRole::Poster => AddonMediaListArtworkRole::Poster,
+                WireArtworkRole::Fanart => AddonMediaListArtworkRole::Fanart,
+                WireArtworkRole::Thumb => AddonMediaListArtworkRole::Thumb,
+                WireArtworkRole::Other => AddonMediaListArtworkRole::Other,
+            },
+            width: candidate.width,
+            height: candidate.height,
+            language: candidate.language,
+        })
+        .collect::<Vec<_>>();
+    let artwork_urls = if artwork.is_empty() {
+        fallback_artwork.to_vec()
+    } else {
+        Vec::new()
+    };
+    let guids = if document.guids.is_empty() {
+        fallback_guids.to_vec()
+    } else {
+        document.guids
+    };
+    AddonMediaListNfoMetadata {
+        title: document
+            .title
+            .or_else(|| fallback_title.map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        original_title: document.original_title,
+        sort_title: document.sort_title,
+        outline: document.outline,
+        plot: document
+            .plot
+            .or_else(|| fallback_plot.map(ToOwned::to_owned)),
+        tagline: document.tagline,
+        show_title: document.show_title,
+        season: document.season,
+        episode: document.episode,
+        year: document.year,
+        release_date: document.release_date,
+        content_ratings: document.content_ratings,
+        genres: document.genres,
+        tags: document.tags,
+        studios: document.studios,
+        music_labels: document.music_labels,
+        languages: document.languages,
+        people: document
+            .people
+            .into_iter()
+            .map(|person| AddonMediaListNfoPerson {
+                name: person.name,
+                role: person.role,
+                order: person.order,
+                thumb: person.thumb,
+            })
+            .collect(),
+        writers: document.writers,
+        directors: document.directors,
+        artists: document.artists,
+        producers: document.producers,
+        original_broadcasters: document.original_broadcasters,
+        broadcasters: document.broadcasters,
+        collection: document.collection,
+        artwork,
+        artwork_urls,
+        guids,
+    }
 }
 
 const fn domain_item_kind(kind: WireItemKind) -> ersatzrs_domain::AddonMediaListItemKind {
@@ -381,6 +525,16 @@ const fn domain_content_kind(kind: WireContentKind) -> ersatzrs_domain::AddonMed
         WireContentKind::Movie => ersatzrs_domain::AddonMediaListContentKind::Movie,
         WireContentKind::MusicVideo => ersatzrs_domain::AddonMediaListContentKind::MusicVideo,
         WireContentKind::OtherVideo => ersatzrs_domain::AddonMediaListContentKind::OtherVideo,
+        WireContentKind::Song => ersatzrs_domain::AddonMediaListContentKind::Song,
+        WireContentKind::Image => ersatzrs_domain::AddonMediaListContentKind::Image,
+    }
+}
+
+const fn domain_item_role(kind: WireItemRole) -> ersatzrs_domain::AddonMediaListItemRole {
+    match kind {
+        WireItemRole::Auto => ersatzrs_domain::AddonMediaListItemRole::Auto,
+        WireItemRole::Primary => ersatzrs_domain::AddonMediaListItemRole::Primary,
+        WireItemRole::Extra => ersatzrs_domain::AddonMediaListItemRole::Extra,
     }
 }
 
@@ -729,7 +883,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
 {"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"remote_stream","source_url":"https://example.test/one","duration_seconds":60}
 "#;
-        let error = decode_media_list_output_for_capability(output, false)
+        let error = decode_media_list_output_for_capability(output, false, false)
             .expect_err("v2 must not accept v3 fields");
         assert!(error.to_string().contains("media-list.list.v3"));
     }

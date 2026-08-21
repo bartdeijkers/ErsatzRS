@@ -25,6 +25,20 @@ class GuardTestRunnerTests(unittest.TestCase):
                 f"{relative} must wire guard_test_runner.py",
             )
 
+    def test_codex_hooks_use_sandbox_safe_relative_paths(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        config = json.loads((root / ".codex/hooks.json").read_text(encoding="utf-8"))
+        commands = [
+            hook["command"]
+            for phase in ("PreToolUse", "PostToolUse")
+            for group in config["hooks"][phase]
+            for hook in group["hooks"]
+        ]
+        for command in commands:
+            self.assertTrue(command.startswith('python "scripts/agent-hooks/'))
+            self.assertNotIn("git rev-parse", command)
+            self.assertNotIn("python3", command)
+
     def test_blocks_direct_focused_cargo_test(self) -> None:
         self.assertTrue(contains_direct_cargo_test("cargo test -p ersatzrs-core filter"))
 

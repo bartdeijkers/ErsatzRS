@@ -2,7 +2,9 @@ use axum::{
     extract::{Form, State},
     response::Redirect,
 };
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListReviewState,
+};
 use serde::Deserialize;
 
 use crate::{
@@ -109,6 +111,7 @@ pub async fn save_addon_media_list_form(
         id,
         addon_id: input.addon_id,
         source_url: input.source_url,
+        folder_name: String::new(),
         auto_refresh: input.auto_refresh,
         generate_playlist: input.generate_playlist,
         content_kind_override: input.content_kind_override,
@@ -116,6 +119,9 @@ pub async fn save_addon_media_list_form(
         presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
         requested_presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
         presentation_error: None,
+        review_state: AddonMediaListReviewState::default(),
+        review_error: None,
+        published_revision: 0,
     };
 
     match update_addon_media_list_with_state(&state, form).await {

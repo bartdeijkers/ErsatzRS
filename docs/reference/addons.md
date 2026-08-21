@@ -19,6 +19,7 @@ support retroactively.
 | `media-list.list.v1` | Enumerates a bounded provider list for local matching and optional playlist generation. |
 | `media-list.list.v2` | Adds explicit item availability and provider-owned content classification. |
 | `media-list.list.v3` | Adds duration, artwork, and structured fragment parent/bounds fields. |
+| `media-list.list.v4` | Adds one strict rich metadata document for list/item review, song and image classification, and explicit primary/extra collection roles. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 
 Unknown capability versions are never executed. The v1 platform does not

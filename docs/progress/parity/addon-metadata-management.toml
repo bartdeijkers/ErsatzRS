@@ -1,0 +1,48 @@
+feature    = 'Reviewable add-on metadata management'
+etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
+rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
+status     = 'In progress'
+adr        = ['0068', '0073', '0075']
+
+summary = '''
+ADR 0075 replaces immediate managed-library publication with a provider-neutral
+metadata draft. Generated parent NFOs, the v4 shared contract, provider and
+override snapshots, durable inclusion, explicit publication, the shared
+localized list/item editor, pagination, and both official provider mappings are
+implemented. yt-dlp remains the updateable extraction engine; its add-on mapper
+only translates full yt-dlp JSON. Remaining work hardens cross-file/database
+publication rollback, artwork upload/materialization, refresh-conflict display,
+and native Linux/Firefox/full closeout proof.
+'''
+
+[[debt]]
+id          = 'addon-list-import-has-no-review-draft'
+description = 'Persist enumeration and enrichment as a reviewable draft, and publish library and playlist surfaces only after operator approval.'
+discovered  = '2026-08-21'
+adr         = '0075'
+evidence    = 'Resolved by the v4 provider snapshots, Draft/Ready/Published states, durable inclusion, the two-step Import/Publish editor, and published-item snapshots. Atomic rollback hardening remains separately visible in amm-b-02.'
+resolved    = true
+
+[[debt]]
+id          = 'official-addons-do-not-share-a-complete-editor-contract'
+description = 'Have Beeld & Geluid and yt-dlp supply list and item metadata through one complete provider-neutral document consumed by one ErsatzRS editor.'
+discovered  = '2026-08-21'
+adr         = '0075'
+evidence    = 'Resolved by media-list.list.v4 and the official Beeld & Geluid and yt-dlp mappings, both consumed by the same ErsatzRS editor without host-side provider branches.'
+resolved    = true
+
+[[debt]]
+id          = 'metadata-refresh-ownership-is-record-wide'
+description = 'Track provider values and operator overrides per field so untouched metadata refreshes while conflicts remain reviewable.'
+discovered  = '2026-08-21'
+adr         = '0075'
+evidence    = 'Milestones amm-b-01 and amm-e-01 own provenance, effective-value merging, and conflict state.'
+resolved    = false
+
+[[debt]]
+id          = 'addon-metadata-platform-proof-is-incomplete'
+description = 'Prove equivalent metadata output and review publication on native Linux, WSL, and Windows.'
+discovered  = '2026-08-21'
+adr         = '0075'
+evidence    = 'Milestone amm-e-02 requires packaged POSIX and PowerShell runtime evidence in addition to the host closeout gates.'
+resolved    = false

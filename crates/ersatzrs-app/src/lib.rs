@@ -428,6 +428,30 @@ impl ApplicationServices {
         commands::match_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
+    /// Publish one reviewed add-on media-list snapshot.
+    pub async fn publish_addon_media_list(
+        &self,
+        command: commands::PublishAddonMediaList,
+    ) -> Result<()> {
+        commands::publish_addon_media_list(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Include or exclude one provider item from publication.
+    pub async fn set_addon_media_list_item_included(
+        &self,
+        command: commands::SetAddonMediaListItemIncluded,
+    ) -> Result<()> {
+        commands::set_addon_media_list_item_included(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Set the primary/extra role of one source for the next publication.
+    pub async fn set_addon_media_list_item_role(
+        &self,
+        command: commands::SetAddonMediaListItemRole,
+    ) -> Result<()> {
+        commands::set_addon_media_list_item_role(command, self.ports.addon_media_lists()).await
+    }
+
     /// Save user-editable Add-on media list settings.
     pub async fn update_addon_media_list(
         &self,

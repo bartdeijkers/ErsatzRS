@@ -620,6 +620,7 @@ async fn channel_editor_lists_bundled_music_video_credit_templates() {
         vec![
             "_ArtistTitleAlbum_CenterTop".to_owned(),
             "_ArtistTitle_LeftMiddle".to_owned(),
+            "_MusicFactory_ArtistTitle".to_owned(),
             "_default.ass".to_owned(),
         ]
     );

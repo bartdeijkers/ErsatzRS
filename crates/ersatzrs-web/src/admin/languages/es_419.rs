@@ -366,6 +366,31 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Complemento",
+        TextKey::PrimaryFeature => "Película principal",
+        TextKey::MovieExtra => "Extra de película",
+        TextKey::NeedReview => "Requiere revisión",
+        TextKey::Discovered => "Detectados",
+        TextKey::EditMetadata => "Editar metadatos",
+        TextKey::OneTagPerLine => "Una etiqueta por línea",
+        TextKey::OriginalTitle => "Título original",
+        TextKey::ReleaseDate => "Fecha de estreno",
+        TextKey::Year => "Año",
+        TextKey::SortTitle => "Título de ordenación",
+        TextKey::MovieFilesAndExtras => "Archivos de película y extras",
+        TextKey::MovieFilesAndExtrasHelp => "Asigna exactamente una película principal. El orden de origen no decide el rol, así que un tráiler puede aparecer primero.",
+        TextKey::EpisodesMetadataHelp => "Revisa la identidad y numeración de episodios; el orden del proveedor no cambia.",
+        TextKey::MusicVideosMetadataHelp => "Artista, álbum y pista pertenecen a cada video; las listas con varios artistas siguen siendo válidas.",
+        TextKey::OtherVideosMetadataHelp => "Usa este tipo para videos independientes y no para una película con extras.",
+        TextKey::SongsMetadataHelp => "Pista, disco, artista y álbum se editan por canción; el orden de la lista no reemplaza el número de pista.",
+        TextKey::ImagesMetadataHelp => "El pie y el creador son editables; formato, dimensiones e identidad de origen siguen siendo datos objetivos.",
+        TextKey::RemoteStreamsMetadataHelp => "Edita aquí los metadatos de presentación; conectividad y protocolo siguen siendo datos de la fuente.",
+        TextKey::CastAndCredits => "Reparto y créditos",
+        TextKey::OneCreditPerLine => "Una persona por línea: nombre | rol",
+        TextKey::Poster => "Póster",
+        TextKey::Artwork => "Imágenes",
+        TextKey::PublishMetadata => "Publicar",
+        TextKey::IncludeItem => "Incluir",
+        TextKey::MetadataDraftNotice => "Revisa los metadatos y los elementos incluidos antes de publicar esta lista.",
         TextKey::ApplyToAllItemsPrompt => "Cada elemento se reclasifica con el tipo de medio seleccionado y reemplaza los valores derivados por el complemento o definidos por ti.",
         TextKey::TelevisionEpisode => "Episodio de televisión",
         TextKey::CollectionTypeAuto => "Determinar a partir de los elementos",
@@ -1383,9 +1408,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LoadingCollections => "Cargando colecciones...",
         TextKey::LoadingPlaylistGroups => "Cargando grupos de listas de reproducción...",
         TextKey::LoadingPlaylists => "Cargando listas de reproducción...",
-        TextKey::GeneratePlaylist => "Generar lista de reproducción",
+        TextKey::GeneratePlaylist => "Crear lista en el orden original",
         TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
-            "Generar una lista de reproducción a partir de los elementos ordenados de la lista de add-on"
+            "Conservar el orden original del proveedor después de cada publicación"
         }
         TextKey::MusicVideos => "Videos musicales",
         TextKey::NewCollectionName => "Nuevo nombre de colección",

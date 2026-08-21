@@ -137,7 +137,7 @@ mod windows_launcher {
     }
 
     /// Directory the launcher exe lives in. The server and site assets are
-    /// staged next to it in the release zip; FFmpeg is managed at server
+    /// staged next to it in the release zip; `FFmpeg` is managed at server
     /// startup unless an operator manually co-locates binaries here.
     fn launcher_dir() -> PathBuf {
         process_path::get_executable_path()
@@ -147,7 +147,7 @@ mod windows_launcher {
     }
 
     /// Spawn `ersatzrs-web.exe` with no console window, pointing it at optional
-    /// manually co-located FFmpeg binaries and bundled Leptos hydration assets
+    /// manually co-located `FFmpeg` binaries and bundled Leptos hydration assets
     /// when present.
     fn spawn_server(exe_dir: &Path) -> io::Result<Child> {
         let server = exe_dir.join(SERVER_EXE);

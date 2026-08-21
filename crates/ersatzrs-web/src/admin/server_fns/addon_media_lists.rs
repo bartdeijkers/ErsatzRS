@@ -1,5 +1,6 @@
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListReviewState,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,9 @@ pub struct AddonMediaListRow {
     pub presentation_kind: AddonMediaListPresentationKind,
     pub requested_presentation_kind: AddonMediaListPresentationKind,
     pub presentation_error: Option<String>,
+    pub review_state: AddonMediaListReviewState,
+    pub review_error: Option<String>,
+    pub published_revision: i32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,12 +29,16 @@ pub struct AddonMediaListForm {
     pub id: i64,
     pub addon_id: String,
     pub source_url: String,
+    pub folder_name: String,
     pub auto_refresh: bool,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
     pub presentation_kind: AddonMediaListPresentationKind,
     pub requested_presentation_kind: AddonMediaListPresentationKind,
     pub presentation_error: Option<String>,
+    pub review_state: AddonMediaListReviewState,
+    pub review_error: Option<String>,
+    pub published_revision: i32,
     pub legacy_chapter_input: String,
 }
 
@@ -63,6 +71,12 @@ pub struct AddonMediaListItemRow {
     pub provider_chapter_input: String,
     pub projected_episode_id: Option<i64>,
     pub content_kind: AddonMediaListContentKind,
+    pub collection_role: AddonMediaListItemRole,
+    pub thumbnail_url: Option<String>,
+    pub tags: Vec<String>,
+    pub people: Vec<String>,
+    pub included: bool,
+    pub published: bool,
 }
 
 /// Per-availability entry totals for one list.
@@ -79,6 +93,25 @@ pub struct AddonMediaListNfoPerson {
     pub role: Option<String>,
     pub order: Option<i32>,
     pub thumb: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListArtworkRole {
+    Poster,
+    Fanart,
+    Thumb,
+    #[default]
+    Other,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListArtwork {
+    pub url: String,
+    pub role: AddonMediaListArtworkRole,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub language: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -109,6 +142,7 @@ pub struct AddonMediaListNfoMetadata {
     pub original_broadcasters: Vec<String>,
     pub broadcasters: Vec<String>,
     pub collection: Option<String>,
+    pub artwork: Vec<AddonMediaListArtwork>,
     pub artwork_urls: Vec<String>,
     pub guids: Vec<String>,
 }
@@ -163,6 +197,12 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             provider_chapter_input: row.provider_chapter_input,
             projected_episode_id: row.projected_episode_id,
             content_kind: row.content_kind,
+            collection_role: row.collection_role,
+            thumbnail_url: row.thumbnail_url,
+            tags: row.tags,
+            people: row.people,
+            included: row.included,
+            published: row.published,
         }
     }
 }
@@ -205,6 +245,30 @@ impl From<ersatzrs_core::repositories::AddonMediaListNfoMetadata> for AddonMedia
             original_broadcasters: metadata.original_broadcasters,
             broadcasters: metadata.broadcasters,
             collection: metadata.collection,
+            artwork: metadata
+                .artwork
+                .into_iter()
+                .map(|artwork| AddonMediaListArtwork {
+                    url: artwork.url,
+                    role: match artwork.role {
+                        ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster => {
+                            AddonMediaListArtworkRole::Poster
+                        }
+                        ersatzrs_core::repositories::AddonMediaListArtworkRole::Fanart => {
+                            AddonMediaListArtworkRole::Fanart
+                        }
+                        ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb => {
+                            AddonMediaListArtworkRole::Thumb
+                        }
+                        ersatzrs_core::repositories::AddonMediaListArtworkRole::Other => {
+                            AddonMediaListArtworkRole::Other
+                        }
+                    },
+                    width: artwork.width,
+                    height: artwork.height,
+                    language: artwork.language,
+                })
+                .collect(),
             artwork_urls: metadata.artwork_urls,
             guids: metadata.guids,
         }
@@ -251,6 +315,32 @@ impl From<AddonMediaListNfoMetadata> for ersatzrs_core::repositories::AddonMedia
             original_broadcasters: metadata.original_broadcasters,
             broadcasters: metadata.broadcasters,
             collection: metadata.collection,
+            artwork: metadata
+                .artwork
+                .into_iter()
+                .map(
+                    |artwork| ersatzrs_core::repositories::AddonMediaListArtwork {
+                        url: artwork.url,
+                        role: match artwork.role {
+                            AddonMediaListArtworkRole::Poster => {
+                                ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster
+                            }
+                            AddonMediaListArtworkRole::Fanart => {
+                                ersatzrs_core::repositories::AddonMediaListArtworkRole::Fanart
+                            }
+                            AddonMediaListArtworkRole::Thumb => {
+                                ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb
+                            }
+                            AddonMediaListArtworkRole::Other => {
+                                ersatzrs_core::repositories::AddonMediaListArtworkRole::Other
+                            }
+                        },
+                        width: artwork.width,
+                        height: artwork.height,
+                        language: artwork.language,
+                    },
+                )
+                .collect(),
             artwork_urls: metadata.artwork_urls,
             guids: metadata.guids,
         }
@@ -314,6 +404,7 @@ pub async fn list_addon_media_list_providers(
                 capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3
+                    || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4
             })
         })
         .map(|item| AddonMediaListProviderRow {
@@ -404,6 +495,9 @@ pub async fn list_addon_media_lists_with_state(
                 presentation_kind: row.presentation_kind,
                 requested_presentation_kind: row.requested_presentation_kind,
                 presentation_error: row.presentation_error,
+                review_state: row.review_state,
+                review_error: row.review_error,
+                published_revision: row.published_revision,
             })
             .collect(),
         total,
@@ -439,12 +533,16 @@ pub async fn get_addon_media_list_form(
                 id: form.id,
                 addon_id: form.addon_id,
                 source_url: form.source_url,
+                folder_name: form.folder_name,
                 auto_refresh: form.auto_refresh,
                 generate_playlist: form.generate_playlist,
                 content_kind_override: form.content_kind_override,
                 presentation_kind: form.presentation_kind,
                 requested_presentation_kind: form.requested_presentation_kind,
                 presentation_error: form.presentation_error,
+                review_state: form.review_state,
+                review_error: form.review_error,
+                published_revision: form.published_revision,
                 legacy_chapter_input: form.legacy_chapter_input,
             })
         })
@@ -486,6 +584,12 @@ pub async fn list_addon_media_list_items(
                     provider_chapter_input: row.provider_chapter_input,
                     projected_episode_id: row.projected_episode_id,
                     content_kind: row.content_kind,
+                    collection_role: row.collection_role,
+                    thumbnail_url: row.thumbnail_url,
+                    tags: row.tags,
+                    people: row.people,
+                    included: row.included,
+                    published: row.published,
                 })
                 .collect()
         })
@@ -554,6 +658,46 @@ pub async fn set_addon_media_list_item_content_kind(
                 content_kind,
             },
         )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Include or exclude one entry from the next publication.
+#[server]
+pub async fn set_addon_media_list_item_included(
+    list_id: i64,
+    item_id: i64,
+    included: bool,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .set_addon_media_list_item_included(ersatzrs_app::commands::SetAddonMediaListItemIncluded {
+            list_id,
+            item_id,
+            included,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Set the collection-aware role of one source for the next publication.
+#[server]
+pub async fn set_addon_media_list_item_role(
+    list_id: i64,
+    item_id: i64,
+    role: AddonMediaListItemRole,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .set_addon_media_list_item_role(ersatzrs_app::commands::SetAddonMediaListItemRole {
+            list_id,
+            item_id,
+            role,
+        })
         .await
         .map_err(ServerFnError::new)
 }
@@ -775,6 +919,33 @@ pub async fn match_addon_media_list(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
+/// Publish the reviewed metadata snapshot, then scan its managed library.
+#[server]
+pub async fn publish_addon_media_list(id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .publish_addon_media_list(ersatzrs_app::commands::PublishAddonMediaList { id })
+        .await
+        .map_err(ServerFnError::new)?;
+    if let Some(library_id) = state
+        .application
+        .addon_media_list_library_id(id)
+        .await
+        .map_err(ServerFnError::new)?
+    {
+        let _ = state
+            .application
+            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
+                library_id, false,
+            ))
+            .await;
+    }
+    Ok(())
+}
+
 #[server]
 pub async fn update_addon_media_list(form: AddonMediaListForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
@@ -840,10 +1011,11 @@ fn log_addon_media_list_failure(
 
 /// Every contract version that can enumerate an add-on media list.
 #[cfg(feature = "ssr")]
-const MEDIA_LIST_CAPABILITIES: [&str; 3] = [
+const MEDIA_LIST_CAPABILITIES: [&str; 4] = [
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3,
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4,
 ];
 
 /// Select the add-on for one operator source URL when none was chosen.
@@ -921,23 +1093,30 @@ pub async fn add_addon_media_list_with_state(
         .inspect_err(|error| {
             log_addon_media_list_failure("add", Some(&logged_addon_id), None, error);
         })?;
-    if let Some(library_id) = state
+    let published = state
         .application
-        .addon_media_list_library_id(list_id)
+        .get_addon_media_list(list_id)
         .await?
-    {
-        let outcome = state
+        .is_some_and(|form| form.review_state == AddonMediaListReviewState::Published);
+    if published {
+        if let Some(library_id) = state
             .application
-            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
-                library_id, false,
-            ))
-            .await;
-        tracing::info!(
-            list_id,
-            library_id,
-            ?outcome,
-            "queued managed add-on list library scan"
-        );
+            .addon_media_list_library_id(list_id)
+            .await?
+        {
+            let outcome = state
+                .application
+                .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
+                    library_id, false,
+                ))
+                .await;
+            tracing::info!(
+                list_id,
+                library_id,
+                ?outcome,
+                "queued managed add-on list library scan"
+            );
+        }
     }
     Ok(list_id)
 }

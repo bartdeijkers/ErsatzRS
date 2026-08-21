@@ -35,6 +35,13 @@ pub enum IconName {
     ArrowUp,
     ArrowDown,
     Calendar,
+    Clock,
+    RefreshOff,
+    Film,
+    Tv,
+    MusicNote,
+    Image,
+    Radio,
 }
 
 /// Returns inline style for a static icon span.
@@ -82,6 +89,13 @@ fn icon_path(name: IconName) -> &'static str {
         IconName::ArrowUp => "M12 19V5M5 12l7-7 7 7",
         IconName::ArrowDown => "M12 5v14M19 12l-7 7-7-7",
         IconName::Calendar => "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+        IconName::Clock => "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
+        IconName::RefreshOff => "M1 1l22 22M20.5 9A9 9 0 0 0 6.6 4.7M3.5 15A9 9 0 0 0 17.4 19.3M23 4v6h-6M1 20v-6h6",
+        IconName::Film => "M4 3h16v18H4zM4 8h16M4 16h16M8 3v5M16 3v5M8 16v5M16 16v5",
+        IconName::Tv => "M4 7h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM8 3l4 4 4-4",
+        IconName::MusicNote => "M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
+        IconName::Image => "M3 5h18v14H3zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM3 17l5-5 4 4 2-2 7 5",
+        IconName::Radio => "M5 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 3l8-2M8 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 10h2M16 14h2",
     }
 }
 

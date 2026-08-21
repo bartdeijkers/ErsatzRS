@@ -142,6 +142,10 @@ managed acquisition is disabled or fails.
 SQLite.SQLite` (or any other source of `sqlite3.exe` on `PATH`) covers the
 prerequisite.
 
+`cargo xtask smoke` always overrides the web listener to
+`127.0.0.1:8409`. The ephemeral smoke executable therefore remains local and
+does not require an interactive Windows Firewall approval.
+
 ## Dev loop (`run.sh dev`)
 
 The wrapper first runs an incremental build of the `ersatzrs-scanner` binary in
@@ -270,6 +274,9 @@ debug = "line-tables-only"     # smaller debuginfo, faster link
 split-debuginfo = "unpacked"   # Linux only
 incremental = true
 
+[profile.test]
+debug = 0                      # keeps the Windows web-test PDB below its limit
+
 [profile.dev.package."*"]
 opt-level = 1                  # all deps -O1: dev runtime ~2-5x faster
 
@@ -278,6 +285,9 @@ opt-level = 0                  # vendored Lua C build is slow; -O1 buys little
 
 [profile.dev.package.sqlx-macros]
 opt-level = 0
+
+[profile.dev.package.ersatzrs-web]
+debug = 0                      # keeps the native web rlib below MSVC's 4-GiB limit
 ```
 
 Trade-offs:
@@ -287,6 +297,12 @@ Trade-offs:
   watch loop.
 - `split-debuginfo = "unpacked"` shrinks the resulting `target/` and speeds
   up linking on Linux. On other OSes, drop or change this line.
+- Test binaries omit debug information because it is not needed to determine
+  outcomes and the large `ersatzrs-web` harness otherwise exceeds MSVC's PDB
+  size limit on Windows. Panic messages and nextest diagnostics remain intact.
+- The `ersatzrs-web` workspace package also omits debug information in dev
+  builds. Its native RLIB exceeds MSVC's 4-GiB archive limit even with line
+  tables only; dependencies retain their normal dev line tables.
 - `target/` will be larger than before — the per-package optimisation level
   generates more codegen artifacts. Run `cargo clean` when `target/` grows
   beyond 40 GiB; between cleanups, use

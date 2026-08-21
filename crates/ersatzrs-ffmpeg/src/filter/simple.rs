@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use ersatzrs_domain::{WatermarkLocation, WatermarkSize};
+use ersatzrs_domain::{ScalingBehavior, WatermarkLocation, WatermarkSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameSize {
@@ -166,6 +166,35 @@ pub fn scale_filter(
     };
 
     with_hwdownload(current, &scale)
+}
+
+/// Scale a source whose dimensions are only known after `FFmpeg` opens it.
+///
+/// Managed Remote Stream items intentionally avoid an eager network probe.
+/// This expression uses `FFmpeg`'s runtime input geometry while still enforcing
+/// the selected profile's output frame and scaling behavior.
+#[must_use]
+pub fn unknown_source_scale_filter(
+    current: &FrameState,
+    frame_size: FrameSize,
+    scaling_behavior: ScalingBehavior,
+) -> String {
+    let spatial = match scaling_behavior {
+        ScalingBehavior::Stretch => format!(
+            "scale={}:{}:flags=fast_bilinear,setsar=1",
+            frame_size.width, frame_size.height
+        ),
+        ScalingBehavior::Crop => format!(
+            "scale={}:{}:flags=fast_bilinear:force_original_aspect_ratio=increase,setsar=1,crop=w={}:h={}",
+            frame_size.width, frame_size.height, frame_size.width, frame_size.height
+        ),
+        ScalingBehavior::ScaleAndPad => format!(
+            "scale={}:{}:flags=fast_bilinear:force_original_aspect_ratio=decrease,setsar=1,pad={}:{}:-1:-1:color=black",
+            frame_size.width, frame_size.height, frame_size.width, frame_size.height
+        ),
+    };
+
+    with_hwdownload(current, &spatial)
 }
 
 #[must_use]

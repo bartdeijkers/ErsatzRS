@@ -20,17 +20,18 @@ use crate::{
     select_video_decoder, standard_format_flags, still_image_loop_filter,
     strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
-    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
-    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
-    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
-    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
-    ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain, FrameRate, FrameSize,
-    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, HardwareGraphOperation,
-    Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile, InputKind,
-    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
-    SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
+    tonemap_filter_for, unknown_source_scale_filter, vaapi_subtitle_pixel_format_filter,
+    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
+    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
+    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
+    ComplexFilter, ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling,
+    FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain,
+    FrameRate, FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory,
+    HardwareGraphOperation, Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile,
+    InputKind, MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat,
+    SourceColorTags, SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod,
+    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    NVENC_HDR_DEVICE_PREFIX,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -152,6 +153,13 @@ impl PipelineRequest {
     pub fn with_source_audio_streams(mut self, streams: Vec<SourceAudioStream>) -> Self {
         self.source_audio_streams = streams;
         self
+    }
+
+    fn source_metadata_is_runtime_only(&self) -> bool {
+        self.inputs
+            .iter()
+            .find(|input| input.kind == InputKind::Video)
+            .is_some_and(|input| input.path == "pipe:0")
     }
 
     /// Disable audio mapping for an explicitly silent playback request.
@@ -671,6 +679,7 @@ pub struct DesiredVideoState {
     pub scaled_size: FrameSize,
     pub frame_size: FrameSize,
     pub cropped_size: Option<FrameSize>,
+    pub scaling_behavior: ScalingBehavior,
     pub pad_mode: FilterMode,
     pub frame_rate: Option<FrameRate>,
     pub video_format: FFmpegProfileVideoFormat,
@@ -718,6 +727,7 @@ impl DesiredVideoState {
             scaled_size: FrameSize::new(1920, 1080),
             frame_size: FrameSize::new(1920, 1080),
             cropped_size: None,
+            scaling_behavior: ScalingBehavior::ScaleAndPad,
             pad_mode: FilterMode::Software,
             frame_rate: Some(FrameRate::DEFAULT),
             video_format: FFmpegProfileVideoFormat::H264,
@@ -780,6 +790,7 @@ impl DesiredVideoState {
             scaled_size,
             frame_size,
             cropped_size,
+            scaling_behavior: profile.scaling_behavior,
             pad_mode: profile.pad_mode,
             frame_rate,
             video_format: profile.video_format,
@@ -832,6 +843,7 @@ impl DesiredVideoState {
             scaled_size: frame_size,
             frame_size,
             cropped_size: None,
+            scaling_behavior: profile.scaling_behavior,
             pad_mode: profile.pad_mode,
             frame_rate: None,
             video_format: FFmpegProfileVideoFormat::Copy,
@@ -1093,6 +1105,7 @@ fn build_transcode_pipeline(
     acceleration: HardwareAccelerationKind,
 ) -> FFmpegPipeline {
     apply_source_stream_indexes(&mut request);
+    let source_metadata_is_runtime_only = request.source_metadata_is_runtime_only();
 
     let effective_acceleration = effective_video_acceleration(&request, acceleration);
     let effective_decode_acceleration =
@@ -1623,6 +1636,7 @@ fn build_transcode_pipeline(
                 request.inputs.as_slice(),
                 request.source_audio_streams.as_slice(),
             ),
+            source_metadata_is_runtime_only,
         ));
     }
     if let Some(encoder) = subtitle_encoder(&request.inputs) {
@@ -1754,8 +1768,40 @@ fn apply_source_video_filters(
         return;
     }
 
+    apply_source_video_geometry(
+        request,
+        acceleration,
+        profile_5_operation,
+        used_hdr_tonemap,
+        target_state,
+        filter_chain,
+    );
+}
+
+fn apply_source_video_geometry(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    profile_5_operation: Option<HardwareGraphOperation>,
+    used_hdr_tonemap: bool,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
     if let Some(cropped_size) = request.desired.cropped_size {
         target_state.cropped_size = Some(cropped_size);
+    }
+
+    let source_frame_size_unknown = request.source_metadata_is_runtime_only()
+        && request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.frame_size)
+            .is_none();
+
+    if source_frame_size_unknown {
+        if profile_5_operation.is_none() {
+            apply_unknown_source_video_geometry(request, acceleration, target_state, filter_chain);
+        }
+        return;
     }
 
     if profile_5_operation.is_none() {
@@ -1800,6 +1846,25 @@ fn apply_source_video_filters(
             upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
         }
     }
+}
+
+fn apply_unknown_source_video_geometry(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    filter_chain.video.push(unknown_source_scale_filter(
+        target_state,
+        request.desired.frame_size,
+        request.desired.scaling_behavior,
+    ));
+    target_state.scaled_size = request.desired.frame_size;
+    target_state.padded_size = request.desired.frame_size;
+    target_state.cropped_size = None;
+    target_state.frame_data_location = crate::FrameDataLocation::Software;
+    target_state.pixel_format = request.desired.pixel_format();
+    upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
 }
 
 fn initialize_source_video_state(
@@ -3815,6 +3880,7 @@ const fn cuda_surface_pixel_format(bit_depth: FFmpegProfileBitDepth) -> PixelFor
 fn audio_encoder(
     desired: &DesiredVideoState,
     source_audio_stream: Option<&SourceAudioStream>,
+    source_metadata_is_runtime_only: bool,
 ) -> PipelineStep {
     let name = match desired.audio_format {
         FFmpegProfileAudioFormat::Copy => "copy",
@@ -3827,7 +3893,12 @@ fn audio_encoder(
     let mut extra = Vec::new();
     if desired.audio_format != FFmpegProfileAudioFormat::Copy {
         if let Some(channels) = desired.audio_channels.filter(|channels| {
-            emit_audio_channels(desired.audio_format, source_audio_stream, *channels)
+            emit_audio_channels(
+                desired.audio_format,
+                source_audio_stream,
+                *channels,
+                source_metadata_is_runtime_only,
+            )
         }) {
             extra.extend(["-ac".to_owned(), channels.to_string()]);
         }
@@ -3855,9 +3926,13 @@ fn emit_audio_channels(
     audio_format: FFmpegProfileAudioFormat,
     source_audio_stream: Option<&SourceAudioStream>,
     desired_channels: u32,
+    source_metadata_is_runtime_only: bool,
 ) -> bool {
     let Some(source_channels) = source_audio_stream.and_then(|stream| stream.channels) else {
-        return false;
+        // Add-on-backed Remote Streams arrive through stdin and intentionally
+        // skip eager probing. The explicit output profile remains authoritative
+        // for that bounded case; ordinary unprobed files keep legacy behavior.
+        return source_metadata_is_runtime_only;
     };
     source_channels != desired_channels
         || matches!(

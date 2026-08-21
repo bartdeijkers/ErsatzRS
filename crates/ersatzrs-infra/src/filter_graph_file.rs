@@ -90,6 +90,7 @@ fn restrict_permissions(file: &std::fs::File) -> std::io::Result<()> {
 /// Windows has no mode bits; the file inherits the ErsatzRS data directory's
 /// ACL, which is already user-scoped.
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
 fn restrict_permissions(_file: &std::fs::File) -> std::io::Result<()> {
     Ok(())
 }

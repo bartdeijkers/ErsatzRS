@@ -14,7 +14,7 @@ use ersatzrs_core::repositories::{
     AddonMediaListNfoMetadata, AddonMediaListNfoPerson, AddonMediaListRepository,
 };
 use ersatzrs_domain::AddonMediaListPresentationKind;
-use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
 use tempfile::TempDir;
 
@@ -52,10 +52,12 @@ async fn seed_managed_list(pool: &SqlitePool) -> TempDir {
     .expect("seed addon installation");
     pool.execute(
         r#"INSERT INTO "AddonMediaList" (
-              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount"
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "Description", "ItemCount",
+              "ProviderMetadataJson", "ReviewState", "PublishedRevision"
            ) VALUES (
               1, 'org.example.lists', 'fixture/show',
-              'https://example.invalid/fixture/show', 'Fixture Show', 3
+              'https://example.invalid/fixture/show', 'Fixture Show', 'Provider introduction', 3,
+              '{"title":"Fixture Show","plot":"Provider introduction"}', 2, 1
            )"#,
     )
     .await
@@ -167,8 +169,9 @@ async fn seed_list_item(
     sqlx::query(
         r#"INSERT INTO "AddonMediaListItem" (
               "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
-              "MediaItemId", "Rank", "Title", "Season", "Episode", "Availability"
-           ) VALUES (?, 1, ?, ?, 4, ?, ?, ?, ?, ?, 1)"#,
+              "MediaItemId", "Rank", "Title", "Season", "Episode", "Availability", "Published",
+              "CollectionRole", "ProviderMetadataJson"
+           ) VALUES (?, 1, ?, ?, 4, ?, ?, ?, ?, ?, 0, 1, ?, ?)"#,
     )
     .bind(item_id)
     .bind(format!("episode:{item_id}"))
@@ -178,9 +181,39 @@ async fn seed_list_item(
     .bind(title)
     .bind(season)
     .bind(episode)
+    .bind(if item_id == 10 { 1 } else { 2 })
+    .bind(serde_json::to_string(&nfo).expect("serialize provider metadata"))
     .execute(pool)
     .await
     .expect("seed addon media list item");
+}
+
+/// Presentation selection edits the review draft; publication is the explicit
+/// boundary that changes the managed library hierarchy.
+async fn request_and_publish(
+    repositories: &Repositories,
+    presentation: AddonMediaListPresentationKind,
+) -> ersatzrs_core::repositories::Result<()> {
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, presentation, None)
+        .await?;
+    repositories.addon_media_lists.publish(LIST_ID).await
+}
+
+async fn save_collection_title(repositories: &Repositories, title: &str) {
+    let form = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("load collection metadata");
+    let mut metadata = form.metadata;
+    metadata.title = title.to_owned();
+    repositories
+        .addon_media_lists
+        .save_show_nfo(LIST_ID, &metadata, &form.etag)
+        .await
+        .expect("save collection title");
 }
 
 async fn scalar<T>(pool: &SqlitePool, sql: &str) -> T
@@ -240,15 +273,27 @@ async fn television_projection_creates_show_seasons_and_episodes() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("project the list as a television show");
+
+    let show_nfo = repositories
         .addon_media_lists
-        .request_presentation(
-            LIST_ID,
-            AddonMediaListPresentationKind::TelevisionShow,
-            Some("Fixture Show"),
-        )
+        .get_show_nfo(LIST_ID)
         .await
-        .expect("project the list as a television show");
+        .expect("load generated show NFO");
+    assert_eq!(show_nfo.metadata.title, "Fixture Show");
+    assert_eq!(
+        show_nfo.metadata.plot.as_deref(),
+        Some("Provider introduction")
+    );
+    assert_eq!(
+        show_nfo.ownership,
+        ersatzrs_core::repositories::AddonMediaListNfoOwnership::Generated
+    );
 
     let show_id: i64 = scalar(
         &pool,
@@ -320,15 +365,12 @@ async fn television_projection_is_idempotent() {
     let repositories = make_repositories(pool.clone());
 
     for _ in 0..2 {
-        repositories
-            .addon_media_lists
-            .request_presentation(
-                LIST_ID,
-                AddonMediaListPresentationKind::TelevisionShow,
-                Some("Fixture Show"),
-            )
-            .await
-            .expect("project the list as a television show");
+        request_and_publish(
+            &repositories,
+            AddonMediaListPresentationKind::TelevisionShow,
+        )
+        .await
+        .expect("project the list as a television show");
     }
 
     assert_eq!(
@@ -363,15 +405,12 @@ async fn television_projection_projects_nfo_facets_and_materialized_artwork() {
     let repositories = make_repositories(pool.clone());
 
     for _ in 0..2 {
-        repositories
-            .addon_media_lists
-            .request_presentation(
-                LIST_ID,
-                AddonMediaListPresentationKind::TelevisionShow,
-                Some("Fixture Show"),
-            )
-            .await
-            .expect("project managed NFO metadata");
+        request_and_publish(
+            &repositories,
+            AddonMediaListPresentationKind::TelevisionShow,
+        )
+        .await
+        .expect("project managed NFO metadata");
     }
 
     let metadata_id: i64 = scalar(
@@ -454,18 +493,13 @@ async fn reverting_to_remote_streams_removes_the_projection() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(
-            LIST_ID,
-            AddonMediaListPresentationKind::TelevisionShow,
-            Some("Fixture Show"),
-        )
-        .await
-        .expect("project the list as a television show");
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("project the list as a television show");
+    request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
         .await
         .expect("revert the projection");
 
@@ -496,9 +530,7 @@ async fn movie_projection_creates_movies_over_the_shared_remote_stream_version()
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
         .await
         .expect("project the list as movies");
 
@@ -549,13 +581,13 @@ async fn movie_projection_creates_movies_over_the_shared_remote_stream_version()
         3
     );
 
-    // Unavailable provider items keep their unavailable media-item state.
+    // Available provider items remain available through the projected identity.
     assert_eq!(
         scalar::<i64>(
             &pool,
             r#"SELECT COUNT(*) FROM "MediaItem" AS "item"
                JOIN "AddonMediaListItemMovie" AS "link" ON "link"."MovieId" = "item"."Id"
-               WHERE "item"."State" = 2"#
+               WHERE "item"."State" = 0"#
         )
         .await,
         3
@@ -569,9 +601,7 @@ async fn movie_projection_is_idempotent_and_reverts_without_deleting_the_source(
     let repositories = make_repositories(pool.clone());
 
     for _ in 0..2 {
-        repositories
-            .addon_media_lists
-            .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
             .await
             .expect("project the list as movies");
     }
@@ -580,9 +610,7 @@ async fn movie_projection_is_idempotent_and_reverts_without_deleting_the_source(
         3
     );
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
         .await
         .expect("revert to remote streams");
 
@@ -617,9 +645,7 @@ async fn movie_projection_revert_is_refused_while_a_projected_movie_is_reference
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
         .await
         .expect("project the list as movies");
 
@@ -640,9 +666,7 @@ async fn movie_projection_revert_is_refused_while_a_projected_movie_is_reference
         .await
         .expect("reference the projected movie");
 
-    let error = repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+    let error = request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
         .await
         .expect_err("a referenced projection must not be reverted");
     assert!(error.to_string().contains("referenced"), "{error}");
@@ -660,9 +684,7 @@ async fn switching_between_flat_projections_leaves_only_the_requested_one() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::OtherVideos, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::OtherVideos)
         .await
         .expect("project the list as other videos");
     assert_eq!(
@@ -684,9 +706,7 @@ async fn switching_between_flat_projections_leaves_only_the_requested_one() {
 
     // Switching to Movies must detach the Other Video projection rather than
     // leaving two hierarchies over the same provider items.
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
         .await
         .expect("switch the list to movies");
     assert_eq!(
@@ -735,9 +755,7 @@ async fn song_projection_writes_the_narrow_metadata_column_set() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Songs, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Songs)
         .await
         .expect("project the list as songs");
 
@@ -769,9 +787,7 @@ async fn song_projection_writes_the_narrow_metadata_column_set() {
         3
     );
 
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
         .await
         .expect("revert to remote streams");
     assert_eq!(
@@ -823,9 +839,7 @@ async fn every_flat_projection_projects_and_reverts() {
         let _directory = seed_managed_list(&pool).await;
         let repositories = make_repositories(pool.clone());
 
-        repositories
-            .addon_media_lists
-            .request_presentation(LIST_ID, presentation, None)
+        request_and_publish(&repositories, presentation)
             .await
             .unwrap_or_else(|error| panic!("{presentation:?} projection failed: {error}"));
         assert_eq!(
@@ -851,9 +865,7 @@ async fn every_flat_projection_projects_and_reverts() {
         );
         assert_projected_item_facets(&pool, metadata_table, link_table, version_column).await;
 
-        repositories
-            .addon_media_lists
-            .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+        request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
             .await
             .unwrap_or_else(|error| panic!("{presentation:?} revert failed: {error}"));
         assert_eq!(
@@ -878,11 +890,10 @@ async fn music_video_projection_creates_one_managed_artist_for_the_list() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    // Without a name there is nothing to call the artist, so the request fails
+    // Without a name there is nothing to call the artist, so publication fails
     // rather than projecting an unnamed parent.
-    let error = repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::MusicVideos, None)
+    save_collection_title(&repositories, "").await;
+    let error = request_and_publish(&repositories, AddonMediaListPresentationKind::MusicVideos)
         .await
         .expect_err("an unnamed artist must be refused");
     assert!(error.to_string().contains("title"), "{error}");
@@ -891,13 +902,8 @@ async fn music_video_projection_creates_one_managed_artist_for_the_list() {
         0
     );
 
-    repositories
-        .addon_media_lists
-        .request_presentation(
-            LIST_ID,
-            AddonMediaListPresentationKind::MusicVideos,
-            Some("Fixture Artist"),
-        )
+    save_collection_title(&repositories, "Fixture Artist").await;
+    request_and_publish(&repositories, AddonMediaListPresentationKind::MusicVideos)
         .await
         .expect("project the list as music videos");
 
@@ -943,9 +949,7 @@ async fn music_video_projection_creates_one_managed_artist_for_the_list() {
     );
 
     // Reverting removes the artist too, and leaves the provider items alone.
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::RemoteStreams, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
         .await
         .expect("revert to remote streams");
     assert_eq!(
@@ -970,18 +974,11 @@ async fn switching_away_from_music_videos_removes_the_managed_artist() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
 
-    repositories
-        .addon_media_lists
-        .request_presentation(
-            LIST_ID,
-            AddonMediaListPresentationKind::MusicVideos,
-            Some("Fixture Artist"),
-        )
+    save_collection_title(&repositories, "Fixture Artist").await;
+    request_and_publish(&repositories, AddonMediaListPresentationKind::MusicVideos)
         .await
         .expect("project the list as music videos");
-    repositories
-        .addon_media_lists
-        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
         .await
         .expect("switch the list to movies");
 

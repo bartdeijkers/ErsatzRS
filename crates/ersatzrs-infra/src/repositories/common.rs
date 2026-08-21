@@ -4,11 +4,11 @@ use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListPresentationKind, ArtworkKind, BlockStopScheduling, ChannelIdleBehavior,
-    ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode,
-    ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
-    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
-    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState, ArtworkKind,
+    BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode,
+    ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
+    ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType,
+    ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
     FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
     FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
     HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
@@ -637,6 +637,18 @@ db_enum!(AddonMediaListPresentationKind {
     5 => AddonMediaListPresentationKind::OtherVideos,
     6 => AddonMediaListPresentationKind::Songs,
     7 => AddonMediaListPresentationKind::Images,
+});
+
+db_enum!(AddonMediaListReviewState {
+    0 => AddonMediaListReviewState::Draft,
+    1 => AddonMediaListReviewState::Ready,
+    2 => AddonMediaListReviewState::Published,
+});
+
+db_enum!(AddonMediaListItemRole {
+    0 => AddonMediaListItemRole::Auto,
+    1 => AddonMediaListItemRole::Primary,
+    2 => AddonMediaListItemRole::Extra,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

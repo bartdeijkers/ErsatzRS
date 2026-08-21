@@ -106,6 +106,14 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `addon-metadata-management.md` — active AMM-A through AMM-E program for a
+  reviewable provider-neutral import draft, durable item inclusion, field-level
+  overrides, one shared metadata/artwork editor, and Linux/WSL/Windows parity
+  for Beeld & Geluid and yt-dlp.
+- `drawtext-overlay-leg.md` — queued after AMM and before Phase 9A; adds an
+  additive FFmpeg `drawtext` path for live, reloadable text while retaining
+  `drawvg` as the default static/vector-rich backend. The resulting controller
+  and overlay contract can also be reused by Phase 10's video jukebox.
 - `addon-nfo-sidecars-and-local-replacements-closeout.md` — blocking handoff
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,

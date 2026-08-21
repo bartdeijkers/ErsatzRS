@@ -28,6 +28,10 @@ const BUILTIN_TEMPLATES: &[(&str, &str)] = &[
         "_ArtistTitleAlbum_CenterTop",
         include_str!("../../../assets/templates/_ArtistTitleAlbum_CenterTop.sbntxt"),
     ),
+    (
+        "_MusicFactory_ArtistTitle",
+        include_str!("../../../assets/templates/_MusicFactory_ArtistTitle.sbntxt"),
+    ),
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -310,7 +314,56 @@ pub fn render_music_video_credits_template(template: &str, data: &MusicVideoCred
     if template.contains("_first_start_ts") && template.contains("_fancy_title_t") {
         return render_interval_template(template, data);
     }
+    if template.contains(MINIJINJA_MARKER) {
+        return render_minijinja_template(template, data);
+    }
     render_simple_template(template, data)
+}
+
+/// Opt-in marker (a minijinja comment, stripped on render) that selects the
+/// real template engine instead of the legacy fixed-token substitution.
+const MINIJINJA_MARKER: &str = "ersatzrs:minijinja";
+
+/// Render a music-video-credits template with minijinja.
+///
+/// Templates that opt in with a leading `{# ersatzrs:minijinja #}` marker are
+/// evaluated by a real engine (ADR 0076) rather than the legacy fixed-token
+/// substitution, so all layout maths — sizes, margins and positions derived
+/// from the output resolution — live in the template instead of in per-preset
+/// Rust. The built-in "Music Factory" (TMF) card uses this path. On a template
+/// error the built-in default song-title card is used so playback still gets a
+/// subtitle.
+fn render_minijinja_template(template: &str, data: &MusicVideoCreditsData) -> String {
+    use minijinja::{context, Environment};
+
+    let env = Environment::new();
+    let ctx = context! {
+        resolution => context! {
+            width => data.resolution.width,
+            height => data.resolution.height,
+        },
+        artist => &data.artist,
+        all_artists => &data.all_artists,
+        title => &data.title,
+        album => &data.album,
+        track => data.track,
+        plot => &data.plot,
+        release_date => &data.release_date,
+        studios => &data.studios,
+        directors => &data.directors,
+        duration_seconds => data.duration.num_seconds(),
+        stream_seek_seconds => data.stream_seek.num_seconds(),
+    };
+    match env.render_str(template, ctx) {
+        Ok(rendered) => rendered,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "minijinja music video credits template failed to render; falling back to built-in default"
+            );
+            render_builtin_default(data)
+        }
+    }
 }
 
 fn render_builtin_default(data: &MusicVideoCreditsData) -> String {
@@ -602,6 +655,53 @@ mod tests {
         assert!(rendered.contains("PlayResX: 1920"));
         assert!(rendered.contains(r#"Artist A / Artist B\N"The Song"\NThe Album"#));
         assert!(rendered.contains("58,58,54"));
+    }
+
+    #[test]
+    fn tmf_template_renders_two_bar_lower_third() {
+        // The Music Factory preset opts into minijinja; this exercises that path.
+        let rendered = render_music_video_credits_template(BUILTIN_TEMPLATES[3].1, &data());
+        assert!(rendered.contains("PlayResX: 1920"));
+        assert!(rendered.contains("PlayResY: 1080"));
+        assert!(rendered.contains("Style: TmfBar,OPTIKabel-Heavy,54,&H32B8EF&"));
+        // Two equal-width drawn bars: black (artist) flush on top of gold (title).
+        assert!(rendered.contains(
+            r"{\an7\pos(58,886)\1c&H000000&\p1\fad(1200,1200)}m 0 0 l 1402 0 1402 70 0 70{\p0}"
+        ));
+        assert!(rendered.contains(
+            r"{\an7\pos(58,956)\1c&H32B8EF&\p1\fad(1200,1200)}m 0 0 l 1402 0 1402 70 0 70{\p0}"
+        ));
+        // Gold artist text (joined with " / ") centred on the black bar and the
+        // black title text on the gold bar, both upper-cased like TMF.
+        assert!(rendered.contains(r"{\an4\pos(74,921)\fad(1200,1200)}ARTIST A / ARTIST B"));
+        assert!(rendered.contains(r"{\an4\pos(74,991)\fad(1200,1200)}THE SONG"));
+    }
+
+    #[test]
+    fn tmf_template_scales_with_resolution() {
+        let mut data = data();
+        data.resolution = Resolution {
+            id: 2,
+            name: "720p".to_owned(),
+            is_custom: false,
+            width: 1280,
+            height: 720,
+        };
+        let rendered = render_music_video_credits_template(BUILTIN_TEMPLATES[3].1, &data);
+        assert!(rendered.contains("PlayResX: 1280"));
+        assert!(rendered.contains("Style: TmfBar,OPTIKabel-Heavy,36,"));
+        // bar_width = round(1280 * 0.73) = 934, bar_height = 36 + 2*5 = 46.
+        assert!(rendered.contains("m 0 0 l 934 0 934 46 0 46"));
+    }
+
+    #[test]
+    fn minijinja_template_error_falls_back_to_default() {
+        // A minijinja-marked template that fails to render must fall back to the
+        // built-in default card so playback still gets a subtitle.
+        let broken = "{# ersatzrs:minijinja #}{{ resolution.width * }}";
+        let rendered = render_music_video_credits_template(broken, &data());
+        assert!(rendered.contains("Style: Default,OPTIKabel-Heavy"));
+        assert!(!rendered.contains("TmfBar"));
     }
 
     #[test]

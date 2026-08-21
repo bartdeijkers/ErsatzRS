@@ -52,6 +52,19 @@ pub enum AddonMediaListItemAvailability {
     Unknown,
 }
 
+/// Lifecycle of provider metadata before it becomes playable library content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListReviewState {
+    /// Provider data is editable and has not been published.
+    #[default]
+    Draft,
+    /// Review is complete, but publication has not yet committed.
+    Ready,
+    /// The current included snapshot is available to scanners and playout.
+    Published,
+}
+
 /// Descriptive content classification for an add-on supplied stream.
 ///
 /// This does not change the storage identity: generated streams remain Remote
@@ -72,6 +85,23 @@ pub enum AddonMediaListContentKind {
     Song,
     /// One still image; it has no duration of its own.
     Image,
+}
+
+/// Semantic role of one source inside the selected collection presentation.
+///
+/// This is deliberately independent from provider rank. A trailer can precede
+/// the feature in the original order, so movie publication must never infer
+/// its main feature from the first row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListItemRole {
+    /// No role was supplied or selected yet.
+    #[default]
+    Auto,
+    /// The primary source, such as the feature in a movie collection.
+    Primary,
+    /// A secondary source, such as a trailer, interview, or featurette.
+    Extra,
 }
 
 /// Host-owned library presentation for an imported add-on list.

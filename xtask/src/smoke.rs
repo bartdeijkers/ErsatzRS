@@ -307,6 +307,10 @@ impl ServerProcess {
         command
             .env("DATABASE_URL", database_url)
             .env("HOME", home)
+            // Keep the local gate off external interfaces. Besides matching
+            // every probe below, this avoids a Windows Firewall consent
+            // dialog for the ephemeral debug executable.
+            .env("LEPTOS_SITE_ADDR", LISTEN_ADDR)
             .env("RUST_LOG", smoke_rust_log())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));

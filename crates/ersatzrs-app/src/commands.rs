@@ -4352,6 +4352,28 @@ pub struct MatchAddonMediaList {
     pub id: EntityId,
 }
 
+/// Publish one reviewed Add-on media list snapshot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PublishAddonMediaList {
+    pub id: EntityId,
+}
+
+/// Include or exclude one provider item from publication.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetAddonMediaListItemIncluded {
+    pub list_id: EntityId,
+    pub item_id: EntityId,
+    pub included: bool,
+}
+
+/// Set the primary/extra role of one source without changing list order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetAddonMediaListItemRole {
+    pub list_id: EntityId,
+    pub item_id: EntityId,
+    pub role: ersatzrs_domain::AddonMediaListItemRole,
+}
+
 /// Update user-editable Add-on media list settings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateAddonMediaList {
@@ -4479,6 +4501,41 @@ pub async fn match_addon_media_list(
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     repository.match_items(command.id).await.map_err(Into::into)
+}
+
+/// Commit the reviewed snapshot for scanning and playout.
+pub async fn publish_addon_media_list(
+    command: PublishAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    repository.publish(command.id).await.map_err(Into::into)
+}
+
+/// Include or exclude one item from publication.
+pub async fn set_addon_media_list_item_included(
+    command: SetAddonMediaListItemIncluded,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    repository
+        .set_item_included(command.list_id, command.item_id, command.included)
+        .await
+        .map_err(Into::into)
+}
+
+/// Persist one collection-aware item role for the next publication.
+pub async fn set_addon_media_list_item_role(
+    command: SetAddonMediaListItemRole,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    repository
+        .set_item_collection_role(command.list_id, command.item_id, command.role)
+        .await
+        .map_err(Into::into)
 }
 
 /// Persist Add-on media list settings.

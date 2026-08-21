@@ -627,6 +627,13 @@ pub async fn sync_playlist_files(
         .into_iter()
         .filter(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()))
         .collect::<Vec<_>>();
+    let published_ids = published_provider_ids(pool, manifest_path).await?;
+    if let Some(published_ids) = published_ids {
+        selected.retain(|entry| {
+            let provider_id = entry.provider_id.as_deref().unwrap_or(&entry.id);
+            published_ids.contains(provider_id)
+        });
+    }
     // Enrichment runs only after item limits, filters, and exclusions have been
     // applied, so its cost is proportional to the entries actually kept rather
     // than the whole upstream listing.
@@ -638,6 +645,7 @@ pub async fn sync_playlist_files(
         &mut selected,
     )
     .await;
+    apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
     if let Err(error) =
         append_item_chapter_fragments(pool, manifest_path, &manifest.manifest.addon, &mut selected)
             .await
@@ -917,9 +925,8 @@ const fn wire_content_kind(kind: AddonMediaListContentKind) -> WireContentKind {
         AddonMediaListContentKind::Movie => WireContentKind::Movie,
         AddonMediaListContentKind::MusicVideo => WireContentKind::MusicVideo,
         AddonMediaListContentKind::OtherVideo => WireContentKind::OtherVideo,
-        // The frozen wire contract has no song or image classification, so the
-        // host keeps those as its own and asks the add-on to classify freely
-        // rather than sending a value the contract would reject.
+        // Remote-stream v1-v3 do not negotiate the media-list v4 additions, so
+        // keep sending Auto on this older capability family.
         AddonMediaListContentKind::Auto
         | AddonMediaListContentKind::Song
         | AddonMediaListContentKind::Image => WireContentKind::Auto,
@@ -933,6 +940,8 @@ const fn domain_content_kind(kind: WireContentKind) -> AddonMediaListContentKind
         WireContentKind::Movie => AddonMediaListContentKind::Movie,
         WireContentKind::MusicVideo => AddonMediaListContentKind::MusicVideo,
         WireContentKind::OtherVideo => AddonMediaListContentKind::OtherVideo,
+        WireContentKind::Song => AddonMediaListContentKind::Song,
+        WireContentKind::Image => AddonMediaListContentKind::Image,
     }
 }
 
@@ -1009,6 +1018,7 @@ async fn append_item_chapter_fragments(
              ON "item"."AddonMediaListId" = "managed"."AddonMediaListId"
            WHERE "managed"."ManifestPath" = ?
              AND "item"."ParentProviderId" IS NULL
+             AND "item"."Published" = 1
              AND (COALESCE(TRIM("item"."ChapterInput"), '') <> ''
                   OR COALESCE(TRIM("item"."ProviderChapterInput"), '') <> '')
            ORDER BY "item"."Rank", "item"."Id""#,
@@ -1052,6 +1062,160 @@ async fn append_item_chapter_fragments(
         }
     }
     Ok(())
+}
+
+/// Return the provider identities in the current published snapshot.
+///
+/// `None` preserves compatibility for unmanaged manifests. Managed draft
+/// lists return an empty set, so scanners cannot accidentally publish them.
+async fn published_provider_ids(
+    pool: &DbPool,
+    manifest_path: &Path,
+) -> Result<Option<BTreeSet<String>>> {
+    let managed: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "AddonMediaListId" FROM "AddonMediaListLibrary"
+           WHERE "ManifestPath" = ? LIMIT 1"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!(
+            "unable to resolve managed list publication: {error}"
+        ))
+    })?;
+    let Some(list_id) = managed else {
+        return Ok(None);
+    };
+    let values = sqlx::query_scalar::<_, String>(
+        r#"SELECT "ProviderId" FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "Published" = 1"#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to load published list items: {error}"))
+    })?;
+    Ok(Some(values.into_iter().collect()))
+}
+
+/// Apply the provider snapshot plus field-level operator overrides retained by
+/// the shared metadata editor. This runs after add-on enrichment so both
+/// Beeld & Geluid and yt-dlp reach the exact same publication boundary.
+async fn apply_reviewed_metadata(
+    pool: &DbPool,
+    manifest_path: &Path,
+    selected: &mut [PlaylistEntry],
+) -> Result<()> {
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        r#"SELECT "item"."ProviderId", "item"."ProviderMetadataJson",
+                  "item"."MetadataOverrideJson"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."AddonMediaListId" = "managed"."AddonMediaListId"
+           WHERE "managed"."ManifestPath" = ? AND "item"."Published" = 1"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .fetch_all(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to load reviewed metadata: {error}"))
+    })?;
+    let mut by_provider = BTreeMap::new();
+    for (provider_id, provider_json, override_json) in rows {
+        let mut provider: serde_json::Value =
+            serde_json::from_str(&provider_json).map_err(|error| {
+                PlaylistError::Enumeration(format!("stored provider metadata is invalid: {error}"))
+            })?;
+        let overrides: serde_json::Value =
+            serde_json::from_str(&override_json).map_err(|error| {
+                PlaylistError::Enumeration(format!("stored metadata override is invalid: {error}"))
+            })?;
+        if let (Some(provider), Some(overrides)) = (provider.as_object_mut(), overrides.as_object())
+        {
+            for (field, value) in overrides {
+                provider.insert(field.clone(), value.clone());
+            }
+        }
+        let metadata: ersatzrs_core::repositories::AddonMediaListNfoMetadata =
+            serde_json::from_value(provider).map_err(|error| {
+                PlaylistError::Enumeration(format!("stored reviewed metadata is invalid: {error}"))
+            })?;
+        by_provider.insert(provider_id, metadata);
+    }
+    for entry in selected {
+        let provider_id = entry.provider_id.as_deref().unwrap_or(&entry.id);
+        let Some(metadata) = by_provider.get(provider_id) else {
+            continue;
+        };
+        apply_metadata_to_entry(entry, metadata);
+    }
+    Ok(())
+}
+
+fn apply_metadata_to_entry(
+    entry: &mut PlaylistEntry,
+    metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+) {
+    entry.title.clone_from(&metadata.title);
+    entry.original_title.clone_from(&metadata.original_title);
+    entry.sort_title.clone_from(&metadata.sort_title);
+    entry.outline.clone_from(&metadata.outline);
+    entry.plot.clone_from(&metadata.plot);
+    entry.tagline.clone_from(&metadata.tagline);
+    entry.show_title.clone_from(&metadata.show_title);
+    entry.season = metadata.season;
+    entry.episode = metadata.episode;
+    entry.year = metadata.year;
+    entry.release_date.clone_from(&metadata.release_date);
+    entry.content_rating = metadata.content_ratings.first().cloned();
+    entry.genres.clone_from(&metadata.genres);
+    entry.tags.clone_from(&metadata.tags);
+    entry.collection.clone_from(&metadata.collection);
+    entry.people = metadata
+        .people
+        .iter()
+        .map(|person| ersatzrs_addon_contract::RemoteStreamPerson {
+            name: person.name.clone(),
+            role: person.role.clone().unwrap_or_default(),
+        })
+        .collect();
+    entry.producers.clone_from(&metadata.producers);
+    entry
+        .original_broadcasters
+        .clone_from(&metadata.original_broadcasters);
+    entry.broadcasters.clone_from(&metadata.broadcasters);
+    let preferred_artwork = metadata
+        .artwork
+        .iter()
+        .find(|candidate| {
+            candidate.role == ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb
+        })
+        .or_else(|| {
+            metadata.artwork.iter().find(|candidate| {
+                candidate.role == ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster
+            })
+        })
+        .or_else(|| metadata.artwork.first());
+    entry.thumbnail_url = preferred_artwork
+        .map(|candidate| candidate.url.clone())
+        .or_else(|| metadata.artwork_urls.first().cloned());
+    let mut additional_image_urls = Vec::new();
+    for url in metadata
+        .artwork
+        .iter()
+        .map(|candidate| candidate.url.as_str())
+        .chain(metadata.artwork_urls.iter().map(String::as_str))
+    {
+        if entry.thumbnail_url.as_deref() != Some(url)
+            && !additional_image_urls.iter().any(|existing| existing == url)
+        {
+            additional_image_urls.push(url.to_owned());
+        }
+    }
+    entry.additional_image_urls = additional_image_urls;
+    entry.guids.clone_from(&metadata.guids);
 }
 
 fn effective_chapter_input<'a>(
@@ -1328,7 +1492,11 @@ fn generated_nfo_bytes(
     let root_name = match entry.content_kind {
         WireContentKind::TelevisionEpisode => "episodedetails",
         WireContentKind::MusicVideo => "musicvideo",
-        WireContentKind::Auto | WireContentKind::Movie | WireContentKind::OtherVideo => "movie",
+        WireContentKind::Auto
+        | WireContentKind::Movie
+        | WireContentKind::OtherVideo
+        | WireContentKind::Song
+        | WireContentKind::Image => "movie",
     };
     let mut root = BytesStart::new(root_name);
     root.push_attribute(("xmlns:ersatzrs", "urn:ersatzrs:nfo:1"));

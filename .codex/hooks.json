@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/guard_test_runner.py\"",
+            "command": "python \"scripts/agent-hooks/guard_test_runner.py\"",
             "timeout": 30,
             "statusMessage": "Enforcing the repository test runner"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/guard_contributing_contract.py\"",
+            "command": "python \"scripts/agent-hooks/guard_contributing_contract.py\"",
             "timeout": 30,
             "statusMessage": "Checking repository content contract"
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/rustfmt_single_file.py\"",
+            "command": "python \"scripts/agent-hooks/rustfmt_single_file.py\"",
             "timeout": 30,
             "statusMessage": "Formatting edited Rust file"
           }

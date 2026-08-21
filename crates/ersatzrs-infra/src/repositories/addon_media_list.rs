@@ -2,14 +2,16 @@ use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
     AddonMediaListItemCounts, AddonMediaListItemDetail, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListReplacementCandidate, AddonMediaListRepository,
-    RepositoryError, Result,
+    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
-    EntityId,
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId,
 };
+use sha2::{Digest as _, Sha256};
 use sqlx::{Pool, Row};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::addon_media_list::InstalledAddonMediaListProvider;
@@ -27,6 +29,7 @@ const PAGE_SIZE_KEY: &str = "pages.addon_media_lists.page_size";
 pub struct SqliteAddonMediaListRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     async fn list_admin(
         &self,
@@ -43,7 +46,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."ItemCount", "list"."AutoRefresh", "list"."GeneratePlaylist",
                       "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                       "list"."PresentationKind", "list"."RequestedPresentationKind",
-                      "list"."PresentationError",
+                      "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
+                      "list"."PublishedRevision",
                       COUNT("matched"."Id") AS "MatchCount"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListItem" AS "matched"
@@ -54,7 +58,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         "list"."AutoRefresh", "list"."GeneratePlaylist",
                         "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                         "list"."PresentationKind", "list"."RequestedPresentationKind",
-                        "list"."PresentationError"
+                        "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
+                        "list"."PublishedRevision"
                ORDER BY "list"."Name", "list"."Id"
                LIMIT ? OFFSET ?"#,
         )
@@ -105,6 +110,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         "RequestedPresentationKind",
                     )?,
                     presentation_error: row.try_get("PresentationError").repository()?,
+                    review_state: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListReviewState",
+                        row,
+                        "ReviewState",
+                    )?,
+                    review_error: row.try_get("ReviewError").repository()?,
+                    published_revision: row.try_get("PublishedRevision").repository()?,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -117,11 +129,17 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
-            r#"SELECT "Id", "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist",
-                      "ContentKindOverride", "PresentationKind",
-                      "RequestedPresentationKind", "PresentationError", "ChapterInput"
-               FROM "AddonMediaList"
-               WHERE "Id" = ?"#,
+            r#"SELECT "list"."Id", "list"."AddonId", "list"."SourceUrl",
+                      "list"."AutoRefresh", "list"."GeneratePlaylist",
+                      "list"."ContentKindOverride", "list"."PresentationKind",
+                      "list"."RequestedPresentationKind", "list"."PresentationError",
+                      "list"."ChapterInput", "list"."ReviewState", "list"."ReviewError",
+                      "list"."PublishedRevision",
+                      COALESCE("managed"."FolderName", '') AS "FolderName"
+               FROM "AddonMediaList" AS "list"
+               LEFT JOIN "AddonMediaListLibrary" AS "managed"
+                 ON "managed"."AddonMediaListId" = "list"."Id"
+               WHERE "list"."Id" = ?"#,
         )
         .bind(id)
         .fetch_optional(&self.0)
@@ -132,6 +150,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id: row.try_get("Id").repository()?,
                 addon_id: row.try_get("AddonId").repository()?,
                 source_url: row.try_get("SourceUrl").repository()?,
+                folder_name: row.try_get("FolderName").repository()?,
                 auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
                 generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
                 content_kind_override: crate::repositories::common::decode_enum_column(
@@ -150,6 +169,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     "RequestedPresentationKind",
                 )?,
                 presentation_error: row.try_get("PresentationError").repository()?,
+                review_state: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListReviewState",
+                    &row,
+                    "ReviewState",
+                )?,
+                review_error: row.try_get("ReviewError").repository()?,
+                published_revision: row.try_get("PublishedRevision").repository()?,
                 legacy_chapter_input: row
                     .try_get::<Option<String>, _>("ChapterInput")
                     .repository()?
@@ -206,11 +232,23 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         item_id: EntityId,
         content_kind: AddonMediaListContentKind,
     ) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let row =
+            sqlx::query(r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?"#)
+                .bind(item_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?
+                .ok_or(RepositoryError::NotFound {
+                    kind: "add-on media list item",
+                    id: item_id,
+                })?;
+        let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
         let updated =
             sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ? WHERE "Id" = ?"#)
                 .bind(crate::repositories::common::encode_enum(content_kind))
                 .bind(item_id)
-                .execute(&self.0)
+                .execute(&mut *tx)
                 .await
                 .repository()?;
         if updated.rows_affected() == 0 {
@@ -219,6 +257,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id: item_id,
             });
         }
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -245,6 +285,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .execute(&mut *tx)
         .await
         .repository()?;
+        mark_list_ready_tx(&mut tx, id).await?;
         tx.commit().await.repository()?;
         Ok(updated.rows_affected())
     }
@@ -259,7 +300,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             return Ok(None);
         };
         let path = item_nfo_path_for(&self.0, list_id, item_id).await?;
-        let nfo = crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)?;
+        let nfo = if path.as_deref().is_some_and(Path::is_file) {
+            crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)?
+        } else {
+            load_item_metadata_form(&self.0, list_id, item_id).await?
+        };
         let child_ids = sqlx::query_scalar::<_, EntityId>(
             r#"SELECT "FragmentItemId" FROM "AddonMediaListChapter"
                WHERE "SourceItemId" = ? ORDER BY "ChapterIndex", "Id""#,
@@ -281,7 +326,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn get_show_nfo(&self, id: EntityId) -> Result<AddonMediaListNfoForm> {
         let path = self.parent_nfo_path(id).await?;
-        crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)
+        if path.as_deref().is_some_and(Path::is_file) {
+            crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)
+        } else {
+            load_list_metadata_form(&self.0, id).await
+        }
     }
 
     async fn search_replacement_candidates(
@@ -361,9 +410,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
             .repository()?;
         }
-        AddonMediaListSynchronizer::new(self.0.clone())
-            .match_list_items(list_id)
-            .await
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
     }
 
     async fn add_or_refresh(
@@ -384,7 +434,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 chapter_input,
             )
             .await?;
-        adopt_derived_presentation(&self.0, id).await?;
+        if self
+            .get_admin_form(id)
+            .await?
+            .is_some_and(|form| form.review_state == AddonMediaListReviewState::Published)
+        {
+            adopt_derived_presentation(&self.0, id).await?;
+        }
         Ok(id)
     }
 
@@ -393,9 +449,200 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn match_items(&self, id: EntityId) -> Result<()> {
+        let form = self
+            .get_admin_form(id)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+        if form.review_state != AddonMediaListReviewState::Published {
+            return Ok(());
+        }
         AddonMediaListSynchronizer::new(self.0.clone())
             .match_list_items(id)
             .await
+    }
+
+    async fn publish(&self, id: EntityId) -> Result<()> {
+        let form = self
+            .get_admin_form(id)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+        let effective_presentation =
+            if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
+                resolve_auto_presentation(&self.0, id).await?
+            } else {
+                form.requested_presentation_kind
+            };
+        let items = self.query_items(id, None, 0, None).await?;
+        if let Some(message) =
+            publication_validation_error(&self.0, id, effective_presentation, &items).await?
+        {
+            record_publication_error(&self.0, id, &message).await?;
+            return Err(RepositoryError::Conflict(message));
+        }
+        if parent_nfo_for(effective_presentation).is_some() {
+            if let Err(error) =
+                ensure_generated_parent_nfo(&self.0, id, effective_presentation, None).await
+            {
+                record_publication_error(&self.0, id, &error.to_string()).await?;
+                return Err(error);
+            }
+        }
+
+        let previous_publication = items
+            .iter()
+            .map(|item| (item.id, item.published))
+            .collect::<Vec<_>>();
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "Published" = "Included"
+               WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()?;
+
+        let publication_result = async {
+            reconcile_projection(&self.0, id, form.requested_presentation_kind).await?;
+            if !form.generate_playlist {
+                let playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
+                    r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
+                )
+                .bind(id)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+                if let Some(playlist_id) = playlist_id {
+                    sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
+                        .bind(playlist_id)
+                        .execute(&self.0)
+                        .await
+                        .repository()?;
+                    sqlx::query(
+                        r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#,
+                    )
+                    .bind(id)
+                    .execute(&self.0)
+                    .await
+                    .repository()?;
+                }
+            }
+            AddonMediaListSynchronizer::new(self.0.clone())
+                .match_list_items(id)
+                .await
+        }
+        .await;
+
+        if let Err(error) = publication_result {
+            let mut restore = crate::db::begin_write(&self.0).await.repository()?;
+            for (item_id, published) in previous_publication {
+                sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published" = ? WHERE "Id" = ?"#)
+                    .bind(published)
+                    .bind(item_id)
+                    .execute(&mut *restore)
+                    .await
+                    .repository()?;
+            }
+            restore.commit().await.repository()?;
+            record_publication_error(&self.0, id, &error.to_string()).await?;
+            if form.presentation_kind.is_projected() {
+                let _ = reconcile_projection(&self.0, id, form.presentation_kind).await;
+            }
+            let _ = AddonMediaListSynchronizer::new(self.0.clone())
+                .match_list_items(id)
+                .await;
+            return Err(error);
+        }
+
+        let mut commit = crate::db::begin_write(&self.0).await.repository()?;
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
+                   "ReviewError" = NULL, "PresentationError" = NULL
+               WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .execute(&mut *commit)
+        .await
+        .repository()?;
+        commit.commit().await.repository()?;
+        Ok(())
+    }
+
+    async fn set_item_included(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        included: bool,
+    ) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "Included" = ?
+               WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+        )
+        .bind(included)
+        .bind(item_id)
+        .bind(list_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list item",
+                id: item_id,
+            });
+        }
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
+    }
+
+    async fn set_item_collection_role(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        role: AddonMediaListItemRole,
+    ) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if role == AddonMediaListItemRole::Primary {
+            // One movie collection can have only one feature. Clearing the old
+            // primary is explicit and never changes the provider order.
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "CollectionRole" = 2
+                   WHERE "AddonMediaListId" = ? AND "CollectionRole" = 1"#,
+            )
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "CollectionRole" = ?
+               WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+        )
+        .bind(crate::repositories::common::encode_enum(role))
+        .bind(item_id)
+        .bind(list_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list item",
+                id: item_id,
+            });
+        }
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
     }
 
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
@@ -420,6 +667,9 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
+        let mut review_tx = crate::db::begin_write(&self.0).await.repository()?;
+        mark_list_ready_tx(&mut review_tx, id).await?;
+        review_tx.commit().await.repository()?;
         if existing.legacy_chapter_input != chapter_input
             || existing.content_kind_override != content_kind_override
         {
@@ -449,7 +699,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         &self,
         id: EntityId,
         presentation_kind: AddonMediaListPresentationKind,
-        show_title: Option<&str>,
+        _show_title: Option<&str>,
     ) -> Result<()> {
         let _form = self
             .get_admin_form(id)
@@ -465,30 +715,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "presentation {presentation_kind:?} has no projection yet"
             )));
         }
-        // A presentation with a parent needs that parent named before anything
-        // is projected, and the name is durable in its NFO rather than the row.
-        if let Some((file_name, root)) = parent_nfo_for(presentation_kind) {
-            let path = parent_nfo_path_for(&self.0, id, file_name)
-                .await?
-                .ok_or_else(|| {
-                    RepositoryError::Conflict("managed list storage is unavailable".to_owned())
-                })?;
-            let mut nfo = crate::addon_media_nfo::read_form(Some(&path)).map_err(map_nfo_error)?;
-            if nfo.metadata.title.trim().is_empty() {
-                show_title
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        RepositoryError::Conflict(format!("{file_name} must contain a title"))
-                    })?
-                    .clone_into(&mut nfo.metadata.title);
-                crate::addon_media_nfo::save_user(&path, root, &nfo.metadata, &nfo.etag)
-                    .map_err(map_nfo_error)?;
-            }
-        }
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "RequestedPresentationKind" = ?, "PresentationError" = NULL
+               SET "RequestedPresentationKind" = ?, "PresentationError" = NULL,
+                   "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+                   "ReviewError" = NULL
                WHERE "Id" = ?"#,
         )
         .bind(crate::repositories::common::encode_enum(presentation_kind))
@@ -496,21 +727,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .execute(&self.0)
         .await
         .repository()?;
-
-        let result = reconcile_projection(&self.0, id, presentation_kind).await;
-        if let Err(error) = &result {
-            let _ = sqlx::query(
-                r#"UPDATE "AddonMediaList" SET "PresentationError" = ? WHERE "Id" = ?"#,
-            )
-            .bind(error.to_string())
-            .bind(id)
-            .execute(&self.0)
-            .await;
-        }
-        result?;
-        AddonMediaListSynchronizer::new(self.0.clone())
-            .match_list_items(id)
-            .await
+        Ok(())
     }
 
     async fn save_show_nfo(
@@ -519,25 +736,20 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         metadata: &AddonMediaListNfoMetadata,
         expected_etag: &str,
     ) -> Result<()> {
-        let path = self.parent_nfo_path(id).await?.ok_or_else(|| {
-            RepositoryError::Conflict("managed list storage is unavailable".to_owned())
-        })?;
-        crate::addon_media_nfo::save_user(&path, "tvshow", metadata, expected_etag)
-            .map_err(map_nfo_error)?;
-        let form = self
-            .get_admin_form(id)
-            .await?
-            .ok_or(RepositoryError::NotFound {
-                kind: "add-on media list",
-                id,
-            })?;
-        if form.requested_presentation_kind == AddonMediaListPresentationKind::TelevisionShow {
-            reconcile_projection(&self.0, id, form.requested_presentation_kind).await?;
-            AddonMediaListSynchronizer::new(self.0.clone())
-                .match_list_items(id)
-                .await?;
-        }
-        Ok(())
+        let current = load_list_metadata_form(&self.0, id).await?;
+        let accepted_etag = if current.etag == expected_etag {
+            current.etag
+        } else {
+            let path = self.parent_nfo_path(id).await?;
+            let disk = crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)?;
+            if disk.etag != expected_etag {
+                return Err(RepositoryError::Conflict(
+                    "metadata changed since the editor was loaded".to_owned(),
+                ));
+            }
+            current.etag
+        };
+        save_list_metadata_override(&self.0, id, metadata, &accepted_etag).await
     }
 
     async fn save_item_nfo(
@@ -547,69 +759,46 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         metadata: &AddonMediaListNfoMetadata,
         expected_etag: &str,
     ) -> Result<()> {
-        let path = item_nfo_path_for(&self.0, list_id, item_id)
-            .await?
-            .ok_or_else(|| {
-                RepositoryError::Conflict(
-                    "item must be scanned before its NFO can be edited".to_owned(),
-                )
-            })?;
-        let presentation =
-            self.get_admin_form(list_id)
-                .await?
-                .ok_or(RepositoryError::NotFound {
-                    kind: "add-on media list",
-                    id: list_id,
-                })?;
-        let root = if presentation.requested_presentation_kind
-            == AddonMediaListPresentationKind::TelevisionShow
-        {
-            "episodedetails"
+        let current = load_item_metadata_form(&self.0, list_id, item_id).await?;
+        let accepted_etag = if current.etag == expected_etag {
+            current.etag
         } else {
-            // The entry classifies itself. The list-wide value is only the
-            // default new entries inherit, so a mixed list would otherwise
-            // write every item under one wrong NFO root.
-            let item_kind = sqlx::query_scalar::<_, i32>(
-                r#"SELECT "ContentKind" FROM "AddonMediaListItem"
+            let path = item_nfo_path_for(&self.0, list_id, item_id).await?;
+            let disk = crate::addon_media_nfo::read_form(path.as_deref()).map_err(map_nfo_error)?;
+            if disk.etag != expected_etag {
+                return Err(RepositoryError::Conflict(
+                    "metadata changed since the editor was loaded".to_owned(),
+                ));
+            }
+            current.etag
+        };
+        save_item_metadata_override(&self.0, list_id, item_id, metadata, &accepted_etag).await
+    }
+
+    async fn reset_nfo(&self, list_id: EntityId, item_id: Option<EntityId>) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if let Some(item_id) = item_id {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "MetadataOverrideJson" = '{}'
                    WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
             )
             .bind(item_id)
             .bind(list_id)
-            .fetch_optional(&self.0)
+            .execute(&mut *tx)
             .await
-            .repository()?
-            .and_then(
-                <AddonMediaListContentKind as crate::repositories::common::DbEnum>::from_db_int,
-            )
-            .unwrap_or(presentation.content_kind_override);
-            let item_kind = match item_kind {
-                AddonMediaListContentKind::Auto => presentation.content_kind_override,
-                kind => kind,
-            };
-            nfo_root_for_content_kind(item_kind)
-        };
-        crate::addon_media_nfo::save_user(&path, root, metadata, expected_etag)
-            .map_err(map_nfo_error)?;
-        if presentation.requested_presentation_kind
-            == AddonMediaListPresentationKind::TelevisionShow
-        {
-            reconcile_projection(&self.0, list_id, presentation.requested_presentation_kind)
-                .await?;
-            AddonMediaListSynchronizer::new(self.0.clone())
-                .match_list_items(list_id)
-                .await?;
-        }
-        Ok(())
-    }
-
-    async fn reset_nfo(&self, list_id: EntityId, item_id: Option<EntityId>) -> Result<()> {
-        let path = if let Some(item_id) = item_id {
-            item_nfo_path_for(&self.0, list_id, item_id).await?
+            .repository()?;
         } else {
-            self.parent_nfo_path(list_id).await?
+            sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "MetadataOverrideJson" = '{}' WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
         }
-        .ok_or_else(|| RepositoryError::Conflict("managed NFO path is unavailable".to_owned()))?;
-        crate::addon_media_nfo::reset(&path).map_err(map_nfo_error)
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
     }
 
     async fn update_item_chapters(&self, item_id: EntityId, chapter_input: &str) -> Result<()> {
@@ -637,13 +826,16 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "chapters can only be edited on a full source item".to_owned(),
             ));
         }
+        let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ChapterInput" = ? WHERE "Id" = ?"#)
             .bind((!chapter_input.trim().is_empty()).then_some(chapter_input.trim()))
             .bind(item_id)
-            .execute(&self.0)
+            .execute(&mut *tx)
             .await
             .repository()?;
-        let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
         let provider = InstalledAddonMediaListProvider::new(self.0.clone());
         AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
             .add_or_refresh(
@@ -658,9 +850,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "",
             )
             .await?;
-        AddonMediaListSynchronizer::new(self.0.clone())
-            .match_list_items(list_id)
-            .await
+        Ok(())
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
@@ -727,18 +917,344 @@ fn map_nfo_error(error: crate::addon_media_nfo::AddonMediaNfoError) -> Repositor
     }
 }
 
-const fn nfo_root_for_content_kind(kind: AddonMediaListContentKind) -> &'static str {
-    match kind {
-        AddonMediaListContentKind::TelevisionEpisode => "episodedetails",
-        // Kodi defines no song or still-image NFO document, so those reuse the
-        // nearest root it does define. Writing an invented root would produce a
-        // sidecar no Kodi-compatible reader accepts, and `serialize` refuses it.
-        AddonMediaListContentKind::MusicVideo | AddonMediaListContentKind::Song => "musicvideo",
-        AddonMediaListContentKind::Auto
-        | AddonMediaListContentKind::Movie
-        | AddonMediaListContentKind::OtherVideo
-        | AddonMediaListContentKind::Image => "movie",
+async fn load_list_metadata_form(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+) -> Result<AddonMediaListNfoForm> {
+    let row = sqlx::query(
+        r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id,
+    })?;
+    let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+    let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+    metadata_form_from_json(&provider_json, &override_json)
+}
+
+async fn load_item_metadata_form(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    item_id: EntityId,
+) -> Result<AddonMediaListNfoForm> {
+    let row = sqlx::query(
+        r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson"
+           FROM "AddonMediaListItem"
+           WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+    )
+    .bind(item_id)
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list item",
+        id: item_id,
+    })?;
+    let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+    let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+    metadata_form_from_json(&provider_json, &override_json)
+}
+
+fn metadata_form_from_json(
+    provider_json: &str,
+    override_json: &str,
+) -> Result<AddonMediaListNfoForm> {
+    let provider = metadata_json_value(provider_json)?;
+    let overrides = metadata_json_value(override_json)?;
+    let effective = merge_metadata_values(provider.clone(), &overrides);
+    let metadata = serde_json::from_value(effective).map_err(|error| RepositoryError::Decode {
+        kind: "add-on metadata",
+        value: error.to_string(),
+    })?;
+    Ok(AddonMediaListNfoForm {
+        metadata,
+        etag: metadata_json_etag(&provider, &overrides),
+        ownership: if overrides.as_object().is_some_and(serde_json::Map::is_empty) {
+            AddonMediaListNfoOwnership::Generated
+        } else {
+            AddonMediaListNfoOwnership::User
+        },
+        error: None,
+        path_available: false,
+    })
+}
+
+fn metadata_json_value(json: &str) -> Result<serde_json::Value> {
+    serde_json::from_str(json).map_err(|error| RepositoryError::Decode {
+        kind: "add-on metadata JSON",
+        value: error.to_string(),
+    })
+}
+
+fn merge_metadata_values(
+    mut provider: serde_json::Value,
+    overrides: &serde_json::Value,
+) -> serde_json::Value {
+    if let (Some(provider), Some(overrides)) = (provider.as_object_mut(), overrides.as_object()) {
+        for (field, value) in overrides {
+            provider.insert(field.clone(), value.clone());
+        }
     }
+    provider
+}
+
+fn metadata_json_etag(provider: &serde_json::Value, overrides: &serde_json::Value) -> String {
+    let mut digest = Sha256::new();
+    digest.update(serde_json::to_vec(provider).unwrap_or_default());
+    digest.update([0]);
+    digest.update(serde_json::to_vec(overrides).unwrap_or_default());
+    let mut etag = String::with_capacity(64);
+    for byte in digest.finalize() {
+        write!(&mut etag, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    etag
+}
+
+/// Move an already published list back to review while preserving its last
+/// published item snapshot and library projection. A never-published import
+/// remains a draft until its first explicit publication.
+async fn mark_list_ready_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+) -> Result<()> {
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+               "ReviewError" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    Ok(())
+}
+
+async fn publication_validation_error(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+    items: &[AddonMediaListItemAdminRow],
+) -> Result<Option<String>> {
+    let list_metadata = load_list_metadata_form(pool, list_id).await?.metadata;
+    if list_metadata.title.trim().is_empty() {
+        return Ok(Some(
+            "collection title is required before publication".to_owned(),
+        ));
+    }
+    if let Some(message) = invalid_artwork_message("collection", &list_metadata) {
+        return Ok(Some(message));
+    }
+
+    let included = items
+        .iter()
+        .filter(|item| item.included)
+        .collect::<Vec<_>>();
+    if included.is_empty() {
+        return Ok(Some(
+            "at least one item must be included before publication".to_owned(),
+        ));
+    }
+
+    if presentation == AddonMediaListPresentationKind::Movies {
+        let primary_count = included
+            .iter()
+            .filter(|item| {
+                item.parent_provider_id.is_none()
+                    && item.collection_role == AddonMediaListItemRole::Primary
+            })
+            .count();
+        if primary_count != 1 {
+            return Ok(Some(format!(
+                "movie publication requires exactly one included main movie; found {primary_count}"
+            )));
+        }
+    }
+
+    for item in included {
+        if item.availability == AddonMediaListItemAvailability::Unavailable
+            && !item.replacement_valid
+        {
+            return Ok(Some(format!(
+                "{} is unavailable and has no valid local replacement",
+                item.display_title
+            )));
+        }
+        let metadata = load_item_metadata_form(pool, list_id, item.id)
+            .await?
+            .metadata;
+        if metadata.title.trim().is_empty() {
+            return Ok(Some(format!(
+                "item {} requires a title before publication",
+                item.rank.saturating_add(1)
+            )));
+        }
+        if let Some(message) = invalid_artwork_message(&item.display_title, &metadata) {
+            return Ok(Some(message));
+        }
+        if presentation == AddonMediaListPresentationKind::TelevisionShow
+            && (metadata.season.is_none_or(|season| season < 0)
+                || metadata.episode.is_none_or(|episode| episode < 1))
+        {
+            return Ok(Some(format!(
+                "{} requires a valid season and episode number",
+                item.display_title
+            )));
+        }
+        if matches!(
+            presentation,
+            AddonMediaListPresentationKind::MusicVideos | AddonMediaListPresentationKind::Songs
+        ) && metadata
+            .artists
+            .iter()
+            .all(|artist| artist.trim().is_empty())
+        {
+            return Ok(Some(format!(
+                "{} requires at least one artist",
+                item.display_title
+            )));
+        }
+    }
+    Ok(None)
+}
+
+fn invalid_artwork_message(owner: &str, metadata: &AddonMediaListNfoMetadata) -> Option<String> {
+    metadata
+        .artwork
+        .iter()
+        .map(|candidate| candidate.url.as_str())
+        .chain(metadata.artwork_urls.iter().map(String::as_str))
+        .find(|url| !is_safe_remote_artwork_url(url))
+        .map(|_| format!("{owner} contains an invalid artwork URL; use a bounded HTTPS URL"))
+}
+
+fn is_safe_remote_artwork_url(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 2_048 {
+        return false;
+    }
+    url::Url::parse(value).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url.has_host()
+            && url.username().is_empty()
+            && url.password().is_none()
+    })
+}
+
+async fn record_publication_error(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    message: &str,
+) -> Result<()> {
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewError" = ? WHERE "Id" = ?"#)
+        .bind(message)
+        .bind(list_id)
+        .execute(pool)
+        .await
+        .repository()?;
+    Ok(())
+}
+
+fn metadata_override_json(
+    provider: &serde_json::Value,
+    metadata: &AddonMediaListNfoMetadata,
+) -> Result<String> {
+    let submitted = serde_json::to_value(metadata).map_err(|error| RepositoryError::Decode {
+        kind: "add-on metadata",
+        value: error.to_string(),
+    })?;
+    let mut overrides = serde_json::Map::new();
+    if let Some(fields) = submitted.as_object() {
+        for (field, value) in fields {
+            if provider.get(field) != Some(value) {
+                overrides.insert(field.clone(), value.clone());
+            }
+        }
+    }
+    serde_json::to_string(&overrides).map_err(|error| RepositoryError::Decode {
+        kind: "add-on metadata override",
+        value: error.to_string(),
+    })
+}
+
+async fn save_list_metadata_override(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+    metadata: &AddonMediaListNfoMetadata,
+    expected_etag: &str,
+) -> Result<()> {
+    let current = load_list_metadata_form(pool, id).await?;
+    if current.etag != expected_etag {
+        return Err(RepositoryError::Conflict(
+            "metadata changed since the editor was loaded".to_owned(),
+        ));
+    }
+    let provider_json: String =
+        sqlx::query_scalar(r#"SELECT "ProviderMetadataJson" FROM "AddonMediaList" WHERE "Id" = ?"#)
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .repository()?;
+    let overrides = metadata_override_json(&metadata_json_value(&provider_json)?, metadata)?;
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "MetadataOverrideJson" = ?,
+               "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+               "ReviewError" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(overrides)
+    .bind(id)
+    .execute(pool)
+    .await
+    .repository()?;
+    Ok(())
+}
+
+async fn save_item_metadata_override(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    item_id: EntityId,
+    metadata: &AddonMediaListNfoMetadata,
+    expected_etag: &str,
+) -> Result<()> {
+    let current = load_item_metadata_form(pool, list_id, item_id).await?;
+    if current.etag != expected_etag {
+        return Err(RepositoryError::Conflict(
+            "metadata changed since the editor was loaded".to_owned(),
+        ));
+    }
+    let provider_json: String = sqlx::query_scalar(
+        r#"SELECT "ProviderMetadataJson" FROM "AddonMediaListItem"
+           WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+    )
+    .bind(item_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let overrides = metadata_override_json(&metadata_json_value(&provider_json)?, metadata)?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "MetadataOverrideJson" = ?
+           WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+    )
+    .bind(overrides)
+    .bind(item_id)
+    .bind(list_id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    mark_list_ready_tx(&mut tx, list_id).await?;
+    tx.commit().await.repository()?;
+    Ok(())
 }
 
 /// Path of the list-level NFO document for a presentation with a parent.
@@ -750,7 +1266,7 @@ async fn parent_nfo_path_for(
     list_id: EntityId,
     file_name: &str,
 ) -> Result<Option<PathBuf>> {
-    let path = sqlx::query_scalar::<_, Option<String>>(
+    let scanned_path = sqlx::query_scalar::<_, Option<String>>(
         r#"SELECT "file"."Path"
            FROM "AddonMediaListItem" AS "item"
            JOIN "MediaVersion" AS "version"
@@ -766,7 +1282,23 @@ async fn parent_nfo_path_for(
     .await
     .repository()?
     .flatten();
-    Ok(path.and_then(|path| {
+    if let Some(path) = scanned_path {
+        return Ok(Path::new(&path)
+            .parent()
+            .map(|parent| parent.join(file_name)));
+    }
+    // A newly imported managed list has a manifest folder before its first
+    // library scan has created MediaVersion/MediaFile rows. The review and
+    // auto-presentation paths still need a parent NFO in that folder.
+    let manifest_path = sqlx::query_scalar::<_, String>(
+        r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    Ok(manifest_path.and_then(|path| {
         Path::new(&path)
             .parent()
             .map(|parent| parent.join(file_name))
@@ -779,9 +1311,7 @@ const fn parent_nfo_for(
 ) -> Option<(&'static str, &'static str)> {
     match presentation {
         AddonMediaListPresentationKind::TelevisionShow => Some(("tvshow.nfo", "tvshow")),
-        // Kodi has no artist NFO root in this serializer, so the managed artist
-        // document reuses the show root; only its file name differs.
-        AddonMediaListPresentationKind::MusicVideos => Some(("artist.nfo", "tvshow")),
+        AddonMediaListPresentationKind::MusicVideos => Some(("artist.nfo", "artist")),
         _ => None,
     }
 }
@@ -942,21 +1472,43 @@ async fn replace_projected_metadata_relations(
         .iter()
         .map(|extension| nfo_path.with_extension(extension))
         .find(|path| path.is_file())
-        .map(|path| path.display().to_string())
-        .or_else(|| metadata.artwork_urls.first().cloned());
-    let artwork = artwork_path
-        .map(|path| ArtworkRef {
+        .map(|path| path.display().to_string());
+    let mut artwork = metadata
+        .artwork
+        .iter()
+        .map(|candidate| ArtworkRef {
+            kind: match candidate.role {
+                ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster => {
+                    artwork_kind::POSTER
+                }
+                ersatzrs_core::repositories::AddonMediaListArtworkRole::Fanart => {
+                    artwork_kind::FAN_ART
+                }
+                ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb
+                | ersatzrs_core::repositories::AddonMediaListArtworkRole::Other => {
+                    artwork_kind::THUMBNAIL
+                }
+            },
+            path: candidate.url.clone(),
+            date_added: chrono::Utc::now(),
+        })
+        .collect::<Vec<_>>();
+    if let Some(path) = artwork_path.or_else(|| metadata.artwork_urls.first().cloned()) {
+        artwork.push(ArtworkRef {
             kind: artwork_kind::THUMBNAIL,
             path,
             date_added: chrono::Utc::now(),
-        })
-        .into_iter()
-        .collect::<Vec<_>>();
+        });
+    }
     replace_artwork(
         tx,
         fk_column,
         metadata_id,
-        &[artwork_kind::THUMBNAIL],
+        &[
+            artwork_kind::POSTER,
+            artwork_kind::THUMBNAIL,
+            artwork_kind::FAN_ART,
+        ],
         &artwork,
     )
     .await
@@ -987,6 +1539,7 @@ impl SqliteAddonMediaListRepository {
     ///
     /// One query shape serves the unfiltered internal callers and the paged
     /// editor sections so their row decoding cannot drift apart.
+    #[allow(clippy::too_many_lines)]
     async fn query_items(
         &self,
         id: EntityId,
@@ -1002,7 +1555,9 @@ impl SqliteAddonMediaListRepository {
                       "item"."Title", "item"."Year", "item"."Season", "item"."Episode",
                       "item"."SourceUrl", "item"."DurationSeconds", "item"."ParentProviderId",
                       "item"."ChapterInput", "item"."ProviderChapterInput",
-                      "item"."ContentKind",
+                       "item"."ContentKind", "item"."CollectionRole",
+                       "item"."Included", "item"."Published",
+                       "item"."ProviderMetadataJson", "item"."MetadataOverrideJson",
                       "projection"."EpisodeId" AS "ProjectedEpisodeId",
                       "item"."Availability", "item"."AvailabilityReason",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
@@ -1028,6 +1583,9 @@ impl SqliteAddonMediaListRepository {
 
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
+            let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+            let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+            let metadata = metadata_form_from_json(&provider_json, &override_json)?.metadata;
             let replacement_media_item_id = row
                 .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
                 .repository()?;
@@ -1076,6 +1634,31 @@ impl SqliteAddonMediaListRepository {
                     &row,
                     "ContentKind",
                 )?,
+                collection_role: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListItemRole",
+                    &row,
+                    "CollectionRole",
+                )?,
+                thumbnail_url: metadata
+                    .artwork
+                    .iter()
+                    .find(|candidate| {
+                        matches!(
+                            candidate.role,
+                            ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb
+                                | ersatzrs_core::repositories::AddonMediaListArtworkRole::Poster
+                        )
+                    })
+                    .map(|candidate| candidate.url.clone())
+                    .or_else(|| metadata.artwork_urls.first().cloned()),
+                tags: metadata.tags,
+                people: metadata
+                    .people
+                    .into_iter()
+                    .map(|person| person.name)
+                    .collect(),
+                included: decode_bool_column(&row, "Included")?,
+                published: decode_bool_column(&row, "Published")?,
             });
         }
         Ok(result)
@@ -1094,6 +1677,7 @@ async fn adopt_derived_presentation(pool: &Pool<crate::db::Db>, id: EntityId) ->
     if derived == AddonMediaListPresentationKind::RemoteStreams {
         return Ok(());
     }
+    ensure_generated_parent_nfo(pool, id, derived, None).await?;
     sqlx::query(r#"UPDATE "AddonMediaList" SET "RequestedPresentationKind" = ? WHERE "Id" = ?"#)
         .bind(crate::repositories::common::encode_enum(
             AddonMediaListPresentationKind::Auto,
@@ -1114,6 +1698,67 @@ async fn adopt_derived_presentation(pool: &Pool<crate::db::Db>, id: EntityId) ->
     AddonMediaListSynchronizer::new(pool.clone())
         .match_list_items(id)
         .await
+}
+
+/// Materialize parent metadata from the provider list header before applying a
+/// parented library presentation. Managed add-on imports must never require an
+/// operator to create an empty `tvshow.nfo` or `artist.nfo` by hand.
+async fn ensure_generated_parent_nfo(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+    title_override: Option<&str>,
+) -> Result<()> {
+    let Some((file_name, root)) = parent_nfo_for(presentation) else {
+        return Ok(());
+    };
+    let path = parent_nfo_path_for(pool, id, file_name)
+        .await?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+        })?;
+    let row = sqlx::query(
+        r#"SELECT COALESCE("Name", '') AS "Name", "Description", "ProviderMetadataJson",
+                  "MetadataOverrideJson"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id,
+    })?;
+    let provider_title: String = row.try_get("Name").repository()?;
+    let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+    let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+    let effective = merge_metadata_values(
+        metadata_json_value(&provider_json)?,
+        &metadata_json_value(&override_json)?,
+    );
+    let mut metadata: AddonMediaListNfoMetadata =
+        serde_json::from_value(effective).map_err(|error| RepositoryError::Decode {
+            kind: "add-on list metadata",
+            value: error.to_string(),
+        })?;
+    let title = title_override
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| (!metadata.title.trim().is_empty()).then_some(metadata.title.trim()))
+        .unwrap_or_else(|| provider_title.trim());
+    if title.is_empty() {
+        return Err(RepositoryError::Conflict(format!(
+            "{file_name} cannot be generated because the add-on supplied no title"
+        )));
+    }
+    metadata.title = title.to_owned();
+    if metadata.plot.is_none() {
+        metadata.plot = row.try_get("Description").repository()?;
+    }
+    let generated = crate::addon_media_nfo::serialize(root, &metadata).map_err(map_nfo_error)?;
+    crate::addon_media_nfo::reconcile_generated(&path, &generated).map_err(map_nfo_error)?;
+    Ok(())
 }
 
 /// Apply the requested presentation, reverting whatever the list had before.
@@ -1280,6 +1925,7 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
         r#"SELECT "Id", "Title", "Year", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
@@ -1523,7 +2169,8 @@ async fn resolve_auto_presentation(
 ) -> Result<AddonMediaListPresentationKind> {
     let kinds = sqlx::query_scalar::<_, i32>(
         r#"SELECT DISTINCT "ContentKind" FROM "AddonMediaListItem"
-           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL"#,
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1"#,
     )
     .bind(list_id)
     .fetch_all(pool)
@@ -1772,6 +2419,7 @@ async fn apply_flat_projection(
         r#"SELECT "Id", "Title", "Year", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
@@ -2070,6 +2718,7 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
         r#"SELECT "Id", "Title", "Year", "Season", "Episode", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
@@ -2483,24 +3132,19 @@ fn decode_replacement_candidate(
 
 #[cfg(test)]
 mod tests {
-    use super::nfo_root_for_content_kind;
-    use ersatzrs_domain::AddonMediaListContentKind;
+    use super::{is_safe_remote_artwork_url, FlatProjection};
 
     /// Every classification must map to a root the NFO serializer accepts.
     /// `Song` once mapped to an invented `song` root, so saving the NFO of any
     /// song-classified entry failed with "unsupported NFO root".
     #[test]
-    fn every_content_kind_maps_to_a_serializable_nfo_root() {
-        for kind in [
-            AddonMediaListContentKind::Auto,
-            AddonMediaListContentKind::TelevisionEpisode,
-            AddonMediaListContentKind::Movie,
-            AddonMediaListContentKind::MusicVideo,
-            AddonMediaListContentKind::OtherVideo,
-            AddonMediaListContentKind::Song,
-            AddonMediaListContentKind::Image,
-        ] {
-            let root = nfo_root_for_content_kind(kind);
+    fn every_projection_uses_a_serializable_nfo_root() {
+        let roots = FlatProjection::ALL
+            .into_iter()
+            .map(|projection| projection.nfo_root)
+            .chain(["tvshow", "episodedetails", "musicvideo"]);
+
+        for root in roots {
             crate::addon_media_nfo::serialize(
                 root,
                 &ersatzrs_core::repositories::AddonMediaListNfoMetadata {
@@ -2508,7 +3152,25 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .unwrap_or_else(|error| panic!("{kind:?} maps to unusable root {root}: {error}"));
+            .unwrap_or_else(|error| panic!("projection uses unusable root {root}: {error}"));
         }
+    }
+
+    #[test]
+    fn artwork_urls_require_bounded_https_without_credentials() {
+        assert!(is_safe_remote_artwork_url(
+            "https://media.example.test/poster.jpg"
+        ));
+        assert!(!is_safe_remote_artwork_url(
+            "http://media.example.test/poster.jpg"
+        ));
+        assert!(!is_safe_remote_artwork_url(
+            "https://user:secret@media.example.test/poster.jpg"
+        ));
+        assert!(!is_safe_remote_artwork_url("file:///tmp/poster.jpg"));
+        assert!(!is_safe_remote_artwork_url(&format!(
+            "https://media.example.test/{}",
+            "x".repeat(2_048)
+        )));
     }
 }

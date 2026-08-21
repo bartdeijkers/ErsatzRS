@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListPresentationKind,
-    EntityId,
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,12 @@ pub struct AddonMediaListAdminRow {
     pub requested_presentation_kind: AddonMediaListPresentationKind,
     /// Last projection failure, if conversion has not completed.
     pub presentation_error: Option<String>,
+    /// Review lifecycle; new imports remain drafts until explicitly published.
+    pub review_state: AddonMediaListReviewState,
+    /// Last publication validation or projection failure, if any.
+    pub review_error: Option<String>,
+    /// Monotonic publication revision used by refresh and audit flows.
+    pub published_revision: i32,
 }
 
 /// Editable settings for one persisted add-on media list.
@@ -51,6 +57,8 @@ pub struct AddonMediaListAdminForm {
     pub addon_id: String,
     /// Provider source hyperlink.
     pub source_url: String,
+    /// Safe host-managed library folder below the configured add-on root.
+    pub folder_name: String,
     /// Whether daily provider refresh is enabled.
     pub auto_refresh: bool,
     /// Whether a host-owned generated playlist is maintained.
@@ -64,6 +72,9 @@ pub struct AddonMediaListAdminForm {
     pub requested_presentation_kind: AddonMediaListPresentationKind,
     /// Projection error retained while active and requested kinds differ.
     pub presentation_error: Option<String>,
+    pub review_state: AddonMediaListReviewState,
+    pub review_error: Option<String>,
+    pub published_revision: i32,
     /// Legacy list-wide chapter input retained only for ambiguous migrations.
     pub legacy_chapter_input: String,
 }
@@ -97,6 +108,18 @@ pub struct AddonMediaListItemAdminRow {
     /// The list-wide value is only the default applied to new entries; this is
     /// the effective kind for the item.
     pub content_kind: AddonMediaListContentKind,
+    /// Primary/extra classification used by collection-aware publication.
+    pub collection_role: AddonMediaListItemRole,
+    /// First effective provider/operator artwork candidate for compact review.
+    pub thumbnail_url: Option<String>,
+    /// Effective tags shown as a bounded summary without opening the editor.
+    pub tags: Vec<String>,
+    /// Effective credited people shown as a bounded summary in the overview.
+    pub people: Vec<String>,
+    /// Operator-controlled inclusion; defaults to true.
+    pub included: bool,
+    /// Whether this entry belongs to the currently published revision.
+    pub published: bool,
 }
 
 /// How many entries of one list fall into each availability group.
@@ -119,11 +142,31 @@ pub struct AddonMediaListNfoPerson {
     pub thumb: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListArtworkRole {
+    Poster,
+    Fanart,
+    Thumb,
+    #[default]
+    Other,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListArtwork {
+    pub url: String,
+    pub role: AddonMediaListArtworkRole,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub language: Option<String>,
+}
+
 /// Complete descriptive metadata supported by managed add-on-list NFO files.
 ///
 /// Operational identity, source URL, availability, and runtime deliberately
 /// remain outside this structure because YAML/provider state owns them.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AddonMediaListNfoMetadata {
     pub title: String,
     pub original_title: Option<String>,
@@ -150,6 +193,9 @@ pub struct AddonMediaListNfoMetadata {
     pub original_broadcasters: Vec<String>,
     pub broadcasters: Vec<String>,
     pub collection: Option<String>,
+    /// Role-aware candidates supplied through the shared v4 contract.
+    pub artwork: Vec<AddonMediaListArtwork>,
+    /// Legacy untyped artwork URLs retained for v1-v3 compatibility.
     pub artwork_urls: Vec<String>,
     pub guids: Vec<String>,
 }
@@ -253,6 +299,40 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
+    /// Atomically publish the current included draft snapshot.
+    async fn publish(&self, id: EntityId) -> Result<()> {
+        let _ = id;
+        Err(RepositoryError::unavailable(
+            "publish add-on media list",
+            "not implemented",
+        ))
+    }
+    /// Include or exclude one item from the next and current publication.
+    async fn set_item_included(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        included: bool,
+    ) -> Result<()> {
+        let _ = (list_id, item_id, included);
+        Err(RepositoryError::unavailable(
+            "set add-on item inclusion",
+            "not implemented",
+        ))
+    }
+    /// Set the semantic role of one source without changing provider order.
+    async fn set_item_collection_role(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        role: AddonMediaListItemRole,
+    ) -> Result<()> {
+        let _ = (list_id, item_id, role);
+        Err(RepositoryError::unavailable(
+            "set add-on item collection role",
+            "not implemented",
+        ))
+    }
     /// Return one page of entries in one availability group.
     ///
     /// `page_size` of `None` returns every row in the group, which the editor

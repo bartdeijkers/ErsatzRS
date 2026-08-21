@@ -1545,8 +1545,11 @@ content_rating: PG
             .tempdir()
             .expect("temp directory");
         let batch = root.path().join("emit arguments.bat");
-        std::fs::write(&batch, "@echo off\r\n<nul set /p=\"%~1|%~2\"\r\n")
-            .expect("write batch producer");
+        std::fs::write(
+            &batch,
+            "@echo off\r\n<nul set /p=\"%~1|%~2\"\r\nexit /b 0\r\n",
+        )
+        .expect("write batch producer");
         let command = RemoteStreamCommand {
             program: batch.to_string_lossy().into_owned(),
             args: vec![
@@ -1558,15 +1561,21 @@ content_rating: PG
         };
 
         let mut child = spawn_remote_stream_producer(&command).expect("spawn batch producer");
-        let mut stdout = child.stdout.take().expect("producer stdout");
+        let mut stdout = child.stdout().take().expect("producer stdout");
+        let mut stderr = child.stderr().take().expect("producer stderr");
         let mut output = String::new();
+        let mut error_output = String::new();
         stdout
             .read_to_string(&mut output)
             .await
             .expect("read producer output");
+        stderr
+            .read_to_string(&mut error_output)
+            .await
+            .expect("read producer error output");
         let status = child.wait().await.expect("producer status");
 
-        assert!(status.success());
+        assert!(status.success(), "producer failed: {error_output}");
         assert_eq!(output, "https://example.test/watch?id=1&x=2|");
     }
 

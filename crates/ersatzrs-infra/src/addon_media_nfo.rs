@@ -7,8 +7,8 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use ersatzrs_core::repositories::{
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
-    AddonMediaListNfoPerson,
+    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoForm,
+    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListNfoPerson,
 };
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
@@ -55,6 +55,7 @@ struct NfoFileState {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct RawNfo {
+    name: Option<String>,
     title: Option<String>,
     originaltitle: Option<String>,
     sorttitle: Option<String>,
@@ -101,7 +102,7 @@ struct RawNfo {
     #[serde(rename = "ersatzrs:collection", alias = "collection")]
     collection: Option<String>,
     #[serde(rename = "thumb")]
-    artwork_urls: Vec<String>,
+    artwork: Vec<RawArtwork>,
     #[serde(rename = "uniqueid")]
     guids: Vec<RawGuid>,
 }
@@ -122,6 +123,21 @@ struct RawGuid {
     source: Option<String>,
     #[serde(rename = "$text")]
     value: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RawArtwork {
+    #[serde(rename = "@aspect")]
+    aspect: Option<String>,
+    #[serde(rename = "@width")]
+    width: Option<u32>,
+    #[serde(rename = "@height")]
+    height: Option<u32>,
+    #[serde(rename = "@language")]
+    language: Option<String>,
+    #[serde(rename = "$text")]
+    url: Option<String>,
 }
 
 /// Read and validate one managed NFO document.
@@ -210,6 +226,15 @@ pub fn reconcile_generated(path: &Path, generated: &[u8]) -> Result<Vec<u8>> {
 
     if let Some(current) = current {
         let current_hash = hash(&current);
+        // An empty, untracked file is a common attempt to satisfy software
+        // that reports a missing NFO. It contains no user metadata to preserve,
+        // so treat it as an absent generated file instead of adopting it as an
+        // invalid user document. Once a file has ownership state, the normal
+        // user/invalid preservation rules still apply.
+        if current.is_empty() && record.is_none() {
+            publish_with_state(path, generated, AddonMediaListNfoOwnership::Generated, None)?;
+            return Ok(generated.to_vec());
+        }
         let changed_user_file = record.as_ref().is_some_and(|record| {
             record.ownership != AddonMediaListNfoOwnership::Generated
                 || record.sha256 != current_hash
@@ -318,8 +343,12 @@ pub fn adopt_existing(path: &Path, generated_hash: Option<&str>) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error for an unsupported root or XML encoding failure.
+#[allow(clippy::too_many_lines)]
 pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec<u8>> {
-    if !matches!(root, "tvshow" | "episodedetails" | "movie" | "musicvideo") {
+    if !matches!(
+        root,
+        "tvshow" | "episodedetails" | "movie" | "musicvideo" | "artist"
+    ) {
         return Err(AddonMediaNfoError::Invalid(format!(
             "unsupported NFO root {root}"
         )));
@@ -332,7 +361,11 @@ pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec
     let mut start = BytesStart::new(root);
     start.push_attribute(("xmlns:ersatzrs", "urn:ersatzrs:nfo:1"));
     xml(&mut writer, Event::Start(start))?;
-    text(&mut writer, "title", Some(&metadata.title))?;
+    text(
+        &mut writer,
+        if root == "artist" { "name" } else { "title" },
+        Some(&metadata.title),
+    )?;
     text(
         &mut writer,
         "originaltitle",
@@ -381,7 +414,40 @@ pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec
         "ersatzrs:collection",
         metadata.collection.as_deref(),
     )?;
-    repeated(&mut writer, "thumb", &metadata.artwork_urls)?;
+    for artwork in &metadata.artwork {
+        let mut element = BytesStart::new("thumb");
+        element.push_attribute((
+            "aspect",
+            match artwork.role {
+                AddonMediaListArtworkRole::Poster => "poster",
+                AddonMediaListArtworkRole::Fanart => "fanart",
+                AddonMediaListArtworkRole::Thumb => "thumb",
+                AddonMediaListArtworkRole::Other => "other",
+            },
+        ));
+        let width = artwork.width.map(|value| value.to_string());
+        let height = artwork.height.map(|value| value.to_string());
+        if let Some(width) = &width {
+            element.push_attribute(("width", width.as_str()));
+        }
+        if let Some(height) = &height {
+            element.push_attribute(("height", height.as_str()));
+        }
+        if let Some(language) = &artwork.language {
+            element.push_attribute(("language", language.as_str()));
+        }
+        xml(&mut writer, Event::Start(element))?;
+        xml(&mut writer, Event::Text(BytesText::new(&artwork.url)))?;
+        xml(&mut writer, Event::End(BytesEnd::new("thumb")))?;
+    }
+    for url in metadata.artwork_urls.iter().filter(|url| {
+        metadata
+            .artwork
+            .iter()
+            .all(|candidate| candidate.url != **url)
+    }) {
+        text(&mut writer, "thumb", Some(url))?;
+    }
     for guid in &metadata.guids {
         let Some((source, value)) = guid.split_once("://") else {
             continue;
@@ -401,7 +467,7 @@ pub fn serialize(root: &str, metadata: &AddonMediaListNfoMetadata) -> Result<Vec
 fn parse(bytes: &[u8]) -> Result<AddonMediaListNfoMetadata> {
     let input = std::str::from_utf8(bytes)
         .map_err(|error| AddonMediaNfoError::Invalid(error.to_string()))?;
-    if !["tvshow", "episodedetails", "movie", "musicvideo"]
+    if !["tvshow", "episodedetails", "movie", "musicvideo", "artist"]
         .iter()
         .any(|root| input.contains(&format!("<{root}")))
     {
@@ -411,8 +477,33 @@ fn parse(bytes: &[u8]) -> Result<AddonMediaListNfoMetadata> {
     }
     let raw: RawNfo = quick_xml::de::from_str(input)
         .map_err(|error| AddonMediaNfoError::Invalid(error.to_string()))?;
+    let mut artwork = Vec::new();
+    let mut artwork_urls = Vec::new();
+    for candidate in raw.artwork {
+        let Some(url) = candidate.url.and_then(|url| non_empty_owned(&url)) else {
+            continue;
+        };
+        let role = match candidate.aspect.as_deref() {
+            Some("poster") => Some(AddonMediaListArtworkRole::Poster),
+            Some("fanart") => Some(AddonMediaListArtworkRole::Fanart),
+            Some("thumb") => Some(AddonMediaListArtworkRole::Thumb),
+            Some("other") => Some(AddonMediaListArtworkRole::Other),
+            _ => None,
+        };
+        if let Some(role) = role {
+            artwork.push(AddonMediaListArtwork {
+                url,
+                role,
+                width: candidate.width,
+                height: candidate.height,
+                language: candidate.language,
+            });
+        } else {
+            artwork_urls.push(url);
+        }
+    }
     Ok(AddonMediaListNfoMetadata {
-        title: raw.title.unwrap_or_default(),
+        title: raw.title.or(raw.name).unwrap_or_default(),
         original_title: raw.originaltitle,
         sort_title: raw.sorttitle,
         outline: raw.outline,
@@ -448,7 +539,8 @@ fn parse(bytes: &[u8]) -> Result<AddonMediaListNfoMetadata> {
         original_broadcasters: clean(raw.original_broadcasters),
         broadcasters: clean(raw.broadcasters),
         collection: raw.collection,
-        artwork_urls: clean(raw.artwork_urls),
+        artwork,
+        artwork_urls,
         guids: raw
             .guids
             .into_iter()
@@ -546,6 +638,10 @@ fn clean(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+fn non_empty_owned(value: &str) -> Option<String> {
+    (!value.trim().is_empty()).then(|| value.trim().to_owned())
+}
+
 fn parse_number(value: Option<String>) -> Option<i32> {
     value.and_then(|value| value.trim().parse().ok())
 }
@@ -612,6 +708,21 @@ mod tests {
     }
 
     #[test]
+    fn artist_parent_uses_kodi_artist_name_field() {
+        let metadata = AddonMediaListNfoMetadata {
+            title: "Fixture artist".to_owned(),
+            plot: Some("Biography".to_owned()),
+            ..AddonMediaListNfoMetadata::default()
+        };
+        let encoded = serialize("artist", &metadata).expect("serialize artist NFO");
+        let xml = std::str::from_utf8(&encoded).expect("UTF-8 artist NFO");
+        assert!(xml.contains("<artist"));
+        assert!(xml.contains("<name>Fixture artist</name>"));
+        assert!(!xml.contains("<title>"));
+        assert_eq!(parse(&encoded).expect("parse artist NFO"), metadata);
+    }
+
+    #[test]
     fn external_edit_becomes_user_owned_and_survives_generation() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let path = temp.path().join("episode.nfo");
@@ -639,5 +750,28 @@ mod tests {
             read_form(Some(&path)).expect("form").ownership,
             AddonMediaListNfoOwnership::User
         );
+    }
+
+    #[test]
+    fn empty_untracked_placeholder_is_replaced_by_generated_metadata() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let path = temp.path().join("tvshow.nfo");
+        fs::write(&path, []).expect("empty placeholder");
+        let generated = serialize(
+            "tvshow",
+            &AddonMediaListNfoMetadata {
+                title: "Provider Series".to_owned(),
+                plot: Some("Provider introduction".to_owned()),
+                ..AddonMediaListNfoMetadata::default()
+            },
+        )
+        .expect("generated NFO");
+
+        let effective = reconcile_generated(&path, &generated).expect("replace placeholder");
+
+        assert_eq!(effective, generated);
+        let form = read_form(Some(&path)).expect("generated form");
+        assert_eq!(form.metadata.title, "Provider Series");
+        assert_eq!(form.ownership, AddonMediaListNfoOwnership::Generated);
     }
 }

@@ -13,6 +13,72 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Add-on list imports now open as a reviewable two-step Import/Publish draft
+  using one localized metadata editor for Beeld & Geluid, yt-dlp, and future
+  providers. The shared `media-list.list.v4` document covers list and item
+  titles, dates and numbering, descriptions, genres, large tag sets, credits,
+  languages, GUIDs, and role-aware poster/fanart/thumbnail candidates. The
+  editor supports per-item inclusion, a filterable review count, inline
+  accordion editing, movie primary/extra roles independent of source order,
+  original-order playlist creation, and pagination across every collection
+  type before explicit publication. The official yt-dlp package keeps the
+  frequently updated `yt-dlp` executable in charge of all provider extraction;
+  its shared POSIX/PowerShell mapper only translates the complete JSON result.
+
+- New built-in music-video-credits preset `_MusicFactory_ArtistTitle`, a
+  "Music Factory" (TMF) styled artist/song-title card alongside the MTV-styled
+  `_default.ass`. It renders two equal-width stacked bars bottom-left — a black
+  bar with the gold artist name flush on top of a gold bar with the black song
+  title — faded in and out over the same 9s–16s window; the TMF brand gold is
+  `#EFB832`. The "MUSIC FACTORY" wordmark and TMF channel bug are intended as
+  separate always-on image graphics/watermark overlays rather than baked into
+  this per-song card.
+
+- Music-video-credits templates can opt into real `minijinja` rendering with a
+  leading `{# ersatzrs:minijinja #}` marker, so a template's whole layout —
+  sizes, margins and positions derived from the output resolution — lives in
+  the template instead of a per-preset Rust renderer (ADR 0076). The
+  `_MusicFactory_ArtistTitle` preset uses this, and a render error falls back to
+  the built-in default card. Existing token/interval presets are unchanged.
+
+### Changed
+
+- Scheduled an additive FFmpeg `drawtext` overlay leg after add-on metadata
+  closeout and before Phase 9 teletext. ADR 0077 keeps `drawvg` as the default
+  static/vector-rich backend while defining reloadable text files for live
+  clocks, countdowns, and changing now/next or video-jukebox presentation.
+
+### Fixed
+
+- Generate a managed list-level `tvshow.nfo` or `artist.nfo` from the
+  add-on's title and description before applying an automatic library
+  presentation, including before the first library scan. An empty untracked
+  placeholder is healed instead of being reported as malformed XML, while real
+  user-authored NFO files keep their ownership protection.
+
+- Project-local Codex hooks now invoke the real Windows Python installation
+  through repository-relative paths, avoiding repeated `PostToolUse hook
+  (failed)` reports caused by the inaccessible Windows Store `python3` alias
+  and Git's sandbox-user ownership check.
+
+- Workspace test binaries and the native `ersatzrs-web` dev package omit debug
+  information, preventing the Windows web test harness from exceeding MSVC's
+  program-database limit and its RLIB from exceeding the 4-GiB archive limit.
+
+- Bind the runtime smoke host exclusively to loopback, avoiding an interactive
+  Windows Firewall prompt for its ephemeral debug executable.
+
+- Enforce the selected FFmpeg profile's scaling behavior, output frame, and
+  audio channel count for managed Remote Stream items whose media properties
+  are unavailable until FFmpeg opens the add-on stream, instead of silently
+  preserving the source geometry or channel layout.
+
+- Decode escaped Beeld & Geluid descriptions consistently in the official
+  Windows add-on package, including embedded quotation marks and newlines,
+  instead of rejecting otherwise valid series metadata as malformed JSON.
+
 ### Security
 
 - Updated `h2` to 0.4.16 for

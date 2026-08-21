@@ -1,30 +1,34 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 9 — Teletext support'
-current_focus = 'Phase 9A — Teletext product and standards contract'
+current_phase = 'Add-on metadata management'
+current_focus = 'AMM-B — Draft ingest and safe publication'
 
 summary = '''
-Phases 0–8 are complete. Remote Stream playlist ingest, synchronization,
-health, localized administration, and ordered managed scheduling closed Phase
-8 on 2026-08-10 through P8D-01 to P8E-03; the separate channel-editor dependency
-milestone P8F-01 is also complete. Phase 9 begins with the blocking P9A-01
-teletext product and standards ADR. The "The Box" video-jukebox extension
-follows as Phase 10.
+Phases 0–8 are complete. The AMM-A contract and parent-NFO repair, durable draft
+schema, shared localized editor, and v4 mappings for the official Beeld &
+Geluid and yt-dlp add-ons are implemented. AMM-B now closes cross-file/database
+publication rollback before artwork upload, refresh-conflict, and platform
+closeout work. The additive FFmpeg drawtext overlay leg follows AMM so live,
+file-backed text is available before Phase 9 teletext resumes at P9A-01; the
+leg also establishes reusable dynamic overlays for Phase 10's video jukebox.
 '''
 
 next_steps = '''
-Start P9A-01 by deciding the teletext product and standards contract before any
-schema, runtime packaging, selection, or output implementation. Then use
-`cargo xtask progress milestones --runnable` for dependency-ready work and
-`cargo xtask progress milestones --id <id> --full` for acceptance criteria.
-
-The original Phase 8 hardware/performance milestones are complete or explicitly
-deferred with structured evidence. Their remaining hardware-, fixture-, and
-client-matrix proof is opportunistic debt and does not block Phase 9. Historical
-completion evidence remains in parity TOMLs, ADRs, sessions, the changelog, and
-git history instead of accumulating in this current-focus record.
+Complete amm-b-02 with injected NFO/artwork/database failure tests that prove
+one reviewed revision cannot publish partially. Then implement bounded artwork
+upload/materialization in amm-c-02 and finish refresh conflicts, health, native
+Linux, Firefox, and full closeout gates in AMM-E. Next accept ADR 0077 and
+complete dtx-a-01 and dtx-a-02 for the FFmpeg filter leg, dynamic text-file
+controller, localized backend choice, and cross-platform proof. Restore Phase
+9A as the current focus after the drawtext program closes.
 '''
+
+[[blocking_decision]]
+note = 'ADR 0075 is accepted: add-on imports use provider-neutral drafts, explicit publication, durable item inclusion, and field-level operator overrides.'
+
+[[blocking_decision]]
+note = 'Milestone dtx-a-01 must accept proposed ADR 0077 before the drawtext filter, schema, controller, or admin backend-selection contract is implemented.'
 
 [[blocking_decision]]
 note = 'Milestone p9a-01 must accept the teletext product and standards ADR before Phase 9 schema, runtime packaging, selection, or output work starts.'

@@ -957,13 +957,49 @@ title      = 'Decide the teletext product and standards contract'
 status     = 'Not started'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
-depends_on = ['p8e-03', 'p8f-01']
+depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02']
 acceptance = '''
 An accepted ADR distinguishes source DVB teletext subtitles, full-page
 browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the
 supported MPEG-TS/HLS/browser behavior; chooses page/language/region and
 accessibility semantics; and records the six-RID FFmpeg/libzvbi packaging and
 fallback contract before schema or pipeline work begins.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'dtx-a-01'
+phase      = 'DTX-A — FFmpeg drawtext overlay leg'
+title      = 'Accept and implement the drawtext filter contract'
+status     = 'Not started'
+feature    = 'drawtext-overlay-leg'
+plan       = 'plans/drawtext-overlay-leg.md'
+depends_on = ['amm-e-02']
+acceptance = '''
+ADR 0077 is accepted before implementation. ErsatzRS then exposes a bounded
+FFmpeg drawtext builder and composable pipeline leg for inline and reloadable
+file-backed text, explicit font resolution, positioning, colour, and boxes.
+Filter-path and expression escaping are correct for every supported platform,
+drawvg and libass behavior remain unchanged, and focused unit and filtergraph
+snapshot tests freeze the command contract.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'dtx-a-02'
+phase      = 'DTX-A — FFmpeg drawtext overlay leg'
+title      = 'Deliver dynamic text selection and runtime proof'
+status     = 'Not started'
+feature    = 'drawtext-overlay-leg'
+plan       = 'plans/drawtext-overlay-leg.md'
+depends_on = ['dtx-a-01']
+acceptance = '''
+The graphics-element contract and localized admin editor select drawvg for
+static vector-rich text by default or drawtext for dynamic/file-backed text.
+The controller writes and refreshes bounded text files atomically, restart and
+failure behavior is explicit, existing serialized text elements remain
+compatible, and Linux, WSL, and Windows plus hydration/browser and decoded
+playback tests prove a live overlay update without rebuilding the FFmpeg graph.
 '''
 evidence = ''
 
@@ -1360,3 +1396,230 @@ construction, detached signing, and GitHub Pages deployment. The live catalog
 and detached signature both returned HTTP 200. Host exact-SHA CI run
 `31943829930` passed on `2bf94ea7d55dc291c591656435f8bd25390cdc7f`.
 '''
+
+[[milestone]]
+id         = 'amm-a-01'
+phase      = 'AMM-A — Metadata contract and blocking import repair'
+title      = 'Accept the reviewable add-on metadata contract'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = []
+acceptance = '''
+An accepted ADR assigns provider parsing to add-ons and draft persistence,
+field-level overrides, validation, artwork, NFO generation, publication,
+projection, localization, and health to ErsatzRS. It locks initial review,
+default-included durable exclusions, refresh conflicts, and Linux/WSL/Windows
+acceptance before schema or UI implementation.
+'''
+evidence = '''
+ADR 0075 was accepted on 2026-08-21 and the actionable AMM plan, parity feature,
+current focus, dependencies, and acceptance criteria are stored in the
+structured progress sources.
+'''
+
+[[milestone]]
+id         = 'amm-a-02'
+phase      = 'AMM-A — Metadata contract and blocking import repair'
+title      = 'Generate parent NFO metadata before projection'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-01']
+acceptance = '''
+A newly imported episodic or music-video list derives a valid generated parent
+NFO from its provider header before projection, including before the first scan.
+An empty untracked placeholder is healed, valid user files remain authoritative,
+invalid user XML is preserved and actionable, and focused regressions pass.
+'''
+evidence = '''
+Completed 2026-08-21. Provider list metadata now generates `tvshow.nfo` or
+`artist.nfo` before a parent projection, including before the first scan. Empty
+untracked placeholders are healed, user-owned valid files remain authoritative,
+and invalid XML is preserved as an actionable error. Focused NFO, repository,
+television-projection, and scanner regressions passed.
+'''
+
+[[milestone]]
+id         = 'amm-a-03'
+phase      = 'AMM-A — Metadata contract and blocking import repair'
+title      = 'Version one shared rich metadata document'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-01']
+acceptance = '''
+The contract crate exposes one bounded list/item metadata document and new
+capability versions. Host adapters preserve older add-ons, official packages
+can populate the complete shape, and contract/reference tests freeze every
+field, bound, null rule, and compatibility path.
+'''
+evidence = '''
+Completed 2026-08-21. `media-list.list.v4` adds one bounded provider-neutral
+list/item metadata document with dates, numbering, descriptions, genres, tags,
+languages, people, identifiers, collection roles, and role-aware artwork. Older
+capabilities retain their frozen validation rules. All 32 add-on-contract tests
+and the reference add-on example passed.
+'''
+
+[[milestone]]
+id         = 'amm-b-01'
+phase      = 'AMM-B — Draft ingest and safe publication'
+title      = 'Persist drafts, inclusion, overrides, and migration state'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-03']
+acceptance = '''
+SQLite and MySQL persist provider snapshots, operator patches, effective
+metadata, validation/conflict state, publication revision, and durable item
+inclusion. Existing lists migrate as published/included without losing NFO or
+replacement ownership.
+'''
+evidence = '''
+Completed 2026-08-21. Additive SQLite and MySQL migrations persist provider
+documents, per-field override patches, conflict/error storage, review state,
+publication revision, collection role, durable inclusion, and the published
+item snapshot. Existing rows migrate as published and included. Repository and
+draft/refresh synchronization regressions pass, including the guarantee that a
+refresh does not mutate the last published playlist before Publish.
+'''
+
+[[milestone]]
+id         = 'amm-b-02'
+phase      = 'AMM-B — Draft ingest and safe publication'
+title      = 'Publish one reviewed revision atomically'
+status     = 'In progress'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-02', 'amm-b-01']
+acceptance = '''
+Only explicit publication creates or changes managed YAML/NFO/artwork,
+projected media, and playlist membership. Excluded items retain control-plane
+state but have no published surface, and injected failures cannot expose a
+mixed revision.
+'''
+evidence = '''
+Explicit Publish validation, included-versus-published snapshots, projection,
+playlist reconciliation, revision advancement, persisted failure reporting,
+and best-effort compensation are implemented. Closeout still needs injected
+file/database failure regressions proving that every NFO/artwork and database
+surface rolls back as one revision.
+'''
+
+[[milestone]]
+id         = 'amm-c-01'
+phase      = 'AMM-C — Shared metadata and artwork editor'
+title      = 'Use one editor for list and item metadata'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-b-01']
+acceptance = '''
+One localized schema-driven editor handles global and per-item metadata for
+every add-on. The item overview exposes inclusion, warnings, thumbnail,
+numbering, title, kind, tags, cast summary, and availability; optimistic
+concurrency and browser hydration regressions pass.
+'''
+evidence = '''
+Completed 2026-08-21. The existing Add-on Lists design now hosts one localized
+list and inline item editor for every collection type. It includes compact
+large-tag editing, credits, numbering, artwork previews, inclusion, movie
+primary/extra roles, warnings, the filterable review count, pagination, and
+ETag-protected saves. Playwright verified Beeld & Geluid and yt-dlp at 1252 px
+and 390 px with zero console errors and no horizontal overflow; focused web
+library tests passed.
+'''
+
+[[milestone]]
+id         = 'amm-c-02'
+phase      = 'AMM-C — Shared metadata and artwork editor'
+title      = 'Review and publish poster, fanart, and thumbnails'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-b-02', 'amm-c-01']
+acceptance = '''
+The editor selects provider candidates, assigns poster/fanart/thumb roles, and
+accepts bounded uploads or HTTPS URLs. Publication uses safe local files,
+preserves operator replacements, and projects role-correct artwork.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'amm-d-01'
+phase      = 'AMM-D — Official provider and platform parity'
+title      = 'Populate complete Beeld & Geluid metadata'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-03', 'amm-c-01']
+acceptance = '''
+Series and episode pages populate the shared document with available titles,
+introductions, dates, numbering, genres, subjects, collection, broadcasters,
+role-aware people, and artwork. POSIX and PowerShell fixture output is
+equivalent and provider rules remain package-owned.
+'''
+evidence = '''
+Completed 2026-08-21 in the official add-ons repository. Beeld & Geluid emits
+v4 list and episode metadata with series introduction, numbering, dates,
+subjects/tags, broadcaster and people data, identifiers, and role-aware image
+candidates through the same document. The complete 30-test repository suite
+passed under WSL and Windows, and a live 48-episode Glamourland import produced
+contiguous provider order plus descriptions, tags, and artwork on both paths.
+'''
+
+[[milestone]]
+id         = 'amm-d-02'
+phase      = 'AMM-D — Official provider and platform parity'
+title      = 'Populate complete yt-dlp metadata'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-a-03', 'amm-c-01']
+acceptance = '''
+yt-dlp maps series/episode identity, descriptions, dates, categories, tags,
+channel/uploader, available people/artist data, chapters, and artwork into the
+same document on POSIX and PowerShell without host-side provider branches.
+'''
+evidence = '''
+Completed 2026-08-21 in the official add-ons repository. The updateable
+`yt-dlp` executable performs the complete provider extraction; a shared Deno
+mapper only bounds and translates its JSON to v4 for the POSIX and PowerShell
+launchers. A real 20-entry Red Letter Media playlist produced equivalent core
+metadata on Windows and WSL, including title, date, channel, tags, duration,
+availability, and thumbnail. Offline Deno checks and the add-on repository's
+Rust and Python suites passed.
+'''
+
+[[milestone]]
+id         = 'amm-e-01'
+phase      = 'AMM-E — Refresh, projection, and health'
+title      = 'Merge refreshes per field and expose operational state'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-b-02', 'amm-c-02', 'amm-d-01', 'amm-d-02']
+acceptance = '''
+Provider refresh updates untouched fields, preserves overrides, records
+conflicts, and holds new items for review. Every presentation replaces its
+supported metadata relations without duplicates, and health reports pending,
+invalid, stuck, missing-artwork, and publication-failure states.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'amm-e-02'
+phase      = 'AMM-E — Refresh, projection, and health'
+title      = 'Close platform, browser, and parity acceptance'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-metadata-management.md'
+depends_on = ['amm-e-01']
+acceptance = '''
+Chromium and Firefox prove draft review, exclusion, editing, artwork,
+publication, reinclusion, ETag conflicts, and refresh conflicts. Packaged
+add-ons pass native Linux, WSL with a spaced Unicode mounted path, and native
+Windows runs; both Clippy configurations, test closeout, Leptos build, parity,
+health, migration, and progress gates pass before Phase 9A resumes.
+'''
+evidence = ''

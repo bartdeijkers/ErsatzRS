@@ -6,13 +6,17 @@ use async_trait::async_trait;
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
-use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_core::repositories::{
+    AddonMediaListNfoMetadata, AddonMediaListRepository, RepositoryError, Result,
+};
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole,
 };
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
 };
+use ersatzrs_infra::repositories::SqliteAddonMediaListRepository;
 use sqlx::{Executor, Row};
 
 #[derive(Clone)]
@@ -30,6 +34,10 @@ impl AddonMediaListProvider for FakeListProvider {
             provider_id: "api-user/api-list".to_string(),
             name: "API List".to_string(),
             description: Some("From add-on".to_string()),
+            metadata: AddonMediaListNfoMetadata {
+                title: "API List".to_owned(),
+                ..AddonMediaListNfoMetadata::default()
+            },
             items: vec![EnumeratedAddonMediaListItem {
                 provider_id: "movie:100".to_string(),
                 rank: 1,
@@ -44,11 +52,16 @@ impl AddonMediaListProvider for FakeListProvider {
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::Movie,
+                collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: None,
                 parent_provider_id: None,
                 fragment_start_seconds: None,
                 fragment_end_seconds: None,
                 additional_image_urls: Vec::new(),
+                metadata: AddonMediaListNfoMetadata {
+                    title: "Fixture Movie".to_owned(),
+                    ..AddonMediaListNfoMetadata::default()
+                },
             }],
         })
     }
@@ -69,6 +82,10 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
             provider_id: "remote/list".to_string(),
             name: "Remote List".to_string(),
             description: None,
+            metadata: AddonMediaListNfoMetadata {
+                title: "Remote List".to_owned(),
+                ..AddonMediaListNfoMetadata::default()
+            },
             items: vec![EnumeratedAddonMediaListItem {
                 provider_id: "remote:100".to_string(),
                 rank: 0,
@@ -83,11 +100,16 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::Auto,
+                collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: None,
                 parent_provider_id: None,
                 fragment_start_seconds: None,
                 fragment_end_seconds: None,
                 additional_image_urls: Vec::new(),
+                metadata: AddonMediaListNfoMetadata {
+                    title: "Fixture Remote Stream".to_owned(),
+                    ..AddonMediaListNfoMetadata::default()
+                },
             }],
         })
     }
@@ -108,6 +130,10 @@ impl AddonMediaListProvider for EmptyRemoteStreamListProvider {
             provider_id: "remote/list".to_string(),
             name: "Remote List".to_string(),
             description: None,
+            metadata: AddonMediaListNfoMetadata {
+                title: "Remote List".to_owned(),
+                ..AddonMediaListNfoMetadata::default()
+            },
             items: Vec::new(),
         })
     }
@@ -156,11 +182,13 @@ impl AddonMediaListProvider for ChapterListProvider {
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
             content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: Some(600),
             parent_provider_id: None,
             fragment_start_seconds: None,
             fragment_end_seconds: None,
             additional_image_urls: Vec::new(),
+            metadata: AddonMediaListNfoMetadata::default(),
         }];
         for chapter in ersatzrs_core::media_chapters::parse_chapter_input(chapter_input, Some(600))
             .expect("test chapter input")
@@ -182,17 +210,20 @@ impl AddonMediaListProvider for ChapterListProvider {
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::TelevisionEpisode,
+                collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: chapter.end_seconds.map(|end| end - chapter.start_seconds),
                 parent_provider_id: Some(full_provider_id.clone()),
                 fragment_start_seconds: Some(chapter.start_seconds),
                 fragment_end_seconds: chapter.end_seconds,
                 additional_image_urls: Vec::new(),
+                metadata: AddonMediaListNfoMetadata::default(),
             });
         }
         Ok(EnumeratedAddonMediaList {
             provider_id: "episode-list:42".to_owned(),
             name: "Fixture Episode".to_owned(),
             description: None,
+            metadata: AddonMediaListNfoMetadata::default(),
             items,
         })
     }
@@ -231,12 +262,22 @@ async fn add_refresh_match_and_generate_playlist() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(item.get::<i64, _>("MediaItemId"), 1);
+    assert_eq!(item.get::<Option<i64>, _>("MediaItemId"), None);
 
     AddonMediaListSynchronizer::new(pool.clone())
         .update_settings(list_id, true, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, list_id).await;
+
+    let matched_media_item: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(matched_media_item, Some(1));
 
     let playlist_item = sqlx::query(
         r#"SELECT "pi"."CollectionType", "pi"."MediaItemId", "pi"."PlaybackOrder"
@@ -307,6 +348,7 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
         .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, list_id).await;
 
     let playlist_item = sqlx::query(
         r#"SELECT "pi"."CollectionType", "pi"."MediaItemId"
@@ -379,6 +421,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
         .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, list_id).await;
     assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
 
     sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Availability" = 2 WHERE "Id" = ?"#)
@@ -449,6 +492,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
         .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, list_id).await;
 
     AddonMediaListRemoteSynchronizer::new(pool.clone(), EmptyRemoteStreamListProvider)
         .add_or_refresh(
@@ -474,6 +518,10 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
         tombstone.get::<String, _>("AvailabilityReason"),
         "omitted_by_provider"
     );
+    // Refreshing creates a review draft and must leave the published snapshot
+    // untouched until the operator explicitly publishes it.
+    assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+    publish_as_remote_streams(&pool, list_id).await;
     assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
 
     AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider)
@@ -486,6 +534,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
         )
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, list_id).await;
     let recovered = sqlx::query(
         r#"SELECT "Id", "Availability" FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ?"#,
@@ -562,6 +611,13 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
             .fetch_one(&pool)
             .await
             .unwrap();
+    assert_eq!(linked_playlist, Some(playlist_id));
+    publish_as_remote_streams(&pool, 50).await;
+    let linked_playlist: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 50"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(linked_playlist, None);
     let playlist_count: i64 =
         sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
@@ -575,6 +631,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
         .update_settings(50, false, true, AddonMediaListContentKind::Auto, "")
         .await
         .unwrap();
+    publish_as_remote_streams(&pool, 50).await;
     let replacement_playlist_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 50"#)
             .fetch_one(&pool)
@@ -857,11 +914,12 @@ async fn seed_local_addon_media_list(pool: &sqlx::SqlitePool, id: i64, generate_
     sqlx::query(
         r#"INSERT INTO "AddonMediaList" (
             "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "AutoRefresh",
-            "Description", "GeneratePlaylist", "ItemCount", "LastMatch", "LastUpdate", "PlaylistId"
+            "Description", "GeneratePlaylist", "ItemCount", "LastMatch", "LastUpdate", "PlaylistId",
+            "ReviewState", "PublishedRevision", "RequestedPresentationKind", "ProviderMetadataJson"
         ) VALUES (
             ?, 'org.example.lists', 'local-user/local-list',
             'https://example.invalid/local-list', 'Local List', 1,
-            NULL, ?, 1, NULL, NULL, NULL
+            NULL, ?, 1, NULL, NULL, NULL, 2, 1, 0, '{"title":"Local List"}'
         )"#,
     )
     .bind(id)
@@ -872,10 +930,11 @@ async fn seed_local_addon_media_list(pool: &sqlx::SqlitePool, id: i64, generate_
     sqlx::query(
         r#"INSERT INTO "AddonMediaListItem" (
             "Id", "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
-            "Rank", "Season", "Title", "AddonMediaListId", "Year"
+            "Rank", "Season", "Title", "AddonMediaListId", "Year", "Published",
+            "ProviderMetadataJson"
         ) VALUES (
             500, 'movie:100', 'Fixture Movie (1999)', NULL, 0, NULL,
-            3, NULL, 'Fixture Movie', ?, 1999
+            3, NULL, 'Fixture Movie', ?, 1999, 1, '{"title":"Fixture Movie"}'
         )"#,
     )
     .bind(id)
@@ -889,6 +948,21 @@ async fn seed_local_addon_media_list(pool: &sqlx::SqlitePool, id: i64, generate_
     .execute(pool)
     .await
     .unwrap();
+}
+
+/// These tests exercise the legacy Remote Stream matcher, not the managed
+/// Movie/TV projections. A provider refresh is a draft, so select that
+/// presentation and explicitly publish before asserting library side effects.
+async fn publish_as_remote_streams(pool: &sqlx::SqlitePool, list_id: i64) {
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "RequestedPresentationKind" = 0 WHERE "Id" = ?"#)
+        .bind(list_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    SqliteAddonMediaListRepository(pool.clone())
+        .publish(list_id)
+        .await
+        .unwrap();
 }
 
 async fn seed_addon(pool: &sqlx::SqlitePool) {

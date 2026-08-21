@@ -2,9 +2,10 @@
 
 ## Status
 
-Active and not implemented. Phase 8's required milestones completed on
-2026-08-07, so this is now the live phase; it starts with the blocking `p9a-01`
-product/standards ADR. The authoritative execution state lives in
+Queued and not implemented. Phase 8's required milestones completed on
+2026-08-07, but the current program order closes Add-on metadata management and
+the additive FFmpeg drawtext overlay leg first. Phase 9 then starts with the
+blocking `p9a-01` product/standards ADR. The authoritative execution state lives in
 [`docs/progress/milestones.toml`](../docs/progress/milestones.toml) and
 [`docs/progress/parity/teletext-support.toml`](../docs/progress/parity/teletext-support.toml);
 this plan owns future sequencing and acceptance boundaries.

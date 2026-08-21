@@ -55,7 +55,7 @@ impl AddonMediaListSynchronizer {
 
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
-                      "Availability"
+                      "Availability", "Published"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -110,6 +110,9 @@ impl AddonMediaListSynchronizer {
                 .repository()?;
 
             if let Some(playlist_id) = playlist_id {
+                if !decode_bool_column(&row, "Published")? {
+                    continue;
+                }
                 if let Some(selection) = self.playlist_selection(&item, matched_id).await? {
                     self.upsert_playlist_item(playlist_id, &item, selection)
                         .await?;
@@ -140,11 +143,13 @@ impl AddonMediaListSynchronizer {
         content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
         chapter_input: &str,
     ) -> Result<()> {
-        let list = self.load_list(list_id).await?;
+        let _list = self.load_list(list_id).await?;
         sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
-                   "ChapterInput" = ?
+                   "ChapterInput" = ?,
+                   "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+                   "ReviewError" = NULL
                WHERE "Id" = ?"#,
         )
         .bind(auto_refresh)
@@ -155,29 +160,6 @@ impl AddonMediaListSynchronizer {
         .execute(&self.pool)
         .await
         .repository()?;
-
-        if generate_playlist {
-            self.ensure_generated_playlist(&AddonMediaList {
-                auto_refresh,
-                generate_playlist,
-                content_kind_override,
-                chapter_input: chapter_input.to_owned(),
-                ..list
-            })
-            .await?;
-            self.match_list_items(list_id).await?;
-        } else if let Some(playlist_id) = list.playlist_id {
-            sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
-                .bind(playlist_id)
-                .execute(&self.pool)
-                .await
-                .repository()?;
-            sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
-                .bind(list_id)
-                .execute(&self.pool)
-                .await
-                .repository()?;
-        }
 
         Ok(())
     }
@@ -261,7 +243,12 @@ impl AddonMediaListSynchronizer {
         Ok(ids.len())
     }
 
-    async fn save_list(&self, list: &AddonMediaList) -> Result<EntityId> {
+    async fn save_list(
+        &self,
+        list: &AddonMediaList,
+        metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+    ) -> Result<EntityId> {
+        let provider_metadata = encode_metadata(metadata)?;
         let maybe_existing = sqlx::query(
             r#"SELECT "Id"
                FROM "AddonMediaList"
@@ -280,7 +267,10 @@ impl AddonMediaListSynchronizer {
             sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "SourceUrl" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?,
-                       "ContentKindOverride" = ?, "ChapterInput" = ?, "LastError" = NULL
+                       "ContentKindOverride" = ?, "ChapterInput" = ?,
+                       "ProviderMetadataJson" = ?, "LastError" = NULL,
+                       "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+                       "ReviewError" = NULL
                    WHERE "Id" = ?"#,
             )
             .bind(&list.source_url)
@@ -289,6 +279,7 @@ impl AddonMediaListSynchronizer {
             .bind(list.item_count)
             .bind(encode_enum(list.content_kind_override))
             .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
+            .bind(&provider_metadata)
             .bind(id)
             .execute(&self.pool)
             .await
@@ -300,8 +291,9 @@ impl AddonMediaListSynchronizer {
                 r#"INSERT INTO "AddonMediaList" (
                     "AddonId", "SourceUrl", "ProviderId", "Name", "Description",
                     "AutoRefresh", "GeneratePlaylist", "ItemCount", "PlaylistId",
-                    "LastUpdate", "LastMatch", "LastError", "ContentKindOverride", "ChapterInput"
-                   ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, NULL, NULL, NULL, NULL, ?, ?)"#,
+                    "LastUpdate", "LastMatch", "LastError", "ContentKindOverride", "ChapterInput",
+                    "ProviderMetadataJson", "MetadataOverrideJson"
+                   ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, NULL, NULL, NULL, NULL, ?, ?, ?, '{}')"#,
             )
             .bind(&list.addon_id)
             .bind(&list.source_url)
@@ -311,6 +303,7 @@ impl AddonMediaListSynchronizer {
             .bind(list.item_count)
             .bind(encode_enum(list.content_kind_override))
             .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
+            .bind(&provider_metadata)
             .execute(&mut *transaction)
             .await
             .repository()?;
@@ -396,6 +389,7 @@ impl AddonMediaListSynchronizer {
                            "ContentKind" = ?, "DurationSeconds" = ?,
                            "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
                            "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
+                           "ProviderMetadataJson" = ?,
                            "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                     )
@@ -422,6 +416,7 @@ impl AddonMediaListSynchronizer {
                         "fragment end",
                     )?)
                     .bind(image_urls)
+                    .bind(encode_metadata(&item.metadata)?)
                     .bind(existing_id)
                     .execute(&mut *tx)
                     .await
@@ -1032,7 +1027,7 @@ where
         enumerated: &mut EnumeratedAddonMediaList,
         requested_folder: Option<&str>,
     ) -> Result<EntityId> {
-        let list_id = self.local.save_list(list).await?;
+        let list_id = self.local.save_list(list, &enumerated.metadata).await?;
         if list.chapter_input.trim().is_empty() {
             self.expand_item_chapters(list_id, &list.addon_id, enumerated)
                 .await?;
@@ -1053,7 +1048,15 @@ where
             )
             .await?;
         }
-        self.local.match_list_items(list.id).await?;
+        let review_state: i32 =
+            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list.id)
+                .fetch_one(&self.local.pool)
+                .await
+                .repository()?;
+        if review_state == 2 {
+            self.local.match_list_items(list.id).await?;
+        }
         Ok(list.id)
     }
 
@@ -1290,9 +1293,10 @@ async fn insert_item(
             "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
             "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl",
             "Availability", "AvailabilityReason", "AvailabilityUpdated", "ContentKind",
-            "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
-            "FragmentEndSeconds", "AdditionalImageUrls"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
+            "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
+            "MetadataOverrideJson"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -1308,6 +1312,7 @@ async fn insert_item(
     .bind(&item.availability_reason)
     .bind(encode_datetime(Utc::now()))
     .bind(encode_enum(item.content_kind))
+    .bind(encode_enum(item.collection_role))
     .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
     .bind(&item.parent_provider_id)
     .bind(optional_fragment_bound(
@@ -1319,6 +1324,7 @@ async fn insert_item(
         "fragment end",
     )?)
     .bind(encode_image_urls(&item.additional_image_urls)?)
+    .bind(encode_metadata(&item.metadata)?)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -1358,6 +1364,15 @@ fn encode_image_urls(urls: &[String]) -> Result<Option<String>> {
             kind: "add-on media list image URLs",
             value: error.to_string(),
         })
+}
+
+fn encode_metadata(
+    metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+) -> Result<String> {
+    serde_json::to_string(metadata).map_err(|error| RepositoryError::Decode {
+        kind: "add-on metadata document",
+        value: error.to_string(),
+    })
 }
 
 fn fragment_bound(value: Option<u64>, kind: &'static str) -> Result<i64> {

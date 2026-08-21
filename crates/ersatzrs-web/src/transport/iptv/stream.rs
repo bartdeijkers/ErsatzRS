@@ -4413,7 +4413,7 @@ mod tests {
         release.await.expect("release occupied HLS capacity");
         let output = String::from_utf8_lossy(&bytes);
 
-        assert_eq!(output, "content");
+        assert_eq!(output.trim_end_matches(['\r', '\n']), "content");
         assert!(!output.contains("slate"));
         assert_ne!(
             requested_slot_id.load(std::sync::atomic::Ordering::Acquire),

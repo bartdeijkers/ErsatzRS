@@ -14,6 +14,7 @@ impl AddonMediaListHealthCheck {
 }
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl HealthCheck for AddonMediaListHealthCheck {
     fn title(&self) -> &'static str {
         "Add-on media lists"
@@ -22,6 +23,7 @@ impl HealthCheck for AddonMediaListHealthCheck {
     async fn check(&self) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
             r#"SELECT "list"."Name", "list"."LastError", "list"."PresentationError",
+                      "list"."ReviewState", "list"."ReviewError",
                       "addon"."Enabled",
                       "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
                FROM "AddonMediaList" AS "list"
@@ -77,10 +79,12 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .take(5)
             .collect::<Vec<_>>();
         let presentation_failures = presentation_failures(&rows);
+        let publication_failures = publication_failures(&rows);
         let failures = storage_failures
             .into_iter()
             .chain(failures)
             .chain(presentation_failures)
+            .chain(publication_failures)
             .take(5)
             .collect::<Vec<_>>();
         if !failures.is_empty() {
@@ -112,6 +116,25 @@ impl HealthCheck for AddonMediaListHealthCheck {
 
         if let Some(result) = replacement_failure(&self.pool, self.title()).await? {
             return Ok(result);
+        }
+
+        let pending_review = rows
+            .iter()
+            .filter(|row| {
+                row.try_get::<i64, _>("ReviewState")
+                    .is_ok_and(|state| state != 2)
+            })
+            .count();
+        if pending_review > 0 {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Warning,
+                format!(
+                    "{pending_review} add-on media list(s) await metadata review or publication"
+                ),
+                "Review and publish the imported metadata before using the new revision",
+            )
+            .with_link("/media/addon-lists"));
         }
 
         Ok(HealthCheckResult::pass(self.title()).with_link("/media/addon-lists"))
@@ -148,6 +171,22 @@ fn presentation_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
                 .try_get::<String, _>("Name")
                 .unwrap_or_else(|_| "List".to_owned());
             Some(format!("{name}: television projection failed: {error}"))
+        })
+        .take(5)
+        .collect()
+}
+
+fn publication_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| {
+            let error = row
+                .try_get::<Option<String>, _>("ReviewError")
+                .ok()
+                .flatten()?;
+            let name = row
+                .try_get::<String, _>("Name")
+                .unwrap_or_else(|_| "List".to_owned());
+            Some(format!("{name}: publication failed: {error}"))
         })
         .take(5)
         .collect()
@@ -212,7 +251,9 @@ mod tests {
                 "AddonId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL,
                 "LastError" TEXT NULL,
-                "PresentationError" TEXT NULL
+                "PresentationError" TEXT NULL,
+                "ReviewState" INTEGER NOT NULL DEFAULT 2,
+                "ReviewError" TEXT NULL
             );
             CREATE TABLE "AddonMediaSource" (
                 "AddonId" TEXT PRIMARY KEY,

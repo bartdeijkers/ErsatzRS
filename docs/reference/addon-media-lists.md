@@ -1,7 +1,8 @@
 # Add-on media-list contract reference
 
-`media-list.list.v1` or `media-list.list.v2` enumerates one provider-selected
-list through an enabled add-on. The host invokes the add-on with positional operation `list`, sets
+`media-list.list.v1` through `media-list.list.v4` enumerate one
+provider-selected list through an enabled add-on. The host invokes the add-on
+with positional operation `list`, sets
 `ERSATZRS_MEDIA_LIST_URL` to the configured source hyperlink, and applies a
 60-second timeout and a 16 MiB stdout limit.
 
@@ -42,6 +43,15 @@ silently accept speculative fields emitted against an existing version.
 Version 3 adds structured Remote Stream fragment and artwork fields. The host
 rejects these fields from v1 or v2 providers.
 
+Version 4 adds the shared rich metadata document, song and image content
+classifications, and an explicit collection role. The same document is used at
+list and item scope by every provider and by the one ErsatzRS review editor;
+provider-specific metadata fields or editors are not part of the host contract.
+Provider executables remain responsible for complete extraction. In particular,
+the official YouTube-compatible package runs the updateable `yt-dlp` binary for
+the full playlist/video JSON and uses Deno only to translate that result to v4;
+the mapper and host do not duplicate yt-dlp's provider logic.
+
 ## List record
 
 | Field | Type | Requirement |
@@ -50,6 +60,7 @@ rejects these fields from v1 or v2 providers.
 | `provider_id` | string | Non-empty identity stable within the add-on; at most 384 UTF-8 bytes. |
 | `name` | string | Non-empty display name. |
 | `description` | string or null | Optional provider description. |
+| `metadata` | metadata document or null | Version 4 only. Provider snapshot used by the shared review editor. |
 
 ## Item record
 
@@ -84,6 +95,58 @@ Version 3 adds these item fields:
 | `parent_provider_id` | string or null | Required with `fragment_start_seconds`; identifies the full item and must differ from this item. |
 | `fragment_start_seconds` | non-negative integer or null | Inclusive fragment start in whole seconds. |
 | `fragment_end_seconds` | non-negative integer or null | Optional exclusive end; when present it must be greater than the start. |
+
+Version 4 adds these item fields and values:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `metadata` | metadata document or null | Provider snapshot used by the shared review editor. |
+| `collection_role` | string | `auto`, `primary`, or `extra`. Rank remains provider order and never implies that the first movie is the main feature. |
+| `content_kind` | string | Version 4 additionally accepts `song` and `image`. |
+
+## Shared metadata document
+
+The optional `metadata` object has the same strict shape on list and item
+records. Missing fields keep their compatibility fallback: list title/plot
+come from `name`/`description`, while item title, identity, GUIDs, and legacy
+artwork keep their existing record values. Unknown fields are rejected.
+
+| Field | Type | Notes |
+|---|---|---|
+| `title`, `original_title`, `sort_title` | string or null | Display, source-language, and sorting titles. |
+| `outline`, `plot`, `tagline` | string or null | Short and full descriptions. |
+| `show_title`, `collection` | string or null | Parent series or collection identity where available. |
+| `season`, `episode` | integer or null | Season is non-negative; episode is positive. |
+| `year` | integer or null | From year 1 through five years beyond the current year. |
+| `release_date` | string or null | Exact `YYYY-MM-DD` date. |
+| `content_ratings`, `genres`, `tags`, `studios`, `music_labels`, `languages` | string array | Empty members are rejected. |
+| `writers`, `directors`, `artists`, `producers` | string array | Provider-neutral credit groups. |
+| `original_broadcasters`, `broadcasters` | string array | Source and current broadcast/channel identities. |
+| `people` | person array | Each person has a non-empty `name` and optional `role`, integer `order`, and bounded HTTPS `thumb`. |
+| `artwork` | artwork array | Each candidate has bounded HTTPS `url`, `role` (`poster`, `fanart`, `thumb`, or `other`), optional positive dimensions, and optional language. |
+| `guids` | string array | Stable provider or external metadata identities. |
+
+Each repeated field accepts at most 1,024 values and the encoded document is at
+most 256 KiB. Artwork and person-thumbnail URLs are absolute HTTPS URLs without
+userinfo, are limited to 2,048 bytes, and must include a host. These are input
+bounds; publication separately validates and materializes artwork rather than
+letting an NFO depend on an untrusted remote URL forever.
+
+## Review and publication
+
+An initial storage-backed import persists provider documents as a `draft`.
+Provider snapshots and operator overrides stay separate; the editor shows their
+effective values, lets the operator include or exclude each item, and preserves
+provider rank for the optional original-order playlist. Only explicit
+**Publish** makes included rows visible to generated NFO/YAML, library
+projection, scanning, and playlist membership. Existing lists migrate as
+published so an upgrade does not silently withdraw working media.
+
+Refresh replaces provider snapshots while preserving operator overrides and a
+movie's explicit primary/extra role. Newly discovered or changed data returns
+the list to review, and publication errors remain visible on the list and in
+Health Checks. Excluded items retain their provider identity and metadata so
+they can be reviewed and re-included later.
 
 The persisted `AddonMediaListChapter` row links the list, full source item, and
 fragment item and stores chapter index, title, start, and optional end. A
@@ -132,8 +195,8 @@ source_name = "provider"
 
 `path_setting` must name a declared `path` setting without a static default.
 The host renders an absolute default below the ErsatzRS profile/SQLite folder,
-while an operator can save another absolute path. The package must implement
-media-list list v1 or v2, Remote Stream list v1 or v2, and
+while an operator can save another absolute path. The package must implement a
+supported media-list list capability, Remote Stream list v1 or v2, and
 `remote-stream.play.v1`.
 
 Enabling the add-on creates the root and an add-on-owned local media source if
@@ -170,8 +233,9 @@ file plus a non-attached video stream.
 ## NFO ownership and television presentation
 
 Managed lists can be presented as their original Remote Streams or as one
-television show. Converting to a television show requires `tvshow.nfo` with a
-non-empty title. Each full provider item becomes a normal Show/Season/Episode
+television show. ErsatzRS generates a valid list-level `tvshow.nfo` from the
+reviewed metadata before the first television projection; a hand-created empty
+placeholder is neither required nor valid metadata. Each full provider item becomes a normal Show/Season/Episode
 projection; chapter fragments remain children of that full item. The projected
 episode shares the scanned Remote Stream media version, so schedules and
 playlists retain the add-on playback URL while using television identity.

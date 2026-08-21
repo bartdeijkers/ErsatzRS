@@ -364,6 +364,31 @@ impl LanguageStrings for ItalianStrings {
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::Addon => "Componente aggiuntivo",
+        TextKey::PrimaryFeature => "Film principale",
+        TextKey::MovieExtra => "Contenuto extra",
+        TextKey::NeedReview => "Da rivedere",
+        TextKey::Discovered => "Rilevati",
+        TextKey::EditMetadata => "Modifica metadati",
+        TextKey::OneTagPerLine => "Un tag per riga",
+        TextKey::OriginalTitle => "Titolo originale",
+        TextKey::ReleaseDate => "Data di uscita",
+        TextKey::Year => "Anno",
+        TextKey::SortTitle => "Titolo di ordinamento",
+        TextKey::MovieFilesAndExtras => "File del film ed extra",
+        TextKey::MovieFilesAndExtrasHelp => "Assegna esattamente un film principale. L’ordine delle fonti non decide il ruolo, quindi un trailer può comparire per primo.",
+        TextKey::EpisodesMetadataHelp => "Controlla identità e numerazione degli episodi; l’ordine del provider resta invariato.",
+        TextKey::MusicVideosMetadataHelp => "Artista, album e traccia appartengono a ogni video; gli elenchi con più artisti restano validi.",
+        TextKey::OtherVideosMetadataHelp => "Usa questo tipo per video indipendenti invece che per un film con extra.",
+        TextKey::SongsMetadataHelp => "Traccia, disco, artista e album si modificano per brano; l’ordine dell’elenco non sostituisce il numero di traccia.",
+        TextKey::ImagesMetadataHelp => "Didascalia e autore sono modificabili; formato, dimensioni e identità della fonte restano dati oggettivi.",
+        TextKey::RemoteStreamsMetadataHelp => "Modifica qui i metadati di presentazione; connessione e protocollo restano dati della fonte provider.",
+        TextKey::CastAndCredits => "Cast e collaboratori",
+        TextKey::OneCreditPerLine => "Una persona per riga: nome | ruolo",
+        TextKey::Poster => "Poster",
+        TextKey::Artwork => "Immagini",
+        TextKey::PublishMetadata => "Pubblica",
+        TextKey::IncludeItem => "Includi",
+        TextKey::MetadataDraftNotice => "Controlla i metadati e gli elementi inclusi prima di pubblicare questo elenco.",
         TextKey::ApplyToAllItemsPrompt => "Ogni elemento viene riclassificato con il tipo di contenuto selezionato, sostituendo i valori dedotti dal componente aggiuntivo o impostati manualmente.",
         TextKey::TelevisionEpisode => "Episodio televisivo",
         TextKey::CollectionTypeAuto => "Determina dagli elementi",
@@ -1375,9 +1400,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LoadingCollections => "Caricamento raccolte...",
         TextKey::LoadingPlaylistGroups => "Caricamento gruppi playlist...",
         TextKey::LoadingPlaylists => "Caricamento playlist...",
-        TextKey::GeneratePlaylist => "Genera playlist",
+        TextKey::GeneratePlaylist => "Crea playlist nell’ordine originale",
         TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
-            "Genera una playlist dagli elementi della lista add-on ordinata"
+            "Mantieni l’ordine originale del provider dopo ogni pubblicazione"
         }
         TextKey::MusicVideos => "Video musicali",
         TextKey::NewCollectionName => "Nuovo nome della raccolta",

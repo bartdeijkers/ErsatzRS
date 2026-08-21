@@ -8,9 +8,9 @@ combinations are rejected.
 
 The distribution mechanism for Rust add-ons is the independently versioned
 `ersatzrs-addon-contract` crate in the canonical ErsatzRS GitHub repository.
-Contract version `0.1.1` is the current source version. Once its implementation
-is committed, it receives the immutable `addon-contract-v0.1.1` tag. Add-ons
-pin the tag's full commit SHA:
+Contract version `0.2.0` is the current source version. When that version is
+released, its implementation receives the immutable `addon-contract-v0.2.0`
+tag. Add-ons pin the tag's full commit SHA:
 
 ```toml
 [dependencies.ersatzrs-addon-contract]
@@ -26,7 +26,8 @@ official add-on change is published. Add-ons update the revision and lockfile
 deliberately; they do not depend on a moving branch or the application
 workspace by path.
 
-`AddonMediaListRecord` owns `media-list.list.v1` through v3 records.
+`AddonMediaListRecord` and `AddonMetadataDocument` own
+`media-list.list.v1` through v4 records.
 `PlaylistEntry` owns `remote-stream.list.v1` through v3 records, while
 `PlaylistEntryMetadata` owns `remote-stream.item.v1` and v2. Their shared wire
 enums are distinct from the host's persisted domain enums. The crate also

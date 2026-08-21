@@ -26,10 +26,11 @@ mod troubleshooting;
 mod watermark;
 
 pub use addon_media_list::{
-    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-    AddonMediaListItemCounts, AddonMediaListItemDetail, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListNfoPerson,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
+    AddonMediaListArtworkRole, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
+    AddonMediaListItemDetail, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoOwnership, AddonMediaListNfoPerson, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

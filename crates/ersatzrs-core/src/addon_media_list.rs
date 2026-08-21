@@ -3,9 +3,10 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole,
 };
 
-use crate::repositories::Result;
+use crate::repositories::{AddonMediaListNfoMetadata, Result};
 
 /// One complete, validated provider enumeration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +17,8 @@ pub struct EnumeratedAddonMediaList {
     pub name: String,
     /// Optional provider description.
     pub description: Option<String>,
+    /// Rich list-level metadata supplied through the shared add-on contract.
+    pub metadata: AddonMediaListNfoMetadata,
     /// Ordered provider items.
     pub items: Vec<EnumeratedAddonMediaListItem>,
 }
@@ -49,6 +52,8 @@ pub struct EnumeratedAddonMediaListItem {
     pub availability_reason: Option<String>,
     /// Provider-inferred descriptive content type.
     pub content_kind: AddonMediaListContentKind,
+    /// Provider-supplied collection role; independent from list rank.
+    pub collection_role: AddonMediaListItemRole,
     /// Provider-reported full item duration in whole seconds.
     pub duration_seconds: Option<u64>,
     /// Stable provider identity of the full item for a fragment row.
@@ -59,6 +64,8 @@ pub struct EnumeratedAddonMediaListItem {
     pub fragment_end_seconds: Option<u64>,
     /// Additional provider artwork beyond the primary thumbnail.
     pub additional_image_urls: Vec<String>,
+    /// Rich item metadata supplied through the shared add-on contract.
+    pub metadata: AddonMediaListNfoMetadata,
 }
 
 /// Host adapter that invokes one installed list-provider add-on.
