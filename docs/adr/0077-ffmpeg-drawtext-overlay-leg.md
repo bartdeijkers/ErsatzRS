@@ -28,6 +28,13 @@ stays on screen) wants FFmpeg's `drawtext`, which reads text inline or from a
 (`%{pts}`, `%{localtime}`, `%{eif}`). ADR 0076's diagram already anticipates
 this: the Rust controller writes the text files a `drawtext` leg consumes.
 
+The current `text_drawvg` path also exposes a narrower text-specific control
+surface than FFmpeg's dedicated filter. The additive leg should make
+FFmpeg-native font selection and sizing, alignment and spacing, shaping where
+the packaged build supports it, border/shadow/box styling, alpha, and
+expression-driven values available without pretending that `drawtext` replaces
+SVG for arbitrary vector composition.
+
 ## Decision
 
 Add a `drawtext` overlay leg to `ersatzrs-ffmpeg` and wire it through the app
@@ -35,10 +42,12 @@ Add a `drawtext` overlay leg to `ersatzrs-ffmpeg` and wire it through the app
 
 - In `ersatzrs-ffmpeg`, a filter builder (under `src/filter/`) emits
   `drawtext=…` with `fontfile`/`fontsdir`, `text=` or `textfile=`+`reload=1`,
-  position, colour, optional box, and correct escaping of colons, Windows drive
-  letters and special characters — mirroring the escaping care already in
-  `subtitles_filter`. It plugs into the graphics/pipeline exactly where the
-  `drawvg` leg does (`graphics/mod.rs`, `pipeline/mod.rs`, `filter/complex.rs`).
+  font size, alignment/spacing, position, colour/alpha, optional
+  border/shadow/box styling, expression expansion, and correct escaping of
+  colons, Windows drive letters and special characters — mirroring the escaping
+  care already in `subtitles_filter`. It plugs into the graphics/pipeline
+  exactly where the `drawvg` leg does (`graphics/mod.rs`, `pipeline/mod.rs`,
+  `filter/complex.rs`).
 - In the app, the graphics-element system gains a way to select the `drawtext`
   backend for text — a "dynamic / file-backed" text mode — with the minijinja
   controller writing and refreshing the text file the filter reloads. `drawvg`
@@ -50,8 +59,8 @@ Add a `drawtext` overlay leg to `ersatzrs-ffmpeg` and wire it through the app
   re-rendering the whole graphic.
 - A second text path: the graphics config and admin UI must let authors choose
   `drawvg` (static, vector-rich) versus `drawtext` (dynamic, file-backed) and
-  surface the trade-off — `drawtext` has no arbitrary shapes, gradients or path
-  effects.
+  surface the trade-off — `drawtext` exposes dedicated font/text controls but
+  has no arbitrary shapes, gradients or path effects.
 - More FFmpeg surface to test: filtergraph snapshots, escaping (the Windows
   drive-colon case as in `subtitles`), `fontfile`/`fontsdir` resolution, and
   reload timing.

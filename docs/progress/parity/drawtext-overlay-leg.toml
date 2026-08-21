@@ -6,14 +6,15 @@ adr        = ['0077']
 summary    = '''
 Not started. Adds an FFmpeg `drawtext` overlay leg beside the drawvg engine for
 live, file-backed text (clock, countdown, changing now/next) that drawvg's
-static VGS cannot update mid-stream. Planned as its own program between the
-Add-on metadata management (AMM) work and Phase 9A teletext: `dtx-a-01` accepts
-ADR 0077 and lands the `ersatzrs-ffmpeg` filter builder + pipeline leg
-(fontfile/fontsdir, `text=`/`textfile=`+`reload=1`, position/colour/box,
-filter-path escaping mirroring `subtitles_filter`, filtergraph snapshots);
+static VGS cannot update mid-stream, plus dedicated font selection, sizing,
+layout, border/shadow/box, alpha, and expression controls. Planned as its own
+program between the Add-on metadata management (AMM) work and Phase 9A
+teletext: `dtx-a-01` accepts ADR 0077 and lands the `ersatzrs-ffmpeg` filter
+builder + pipeline leg (inline/reloadable text, font and layout controls,
+filter-path/expression escaping mirroring `subtitles_filter`, snapshots);
 `dtx-a-02` wires a dynamic/file-backed text graphics mode into the app with the
 minijinja controller writing/refreshing the reloaded text file, an admin UI
 backend choice, and Linux/WSL/Windows tests. drawvg stays the default for
-static, vector-rich text; this leg is additive. See ADR 0076's pipeline diagram
-for how it sits beside drawvg and libass.
+arbitrary vector composition; this leg is additive. See ADR 0076's pipeline
+diagram for how it sits beside drawvg and libass.
 '''

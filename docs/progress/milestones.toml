@@ -978,10 +978,11 @@ depends_on = ['amm-e-02']
 acceptance = '''
 ADR 0077 is accepted before implementation. ErsatzRS then exposes a bounded
 FFmpeg drawtext builder and composable pipeline leg for inline and reloadable
-file-backed text, explicit font resolution, positioning, colour, and boxes.
-Filter-path and expression escaping are correct for every supported platform,
-drawvg and libass behavior remain unchanged, and focused unit and filtergraph
-snapshot tests freeze the command contract.
+file-backed text, explicit font resolution and sizing, text layout, position,
+colour/alpha, border/shadow/box styling, and expression expansion. Filter-path
+and expression escaping are correct for every supported platform, drawvg and
+libass behavior remain unchanged, and focused unit and filtergraph snapshot
+tests freeze the command contract.
 '''
 evidence = ''
 
