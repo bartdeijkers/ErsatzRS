@@ -13,6 +13,11 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Removed
+
+- Dropped the unread `pin_id` field from the Plex sign-in island's polling
+  state; the poll loop already used its own cloned copy.
+
 ## [1.0.24-beta] - 2026-08-22
 
 ### Added

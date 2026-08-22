@@ -1,4 +1,3 @@
-#![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
@@ -16,7 +15,14 @@ use crate::admin::ui::primitives::toast::{load_failed_message, load_or_notify, u
 
 use super::jellyfin::PathsEditor;
 
-stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
+// `shared.module.css` is shared across the media-source pages (emby, jellyfin,
+// local, plex); not every class is used by this particular page.
+#[allow(dead_code)]
+mod style_mod {
+    stylance::import_crate_style!(s, "src/admin/pages/media_sources/shared.module.css");
+    pub use s::*;
+}
+use style_mod as style;
 
 #[cfg(target_arch = "wasm32")]
 fn set_browser_location(path: &str) {
@@ -172,7 +178,7 @@ fn PlexSignInControls() -> impl IntoView {
     #[derive(Clone)]
     enum State {
         Idle,
-        Waiting { pin_id: String, auth_url: String },
+        Waiting { auth_url: String },
         Done,
         Error(String),
     }
@@ -185,7 +191,7 @@ fn PlexSignInControls() -> impl IntoView {
         match start_action.value().get() {
             Some(Ok((pin_id, auth_url))) => {
                 let pin = pin_id.clone();
-                state.set(State::Waiting { pin_id, auth_url });
+                state.set(State::Waiting { auth_url });
 
                 // Poll every 2 s until Plex confirms the PIN.
                 leptos::task::spawn_local(async move {
