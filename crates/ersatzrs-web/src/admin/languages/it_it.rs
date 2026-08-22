@@ -367,6 +367,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Film principale",
         TextKey::MovieExtra => "Contenuto extra",
         TextKey::NeedReview => "Da rivedere",
+        TextKey::NumberEpisodes => "Numerare gli episodi",
+        TextKey::NumberEpisodesHelp => {
+            "Assegna una stagione e numeri di episodio consecutivi nell’ordine originale dell’add-on. Gli elementi esclusi e i frammenti di capitolo vengono ignorati."
+        }
+        TextKey::FirstEpisode => "Primo episodio",
+        TextKey::NumberToAssign => "Numero da assegnare",
+        TextKey::AllRemaining => "Tutti i rimanenti",
+        TextKey::ReplaceExistingEpisodeNumbers => "Sostituisci i numeri di episodio esistenti",
         TextKey::MetadataConflicts => "Conflitti nei metadati",
         TextKey::MetadataConflictsHelp => {
             "Il fornitore ha modificato campi sostituiti dall’operatore. Controlla i valori prima della pubblicazione."

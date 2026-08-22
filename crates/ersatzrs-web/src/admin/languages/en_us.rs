@@ -363,6 +363,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Main feature",
         TextKey::MovieExtra => "Movie extra",
         TextKey::NeedReview => "Need review",
+        TextKey::NumberEpisodes => "Number episodes",
+        TextKey::NumberEpisodesHelp => {
+            "Assign one season and consecutive episode numbers in the add-on's original order. Excluded items and chapter fragments are skipped."
+        }
+        TextKey::FirstEpisode => "First episode",
+        TextKey::NumberToAssign => "Number to assign",
+        TextKey::AllRemaining => "All remaining",
+        TextKey::ReplaceExistingEpisodeNumbers => "Replace existing episode numbers",
         TextKey::MetadataConflicts => "Metadata conflicts",
         TextKey::MetadataConflictsHelp => {
             "The provider changed fields that you overrode. Review the values before publishing."

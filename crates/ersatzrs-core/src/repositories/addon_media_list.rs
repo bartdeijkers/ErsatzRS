@@ -452,6 +452,25 @@ pub trait AddonMediaListRepository: Send + Sync {
         id: EntityId,
         content_kind: AddonMediaListContentKind,
     ) -> Result<u64>;
+    /// Assign one season and consecutive episode numbers in provider order.
+    ///
+    /// Only included top-level entries participate. When `missing_only` is
+    /// true, entries that already have both a valid season and episode number
+    /// are skipped without consuming a number.
+    async fn assign_episode_numbers(
+        &self,
+        id: EntityId,
+        season: i32,
+        starting_episode: i32,
+        item_count: Option<u32>,
+        missing_only: bool,
+    ) -> Result<u64> {
+        let _ = (id, season, starting_episode, item_count, missing_only);
+        Err(RepositoryError::unavailable(
+            "assign add-on episode numbers",
+            "not implemented",
+        ))
+    }
     /// Move one list to a different add-on and re-import it through that
     /// add-on.
     ///

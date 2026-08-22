@@ -1244,7 +1244,7 @@ async fn load_staged_playlist_entries(
         i32,
         Option<String>,
         i32,
-        String,
+        Option<String>,
     );
 
     let rows = sqlx::query_as::<_, StagedItemRow>(
@@ -1292,15 +1292,17 @@ async fn load_staged_playlist_entries(
                     staged_u64(fragment_start_seconds, "fragment start", &provider_id)?;
                 let fragment_end_seconds =
                     staged_u64(fragment_end_seconds, "fragment end", &provider_id)?;
-                let additional_image_urls = if additional_image_urls.trim().is_empty() {
-                    Vec::new()
-                } else {
-                    serde_json::from_str(&additional_image_urls).map_err(|error| {
-                        PlaylistError::Enumeration(format!(
-                            "staged item '{provider_id}' has invalid artwork URLs: {error}"
-                        ))
-                    })?
-                };
+                let additional_image_urls = additional_image_urls
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| {
+                        serde_json::from_str(&value).map_err(|error| {
+                            PlaylistError::Enumeration(format!(
+                                "staged item '{provider_id}' has invalid artwork URLs: {error}"
+                            ))
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or_default();
                 let content_kind = if content_kind_override == AddonMediaListContentKind::Auto {
                     stored_content_kind(content_kind, &provider_id)?
                 } else {

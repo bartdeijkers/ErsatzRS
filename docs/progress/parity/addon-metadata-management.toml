@@ -24,6 +24,10 @@ be republished as any supported library type without running the provider a
 second time; the stored provider snapshot, source order, inclusion, and
 operator overrides remain the durable control plane while only the media
 projection changes.
+Television drafts also provide atomic, provider-free bulk numbering in original
+provider order. Operators can assign one season in bounded batches, preserve
+existing numbering by default, skip occupied episode identities, and still
+correct every result through the item accordion before publication.
 '''
 
 [[debt]]
@@ -40,6 +44,14 @@ description = 'Allow an operator to change an already imported list to any suppo
 discovered  = '2026-08-22'
 adr         = '0075'
 evidence    = 'Resolved by staged publication replaying AddonMediaListItem snapshots, projection reconciliation for every presentation kind, localized current-to-pending type guidance, and repository, scanner, and browser regressions proving that provider execution, source identity, rank, inclusion, and metadata overrides remain unchanged.'
+resolved    = true
+
+[[debt]]
+id          = 'missing-addon-episode-numbering-is-slow-to-repair'
+description = 'Let an operator assign season and episode identities efficiently when an add-on cannot provide them, without editing every row separately.'
+discovered  = '2026-08-22'
+adr         = '0075'
+evidence    = 'Resolved by the localized television-only numbering accordion, atomic provider-order override operation, bounded multi-season batches, safe preservation and collision skipping for existing identities, effective-metadata row labels, and repository, application, hydration, Chromium, and Playwright MCP regressions.'
 resolved    = true
 
 [[debt]]

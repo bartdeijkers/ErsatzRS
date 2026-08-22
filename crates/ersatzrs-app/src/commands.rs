@@ -4404,6 +4404,18 @@ pub struct ApplyAddonMediaListContentKind {
     pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
 }
 
+/// Assign consecutive episode numbers to included top-level list entries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AssignAddonMediaListEpisodeNumbers {
+    pub id: EntityId,
+    pub season: i32,
+    pub starting_episode: i32,
+    /// Maximum number of eligible entries to assign; `None` assigns all.
+    pub item_count: Option<u32>,
+    /// Preserve entries that already have a valid season and episode number.
+    pub missing_only: bool,
+}
+
 /// Move one Add-on media list to a different add-on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChangeAddonMediaListAddon {
@@ -4630,6 +4642,49 @@ pub async fn apply_addon_media_list_content_kind(
     validate_positive_id(command.id, "addon_media_list_id")?;
     repository
         .apply_list_content_kind(command.id, command.content_kind)
+        .await
+        .map_err(Into::into)
+}
+
+/// Assign one season and consecutive episode numbers in original provider order.
+///
+/// # Errors
+///
+/// Returns a validation error for an invalid identity or numbering range, or a
+/// repository error when the atomic update fails.
+pub async fn assign_addon_media_list_episode_numbers(
+    command: AssignAddonMediaListEpisodeNumbers,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<u64> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.season < 0 {
+        return validation_error("season", "must be zero or greater");
+    }
+    if command.starting_episode < 1 {
+        return validation_error("starting_episode", "must be one or greater");
+    }
+    if command.item_count == Some(0) {
+        return validation_error("item_count", "must be one or greater when provided");
+    }
+    if let Some(item_count) = command.item_count {
+        let Ok(last_offset) = i32::try_from(item_count - 1) else {
+            return validation_error("item_count", "is too large");
+        };
+        if command.starting_episode.checked_add(last_offset).is_none() {
+            return validation_error(
+                "item_count",
+                "episode numbering exceeds the supported range",
+            );
+        }
+    }
+    repository
+        .assign_episode_numbers(
+            command.id,
+            command.season,
+            command.starting_episode,
+            command.item_count,
+            command.missing_only,
+        )
         .await
         .map_err(Into::into)
 }
@@ -6074,24 +6129,25 @@ mod tests {
 
     use super::{
         add_addon_media_list, add_default_collection_item, add_media_item_to_collection,
-        change_addon_media_list_addon, create_playlist_group, delete_playlist,
-        finalize_initial_playout_build, legacy_nvenc_tune, normalize_channel_form,
-        normalize_channel_number_updates, normalize_legacy_nvenc_preset, normalize_schedule_item,
-        normalized_hdr_metadata, parse_hdr_content_light, parse_hdr_mastering_display,
-        publish_addon_media_list, request_library_scan, request_playout_build,
-        request_scheduled_library_scan, request_show_scan, save_collection, save_ffmpeg_profile,
-        save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
-        save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
-        validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
-        validate_schedule_items, validate_template_group_name, validate_template_name,
-        validate_watermark, AddAddonMediaList, AddMediaItemToCollection, BlockItemAdminForm,
-        ChangeAddonMediaListAddon, ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist,
-        FfmpegProfileAdminForm, PublishAddonMediaList, RequestLibraryScan, RequestPlayoutBuild,
-        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
-        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
-        RequestShowScan, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
-        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
-        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
+        assign_addon_media_list_episode_numbers, change_addon_media_list_addon,
+        create_playlist_group, delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune,
+        normalize_channel_form, normalize_channel_number_updates, normalize_legacy_nvenc_preset,
+        normalize_schedule_item, normalized_hdr_metadata, parse_hdr_content_light,
+        parse_hdr_mastering_display, publish_addon_media_list, request_library_scan,
+        request_playout_build, request_scheduled_library_scan, request_show_scan, save_collection,
+        save_ffmpeg_profile, save_ffmpeg_settings, save_logging_settings, save_multi_collection,
+        save_playlist, save_playout_settings, save_rerun_collection, save_smart_collection,
+        set_windows_startup, validate_channel_form, validate_channel_number_updates,
+        validate_output_dynamic_range, validate_schedule_items, validate_template_group_name,
+        validate_template_name, validate_watermark, AddAddonMediaList, AddMediaItemToCollection,
+        AssignAddonMediaListEpisodeNumbers, BlockItemAdminForm, ChangeAddonMediaListAddon,
+        ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
+        PublishAddonMediaList, RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
+        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
+        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
+        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
+        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
@@ -6107,11 +6163,14 @@ mod tests {
         playout_ids: Vec<EntityId>,
     }
 
+    type EpisodeNumberAssignment = (EntityId, i32, i32, Option<u32>, bool);
+
     #[derive(Default)]
     struct RecordingAddonMediaListRepository {
         added_source_urls: Mutex<Vec<String>>,
         changed_addons: Mutex<Vec<(EntityId, String)>>,
         item_content_kinds: Mutex<Vec<(EntityId, ersatzrs_domain::AddonMediaListContentKind)>>,
+        episode_number_assignments: Mutex<Vec<EpisodeNumberAssignment>>,
         publication_events: Arc<Mutex<Vec<String>>>,
         fail_publication_commit: bool,
     }
@@ -6274,6 +6333,21 @@ mod tests {
             _content_kind: ersatzrs_domain::AddonMediaListContentKind,
         ) -> ersatzrs_core::repositories::Result<u64> {
             Ok(0)
+        }
+
+        async fn assign_episode_numbers(
+            &self,
+            id: EntityId,
+            season: i32,
+            starting_episode: i32,
+            item_count: Option<u32>,
+            missing_only: bool,
+        ) -> ersatzrs_core::repositories::Result<u64> {
+            self.episode_number_assignments
+                .lock()
+                .expect("episode number assignments")
+                .push((id, season, starting_episode, item_count, missing_only));
+            Ok(item_count.map_or(3, u64::from))
         }
 
         async fn change_addon(
@@ -7476,6 +7550,71 @@ mod tests {
         assert_eq!(
             *repository.changed_addons.lock().expect("changed add-ons"),
             [(7, "org.ersatzrs.addon.fixture".to_owned())]
+        );
+    }
+
+    #[tokio::test]
+    async fn episode_number_assignment_validates_and_forwards_one_bounded_range() {
+        let repository = RecordingAddonMediaListRepository::default();
+        for command in [
+            AssignAddonMediaListEpisodeNumbers {
+                id: 0,
+                season: 1,
+                starting_episode: 1,
+                item_count: None,
+                missing_only: true,
+            },
+            AssignAddonMediaListEpisodeNumbers {
+                id: 1,
+                season: -1,
+                starting_episode: 1,
+                item_count: None,
+                missing_only: true,
+            },
+            AssignAddonMediaListEpisodeNumbers {
+                id: 1,
+                season: 1,
+                starting_episode: 0,
+                item_count: None,
+                missing_only: true,
+            },
+            AssignAddonMediaListEpisodeNumbers {
+                id: 1,
+                season: 1,
+                starting_episode: 1,
+                item_count: Some(0),
+                missing_only: true,
+            },
+        ] {
+            assign_addon_media_list_episode_numbers(command, &repository)
+                .await
+                .expect_err("invalid episode numbering request");
+        }
+        assert!(repository
+            .episode_number_assignments
+            .lock()
+            .expect("episode number assignments")
+            .is_empty());
+
+        let assigned = assign_addon_media_list_episode_numbers(
+            AssignAddonMediaListEpisodeNumbers {
+                id: 7,
+                season: 2,
+                starting_episode: 4,
+                item_count: Some(6),
+                missing_only: true,
+            },
+            &repository,
+        )
+        .await
+        .expect("valid episode numbering request");
+        assert_eq!(assigned, 6);
+        assert_eq!(
+            *repository
+                .episode_number_assignments
+                .lock()
+                .expect("episode number assignments"),
+            [(7, 2, 4, Some(6), true)]
         );
     }
 

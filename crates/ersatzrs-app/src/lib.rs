@@ -517,6 +517,15 @@ impl ApplicationServices {
         commands::apply_addon_media_list_content_kind(command, self.ports.addon_media_lists()).await
     }
 
+    /// Assign consecutive episode numbers to included top-level entries.
+    pub async fn assign_addon_media_list_episode_numbers(
+        &self,
+        command: commands::AssignAddonMediaListEpisodeNumbers,
+    ) -> Result<u64> {
+        commands::assign_addon_media_list_episode_numbers(command, self.ports.addon_media_lists())
+            .await
+    }
+
     /// Move one Add-on media list to a different add-on and re-import it.
     pub async fn change_addon_media_list_addon(
         &self,

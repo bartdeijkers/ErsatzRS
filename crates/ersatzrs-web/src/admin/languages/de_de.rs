@@ -365,6 +365,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Hauptfilm",
         TextKey::MovieExtra => "Filmextra",
         TextKey::NeedReview => "Überprüfung nötig",
+        TextKey::NumberEpisodes => "Folgen nummerieren",
+        TextKey::NumberEpisodesHelp => {
+            "Ordnen Sie eine Staffel und fortlaufende Folgennummern in der ursprünglichen Reihenfolge des Add-ons zu. Ausgeschlossene Einträge und Kapitelfragmente werden übersprungen."
+        }
+        TextKey::FirstEpisode => "Erste Folge",
+        TextKey::NumberToAssign => "Anzahl",
+        TextKey::AllRemaining => "Alle verbleibenden",
+        TextKey::ReplaceExistingEpisodeNumbers => "Vorhandene Folgennummern ersetzen",
         TextKey::MetadataConflicts => "Metadatenkonflikte",
         TextKey::MetadataConflictsHelp => {
             "Der Anbieter hat von Ihnen überschriebene Felder geändert. Prüfen Sie die Werte vor der Veröffentlichung."

@@ -1100,6 +1100,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Filme principal",
         TextKey::MovieExtra => "Extra do filme",
         TextKey::NeedReview => "Precisa de revisão",
+        TextKey::NumberEpisodes => "Numerar episódios",
+        TextKey::NumberEpisodesHelp => {
+            "Atribua uma temporada e números de episódio consecutivos na ordem original do complemento. Itens excluídos e fragmentos de capítulo são ignorados."
+        }
+        TextKey::FirstEpisode => "Primeiro episódio",
+        TextKey::NumberToAssign => "Quantidade a atribuir",
+        TextKey::AllRemaining => "Todos os restantes",
+        TextKey::ReplaceExistingEpisodeNumbers => "Substituir números de episódio existentes",
         TextKey::MetadataConflicts => "Conflitos de metadados",
         TextKey::MetadataConflictsHelp => {
             "O provedor alterou campos substituídos pelo operador. Revise os valores antes de publicar."

@@ -1086,6 +1086,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Film główny",
         TextKey::MovieExtra => "Materiał dodatkowy",
         TextKey::NeedReview => "Wymaga sprawdzenia",
+        TextKey::NumberEpisodes => "Numeruj odcinki",
+        TextKey::NumberEpisodesHelp => {
+            "Przypisz jeden sezon i kolejne numery odcinków w pierwotnej kolejności dodatku. Wykluczone elementy i fragmenty rozdziałów są pomijane."
+        }
+        TextKey::FirstEpisode => "Pierwszy odcinek",
+        TextKey::NumberToAssign => "Liczba do przypisania",
+        TextKey::AllRemaining => "Wszystkie pozostałe",
+        TextKey::ReplaceExistingEpisodeNumbers => "Zastąp istniejące numery odcinków",
         TextKey::MetadataConflicts => "Konflikty metadanych",
         TextKey::MetadataConflictsHelp => {
             "Dostawca zmienił pola zastąpione przez operatora. Sprawdź wartości przed publikacją."

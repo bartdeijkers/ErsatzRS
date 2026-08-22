@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-22","summary":"Added provider-order TV episode numbering and made Windows beta archive replacement reproducible."}
 {"agent":"Codex","date":"2026-08-22","summary":"Enabled provider-free post-import reclassification of add-on lists across every library type, preserved reviewed snapshots and requested presentation state, and verified the localized workflow with repository, scanner, web parity, and Playwright MCP regressions."}
 {"agent":"Codex","date":"2026-08-22","summary":"Fixed staged add-on publication cache reuse and provider artwork identification; validated Windows library materialization."}
 {"agent":"Codex","date":"2026-08-22","summary":"Added exact media-list output validation for shared add-on adapter CI; Beeld & Geluid 0.8.0 normalizes v4 metadata and imports episode-card stills on Windows and POSIX."}

@@ -1,7 +1,9 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
-use ersatzrs_core::repositories::{AddonMediaListRepository, RepositoryError};
+use ersatzrs_core::repositories::{
+    AddonMediaListNfoMetadata, AddonMediaListRepository, RepositoryError,
+};
 use ersatzrs_domain::AddonMediaListPresentationKind;
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
@@ -88,6 +90,95 @@ async fn addon_media_list_repository_propagates_closed_pool_failures() {
     ));
 }
 
+#[tokio::test]
+async fn episode_numbering_uses_provider_order_and_preserves_other_operator_metadata() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+              "ItemCount", "ReviewState"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/show',
+              'https://example.invalid/show', 'Fixture Show', 5, 2
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    seed_numbering_item(&pool, 14, 1, None, None, true, None, "First").await;
+    seed_numbering_item(&pool, 10, 2, None, None, true, None, "Second").await;
+    seed_numbering_item(&pool, 11, 3, Some(2), Some(3), true, None, "Numbered").await;
+    seed_numbering_item(&pool, 12, 4, None, None, false, None, "Excluded").await;
+    seed_numbering_item(&pool, 13, 5, None, None, true, Some("parent"), "Chapter").await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "MetadataOverrideJson" = '{"title":"Operator title"}',
+               "MetadataConflictJson" = '{
+                 "season":{"provider_before":1,"provider_after":null,"operator_value":2},
+                 "plot":{"provider_before":"old","provider_after":"new","operator_value":"mine"}
+               }'
+           WHERE "Id" = 10"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let assigned = repositories
+        .addon_media_lists
+        .assign_episode_numbers(1, 2, 3, Some(2), true)
+        .await
+        .unwrap();
+    assert_eq!(assigned, 2);
+
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    let row = |id| rows.iter().find(|row| row.id == id).unwrap();
+    assert_eq!((row(14).season, row(14).episode), (Some(2), Some(4)));
+    assert_eq!((row(10).season, row(10).episode), (Some(2), Some(5)));
+    assert_eq!((row(11).season, row(11).episode), (Some(2), Some(3)));
+    assert_eq!((row(12).season, row(12).episode), (None, None));
+    assert_eq!((row(13).season, row(13).episode), (None, None));
+    assert_eq!(row(10).title, "Operator title");
+
+    let (overrides, conflicts): (String, Option<String>) = sqlx::query_as(
+        r#"SELECT "MetadataOverrideJson", "MetadataConflictJson"
+           FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let overrides: serde_json::Value = serde_json::from_str(&overrides).unwrap();
+    assert_eq!(overrides["title"], "Operator title");
+    assert_eq!(overrides["season"], 2);
+    assert_eq!(overrides["episode"], 5);
+    let conflicts: serde_json::Value = serde_json::from_str(&conflicts.unwrap()).unwrap();
+    assert!(conflicts.get("season").is_none());
+    assert!(conflicts.get("episode").is_none());
+    assert!(conflicts.get("plot").is_some());
+
+    let reassigned = repositories
+        .addon_media_lists
+        .assign_episode_numbers(1, 2, 5, Some(1), false)
+        .await
+        .unwrap();
+    assert_eq!(reassigned, 1);
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    let row = |id| rows.iter().find(|row| row.id == id).unwrap();
+    assert_eq!((row(14).season, row(14).episode), (Some(2), Some(6)));
+    assert_eq!((row(10).season, row(10).episode), (Some(2), Some(5)));
+    assert_eq!((row(11).season, row(11).episode), (Some(2), Some(3)));
+    assert_eq!(
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+}
+
 async fn seed_addon(pool: &sqlx::SqlitePool) {
     pool.execute(
         r#"INSERT INTO "AddonInstallation" (
@@ -98,6 +189,45 @@ async fn seed_addon(pool: &sqlx::SqlitePool) {
             'addons/org.example.lists', '2026-08-14T00:00:00Z', '2026-08-14T00:00:00Z'
         )"#,
     )
+    .await
+    .unwrap();
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_numbering_item(
+    pool: &sqlx::SqlitePool,
+    id: i64,
+    rank: i32,
+    season: Option<i32>,
+    episode: Option<i32>,
+    included: bool,
+    parent_provider_id: Option<&str>,
+    title: &str,
+) {
+    let metadata = AddonMediaListNfoMetadata {
+        title: title.to_owned(),
+        season,
+        episode,
+        ..AddonMediaListNfoMetadata::default()
+    };
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItem" (
+              "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+              "Rank", "Title", "Season", "Episode", "Included", "ParentProviderId",
+              "ProviderMetadataJson"
+           ) VALUES (?, 1, ?, ?, 4, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(id)
+    .bind(format!("episode:{id}"))
+    .bind(title)
+    .bind(rank)
+    .bind(title)
+    .bind(season)
+    .bind(episode)
+    .bind(included)
+    .bind(parent_provider_id)
+    .bind(serde_json::to_string(&metadata).unwrap())
+    .execute(pool)
     .await
     .unwrap();
 }

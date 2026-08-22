@@ -1077,6 +1077,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PrimaryFeature => "Hoofdfilm",
         TextKey::MovieExtra => "Filmextra",
         TextKey::NeedReview => "Te beoordelen",
+        TextKey::NumberEpisodes => "Afleveringen nummeren",
+        TextKey::NumberEpisodesHelp => {
+            "Ken één seizoen en oplopende afleveringsnummers toe in de oorspronkelijke volgorde van de add-on. Uitgesloten items en hoofdstukfragmenten worden overgeslagen."
+        }
+        TextKey::FirstEpisode => "Eerste aflevering",
+        TextKey::NumberToAssign => "Aantal toewijzen",
+        TextKey::AllRemaining => "Alle resterende",
+        TextKey::ReplaceExistingEpisodeNumbers => "Bestaande afleveringsnummers vervangen",
         TextKey::MetadataConflicts => "Metadataconflicten",
         TextKey::MetadataConflictsHelp => {
             "De aanbieder heeft velden gewijzigd die je had overschreven. Controleer de waarden voordat je publiceert."

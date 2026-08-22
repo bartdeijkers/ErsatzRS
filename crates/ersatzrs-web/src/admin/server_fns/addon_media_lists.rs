@@ -745,6 +745,32 @@ pub async fn apply_addon_media_list_content_kind(
         .map_err(ServerFnError::new)
 }
 
+/// Assign one season and consecutive episode numbers in original provider order.
+#[server]
+pub async fn assign_addon_media_list_episode_numbers(
+    id: i64,
+    season: i32,
+    starting_episode: i32,
+    item_count: Option<u32>,
+    missing_only: bool,
+) -> Result<u64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .assign_addon_media_list_episode_numbers(
+            ersatzrs_app::commands::AssignAddonMediaListEpisodeNumbers {
+                id,
+                season,
+                starting_episode,
+                item_count,
+                missing_only,
+            },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
 #[server]
 pub async fn search_addon_media_list_replacements(
     query: String,

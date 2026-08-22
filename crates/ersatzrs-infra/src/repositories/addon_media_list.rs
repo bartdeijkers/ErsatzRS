@@ -357,6 +357,141 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         Ok(updated.rows_affected())
     }
 
+    async fn assign_episode_numbers(
+        &self,
+        id: EntityId,
+        season: i32,
+        starting_episode: i32,
+        item_count: Option<u32>,
+        missing_only: bool,
+    ) -> Result<u64> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let review_state: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+        let Some(review_state) = review_state else {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            });
+        };
+        if review_state
+            == crate::repositories::common::encode_enum(AddonMediaListReviewState::Publishing)
+        {
+            return Err(publication_in_progress());
+        }
+
+        let rows = sqlx::query(
+            r#"SELECT "Id", "ProviderMetadataJson", "MetadataOverrideJson",
+                      "MetadataConflictJson"
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+                 AND "Included" = 1
+               ORDER BY "Rank", "Id""#,
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .repository()?;
+        let limit = item_count.map_or(usize::MAX, |count| {
+            usize::try_from(count).unwrap_or(usize::MAX)
+        });
+        let mut occupied_episodes = std::collections::BTreeSet::new();
+        if missing_only || limit < rows.len() {
+            let retained_rows = if missing_only {
+                rows.as_slice()
+            } else {
+                &rows[limit..]
+            };
+            for row in retained_rows {
+                let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+                let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+                let conflict_json: Option<String> =
+                    row.try_get("MetadataConflictJson").repository()?;
+                let metadata = metadata_form_from_json(
+                    &provider_json,
+                    &override_json,
+                    conflict_json.as_deref(),
+                )?
+                .metadata;
+                if metadata.season == Some(season) {
+                    if let Some(episode) = metadata.episode.filter(|value| *value >= 1) {
+                        occupied_episodes.insert(episode);
+                    }
+                }
+            }
+        }
+        let mut assigned = 0_usize;
+        let mut next_episode = starting_episode;
+        for row in rows {
+            if assigned == limit {
+                break;
+            }
+            let item_id: EntityId = row.try_get("Id").repository()?;
+            let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+            let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+            let conflict_json: Option<String> = row.try_get("MetadataConflictJson").repository()?;
+            let mut form =
+                metadata_form_from_json(&provider_json, &override_json, conflict_json.as_deref())?;
+            let has_valid_numbering = form.metadata.season.is_some_and(|value| value >= 0)
+                && form.metadata.episode.is_some_and(|value| value >= 1);
+            if missing_only && has_valid_numbering {
+                continue;
+            }
+
+            while occupied_episodes.contains(&next_episode) {
+                next_episode = next_episode.checked_add(1).ok_or_else(|| {
+                    RepositoryError::Conflict(
+                        "episode numbering exceeds the supported range".to_owned(),
+                    )
+                })?;
+            }
+            form.metadata.season = Some(season);
+            form.metadata.episode = Some(next_episode);
+            occupied_episodes.insert(next_episode);
+            form.conflicts.remove("season");
+            form.conflicts.remove("episode");
+            let overrides =
+                metadata_override_json(&metadata_json_value(&provider_json)?, &form.metadata)?;
+            let conflicts = if form.conflicts.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&form.conflicts).map_err(|error| {
+                    RepositoryError::Decode {
+                        kind: "add-on metadata conflicts",
+                        value: error.to_string(),
+                    }
+                })?)
+            };
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "MetadataOverrideJson" = ?, "MetadataConflictJson" = ?
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+            )
+            .bind(overrides)
+            .bind(conflicts)
+            .bind(item_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            assigned += 1;
+            next_episode = next_episode.saturating_add(1);
+        }
+
+        if assigned > 0 {
+            mark_list_ready_tx(&mut tx, id).await?;
+        }
+        tx.commit().await.repository()?;
+        u64::try_from(assigned).map_err(|_| RepositoryError::Decode {
+            kind: "assigned episode count",
+            value: assigned.to_string(),
+        })
+    }
+
     async fn get_item_detail(
         &self,
         list_id: EntityId,
@@ -2499,6 +2634,10 @@ impl SqliteAddonMediaListRepository {
             let metadata_conflict_count =
                 u32::try_from(metadata_form.conflicts.len()).unwrap_or(u32::MAX);
             let metadata = metadata_form.metadata;
+            let effective_title = metadata.title.clone();
+            let effective_year = metadata.year;
+            let effective_season = metadata.season;
+            let effective_episode = metadata.episode;
             let replacement_media_item_id = row
                 .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
                 .repository()?;
@@ -2514,7 +2653,11 @@ impl SqliteAddonMediaListRepository {
             result.push(AddonMediaListItemAdminRow {
                 id: row.try_get("Id").repository()?,
                 rank: row.try_get("Rank").repository()?,
-                display_title: row.try_get("DisplayTitle").repository()?,
+                display_title: if effective_title.trim().is_empty() {
+                    row.try_get("DisplayTitle").repository()?
+                } else {
+                    effective_title.clone()
+                },
                 availability: crate::repositories::common::decode_enum_column(
                     "AddonMediaListItemAvailability",
                     &row,
@@ -2526,10 +2669,10 @@ impl SqliteAddonMediaListRepository {
                 replacement_title: candidate.as_ref().map(|item| item.title.clone()),
                 replacement_path: candidate.as_ref().map(|item| item.path.clone()),
                 replacement_valid: candidate.is_some(),
-                title: row.try_get("Title").repository()?,
-                year: row.try_get("Year").repository()?,
-                season: row.try_get("Season").repository()?,
-                episode: row.try_get("Episode").repository()?,
+                title: effective_title,
+                year: effective_year,
+                season: effective_season,
+                episode: effective_episode,
                 source_url: row.try_get("SourceUrl").repository()?,
                 duration_seconds: decode_optional_u64(&row, "DurationSeconds")?,
                 parent_provider_id: row.try_get("ParentProviderId").repository()?,

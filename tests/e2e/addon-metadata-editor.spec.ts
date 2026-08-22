@@ -277,6 +277,75 @@ test.describe('shared add-on metadata editor', () => {
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('assigns missing episode numbers in original order and allows a bounded overwrite', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    sqlite(`
+UPDATE "AddonMediaList"
+SET "PresentationKind" = 1, "RequestedPresentationKind" = 1
+WHERE "Id" = ${seed.listId};
+UPDATE "AddonMediaListItem"
+SET "ContentKind" = 1
+WHERE "AddonMediaListId" = ${seed.listId};
+UPDATE "AddonMediaListItem"
+SET "ProviderMetadataJson" = json_set(
+      "ProviderMetadataJson", '$.season', 4, '$.episode', 9
+    ),
+    "Season" = 4,
+    "Episode" = 9
+WHERE "Id" = ${seed.firstItemId};
+`);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const numberingButton = page.getByRole('button', { name: /^number episodes$/i });
+    await expect(numberingButton).toBeVisible();
+    await numberingButton.click();
+    const panel = page.locator('#episode-numbering-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText(/1 episodes · s01e01–s01e01/i)).toBeVisible();
+    await panel.getByRole('button', { name: /^apply$/i }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
+       json_extract("MetadataOverrideJson", '$.episode')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
+`),
+      )
+      .toBe('1,1');
+    await expect(page.getByText('S04E09', { exact: true })).toBeVisible();
+    await expect(page.getByText('S01E01', { exact: true })).toBeVisible();
+
+    await numberingButton.click();
+    await panel.getByLabel(/^season$/i).fill('1');
+    await panel.getByLabel(/^first episode$/i).fill('1');
+    await panel.getByLabel(/^number to assign$/i).fill('1');
+    await panel.getByRole('checkbox', { name: /replace existing episode numbers/i }).check();
+    await expect(panel.getByText(/1 episodes · s01e02–s01e02/i)).toBeVisible();
+    await panel.getByRole('button', { name: /^apply$/i }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
+       json_extract("MetadataOverrideJson", '$.episode')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
+`),
+      )
+      .toBe('1,2');
+    await expect(page.getByText('S01E02', { exact: true })).toBeVisible();
+    expect(
+      sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
+       json_extract("MetadataOverrideJson", '$.episode')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
+`),
+    ).toBe('1,1');
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('reviews, edits, uploads, rejects stale ETags, publishes, and reincludes', async ({
     page,
   }, testInfo) => {

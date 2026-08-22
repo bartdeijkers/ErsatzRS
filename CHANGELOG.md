@@ -13,35 +13,6 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-### Added
-
-- The standalone add-on validator can now validate captured media-list NDJSON
-  through the exact runtime conformance parser, allowing provider adapters to
-  reject invalid metadata types and formats before publication.
-
-### Fixed
-
-- Existing add-on lists can now be reclassified after import to any supported
-  library type. Save and Publish replay the durable provider snapshot instead
-  of invoking the add-on again, while preserving source identity, original
-  order, inclusion choices, and operator metadata edits; the list detail page
-  shows both the current library type and any pending type change.
-
-- Publishing a reviewed add-on list now bypasses a fresh empty draft cache, so
-  the staged item selection is materialized into its managed library on the
-  first publish; existing published lists with that stale empty state repair
-  themselves on their next scan. Remote Stream health also understands v3
-  sidecars and reports successful synchronizations with no active entries.
-  Shared artwork downloads now identify ErsatzRS to providers that reject
-  anonymous HTTP clients, preventing Beeld & Geluid episode stills from
-  failing publication with HTTP 403. Reviewed NFO generation also retains
-  list-wide tags and metadata defaults alongside item metadata.
-
-### Removed
-
-- Dropped the unread `pin_id` field from the Plex sign-in island's polling
-  state; the poll loop already used its own cloned copy.
-
 ## [1.0.24-beta] - 2026-08-22
 
 ### Added
@@ -57,6 +28,16 @@ release section when tagging a release.
   type before explicit publication. The official yt-dlp package keeps the
   frequently updated `yt-dlp` executable in charge of all provider extraction;
   its shared POSIX/PowerShell mapper only translates the complete JSON result.
+
+- The standalone add-on validator can now validate captured media-list NDJSON
+  through the exact runtime conformance parser, allowing provider adapters to
+  reject invalid metadata types and formats before publication.
+
+- Television add-on drafts can now assign one season and consecutive episode
+  numbers to all missing entries in original provider order, optionally in
+  bounded batches for multi-season lists. Existing numbering is preserved by
+  default, occupied numbers are skipped, and an explicit override remains
+  available alongside per-episode editing and pagination.
 
 - New built-in music-video-credits preset `_MusicFactory_ArtistTitle`, a
   "Music Factory" (TMF) styled artist/song-title card alongside the MTV-styled
@@ -76,6 +57,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Re-running a Windows beta tag now replaces its existing release archive
+  after rebuilding and validating it, while first-time beta tags continue to
+  create a prerelease normally.
+
 - Windows release packaging now tests startup registration through a small
   platform adapter instead of compiling the complete web test harness in a
   second Cargo profile. The release still performs the isolated real-HKCU
@@ -89,6 +74,26 @@ release section when tagging a release.
   clocks, countdowns, and changing now/next or video-jukebox presentation.
 
 ### Fixed
+
+- Existing add-on lists can now be reclassified after import to any supported
+  library type. Save and Publish replay the durable provider snapshot instead
+  of invoking the add-on again, while preserving source identity, original
+  order, inclusion choices, and operator metadata edits; the list detail page
+  shows both the current library type and any pending type change.
+
+- Publishing a reviewed add-on list now bypasses a fresh empty draft cache, so
+  the staged item selection is materialized into its managed library on the
+  first publish; existing published lists with that stale empty state repair
+  themselves on their next scan. Remote Stream health also understands v3
+  sidecars and reports successful synchronizations with no active entries.
+  Shared artwork downloads now identify ErsatzRS to providers that reject
+  anonymous HTTP clients, preventing Beeld & Geluid episode stills from
+  failing publication with HTTP 403. Reviewed NFO generation also retains
+  list-wide tags and metadata defaults alongside item metadata.
+
+- Replaying a reviewed publication snapshot now treats a legacy nullable extra
+  artwork list as empty across both SQLite and MySQL instead of failing the
+  publication during row decoding.
 
 - Make the Windows `test-closeout` wrapper run both the default and
   all-features nextest matrices, matching Linux and preserving the
@@ -129,6 +134,11 @@ release section when tagging a release.
 - Decode escaped Beeld & Geluid descriptions consistently in the official
   Windows add-on package, including embedded quotation marks and newlines,
   instead of rejecting otherwise valid series metadata as malformed JSON.
+
+### Removed
+
+- Dropped the unread `pin_id` field from the Plex sign-in island's polling
+  state; the poll loop already used its own cloned copy.
 
 ### Security
 
