@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-22","summary":"Enabled provider-free post-import reclassification of add-on lists across every library type, preserved reviewed snapshots and requested presentation state, and verified the localized workflow with repository, scanner, web parity, and Playwright MCP regressions."}
 {"agent":"Codex","date":"2026-08-22","summary":"Fixed staged add-on publication cache reuse and provider artwork identification; validated Windows library materialization."}
 {"agent":"Codex","date":"2026-08-22","summary":"Added exact media-list output validation for shared add-on adapter CI; Beeld & Geluid 0.8.0 normalizes v4 metadata and imports episode-card stills on Windows and POSIX."}
 {"agent":"Codex","date":"2026-08-22","summary":"Prepared the combined v1.0.24-beta Windows release candidate with the isolated startup adapter, ZIP launcher validation, and cross-browser add-on metadata editor coverage."}

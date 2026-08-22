@@ -19,7 +19,11 @@ draft-era Remote Stream cache, existing affected publications self-repair on
 their next scan, and health reports empty successful sidecars. The shared
 artwork client identifies ErsatzRS so provider CDNs can serve reviewed images
 consistently to both publication and scanning paths. Reviewed item NFOs retain
-list-wide tags and defaults without duplicating values.
+list-wide tags and defaults without duplicating values. Existing imports can
+be republished as any supported library type without running the provider a
+second time; the stored provider snapshot, source order, inclusion, and
+operator overrides remain the durable control plane while only the media
+projection changes.
 '''
 
 [[debt]]
@@ -28,6 +32,14 @@ description = 'Persist enumeration and enrichment as a reviewable draft, and pub
 discovered  = '2026-08-21'
 adr         = '0075'
 evidence    = 'Resolved by the v4 provider snapshots, Draft/Ready/Published states, durable inclusion, the two-step Import/Publish editor, and published-item snapshots. Atomic rollback hardening remains separately visible in amm-b-02.'
+resolved    = true
+
+[[debt]]
+id          = 'imported-addon-list-media-type-is-effectively-fixed'
+description = 'Allow an operator to change an already imported list to any supported ErsatzRS media type without repeating provider import or losing reviewed state.'
+discovered  = '2026-08-22'
+adr         = '0075'
+evidence    = 'Resolved by staged publication replaying AddonMediaListItem snapshots, projection reconciliation for every presentation kind, localized current-to-pending type guidance, and repository, scanner, and browser regressions proving that provider execution, source identity, rank, inclusion, and metadata overrides remain unchanged.'
 resolved    = true
 
 [[debt]]

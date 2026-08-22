@@ -21,6 +21,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Existing add-on lists can now be reclassified after import to any supported
+  library type. Save and Publish replay the durable provider snapshot instead
+  of invoking the add-on again, while preserving source identity, original
+  order, inclusion choices, and operator metadata edits; the list detail page
+  shows both the current library type and any pending type change.
+
 - Publishing a reviewed add-on list now bypasses a fresh empty draft cache, so
   the staged item selection is materialized into its managed library on the
   first publish; existing published lists with that stale empty state repair

@@ -425,6 +425,84 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       )
       .toBe('2,1');
 
+    const providerStateBeforeReclassification = sqlite(`
+SELECT group_concat(
+  "ProviderId" || '|' || "SourceUrl" || '|' || "Rank" || '|' ||
+  "Included" || '|' || "ProviderMetadataJson" || '|' || "MetadataOverrideJson",
+  char(10)
+)
+FROM (
+  SELECT * FROM "AddonMediaListItem"
+  WHERE "AddonMediaListId" = ${seed.listId}
+  ORDER BY "Id"
+);
+`);
+    const mediaType = page.getByLabel('Collection Type', { exact: true });
+    await expect(mediaType.locator('option')).toHaveText([
+      'Determine from the items',
+      'TV Shows',
+      'Movies',
+      'Music Video',
+      'Other Videos',
+      'Songs',
+      'Images',
+      'Remote Streams',
+    ]);
+    const typeChangeHelp = page.getByTestId('addon-media-type-change-help');
+    await expect(typeChangeHelp).toContainText('Current library type: Remote Streams');
+    await expect(typeChangeHelp).toContainText('without importing the add-on again');
+
+    await mediaType.selectOption('other_videos');
+    await expect(typeChangeHelp).toContainText('Remote Streams → Other Videos');
+    await expect(page.getByTestId('addon-media-type-change-route')).toBeVisible();
+    const typeSaveNavigation = page.waitForEvent('framenavigated');
+    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await typeSaveNavigation;
+    await waitUntilHydrated(page);
+    await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('other_videos');
+    await expect(page.getByTestId('addon-media-type-change-help')).toContainText(
+      'Remote Streams → Other Videos',
+    );
+
+    const typePublishNavigation = page.waitForEvent('framenavigated');
+    await page.getByRole('button', { name: /^publish$/i }).click();
+    await typePublishNavigation;
+    await waitUntilHydrated(page);
+    await expect(page.getByTestId('addon-media-type-change-help')).toContainText(
+      'Current library type: Other Videos',
+    );
+    await expect(page.getByTestId('addon-media-type-change-route')).not.toBeVisible();
+    await expect
+      .poll(
+        () =>
+          sqlite(`
+SELECT (SELECT COUNT(*) FROM "AddonMediaListItemOtherVideo" AS "link"
+        JOIN "AddonMediaListItem" AS "item" ON "item"."Id" = "link"."AddonMediaListItemId"
+        WHERE "item"."AddonMediaListId" = ${seed.listId}) || ',' ||
+       (SELECT COUNT(*) FROM "RemoteStream" AS "stream"
+        JOIN "AddonMediaListItem" AS "item" ON "item"."MediaItemId" = "stream"."Id"
+        WHERE "item"."AddonMediaListId" = ${seed.listId}) || ',' ||
+       "PublishedRevision"
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`),
+        { timeout: 30_000 },
+      )
+      .toBe('2,2,3');
+    expect(
+      sqlite(`
+SELECT group_concat(
+  "ProviderId" || '|' || "SourceUrl" || '|' || "Rank" || '|' ||
+  "Included" || '|' || "ProviderMetadataJson" || '|' || "MetadataOverrideJson",
+  char(10)
+)
+FROM (
+  SELECT * FROM "AddonMediaListItem"
+  WHERE "AddonMediaListId" = ${seed.listId}
+  ORDER BY "Id"
+);
+`),
+    ).toBe(providerStateBeforeReclassification);
+
     expect(runtimeErrors).toEqual([]);
   });
 });

@@ -614,6 +614,101 @@ async fn reverting_to_remote_streams_removes_the_projection() {
     );
 }
 
+/// Reclassification is a publication of the existing control-plane draft, not
+/// another provider import. Operator metadata and provider identity must stay
+/// intact while the projected media hierarchy changes underneath them.
+#[tokio::test]
+async fn published_list_can_change_media_type_without_reimporting_or_losing_edits() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    let detail = repositories
+        .addon_media_lists
+        .get_item_detail(LIST_ID, 10)
+        .await
+        .expect("load item detail")
+        .expect("seeded item");
+    let mut edited = detail.nfo.metadata;
+    edited.title = "Operator title".to_owned();
+    edited.tags.push("Operator tag".to_owned());
+    repositories
+        .addon_media_lists
+        .save_item_nfo(LIST_ID, 10, &edited, &detail.nfo.etag)
+        .await
+        .expect("save operator metadata");
+
+    let control_plane_before =
+        sqlx::query_as::<_, (i64, String, String, i64, i64, i64, String, String)>(
+            r#"SELECT "Id", "ProviderId", "SourceUrl", "Rank", "Included", "CollectionRole",
+                  "ProviderMetadataJson", "MetadataOverrideJson"
+           FROM "AddonMediaListItem" WHERE "AddonMediaListId" = 1 ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("snapshot imported items");
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("reclassify remote streams as television");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Episode""#).await,
+        3
+    );
+
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
+        .await
+        .expect("reclassify the same imported items as movies");
+    let reclassified = repositories
+        .addon_media_lists
+        .get_admin_form(LIST_ID)
+        .await
+        .expect("reload list classification")
+        .expect("seeded list");
+    assert_eq!(
+        reclassified.presentation_kind,
+        AddonMediaListPresentationKind::Movies
+    );
+    assert_eq!(
+        reclassified.requested_presentation_kind,
+        AddonMediaListPresentationKind::Movies,
+        "publication must not replace the operator's type choice while reverting the old projection"
+    );
+    let control_plane_after =
+        sqlx::query_as::<_, (i64, String, String, i64, i64, i64, String, String)>(
+            r#"SELECT "Id", "ProviderId", "SourceUrl", "Rank", "Included", "CollectionRole",
+                  "ProviderMetadataJson", "MetadataOverrideJson"
+           FROM "AddonMediaListItem" WHERE "AddonMediaListId" = 1 ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("reload imported items");
+    assert_eq!(control_plane_after, control_plane_before);
+    let retained = repositories
+        .addon_media_lists
+        .get_item_detail(LIST_ID, 10)
+        .await
+        .expect("reload item detail")
+        .expect("retained item");
+    assert_eq!(retained.nfo.metadata.title, "Operator title");
+    assert!(retained
+        .nfo
+        .metadata
+        .tags
+        .contains(&"Operator tag".to_owned()));
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Movie""#).await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Show""#).await,
+        0
+    );
+}
+
 /// The Movie projection is the television one without the Show and Season
 /// levels: each entry becomes a `Movie` over the same Remote Stream version.
 #[tokio::test]

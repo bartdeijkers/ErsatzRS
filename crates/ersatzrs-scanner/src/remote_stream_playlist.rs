@@ -604,36 +604,57 @@ pub async fn sync_playlist_files(
         }
     }
 
-    let enumeration = match enumerate_playlist(
-        pool,
-        &manifest.manifest.addon,
-        &manifest.manifest.url,
-        manifest.manifest.chapters.as_deref(),
-        runtime,
-    )
-    .await
-    {
-        Ok(enumeration) => enumeration,
-        Err(error) => {
-            persist_failed_sync(&folder, existing.as_ref(), manifest_etag, now)?;
-            return Err(error);
-        }
-    };
-    let mut unbounded = manifest.clone();
-    unbounded.manifest.sync.max_items = 0;
-    let eligible = select_entries(&unbounded, enumeration.entries);
-    let truncated =
-        manifest.manifest.sync.max_items > 0 && eligible.len() > manifest.manifest.sync.max_items;
-    let mut selected = select_entries(manifest, eligible);
-    if content_kind_override != AddonMediaListContentKind::Auto {
-        for entry in &mut selected {
-            entry.content_kind = wire_content_kind(content_kind_override);
-        }
-    }
-    let overrides = existing
+    // A staged publication owns a complete, already validated provider
+    // snapshot in AddonMediaListItem. Replaying that snapshot keeps Publish a
+    // local materialization boundary: neither media-list.list nor the legacy
+    // remote-stream enumeration is invoked again just because the operator
+    // changed metadata, inclusion, or the projected library type.
+    let staged_selection = published_selection
         .as_ref()
-        .map(|state| state.overrides.clone())
-        .unwrap_or_default();
+        .filter(|selection| selection.is_publishing);
+    let (selected, truncated, enumerated) = if let Some(selection) = staged_selection {
+        (
+            load_staged_playlist_entries(pool, selection.list_id, content_kind_override).await?,
+            false,
+            false,
+        )
+    } else {
+        let enumeration = match enumerate_playlist(
+            pool,
+            &manifest.manifest.addon,
+            &manifest.manifest.url,
+            manifest.manifest.chapters.as_deref(),
+            runtime,
+        )
+        .await
+        {
+            Ok(enumeration) => enumeration,
+            Err(error) => {
+                persist_failed_sync(&folder, existing.as_ref(), manifest_etag, now)?;
+                return Err(error);
+            }
+        };
+        let mut unbounded = manifest.clone();
+        unbounded.manifest.sync.max_items = 0;
+        let eligible = select_entries(&unbounded, enumeration.entries);
+        let truncated = manifest.manifest.sync.max_items > 0
+            && eligible.len() > manifest.manifest.sync.max_items;
+        let mut selected = select_entries(manifest, eligible);
+        if content_kind_override != AddonMediaListContentKind::Auto {
+            for entry in &mut selected {
+                entry.content_kind = wire_content_kind(content_kind_override);
+            }
+        }
+        (selected, truncated, true)
+    };
+    let overrides = if staged_selection.is_some() {
+        PlaylistOverrides::default()
+    } else {
+        existing
+            .as_ref()
+            .map(|state| state.overrides.clone())
+            .unwrap_or_default()
+    };
     let override_ids = overrides
         .excluded
         .iter()
@@ -652,21 +673,29 @@ pub async fn sync_playlist_files(
     // Enrichment runs only after item limits, filters, and exclusions have been
     // applied, so its cost is proportional to the entries actually kept rather
     // than the whole upstream listing.
-    enrich_selected_entries(
-        pool,
-        manifest_path,
-        &manifest.manifest.addon,
-        runtime,
-        &mut selected,
-    )
-    .await;
+    if enumerated {
+        enrich_selected_entries(
+            pool,
+            manifest_path,
+            &manifest.manifest.addon,
+            runtime,
+            &mut selected,
+        )
+        .await;
+    }
     let reviewed_metadata = apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
-    if let Err(error) =
-        append_item_chapter_fragments(pool, manifest_path, &manifest.manifest.addon, &mut selected)
-            .await
-    {
-        persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
-        return Err(error);
+    if enumerated {
+        if let Err(error) = append_item_chapter_fragments(
+            pool,
+            manifest_path,
+            &manifest.manifest.addon,
+            &mut selected,
+        )
+        .await
+        {
+            persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
+            return Err(error);
+        }
     }
     selected.retain(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()));
     if let Err(error) = validate_fragment_parents(&selected) {
@@ -864,7 +893,7 @@ pub async fn sync_playlist_files(
         definitions,
         changed,
         membership_changed,
-        enumerated: true,
+        enumerated,
     })
 }
 
@@ -995,11 +1024,9 @@ const fn wire_content_kind(kind: AddonMediaListContentKind) -> WireContentKind {
         AddonMediaListContentKind::Movie => WireContentKind::Movie,
         AddonMediaListContentKind::MusicVideo => WireContentKind::MusicVideo,
         AddonMediaListContentKind::OtherVideo => WireContentKind::OtherVideo,
-        // Remote-stream v1-v3 do not negotiate the media-list v4 additions, so
-        // keep sending Auto on this older capability family.
-        AddonMediaListContentKind::Auto
-        | AddonMediaListContentKind::Song
-        | AddonMediaListContentKind::Image => WireContentKind::Auto,
+        AddonMediaListContentKind::Song => WireContentKind::Song,
+        AddonMediaListContentKind::Image => WireContentKind::Image,
+        AddonMediaListContentKind::Auto => WireContentKind::Auto,
     }
 }
 
@@ -1136,6 +1163,7 @@ async fn append_item_chapter_fragments(
 
 #[derive(Debug)]
 struct PublishedProviderSelection {
+    list_id: i64,
     provider_ids: BTreeSet<String>,
     is_publishing: bool,
 }
@@ -1187,9 +1215,153 @@ async fn published_provider_selection(
         PlaylistError::Enumeration(format!("unable to load published list items: {error}"))
     })?;
     Ok(Some(PublishedProviderSelection {
+        list_id,
         provider_ids: values.into_iter().collect(),
         is_publishing,
     }))
+}
+
+/// Rebuild the scanner input from the reviewed control-plane snapshot.
+///
+/// These are the same provider identities and playback fields persisted by
+/// `media-list.list.v4` during Import. Publication must not invoke an add-on a
+/// second time merely to convert the already imported list into another
+/// library hierarchy.
+async fn load_staged_playlist_entries(
+    pool: &DbPool,
+    list_id: i64,
+    content_kind_override: AddonMediaListContentKind,
+) -> Result<Vec<PlaylistEntry>> {
+    type StagedItemRow = (
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i64>,
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+        i32,
+        Option<String>,
+        i32,
+        String,
+    );
+
+    let rows = sqlx::query_as::<_, StagedItemRow>(
+        r#"SELECT "ProviderId", "SourceUrl", "Title", "DisplayTitle", "DurationSeconds",
+                  "ParentProviderId", "FragmentStartSeconds", "FragmentEndSeconds",
+                  "Availability", "AvailabilityReason", "ContentKind", "AdditionalImageUrls"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "Published" = 1
+           ORDER BY "Rank", "Id""#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!(
+            "unable to load the staged add-on media-list snapshot: {error}"
+        ))
+    })?;
+
+    rows.into_iter()
+        .map(
+            |(
+                provider_id,
+                source_url,
+                title,
+                display_title,
+                duration_seconds,
+                parent_provider_id,
+                fragment_start_seconds,
+                fragment_end_seconds,
+                availability,
+                availability_reason,
+                content_kind,
+                additional_image_urls,
+            )| {
+                let source_url = source_url
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| {
+                        PlaylistError::Enumeration(format!(
+                            "staged item '{provider_id}' has no playback URL"
+                        ))
+                    })?;
+                let duration_seconds = staged_u64(duration_seconds, "duration", &provider_id)?;
+                let fragment_start_seconds =
+                    staged_u64(fragment_start_seconds, "fragment start", &provider_id)?;
+                let fragment_end_seconds =
+                    staged_u64(fragment_end_seconds, "fragment end", &provider_id)?;
+                let additional_image_urls = if additional_image_urls.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    serde_json::from_str(&additional_image_urls).map_err(|error| {
+                        PlaylistError::Enumeration(format!(
+                            "staged item '{provider_id}' has invalid artwork URLs: {error}"
+                        ))
+                    })?
+                };
+                let content_kind = if content_kind_override == AddonMediaListContentKind::Auto {
+                    stored_content_kind(content_kind, &provider_id)?
+                } else {
+                    content_kind_override
+                };
+                Ok(PlaylistEntry {
+                    id: provider_id.clone(),
+                    provider_id: Some(provider_id.clone()),
+                    url: source_url,
+                    title: title.unwrap_or(display_title),
+                    duration_seconds,
+                    additional_image_urls,
+                    parent_provider_id,
+                    fragment_start_seconds,
+                    fragment_end_seconds,
+                    availability: stored_availability(availability, &provider_id)?,
+                    availability_reason,
+                    content_kind: wire_content_kind(content_kind),
+                    ..PlaylistEntry::default()
+                })
+            },
+        )
+        .collect()
+}
+
+fn staged_u64(value: Option<i64>, field: &str, provider_id: &str) -> Result<Option<u64>> {
+    value
+        .map(|value| {
+            u64::try_from(value).map_err(|_| {
+                PlaylistError::Enumeration(format!(
+                    "staged item '{provider_id}' has an invalid {field}"
+                ))
+            })
+        })
+        .transpose()
+}
+
+fn stored_availability(value: i32, provider_id: &str) -> Result<WireAvailability> {
+    match value {
+        0 => Ok(WireAvailability::Available),
+        1 => Ok(WireAvailability::Unavailable),
+        2 => Ok(WireAvailability::Unknown),
+        _ => Err(PlaylistError::Enumeration(format!(
+            "staged item '{provider_id}' has invalid availability {value}"
+        ))),
+    }
+}
+
+fn stored_content_kind(value: i32, provider_id: &str) -> Result<AddonMediaListContentKind> {
+    match value {
+        0 => Ok(AddonMediaListContentKind::Auto),
+        1 => Ok(AddonMediaListContentKind::TelevisionEpisode),
+        2 => Ok(AddonMediaListContentKind::Movie),
+        3 => Ok(AddonMediaListContentKind::MusicVideo),
+        4 => Ok(AddonMediaListContentKind::OtherVideo),
+        5 => Ok(AddonMediaListContentKind::Song),
+        6 => Ok(AddonMediaListContentKind::Image),
+        _ => Err(PlaylistError::Enumeration(format!(
+            "staged item '{provider_id}' has invalid content kind {value}"
+        ))),
+    }
 }
 
 /// Apply the provider snapshot plus field-level operator overrides retained by
@@ -3551,7 +3723,7 @@ create_playlist: true
     #[cfg(unix)]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn staged_publication_bypasses_a_fresh_empty_draft_cache() {
+    async fn staged_publication_replays_the_import_snapshot_without_addon_enumeration() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let package_root = temp.path().join("addon-package");
         std::fs::create_dir_all(&package_root).expect("package root");
@@ -3636,6 +3808,29 @@ create_playlist: true
         assert!(recovered.enumerated);
         assert_eq!(recovered.definitions.len(), 2);
 
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "MetadataOverrideJson" = '{"title":"Operator One","tags":["edited"]}'
+               WHERE "AddonMediaListId" = 1 AND "ProviderId" = 'one'"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("save reviewed metadata override");
+        std::fs::write(&script, "#!/bin/sh\necho must-not-run >&2\nexit 1\n")
+            .expect("replace fixture with a failing provider");
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(&package_root)
+            .await
+            .expect("hash updated package");
+        sqlx::query(
+            r#"UPDATE "AddonInstallation" SET "PackageSha256" = ?, "ContentSha256" = ?
+               WHERE "AddonId" = ?"#,
+        )
+        .bind("b".repeat(64))
+        .bind(content_sha256)
+        .bind("org.ersatzrs.addon.fixture")
+        .execute(&pool)
+        .await
+        .expect("record fixture package update");
         sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 3 WHERE "Id" = 1"#)
             .execute(&pool)
             .await
@@ -3644,7 +3839,7 @@ create_playlist: true
             sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
                 .await
                 .expect("publishing sync");
-        assert!(publishing.enumerated);
+        assert!(!publishing.enumerated);
         assert_eq!(
             publishing
                 .definitions
@@ -3653,6 +3848,11 @@ create_playlist: true
                 .collect::<Vec<_>>(),
             ["one", "two"]
         );
+        let reviewed_nfo =
+            crate::nfo::parse_other_video_nfo(publishing.definitions[0].path.with_extension("nfo"))
+                .expect("reviewed NFO");
+        assert_eq!(reviewed_nfo.title.as_deref(), Some("Operator One"));
+        assert!(reviewed_nfo.tags.contains(&"edited".to_owned()));
 
         sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 2 WHERE "Id" = 1"#)
             .execute(&pool)

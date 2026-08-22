@@ -391,6 +391,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Chaque élément est reclassé avec le type de média sélectionné, remplaçant les valeurs déduites par l'extension ou saisies manuellement.",
         TextKey::TelevisionEpisode => "Épisode de télévision",
         TextKey::CollectionTypeAuto => "Déterminer d'après les éléments",
+        TextKey::CurrentLibraryType => "Type actuel de la médiathèque",
+        TextKey::CollectionTypeChangeHelp => "Vous pouvez le modifier après l’importation. Enregistrez puis publiez pour reclasser les éléments existants sans réimporter l’extension ; l’ordre, l’inclusion et les modifications de métadonnées sont conservés.",
         TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::UnknownItems => "Éléments inconnus",
         TextKey::PlayableItems => "Éléments lisibles",

@@ -397,6 +397,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Jeder Eintrag erhält die ausgewählte Medienart und überschreibt damit Werte, die das Add-on ermittelt oder Sie selbst gesetzt haben.",
         TextKey::TelevisionEpisode => "Fernsehepisode",
         TextKey::CollectionTypeAuto => "Anhand der Einträge bestimmen",
+        TextKey::CurrentLibraryType => "Aktueller Bibliothekstyp",
+        TextKey::CollectionTypeChangeHelp => "Sie können dies nach dem Import ändern. Speichern und veröffentlichen Sie, um die vorhandenen Einträge neu zuzuordnen, ohne das Add-on erneut zu importieren; Reihenfolge, Auswahl und Metadatenänderungen bleiben erhalten.",
         TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::UnknownItems => "Unbekannte Einträge",
         TextKey::PlayableItems => "Abspielbare Einträge",

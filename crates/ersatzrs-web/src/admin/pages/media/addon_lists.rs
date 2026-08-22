@@ -1980,6 +1980,8 @@ fn AddonMediaListEditorIsland(
     let content_kind_override = RwSignal::new(form.content_kind_override);
     let legacy_chapter_input = form.legacy_chapter_input.clone();
     let presentation_kind = RwSignal::new(form.requested_presentation_kind);
+    let published_presentation_kind = form.presentation_kind;
+    let has_published_projection = form.published_revision > 0;
     let general_metadata_open = RwSignal::new(false);
     let is_draft = form.review_state != AddonMediaListReviewState::Published;
     let show_metadata = initial_show_nfo.metadata.clone();
@@ -2500,6 +2502,27 @@ fn AddonMediaListEditorIsland(
                                         <span>{tr(TextKey::UpdateAddonMediaListDaily)}</span>
                                     </label>
                                 </div>
+                                <p class=style::type_change_note data-testid="addon-media-type-change-help">
+                                    <span style=icon_style(IconName::Edit, "1rem") aria-hidden="true"></span>
+                                    <span class=style::type_change_copy>
+                                        <span
+                                            class=style::type_change_route
+                                            aria-live="polite"
+                                            style:display=if has_published_projection { "inline" } else { "none" }
+                                        >
+                                            <strong>{format!("{}: ", tr(TextKey::CurrentLibraryType))}</strong>
+                                            <span>{tr(presentation_text_key(published_presentation_kind))}</span>
+                                            <span
+                                                data-testid="addon-media-type-change-route"
+                                                style:display=move || if matches!(presentation_kind.get(), AddonMediaListPresentationKind::Auto) || presentation_kind.get() == published_presentation_kind { "none" } else { "inline" }
+                                            >
+                                                <span aria-hidden="true">" → "</span>
+                                                <span>{move || tr(presentation_text_key(presentation_kind.get()))}</span>
+                                            </span>
+                                        </span>
+                                        <span>{tr(TextKey::CollectionTypeChangeHelp)}</span>
+                                    </span>
+                                </p>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>

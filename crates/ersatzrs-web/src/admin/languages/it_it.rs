@@ -399,6 +399,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Ogni elemento viene riclassificato con il tipo di contenuto selezionato, sostituendo i valori dedotti dal componente aggiuntivo o impostati manualmente.",
         TextKey::TelevisionEpisode => "Episodio televisivo",
         TextKey::CollectionTypeAuto => "Determina dagli elementi",
+        TextKey::CurrentLibraryType => "Tipo di libreria attuale",
+        TextKey::CollectionTypeChangeHelp => "Puoi modificarlo dopo l’importazione. Salva e pubblica per riclassificare gli elementi esistenti senza importare nuovamente il componente aggiuntivo; ordine, inclusione e modifiche ai metadati vengono mantenuti.",
         TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::UnknownItems => "Elementi sconosciuti",
         TextKey::PlayableItems => "Elementi riproducibili",

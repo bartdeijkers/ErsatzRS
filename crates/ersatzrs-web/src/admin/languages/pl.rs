@@ -1118,6 +1118,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Każda pozycja otrzyma wybrany rodzaj multimediów, zastępując wartości ustalone przez dodatek lub wprowadzone ręcznie.",
         TextKey::TelevisionEpisode => "Odcinek telewizyjny",
         TextKey::CollectionTypeAuto => "Ustal na podstawie pozycji",
+        TextKey::CurrentLibraryType => "Bieżący typ biblioteki",
+        TextKey::CollectionTypeChangeHelp => "Możesz to zmienić po imporcie. Zapisz i opublikuj, aby przeklasyfikować istniejące pozycje bez ponownego importowania dodatku; kolejność, wybór pozycji i zmiany metadanych zostaną zachowane.",
         TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::UnknownItems => "Pozycje nieznane",
         TextKey::PlayableItems => "Pozycje odtwarzalne",

@@ -395,6 +395,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Every entry is reclassified with the selected media kind, replacing values the add-on derived or you set by hand.",
         TextKey::TelevisionEpisode => "Television Episode",
         TextKey::CollectionTypeAuto => "Determine from the items",
+        TextKey::CurrentLibraryType => "Current library type",
+        TextKey::CollectionTypeChangeHelp => "You can change this after import. Save and publish to reorganize the existing items without importing the add-on again; order, inclusion, and metadata edits are retained.",
         TextKey::NonPlayableItems => "Non-playable items",
         TextKey::UnknownItems => "Unknown items",
         TextKey::PlayableItems => "Playable items",

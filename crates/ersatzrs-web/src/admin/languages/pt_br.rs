@@ -1132,6 +1132,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Cada item é reclassificado com o tipo de mídia selecionado, substituindo valores derivados pelo complemento ou definidos por você.",
         TextKey::TelevisionEpisode => "Episódio de televisão",
         TextKey::CollectionTypeAuto => "Determinar pelos itens",
+        TextKey::CurrentLibraryType => "Tipo atual da biblioteca",
+        TextKey::CollectionTypeChangeHelp => "Você pode alterar isso após a importação. Salve e publique para reclassificar os itens existentes sem importar o complemento novamente; a ordem, a inclusão e as edições de metadados são preservadas.",
         TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::UnknownItems => "Itens desconhecidos",
         TextKey::PlayableItems => "Itens reproduzíveis",

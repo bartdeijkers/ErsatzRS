@@ -1081,9 +1081,12 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let mut review_tx = crate::db::begin_write(&self.0).await.repository()?;
         mark_list_ready_tx(&mut review_tx, id).await?;
         review_tx.commit().await.repository()?;
-        if existing.legacy_chapter_input != chapter_input
-            || existing.content_kind_override != content_kind_override
-        {
+        // A library-type edit changes only the local publication projection.
+        // The imported provider snapshot is already durable, so changing its
+        // list-wide content-kind override must not execute the add-on again.
+        // Legacy chapter input remains provider input and therefore still
+        // requires re-enumeration when that separate setting changes.
+        if existing.legacy_chapter_input != chapter_input {
             let provider = InstalledAddonMediaListProvider::new(self.0.clone());
             AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
                 .add_or_refresh(
@@ -3901,9 +3904,11 @@ async fn revert_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> 
         }
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "PresentationKind" = 0, "RequestedPresentationKind" = 0,
-                   "PresentationError" = NULL WHERE "Id" = ?"#,
+               SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
         )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListPresentationKind::RemoteStreams,
+        ))
         .bind(list_id)
         .execute(&mut *tx)
         .await
@@ -4231,9 +4236,11 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
     }
     sqlx::query(
         r#"UPDATE "AddonMediaList"
-           SET "PresentationKind" = 1, "RequestedPresentationKind" = 1,
-               "PresentationError" = NULL WHERE "Id" = ?"#,
+           SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
     )
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPresentationKind::TelevisionShow,
+    ))
     .bind(list_id)
     .execute(&mut *tx)
     .await

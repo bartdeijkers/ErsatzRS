@@ -1109,6 +1109,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ApplyToAllItemsPrompt => "Elk item krijgt de gekozen mediasoort, waarmee waarden die de add-on heeft afgeleid of die je zelf hebt ingesteld worden overschreven.",
         TextKey::TelevisionEpisode => "Televisieaflevering",
         TextKey::CollectionTypeAuto => "Bepalen uit de items",
+        TextKey::CurrentLibraryType => "Huidig bibliotheektype",
+        TextKey::CollectionTypeChangeHelp => "Je kunt dit na de import wijzigen. Sla op en publiceer om de bestaande items opnieuw in te delen zonder de add-on opnieuw te importeren; volgorde, opnamekeuzes en metadata-aanpassingen blijven behouden.",
         TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::UnknownItems => "Onbekende items",
         TextKey::PlayableItems => "Afspeelbare items",

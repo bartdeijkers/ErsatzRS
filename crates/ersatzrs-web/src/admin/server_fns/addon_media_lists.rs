@@ -1176,20 +1176,9 @@ pub async fn update_addon_media_list_with_state(
         })
         .await
         .inspect_err(|error| log_addon_media_list_failure("update", None, Some(id), error))?;
-    if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {
-        let outcome = state
-            .application
-            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
-                library_id, false,
-            ))
-            .await;
-        tracing::info!(
-            id,
-            library_id,
-            ?outcome,
-            "queued add-on list rescan after settings update"
-        );
-    }
+    // Save is the review boundary. Publication stages the durable imported
+    // snapshot and performs the one required library scan, so settings edits
+    // must not queue an eager scan (or indirectly enumerate the add-on) here.
     Ok(())
 }
 
