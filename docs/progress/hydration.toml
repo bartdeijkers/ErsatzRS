@@ -204,13 +204,19 @@ notes  = 'List island; hydrated copy/delete smoke clean.'
 name   = 'AddonMediaListsPage'
 status = '✅'
 routes = ['/media/addon-lists']
-notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real v2 add-on import with content override plus Search/Match/Delete actions in Chromium and Firefox without hydration errors. 2026-08-19 (ADR 0072): the add dialog now leads with the URL and resolves the optional add-on selection from its host; the spec drives the reordered fields and asserts the select fills itself.'
+notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real v2 add-on import with content override plus Search/Match/Delete actions in Chromium and Firefox without hydration errors. 2026-08-22: creation moved from the legacy dialog to the dedicated `/media/addon-lists/add` import page; its route-specific proof is recorded separately below.'
+
+[[page]]
+name   = 'AddAddonMediaListPage'
+status = '✅'
+routes = ['/media/addon-lists/add']
+notes  = '2026-08-22: `tests/e2e/addon-metadata-editor.spec.ts` proves the hydrated two-step import page in Chromium and Firefox, including the source URL, provider selection, collection-type switching, refresh policy, storage folder, original-order playlist choice, and disabled import guard.'
 
 [[page]]
 name   = 'AddonMediaListEditorPage'
 status = '✅'
 routes = ['/media/addon-lists/:id']
-notes  = '2026-08-15: Chromium and Firefox prove hydrated edit override persistence, unavailable status, Local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent. 2026-08-19 (ADR 0072): the editor gained a change-add-on selector with a confirmation modal; a browser proof of the confirmed re-import is still outstanding. 2026-08-19 (ADR 0073): `tests/e2e/hydration-pending-routes.spec.ts` now proves the three counted availability sections, the collapsed playable section, the per-entry media-kind selector, and that a recovered entry moves out of non-playable into playable.'
+notes  = '2026-08-22: Chromium and Firefox prove hydrated edit override persistence, Search/Match/Delete actions, the unified provider-ordered review table, per-entry media-kind selection, local replacement search/set/clear, explicit stale-target rendering, and provider recovery with retained replacement intent. The editor also has a change-add-on selector with a confirmation modal; a browser proof of the confirmed re-import remains outstanding.'
 
 [[page]]
 name   = 'AddonMediaListItemPage'

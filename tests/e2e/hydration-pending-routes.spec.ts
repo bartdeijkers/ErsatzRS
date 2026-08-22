@@ -363,6 +363,22 @@ fi
 `;
   writeFileSync(join(packageRoot, 'addon.sh'), shell);
   chmodSync(join(packageRoot, 'addon.sh'), 0o755);
+  const batch = [
+    '@echo off',
+    `if "%ERSATZRS_MEDIA_LIST_URL%"=="${editorSourceUrl}" (`,
+    `  echo ${editorListRecord}`,
+    `  if exist "..\\${addonId}-recovered.flag" (`,
+    `    echo ${editorAvailableRecord}`,
+    '  ) else (',
+    `    echo ${editorUnavailableRecord}`,
+    '  )',
+    ') else (',
+    `  echo ${importListRecord}`,
+    `  echo ${importItemRecord}`,
+    ')',
+    '',
+  ].join('\r\n');
+  writeFileSync(join(packageRoot, 'addon.cmd'), batch);
   const contentSha256 = addonContentHash(packageRoot);
   const manifest = JSON.stringify({
     manifest_version: 3,
@@ -376,7 +392,10 @@ fi
     host_version: '*',
     capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v2' }],
     dependencies: [],
-    entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' } },
+    entrypoints: {
+      any: { path: 'addon.sh', kind: 'posix_shell' },
+      'win-x64': { path: 'addon.cmd', kind: 'windows_batch' },
+    },
     permissions: {
       network_hosts: [],
       media_read: false,
@@ -447,11 +466,11 @@ INSERT INTO "AddonInstallation" (
 
 INSERT INTO "AddonMediaList" (
   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "Description", "ItemCount",
-  "AutoRefresh", "GeneratePlaylist"
+  "AutoRefresh", "GeneratePlaylist", "ReviewState", "PublishedRevision"
 ) VALUES (
   ${seed.editorListId}, '${sqlEscape(addonId)}', '${sqlEscape(seed.editorProviderId)}',
   '${sqlEscape(seed.editorSourceUrl)}',
-  '${sqlEscape(seed.editorListName)}', 'Editor proof', 1, 0, 1
+  '${sqlEscape(seed.editorListName)}', 'Editor proof', 1, 0, 1, 2, 1
 );
 INSERT INTO "AddonMediaListItem" (
   "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title",
@@ -644,28 +663,26 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
   test('add-on list import, overrides, replacement lifecycle, and recovery stay hydrated', async ({
     page,
   }, testInfo) => {
+    test.setTimeout(180_000);
     const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedAddonLists(testInfo);
     await forceEnglish(page);
 
     await gotoHydrated(page, '/media/addon-lists');
     await expect(page.getByText(seed.editorListName)).toBeVisible();
-    await page.getByRole('button', { name: /^add add-on list$/i }).click();
-    const addDialog = page
-      .locator('div[class*="panel"]')
-      .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
-      .last();
-    await expect(addDialog).toBeVisible();
+    await page.getByRole('link', { name: /^add add-on list$/i }).click();
+    await expect(page).toHaveURL(/\/media\/addon-lists\/add$/);
+    await waitForHydration(page);
     // ADR 0072: the URL comes first and the add-on selection below it starts
     // empty, so an unclaimed host still needs an explicit choice.
-    await expect(addDialog.locator('select[name="addon_id"]')).toHaveValue('');
-    await addDialog.locator('input[name="source_url"]').fill(seed.importSourceUrl);
-    await addDialog.locator('select[name="addon_id"]').selectOption(seed.addonId);
-    await addDialog
-      .locator('select[name="content_kind_override"]')
-      .selectOption('movie');
-    await addDialog.locator('input[name="folder_name"]').fill(`E2E Import ${testInfo.project.name}`);
-    await addDialog.getByRole('button', { name: /^add$/i }).click();
+    await expect(page.getByLabel('Add-on', { exact: true })).toHaveValue('');
+    await page.getByLabel('Add-on list URL').fill(seed.importSourceUrl);
+    await page.getByLabel('Add-on', { exact: true }).selectOption(seed.addonId);
+    await page.getByLabel('Collection Type', { exact: true }).selectOption('movies');
+    await page.getByLabel('Storage folder').fill(`E2E Import ${testInfo.project.name}`);
+    await page.getByRole('button', { name: /^import$/i }).click();
+    await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
+    await waitForHydration(page);
     await expect.poll(() => sqlite(`
 SELECT "ContentKindOverride" FROM "AddonMediaList"
 WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
@@ -673,6 +690,7 @@ WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
 `)).toBe('2');
     await expect(page.getByText(seed.importListName)).toBeVisible();
 
+    await gotoHydrated(page, '/media/addon-lists');
     const editorRow = page.locator('tr').filter({ hasText: seed.editorListName });
     await expect(editorRow.getByRole('link', { name: /^search add-on list$/i })).toHaveAttribute(
       'href',
@@ -699,42 +717,40 @@ SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
     await expect(page.locator('form[action="/api/addon-lists/save"]')).toBeVisible();
-    await page
-      .locator('select[name="content_kind_override"]')
-      .selectOption('music_video');
+    await page.getByLabel('Collection Type', { exact: true }).selectOption('other_videos');
     await page.locator('input[name="auto_refresh"]').check();
     await page.locator('input[name="generate_playlist"]').uncheck();
+    const saveNavigation = page.waitForEvent('framenavigated');
     await page.getByRole('button', { name: /^save add-on list$/i }).click();
-    await expect(page).toHaveURL(/\/media\/addon-lists$/);
+    await saveNavigation;
+    await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${seed.editorListId}$`));
+    await waitForHydration(page);
 
     expect(sqlite(`
 SELECT "AutoRefresh" || ',' || "GeneratePlaylist" || ',' || "ContentKindOverride"
 FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
-`)).toBe('1,0,3');
+`)).toBe('1,0,4');
+    // Saving edits the review draft but leaves the published playlist intact.
     expect(sqlite(`
 SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
-`)).toBe('');
+`)).toBe(generatedPlaylistId);
     expect(sqlite(`
 SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
-`)).toBe('0');
+`)).toBe('1');
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    // ADR 0073: entries are grouped by availability. The unavailable entry
-    // belongs to the non-playable section, which is the one section expanded by
-    // default precisely because it needs attention.
-    const nonPlayable = page.locator('[data-testid="non-playable-items"]');
-    const unknownSection = page.locator('[data-testid="unknown-items"]');
-    const playable = page.locator('[data-testid="playable-items"]');
-    await expect(nonPlayable.getByRole('heading', { name: /^Non-playable items \(1\)$/ })).toBeVisible();
-    await expect(unknownSection.getByRole('heading', { name: /^Unknown items \(0\)$/ })).toBeVisible();
-    await expect(playable.getByRole('heading', { name: /^Playable items \(\d+\)$/ })).toBeVisible();
-    await expect(nonPlayable.locator('table')).toBeVisible();
-    await expect(playable.locator('table')).toBeHidden();
-
-    let itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    // The shared metadata editor keeps every provider-ordered entry in one
+    // review table; availability is a row status rather than a second hierarchy.
+    const replacementRow = () =>
+      page
+        .getByTestId('addon-metadata-items')
+        .locator('tbody tr')
+        .filter({ hasText: seed.replacementTitle })
+        .first();
+    let itemRow = replacementRow();
     await expect(itemRow).toBeVisible();
     // The entry owns its classification, so the row carries its own selector.
-    await expect(itemRow.locator('select')).toBeVisible();
+    await expect(itemRow.getByRole('combobox', { name: 'Media Kind' })).toBeVisible();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const replacementPicker = page
       .locator('div[class*="picker-panel"]')
@@ -751,13 +767,13 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId}
   AND "MediaItemId" = ${seed.replacementMediaItemId}
   AND "MediaVersionId" = ${seed.replacementMediaVersionId};
 `)).toBe('1');
-    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    itemRow = replacementRow();
     await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
 
     sqlite(`DELETE FROM "MediaStream" WHERE "Id" = ${seed.replacementMediaStreamId};`);
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
-    await expect(itemRow.locator('[data-replacement-state="invalid"]')).toHaveText(
+    itemRow = replacementRow();
+    await expect(itemRow.locator('[data-replacement-state="invalid"]')).toContainText(
       'Invalid replacement',
     );
     await itemRow.getByRole('button', { name: /^clear$/i }).click();
@@ -776,7 +792,7 @@ INSERT INTO "MediaStream" (
 );
 `);
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    itemRow = replacementRow();
     await itemRow.getByRole('button', { name: /^replace$/i }).click();
     const recoveredCandidateRow = page
       .locator('div[class*="picker-panel"]')
@@ -792,15 +808,13 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 `)).toBe('1');
 
     writeFileSync(seed.recoveryFlagPath, 'recovered\n');
-    await gotoHydrated(page, '/media/addon-lists');
-    await page.getByRole('button', { name: /^add add-on list$/i }).click();
-    const recoveryDialog = page
-      .locator('div[class*="panel"]')
-      .filter({ has: page.getByRole('heading', { name: 'Add add-on list' }) })
-      .last();
-    await recoveryDialog.locator('select[name="addon_id"]').selectOption(seed.addonId);
-    await recoveryDialog.locator('input[name="source_url"]').fill(seed.editorSourceUrl);
-    await recoveryDialog.getByRole('button', { name: /^add$/i }).click();
+    await gotoHydrated(page, '/media/addon-lists/add');
+    await page.getByLabel('Add-on', { exact: true }).selectOption(seed.addonId);
+    await page.getByLabel('Add-on list URL').fill(seed.editorSourceUrl);
+    await page.getByLabel('Collection Type', { exact: true }).selectOption('other_videos');
+    await page.getByRole('button', { name: /^import$/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${seed.editorListId}\\?import=1$`));
+    await waitForHydration(page);
     await expect.poll(() => sqlite(`
 SELECT "Availability" FROM "AddonMediaListItem"
 WHERE "Id" = ${seed.editorItemId};
@@ -811,13 +825,10 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 `)).toBe('1');
 
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    // Recovering to Available moves the entry out of the non-playable section
-    // and into the playable one, which is collapsed until asked for.
-    await expect(nonPlayable.getByRole('heading', { name: /^Non-playable items \(0\)$/ })).toBeVisible();
-    await expect(nonPlayable.locator('tr').filter({ hasText: seed.replacementTitle })).toHaveCount(0);
-    await playable.getByRole('button', { name: /^Playable items/ }).click();
-    itemRow = playable.locator('tr').filter({ hasText: seed.replacementTitle }).first();
+    // Recovery updates the same row in place and removes its review status.
+    itemRow = replacementRow();
     await expect(itemRow).toBeVisible();
+    await expect(itemRow).toContainText('Available');
     await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
     expect(runtimeErrors).toEqual([]);
   });

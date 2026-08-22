@@ -12,11 +12,24 @@ use std::path::{Path, PathBuf};
 use directories::BaseDirs;
 
 const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
+/// Optional absolute override for the persistent ErsatzRS state root.
+pub const APP_STATE_DIR_ENV_VAR: &str = "ERSATZRS_APP_STATE_DIR";
+/// Optional absolute override for the ErsatzRS local-data/cache root.
+pub const APP_DATA_DIR_ENV_VAR: &str = "ERSATZRS_APP_DATA_DIR";
+
+fn configured_directory(name: &str) -> Option<PathBuf> {
+    crate::startup_config::environment_variable(name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
 
 /// Application state root, matching the default `SQLite` database directory
 /// (`~/.ersatzrs`).
 #[must_use]
 pub fn app_state_folder() -> PathBuf {
+    if let Some(path) = configured_directory(APP_STATE_DIR_ENV_VAR) {
+        return path;
+    }
     BaseDirs::new().map_or_else(
         || Path::new(".").to_path_buf(),
         |base_dirs| base_dirs.home_dir().join(DEFAULT_SQLITE_DIR_NAME),
@@ -138,6 +151,9 @@ async fn list_channel_stream_selectors_in(folder: &Path) -> Vec<String> {
 /// (`data_local_dir()/ErsatzRS`), falling back to `./` when no home directory
 /// is available.
 fn app_data_folder() -> PathBuf {
+    if let Some(path) = configured_directory(APP_DATA_DIR_ENV_VAR) {
+        return path;
+    }
     BaseDirs::new().map_or_else(
         || Path::new(".").to_path_buf(),
         |base_dirs| base_dirs.data_local_dir().join("ErsatzRS"),

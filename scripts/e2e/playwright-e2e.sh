@@ -146,6 +146,8 @@ DB_PATH="$TMP_ROOT/ErsatzRS.db"
 TMP_HOME_ENV="$(native_env_path "$TMP_ROOT/home")"
 DB_PATH_ENV="$(native_env_path "$DB_PATH")"
 SITE_ROOT_ENV="$(native_env_path "$SITE_ROOT")"
+APP_STATE_DIR_ENV="$(native_env_path "$TMP_ROOT/home/.ersatzrs")"
+APP_DATA_DIR_ENV="$(native_env_path "$TMP_ROOT/app-data/ErsatzRS")"
 TMP_LOG="$TMP_ROOT/ersatzrs-web.log"
 SERVER_PID=""
 
@@ -169,6 +171,8 @@ log "starting ersatzrs-web on $BASE_URL"
 log "database: $DB_PATH"
 log "site root: $SITE_ROOT"
 HOME="$TMP_HOME_ENV" \
+ERSATZRS_APP_STATE_DIR="$APP_STATE_DIR_ENV" \
+ERSATZRS_APP_DATA_DIR="$APP_DATA_DIR_ENV" \
 DATABASE_URL="sqlite:$DB_PATH_ENV" \
 LEPTOS_SITE_ROOT="$SITE_ROOT_ENV" \
 LEPTOS_OUTPUT_NAME="ersatzrs-web" \

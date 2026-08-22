@@ -70,6 +70,10 @@ release section when tagging a release.
   temporary hosts to loopback, so the hydration gates can open their temporary
   SQLite databases without triggering a Windows Firewall prompt.
 
+- Keep Windows browser-gate artwork and runtime caches inside the throwaway
+  test root by explicitly overriding both ErsatzRS state directories; Windows
+  known-folder resolution otherwise ignores an isolated `HOME`.
+
 - Generate a managed list-level `tvshow.nfo` or `artist.nfo` from the
   add-on's title and description before applying an automatic library
   presentation, including before the first library scan. An empty untracked

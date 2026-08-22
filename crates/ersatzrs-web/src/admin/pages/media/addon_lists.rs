@@ -1557,7 +1557,12 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                             <span style=icon_style(IconName::Settings, "1.05rem") aria-hidden="true"></span>
                             <span>{tr(TextKey::Addon)}</span>
                         </span>
-                        <select class=style::boxed_input prop:value=move || addon_id.get() on:change=move |event| {
+                        <select
+                            class=style::boxed_input
+                            name="addon_id"
+                            aria-label=tr(TextKey::Addon)
+                            prop:value=move || addon_id.get()
+                            on:change=move |event| {
                             let value = event_target_value(&event);
                             addon_chosen.set(!value.is_empty());
                             addon_id.set(value);
@@ -1575,7 +1580,12 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                                 <span style=move || icon_style(presentation_icon(presentation.get()), "1.05rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::CollectionType)}</span>
                             </span>
-                            <select class=style::boxed_input prop:value=move || presentation_kind_value(presentation.get()) on:change=move |event| {
+                            <select
+                                class=style::boxed_input
+                                name="presentation_kind"
+                                aria-label=tr(TextKey::CollectionType)
+                                prop:value=move || presentation_kind_value(presentation.get())
+                                on:change=move |event| {
                                 presentation.set(presentation_kind_from_value(&event_target_value(&event)));
                             }>
                                 <option value="movies">{tr(TextKey::Movies)}</option>
@@ -2454,6 +2464,8 @@ fn AddonMediaListEditorIsland(
                                     </span>
                                     <select
                                         class=style::boxed_input
+                                        name="presentation_kind"
+                                        aria-label=tr(TextKey::CollectionType)
                                         prop:value=move || presentation_kind_value(presentation_kind.get())
                                         on:change=move |event| {
                                             let next = presentation_kind_from_value(&event_target_value(&event));

@@ -252,6 +252,31 @@ INSERT INTO "AddonMediaListItem" (
 test.describe('shared add-on metadata editor', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required');
 
+  test('keeps source and import metadata together on the add page', async ({ page }) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    await forceEnglish(page);
+    await gotoHydrated(page, '/media/addon-lists/add');
+
+    await expect(page.getByRole('heading', { name: 'Add add-on list' })).toBeVisible();
+    await expect(page.getByLabel('Add-on list URL')).toBeVisible();
+    await expect(page.getByLabel('Add-on', { exact: true })).toHaveValue('');
+
+    const collectionType = page.getByLabel('Collection Type', { exact: true });
+    await expect(collectionType).toHaveValue('television_show');
+    await collectionType.selectOption('movies');
+    await expect(collectionType).toHaveValue('movies');
+
+    await expect(page.getByLabel('Storage folder')).toBeVisible();
+    await expect(
+      page.getByRole('checkbox', { name: 'Update list from the provider once each day' }),
+    ).toBeChecked();
+    await expect(
+      page.getByRole('checkbox', { name: 'Create playlist in original order' }),
+    ).not.toBeChecked();
+    await expect(page.getByRole('button', { name: 'Import' })).toBeDisabled();
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('reviews, edits, uploads, rejects stale ETags, publishes, and reincludes', async ({
     page,
   }, testInfo) => {

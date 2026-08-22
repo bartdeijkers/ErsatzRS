@@ -256,7 +256,10 @@ spec subsets that are known to be independent.
 
 On Windows, run the same wrapper from Git Bash. It keeps shell-owned paths in
 POSIX form while translating the temporary database, home, site, and fixture
-paths passed to native Windows processes into drive-letter form. Its web host
+paths passed to native Windows processes into drive-letter form. The wrapper
+also sets `ERSATZRS_APP_STATE_DIR` and `ERSATZRS_APP_DATA_DIR`, because Windows
+known-folder resolution does not honor a temporary `HOME`; artwork and caches
+therefore remain inside the throwaway test root on every platform. Its web host
 always binds to loopback, so the E2E run does not require a Windows Firewall
 approval.
 
