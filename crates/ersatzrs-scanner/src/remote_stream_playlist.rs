@@ -559,10 +559,16 @@ pub async fn sync_playlist_files(
     let folder = parent.join(&manifest.folder);
     let sidecar_path = folder.join(".ersatzrs-playlist.json");
     let existing = load_sidecar(&sidecar_path)?;
+    let published_selection = published_provider_selection(pool, manifest_path).await?;
     let manifest_etag = manifest_etag(manifest_bytes, &addon, content_kind_override);
     let now = Utc::now();
     if let Some(state) = existing.as_ref() {
-        let cache_is_fresh = matches!(state.version, 1..=3)
+        let cache_matches_publication = published_selection.as_ref().is_none_or(|selection| {
+            !selection.is_publishing
+                && (selection.provider_ids.is_empty() || state.last_result.entries > 0)
+        });
+        let cache_is_fresh = cache_matches_publication
+            && matches!(state.version, 1..=3)
             && state.last_result.kind == "ok"
             && state.manifest_etag == manifest_etag
             && managed_files_intact(&folder, state)
@@ -637,11 +643,10 @@ pub async fn sync_playlist_files(
         .into_iter()
         .filter(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()))
         .collect::<Vec<_>>();
-    let published_ids = published_provider_ids(pool, manifest_path).await?;
-    if let Some(published_ids) = published_ids {
+    if let Some(published_selection) = published_selection {
         selected.retain(|entry| {
             let provider_id = entry.provider_id.as_deref().unwrap_or(&entry.id);
-            published_ids.contains(provider_id)
+            published_selection.provider_ids.contains(provider_id)
         });
     }
     // Enrichment runs only after item limits, filters, and exclusions have been
@@ -756,7 +761,7 @@ pub async fn sync_playlist_files(
         };
         let generated_nfo = metadata.map_or_else(
             || generated_nfo_bytes(manifest, entry),
-            |metadata| generated_reviewed_nfo_bytes(entry, metadata, &artwork_roles),
+            |metadata| generated_reviewed_nfo_bytes(manifest, entry, metadata, &artwork_roles),
         )?;
         let nfo_bytes =
             ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
@@ -1129,17 +1134,27 @@ async fn append_item_chapter_fragments(
     Ok(())
 }
 
-/// Return the provider identities in the current published snapshot.
+#[derive(Debug)]
+struct PublishedProviderSelection {
+    provider_ids: BTreeSet<String>,
+    is_publishing: bool,
+}
+
+/// Return the provider identities in the current published snapshot and
+/// whether an explicit publication is currently staged.
 ///
 /// `None` preserves compatibility for unmanaged manifests. Managed draft
 /// lists return an empty set, so scanners cannot accidentally publish them.
-async fn published_provider_ids(
+async fn published_provider_selection(
     pool: &DbPool,
     manifest_path: &Path,
-) -> Result<Option<BTreeSet<String>>> {
-    let managed: Option<i64> = sqlx::query_scalar(
-        r#"SELECT "AddonMediaListId" FROM "AddonMediaListLibrary"
-           WHERE "ManifestPath" = ? LIMIT 1"#,
+) -> Result<Option<PublishedProviderSelection>> {
+    let managed = sqlx::query_as::<_, (i64, i32)>(
+        r#"SELECT "managed"."AddonMediaListId", "list"."ReviewState"
+           FROM "AddonMediaListLibrary" AS "managed"
+           JOIN "AddonMediaList" AS "list"
+             ON "list"."Id" = "managed"."AddonMediaListId"
+           WHERE "managed"."ManifestPath" = ? LIMIT 1"#,
     )
     .bind(manifest_path.to_string_lossy().as_ref())
     .fetch_optional(pool)
@@ -1149,8 +1164,17 @@ async fn published_provider_ids(
             "unable to resolve managed list publication: {error}"
         ))
     })?;
-    let Some(list_id) = managed else {
+    let Some((list_id, review_state)) = managed else {
         return Ok(None);
+    };
+    let is_publishing = match review_state {
+        0..=2 => false,
+        3 => true,
+        value => {
+            return Err(PlaylistError::Enumeration(format!(
+                "stored add-on media-list review state {value} is invalid"
+            )))
+        }
     };
     let values = sqlx::query_scalar::<_, String>(
         r#"SELECT "ProviderId" FROM "AddonMediaListItem"
@@ -1162,7 +1186,10 @@ async fn published_provider_ids(
     .map_err(|error| {
         PlaylistError::Enumeration(format!("unable to load published list items: {error}"))
     })?;
-    Ok(Some(values.into_iter().collect()))
+    Ok(Some(PublishedProviderSelection {
+        provider_ids: values.into_iter().collect(),
+        is_publishing,
+    }))
 }
 
 /// Apply the provider snapshot plus field-level operator overrides retained by
@@ -1710,6 +1737,7 @@ fn generated_nfo_bytes(
 }
 
 fn generated_reviewed_nfo_bytes(
+    manifest: &ValidatedPlaylistManifest,
     entry: &PlaylistEntry,
     metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
     artwork_roles: &BTreeMap<String, ManagedPlaylistArtwork>,
@@ -1726,6 +1754,15 @@ fn generated_reviewed_nfo_bytes(
         | WireContentKind::Image => "movie",
     };
     let mut published = metadata.clone();
+    published.tags = union_values(&manifest.manifest.tags, &published.tags);
+    if published.year.is_none() {
+        published.year = manifest.manifest.defaults.year;
+    }
+    if published.content_ratings.is_empty() {
+        if let Some(rating) = &manifest.manifest.defaults.content_rating {
+            published.content_ratings.push(rating.clone());
+        }
+    }
     published.artwork.retain_mut(|candidate| {
         let key = match candidate.role {
             AddonMediaListArtworkRole::Poster => "poster",
@@ -3509,6 +3546,124 @@ create_playlist: true
             .await
             .expect_err("updated add-on must bypass the fresh interval");
         assert!(error.to_string().contains("enumeration failed"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn staged_publication_bypasses_a_fresh_empty_draft_cache() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let package_root = temp.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).expect("package root");
+        let script = package_root.join("fixture.sh");
+        write_fixture_playlist_script(&script, "https://example.test/1", true);
+        let pool = fixture_addon_pool(&package_root).await;
+        let runtime = AddonRuntimeContext::default();
+        let manifest_path = temp.path().join("Managed.playlist.yml");
+        let manifest_bytes = valid_yaml().as_bytes();
+        let manifest = parse_playlist_manifest(valid_yaml(), &manifest_path).expect("manifest");
+
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Managed', 7, 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("library");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ReviewState"
+               ) VALUES (1, 'org.ersatzrs.addon.fixture', 'fixture/list',
+                         'https://example.test/playlist', 'Managed', 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("managed list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (1, 1, 'Managed', ?)"#,
+        )
+        .bind(manifest_path.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .expect("managed library");
+        for (provider_id, rank, title) in [("one", 0, "One"), ("two", 1, "Two")] {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                       "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+                       "Title", "SourceUrl", "Published", "ProviderMetadataJson"
+                   ) VALUES (1, ?, ?, 4, ?, ?, ?, 0, ?)"#,
+            )
+            .bind(provider_id)
+            .bind(title)
+            .bind(rank)
+            .bind(title)
+            .bind(format!("https://example.test/{provider_id}"))
+            .bind(serde_json::json!({"title": title}).to_string())
+            .execute(&pool)
+            .await
+            .expect("managed item");
+        }
+
+        let draft = sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+            .await
+            .expect("draft sync");
+        assert!(draft.enumerated);
+        assert!(draft.definitions.is_empty());
+        assert_eq!(draft.state.last_result.entries, 0);
+
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 2 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .expect("simulate affected publication");
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "Published" = 1
+               WHERE "AddonMediaListId" = 1"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("publish item selection");
+
+        let recovered =
+            sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+                .await
+                .expect("recover published empty cache");
+        assert!(recovered.enumerated);
+        assert_eq!(recovered.definitions.len(), 2);
+
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 3 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .expect("stage publication");
+        let publishing =
+            sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+                .await
+                .expect("publishing sync");
+        assert!(publishing.enumerated);
+        assert_eq!(
+            publishing
+                .definitions
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["one", "two"]
+        );
+
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 2 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .expect("commit publication");
+        let published =
+            sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
+                .await
+                .expect("published cache sync");
+        assert!(!published.enumerated);
+        assert_eq!(published.definitions.len(), 2);
     }
 
     #[cfg(unix)]

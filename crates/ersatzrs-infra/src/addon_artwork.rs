@@ -6,6 +6,8 @@ use std::{io::Write as _, path::Path};
 use futures_util::StreamExt as _;
 use reqwest::{header::CONTENT_TYPE, redirect::Policy, Client};
 
+const ARTWORK_USER_AGENT: &str = concat!("ErsatzRS/", env!("CARGO_PKG_VERSION"));
+
 /// Maximum accepted size for one artwork file.
 pub const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
 /// Opaque URL scheme used inside metadata drafts for database-backed uploads.
@@ -19,6 +21,7 @@ pub const UPLOAD_URL_PREFIX: &str = "ersatzrs-upload://";
 /// Returns an error when the HTTP client cannot be constructed.
 pub fn client() -> Result<Client, String> {
     Client::builder()
+        .user_agent(ARTWORK_USER_AGENT)
         .timeout(Duration::from_secs(10))
         .redirect(Policy::none())
         .build()
@@ -156,6 +159,34 @@ pub fn upload_id(value: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn downloader_identifies_ersatzrs_to_artwork_hosts() {
+        use httpmock::{Method::GET, MockServer};
+
+        let server = MockServer::start_async().await;
+        let image = b"\xff\xd8\xfffixture jpeg bytes";
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path("/episode.jpg")
+                    .header("user-agent", ARTWORK_USER_AGENT);
+                then.status(200)
+                    .header("content-type", "image/jpeg")
+                    .body(image);
+            })
+            .await;
+
+        let client = client().expect("artwork client");
+        let (downloaded, extension) =
+            download(&client, &format!("{}/episode.jpg", server.base_url()))
+                .await
+                .expect("identified artwork download");
+
+        assert_eq!(downloaded, image);
+        assert_eq!(extension, "jpg");
+        request.assert_calls_async(1).await;
+    }
 
     #[test]
     fn validates_declared_image_signature_and_bounds() {

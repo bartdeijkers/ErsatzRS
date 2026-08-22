@@ -14,7 +14,12 @@ updateable extraction engine; its add-on mapper only translates full yt-dlp
 JSON. Beeld & Geluid uses one cross-platform adapter to normalize scraped data
 and prefer episode-card stills over generic broadcaster artwork. Native Linux,
 WSL, Windows, Chromium, Firefox, migration, and full workspace closeout proof
-complete the contract.
+complete the contract. A staged publication explicitly bypasses the empty
+draft-era Remote Stream cache, existing affected publications self-repair on
+their next scan, and health reports empty successful sidecars. The shared
+artwork client identifies ErsatzRS so provider CDNs can serve reviewed images
+consistently to both publication and scanning paths. Reviewed item NFOs retain
+list-wide tags and defaults without duplicating values.
 '''
 
 [[debt]]

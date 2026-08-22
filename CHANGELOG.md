@@ -19,6 +19,18 @@ release section when tagging a release.
   through the exact runtime conformance parser, allowing provider adapters to
   reject invalid metadata types and formats before publication.
 
+### Fixed
+
+- Publishing a reviewed add-on list now bypasses a fresh empty draft cache, so
+  the staged item selection is materialized into its managed library on the
+  first publish; existing published lists with that stale empty state repair
+  themselves on their next scan. Remote Stream health also understands v3
+  sidecars and reports successful synchronizations with no active entries.
+  Shared artwork downloads now identify ErsatzRS to providers that reject
+  anonymous HTTP clients, preventing Beeld & Geluid episode stills from
+  failing publication with HTTP 403. Reviewed NFO generation also retains
+  list-wide tags and metadata defaults alongside item metadata.
+
 ### Removed
 
 - Dropped the unread `pin_id` field from the Plex sign-in island's polling

@@ -5875,6 +5875,9 @@ sync:
   on_removed: trash
 create_playlist: true
 tags: [Fixture Tag]
+defaults:
+  content_rating: TV-G
+  year: 1999
 ",
         )
         .expect("manifest");
@@ -5955,9 +5958,10 @@ tags: [Fixture Tag]
         .expect("add-on installation");
         sqlx::query(
             r#"INSERT INTO "AddonMediaList" (
-                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ContentKindOverride"
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "ContentKindOverride", "ReviewState"
                ) VALUES (50, 'org.ersatzrs.addon.fixture', 'fixture/list',
-                         'https://example.test/playlist', 'Fixture order', 0)"#,
+                         'https://example.test/playlist', 'Fixture order', 0, 2)"#,
         )
         .execute(&pool)
         .await
@@ -5971,6 +5975,58 @@ tags: [Fixture Tag]
         .execute(&pool)
         .await
         .expect("managed list library");
+        let published_metadata = [
+            (
+                "item:first:chapter:0",
+                "First - Intro",
+                "https://example.test/1?start=0&end=30",
+                serde_json::json!({"title": "First - Intro"}),
+            ),
+            (
+                "item:first",
+                "First",
+                "https://example.test/1",
+                serde_json::json!({
+                    "title": "First",
+                    "original_title": "Original First",
+                    "sort_title": "A First",
+                    "outline": "First outline",
+                    "plot": "First plot",
+                    "tagline": "First tagline",
+                    "year": 2001,
+                    "release_date": "2001-02-03T04:05:06Z",
+                    "content_ratings": ["12"],
+                    "collection": "Example Collection",
+                    "original_broadcasters": ["Original Network"],
+                    "broadcasters": ["Current Network"]
+                }),
+            ),
+            (
+                "second",
+                "Second",
+                "https://example.test/2",
+                serde_json::json!({"title": "Second"}),
+            ),
+        ];
+        for (rank, (provider_id, title, source_url, metadata)) in
+            published_metadata.into_iter().enumerate()
+        {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                       "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+                       "Title", "SourceUrl", "Published", "ProviderMetadataJson"
+                   ) VALUES (50, ?, ?, 4, ?, ?, ?, 1, ?)"#,
+            )
+            .bind(provider_id)
+            .bind(title)
+            .bind(i32::try_from(rank).expect("published rank"))
+            .bind(title)
+            .bind(source_url)
+            .bind(metadata.to_string())
+            .execute(&pool)
+            .await
+            .expect("published list item");
+        }
 
         let report = scan_local_library(
             &pool,
@@ -6019,6 +6075,16 @@ tags: [Fixture Tag]
             metadata.get::<String, _>("Broadcasters"),
             r#"["Current Network"]"#
         );
+        let second_defaults = sqlx::query_as::<_, (Option<i32>, Option<String>)>(
+            r#"SELECT "rsm"."Year", "rsm"."ContentRating"
+               FROM "RemoteStreamMetadata" AS "rsm"
+               JOIN "RemoteStream" AS "rs" ON "rs"."Id" = "rsm"."RemoteStreamId"
+               WHERE "rs"."ProviderId" = 'second'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("second metadata defaults");
+        assert_eq!(second_defaults, (Some(1999), Some("TV-G".to_owned())));
         let full_item_id: i64 = sqlx::query_scalar(
             r#"SELECT "Id" FROM "RemoteStream" WHERE "ProviderId" = 'item:first'"#,
         )
@@ -6128,6 +6194,43 @@ tags: [Fixture Tag]
         .execute(&pool)
         .await
         .expect("update fixture installation integrity");
+        for (provider_id, metadata) in [
+            (
+                "item:first:chapter:0",
+                serde_json::json!({"title": "Updated First - Intro"}),
+            ),
+            (
+                "item:first",
+                serde_json::json!({
+                    "title": "Updated First",
+                    "original_title": "Updated Original",
+                    "sort_title": "Updated Sort",
+                    "outline": "Updated outline",
+                    "plot": "Updated plot",
+                    "tagline": "Updated tagline",
+                    "year": 2002,
+                    "release_date": "2002-03-04T05:06:07Z",
+                    "content_ratings": ["16"],
+                    "collection": "Updated Collection",
+                    "original_broadcasters": ["Earlier Network"],
+                    "broadcasters": ["Later Network"]
+                }),
+            ),
+        ] {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "ProviderMetadataJson" = ?
+                   WHERE "AddonMediaListId" = 50 AND "ProviderId" = ?"#,
+            )
+            .bind(metadata.to_string())
+            .bind(provider_id)
+            .execute(&pool)
+            .await
+            .expect("update reviewed provider metadata");
+        }
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision" = 2 WHERE "Id" = 50"#)
+            .execute(&pool)
+            .await
+            .expect("advance published revision");
         let rescan = scan_local_library(
             &pool,
             &LocalScanConfig {

@@ -59,6 +59,8 @@ struct HealthSidecar {
 struct HealthOutcome {
     kind: String,
     #[serde(default)]
+    entries: usize,
+    #[serde(default)]
     truncated: bool,
 }
 
@@ -137,7 +139,7 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
                 .ok()
                 .and_then(|value| serde_json::from_str::<HealthSidecar>(&value).ok())
             {
-                Some(state) if matches!(state.version, 1 | 2) => state,
+                Some(state) if matches!(state.version, 1..=3) => state,
                 _ => {
                     warnings.push(format!("{name} has never synchronized successfully"));
                     continue;
@@ -146,6 +148,9 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
             if state.last_result.kind != "ok" {
                 failures.push(format!("{name} last synchronization failed"));
                 continue;
+            }
+            if state.last_result.entries == 0 {
+                warnings.push(format!("{name} synchronized without active entries"));
             }
             let stale_after = interval.checked_mul(2).unwrap_or(Duration::MAX);
             if Utc::now()
@@ -349,6 +354,14 @@ mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
 
+    fn write_sidecar(folder: &Path, state: &serde_json::Value) {
+        std::fs::write(
+            folder.join(".ersatzrs-playlist.json"),
+            serde_json::to_vec(state).expect("state JSON"),
+        )
+        .expect("sidecar");
+    }
+
     #[tokio::test]
     async fn health_reports_missing_duration_and_unknown_addon() {
         let temp = tempfile::TempDir::new().expect("temp dir");
@@ -360,21 +373,17 @@ mod tests {
             "url: https://example.test/list\naddon: org.ersatzrs.addon.fixture\n",
         )
         .expect("manifest");
-        let state = serde_json::json!({
-            "version": 1,
+        let mut state = serde_json::json!({
+            "version": 3,
             "last_sync": Utc::now(),
-            "last_result": {"kind": "ok", "truncated": false},
+            "last_result": {"kind": "ok", "entries": 1, "truncated": false},
             "entries": [{
                 "file": "entry.yml",
                 "duration_seconds": null,
                 "active": true
             }]
         });
-        std::fs::write(
-            folder.join(".ersatzrs-playlist.json"),
-            serde_json::to_vec(&state).expect("state JSON"),
-        )
-        .expect("sidecar");
+        write_sidecar(&folder, &state);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -436,6 +445,14 @@ mod tests {
         let result = check.check().await.expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("1 entries without duration"));
+
+        state["last_result"]["entries"] = serde_json::json!(0);
+        write_sidecar(&folder, &state);
+        let result = check.check().await.expect("empty health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result
+            .message
+            .contains("synchronized without active entries"));
 
         sqlx::query(r#"DELETE FROM "AddonInstallation""#)
             .execute(&pool)
