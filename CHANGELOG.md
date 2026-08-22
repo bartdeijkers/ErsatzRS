@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- The standalone add-on validator can now validate captured media-list NDJSON
+  through the exact runtime conformance parser, allowing provider adapters to
+  reject invalid metadata types and formats before publication.
+
 ### Removed
 
 - Dropped the unread `pin_id` field from the Plex sign-in island's polling

@@ -11,8 +11,10 @@ provider and override snapshots, durable inclusion, atomic publication, the
 shared localized list/item editor, pagination, artwork materialization, health,
 and both official provider mappings are implemented. yt-dlp remains the
 updateable extraction engine; its add-on mapper only translates full yt-dlp
-JSON. Native Linux, WSL, Windows, Chromium, Firefox, migration, and full
-workspace closeout proof complete the contract.
+JSON. Beeld & Geluid uses one cross-platform adapter to normalize scraped data
+and prefer episode-card stills over generic broadcaster artwork. Native Linux,
+WSL, Windows, Chromium, Firefox, migration, and full workspace closeout proof
+complete the contract.
 '''
 
 [[debt]]
@@ -28,7 +30,7 @@ id          = 'official-addons-do-not-share-a-complete-editor-contract'
 description = 'Have Beeld & Geluid and yt-dlp supply list and item metadata through one complete provider-neutral document consumed by one ErsatzRS editor.'
 discovered  = '2026-08-21'
 adr         = '0075'
-evidence    = 'Resolved by media-list.list.v4 and the official Beeld & Geluid and yt-dlp mappings, both consumed by the same ErsatzRS editor without host-side provider branches.'
+evidence    = 'Resolved by media-list.list.v4 and the official Beeld & Geluid and yt-dlp mappings, both consumed by the same ErsatzRS editor without host-side provider branches. Beeld & Geluid 0.8.0 routes its Windows and POSIX scrapers through one Deno adapter; the pinned host validator now runs the exact media-list conformance parser over adapter output in public CI.'
 resolved    = true
 
 [[debt]]
@@ -44,5 +46,5 @@ id          = 'addon-metadata-platform-proof-is-incomplete'
 description = 'Prove equivalent metadata output and review publication on native Linux, WSL, and Windows.'
 discovered  = '2026-08-21'
 adr         = '0075'
-evidence    = 'Resolved by live Beeld & Geluid and yt-dlp runs on native Linux, native Windows, and WSL, including a spaced Unicode WSL path, plus Chromium and Firefox publication flows and the full release-candidate gate.'
+evidence    = 'Resolved by live Beeld & Geluid and yt-dlp runs on native Linux, native Windows, and WSL, including a spaced Unicode WSL path, plus Chromium and Firefox publication flows and the full release-candidate gate. A live Kreatief met Kurk regression on Windows and WSL produced 27 unique episode stills, no generic VPRO artwork, and output accepted by the runtime conformance parser.'
 resolved    = true

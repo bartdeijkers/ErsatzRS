@@ -1,7 +1,15 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use ersatzrs_addon_contract::{validate_contract_document, ContractDocumentKind};
+use ersatzrs_addon_contract::{
+    conform_media_list_output, validate_contract_document, ContractDocumentKind,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValidationKind {
+    Document(ContractDocumentKind),
+    MediaListOutput,
+}
 
 fn main() -> ExitCode {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
@@ -37,9 +45,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut index = 0;
     while index < args.len() {
         if args[index] == "--kind" {
-            let value = args
-                .get(index + 1)
-                .ok_or_else(|| "--kind requires addon, repository, or catalog".to_owned())?;
+            let value = args.get(index + 1).ok_or_else(|| {
+                "--kind requires addon, repository, catalog, or media-list-output".to_owned()
+            })?;
             kind = Some(parse_kind(value)?);
             index += 2;
         } else if args[index].starts_with('-') {
@@ -55,45 +63,68 @@ fn run(args: &[String]) -> Result<(), String> {
 
     for path in paths {
         let document_kind = kind.unwrap_or_else(|| infer_kind(Path::new(path)));
-        let contents = std::fs::read_to_string(path)
+        let contents = std::fs::read(path)
             .map_err(|error| format!("{path}: failed to read document: {error}"))?;
-        validate_contract_document(document_kind, &contents)
-            .map_err(|error| format!("{path}: {error}"))?;
+        validate_input(document_kind, &contents).map_err(|error| format!("{path}: {error}"))?;
         println!("validated {path}");
     }
     Ok(())
 }
 
-fn parse_kind(value: &str) -> Result<ContractDocumentKind, String> {
+fn validate_input(kind: ValidationKind, contents: &[u8]) -> Result<(), String> {
+    match kind {
+        ValidationKind::Document(kind) => {
+            let text = std::str::from_utf8(contents)
+                .map_err(|_| "contract document must be UTF-8".to_owned())?;
+            validate_contract_document(kind, text).map_err(|error| error.to_string())
+        }
+        ValidationKind::MediaListOutput => conform_media_list_output(contents)
+            .map(|_| ())
+            .map_err(|error| error.to_string()),
+    }
+}
+
+fn parse_kind(value: &str) -> Result<ValidationKind, String> {
     match value {
-        "addon" => Ok(ContractDocumentKind::AddonManifest),
-        "repository" => Ok(ContractDocumentKind::RepositoryManifest),
-        "catalog" => Ok(ContractDocumentKind::RepositoryIndex),
+        "addon" => Ok(ValidationKind::Document(
+            ContractDocumentKind::AddonManifest,
+        )),
+        "repository" => Ok(ValidationKind::Document(
+            ContractDocumentKind::RepositoryManifest,
+        )),
+        "catalog" => Ok(ValidationKind::Document(
+            ContractDocumentKind::RepositoryIndex,
+        )),
+        "media-list-output" => Ok(ValidationKind::MediaListOutput),
         _ => Err(format!(
-            "unsupported document kind `{value}`; expected addon, repository, or catalog"
+            "unsupported document kind `{value}`; expected addon, repository, catalog, or media-list-output"
         )),
     }
 }
 
-fn infer_kind(path: &Path) -> ContractDocumentKind {
+fn infer_kind(path: &Path) -> ValidationKind {
     match path.file_name().and_then(|name| name.to_str()) {
-        Some("repository.toml") => ContractDocumentKind::RepositoryManifest,
+        Some("repository.toml") => {
+            ValidationKind::Document(ContractDocumentKind::RepositoryManifest)
+        }
         Some(name)
             if Path::new(name)
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("json")) =>
         {
-            ContractDocumentKind::RepositoryIndex
+            ValidationKind::Document(ContractDocumentKind::RepositoryIndex)
         }
-        _ => ContractDocumentKind::AddonManifest,
+        _ => ValidationKind::Document(ContractDocumentKind::AddonManifest),
     }
 }
 
 fn print_help() {
-    eprintln!("ersatzrs-addon-validator — validate public add-on contract documents");
+    eprintln!("ersatzrs-addon-validator — validate public add-on contracts and output");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("    ersatzrs-addon-validator [--kind addon|repository|catalog] <PATH>...");
+    eprintln!(
+        "    ersatzrs-addon-validator [--kind addon|repository|catalog|media-list-output] <PATH>..."
+    );
 }
 
 #[cfg(test)]
@@ -104,15 +135,30 @@ mod tests {
     fn infers_the_two_manifest_names_and_catalog_json() {
         assert_eq!(
             infer_kind(Path::new("addon.toml")),
-            ContractDocumentKind::AddonManifest
+            ValidationKind::Document(ContractDocumentKind::AddonManifest)
         );
         assert_eq!(
             infer_kind(Path::new("repository.toml")),
-            ContractDocumentKind::RepositoryManifest
+            ValidationKind::Document(ContractDocumentKind::RepositoryManifest)
         );
         assert_eq!(
             infer_kind(Path::new("index-v1.json")),
-            ContractDocumentKind::RepositoryIndex
+            ValidationKind::Document(ContractDocumentKind::RepositoryIndex)
         );
+    }
+
+    #[test]
+    fn media_list_output_kind_uses_runtime_conformance() {
+        let valid = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode","title":"Episode","kind":"remote_stream","source_url":"https://video.example.test/episode-1","metadata":{"release_date":"2026-08-22","artwork":[]}}
+"#;
+        validate_input(ValidationKind::MediaListOutput, valid).expect("valid media-list output");
+
+        let invalid = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode","title":"Episode","kind":"remote_stream","source_url":"https://video.example.test/episode-1","metadata":{"release_date":"2026-08-22T12:00:00Z"}}
+"#;
+        let error = validate_input(ValidationKind::MediaListOutput, invalid)
+            .expect_err("timestamp must not satisfy the Kodi date contract");
+        assert!(error.contains("release_date"));
     }
 }

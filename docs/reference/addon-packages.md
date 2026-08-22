@@ -50,7 +50,14 @@ cargo xtask validate-addon-manifest --kind catalog path/to/index-v1.json
 ```
 
 The dependency-light `ersatzrs-addon-validator` binary exposes the same checks
-for pinned cross-repository CI use. Publication-specific checks such as package
+for pinned cross-repository CI use. It can also validate captured provider
+output through the exact host parser:
+
+```bash
+ersatzrs-addon-validator --kind media-list-output captured-media-list.ndjson
+```
+
+Publication-specific checks such as package
 directory naming, icon bytes, artifact presence, ZIP construction, and catalog
 assembly remain the publisher's responsibility; they are not a second manifest
 contract.
